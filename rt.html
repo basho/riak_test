@@ -1,0 +1,175 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module rt</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module rt</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+  Implements the base <code>riak_test</code> API, providing the ability to control
+  nodes in a Riak cluster as well as perform commonly reused operations.
+
+
+<h2><a name="description">Description</a></h2>
+  Implements the base <code>riak_test</code> API, providing the ability to control
+  nodes in a Riak cluster as well as perform commonly reused operations.
+  Please extend this module with new functions that prove useful between
+  multiple independent tests.
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#check_singleton_node-1">check_singleton_node/1</a></td><td>Ensure that the specified node is a singleton node/cluster -- a node
+       that owns 100% of the ring.</td></tr>
+<tr><td valign="top"><a href="#claimant_according_to-1">claimant_according_to/1</a></td><td>Return a list of nodes that own partitions according to the ring
+       retrieved from the specified node.</td></tr>
+<tr><td valign="top"><a href="#deploy_nodes-1">deploy_nodes/1</a></td><td>Deploy a set of freshly installed Riak nodes, returning a list of the
+       nodes deployed.</td></tr>
+<tr><td valign="top"><a href="#down-2">down/2</a></td><td>Have <code>Node</code> mark <code>OtherNode</code> as down.</td></tr>
+<tr><td valign="top"><a href="#join-2">join/2</a></td><td>Have <code>Node</code> send a join request to <code>PNode</code></td></tr>
+<tr><td valign="top"><a href="#leave-1">leave/1</a></td><td>Have the specified node leave the cluster.</td></tr>
+<tr><td valign="top"><a href="#members_according_to-1">members_according_to/1</a></td><td>Return a list of cluster members according to the ring retrieved from
+       the specified node.</td></tr>
+<tr><td valign="top"><a href="#owners_according_to-1">owners_according_to/1</a></td><td>Return a list of nodes that own partitions according to the ring
+       retrieved from the specified node.</td></tr>
+<tr><td valign="top"><a href="#remove-2">remove/2</a></td><td>Have <code>Node</code> remove <code>OtherNode</code> from the cluster.</td></tr>
+<tr><td valign="top"><a href="#start-1">start/1</a></td><td>Start the specified Riak node.</td></tr>
+<tr><td valign="top"><a href="#status_of_according_to-2">status_of_according_to/2</a></td><td>Return the cluster status of <code>Member</code> according to the ring
+       retrieved from <code>Node</code>.</td></tr>
+<tr><td valign="top"><a href="#stop-1">stop/1</a></td><td>Stop the specified Riak node.</td></tr>
+<tr><td valign="top"><a href="#wait_until_all_members-1">wait_until_all_members/1</a></td><td>Wait until all nodes in the list <code>Nodes</code> believe each other to be
+       members of the cluster.</td></tr>
+<tr><td valign="top"><a href="#wait_until_all_members-2">wait_until_all_members/2</a></td><td>Wait until all nodes in the list <code>Nodes</code> believes all nodes in the
+       list <code>Members</code> are members of the cluster.</td></tr>
+<tr><td valign="top"><a href="#wait_until_no_pending_changes-1">wait_until_no_pending_changes/1</a></td><td>Given a list of nodes, wait until all nodes believe there are no
+  on-going or pending ownership transfers.</td></tr>
+<tr><td valign="top"><a href="#wait_until_nodes_ready-1">wait_until_nodes_ready/1</a></td><td>Given a list of nodes, wait until all nodes are considered ready.</td></tr>
+<tr><td valign="top"><a href="#wait_until_pingable-1">wait_until_pingable/1</a></td><td>Wait until the specified node is pingable.</td></tr>
+<tr><td valign="top"><a href="#wait_until_ready-1">wait_until_ready/1</a></td><td>Wait until the specified node is considered ready by <code>riak_core</code>.</td></tr>
+<tr><td valign="top"><a href="#wait_until_ring_converged-1">wait_until_ring_converged/1</a></td><td>Given a list of nodes, wait until all nodes believe the ring has
+       converged (ie.</td></tr>
+<tr><td valign="top"><a href="#wait_until_unpingable-1">wait_until_unpingable/1</a></td><td>Wait until the specified node is no longer pingable.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="check_singleton_node-1">check_singleton_node/1</a></h3>
+<div class="spec">
+<p><tt>check_singleton_node(Node) -&gt; any()</tt></p>
+</div><p>Ensure that the specified node is a singleton node/cluster -- a node
+       that owns 100% of the ring.</p>
+
+<h3 class="function"><a name="claimant_according_to-1">claimant_according_to/1</a></h3>
+<div class="spec">
+<p><tt>claimant_according_to(Node) -&gt; any()</tt></p>
+</div><p>Return a list of nodes that own partitions according to the ring
+       retrieved from the specified node.</p>
+
+<h3 class="function"><a name="deploy_nodes-1">deploy_nodes/1</a></h3>
+<div class="spec">
+<p><tt>deploy_nodes(NumNodes::integer()) -&gt; [node()]</tt><br></p>
+</div><p>Deploy a set of freshly installed Riak nodes, returning a list of the
+       nodes deployed.</p>
+
+<h3 class="function"><a name="down-2">down/2</a></h3>
+<div class="spec">
+<p><tt>down(Node, OtherNode) -&gt; any()</tt></p>
+</div><p>Have <code>Node</code> mark <code>OtherNode</code> as down</p>
+
+<h3 class="function"><a name="join-2">join/2</a></h3>
+<div class="spec">
+<p><tt>join(Node, PNode) -&gt; any()</tt></p>
+</div><p>Have <code>Node</code> send a join request to <code>PNode</code></p>
+
+<h3 class="function"><a name="leave-1">leave/1</a></h3>
+<div class="spec">
+<p><tt>leave(Node) -&gt; any()</tt></p>
+</div><p>Have the specified node leave the cluster</p>
+
+<h3 class="function"><a name="members_according_to-1">members_according_to/1</a></h3>
+<div class="spec">
+<p><tt>members_according_to(Node) -&gt; any()</tt></p>
+</div><p>Return a list of cluster members according to the ring retrieved from
+       the specified node.</p>
+
+<h3 class="function"><a name="owners_according_to-1">owners_according_to/1</a></h3>
+<div class="spec">
+<p><tt>owners_according_to(Node) -&gt; any()</tt></p>
+</div><p>Return a list of nodes that own partitions according to the ring
+       retrieved from the specified node.</p>
+
+<h3 class="function"><a name="remove-2">remove/2</a></h3>
+<div class="spec">
+<p><tt>remove(Node, OtherNode) -&gt; any()</tt></p>
+</div><p>Have <code>Node</code> remove <code>OtherNode</code> from the cluster</p>
+
+<h3 class="function"><a name="start-1">start/1</a></h3>
+<div class="spec">
+<p><tt>start(Node) -&gt; any()</tt></p>
+</div><p>Start the specified Riak node</p>
+
+<h3 class="function"><a name="status_of_according_to-2">status_of_according_to/2</a></h3>
+<div class="spec">
+<p><tt>status_of_according_to(Member, Node) -&gt; any()</tt></p>
+</div><p>Return the cluster status of <code>Member</code> according to the ring
+       retrieved from <code>Node</code>.</p>
+
+<h3 class="function"><a name="stop-1">stop/1</a></h3>
+<div class="spec">
+<p><tt>stop(Node) -&gt; any()</tt></p>
+</div><p>Stop the specified Riak node</p>
+
+<h3 class="function"><a name="wait_until_all_members-1">wait_until_all_members/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_all_members(Nodes) -&gt; any()</tt></p>
+</div><p>Wait until all nodes in the list <code>Nodes</code> believe each other to be
+       members of the cluster.</p>
+
+<h3 class="function"><a name="wait_until_all_members-2">wait_until_all_members/2</a></h3>
+<div class="spec">
+<p><tt>wait_until_all_members(Nodes, Members) -&gt; any()</tt></p>
+</div><p>Wait until all nodes in the list <code>Nodes</code> believes all nodes in the
+       list <code>Members</code> are members of the cluster.</p>
+
+<h3 class="function"><a name="wait_until_no_pending_changes-1">wait_until_no_pending_changes/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_no_pending_changes(Nodes::[node()]) -&gt; ok | fail</tt><br></p>
+</div><p>Given a list of nodes, wait until all nodes believe there are no
+  on-going or pending ownership transfers.</p>
+
+<h3 class="function"><a name="wait_until_nodes_ready-1">wait_until_nodes_ready/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_nodes_ready(Nodes) -&gt; any()</tt></p>
+</div><p>Given a list of nodes, wait until all nodes are considered ready.
+       See <a href="#wait_until_ready-1"><code>wait_until_ready/1</code></a> for definition of ready.</p>
+
+<h3 class="function"><a name="wait_until_pingable-1">wait_until_pingable/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_pingable(Node) -&gt; any()</tt></p>
+</div><p>Wait until the specified node is pingable</p>
+
+<h3 class="function"><a name="wait_until_ready-1">wait_until_ready/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_ready(Node) -&gt; any()</tt></p>
+</div><p>Wait until the specified node is considered ready by <code>riak_core</code>.
+       As of Riak 1.0, a node is ready if it is in the <code>valid</code> or <code>leaving</code>
+       states. A ready node is guaranteed to have current preflist/ownership
+       information.</p>
+
+<h3 class="function"><a name="wait_until_ring_converged-1">wait_until_ring_converged/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_ring_converged(Nodes) -&gt; any()</tt></p>
+</div><p>Given a list of nodes, wait until all nodes believe the ring has
+       converged (ie. <code>riak_core_ring:is_ready</code> returns <code>true</code>).</p>
+
+<h3 class="function"><a name="wait_until_unpingable-1">wait_until_unpingable/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_unpingable(Node) -&gt; any()</tt></p>
+</div><p>Wait until the specified node is no longer pingable</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Jan 10 2012, 17:33:57.</i></p>
+</body>
+</html>

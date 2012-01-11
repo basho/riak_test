@@ -1,0 +1,3 @@
+{application,riak_test}.
+{packages,[]}.
+{modules,[rt]}.
