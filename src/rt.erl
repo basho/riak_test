@@ -38,6 +38,14 @@
 
 -define(HARNESS, (rt:config(rt_harness))).
 
+%% @doc Rewrite the given node's app.config file, overriding the varialbes
+%%      in the existing app.config with those in Config.
+update_app_config(Node, Config) ->
+    stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:update_app_config(Node, Config),
+    start(Node).
+
 %% @doc Deploy a set of freshly installed Riak nodes, returning a list of the
 %%      nodes deployed.
 -spec deploy_nodes(NumNodes :: integer()) -> [node()].
@@ -57,17 +65,20 @@ join(Node, PNode) ->
     R = rpc:call(Node, riak_core, join, [PNode]),
     lager:debug("[join] ~p to (~p): ~p", [Node, PNode, R]),
 %%    wait_until_ready(Node),
+    ?assertEqual(ok, R),
     ok.
 
 %% @doc Have the specified node leave the cluster
 leave(Node) ->
     R = rpc:call(Node, riak_core, leave, []),
     lager:debug("[leave] ~p: ~p", [Node, R]),
+    ?assertEqual(ok, R),
     ok.
 
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
-    rpc:call(Node, riak_kv_console, remove, [[atom_to_list(OtherNode)]]).
+    ?assertEqual(ok,
+                 rpc:call(Node, riak_kv_console, remove, [[atom_to_list(OtherNode)]])).
 
 %% @doc Have `Node' mark `OtherNode' as down
 down(Node, OtherNode) ->
@@ -287,3 +298,20 @@ build_cluster(NumNodes) ->
     [?assertEqual(Nodes, owners_according_to(Node)) || Node <- Nodes],
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
+
+connection_info(Nodes) ->
+    [begin
+         {ok, PB_IP} = rpc:call(Node, application, get_env, [riak_kv, pb_ip]),
+         {ok, PB_Port} = rpc:call(Node, application, get_env, [riak_kv, pb_port]),
+         {ok, [{HTTP_IP, HTTP_Port}]} =
+             rpc:call(Node, application, get_env, [riak_core, http]),
+         {Node, [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}]}
+     end || Node <- Nodes].
+
+http_url(Nodes) when is_list(Nodes) ->
+    [begin
+         {Host, Port} = orddict:fetch(http, Connections),
+         lists:flatten(io_lib:format("http://~s:~b", [Host, Port]))
+     end || {_Node, Connections} <- connection_info(Nodes)];
+http_url(Node) ->
+    hd(http_url([Node])).

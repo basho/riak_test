@@ -31,6 +31,24 @@ setup_harness(_Test, _Args) ->
 cleanup_harness() ->
     ok.
 
+update_app_config(Node, Config) ->
+    N = node_id(Node),
+    ConfigFile = io_lib:format("~s/dev/dev~b/etc/app.config", [?PATH, N]),
+    {ok, [BaseConfig]} = file:consult(ConfigFile),
+    MergeA = orddict:from_list(Config),
+    MergeB = orddict:from_list(BaseConfig),
+    NewConfig =
+        orddict:merge(fun(_, VarsA, VarsB) ->
+                              MergeC = orddict:from_list(VarsA),
+                              MergeD = orddict:from_list(VarsB),
+                              orddict:merge(fun(_, ValA, _ValB) ->
+                                                    ValA
+                                            end, MergeC, MergeD)
+                      end, MergeA, MergeB),
+    NewConfigOut = io_lib:format("~p.", [NewConfig]),
+    ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
+    ok.
+
 deploy_nodes(NumNodes) ->
     Path = ?PATH,
     lager:info("Riak path: ~p", [Path]),

@@ -19,7 +19,8 @@ main(Args) ->
     erlang:set_cookie(node(), Cookie),
 
     application:start(lager),
-    lager:set_loglevel(lager_console_backend, debug),
+    LagerLevel = rt:config(rt_lager_level, debug),
+    lager:set_loglevel(lager_console_backend, LagerLevel),
 
     %% rt:set_config(rtdev_path, Path),
     %% rt:set_config(rt_max_wait_time, 180000),
