@@ -56,6 +56,9 @@ deploy_nodes(NumNodes) ->
 start(Node) ->
     ?HARNESS:start(Node).
 
+async_start(Node) ->
+    spawn(fun() -> start(Node) end).
+
 %% @doc Stop the specified Riak node
 stop(Node) ->
     ?HARNESS:stop(Node).
