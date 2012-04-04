@@ -28,6 +28,9 @@
          wait_until_all_members/2,
          wait_until_ring_converged/1]).
 
+%% Search API
+-export([enable_search_hook/2]).
+
 -export([setup_harness/2,
          cleanup_harness/0,
          load_config/1,
@@ -239,6 +242,20 @@ wait_until(Node, Fun, Retry, Delay) ->
             timer:sleep(Delay),
             wait_until(Node, Fun, Retry-1)
     end.
+
+%%%===================================================================
+%%% Search
+%%%===================================================================
+
+%% doc Enable the search KV hook for the given `Bucket'.  Any `Node'
+%%     in the cluster may be used as the change is propagated via the
+%%     Ring.
+enable_search_hook(Node, Bucket) when is_binary(Bucket) ->
+    ?assertEqual(ok, rpc:call(Node, riak_search_kv_hook, install, [Bucket])).
+
+%%%===================================================================
+%%% Private
+%%%===================================================================
 
 %% @private
 setup_harness(Test, Args) ->
