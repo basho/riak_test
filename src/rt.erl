@@ -7,7 +7,8 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--export([deploy_nodes/1,
+-export([get_ring/1,
+         deploy_nodes/1,
          start/1,
          stop/1,
          join/2,
@@ -40,6 +41,11 @@
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
+
+%% @doc Get the raw ring for the given `Node'.
+get_ring(Node) ->
+    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    Ring.
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in Config.
