@@ -318,3 +318,45 @@ http_url(Nodes) when is_list(Nodes) ->
      end || {_Node, Connections} <- connection_info(Nodes)];
 http_url(Node) ->
     hd(http_url([Node])).
+
+systest_write(Node, Size) ->
+    systest_write(Node, Size, 2).
+
+systest_write(Node, Size, W) ->
+    systest_write(Node, 1, Size, <<"systest">>, W).
+
+systest_write(Node, Start, End, Bucket, W) ->
+    {ok, C} = riak:client_connect(Node),
+    F = fun(N, Acc) ->
+                Obj = riak_object:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
+                case C:put(Obj, W) of
+                    ok ->
+                        Acc;
+                    Other ->
+                        [{N, Other} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
+
+systest_read(Node, Size) ->
+    systest_read(Node, Size, 2).
+
+systest_read(Node, Size, R) ->
+    systest_read(Node, 1, Size, <<"systest">>, R).
+
+systest_read(Node, Start, End, Bucket, R) ->
+    {ok, C} = riak:client_connect(Node),
+    F = fun(N, Acc) ->
+                case C:get(Bucket, <<N:32/integer>>, R) of
+                    {ok, Obj} ->
+                        case riak_object:get_value(Obj) of
+                            <<N:32/integer>> ->
+                                Acc;
+                            WrongVal ->
+                                [{N, {wrong_val, WrongVal}} | Acc]
+                        end;
+                    Other ->
+                        [{N, Other} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
