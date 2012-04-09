@@ -50,6 +50,9 @@ update_app_config(Node, Config) ->
     ok.
 
 deploy_nodes(NumNodes) ->
+    deploy_nodes(NumNodes, default).
+
+deploy_nodes(NumNodes, Config) ->
     Path = ?PATH,
     lager:info("Riak path: ~p", [Path]),
     NodesN = lists:seq(1, NumNodes),
@@ -70,6 +73,13 @@ deploy_nodes(NumNodes) ->
     run_git(Path, "clean -fd"),
     %% run_git(Path, "status"),
     %% ?debugFmt("Reset~n", []),
+
+    %% Set initial config
+    case Config of
+        default -> ok;
+        _ ->
+            pmap(fun(Node) -> update_app_config(Node, Config) end, Nodes)
+    end,
 
     %% Start nodes
     %%[run_riak(N, Path, "start") || N <- Nodes],

@@ -9,6 +9,7 @@
 
 -export([get_ring/1,
          deploy_nodes/1,
+         deploy_nodes/2,
          start/1,
          stop/1,
          join/2,
@@ -60,6 +61,12 @@ update_app_config(Node, Config) ->
 -spec deploy_nodes(NumNodes :: integer()) -> [node()].
 deploy_nodes(NumNodes) ->
     ?HARNESS:deploy_nodes(NumNodes).
+
+%% @doc Deploy a set of freshly installed Riak nodes with the given
+%%      `InitialConfig', returning a list of the nodes deployed.
+-spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
+deploy_nodes(NumNodes, InitialConfig) ->
+    ?HARNESS:deploy_nodes(NumNodes, InitialConfig).
 
 %% @doc Start the specified Riak node
 start(Node) ->
@@ -303,12 +310,16 @@ config(Key, Default) ->
             Default
     end.
 
-%% @doc
-%% Safely construct a `NumNode' size cluster and return a list of the
-%% deployed nodes.
+%% @doc Safely construct a `NumNode' size cluster and return a list of
+%%      the deployed nodes.
 build_cluster(NumNodes) ->
+    build_cluster(NumNodes, default).
+
+%% @doc Safely construct a `NumNode' size cluster using
+%%      `InitialConfig'. Return a list of the deployed nodes.
+build_cluster(NumNodes, InitialConfig) ->
     %% Deploy a set of new nodes
-    Nodes = deploy_nodes(NumNodes),
+    Nodes = deploy_nodes(NumNodes, InitialConfig),
 
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
