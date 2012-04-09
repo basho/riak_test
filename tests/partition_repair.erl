@@ -14,24 +14,31 @@
 %% all data after it has wiped out by a simulated disk crash.
 partition_repair() ->
     SpamDir = get_os_env("SPAM_DIR"),
+    RingSize = list_to_integer(get_os_env("RING_SIZE", "16")),
     NVal = get_os_env("N_VAL", undefined),
     Bucket = <<"scotts_spam">>,
 
     lager:info("Build a cluster"),
-    Nodes = rt:build_cluster(4),
-
-    lager:info("Enable search, reduce vnode_inactivity_timeout"),
+    lager:info("riak_search enabled: true"),
+    lager:info("ring_creation_size: ~p", [RingSize]),
+    lager:info("riak_core vnode_inactivity_timeout 1000"),
     Conf = [
             {riak_core,
              [
+              {ring_creation_size, RingSize},
               {vnode_inactivity_timeout, 1000}
              ]},
             {riak_search,
              [
               {enabled, true}
              ]}
+            %% {lager,
+            %%  [{handlers,
+            %%    [{lager_file_backend,
+            %%      [{"./log/console.log",debug,10485760,"$D0",5}]}]}]}
            ],
-    [update_app_config(Node, Conf) || Node <- Nodes],
+
+    Nodes = rt:build_cluster(4, Conf),
 
     case NVal of
         undefined ->
@@ -82,9 +89,7 @@ kill_repair_verify({Partition, Node}) ->
     lager:info("Invoking repair for ~p on ~p", [Partition, Node]),
     _Ignore = rpc:call(Node, riak_core_handoff_manager, add_repair, [Partition]),
     lager:info("return value of add_repair ~p", [_Ignore]),
-
-    %% TODO: need to wait for repair to finish
-    timer:sleep(6000),
+    wait_for_repair({Partition, Node}),
 
     lager:info("Verify ~p on ~p is fully repaired", [Partition, Node]),
     Postings2 = get_postings({Partition, Node}),
@@ -145,6 +150,16 @@ stash_path(Partition) ->
 
 file_list(Dir) ->
     filelib:wildcard(Dir ++ "/*").
+
+wait_for_repair({Partition, Node}) ->
+    Reply = rpc:call(Node, riak_core_handoff_manager, repair_status,
+                     [Partition]),
+    case Reply of
+        no_repair -> ok;
+        repair_in_progress ->
+            timer:sleep(timer:seconds(1)),
+            wait_for_repair({Partition, Node})
+    end.
 
 %%
 %% STUFF TO MOVE TO rt?
