@@ -190,6 +190,9 @@ deploy_nodes(NodeConfig) ->
             end,
             lists:zip(Nodes, Configs)),
 
+    %% create snmp dirs, for EE
+    create_snmp_dirs(Nodes),
+
     %% Start nodes
     %%[run_riak(N, relpath(node_version(N)), "start") || N <- Nodes],
     rt:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
