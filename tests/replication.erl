@@ -46,19 +46,30 @@ replication() ->
 
     %% setup sites on B
     %% TODO: make `NumSites' an argument
-    {Ip, Port} = hd(Listeners),
-    add_site(hd(BNodes), {Ip, Port, "site1"}),
     NumSites = 4,
+    {Ip, Port, _} = hd(Listeners),
+    add_site(hd(BNodes), {Ip, Port, "site1"}),
     FakeListeners = gen_fake_listeners(NumSites-1),
-    add_fake_sites(BNodes, [hd(Listeners)|FakeListeners]),
+    add_fake_sites(BNodes, FakeListeners),
 
     %% verify sites are distributed on B
+    verify_sites_balanced(NumSites, BNodes),
 
     %% write some data on A
 
     %% verify data is replicated to B
 
     fin.
+
+verify_sites_balanced(NumSites, BNodes) ->
+    NumNodes = length(BNodes),
+    NodeCounts = [{Node, client_count(Node)} || Node <- BNodes],
+    Min = NumSites div NumNodes,
+    [?assert(Count >= Min) || {_Node, Count} <- NodeCounts].
+
+client_count(Node) ->
+    Clients = rpc:call(Node, supervisor, which_children, [riak_repl_client_sup]),
+    length(Clients).
 
 gen_fake_listeners(Num) ->
     Ports = gen_ports(11000, Num),
@@ -74,7 +85,7 @@ add_fake_sites([Node|_], Listeners) ->
      || {IP, Port, _} <- Listeners].
 
 add_site(Node, {IP, Port, Name}) ->
-    lager:info("Add site ~p ~p:~p", [Name, IP, Port]),
+    lager:info("Add site ~p ~p:~p at node ~p", [Name, IP, Port, Node]),
     Args = [IP, integer_to_list(Port), Name],
     Res = rpc:call(Node, riak_repl_console, add_site, [Args]),
     ?assertEqual(ok, Res),
@@ -97,8 +108,7 @@ verify_listener(Node, Str, Status) ->
     ?assert(lists:keymember(Str, 2, Status)).
 
 add_listeners(Nodes) ->
-    %% Start = 9010,
-    Ports = gen_ports(9010, length(Nodes)),%lists:seq(Start, Start + length(Nodes) - 1),
+    Ports = gen_ports(9010, length(Nodes)),
     IPs = lists:duplicate(length(Nodes), "127.0.0.1"),
     PN = lists:zip3(IPs, Ports, Nodes),
     [add_listener(Node, IP, Port) || {IP, Port, Node} <- PN],
