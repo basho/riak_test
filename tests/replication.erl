@@ -35,10 +35,16 @@ replication() ->
     %% setup servers/listeners on A
     Listeners = add_listeners(ANodes),
 
-    %% verify servers are distributed on A
+    %% verify servers are visible on all nodes
     verify_listeners(Listeners),
 
     %% setup sites on B
+    %% TODO: make `NumSites' an argument
+    {Ip, Port} = hd(Listeners),
+    add_site(hd(BNodes), {Ip, Port, "site1"}),
+    NumSites = 4,
+    FakeListeners = gen_fake_listeners(NumSites-1),
+    add_fake_sites(BNodes, [hd(Listeners)|FakeListeners]),
 
     %% verify sites are distributed on B
 
@@ -48,9 +54,32 @@ replication() ->
 
     fin.
 
+gen_fake_listeners(Num) ->
+    Ports = gen_ports(11000, Num),
+    IPs = lists:duplicate(Num, "127.0.0.1"),
+    Nodes = [fake_node(N) || N <- lists:seq(1, Num)],
+    lists:zip3(IPs, Ports, Nodes).
+
+fake_node(Num) ->
+    lists:flatten(io_lib:format("fake~p@127.0.0.1", [Num])).
+
+add_fake_sites([Node|_], Listeners) ->
+    [add_site(Node, {IP, Port, fake_site(Port)})
+     || {IP, Port, _} <- Listeners].
+
+add_site(Node, {IP, Port, Name}) ->
+    lager:info("Add site ~p ~p:~p", [Name, IP, Port]),
+    Args = [IP, integer_to_list(Port), Name],
+    Res = rpc:call(Node, riak_repl_console, add_site, [Args]),
+    ?assertEqual(ok, Res),
+    timer:sleep(timer:seconds(3)).
+
+fake_site(Port) ->
+    lists:flatten(io_lib:format("fake_site_~p", [Port])).
+
 verify_listeners(Listeners) ->
-    Strs = ["127.0.0.1:" ++ integer_to_list(Port) || {Port, _} <- Listeners],
-    [verify_listener(Node, Strs) || {_, Node} <- Listeners].
+    Strs = [IP ++ ":" ++ integer_to_list(Port) || {IP, Port, _} <- Listeners],
+    [verify_listener(Node, Strs) || {_, _, Node} <- Listeners].
 
 verify_listener(Node, Strs) ->
     lager:info("Verify listeners ~p ~p", [Node, Strs]),
@@ -62,17 +91,22 @@ verify_listener(Node, Str, Status) ->
     ?assert(lists:keymember(Str, 2, Status)).
 
 add_listeners(Nodes) ->
-    Start = 9010,
-    Ports = lists:seq(Start, Start + length(Nodes) - 1),
-    PN = lists:zip(Ports, Nodes),
-    [add_listener(Node, "127.0.0.1", Port) || {Port, Node} <- PN],
+    %% Start = 9010,
+    Ports = gen_ports(9010, length(Nodes)),%lists:seq(Start, Start + length(Nodes) - 1),
+    IPs = lists:duplicate(length(Nodes), "127.0.0.1"),
+    PN = lists:zip3(IPs, Ports, Nodes),
+    [add_listener(Node, IP, Port) || {IP, Port, Node} <- PN],
     PN.
 
 add_listener(Node, IP, Port) ->
     lager:info("Adding repl listener to ~p ~s:~p", [Node, IP, Port]),
     Args = [[atom_to_list(Node), IP, integer_to_list(Port)]],
     Res = rpc:call(Node, riak_repl_console, add_listener, Args),
-    ?assertEqual(ok, Res).
+    ?assertEqual(ok, Res),
+    timer:sleep(timer:seconds(5)).
+
+gen_ports(Start, Len) ->
+    lists:seq(Start, Start + Len - 1).
 
 get_os_env(Var) ->
     case get_os_env(Var, undefined) of
