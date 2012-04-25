@@ -3,7 +3,9 @@
 -include("rt.hrl").
 
 -import(rt, [deploy_nodes/1,
-             join/2]).
+             join/2,
+             wait_until_nodes_ready/1,
+             wait_until_no_pending_changes/1]).
 
 replication() ->
     %% TODO: Don't hardcode # of nodes
@@ -27,10 +29,14 @@ replication() ->
     lager:info("Build cluster A"),
     [AFirst|ARest] = ANodes,
     [join(ANode, AFirst) || ANode <- ARest],
+    ?assertEqual(ok, wait_until_nodes_ready(ANodes)),
+    ?assertEqual(ok, wait_until_no_pending_changes(ANodes)),
 
     lager:info("Build cluster B"),
     [BFirst|BRest] = BNodes,
     [join(BNode, BFirst) || BNode <- BRest],
+    ?assertEqual(ok, wait_until_nodes_ready(BNodes)),
+    ?assertEqual(ok, wait_until_no_pending_changes(BNodes)),
 
     %% setup servers/listeners on A
     Listeners = add_listeners(ANodes),
@@ -103,7 +109,7 @@ add_listener(Node, IP, Port) ->
     Args = [[atom_to_list(Node), IP, integer_to_list(Port)]],
     Res = rpc:call(Node, riak_repl_console, add_listener, Args),
     ?assertEqual(ok, Res),
-    timer:sleep(timer:seconds(5)).
+    timer:sleep(timer:seconds(3)).
 
 gen_ports(Start, Len) ->
     lists:seq(Start, Start + Len - 1).
