@@ -26,7 +26,7 @@ partition_repair() ->
             {riak_core,
              [
               {ring_creation_size, RingSize},
-              {vnode_inactivity_timeout, 1000}
+              {handoff_manager_timeout, 1000}
              ]},
             {riak_search,
              [
@@ -63,7 +63,8 @@ partition_repair() ->
     [stash_postings(Owner) || Owner <- Owners],
 
     lager:info("Emulate data loss, repair, verify correct data"),
-    [kill_repair_verify(Owner) || Owner <- Owners].
+    [kill_repair_verify(Owner) || Owner <- Owners],
+    lager:info("TEST PASSED").
 
 kill_repair_verify({Partition, Node}) ->
     {ok, [Stash]} = file:consult(stash_path(Partition)),
@@ -87,9 +88,12 @@ kill_repair_verify({Partition, Node}) ->
 
     %% repair the partition, ignore return for now
     lager:info("Invoking repair for ~p on ~p", [Partition, Node]),
-    _Ignore = rpc:call(Node, riak_core_handoff_manager, add_repair, [Partition]),
+    %% TODO: Don't ignore return, check version of Riak and if greater
+    %% or equal to 1.x then expect OK.
+    _Ignore = rpc:call(Node, search, repair_index, [Partition]),
     lager:info("return value of add_repair ~p", [_Ignore]),
-    wait_for_repair({Partition, Node}),
+    lager:info("Wait for repair to finish"),
+    wait_for_repair({Partition, Node}, 30),
 
     lager:info("Verify ~p on ~p is fully repaired", [Partition, Node]),
     Postings2 = get_postings({Partition, Node}),
@@ -101,6 +105,9 @@ kill_repair_verify({Partition, Node}) ->
             NF2 = NF ++ "/" ++ integer_to_list(Partition) ++ ".notfound",
             ?assertEqual(ok, file:write_file(NF2, io_lib:format("~p.", [NotFound])))
     end,
+    %% NOTE: If the following assert fails then check the .notfound
+    %% file written above...it contains all postings that were in the
+    %% stash that weren't found after the repair.
     ?assertEqual(ExpectToVerify, Verified).
 
 verify(PostingsAfterRepair) ->
@@ -151,14 +158,15 @@ stash_path(Partition) ->
 file_list(Dir) ->
     filelib:wildcard(Dir ++ "/*").
 
-wait_for_repair({Partition, Node}) ->
-    Reply = rpc:call(Node, riak_core_handoff_manager, repair_status,
-                     [Partition]),
+wait_for_repair(_, 0) ->
+    throw(wait_for_repair_max_tries);
+wait_for_repair({Partition, Node}, Tries) ->
+    Reply = rpc:call(Node, search, repair_index_status, [Partition]),
     case Reply of
         no_repair -> ok;
         repair_in_progress ->
             timer:sleep(timer:seconds(1)),
-            wait_for_repair({Partition, Node})
+            wait_for_repair({Partition, Node}, Tries - 1)
     end.
 
 %%
