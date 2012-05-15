@@ -26,7 +26,8 @@ partition_repair() ->
             {riak_core,
              [
               {ring_creation_size, RingSize},
-              {handoff_manager_timeout, 1000}
+              {handoff_manager_timeout, 1000},
+              {vnode_management_timer, 1000}
              ]},
             {riak_search,
              [
@@ -91,7 +92,7 @@ kill_repair_verify({Partition, Node}) ->
     %% TODO: Don't ignore return, check version of Riak and if greater
     %% or equal to 1.x then expect OK.
     _Ignore = rpc:call(Node, search, repair_index, [Partition]),
-    lager:info("return value of add_repair ~p", [_Ignore]),
+    lager:info("return value of repair_index ~p", [_Ignore]),
     lager:info("Wait for repair to finish"),
     wait_for_repair({Partition, Node}, 30),
 
@@ -163,8 +164,8 @@ wait_for_repair(_, 0) ->
 wait_for_repair({Partition, Node}, Tries) ->
     Reply = rpc:call(Node, search, repair_index_status, [Partition]),
     case Reply of
-        no_repair -> ok;
-        repair_in_progress ->
+        not_found -> ok;
+        in_progress ->
             timer:sleep(timer:seconds(1)),
             wait_for_repair({Partition, Node}, Tries - 1)
     end.
