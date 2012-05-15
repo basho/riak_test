@@ -81,7 +81,8 @@ kill_repair_verify({Partition, Node}) ->
     lager:info("Restarting search vnode for ~p on ~p", [Partition, Node]),
     {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
                          [Partition, riak_search_vnode]),
-    ?assert(rpc:call(Node, erlang, exit, [Pid, kill])),
+    ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
+    timer:sleep(100),
     ?assertNot(rpc:call(Node, erlang, is_process_alive, [Pid])),
 
     lager:info("Verify data is missing"),
@@ -91,8 +92,9 @@ kill_repair_verify({Partition, Node}) ->
     lager:info("Invoking repair for ~p on ~p", [Partition, Node]),
     %% TODO: Don't ignore return, check version of Riak and if greater
     %% or equal to 1.x then expect OK.
-    _Ignore = rpc:call(Node, search, repair_index, [Partition]),
-    lager:info("return value of repair_index ~p", [_Ignore]),
+    Return = rpc:call(Node, search, repair_index, [Partition]),
+
+    lager:info("return value of repair_index ~p", [Return]),
     lager:info("Wait for repair to finish"),
     wait_for_repair({Partition, Node}, 30),
 
@@ -109,7 +111,39 @@ kill_repair_verify({Partition, Node}) ->
     %% NOTE: If the following assert fails then check the .notfound
     %% file written above...it contains all postings that were in the
     %% stash that weren't found after the repair.
-    ?assertEqual(ExpectToVerify, Verified).
+    ?assertEqual(ExpectToVerify, Verified),
+
+    {ok, [{BeforeP, _BeforeOwner}=B, _, {AfterP, _AfterOwner}=A]} = Return,
+    lager:info("Verify before src partition ~p still has data", [B]),
+    {ok, [StashB]} = file:consult(stash_path(BeforeP)),
+    ExpectToVerifyB = dict:size(StashB),
+    BeforePostings = get_postings(B),
+    {VerifiedB, NotFoundB} = dict:fold(verify(BeforePostings), {0, []}, StashB),
+    case NotFoundB of
+        [] -> ok;
+        _ ->
+            NFB = rt:config(rtdev_path) ++ "/dev/postings_stash",
+            NFB2 = NFB ++ "/" ++ integer_to_list(BeforeP) ++ "_src.notfound",
+            ?assertEqual(ok, file:write_file(NFB2, io_lib:format("~p.", [NotFoundB]))),
+            throw({src_partition_missing_data, NFB2})
+    end,
+    ?assertEqual(ExpectToVerifyB, VerifiedB),
+
+    lager:info("Verify after src partition ~p still has data", [A]),
+    {ok, [StashA]} = file:consult(stash_path(AfterP)),
+    ExpectToVerifyA = dict:size(StashA),
+    AfterPostings = get_postings(A),
+    {VerifiedA, NotFoundA} = dict:fold(verify(AfterPostings), {0, []}, StashA),
+    case NotFoundA of
+        [] -> ok;
+        _ ->
+            NFA = rt:config(rtdev_path) ++ "/dev/postings_stash",
+            NFA2 = NFA ++ "/" ++ integer_to_list(AfterP) ++ "_src.notfound",
+            ?assertEqual(ok, file:write_file(NFA2, io_lib:format("~p.", [NotFoundA]))),
+            throw({src_partition_missing_data, NFA2})
+    end,
+    ?assertEqual(ExpectToVerifyA, VerifiedA).
+
 
 verify(PostingsAfterRepair) ->
     fun(IFT, StashedPostings, {Verified, NotFound}) ->
