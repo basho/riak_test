@@ -61,52 +61,71 @@ partition_repair() ->
     load_module_on_riak(Nodes, ?MODULE),
     Ring = get_ring(hd(Nodes)),
     Owners = riak_core_ring:all_owners(Ring),
-    [stash_postings(Owner) || Owner <- Owners],
+    [stash_data(riak_search, Owner) || Owner <- Owners],
 
-    lager:info("Emulate data loss, repair, verify correct data"),
-    [kill_repair_verify(Owner) || Owner <- Owners],
+    lager:info("Stash KV data for each partition"),
+    [stash_data(riak_kv, Owner) || Owner <- Owners],
+
+    lager:info("Emulate data loss for riak_search, repair, verify correct data"),
+    [kill_repair_verify(Owner, "merge_index", riak_search) || Owner <- Owners],
+
+    %% TODO: parameterize backend
+    lager:info("Emulate data loss for riak_kv, repair, verify correct data"),
+    [kill_repair_verify(Owner, "bitcask", riak_kv) || Owner <- Owners],
+
     lager:info("TEST PASSED").
 
-kill_repair_verify({Partition, Node}) ->
-    {ok, [Stash]} = file:consult(stash_path(Partition)),
+data_path(Node, Suffix, Partition) ->
+    [Name, _] = string:tokens(atom_to_list(Node), "@"),
+    Base = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data",
+    Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
+
+kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
+    StashPath = stash_path(Service, Partition),
+    {ok, [Stash]} = file:consult(StashPath),
     ExpectToVerify = dict:size(Stash),
+    VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),
 
     %% kill the partition data
-    [Name, _] = string:tokens(atom_to_list(Node), "@"),
-    Path = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data/merge_index/" ++ integer_to_list(Partition),
+    Path = data_path(Node, DataSuffix, Partition),
+    %% [Name, _] = string:tokens(atom_to_list(Node), "@"),
+    %% Path = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data/merge_index/" ++ integer_to_list(Partition),
     lager:info("Killing data for ~p on ~p at ~p", [Partition, Node, Path]),
     ?assertCmd("rm -rf " ++ Path),
 
     %% force restart of vnode since some data is kept in memory
-    lager:info("Restarting search vnode for ~p on ~p", [Partition, Node]),
+    lager:info("Restarting ~p vnode for ~p on ~p", [Service, Partition, Node]),
     {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
-                         [Partition, riak_search_vnode]),
+                         [Partition, VNodeName]),
     ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
     timer:sleep(100),
     ?assertNot(rpc:call(Node, erlang, is_process_alive, [Pid])),
 
     lager:info("Verify data is missing"),
-    ?assertEqual(0, count_postings({Partition, Node})),
+    ?assertEqual(0, count_data(Service, {Partition, Node})),
 
     %% repair the partition, ignore return for now
     lager:info("Invoking repair for ~p on ~p", [Partition, Node]),
     %% TODO: Don't ignore return, check version of Riak and if greater
     %% or equal to 1.x then expect OK.
-    Return = rpc:call(Node, search, repair_index, [Partition]),
+    Return =
+        case Service of
+            riak_kv -> rpc:call(Node, riak_kv_vnode, repair, [Partition]);
+            riak_search -> rpc:call(Node, search, repair_index, [Partition])
+        end,
 
     lager:info("return value of repair_index ~p", [Return]),
     lager:info("Wait for repair to finish"),
-    wait_for_repair({Partition, Node}, 30),
+    wait_for_repair(Service, {Partition, Node}, 30),
 
     lager:info("Verify ~p on ~p is fully repaired", [Partition, Node]),
-    Postings2 = get_postings({Partition, Node}),
-    {Verified, NotFound} = dict:fold(verify(Postings2), {0, []}, Stash),
+    Data2 = get_data(Service, {Partition, Node}),
+    {Verified, NotFound} = dict:fold(verify(Service, Data2), {0, []}, Stash),
     case NotFound of
         [] -> ok;
         _ ->
-            NF = rt:config(rtdev_path) ++ "/dev/postings_stash",
-            NF2 = NF ++ "/" ++ integer_to_list(Partition) ++ ".notfound",
-            ?assertEqual(ok, file:write_file(NF2, io_lib:format("~p.", [NotFound])))
+            NF = StashPath ++ ".nofound",
+            ?assertEqual(ok, file:write_file(NF, io_lib:format("~p.", [NotFound])))
     end,
     %% NOTE: If the following assert fails then check the .notfound
     %% file written above...it contains all postings that were in the
@@ -115,37 +134,49 @@ kill_repair_verify({Partition, Node}) ->
 
     {ok, [{BeforeP, _BeforeOwner}=B, _, {AfterP, _AfterOwner}=A]} = Return,
     lager:info("Verify before src partition ~p still has data", [B]),
-    {ok, [StashB]} = file:consult(stash_path(BeforeP)),
+    StashPathB = stash_path(Service, BeforeP),
+    {ok, [StashB]} = file:consult(StashPathB),
     ExpectToVerifyB = dict:size(StashB),
-    BeforePostings = get_postings(B),
-    {VerifiedB, NotFoundB} = dict:fold(verify(BeforePostings), {0, []}, StashB),
+    BeforeData = get_data(Service, B),
+    {VerifiedB, NotFoundB} = dict:fold(verify(Service, BeforeData), {0, []}, StashB),
     case NotFoundB of
         [] -> ok;
         _ ->
-            NFB = rt:config(rtdev_path) ++ "/dev/postings_stash",
-            NFB2 = NFB ++ "/" ++ integer_to_list(BeforeP) ++ "_src.notfound",
-            ?assertEqual(ok, file:write_file(NFB2, io_lib:format("~p.", [NotFoundB]))),
-            throw({src_partition_missing_data, NFB2})
+            NFB = StashPathB ++ ".notfound",
+            ?assertEqual(ok, file:write_file(NFB, io_lib:format("~p.", [NotFoundB]))),
+            throw({src_partition_missing_data, NFB})
     end,
     ?assertEqual(ExpectToVerifyB, VerifiedB),
 
     lager:info("Verify after src partition ~p still has data", [A]),
-    {ok, [StashA]} = file:consult(stash_path(AfterP)),
+    StashPathA = stash_path(Service, AfterP),
+    {ok, [StashA]} = file:consult(StashPathA),
     ExpectToVerifyA = dict:size(StashA),
-    AfterPostings = get_postings(A),
-    {VerifiedA, NotFoundA} = dict:fold(verify(AfterPostings), {0, []}, StashA),
+    AfterData = get_data(Service, A),
+    {VerifiedA, NotFoundA} = dict:fold(verify(Service, AfterData), {0, []}, StashA),
     case NotFoundA of
         [] -> ok;
         _ ->
-            NFA = rt:config(rtdev_path) ++ "/dev/postings_stash",
-            NFA2 = NFA ++ "/" ++ integer_to_list(AfterP) ++ "_src.notfound",
-            ?assertEqual(ok, file:write_file(NFA2, io_lib:format("~p.", [NotFoundA]))),
-            throw({src_partition_missing_data, NFA2})
+            NFA = StashPathA ++ ".notfound",
+            ?assertEqual(ok, file:write_file(NFA, io_lib:format("~p.", [NotFoundA]))),
+            throw({src_partition_missing_data, NFA})
     end,
     ?assertEqual(ExpectToVerifyA, VerifiedA).
 
 
-verify(PostingsAfterRepair) ->
+verify(riak_kv, DataAfterRepair) ->
+    fun(BKey, StashedValue, {Verified, NotFound}) ->
+            StashedData={BKey, StashedValue},
+            case dict:find(BKey, DataAfterRepair) of
+                error -> {Verified, [StashedData|NotFound]};
+                {ok, Value} ->
+                    if Value == StashedValue -> {Verified+1, NotFound};
+                       true -> {Verified, [StashedData|NotFound]}
+                    end
+            end
+    end;
+
+verify(riak_search, PostingsAfterRepair) ->
     fun(IFT, StashedPostings, {Verified, NotFound}) ->
             StashedPosting={IFT, StashedPostings},
             case dict:find(IFT, PostingsAfterRepair) of
@@ -163,45 +194,64 @@ verify(PostingsAfterRepair) ->
 is_true(X) ->
     X == true.
 
-count_postings({Partition, Node}) ->
-    dict:size(get_postings({Partition, Node})).
+count_data(Service, {Partition, Node}) ->
+    dict:size(get_data(Service, {Partition, Node})).
 
-get_postings({Partition, Node}) ->
-    VMaster = riak_search_vnode_master,
+get_data(Service, {Partition, Node}) ->
+    VMaster =
+        case Service of
+            riak_kv -> riak_kv_vnode_master;
+            riak_search -> riak_search_vnode_master
+        end,
     %% TODO: add compile time support for riak_test
-    Req = {riak_core_fold_req_v1, fun stash/3, dict:new()},
-    Postings = riak_core_vnode_master:sync_command({Partition, Node},
-                                                   Req,
-                                                   VMaster,
-                                                   infinity),
-    Postings.
+    Req =
+        case Service of
+            riak_kv ->
+                {riak_core_fold_req_v1, fun stash_kv/3, dict:new()};
+            riak_search ->
+                {riak_core_fold_req_v1, fun stash_search/3, dict:new()}
+        end,
+    Data = riak_core_vnode_master:sync_command({Partition, Node},
+                                               Req,
+                                               VMaster,
+                                               infinity),
+    Data.
 
-stash_postings({Partition, Node}) ->
-    File = stash_path(Partition),
+stash_data(Service, {Partition, Node}) ->
+    File = stash_path(Service, Partition),
     ?assertEqual(ok, filelib:ensure_dir(File)),
-    lager:info("Stashing ~p at ~p to ~p", [Partition, Node, File]),
-    Postings = get_postings({Partition, Node}),
+    lager:info("Stashing ~p/~p at ~p to ~p", [Service, Partition, Node, File]),
+    Postings = get_data(Service, {Partition, Node}),
     ?assertEqual(ok, file:write_file(File, io_lib:format("~p.", [Postings]))).
 
-stash({_I,{_F,_T}}=K, _Postings=V, Stash) ->
+stash_kv(Key, Value, Stash) ->
+    dict:store(Key, Value, Stash).
+
+stash_search({_I,{_F,_T}}=K, _Postings=V, Stash) ->
     dict:append_list(K, V, Stash).
 
-stash_path(Partition) ->
-    Path = rt:config(rtdev_path) ++ "/dev/postings_stash",
-    Path ++ "/" ++ integer_to_list(Partition) ++ ".stash".
+stash_path(Service, Partition) ->
+    Path = rt:config(rtdev_path) ++ "/dev/data_stash",
+    Path ++ "/" ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".
 
 file_list(Dir) ->
     filelib:wildcard(Dir ++ "/*").
 
-wait_for_repair(_, 0) ->
+wait_for_repair(_, _, 0) ->
     throw(wait_for_repair_max_tries);
-wait_for_repair({Partition, Node}, Tries) ->
-    Reply = rpc:call(Node, search, repair_index_status, [Partition]),
+wait_for_repair(Service, {Partition, Node}, Tries) ->
+    Reply =
+        case Service of
+            riak_kv ->
+                rpc:call(Node, riak_kv_vnode, repair_status, [Partition]);
+            riak_search ->
+                rpc:call(Node, search, repair_index_status, [Partition])
+        end,
     case Reply of
         not_found -> ok;
         in_progress ->
             timer:sleep(timer:seconds(1)),
-            wait_for_repair({Partition, Node}, Tries - 1)
+            wait_for_repair(Service, {Partition, Node}, Tries - 1)
     end.
 
 %%
