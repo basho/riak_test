@@ -113,8 +113,10 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     %% or equal to 1.x then expect OK.
     Return =
         case Service of
-            riak_kv -> rpc:call(Node, riak_kv_vnode, repair, [Partition]);
-            riak_search -> rpc:call(Node, search, repair_index, [Partition])
+            riak_kv ->
+                rpc:call(Node, riak_kv_vnode, repair, [Partition]);
+            riak_search ->
+                rpc:call(Node, riak_search_vnode, repair, [Partition])
         end,
 
     lager:info("return value of repair_index ~p", [Return]),
@@ -248,7 +250,7 @@ wait_for_repair(Service, {Partition, Node}, Tries) ->
             riak_kv ->
                 rpc:call(Node, riak_kv_vnode, repair_status, [Partition]);
             riak_search ->
-                rpc:call(Node, search, repair_index_status, [Partition])
+                rpc:call(Node, riak_search_vnode, repair_status, [Partition])
         end,
     case Reply of
         not_found -> ok;
