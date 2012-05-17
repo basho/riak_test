@@ -16,18 +16,26 @@ partition_repair() ->
     SpamDir = get_os_env("SPAM_DIR"),
     RingSize = list_to_integer(get_os_env("RING_SIZE", "16")),
     NVal = get_os_env("N_VAL", undefined),
+    KVBackend = get_os_env("KV_BACKEND", "bitcask"),
+    {KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
     Bucket = <<"scotts_spam">>,
 
     lager:info("Build a cluster"),
     lager:info("riak_search enabled: true"),
     lager:info("ring_creation_size: ~p", [RingSize]),
-    lager:info("riak_core vnode_inactivity_timeout 1000"),
+    lager:info("n_val: ~p", [NVal]),
+    lager:info("KV backend: ~s", [KVBackend]),
+    lager:info("riak_core vnode_management_timer 1000"),
     Conf = [
             {riak_core,
              [
               {ring_creation_size, RingSize},
               {handoff_manager_timeout, 1000},
               {vnode_management_timer, 1000}
+             ]},
+            {riak_kv,
+             [
+              {storage_backend, KVBackendMod}
              ]},
             {riak_search,
              [
@@ -71,14 +79,9 @@ partition_repair() ->
 
     %% TODO: parameterize backend
     lager:info("Emulate data loss for riak_kv, repair, verify correct data"),
-    [kill_repair_verify(Owner, "bitcask", riak_kv) || Owner <- Owners],
+    [kill_repair_verify(Owner, KVDataDir, riak_kv) || Owner <- Owners],
 
     lager:info("TEST PASSED").
-
-data_path(Node, Suffix, Partition) ->
-    [Name, _] = string:tokens(atom_to_list(Node), "@"),
-    Base = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data",
-    Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
 
 kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     StashPath = stash_path(Service, Partition),
@@ -253,6 +256,17 @@ wait_for_repair(Service, {Partition, Node}, Tries) ->
             timer:sleep(timer:seconds(1)),
             wait_for_repair(Service, {Partition, Node}, Tries - 1)
     end.
+
+data_path(Node, Suffix, Partition) ->
+    [Name, _] = string:tokens(atom_to_list(Node), "@"),
+    Base = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data",
+    Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
+
+backend_mod_dir("bitcask") ->
+    {riak_kv_bitcask_backend, "bitcask"};
+backend_mod_dir("leveldb") ->
+    {riak_kv_eleveldb_backend, "leveldb"}.
+
 
 %%
 %% STUFF TO MOVE TO rt?
