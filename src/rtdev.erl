@@ -121,8 +121,8 @@ deploy_nodes(NumNodes, Versions) ->
     %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
 
     %% Ensure nodes are singleton clusters
-    ok = rt:check_singleton_node(?DEV(N)) end || {N, Version} <- VersionMap,
-                                                 Version /= "0.14.2"],
+    [ok = rt:check_singleton_node(?DEV(N)) || {N, Version} <- VersionMap,
+                                              Version /= "0.14.2"],
 
     lager:info("Deployed nodes: ~p", [Nodes]),
     Nodes.
