@@ -7,7 +7,9 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--export([deploy_nodes/1,
+-export([get_ring/1,
+         deploy_nodes/1,
+         deploy_nodes/2,
          start/1,
          stop/1,
          join/2,
@@ -28,6 +30,9 @@
          wait_until_all_members/2,
          wait_until_ring_converged/1]).
 
+%% Search API
+-export([enable_search_hook/2]).
+
 -export([setup_harness/2,
          cleanup_harness/0,
          load_config/1,
@@ -37,6 +42,11 @@
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
+
+%% @doc Get the raw ring for the given `Node'.
+get_ring(Node) ->
+    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    Ring.
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in Config.
@@ -51,6 +61,12 @@ update_app_config(Node, Config) ->
 -spec deploy_nodes(NumNodes :: integer()) -> [node()].
 deploy_nodes(NumNodes) ->
     ?HARNESS:deploy_nodes(NumNodes).
+
+%% @doc Deploy a set of freshly installed Riak nodes with the given
+%%      `InitialConfig', returning a list of the nodes deployed.
+-spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
+deploy_nodes(NumNodes, InitialConfig) ->
+    ?HARNESS:deploy_nodes(NumNodes, InitialConfig).
 
 %% @doc Start the specified Riak node
 start(Node) ->
@@ -240,6 +256,20 @@ wait_until(Node, Fun, Retry, Delay) ->
             wait_until(Node, Fun, Retry-1)
     end.
 
+%%%===================================================================
+%%% Search
+%%%===================================================================
+
+%% doc Enable the search KV hook for the given `Bucket'.  Any `Node'
+%%     in the cluster may be used as the change is propagated via the
+%%     Ring.
+enable_search_hook(Node, Bucket) when is_binary(Bucket) ->
+    ?assertEqual(ok, rpc:call(Node, riak_search_kv_hook, install, [Bucket])).
+
+%%%===================================================================
+%%% Private
+%%%===================================================================
+
 %% @private
 setup_harness(Test, Args) ->
     ?HARNESS:setup_harness(Test, Args).
@@ -280,12 +310,16 @@ config(Key, Default) ->
             Default
     end.
 
-%% @doc
-%% Safely construct a `NumNode' size cluster and return a list of the
-%% deployed nodes.
+%% @doc Safely construct a `NumNode' size cluster and return a list of
+%%      the deployed nodes.
 build_cluster(NumNodes) ->
+    build_cluster(NumNodes, default).
+
+%% @doc Safely construct a `NumNode' size cluster using
+%%      `InitialConfig'. Return a list of the deployed nodes.
+build_cluster(NumNodes, InitialConfig) ->
     %% Deploy a set of new nodes
-    Nodes = deploy_nodes(NumNodes),
+    Nodes = deploy_nodes(NumNodes, InitialConfig),
 
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
