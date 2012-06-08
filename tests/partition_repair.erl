@@ -17,6 +17,8 @@ partition_repair() ->
     RingSize = list_to_integer(get_os_env("RING_SIZE", "16")),
     NVal = get_os_env("N_VAL", undefined),
     KVBackend = get_os_env("KV_BACKEND", "bitcask"),
+    NumNodes = list_to_integer(get_os_env("NUM_NODES", "4")),
+    HOConcurrency = list_to_integer(get_os_env("HO_CONCURRENCY", "2")),
     {KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
     Bucket = <<"scotts_spam">>,
 
@@ -25,13 +27,16 @@ partition_repair() ->
     lager:info("ring_creation_size: ~p", [RingSize]),
     lager:info("n_val: ~p", [NVal]),
     lager:info("KV backend: ~s", [KVBackend]),
+    lager:info("num nodes: ~p", [NumNodes]),
+    lager:info("riak_core handoff_concurrency: ~p", [HOConcurrency]),
     lager:info("riak_core vnode_management_timer 1000"),
     Conf = [
             {riak_core,
              [
               {ring_creation_size, RingSize},
               {handoff_manager_timeout, 1000},
-              {vnode_management_timer, 1000}
+              {vnode_management_timer, 1000},
+              {handoff_concurrency, HOConcurrency}
              ]},
             {riak_kv,
              [
@@ -47,7 +52,7 @@ partition_repair() ->
             %%      [{"./log/console.log",debug,10485760,"$D0",5}]}]}]}
            ],
 
-    Nodes = rt:build_cluster(4, Conf),
+    Nodes = rt:build_cluster(NumNodes, Conf),
 
     case NVal of
         undefined ->
@@ -118,6 +123,17 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
             riak_search ->
                 rpc:call(Node, riak_search_vnode, repair, [Partition])
         end,
+
+    %% Kill sending vnode to verify HO sender is killed
+    %% {ok, [{KPart, KNode}|_]} = Return,
+    %% {ok, NewPid} = rpc:call(KNode, riak_core_vnode_manager, get_vnode_pid,
+    %%                         [KPart, VNodeName]),
+    %% lager:info("killing src pid: ~p/~p ~p", [KNode, KPart, NewPid]),
+    %% KR = rpc:call(KNode, erlang, exit, [NewPid, kill]),
+    %% lager:info("result of kill: ~p", [KR]),
+    %% timer:sleep(1000),
+    %% ?assertNot(rpc:call(KNode, erlang, is_process_alive, [NewPid])),
+
 
     lager:info("return value of repair_index ~p", [Return]),
     lager:info("Wait for repair to finish"),
