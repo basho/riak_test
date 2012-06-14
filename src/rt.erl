@@ -50,17 +50,21 @@ update_app_config(Node, Config) ->
 %%      nodes deployed.
 -spec deploy_nodes(NumNodes :: integer()) -> [node()].
 deploy_nodes(NumNodes) ->
-    ?HARNESS:deploy_nodes(NumNodes).
+    Nodes = ?HARNESS:deploy_nodes(NumNodes),
+    if_coverage(fun cover:start/1, [Nodes]),
+    Nodes.
 
 %% @doc Start the specified Riak node
 start(Node) ->
-    ?HARNESS:start(Node).
+    ?HARNESS:start(Node),
+    if_coverage(fun cover:start/1, [Node]).
 
 async_start(Node) ->
     spawn(fun() -> start(Node) end).
 
 %% @doc Stop the specified Riak node
 stop(Node) ->
+    maybe_analyze_coverage(),
     ?HARNESS:stop(Node).
 
 %% @doc Have `Node' send a join request to `PNode'
@@ -404,3 +408,45 @@ load_code(Mod, Nodes) ->
     [?assertEqual({module, Mod},
                   rpc:call(Node, code, load_binary, [Mod, File, Bin]))
      || Node <- Nodes].
+
+if_coverage(Fun, Args) ->
+    case rt:config(rt_cover) of
+        true ->
+            erlang:apply(Fun, Args);
+        _ ->
+            ok
+    end.
+
+maybe_analyze_coverage() ->
+    if_coverage(fun cover_analyze/1, [rt:config(rt_test)]).
+
+cover_analyze(_TestMod) ->
+    %% Modules = cover_modules(TestMod),
+    Modules = cover:modules(),
+    [cover:analyze(Mod, calls) || Mod <- Modules].
+
+%% cover_modules() ->
+%%     cover_modules(rt:config(rt_test)).
+%% cover_modules(TestMod) ->
+%%     case TestMod:cover_modules() of
+%%         '$all' ->
+%%             %% [cover_deps(Dep) || Dep <- rt:config(rt_deps)];
+%%             [all_beams(Dep) || Dep <- rt:config(rt_deps)];
+%%         Modules ->
+%%             Modules
+%%     end.
+
+cover_deps(Path) ->
+    {ok, Deps} = file:list_dir(Path),
+    [cover:compile_beam_directory(lists:append([Path, "/", Dep, "/ebin"]))
+     || Dep <- Deps],
+    ok.
+
+cover_compile(TestMod) ->
+    case TestMod:cover_modules() of
+        '$all' ->
+            [cover_deps(Dep) || Dep <- rt:config(rt_deps)];
+        Modules ->
+            [?assertEqual({ok, Mod}, cover:compile_beam(Mod)) || Mod <- Modules]
+    end,
+    ok.

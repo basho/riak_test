@@ -1,15 +1,12 @@
 %% @private
 -module(riak_test).
--export([main/1, all/0, run/1]).
+-export([main/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
     ok.
-
-all() ->
-    [run].
 
 main(Args) ->
     [Config, Test | HarnessArgs]=Args,
@@ -33,26 +30,18 @@ main(Args) ->
     rt:setup_harness(Test, HarnessArgs),
     TestA = list_to_atom(Test),
     rt:set_config(rt_test, TestA),
-    %% run_test().
-    %% st:TestFn(),
-    %% run(ok),
-    case rt:config(rt_cover, false) of
-        false ->
-            run();
-        true ->
-            CoverMods = TestA:cover_modules(),
-            CoverSpec = io_lib:format("~p.", [{incl_mods, CoverMods}]),
-            ?assertEqual(ok, file:write_file("/tmp/rt.coverspec", CoverSpec)),
-            ct:run_test([{label, Test},
-                         {auto_compile, false},
-                         {suite, atom_to_list(?MODULE)},
-                         {cover, "/tmp/rt.coverspec"}])
-    end.
-
-run(_) ->
-    run().
-run() ->
+    rt:if_coverage(fun rt:cover_compile/1, [TestA]),
     TestA = rt:config(rt_test),
     TestA:TestA(),
+    rt:if_coverage(fun cover_analyze_file/1, [TestA]),
     rt:cleanup_harness(),
     ok.
+
+cover_analyze_file(_TestMod) ->
+    %% Modules = rt:cover_modules(TestMod),
+    Modules = cover:modules(),
+    lists:foreach(fun generate_coverage/1, Modules).
+
+generate_coverage(Mod) ->
+    {ok, File} = cover:analyze_to_file(Mod, [html]),
+    lager:info("Wrote coverage file: ~p", [File]).
