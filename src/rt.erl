@@ -111,6 +111,7 @@ wait_until_no_pending_changes(Nodes) ->
                 [rpc:call(NN, riak_core_vnode_manager, force_handoffs, [])
                  || NN <- Nodes],
                 {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+                lager:info("Pending: ~p :: ~p", [Node, riak_core_ring:pending_changes(Ring)]),
                 riak_core_ring:pending_changes(Ring) =:= []
         end,
     [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
@@ -294,6 +295,7 @@ build_cluster(NumNodes) ->
     [Node1|OtherNodes] = Nodes,
     [join(Node, Node1) || Node <- OtherNodes],
 
+    ?assertEqual(ok, wait_until_ring_converged(Nodes)),
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
 
@@ -360,3 +362,45 @@ systest_read(Node, Start, End, Bucket, R) ->
                 end
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
+
+kv_data_dir(Node) ->
+    {ok, Backend} = rpc:call(Node, application, get_env, [riak_kv, storage_backend]),
+    case Backend of
+        riak_kv_bitcask_backend ->
+            {ok, DataRel} = rpc:call(Node, application, get_env, [bitcask, data_root]);
+        riak_kv_eleveldb_backend ->
+            {ok, DataRel} = rpc:call(Node, application, get_env, [eleveldb, data_root]);
+        _ ->
+            DataRel = "",
+            throw({unknown_backend, Backend})
+    end,
+    DataDir = rpc:call(Node, filename, absname, [DataRel]),
+    DataDir.
+
+kv_index_dir(Node, Idx) ->
+    DataDir = kv_data_dir(Node),
+    IdxDir = lists:flatten(io_lib:format("~s/~b", [DataDir, Idx])),
+    IdxDir.
+
+search_data_dir(Node) ->
+    {ok, Backend} = rpc:call(Node, application, get_env, [riak_search, search_backend]),
+    case Backend of
+        merge_index_backend ->
+            {ok, DataRel} = rpc:call(Node, application, get_env, [merge_index, data_root]);
+        _ ->
+            DataRel = "",
+            throw({unknown_backend, Backend})
+    end,
+    DataDir = rpc:call(Node, filename, absname, [DataRel]),
+    DataDir.
+
+search_index_dir(Node, Idx) ->
+    DataDir = search_data_dir(Node),
+    IdxDir = lists:flatten(io_lib:format("~s/~b", [DataDir, Idx])),
+    IdxDir.
+
+load_code(Mod, Nodes) ->
+    {Mod, Bin, File} = code:get_object_code(Mod),
+    [?assertEqual({module, Mod},
+                  rpc:call(Node, code, load_binary, [Mod, File, Bin]))
+     || Node <- Nodes].

@@ -1,11 +1,15 @@
 %% @private
 -module(riak_test).
--export([main/1]).
+-export([main/1, all/0, run/1]).
+-include_lib("eunit/include/eunit.hrl").
 
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
     ok.
+
+all() ->
+    [run].
 
 main(Args) ->
     [Config, Test | HarnessArgs]=Args,
@@ -28,7 +32,27 @@ main(Args) ->
     %% rt:set_config(rt_harness, rtbe),
     rt:setup_harness(Test, HarnessArgs),
     TestA = list_to_atom(Test),
+    rt:set_config(rt_test, TestA),
+    %% run_test().
     %% st:TestFn(),
+    %% run(ok),
+    case rt:config(rt_cover, false) of
+        false ->
+            run();
+        true ->
+            CoverMods = TestA:cover_modules(),
+            CoverSpec = io_lib:format("~p.", [{incl_mods, CoverMods}]),
+            ?assertEqual(ok, file:write_file("/tmp/rt.coverspec", CoverSpec)),
+            ct:run_test([{label, Test},
+                         {auto_compile, false},
+                         {suite, atom_to_list(?MODULE)},
+                         {cover, "/tmp/rt.coverspec"}])
+    end.
+
+run(_) ->
+    run().
+run() ->
+    TestA = rt:config(rt_test),
     TestA:TestA(),
     rt:cleanup_harness(),
     ok.
