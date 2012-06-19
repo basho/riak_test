@@ -410,7 +410,7 @@ load_code(Mod, Nodes) ->
      || Node <- Nodes].
 
 if_coverage(Fun, Args) ->
-    case rt:config(rt_cover) of
+    case rt:config(rt_cover, false) of
         true ->
             erlang:apply(Fun, Args);
         _ ->
@@ -450,3 +450,92 @@ cover_compile(TestMod) ->
             [?assertEqual({ok, Mod}, cover:compile_beam(Mod)) || Mod <- Modules]
     end,
     ok.
+
+wait_for_service(Node, Service) ->
+    F = fun(N) ->
+                Services = rpc:call(N, riak_core_node_watcher, services, []),
+                lists:member(Service, Services)
+        end,
+    ?assertEqual(ok, wait_until(Node, F)),
+    ok.
+
+wait_for_cluster_service(Nodes, Service) ->
+    F = fun(N) ->
+                UpNodes = rpc:call(N, riak_core_node_watcher, nodes, [Service]),
+                (Nodes -- UpNodes) == []
+        end,
+    [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
+    ok.
+
+-record(riak_kv_get_req_v1, {
+          bkey :: {binary(), binary()},
+          req_id :: non_neg_integer()}).
+-define(KV_GET_REQ, #riak_kv_get_req_v1).
+
+kv_vnode_get(Node, Index, BKey) ->
+    Preflist = [{Index, Node}],
+    Ref = make_ref(),
+    From = {raw, Ref, self()},
+    %%     reply({raw, Ref, From}, Reply) ->
+    %%     From ! {Ref, Reply};
+    %% get(Preflist, BKey, ReqId) ->
+    Req = ?KV_GET_REQ{bkey=BKey,
+                      req_id=Ref},
+    ?assertEqual(ok,
+                 rpc:call(Node, riak_core_vnode_master, command,
+                          [Preflist, Req, From, riak_kv_vnode_master])),
+    {ok, Reply} = wait_for_message(Ref),
+    Reply.
+
+wait_for_message(Ref) ->
+    MaxTime = rt:config(rt_max_wait_time),
+    receive
+        {Ref, Reply} ->
+            {ok, Reply}
+    after MaxTime ->
+            fail
+    end.
+
+kv_objects(Node, Index) ->
+    FoldFn = fun(Key, Value, Acc) ->
+                     [{Key, Value}|Acc]
+             end,
+    Req = {riak_core_fold_req_v1, FoldFn, []},
+    Data = riak_core_vnode_master:sync_command({Index, Node},
+                                               Req,
+                                               riak_kv_vnode_master,
+                                               infinity),
+    Data.
+
+systest_fold(Node, Index, Start, End, Bucket) ->
+    F = fun({B, _}, _, Acc) when B /= Bucket ->
+                Acc;
+           ({_, Key}, Bin, {Count, Errors})  ->
+                Obj = binary_to_term(Bin),
+                Value = riak_object:get_value(Obj),
+                case Key of
+                    <<N:32/integer>> when ((N >= Start) and (N =< End)) ->
+                        case Key == Value of
+                            true ->
+                                {Count+1, Errors};
+                            false ->
+                                {Count, [{N, {wrong_val, Value}} | Errors]}
+                        end;
+                    _ ->
+                        {Count, [{unexpected_key, Key} | Errors]}
+                end
+        end,
+    Req = {riak_core_fold_req_v1, F, {0,[]}},
+    {Count, Errors} = riak_core_vnode_master:sync_command({Index, Node},
+                                                          Req,
+                                                          riak_kv_vnode_master,
+                                                          infinity),
+    ExpectedCount = End - Start + 1,
+    case {Errors, Count} of
+        {[], ExpectedCount} ->
+            [];
+        {[], _} ->
+            [{missing, ExpectedCount - Count}];
+        _ ->
+            Errors
+    end.

@@ -38,10 +38,73 @@ main(Args) ->
     ok.
 
 cover_analyze_file(_TestMod) ->
+    ok = filelib:ensure_dir("cover/index.html"),
     %% Modules = rt:cover_modules(TestMod),
     Modules = cover:modules(),
-    lists:foreach(fun generate_coverage/1, Modules).
+    %% io:format("~p~n", [coverage_summary(Modules)]),
+    lists:foreach(fun generate_coverage/1, Modules),
+    generate_coverage_summary(Modules).
 
 generate_coverage(Mod) ->
-    {ok, File} = cover:analyze_to_file(Mod, [html]),
-    lager:info("Wrote coverage file: ~p", [File]).
+    {ok, _File} = cover:analyze_to_file(Mod, cover_file("cover", Mod), [html]),
+    %% lager:info("Wrote coverage file: ~p", [File]).
+    ok.
+
+generate_coverage_summary(Modules) ->
+    {ModCovs, {TC, TN, TP}} = coverage_summary(Modules),
+    IndexHTML = filename:join(["cover", "index.html"]),
+    {ok, F} = file:open(IndexHTML, [write]),
+    io:format(F, "<html><body><h1>Coverage Summary</h1>~n", []),
+    io:format(F, "<style>"
+              "  table, th, td {"
+              "    border: black solid 1px;"
+              "  }"
+              "  td {"
+              "    padding: 5px;"
+              "    text-align: right;"
+              "  }"
+              "  td:first-child {"
+              "    text-align: left;"
+              "  }"
+              "  .total {"
+              "    font-weight: bold;"
+              "  }"
+              "</style>", []),
+    io:format(F, "<table><tr>"
+              "<th>Module</th>"
+              "<th>Covered (%)</th>"
+              "<th>Covered (Lines)</th>"
+              "<th>Not covered (Lines)</th>"
+              "</tr>~n", []),
+    [io:format(F, "<tr><td>~s</td><td>~b%</td><td>~b</td><td>~b</td></tr>~n",
+               [cover_link(Mod), P, C, N]) || {Mod, C, N, P} <- ModCovs],
+    io:format(F, "<tr><td>~s</td><td>~b%</td><td>~b</td><td>~b</td></tr>~n",
+              ["Total", TP, TC, TN]),
+    io:format(F, "</table></body></html>", []),
+    ok = file:close(F),
+    lager:info("Wrote coverage summary: ~p", [IndexHTML]),
+    ok.
+
+coverage_summary(Modules) ->
+    {ModCovs, {TC, TN}} =
+        lists:mapfoldl(
+          fun(Mod, {TC, TN}) ->
+                  {ok, {Mod, {C, N}}} = cover:analyze(Mod, coverage, module),
+                  ModCov = {Mod, C, N, percentage(C,C+N)},
+                  {ModCov, {TC+C, TN+N}}
+          end, {0,0}, Modules),
+    {ModCovs, {TC, TN, percentage(TC, TC+TN)}}.
+
+percentage(_, 0) ->
+    0;
+percentage(X, Y) ->
+    X * 100 div Y.
+
+cover_link(Module) ->
+    lists:flatten(io_lib:format("<a href=\"~s\">~s</a>",
+                                [cover_file(Module), Module])).
+
+cover_file(Dir, Module) ->
+    filename:join([Dir, cover_file(Module)]).
+cover_file(Module) ->
+    atom_to_list(Module) ++ ".COVER.html".
