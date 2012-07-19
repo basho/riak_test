@@ -14,6 +14,7 @@
          stop/1,
          join/2,
          leave/1,
+         admin/2,
          wait_until_pingable/1,
          wait_until_unpingable/1,
          wait_until_ready/1,
@@ -93,6 +94,9 @@ leave(Node) ->
     lager:debug("[leave] ~p: ~p", [Node, R]),
     ?assertEqual(ok, R),
     ok.
+
+admin(Node, Args) ->
+    ?HARNESS:admin(Node, Args).
 
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
