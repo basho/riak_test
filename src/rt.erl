@@ -7,18 +7,21 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--export([get_ring/1,
-         deploy_nodes/1,
+-export([deploy_nodes/1,
          deploy_nodes/2,
+         build_cluster/1,
+         build_cluster/2,
          start/1,
          stop/1,
          join/2,
          leave/1,
+         get_ring/1,
          wait_until_pingable/1,
          wait_until_unpingable/1,
          wait_until_ready/1,
          wait_until_no_pending_changes/1,
          wait_until_nodes_ready/1,
+         wait_until/2,
          remove/2,
          down/2,
          check_singleton_node/1,
@@ -28,6 +31,7 @@
          claimant_according_to/1,
          wait_until_all_members/1,
          wait_until_all_members/2,
+         wait_until_legacy_ringready/1,
          wait_until_ring_converged/1]).
 
 %% Search API
@@ -58,15 +62,23 @@ update_app_config(Node, Config) ->
 
 %% @doc Deploy a set of freshly installed Riak nodes, returning a list of the
 %%      nodes deployed.
--spec deploy_nodes(NumNodes :: integer()) -> [node()].
+%% @todo Re-add -spec after adding multi-version support
+deploy_nodes(Versions) when is_list(Versions) ->
+    NodeConfig = lists:map(fun({Vsn,Config}) ->
+                                   {Vsn, Config};
+                              (Vsn) ->
+                                   {Vsn, default}
+                           end, Versions),
+    ?HARNESS:deploy_nodes(NodeConfig);
 deploy_nodes(NumNodes) ->
-    ?HARNESS:deploy_nodes(NumNodes).
+    deploy_nodes(NumNodes, default).
 
 %% @doc Deploy a set of freshly installed Riak nodes with the given
 %%      `InitialConfig', returning a list of the nodes deployed.
 -spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
 deploy_nodes(NumNodes, InitialConfig) ->
-    ?HARNESS:deploy_nodes(NumNodes, InitialConfig).
+    NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
+    ?HARNESS:deploy_nodes(NodeConfig).
 
 %% @doc Start the specified Riak node
 start(Node) ->
@@ -81,18 +93,35 @@ stop(Node) ->
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
-    R = rpc:call(Node, riak_core, join, [PNode]),
+    R = try_join(Node, PNode),
     lager:debug("[join] ~p to (~p): ~p", [Node, PNode, R]),
 %%    wait_until_ready(Node),
     ?assertEqual(ok, R),
     ok.
 
+try_join(Node, PNode) ->
+    case rpc:call(Node, riak_core, join, [PNode]) of
+        {badrpc, _} ->
+            rpc:call(Node, riak, join, [PNode]);
+        Result ->
+            Result
+    end.
+
 %% @doc Have the specified node leave the cluster
 leave(Node) ->
-    R = rpc:call(Node, riak_core, leave, []),
+    R = try_leave(Node),
     lager:debug("[leave] ~p: ~p", [Node, R]),
     ?assertEqual(ok, R),
     ok.
+
+try_leave(Node) ->
+    case rpc:call(Node, riak_core, leave, []) of
+        {badrpc, _} ->
+            rpc:call(Node, riak_kv_console, leave, [[]]),
+            ok;
+        Result ->
+            Result
+    end.
 
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
@@ -203,6 +232,17 @@ wait_until_ring_converged(Nodes) ->
     [?assertEqual(ok, wait_until(Node, fun is_ring_ready/1)) || Node <- Nodes],
     ok.
 
+wait_until_legacy_ringready(Node) ->
+    rt:wait_until(Node,
+                  fun(_) ->
+                          case rpc:call(Node, riak_kv_status, ringready, []) of
+                              {ok, _Nodes} ->
+                                  true;
+                              _ ->
+                                  false
+                          end
+                  end).
+
 %% @private
 is_ring_ready(Node) ->
     case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
@@ -310,16 +350,27 @@ config(Key, Default) ->
             Default
     end.
 
-%% @doc Safely construct a `NumNode' size cluster and return a list of
-%%      the deployed nodes.
+%% @doc Safely construct a new cluster and return a list of the deployed nodes
+%% @todo Add -spec and update doc to reflect mult-version changes
+build_cluster(Versions) when is_list(Versions) ->
+    build_cluster(length(Versions), Versions, default);
 build_cluster(NumNodes) ->
     build_cluster(NumNodes, default).
 
 %% @doc Safely construct a `NumNode' size cluster using
 %%      `InitialConfig'. Return a list of the deployed nodes.
 build_cluster(NumNodes, InitialConfig) ->
+    build_cluster(NumNodes, [], InitialConfig).
+
+build_cluster(NumNodes, Versions, InitialConfig) ->
     %% Deploy a set of new nodes
-    Nodes = deploy_nodes(NumNodes, InitialConfig),
+    Nodes =
+        case Versions of
+            [] ->
+                deploy_nodes(NumNodes, InitialConfig);
+            _ ->
+                deploy_nodes(Versions)
+        end,
 
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],

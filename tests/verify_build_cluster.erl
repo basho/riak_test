@@ -11,7 +11,7 @@
 verify_build_cluster() ->
     %% Deploy a set of new nodes
     lager:info("Deploying 3 nodes"),
-    Nodes = deploy_nodes(3),
+    Nodes = rt:deploy_nodes(3),
 
     %% Ensure each node owns 100% of it's own ring
     lager:info("Ensure each nodes 100% of it's own ring"),
