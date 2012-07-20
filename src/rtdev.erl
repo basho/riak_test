@@ -14,6 +14,16 @@ gitcmd(Path, Cmd) ->
     io_lib:format("git --git-dir=\"~s/.git\" --work-tree=\"~s/\" ~s",
                   [Path, Path, Cmd]).
 
+riak_admin_cmd(Path, N, Args) ->
+    Quoted =
+        lists:map(fun(Arg) when is_list(Arg) ->
+                          lists:flatten([$", Arg, $"]);
+                     (_) ->
+                          erlang:error(badarg)
+                  end, Args),
+    ArgStr = string:join(Quoted, " "),
+    io_lib:format("~s/dev/dev~b/bin/riak-admin ~s", [Path, N, ArgStr]).
+
 run_git(Path, Cmd) ->
     lager:debug("Running: ~s", [gitcmd(Path, Cmd)]),
     os:cmd(gitcmd(Path, Cmd)).
@@ -141,6 +151,15 @@ stop(Node) ->
 start(Node) ->
     N = node_id(Node),
     run_riak(N, relpath(node_version(N)), "start"),
+    ok.
+
+admin(Node, Args) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    Cmd = riak_admin_cmd(Path, N, Args),
+    lager:debug("Running: ~s", [Cmd]),
+    Result = os:cmd(Cmd),
+    io:format("~s", [Result]),
     ok.
 
 node_id(Node) ->

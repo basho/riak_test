@@ -16,6 +16,7 @@
          join/2,
          leave/1,
          get_ring/1,
+         admin/2,
          wait_until_pingable/1,
          wait_until_unpingable/1,
          wait_until_ready/1,
@@ -122,6 +123,9 @@ try_leave(Node) ->
         Result ->
             Result
     end.
+
+admin(Node, Args) ->
+    ?HARNESS:admin(Node, Args).
 
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
