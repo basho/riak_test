@@ -170,6 +170,41 @@ node_version(N) ->
     VersionMap = rt:config(rt_versions),
     orddict:fetch(N, VersionMap).
 
+spawn_cmd(Cmd) ->
+    Port = open_port({spawn, Cmd}, [stream, in, exit_status]),
+    Port.
+
+wait_for_cmd(Port) ->
+    rt:wait_until(node(),
+                  fun(_) ->
+                          receive
+                              {Port, Msg={data, _}} ->
+                                  self() ! {Port, Msg},
+                                  false;
+                              {Port, Msg={exit_status, _}} ->
+                                  catch port_close(Port),
+                                  self() ! {Port, Msg},
+                                  true
+                          after 0 ->
+                                  false
+                          end
+                  end),
+    get_cmd_result(Port, []).
+
+cmd(Cmd) ->
+    wait_for_cmd(spawn_cmd(Cmd)).
+
+get_cmd_result(Port, Acc) ->
+    receive
+	{Port, {data, Bytes}} ->
+            get_cmd_result(Port, [Bytes|Acc]);
+        {Port, {exit_status, Status}} ->
+            Output = lists:flatten(lists:reverse(Acc)),
+            {Status, Output}
+    after 0 ->
+            timeout
+    end.
+
 pmap(F, L) ->
     Parent = self(),
     lists:foldl(
