@@ -10,7 +10,7 @@
 replication() ->
     %% TODO: Don't hardcode # of nodes
     NumNodes = 6,
-    ClusterASize = list_to_integer(get_os_env("CLUSTER_A_SIZE", "4")),
+    ClusterASize = list_to_integer(get_os_env("CLUSTER_A_SIZE", "3")),
     %% ClusterBSize = NumNodes - ClusterASize,
     %% ClusterBSize = list_to_integer(get_os_env("CLUSTER_B_SIZE"), "2"),
 
@@ -61,9 +61,13 @@ replication() ->
 
     fin.
 
-verify_sites_balanced(NumSites, BNodes) ->
+verify_sites_balanced(NumSites, BNodes0) ->
+    Leader = rpc:call(hd(BNodes0), riak_repl_leader, leader_node, []),
+    BNodes = BNodes0 -- [Leader],
     NumNodes = length(BNodes),
     NodeCounts = [{Node, client_count(Node)} || Node <- BNodes],
+    lager:notice("nodecounts ~p", [NodeCounts]),
+    lager:notice("leader ~p", [Leader]),
     Min = NumSites div NumNodes,
     [?assert(Count >= Min) || {_Node, Count} <- NodeCounts].
 
@@ -89,7 +93,7 @@ add_site(Node, {IP, Port, Name}) ->
     Args = [IP, integer_to_list(Port), Name],
     Res = rpc:call(Node, riak_repl_console, add_site, [Args]),
     ?assertEqual(ok, Res),
-    timer:sleep(timer:seconds(3)).
+    timer:sleep(timer:seconds(5)).
 
 fake_site(Port) ->
     lists:flatten(io_lib:format("fake_site_~p", [Port])).
