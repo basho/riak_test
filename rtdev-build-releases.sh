@@ -50,4 +50,4 @@ tar -xzf riak-1.0.3.tar.gz
 build "riak-1.0.3" $R14B03
 
 tar -xzf riak-1.1.4.tar.gz
-build("riak-1.1.4", $R14B03)
+build "riak-1.1.4" $R14B03
