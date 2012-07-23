@@ -5,7 +5,7 @@
 # create a directory and then run this script from within that directory.
 # I have ~/test-releases that I created once, and then re-use for testing.
 #
-# See rtdev-setup-mixed.sh as an example of setting up mixed version layout
+# See rtdev-setup-releases.sh as an example of setting up mixed version layout
 # for testing.
 
 # Different versions of Riak were released using different Erlang versions,
@@ -39,7 +39,7 @@ build()
 }
 
 # Download Riak release source
-wget http://downloads.basho.com/riak/riak-0.1/4riak-0.14.2.tar.gz
+wget http://downloads.basho.com/riak/riak-0.14/riak-0.14.2.tar.gz
 wget http://downloads.basho.com/riak/riak-1.0.3/riak-1.0.3.tar.gz
 wget http://downloads.basho.com/riak/riak-1.1.4/riak-1.1.4.tar.gz
 
