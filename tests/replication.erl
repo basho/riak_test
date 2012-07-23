@@ -18,8 +18,15 @@ replication() ->
     %% lager:info("Create dirs"),
     %% create_dirs(Nodes),
 
-    lager:info("Deploy ~p nodes", [NumNodes]),
+    Backend = list_to_atom(get_os_env("RIAK_BACKEND",
+            "riak_kv_bitcask_backend")),
+
+    lager:info("Deploy ~p nodes using ~p backend", [NumNodes, Backend]),
     Conf = [
+            {riak_kv,
+             [
+                {storage_backend, Backend}
+             ]},
             {riak_repl,
              [
                 {fullsync_on_connect, false},
