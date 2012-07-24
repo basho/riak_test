@@ -16,32 +16,52 @@
 # Or, alternatively, just substitute the paths to the kerl install paths as
 # that should work too.
 
-R13B04=/Users/jtuple/erlang-R13B04
-R14B03=/Users/jtuple/erlang-R14B03
-R14B04=/Users/jtuple/erlang-R14B04
-R15B01=/Users/jtuple/erlang-R15B01
+R13B04=$HOME/erlang-R13B04
+R14B03=$HOME/erlang-R14B03
+R14B04=$HOME/erlang-R14B04
+R15B01=$HOME/erlang-R15B01
+
+kerl()
+{
+    RELEASE=$1
+    BUILDNAME=$2
+
+    if [ ! -x kerl ]; then
+        curl -O https://raw.github.com/spawngrid/kerl/master/kerl; chmod a+x kerl
+    fi
+
+    ./kerl build $RELEASE $BUILDNAME
+    ./kerl install $BUILDNAME $HOME/$BUILDNAME
+}
 
 build()
 {
     SRCDIR=$1
     ERLROOT=$2
 
+    if [ ! -d $ERLROOT ]; then
+        BUILDNAME=`basename $ERLROOT`
+        RELEASE=`echo $BUILDNAME | awk -F- '{ print $2 }'`
+        kerl $RELEASE $BUILDNAME
+    fi
+
+
     echo
     echo "Building $SRCDIR"
     cd $SRCDIR
 
-    RUN="env PATH=$PATH:$ERLROOT/bin:$ERLROOT/lib/erlang/bin \
+    RUN="env PATH=$ERLROOT/bin:$ERLROOT/lib/erlang/bin:$PATH \
              C_INCLUDE_PATH=$ERLROOT/usr/include \
              LD_LIBRARY_PATH=$ERLROOT/usr/lib"
-    $RUN make
-    $RUN make devrel
+    echo $RUN
+    $RUN make && $RUN make devrel
     cd ..
 }
 
 # Download Riak release source
-wget http://downloads.basho.com/riak/riak-0.14/riak-0.14.2.tar.gz
-wget http://downloads.basho.com/riak/riak-1.0.3/riak-1.0.3.tar.gz
-wget http://downloads.basho.com/riak/riak-1.1.4/riak-1.1.4.tar.gz
+wget -c http://downloads.basho.com/riak/riak-0.14/riak-0.14.2.tar.gz
+wget -c http://downloads.basho.com/riak/riak-1.0.3/riak-1.0.3.tar.gz
+wget -c http://downloads.basho.com/riak/riak-1.1.4/riak-1.1.4.tar.gz
 
 tar -xzf riak-0.14.2.tar.gz
 build "riak-0.14.2" $R13B04
