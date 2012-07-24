@@ -46,72 +46,96 @@ replication() ->
     ?assertEqual(ok, wait_until_nodes_ready(ANodes)),
     ?assertEqual(ok, wait_until_no_pending_changes(ANodes)),
 
-    %% write some initial data to A
-    lager:info("Writing 100 keys to ~p", [AFirst]),
-    rt:systest_write(AFirst, 1, 100, <<"systest_a">>, 2),
-
     lager:info("Build cluster B"),
     [BFirst|BRest] = BNodes,
     [join(BNode, BFirst) || BNode <- BRest],
     ?assertEqual(ok, wait_until_nodes_ready(BNodes)),
     ?assertEqual(ok, wait_until_no_pending_changes(BNodes)),
 
-    %% write some initial data to B
-    lager:info("Writing 100 keys to ~p", [BFirst]),
-    rt:systest_write(BFirst, 1, 100, <<"systest_b">>, 2),
+    replication(ANodes, BNodes, false),
+    replication(ANodes, BNodes, true),
+    replication(ANodes, BNodes, true),
+    replication(ANodes, BNodes, true),
+    replication(ANodes, BNodes, true),
+    replication(ANodes, BNodes, true),
+    replication(ANodes, BNodes, true).
 
-    %% setup servers/listeners on A
-    Listeners = add_listeners(ANodes),
+replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
-    %% verify servers are visible on all nodes
-    verify_listeners(Listeners),
+    TestHash = erlang:md5(term_to_binary(os:timestamp())),
+    TestBucket = <<TestHash/binary, "-systest_a">>,
+    FullsyncOnly = <<TestHash/binary, "-fullsync_only">>,
+    RealtimeOnly = <<TestHash/binary, "-realtime_only">>,
+    NoRepl = <<TestHash/binary, "-no_repl">>,
 
-    %% get the leader for the first cluster
-    LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
+    case Connected of
+        false ->
+            %% write some initial data to A
+            lager:info("Writing 100 keys to ~p", [AFirst]),
+            rt:systest_write(AFirst, 1, 100, TestBucket, 2),
 
-    %% list of listeners not on the leader node
-    NonLeaderListeners = lists:keydelete(LeaderA, 3, Listeners),
+            %% setup servers/listeners on A
+            Listeners = add_listeners(ANodes),
 
-    %% setup sites on B
-    %% TODO: make `NumSites' an argument
-    NumSites = 4,
-    {Ip, Port, _} = hd(NonLeaderListeners),
-    add_site(hd(BNodes), {Ip, Port, "site1"}),
-    FakeListeners = gen_fake_listeners(NumSites-1),
-    add_fake_sites(BNodes, FakeListeners),
+            %% verify servers are visible on all nodes
+            verify_listeners(Listeners),
 
-    %% verify sites are distributed on B
-    verify_sites_balanced(NumSites, BNodes),
+            %% get the leader for the first cluster
+            LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
 
-    %% check the listener IPs were all imported into the site
-    verify_site_ips(BFirst, "site1", Listeners),
+            %% list of listeners not on the leader node
+            NonLeaderListeners = lists:keydelete(LeaderA, 3, Listeners),
+
+            %% setup sites on B
+            %% TODO: make `NumSites' an argument
+            NumSites = 4,
+            {Ip, Port, _} = hd(NonLeaderListeners),
+            add_site(hd(BNodes), {Ip, Port, "site1"}),
+            FakeListeners = gen_fake_listeners(NumSites-1),
+            add_fake_sites(BNodes, FakeListeners),
+
+            %% verify sites are distributed on B
+            verify_sites_balanced(NumSites, BNodes),
+
+            %% check the listener IPs were all imported into the site
+            verify_site_ips(BFirst, "site1", Listeners);
+        _ ->
+            %% get the leader for the first cluster
+            LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
+            [{Ip, Port, _}|_] = get_listeners(LeaderA)
+    end,
 
     %% get the leader for the first cluster
     LeaderB = rpc:call(BFirst, riak_repl_leader, leader_node, []),
 
     %% write some data on A
     lager:info("Writing 100 more keys to ~p", [AFirst]),
-    rt:systest_write(AFirst, 101, 200, <<"systest_a">>, 2),
+    rt:systest_write(AFirst, 101, 200, TestBucket, 2),
 
     %% verify data is replicated to B
     lager:info("Reading 100 keys written to ~p from ~p", [AFirst, BFirst]),
-    Res1 = rt:systest_read(BFirst, 101, 200, <<"systest_a">>, 2),
+    Res1 = rt:systest_read(BFirst, 101, 200, TestBucket, 2),
     ?assertEqual([], Res1),
 
-    %% check that the keys we wrote initially aren't replicated yet, because
-    %% we've disabled fullsync_on_connect
-    lager:info("Check keys written before repl was connected are not present"),
-    Res2 = rt:systest_read(BFirst, 1, 100, <<"systest_a">>, 2),
-    ?assertEqual(100, length(Res2)),
+    case Connected of
+        false ->
+            %% check that the keys we wrote initially aren't replicated yet, because
+            %% we've disabled fullsync_on_connect
+            lager:info("Check keys written before repl was connected are not present"),
+            Res2 = rt:systest_read(BFirst, 1, 100, TestBucket, 2),
+            ?assertEqual(100, length(Res2)),
 
-    lager:info("Starting fullsync on ~p", [LeaderA]),
-    rpc:call(LeaderA, riak_repl_console, start_fullsync, [[]]),
-    wait_until_fullsync_complete(LeaderA, 1),
-    lager:info("fullsync complete"),
+            lager:info("Starting fullsync on ~p", [LeaderA]),
+            rpc:call(LeaderA, riak_repl_console, start_fullsync, [[]]),
+            wait_until_fullsync_complete(LeaderA),
+            lager:info("fullsync complete"),
 
-    lager:info("Check keys written before repl was connected are present"),
-    Res3 = rt:systest_read(BFirst, 1, 200, <<"systest_a">>, 2),
-    ?assertEqual([], Res3),
+            lager:info("Check keys written before repl was connected are present"),
+            Res3 = rt:systest_read(BFirst, 1, 200, TestBucket, 2),
+            ?assertEqual([], Res3);
+        _ ->
+            ok
+    end,
 
     %%
     %% Failover tests
@@ -132,11 +156,11 @@ replication() ->
     lager:info("Writing 100 more keys to ~p now that the old leader is down",
         [ASecond]),
 
-    rt:systest_write(ASecond, 201, 300, <<"systest_a">>, 2),
+    rt:systest_write(ASecond, 201, 300, TestBucket, 2),
 
     %% verify data is replicated to B
     lager:info("Reading 100 keys written to ~p from ~p", [ASecond, BFirst]),
-    Res4 = rt:systest_read(BFirst, 201, 300, <<"systest_a">>, 2),
+    Res4 = rt:systest_read(BFirst, 201, 300, TestBucket, 2),
     ?assertEqual([], Res4),
 
     lager:info("Testing client failover: stopping ~p", [LeaderB]),
@@ -154,11 +178,11 @@ replication() ->
     lager:info("Writing 100 more keys to ~p now that the old leader is down",
         [ASecond]),
 
-    rt:systest_write(ASecond, 301, 400, <<"systest_a">>, 2),
+    rt:systest_write(ASecond, 301, 400, TestBucket, 2),
 
     %% verify data is replicated to B
     lager:info("Reading 100 keys written to ~p from ~p", [ASecond, BSecond]),
-    Res5 = rt:systest_read(BSecond, 301, 400, <<"systest_a">>, 2),
+    Res5 = rt:systest_read(BSecond, 301, 400, TestBucket, 2),
     ?assertEqual([], Res5),
 
     %% Testing fullsync with downed nodes
@@ -166,7 +190,7 @@ replication() ->
 
     lager:info("Starting fullsync on ~p", [LeaderA2]),
     rpc:call(LeaderA2, riak_repl_console, start_fullsync, [[]]),
-    wait_until_fullsync_complete(LeaderA2, 1),
+    wait_until_fullsync_complete(LeaderA2),
     lager:info("fullsync complete"),
 
     %%
@@ -181,16 +205,16 @@ replication() ->
 
     lager:info("Nodes restarted"),
 
-    make_bucket(LeaderA, <<"fullsync_only">>, [{repl, fullsync}]),
-    make_bucket(LeaderA, <<"realtime_only">>, [{repl, realtime}]),
-    make_bucket(LeaderA, <<"no_repl">>, [{repl, false}]),
+    make_bucket(LeaderA, FullsyncOnly, [{repl, fullsync}]),
+    make_bucket(LeaderA, RealtimeOnly, [{repl, realtime}]),
+    make_bucket(LeaderA, NoRepl, [{repl, false}]),
 
     %% disconnect the other cluster, so realtime doesn't happen
     lager:info("disconnect the 2 clusters"),
     del_site(LeaderB, "site1"),
 
     lager:info("write 100 keys to a realtime only bucket"),
-    rt:systest_write(ASecond, 1, 100, <<"realtime_only">>, 2),
+    rt:systest_write(ASecond, 1, 100, RealtimeOnly, 2),
 
     lager:info("reconnect the 2 clusters"),
     add_site(LeaderB, {Ip, Port, "site1"}),
@@ -199,53 +223,53 @@ replication() ->
     LeaderA3 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
 
     lager:info("write 100 keys to a fullsync only bucket"),
-    rt:systest_write(ASecond, 1, 100, <<"fullsync_only">>, 2),
+    rt:systest_write(ASecond, 1, 100, FullsyncOnly, 2),
     lager:info("write 100 keys to a {repl, false} bucket"),
-    rt:systest_write(ASecond, 1, 100, <<"no_repl">>, 2),
+    rt:systest_write(ASecond, 1, 100, NoRepl, 2),
 
     lager:info("Check the fullsync only bucket didn't replicate the writes"),
-    Res6 = rt:systest_read(BSecond, 1, 100, <<"fullsync_only">>, 2),
+    Res6 = rt:systest_read(BSecond, 1, 100, FullsyncOnly, 2),
     ?assertEqual(100, length(Res6)),
 
     lager:info("Check the realtime only bucket that was written to offline "
         "isn't replicated"),
-    Res7 = rt:systest_read(BSecond, 1, 100, <<"realtime_only">>, 2),
+    Res7 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
     ?assertEqual(100, length(Res7)),
 
     lager:info("Check the {repl, false} bucket didn't replicate"),
-    Res8 = rt:systest_read(BSecond, 1, 100, <<"no_repl">>, 2),
+    Res8 = rt:systest_read(BSecond, 1, 100, NoRepl, 2),
     ?assertEqual(100, length(Res8)),
 
     %% do a fullsync, make sure that fullsync_only is replicated, but
     %% realtime_only and no_repl aren't
     lager:info("Starting fullsync on ~p", [LeaderA3]),
     rpc:call(LeaderA3, riak_repl_console, start_fullsync, [[]]),
-    wait_until_fullsync_complete(LeaderA3, 1),
+    wait_until_fullsync_complete(LeaderA3),
     lager:info("fullsync complete"),
 
     lager:info("Check fullsync only bucket is now replicated"),
-    Res9 = rt:systest_read(BSecond, 1, 100, <<"fullsync_only">>, 2),
+    Res9 = rt:systest_read(BSecond, 1, 100, FullsyncOnly, 2),
     ?assertEqual([], Res9),
 
     lager:info("Check realtime only bucket didn't replicate"),
-    Res10 = rt:systest_read(BSecond, 1, 100, <<"realtime_only">>, 2),
+    Res10 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
     ?assertEqual(100, length(Res10)),
 
     lager:info("Check {repl, false} bucket didn't replicate"),
-    Res10 = rt:systest_read(BSecond, 1, 100, <<"no_repl">>, 2),
+    Res10 = rt:systest_read(BSecond, 1, 100, NoRepl, 2),
     ?assertEqual(100, length(Res10)),
 
     lager:info("Write 100 more keys into realtime only bucket"),
-    rt:systest_write(ASecond, 101, 200, <<"realtime_only">>, 2),
+    rt:systest_write(ASecond, 101, 200, RealtimeOnly, 2),
 
     timer:sleep(5000),
 
     lager:info("Check the realtime keys replicated"),
-    Res11 = rt:systest_read(BSecond, 101, 200, <<"realtime_only">>, 2),
+    Res11 = rt:systest_read(BSecond, 101, 200, RealtimeOnly, 2),
     ?assertEqual([], Res11),
 
     lager:info("Check the older keys in the realtime bucket did not replicate"),
-    Res12 = rt:systest_read(BSecond, 1, 100, <<"realtime_only">>, 2),
+    Res12 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
     ?assertEqual(100, length(Res12)),
 
     lager:info("Test passed"),
@@ -321,6 +345,17 @@ add_listener(Node, IP, Port) ->
     ?assertEqual(ok, Res),
     timer:sleep(timer:seconds(3)).
 
+get_listeners(Node) ->
+    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    %% *sigh*
+    [
+        begin
+                NodeName = list_to_atom(string:substr(K, 10)),
+                [IP, Port] = string:tokens(V, ":"),
+                {IP, list_to_integer(Port), NodeName}
+        end || {K, V} <- Status, is_list(K), string:substr(K, 1, 9) == "listener_"
+    ].
+
 gen_ports(Start, Len) ->
     lists:seq(Start, Start + Len - 1).
 
@@ -350,7 +385,10 @@ make_bucket(Node, Name, Args) ->
     Res = rpc:call(Node, riak_core_bucket, set_bucket, [Name, Args]),
     ?assertEqual(ok, Res).
 
-wait_until_fullsync_complete(Node, Count) ->
+wait_until_fullsync_complete(Node) ->
+    Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
+    Count = proplists:get_value(server_fullsyncs, Status0) + 1,
+
     rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
