@@ -44,15 +44,9 @@ replication() ->
     make_cluster(ANodes),
 
     lager:info("Build cluster B"),
-    make_cluster(ANodes),
+    make_cluster(BNodes),
 
-    replication(ANodes, BNodes, false),
-    replication(ANodes, BNodes, true),
-    replication(ANodes, BNodes, true),
-    replication(ANodes, BNodes, true),
-    replication(ANodes, BNodes, true),
-    replication(ANodes, BNodes, true),
-    replication(ANodes, BNodes, true).
+    replication(ANodes, BNodes, false).
 
 replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
@@ -208,8 +202,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             case nodes_all_have_version(ANodes, "1.2.0") of
                 true ->
-                    make_bucket(LeaderA, FullsyncOnly, [{repl, fullsync}]),
                     make_bucket(LeaderA, RealtimeOnly, [{repl, realtime}]),
+                    make_bucket(LeaderA, FullsyncOnly, [{repl, fullsync}]),
 
                     %% disconnect the other cluster, so realtime doesn't happen
                     lager:info("disconnect the 2 clusters"),
@@ -222,7 +216,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                     add_site(LeaderB, {Ip, Port, "site1"}),
                     wait_until_connection(LeaderA);
                 _ ->
-                    ok
+                    timer:sleep(1000)
             end,
 
             LeaderA3 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
@@ -244,7 +238,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                     Res7 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
                     ?assertEqual(100, length(Res7));
                 _ ->
-                    ok
+                    timer:sleep(1000)
             end,
 
             lager:info("Check the {repl, false} bucket didn't replicate"),
@@ -323,10 +317,15 @@ make_cluster(Nodes) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)).
 
 %% does the node meet the version requirement?
-node_has_version(_, current) ->
-    true; %% current is always the latest
 node_has_version(Node, Version) ->
-    rtdev:node_version(rtdev:node_id(Node)) >= Version.
+    NodeVersion =  rtdev:node_version(rtdev:node_id(Node)),
+    case NodeVersion of
+        current ->
+            %% current always satisfies any version check
+            true;
+        _ ->
+            NodeVersion >= Version
+    end.
 
 nodes_with_version(Nodes, Version) ->
     [Node || Node <- Nodes, node_has_version(Node, Version)].
