@@ -58,16 +58,32 @@ build()
     cd ..
 }
 
-# Download Riak release source
-wget -c http://downloads.basho.com/riak/riak-0.14/riak-0.14.2.tar.gz
-wget -c http://downloads.basho.com/riak/riak-1.0.3/riak-1.0.3.tar.gz
-wget -c http://downloads.basho.com/riak/riak-1.1.4/riak-1.1.4.tar.gz
+if [ $1 = "-ee" ]; then
+    # Download Riak EE release source, need s3cmd configured
+    s3cmd get --continue s3://builds.basho.com/riak_ee/riak_ee-0.14/0.14.2/riak_ee-0.14.2.tar.gz
+    s3cmd get --continue s3://builds.basho.com/riak_ee/1.0/1.0.3/riak_ee-1.0.3.tar.gz
+    s3cmd get --continue s3://builds.basho.com/riak_ee/1.1/1.1.4/riak_ee-1.1.4.tar.gz
 
-tar -xzf riak-0.14.2.tar.gz
-build "riak-0.14.2" $R13B04
+    tar -xzf riak_ee-0.14.2.tar.gz
+    build "riak_ee-0.14.2" $R13B04
 
-tar -xzf riak-1.0.3.tar.gz
-build "riak-1.0.3" $R14B03
+    tar -xzf riak_ee-1.0.3.tar.gz
+    build "riak_ee-1.0.3" $R14B03
 
-tar -xzf riak-1.1.4.tar.gz
-build "riak-1.1.4" $R14B03
+    tar -xzf riak_ee-1.1.4.tar.gz
+    build "riak_ee-1.1.4" $R14B03
+else
+    # Download Riak release source
+    wget -c http://downloads.basho.com/riak/riak-0.14/riak-0.14.2.tar.gz
+    wget -c http://downloads.basho.com/riak/riak-1.0.3/riak-1.0.3.tar.gz
+    wget -c http://downloads.basho.com/riak/riak-1.1.4/riak-1.1.4.tar.gz
+
+    tar -xzf riak-0.14.2.tar.gz
+    build "riak-0.14.2" $R13B04
+
+    tar -xzf riak-1.0.3.tar.gz
+    build "riak-1.0.3" $R14B03
+
+    tar -xzf riak-1.1.4.tar.gz
+    build "riak-1.1.4" $R14B03
+fi
