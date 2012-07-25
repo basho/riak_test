@@ -1,6 +1,6 @@
 -module(replication_upgrade).
 -compile(export_all).
--include("rt.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 replication_upgrade() ->
     FromVersion = replication:get_os_env("REPL_FROM", "1.1.4"),
