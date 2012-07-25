@@ -434,6 +434,7 @@ make_bucket(Node, Name, Args) ->
     ?assertEqual(ok, Res).
 
 wait_until_fullsync_complete(Node) ->
+    timer:sleep(500),
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
     Count = proplists:get_value(server_fullsyncs, Status0) + 1,
 
