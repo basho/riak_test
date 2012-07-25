@@ -1,6 +1,6 @@
 -module(replication).
 -compile(export_all).
--include("rt.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
              join/2,
