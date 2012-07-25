@@ -136,6 +136,20 @@ remove(Node, OtherNode) ->
 down(Node, OtherNode) ->
     rpc:call(Node, riak_kv_console, down, [[atom_to_list(OtherNode)]]).
 
+%% @doc Spawn `Cmd' on the machine running the test harness
+spawn_cmd(Cmd) ->
+    ?HARNESS:spawn_cmd(Cmd).
+
+%% @doc Wait for a command spawned by `spawn_cmd', returning
+%%      the exit status and result
+wait_for_cmd(CmdHandle) ->
+    ?HARNESS:wait_for_cmd(CmdHandle).
+
+%% @doc Spawn `Cmd' on the machine running the test harness, returning
+%%      the exit status and result
+cmd(Cmd) ->
+    ?HARNESS:cmd(Cmd).
+
 %% @doc Ensure that the specified node is a singleton node/cluster -- a node
 %%      that owns 100% of the ring.
 check_singleton_node(Node) ->
@@ -170,6 +184,22 @@ are_no_pending(Node) ->
     rpc:call(Node, riak_core_vnode_manager, force_handoffs, []),
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
     riak_core_ring:pending_changes(Ring) =:= [].
+
+wait_for_service(Node, Service) ->
+    F = fun(N) ->
+                Services = rpc:call(N, riak_core_node_watcher, services, []),
+                lists:member(Service, Services)
+        end,
+    ?assertEqual(ok, wait_until(Node, F)),
+    ok.
+
+wait_for_cluster_service(Nodes, Service) ->
+    F = fun(N) ->
+                UpNodes = rpc:call(N, riak_core_node_watcher, nodes, [Service]),
+                (Nodes -- UpNodes) == []
+        end,
+    [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
+    ok.
 
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.
@@ -391,10 +421,25 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
 
+%% Helper that returns first successful application get_env result,
+%% used when different versions of Riak use different app vars for
+%% the same setting.
+rpc_get_env(_, []) ->
+    undefined;
+rpc_get_env(Node, [{App,Var}|Others]) ->
+    case rpc:call(Node, application, get_env, [App, Var]) of
+        {ok, Value} ->
+            {ok, Value};
+        _ ->
+            rpc_get_env(Node, Others)
+    end.
+
 connection_info(Nodes) ->
     [begin
-         {ok, PB_IP} = rpc:call(Node, application, get_env, [riak_kv, pb_ip]),
-         {ok, PB_Port} = rpc:call(Node, application, get_env, [riak_kv, pb_port]),
+         {ok, PB_IP} = rpc_get_env(Node, [{riak_api, pb_ip},
+                                          {riak_kv, pb_ip}]),
+         {ok, PB_Port} = rpc_get_env(Node, [{riak_api, pb_port},
+                                            {riak_kv, pb_port}]),
          {ok, [{HTTP_IP, HTTP_Port}]} =
              rpc:call(Node, application, get_env, [riak_core, http]),
          {Node, [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}]}
