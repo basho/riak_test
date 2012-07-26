@@ -112,10 +112,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             Res2 = rt:systest_read(BFirst, 1, 100, TestBucket, 2),
             ?assertEqual(100, length(Res2)),
 
-            lager:info("Starting fullsync on ~p", [LeaderA]),
-            rpc:call(LeaderA, riak_repl_console, start_fullsync, [[]]),
-            wait_until_fullsync_complete(LeaderA),
-            lager:info("fullsync complete"),
+            start_and_wait_until_fullsync_complete(LeaderA),
 
             lager:info("Check keys written before repl was connected are present"),
             Res3 = rt:systest_read(BFirst, 1, 200, TestBucket, 2),
@@ -171,17 +168,14 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:systest_write(ASecond, 301, 400, TestBucket, 2),
 
     %% verify data is replicated to B
-    lager:info("Reading 100 keys written to ~p from ~p", [ASecond, BSecond]),
+    lager:info("Reading 101 keys written to ~p from ~p", [ASecond, BSecond]),
     Res5 = rt:systest_read(BSecond, 301, 400, TestBucket, 2),
     ?assertEqual([], Res5),
 
     %% Testing fullsync with downed nodes
     lager:info("Re-running fullsync with ~p and ~p down", [LeaderA, LeaderB]),
 
-    lager:info("Starting fullsync on ~p", [LeaderA2]),
-    rpc:call(LeaderA2, riak_repl_console, start_fullsync, [[]]),
-    wait_until_fullsync_complete(LeaderA2),
-    lager:info("fullsync complete"),
+    start_and_wait_until_fullsync_complete(LeaderA2),
 
     %%
     %% Per-bucket repl settings tests
@@ -247,10 +241,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             %% do a fullsync, make sure that fullsync_only is replicated, but
             %% realtime_only and no_repl aren't
-            lager:info("Starting fullsync on ~p", [LeaderA3]),
-            rpc:call(LeaderA3, riak_repl_console, start_fullsync, [[]]),
-            wait_until_fullsync_complete(LeaderA3),
-            lager:info("fullsync complete"),
+            start_and_wait_until_fullsync_complete(LeaderA3),
 
             case nodes_all_have_version(ANodes, "1.2.0") of
                 true ->
@@ -433,24 +424,45 @@ make_bucket(Node, Name, Args) ->
     Res = rpc:call(Node, riak_core_bucket, set_bucket, [Name, Args]),
     ?assertEqual(ok, Res).
 
-wait_until_fullsync_complete(Node) ->
-    timer:sleep(500),
+start_and_wait_until_fullsync_complete(Node) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
     Count = proplists:get_value(server_fullsyncs, Status0) + 1,
 
-    rt:wait_until(Node,
+    lager:info("Starting fullsync on ~p (~p)", [Node,
+            rtdev:node_version(rtdev:node_id(Node))]),
+    rpc:call(Node, riak_repl_console, start_fullsync, [[]]),
+    %% sleep because of the old bug where stats will crash if you call it too
+    %% soon after starting a fullsync
+    timer:sleep(500),
+
+    Res = rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
                 case proplists:get_value(server_fullsyncs, Status) of
-                    Count ->
+                    C when C >= Count ->
                         true;
                     _ ->
                         false
                 end
-        end).
+        end),
+    case node_has_version(Node, "1.2.0") of
+        true ->
+            ?assertEqual(ok, Res);
+        _ ->
+            case Res of
+                ok ->
+                    ok;
+                _ ->
+                    wait_until_connection(Node),
+                    lager:warning("Pre 1.2.0 node failed to fullsync, retrying"),
+                    start_and_wait_until_fullsync_complete(Node)
+            end
+    end,
+
+    lager:info("Fullsync on ~p complete", [Node]).
 
 wait_until_leader(Node) ->
-    rt:wait_until(Node,
+    Res = rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
                 case proplists:get_value(leader, Status) of
@@ -459,16 +471,19 @@ wait_until_leader(Node) ->
                     _ ->
                         true
                 end
-        end).
+        end),
+    ?assertEqual(ok, Res).
 
 wait_until_connection(Node) ->
-    rt:wait_until(Node,
+    Res = rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
                 case proplists:get_value(server_stats, Status) of
                     [] ->
                         false;
-                    _ ->
+                    C ->
+                        lager:info("connections ~p", [C]),
                         true
                 end
-        end).
+        end),
+    ?assertEqual(ok, Res).
