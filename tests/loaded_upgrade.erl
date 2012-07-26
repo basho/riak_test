@@ -5,8 +5,8 @@
 loaded_upgrade() ->
     (os:getenv("BASHO_BENCH") /= false) orelse
         throw("Missing path to BASHO_BENCH enviroment variable"),
-    %% OldVsns = ["1.0.3", "1.1.2"],
-    OldVsns = ["1.1.2"],
+    %% OldVsns = ["1.0.3", "1.1.4"],
+    OldVsns = ["1.1.4"],
     [verify_upgrade(OldVsn) || OldVsn <- OldVsns],
     lager:info("Test ~p passed", [?MODULE]),
     ok.
@@ -30,7 +30,7 @@ verify_upgrade(OldVsn) ->
          KV2 = spawn_kv_tester(KV1),
          MR2 = spawn_mapred_tester(MR1),
          lager:info("Upgrading ~p", [Node]),
-         rtdev:upgrade(Node, current),
+         rt:upgrade(Node, current),
          _KV3 = check_kv_tester(KV2),
          _MR3 = check_mapred_tester(MR2),
          lager:info("Ensuring keys still exist"),

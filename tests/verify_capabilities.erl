@@ -4,7 +4,7 @@
 
 verify_capabilities() ->
     lager:info("Deploying mixed set of nodes"),
-    Nodes = rt:deploy_nodes([current, "0.14.2", "1.1.2", "1.0.3"]),
+    Nodes = rt:deploy_nodes([current, "0.14.2", "1.1.4", "1.0.3"]),
     [Node1, Node2, Node3, Node4] = Nodes,
 
     lager:info("Verify vnode_routing == proxy"),
@@ -32,7 +32,7 @@ verify_capabilities() ->
     lager:info("Verify vnode_routing == legacy after crash"),
     ?assertEqual(legacy, capability(Node1, {riak_core, vnode_routing})),
 
-    lager:info("Adding 1.1.2 node to cluster"),
+    lager:info("Adding 1.1.4 node to cluster"),
     rt:join(Node3, Node2),
     ?assertEqual(ok, rt:wait_until_all_members([Node1], [Node1, Node2, Node3])),
     ?assertEqual(ok, rt:wait_until_legacy_ringready(Node1)),
@@ -41,7 +41,7 @@ verify_capabilities() ->
     ?assertEqual(legacy, capability(Node1, {riak_core, vnode_routing})),
 
     lager:info("Upgrade 0.14.2 node"),
-    rtdev:upgrade(Node2, current),
+    rt:upgrade(Node2, current),
 
     lager:info("Verifying vnode_routing == proxy"),
     ?assertEqual(ok, wait_until_capability(Node1, {riak_core, vnode_routing}, proxy)),
@@ -54,13 +54,13 @@ verify_capabilities() ->
     ?assertEqual(legacy, capability(Node1, {riak_core, vnode_routing})),
 
     lager:info("Upgrading 1.0.3 node"),
-    rtdev:upgrade(Node4, current),
+    rt:upgrade(Node4, current),
 
     lager:info("Verifying vnode_routing changes to proxy"),
     ?assertEqual(ok, wait_until_capability(Node1, {riak_core, vnode_routing}, proxy)),
 
-    lager:info("Upgrade 1.1.2 node"),
-    rtdev:upgrade(Node3, current),
+    lager:info("Upgrade 1.1.4 node"),
+    rt:upgrade(Node3, current),
 
     %% All nodes are now current version. Test override behavior.
     Override = fun(undefined, Prefer) ->

@@ -107,7 +107,7 @@ deploy_nodes(NodeConfig) ->
 
     %% Stop nodes if already running
     %% [run_riak(N, relpath(node_version(N)), "stop") || N <- Nodes],
-    pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "stop") end, NodesN),
+    rt:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "stop") end, NodesN),
     %% ?debugFmt("Shutdown~n", []),
 
     %% Reset nodes to base state
@@ -119,16 +119,16 @@ deploy_nodes(NodeConfig) ->
     %% ?debugFmt("Reset~n", []),
 
     %% Set initial config
-    pmap(fun({_, default}) ->
-                 ok;
-            ({Node, Config}) ->
-                 update_app_config(Node, Config)
-         end,
-         lists:zip(Nodes, Configs)),
+    rt:pmap(fun({_, default}) ->
+                    ok;
+               ({Node, Config}) ->
+                    update_app_config(Node, Config)
+            end,
+            lists:zip(Nodes, Configs)),
 
     %% Start nodes
     %%[run_riak(N, relpath(node_version(N)), "start") || N <- Nodes],
-    pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
+    rt:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
 
     %% Ensure nodes started
     [ok = rt:wait_until_pingable(N) || N <- Nodes],
@@ -204,16 +204,3 @@ get_cmd_result(Port, Acc) ->
     after 0 ->
             timeout
     end.
-
-pmap(F, L) ->
-    Parent = self(),
-    lists:foldl(
-      fun(X, N) ->
-              spawn(fun() ->
-                            Parent ! {pmap, N, F(X)}
-                    end),
-              N+1
-      end, 0, L),
-    L2 = [receive {pmap, N, R} -> {N,R} end || _ <- L],
-    {_, L3} = lists:unzip(lists:keysort(1, L2)),
-    L3.
