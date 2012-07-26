@@ -10,6 +10,8 @@ replication_upgrade() ->
 
     NumNodes = 6,
 
+    UpgradeOrder = replication:get_os_env("UPGRADE_ORDER", "forwards"),
+
     Backend = list_to_atom(replication:get_os_env("RIAK_BACKEND",
             "riak_kv_bitcask_backend")),
 
@@ -30,6 +32,25 @@ replication_upgrade() ->
 
     Nodes = rt:deploy_nodes(NodeConfig),
 
+    NodeUpgrades = case UpgradeOrder of
+        "forwards" ->
+            Nodes;
+        "backwards" ->
+            lists:reverse(Nodes);
+        "alternate" ->
+            %% eg 1, 4, 2, 5, 3, 6
+            lists:flatten(lists:foldl(fun(E, [A,B,C]) -> [B, C, A ++ [E]] end,
+                    [[],[],[]], Nodes));
+        "random" ->
+            %% halfass randomization
+            lists:sort(fun(_, _) -> random:uniform(100) < 50 end, Nodes);
+        Other ->
+            lager:error("Invalid upgrade ordering ~p", [Other]),
+            erlang:exit()
+    end,
+
+    lager:info("Upgrading nodes in order: ~p", [NodeUpgrades]),
+
     ClusterASize = list_to_integer(replication:get_os_env("CLUSTER_A_SIZE", "3")),
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
@@ -49,4 +70,4 @@ replication_upgrade() ->
                 rt:wait_until_pingable(Node),
                 timer:sleep(1000),
                 replication:replication(ANodes, BNodes, true)
-        end, Nodes).
+        end, NodeUpgrades).
