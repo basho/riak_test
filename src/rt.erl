@@ -15,6 +15,8 @@
          stop/1,
          join/2,
          leave/1,
+         get_os_env/1,
+         get_os_env/2,
          get_ring/1,
          admin/2,
          wait_until_pingable/1,
@@ -47,6 +49,18 @@
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
+
+get_os_env(Var) ->
+    case get_os_env(Var, undefined) of
+        undefined -> exit({os_env_var_undefined, Var});
+        Value -> Value
+    end.
+
+get_os_env(Var, Default) ->
+    case os:getenv(Var) of
+        false -> Default;
+        Value -> Value
+    end.
 
 %% @doc Get the raw ring for the given `Node'.
 get_ring(Node) ->
@@ -434,6 +448,11 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
             rpc_get_env(Node, Others)
     end.
 
+-type interface() :: {http, tuple()} | {pb, tuple()}.
+-type interfaces() :: [interface()].
+-type conn_info() :: [{node(), interfaces()}].
+
+-spec connection_info([node()]) -> conn_info().
 connection_info(Nodes) ->
     [begin
          {ok, PB_IP} = rpc_get_env(Node, [{riak_api, pb_ip},

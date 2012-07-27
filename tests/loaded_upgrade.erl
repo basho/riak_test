@@ -1,10 +1,10 @@
 -module(loaded_upgrade).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
+-define(SPAM_BUCKET, <<"scotts_spam">>).
 
 loaded_upgrade() ->
-    (os:getenv("BASHO_BENCH") /= false) orelse
-        throw("Missing path to BASHO_BENCH enviroment variable"),
+    _ = rt:get_os_env("BASHO_BENCH"),
     %% OldVsns = ["1.0.3", "1.1.2"],
     OldVsns = ["1.1.2"],
     [verify_upgrade(OldVsn) || OldVsn <- OldVsns],
@@ -25,14 +25,17 @@ verify_upgrade(OldVsn) ->
 
     KV1 = init_kv_tester(NodeConn),
     MR1 = init_mapred_tester(NodeConn),
+    Search1 = init_search_tester(Nodes, Conns),
 
     [begin
          KV2 = spawn_kv_tester(KV1),
          MR2 = spawn_mapred_tester(MR1),
+         Search2 = spawn_search_tester(Search1),
          lager:info("Upgrading ~p", [Node]),
          rtdev:upgrade(Node, current),
          _KV3 = check_kv_tester(KV2),
          _MR3 = check_mapred_tester(MR2),
+         _Search3 = check_search_tester(Search2),
          lager:info("Ensuring keys still exist"),
          rt:wait_for_cluster_service(Nodes, riak_kv),
          ?assertEqual([], rt:systest_read(Node1, 100, 1))
@@ -76,7 +79,7 @@ check_kv_tester(KV=#kv{runs=Runs}) ->
          ok
      end || Bucket <- Failed],
     KV#kv{runs=[]}.
-    
+
 kv_populate(Bucket) when is_binary(Bucket) ->
     kv_populate(binary_to_list(Bucket));
 kv_populate(Bucket) ->
@@ -112,7 +115,7 @@ kv_spawn_repair(Bucket) ->
     Config = "bb-repair-" ++ Bucket ++ ".config",
     lager:info("Read-repairing bucket ~s", [Bucket]),
     rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config).
-    
+
 %% ===================================================================
 %% map/reduce Tester
 %% ===================================================================
@@ -169,6 +172,73 @@ mapred_check_verify(Port) ->
     end.
 
 %% ===================================================================
+%% Search tester
+%% ===================================================================
+
+-record(search, {buckets, runs}).
+
+init_search_tester(Nodes, Conns) ->
+    SpamDir = rt:get_os_env("SPAM_DIR"),
+    IPs = [proplists:get_value(http, I) || {_, I} <- Conns],
+    Buckets = [?SPAM_BUCKET],
+    rt:enable_search_hook(hd(Nodes), ?SPAM_BUCKET),
+    generate_search_scripts(Buckets, IPs, SpamDir),
+    [search_populate(Bucket) || Bucket <- Buckets],
+    #search{buckets=Buckets, runs=[]}.
+
+spawn_search_tester(Search=#search{buckets=Buckets}) ->
+    Count = 3,
+    Runs = [{Bucket, search_spawn_verify(Bucket)} || Bucket <- Buckets,
+                                                     _ <- lists:seq(1, Count)],
+    Search#search{runs=Runs}.
+
+check_search_tester(Search=#search{runs=Runs}) ->
+    Failed = [Bucket || {Bucket, Run} <- Runs,
+                        ok /= search_check_verify(Bucket, Run, [])],
+    [begin
+         lager:info("Failed search test for: ~p", [Bucket]),
+         lager:info("Re-running until test passes to check for data loss"),
+         Result =
+             rt:wait_until(node(),
+                           fun(_) ->
+                                   Rerun = search_spawn_verify(Bucket),
+                                   ok == search_check_verify(Bucket, Rerun, [])
+                           end),
+         ?assertEqual(ok, Result),
+         lager:info("search test finally passed"),
+         ok
+     end || Bucket <- Failed],
+    Search#search{runs=[]}.
+
+search_populate(Bucket) when is_binary(Bucket) ->
+    search_populate(binary_to_list(Bucket));
+search_populate(Bucket) ->
+    Config = "bb-populate-" ++ Bucket ++ ".config",
+    lager:info("Populating search bucket: ~s", [Bucket]),
+    rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config).
+
+search_spawn_verify(Bucket) when is_binary(Bucket) ->
+    search_spawn_verify(binary_to_list(Bucket));
+search_spawn_verify(Bucket) when is_list(Bucket) ->
+    Config = "bb-verify-" ++ Bucket ++ ".config",
+    lager:info("Spawning search test against: ~s", [Bucket]),
+    rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config).
+
+search_check_verify(Bucket, Port, Opts) ->
+    lager:info("Checking search test against: ~p", [Bucket]),
+    {Status,_} = rt:wait_for_cmd(Port),
+    Repair = ordsets:is_element(repair, Opts),
+    case {Repair, Status} of
+        %% {true, 1} ->
+        %%     lager:info("Allowing repair: ~p", [Bucket]),
+        %%     search_verify_repair(Bucket);
+        {_, 0} ->
+            ok;
+        {_, _} ->
+            fail
+    end.
+
+%% ===================================================================
 %% basho_bench K/V scripts
 %% ===================================================================
 
@@ -182,55 +252,52 @@ generate_kv_scripts(Buckets, Host, Port) ->
     ok.
 
 kv_populate_script(Bucket, Host, Port) ->
-    Out = io_lib:format("
-{mode, max}.
-{duration, infinity}.
-{concurrent, 16}.
-{driver, basho_bench_driver_http_raw}.
-{key_generator, {partitioned_sequential_int, 0, 8000}}.
-{value_generator, {uniform_bin,100,1000}}.
-{operations, [{update, 1}]}.
-{http_raw_ips, [\"~s\"]}.
-{http_raw_port, ~b}.
-{http_raw_path, \"/riak/~s\"}.", [Host, Port, Bucket]),
+    Cfg = [{mode, max},
+           {duration, infinity},
+           {concurrent, 16},
+           {driver, basho_bench_driver_http_raw},
+           {key_generator, {partitioned_sequential_int, 0, 8000}},
+           {value_generator, {uniform_bin,100,1000}},
+           {operations, [{update, 1}]},
+           {http_raw_ips, [Host]},
+           {http_raw_port, Port},
+           {http_raw_path, "/riak/" ++ Bucket}],
     Config = "bb-populate-" ++ Bucket ++ ".config",
-    file:write_file(Config, Out),
+    write_terms(Config, Cfg),
     ok.
 
 kv_verify_script(Bucket, Host, Port) ->
-    Out = io_lib:format("
-{mode, {rate, 50}}.
-%{duration, infinity}.
-{duration, 1}.
-{concurrent, 10}.
-{driver, basho_bench_driver_http_raw}.
-{key_generator, {uniform_int, 7999}}.
-{value_generator, {uniform_bin,100,1000}}.
-{operations, [{update, 1},{get_existing, 1}]}.
-{http_raw_ips, [\"~s\"]}.
-{http_raw_port, ~b}.
-{http_raw_path, \"/riak/~s\"}.
-{shutdown_on_error, true}.", [Host, Port, Bucket]),
+    Cfg = [{mode, {rate, 50}},
+           %%{duration, infinity},
+           {duration, 1},
+           {concurrent, 10},
+           {driver, basho_bench_driver_http_raw},
+           {key_generator, {uniform_int, 7999}},
+           {value_generator, {uniform_bin,100,1000}},
+           {operations, [{update, 1},{get_existing, 1}]},
+           {http_raw_ips, [Host]},
+           {http_raw_port, Port},
+           {http_raw_path, "/riak/" ++ Bucket},
+           {shutdown_on_error, true}],
     Config = "bb-verify-" ++ Bucket ++ ".config",
-    file:write_file(Config, Out),
+    write_terms(Config, Cfg),
     ok.
 
 kv_repair_script(Bucket, Host, Port) ->
-    Out = io_lib:format("
-{mode, {rate, 50}}.
-{duration, infinity}.
-%{duration, 1}.
-{concurrent, 10}.
-{driver, basho_bench_driver_http_raw}.
-%{key_generator, {uniform_int, 8000}}.
-{key_generator, {partitioned_sequential_int, 0, 8000}}.
-{value_generator, {uniform_bin,100,1000}}.
-{operations, [{get, 1}]}.
-{http_raw_ips, [\"~s\"]}.
-{http_raw_port, ~b}.
-{http_raw_path, \"/riak/~s\"}.", [Host, Port, Bucket]),
+    Cfg = [{mode, {rate, 50}},
+           {duration, infinity},
+           %%{duration, 1},
+           {concurrent, 10},
+           {driver, basho_bench_driver_http_raw},
+           %%{key_generator, {uniform_int, 8000}},
+           {key_generator, {partitioned_sequential_int, 0, 8000}},
+           {value_generator, {uniform_bin,100,1000}},
+           {operations, [{get, 1}]},
+           {http_raw_ips, [Host]},
+           {http_raw_port, Port},
+           {http_raw_path, "/riak/" ++ Bucket}],
     Config = "bb-repair-" ++ Bucket ++ ".config",
-    file:write_file(Config, Out),
+    file:write_file(Config, Cfg),
     ok.
 
 %% ===================================================================
@@ -243,47 +310,87 @@ generate_mapred_scripts(Host, Port) ->
     ok.
 
 mapred_populate_script(Host, Port) ->
-    Out = io_lib:format("
-{driver, basho_bench_driver_riakc_pb}.
-%{code_paths, [\"deps/stats\",
-%              \"deps/riakc\",
-%              \"deps/protobuffs\"]}.
-{riakc_pb_ips, [{~p, ~b}]}.
-{riakc_pb_replies, 1}.
-{riakc_pb_bucket, <<\"bryanitbs\">>}.
-%% load
-{mode, max}.
-{duration, 10000}.
-{concurrent, 1}.
-{operations, [{put, 1}]}.
-{key_generator, {int_to_str, {sequential_int, 10000}}}.
-{value_generator,
- {function, basho_bench_driver_riakc_pb, mapred_ordered_valgen, []}}.",
-    [Host, Port]),
+    Cfg = [{driver, basho_bench_driver_riakc_pb},
+           {riakc_pb_ips, [{Host, Port}]},
+           {riakc_pb_replies, 1},
+           {riakc_pb_bucket, <<"bryanitbs">>},
+           {mode, max},
+           {duration, 10000},
+           {concurrent, 1},
+           {operations, [{put, 1}]},
+           {key_generator, {int_to_str, {sequential_int, 10000}}},
+           {value_generator,
+            {function, basho_bench_driver_riakc_pb, mapred_ordered_valgen, []}}],
+
     Config = "bb-populate-mapred.config",
-    file:write_file(Config, Out),
+    write_terms(Config, Cfg),
     ok.
 
 mapred_verify_script(Host, Port) ->
-    Out = io_lib:format("
-{driver, basho_bench_driver_riakc_pb}.
-%{code_paths, [\"deps/stats\",
-%              \"deps/riakc\",
-%              \"deps/protobuffs\"]}.
-{riakc_pb_ips, [{~p, ~b}]}.
-{riakc_pb_replies, 1}.
-{riakc_pb_bucket, <<\"bryanitbs\">>}.
-%% test
-%% for computing expected bucket sum
-{riakc_pb_preloaded_keys, 10000}.
-{mode, max}.
-{duration, 1}.
-{concurrent, 1}.
-{operations, [{mr_bucket_erlang, 1}]}.
-{key_generator, {int_to_str, {uniform_int, 9999}}}.
-{value_generator, {fixed_bin, 1}}.
-{riakc_pb_keylist_length, 1000}.
-{shutdown_on_error, true}.", [Host, Port]),
+    Cfg = [{driver, basho_bench_driver_riakc_pb},
+           {riakc_pb_ips, [{Host, Port}]},
+           {riakc_pb_replies, 1},
+           {riakc_pb_bucket, <<"bryanitbs">>},
+           {riakc_pb_preloaded_keys, 10000},
+           {mode, max},
+           {duration, 1},
+           {concurrent, 1},
+           {operations, [{mr_bucket_erlang, 1}]},
+           {key_generator, {int_to_str, {uniform_int, 9999}}},
+           {value_generator, {fixed_bin, 1}},
+           {riakc_pb_keylist_length, 1000},
+           {shutdown_on_error, true}],
     Config = "bb-verify-mapred.config",
-    file:write_file(Config, Out),
+    write_terms(Config, Cfg),
     ok.
+
+%% ===================================================================
+%% basho_bench Search scritps
+%% ===================================================================
+
+generate_search_scripts(Buckets, IPs, SpamDir) ->
+    [begin
+         Bucket = binary_to_list(BucketBin),
+         search_populate_script(Bucket, IPs, SpamDir),
+         search_verify_script(Bucket, IPs)
+     end || BucketBin <- Buckets],
+    ok.
+
+search_populate_script(Bucket, IPs, SpamDir) ->
+    Cfg = [{mode, max},
+           {duration, 1},
+           {concurrent, 10},
+           {driver, basho_bench_driver_http_raw},
+           {file_dir, SpamDir},
+           {operations, [{put_file,1}]},
+           {http_raw_ips, IPs},
+           {http_raw_path, "/riak/" ++ Bucket},
+           {shutdown_on_error, true}],
+
+    Config = "bb-populate-" ++ Bucket ++ ".config",
+    write_terms(Config, Cfg).
+
+search_verify_script(Bucket, IPs) ->
+    Expect = [{"postoffice.mr.net", 194},
+              {"ZiaSun", 1},
+              {"headaches", 4},
+              {"YALSP", 3},
+              {"mister", 0},
+              {"prohibiting", 5}],
+    Operations = [{{search,E},1} || E <- Expect],
+    Cfg = [{mode, max},
+           {duration, 1},
+           {concurrent, 10},
+           {driver, basho_bench_driver_http_raw},
+           {operations, Operations},
+           {http_raw_ips, IPs},
+           {http_raw_path, "/riak/" ++ Bucket},
+           {shutdown_on_error, true}],
+
+    Config = "bb-verify-" ++ Bucket ++ ".config",
+    write_terms(Config, Cfg).
+
+write_terms(File, Terms) ->
+    {ok, IO} = file:open(File, [write]),
+    [io:fwrite(IO, "~p.~n", [T]) || T <- Terms],
+    file:close(IO).
