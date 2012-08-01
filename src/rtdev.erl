@@ -107,7 +107,11 @@ deploy_nodes(NodeConfig) ->
 
     %% Stop nodes if already running
     %% [run_riak(N, relpath(node_version(N)), "stop") || N <- Nodes],
-    pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "stop") end, NodesN),
+    pmap(fun(Node) ->
+                N = node_id(Node),
+                run_riak(N, relpath(node_version(N)), "stop"),
+                rt:wait_until_unpingable(Node)
+        end, Nodes),
     %% ?debugFmt("Shutdown~n", []),
 
     %% Reset nodes to base state
