@@ -93,6 +93,15 @@ update_app_config(Node, Config) ->
     ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
     ok.
 
+node_path(Node) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
+
+create_dirs(Nodes) ->
+    Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],
+    [?assertCmd("mkdir -p " ++ Dir) || Dir <- Snmp].
+
 deploy_nodes(NodeConfig) ->
     Path = relpath(root),
     lager:info("Riak path: ~p", [Path]),
@@ -121,6 +130,8 @@ deploy_nodes(NodeConfig) ->
     run_git(Path, "clean -fd"),
     %% run_git(Path, "status"),
     %% ?debugFmt("Reset~n", []),
+
+    create_dirs(Nodes),
 
     %% Set initial config
     pmap(fun({_, default}) ->
