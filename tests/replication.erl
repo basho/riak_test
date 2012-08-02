@@ -71,6 +71,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             verify_listeners(Listeners),
 
             %% get the leader for the first cluster
+            wait_until_leader(AFirst),
             LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
 
             %% list of listeners not on the leader node
@@ -181,10 +182,13 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %% Per-bucket repl settings tests
     %%
 
-    lager:info("Restarting down nodes ~p and ~p", [LeaderA, LeaderB]),
+    lager:info("Restarting down node ~p", [LeaderA]),
     rt:start(LeaderA),
-    rt:start(LeaderB),
     rt:wait_until_pingable(LeaderA),
+    start_and_wait_until_fullsync_complete(LeaderA2),
+
+    lager:info("Restarting down node ~p", [LeaderB]),
+    rt:start(LeaderB),
     rt:wait_until_pingable(LeaderB),
 
     lager:info("Nodes restarted"),
@@ -427,6 +431,7 @@ make_bucket(Node, Name, Args) ->
 start_and_wait_until_fullsync_complete(Node) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
     Count = proplists:get_value(server_fullsyncs, Status0) + 1,
+    lager:info("waiting for fullsync count to be ~p", [Count]),
 
     lager:info("Starting fullsync on ~p (~p)", [Node,
             rtdev:node_version(rtdev:node_id(Node))]),
@@ -481,8 +486,11 @@ wait_until_connection(Node) ->
                 case proplists:get_value(server_stats, Status) of
                     [] ->
                         false;
-                    C ->
-                        lager:info("connections ~p", [C]),
+                    [_C] ->
+                        true;
+                    Conns ->
+                        lager:warning("multiple connections detected: ~p",
+                            [Conns]),
                         true
                 end
         end),
