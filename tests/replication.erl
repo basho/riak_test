@@ -379,6 +379,7 @@ add_listeners(Nodes=[FirstNode|_]) ->
     IPs = lists:duplicate(length(Nodes), "127.0.0.1"),
     PN = lists:zip3(IPs, Ports, Nodes),
     [add_listener(FirstNode, Node, IP, Port) || {IP, Port, Node} <- PN],
+    timer:sleep(timer:seconds(5)),
     PN.
 
 add_listener(N, Node, IP, Port) ->
