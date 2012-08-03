@@ -136,12 +136,13 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     lager:info("New leader is ~p", [LeaderA2]),
 
-    wait_until_connection(LeaderA2),
+    ?assertEqual(ok, wait_until_connection(LeaderA2)),
 
     lager:info("Writing 100 more keys to ~p now that the old leader is down",
         [ASecond]),
 
     rt:systest_write(ASecond, 201, 300, TestBucket, 2),
+    timer:sleep(1000),
 
     %% verify data is replicated to B
     lager:info("Reading 100 keys written to ~p from ~p", [ASecond, BFirst]),
@@ -161,7 +162,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     lager:info("New leader is ~p", [LeaderB2]),
 
-    wait_until_connection(LeaderA2),
+    ?assertEqual(ok, wait_until_connection(LeaderA2)),
 
     lager:info("Writing 100 more keys to ~p now that the old leader is down",
         [ASecond]),
@@ -212,7 +213,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
                     lager:info("reconnect the 2 clusters"),
                     add_site(LeaderB, {Ip, Port, "site1"}),
-                    wait_until_connection(LeaderA);
+                    ?assertEqual(ok, wait_until_connection(LeaderA));
                 _ ->
                     timer:sleep(1000)
             end,
@@ -390,10 +391,10 @@ add_listener(N, Node, IP, Port) ->
 
 del_listeners(Node) ->
     Listeners = get_listeners(Node),
-    lists:foreach(fun(Listener={_Node, IP, Port}) ->
+    lists:foreach(fun(Listener={IP, Port, N}) ->
                 lager:info("deleting listener ~p on ~p", [Listener, Node]),
                 Res = rpc:call(Node, riak_repl_console, del_listener,
-                    [[atom_to_list(Node), IP, integer_to_list(Port)]]),
+                    [[atom_to_list(N), IP, integer_to_list(Port)]]),
                 ?assertEqual(ok, Res)
         end, Listeners).
 
@@ -467,7 +468,7 @@ start_and_wait_until_fullsync_complete(Node) ->
                 ok ->
                     ok;
                 _ ->
-                    wait_until_connection(Node),
+                    ?assertEqual(ok, wait_until_connection(Node)),
                     lager:warning("Pre 1.2.0 node failed to fullsync, retrying"),
                     start_and_wait_until_fullsync_complete(Node)
             end
@@ -489,7 +490,7 @@ wait_until_leader(Node) ->
     ?assertEqual(ok, Res).
 
 wait_until_connection(Node) ->
-    Res = rt:wait_until(Node,
+    rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
                 case proplists:get_value(server_stats, Status) of
@@ -502,5 +503,4 @@ wait_until_connection(Node) ->
                             [Conns]),
                         true
                 end
-        end),
-    ?assertEqual(ok, Res).
+        end, 80, 500). %% 40 seconds is enough for repl
