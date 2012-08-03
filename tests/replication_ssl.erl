@@ -189,6 +189,8 @@ replication_ssl() ->
 
     Nodes = rt:deploy_nodes(6, BaseConf),
 
+    [rt:wait_until_pingable(N) || N <- Nodes],
+
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
 
     lager:info("Reconfiguring nodes with SSL options"),
