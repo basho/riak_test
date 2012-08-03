@@ -374,19 +374,27 @@ verify_listener(Node, Str, Status) ->
     lager:info("Verify listener ~s is seen by node ~p", [Str, Node]),
     ?assert(lists:keymember(Str, 2, Status)).
 
-add_listeners(Nodes) ->
+add_listeners(Nodes=[FirstNode|_]) ->
     Ports = gen_ports(9010, length(Nodes)),
     IPs = lists:duplicate(length(Nodes), "127.0.0.1"),
     PN = lists:zip3(IPs, Ports, Nodes),
-    [add_listener(Node, IP, Port) || {IP, Port, Node} <- PN],
+    [add_listener(FirstNode, Node, IP, Port) || {IP, Port, Node} <- PN],
     PN.
 
-add_listener(Node, IP, Port) ->
+add_listener(N, Node, IP, Port) ->
     lager:info("Adding repl listener to ~p ~s:~p", [Node, IP, Port]),
     Args = [[atom_to_list(Node), IP, integer_to_list(Port)]],
-    Res = rpc:call(Node, riak_repl_console, add_listener, Args),
-    ?assertEqual(ok, Res),
-    timer:sleep(timer:seconds(3)).
+    Res = rpc:call(N, riak_repl_console, add_listener, Args),
+    ?assertEqual(ok, Res).
+
+del_listeners(Node) ->
+    Listeners = get_listeners(Node),
+    lists:foreach(fun(Listener={_Node, IP, Port}) ->
+                lager:info("deleting listener ~p on ~p", [Listener, Node]),
+                Res = rpc:call(Node, riak_repl_console, del_listener,
+                    [[atom_to_list(Node), IP, integer_to_list(Port)]]),
+                ?assertEqual(ok, Res)
+        end, Listeners).
 
 get_listeners(Node) ->
     Status = rpc:call(Node, riak_repl_console, status, [quiet]),
