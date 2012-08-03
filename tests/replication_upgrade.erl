@@ -65,6 +65,7 @@ replication_upgrade() ->
 
     %% initial replication run, homogeneous cluster
     replication:replication(ANodes, BNodes, false),
+    %% upgrade the nodes, one at a time
     lists:foreach(fun(Node) ->
                 rtdev:upgrade(Node, ToVersion),
                 rt:wait_until_pingable(Node),
