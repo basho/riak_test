@@ -33,7 +33,7 @@ verify_upgrade(OldVsn) ->
          MR2 = spawn_mapred_tester(MR1),
          Search2 = spawn_search_tester(Search1),
          lager:info("Upgrading ~p", [Node]),
-         rtdev:upgrade(Node, current),
+         rt:upgrade(Node, current),
          _KV3 = check_kv_tester(KV2),
          _MR3 = check_mapred_tester(MR2),
          _Search3 = check_search_tester(Search2, false),

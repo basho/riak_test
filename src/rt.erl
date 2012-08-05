@@ -19,6 +19,7 @@
          get_os_env/2,
          get_ring/1,
          admin/2,
+         upgrade/2,
          wait_until_pingable/1,
          wait_until_unpingable/1,
          wait_until_ready/1,
@@ -105,6 +106,10 @@ async_start(Node) ->
 %% @doc Stop the specified Riak node
 stop(Node) ->
     ?HARNESS:stop(Node).
+
+%% @doc Upgrade a Riak node to a specific version
+upgrade(Node, NewVersion) ->
+    ?HARNESS:upgrade(Node, NewVersion).
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
@@ -522,3 +527,17 @@ systest_read(Node, Start, End, Bucket, R) ->
                 end
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
+
+%% utility function
+pmap(F, L) ->
+    Parent = self(),
+    lists:foldl(
+      fun(X, N) ->
+              spawn(fun() ->
+                            Parent ! {pmap, N, F(X)}
+                    end),
+              N+1
+      end, 0, L),
+    L2 = [receive {pmap, N, R} -> {N,R} end || _ <- L],
+    {_, L3} = lists:unzip(lists:keysort(1, L2)),
+    L3.

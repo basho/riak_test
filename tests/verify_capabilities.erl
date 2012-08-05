@@ -41,7 +41,7 @@ verify_capabilities() ->
     ?assertEqual(legacy, rt:capability(Node1, {riak_core, vnode_routing})),
 
     lager:info("Upgrade 0.14.2 node"),
-    rtdev:upgrade(Node2, current),
+    rt:upgrade(Node2, current),
 
     lager:info("Verifying vnode_routing == proxy"),
     ?assertEqual(ok, rt:wait_until_capability(Node1, {riak_core, vnode_routing}, proxy)),
@@ -54,13 +54,13 @@ verify_capabilities() ->
     ?assertEqual(legacy, rt:capability(Node1, {riak_core, vnode_routing})),
 
     lager:info("Upgrading 1.0.3 node"),
-    rtdev:upgrade(Node4, current),
+    rt:upgrade(Node4, current),
 
     lager:info("Verifying vnode_routing changes to proxy"),
     ?assertEqual(ok, rt:wait_until_capability(Node1, {riak_core, vnode_routing}, proxy)),
 
     lager:info("Upgrade 1.1.4 node"),
-    rtdev:upgrade(Node3, current),
+    rt:upgrade(Node3, current),
 
     %% All nodes are now current version. Test override behavior.
     Override = fun(undefined, Prefer) ->
