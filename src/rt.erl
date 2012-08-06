@@ -111,6 +111,21 @@ stop(Node) ->
 upgrade(Node, NewVersion) ->
     ?HARNESS:upgrade(Node, NewVersion).
 
+%% @doc Upgrade a Riak node to a specific version using the alternate
+%%      leave/upgrade/rejoin approach
+slow_upgrade(Node, NewVersion, Nodes) ->
+    lager:info("Perform leave/upgrade/join upgrade on ~p", [Node]),
+    lager:info("Leaving ~p", [Node]),
+    leave(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    upgrade(Node, NewVersion),
+    lager:info("Rejoin ~p", [Node]),
+    join(Node, hd(Nodes -- [Node])),
+    lager:info("Wait until all nodes are ready and there are no pending changes"),
+    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
+    ok.
+
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
     R = try_join(Node, PNode),
