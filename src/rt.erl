@@ -330,6 +330,15 @@ wait_until(Node, Fun, Retry, Delay) ->
             wait_until(Node, Fun, Retry-1)
     end.
 
+capability(Node, Capability) ->
+    rpc:call(Node, riak_core_capability, get, [Capability]).
+
+wait_until_capability(Node, Capability, Value) ->
+    rt:wait_until(Node,
+                  fun(_) ->
+                          Value == capability(Node, Capability)
+                  end).
+
 %%%===================================================================
 %%% Search
 %%%===================================================================
