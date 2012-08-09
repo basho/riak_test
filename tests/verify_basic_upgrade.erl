@@ -3,7 +3,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 verify_basic_upgrade() ->
-    OldVsns = ["1.0.3", "1.1.2"],
+    OldVsns = ["1.0.3", "1.1.4"],
     [build_cluster(OldVsn, current) || OldVsn <- OldVsns],
     [build_cluster(current, OldVsn) || OldVsn <- OldVsns],
     lager:info("Test ~p passed", [?MODULE]),
@@ -26,8 +26,8 @@ build_cluster(Vsn1, Vsn2) ->
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
     ?assertEqual([], rt:systest_read(Node1, 100, 1)),
 
-    (Vsn1 /= current) andalso rtdev:upgrade(Node1, current),
-    (Vsn2 /= current) andalso rtdev:upgrade(Node2, current),
+    (Vsn1 /= current) andalso rt:upgrade(Node1, current),
+    (Vsn2 /= current) andalso rt:upgrade(Node2, current),
 
     timer:sleep(1000),
     lager:info("Ensuring keys still exist"),

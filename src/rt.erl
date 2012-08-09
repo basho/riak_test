@@ -19,6 +19,7 @@
          get_os_env/2,
          get_ring/1,
          admin/2,
+         upgrade/2,
          wait_until_pingable/1,
          wait_until_unpingable/1,
          wait_until_ready/1,
@@ -105,6 +106,25 @@ async_start(Node) ->
 %% @doc Stop the specified Riak node
 stop(Node) ->
     ?HARNESS:stop(Node).
+
+%% @doc Upgrade a Riak node to a specific version
+upgrade(Node, NewVersion) ->
+    ?HARNESS:upgrade(Node, NewVersion).
+
+%% @doc Upgrade a Riak node to a specific version using the alternate
+%%      leave/upgrade/rejoin approach
+slow_upgrade(Node, NewVersion, Nodes) ->
+    lager:info("Perform leave/upgrade/join upgrade on ~p", [Node]),
+    lager:info("Leaving ~p", [Node]),
+    leave(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    upgrade(Node, NewVersion),
+    lager:info("Rejoin ~p", [Node]),
+    join(Node, hd(Nodes -- [Node])),
+    lager:info("Wait until all nodes are ready and there are no pending changes"),
+    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
+    ok.
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
@@ -522,3 +542,17 @@ systest_read(Node, Start, End, Bucket, R) ->
                 end
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
+
+%% utility function
+pmap(F, L) ->
+    Parent = self(),
+    lists:foldl(
+      fun(X, N) ->
+              spawn(fun() ->
+                            Parent ! {pmap, N, F(X)}
+                    end),
+              N+1
+      end, 0, L),
+    L2 = [receive {pmap, N, R} -> {N,R} end || _ <- L],
+    {_, L3} = lists:unzip(lists:keysort(1, L2)),
+    L3.

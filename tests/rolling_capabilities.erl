@@ -25,7 +25,7 @@ rolling_capabilities() ->
     lager:info("Deploying Riak ~p cluster", [OldVsn]),
     Nodes = rt:build_cluster([OldVsn || _ <- lists:seq(1,Count)]),
     lists:foldl(fun(Node, Upgraded) ->
-                        rtdev:upgrade(Node, current),
+                        rt:upgrade(Node, current),
                         Upgraded2 = Upgraded ++ [Node],
                         lager:info("Verifying rolling/old capabilities"),
                         (Upgraded2 == Nodes)

@@ -5,12 +5,10 @@
 -include_lib("eunit/include/eunit.hrl").
 
 gh_riak_core_154() ->
-    Nodes = rt:build_cluster(2),
-    [Node1, Node2] = Nodes,
-
-    lager:info("Increase handoff concurrency on nodes"),
+    %% Increase handoff concurrency on nodes
     NewConfig = [{riak_core, [{handoff_concurrency, 1024}]}],
-    [rt:update_app_config(Node, NewConfig) || Node <- Nodes],
+    Nodes = rt:build_cluster(2, NewConfig),
+    [Node1, Node2] = Nodes,
 
     lager:info("Write data while ~p is offline", [Node2]),
     rt:stop(Node2),

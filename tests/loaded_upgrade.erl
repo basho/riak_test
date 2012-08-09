@@ -13,6 +13,13 @@ loaded_upgrade() ->
 
 verify_upgrade(OldVsn) ->
     Config = [{riak_search, [{enabled, true}]}],
+    %% Uncomment to use settings more prone to cause races
+    %% Config = [{riak_core, [{handoff_concurrency, 1024},
+    %%                        {vnode_inactivity_timeout, 1000},
+    %%                        {vnode_rolling_start, 128},
+    %%                        {vnode_management_timer, 1000},
+    %%                        {gossip_limit, {10000, 1000}}]},
+    %%           {riak_search, [{enabled, true}]}],
     NumNodes = 4,
     Vsns = [{OldVsn, Config} || _ <- lists:seq(2,NumNodes)],
     Nodes = rt:build_cluster([{current, Config} | Vsns]),
@@ -33,7 +40,8 @@ verify_upgrade(OldVsn) ->
          MR2 = spawn_mapred_tester(MR1),
          Search2 = spawn_search_tester(Search1),
          lager:info("Upgrading ~p", [Node]),
-         rtdev:upgrade(Node, current),
+         rt:upgrade(Node, current),
+         %% rt:slow_upgrade(Node, current, Nodes),
          _KV3 = check_kv_tester(KV2),
          _MR3 = check_mapred_tester(MR2),
          _Search3 = check_search_tester(Search2, false),
