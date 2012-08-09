@@ -4,6 +4,8 @@
 
 -import(rt, [deploy_nodes/1,
              enable_search_hook/2,
+             get_os_env/1,
+             get_os_env/2,
              get_ring/1,
              join/2,
              update_app_config/2]).
@@ -294,18 +296,6 @@ put_file(C, Bucket, File) ->
     {ok, Val} = file:read_file(File),
     O = riak_object:new(Bucket, K, Val, "text/plain"),
     ?assertEqual(ok, C:put(O)).
-
-get_os_env(Var) ->
-    case get_os_env(Var, undefined) of
-        undefined -> exit({os_env_var_undefined, Var});
-        Value -> Value
-    end.
-
-get_os_env(Var, Default) ->
-    case os:getenv(Var) of
-        false -> Default;
-        Value -> Value
-    end.
 
 load_module_on_riak(Nodes, Mod) ->
     {Mod, Bin, File} = code:get_object_code(Mod),
