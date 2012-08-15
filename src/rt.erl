@@ -395,12 +395,30 @@ setup_harness(Test, Args) ->
 cleanup_harness() ->
     ?HARNESS:cleanup_harness().
 
+load_config(ConfigName) ->
+    case load_config_file(ConfigName) of
+        ok -> ok;
+        {error, enoent} -> load_dot_config(ConfigName)
+    end.
+
 %% @private
-load_config(File) ->
+load_dot_config(ConfigName) ->
+    case file:consult(filename:join([os:getenv("HOME"), ".riak_test.config"])) of
+        {ok, Terms} ->
+            Config = proplists:get_value(list_to_atom(ConfigName), Terms),
+            [set_config(Key, Value) || {Key, Value} <- Config],
+            ok;            
+        {error, Reason} ->
+            erlang:error("Failed to parse config file", ["~/.riak_test.config", Reason])
+ end.
+%% @private
+load_config_file(File) ->
     case file:consult(File) of
         {ok, Terms} ->
             [set_config(Key, Value) || {Key, Value} <- Terms],
             ok;
+        {error, enoent} ->
+            {error, enoent};            
         {error, Reason} ->
             erlang:error("Failed to parse config file", [File, Reason])
     end.
