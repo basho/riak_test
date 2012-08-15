@@ -1,0 +1,39 @@
+{rtdev, [
+	{rt_deps, ["/Users/joe/dev/basho/riak/deps","deps"]},
+	{rt_max_wait_time, 180000},
+	{rt_retry_delay, 500},
+	{rt_harness, rtdev},
+	{rtdev_path, "/tmp/rt"}
+]}.
+
+{rtdev_mixed, [
+	{rt_deps, ["/Users/joe/dev/basho/riak/deps"]},
+	{rt_max_wait_time, 180000},
+	{rt_retry_delay, 500},
+	{rt_harness, rtdev},
+	{rtdev_path, [{root, "/tmp/rt"},
+				  {current, "/tmp/rt/current"},
+				  {"1.1.4", "/tmp/rt/riak-1.1.4"},
+				  {"1.0.3", "/tmp/rt/riak-1.0.3"}]}
+]}.
+
+{rtdev_ee, [
+	{rt_deps, ["/Users/joe/dev/basho/riak_ee/deps","deps"]},
+	{rt_max_wait_time, 180000},
+	{rt_retry_delay, 500},
+	{rt_harness, rtdev},
+	{rtdev_path, "/tmp/rt_ee"}
+]}.
+
+{rtdev_ee_mixed, [
+	{rt_deps, ["/Users/joe/dev/basho/riak_ee/deps"]},
+	{rt_max_wait_time, 180000},
+	{rt_retry_delay, 500},
+	{rt_harness, rtdev},
+	{rtdev_path, [{root, "/tmp/rt"},
+				  {current, "/tmp/rt/current"},
+				  {"1.1.4", "/tmp/rt/riak_ee-1.1.4"},
+				  {"1.0.3", "/tmp/rt/riak_ee-1.0.3"}]}
+]}.
+
+
