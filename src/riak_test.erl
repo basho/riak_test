@@ -7,6 +7,7 @@ add_deps(Path) ->
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
     ok.
 
+
 main(Args) ->
     [Config, Test | HarnessArgs]=Args,
     rt:load_config(Config),
@@ -17,11 +18,13 @@ main(Args) ->
     [] = os:cmd("epmd -daemon"),
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
-
-    application:start(lager),
+    
+    %% Start Lager
+    application:load(lager),
     LagerLevel = rt:config(rt_lager_level, debug),
-    lager:set_loglevel(lager_console_backend, LagerLevel),
-
+    application:set_env(lager, handlers, [{lager_console_backend, LagerLevel}]),
+    lager:start(),
+    
     %% rt:set_config(rtdev_path, Path),
     %% rt:set_config(rt_max_wait_time, 180000),
     %% rt:set_config(rt_retry_delay, 500),
