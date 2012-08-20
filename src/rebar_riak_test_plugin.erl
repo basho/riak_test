@@ -71,7 +71,8 @@ riak_test_clean(Config, _AppFile) ->
         {error, not_set} -> 
             io:format("No test_output directory set, check your rebar.config");
         TestOutputDir ->
-            io:format("Removing test_output dir ~s~n", [TestOutputDir])
+            io:format("Removing test_output dir ~s~n", [TestOutputDir]),
+            rebar_file_utils:rm_rf(TestOutputDir)
     end,
     ok.
 
