@@ -21,6 +21,19 @@ R14B03=${R14B03:-$HOME/erlang-R14B03}
 R14B04=${R14B04:-$HOME/erlang-R14B04}
 R15B01=${R15B01:-$HOME/erlang-R15B01}
 
+checkbuild()
+{
+    ERLROOT=$1
+    
+    if [ ! -d $ERLROOT ]; then
+        echo -n "$ERLROOT cannot be found, install kerl? [y|N]: "
+        read ans
+        if [[ $ans == n || $ans == N ]]; then
+            exit 1
+        fi
+    fi
+}
+
 kerl()
 {
     RELEASE=$1
@@ -40,15 +53,9 @@ build()
     ERLROOT=$2
 
     if [ ! -d $ERLROOT ]; then
-        echo -n "$ERLROOT cannot be found, install kerl? [y|N]: "
-        read ans
-        if [[ $ans == y || $ans == Y ]]; then
-            BUILDNAME=`basename $ERLROOT`
-            RELEASE=`echo $BUILDNAME | awk -F- '{ print $2 }'`
-            kerl $RELEASE $BUILDNAME
-        else
-            exit 1
-        fi
+        BUILDNAME=`basename $ERLROOT`
+        RELEASE=`echo $BUILDNAME | awk -F- '{ print $2 }'`
+        kerl $RELEASE $BUILDNAME
     fi
 
     echo
@@ -62,6 +69,11 @@ build()
     $RUN make && $RUN make devrel
     cd ..
 }
+
+checkbuild $R13B04
+checkbuild $R14B03
+checkbuild $R14B04
+checkbuild $R15B01
 
 if [ $1 = "-ee" ]; then
     # Download Riak EE release source, need s3cmd configured
