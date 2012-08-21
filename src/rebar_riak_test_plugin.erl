@@ -57,8 +57,9 @@ rt_run(Config, AppFile) ->
 %% Private Functions - pronounced Funk-tee-owns, not funk-ee-towns
 %% ===================================================================
 should_i_run(Config) ->
-    rebar_utils:processing_base_dir(Config).    
-        
+    %% Only run on the base dir
+    rebar_utils:processing_base_dir(Config) andalso proplists:is_defined(riak_test, element(3, Config)).
+
 option(Key, Config) ->
     case proplists:get_value(riak_test, element(3, Config), not_configured) of
         not_configured -> {error, not_configured};
@@ -92,5 +93,5 @@ compilation_config(Conf) ->
     C2 = rebar_config:set(C1, plugins, undefined),
     ErlOpts = rebar_utils:erl_opts(Conf),
     ErlOpts1 = proplists:delete(src_dirs, ErlOpts),
-    ErlOpts2 = [{outdir, "riak_test/ebin"}, {src_dirs, option(test_paths, Conf)} | ErlOpts1],
+    ErlOpts2 = [{outdir, option(test_output, Conf)}, {src_dirs, option(test_paths, Conf)} | ErlOpts1],
     rebar_config:set(C2, erl_opts, ErlOpts2).
