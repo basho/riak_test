@@ -8,16 +8,8 @@
 -define(NODE_COUNT, 3).
 
 mapred_verify_rt() ->
-    lager:info("Deploy ~b nodes", [?NODE_COUNT]),
-    Nodes = rt:deploy_nodes(?NODE_COUNT),
-    
-    lager:info("Join nodes"),
-    lists:foreach(fun(N) -> rt:join(N, hd(Nodes)) end, tl(Nodes)),
-    
-    lager:info("Wait for cluster to be ready"),
-    rt:wait_until_all_members(Nodes),
-    rt:wait_until_nodes_ready(Nodes),
-    rt:wait_until_no_pending_changes(Nodes),
+    lager:info("Build ~b node cluster", [?NODE_COUNT]),
+    Nodes = rt:build_cluster(?NODE_COUNT),
     
     PrivDir = code:priv_dir(mapred_verify),
     MRVProps = [{node, hd(Nodes)},
