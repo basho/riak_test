@@ -20,28 +20,12 @@ R14B04=${R14B04:-$HOME/erlang-R14B04}
 **Kerlveat**: If you want kerl yo build you erlangs with serious 64-bit macintosh action, you'll need a `~/.kerlrc` file that looks like this:
 
 ```
-KERL_CONFIGURE_OPTIONS="--enable-hipe --enable-smp-support --enable-threads 
---enable-kernel-poll  --enable-darwin-64bit"
+KERL_CONFIGURE_OPTIONS="--enable-hipe --enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit"
 ```
 
 The script will check that all these paths exist. If even one of them is missing, it will prompt you to install kerl, even if you already have kerl. If you say no, the script quits. If you say yes, or all of your erlang paths check out, then go get a cup of coffee, you'll be building for a little while.
 
-**Warning**: If you are running OS X 10.7+, then the erlang_js dependency won't compile for you, but fails silently. Fortunately, the precomipled OS X build includes this dependency in it's working form. Here's how you get it:
-
-```bash
-wget http://s3.amazonaws.com/downloads.basho.com/riak/1.0/1.0.3/riak-1.0.3-osx-x86_64.tar.gz
-mkdir erlang_js-1.0.0 && tar xvzf riak-1.0.3-osx-x86_64.tar.gz -C erlang_js-1.0.0 riak-1.0.3/lib/erlang_js-1.0.0 
-rm -rf riak-1.0.3/dev/dev1/lib/erlang_js-1.0.0
-rm -rf riak-1.0.3/dev/dev2/lib/erlang_js-1.0.0
-rm -rf riak-1.0.3/dev/dev3/lib/erlang_js-1.0.0
-rm -rf riak-1.0.3/dev/dev4/lib/erlang_js-1.0.0
-cp -r erlang_js-1.0.0/riak-1.0.3/lib/erlang_js-1.0.0 riak-1.0.3/dev/dev1/lib/.
-cp -r erlang_js-1.0.0/riak-1.0.3/lib/erlang_js-1.0.0 riak-1.0.3/dev/dev2/lib/.
-cp -r erlang_js-1.0.0/riak-1.0.3/lib/erlang_js-1.0.0 riak-1.0.3/dev/dev3/lib/.
-cp -r erlang_js-1.0.0/riak-1.0.3/lib/erlang_js-1.0.0 riak-1.0.3/dev/dev4/lib/.
-```
-
-**Please run this patch before proceeding on to the next script**
+**Warning**: If you are running OS X 10.7+, then the erlang_js dependency won't compile for you, but fails silently. Fortunately, the precomipled OS X build includes this dependency in it's working form. Just run `rtdev-lion-fix.sh` after `rtdev-build-releases.sh` to patch it. **Please run this patch before proceeding on to the next script**
 
 ### rtdev-setup-releases.sh
 The `rtdev-setup-releases.sh` will get the releases you just built into a local git repository. Currently, running this script from the same directory that you just built all of your releases into. Currently this script initializes this repository into `/tmp/rt` but it's probably worth making that configurable in the near term.
