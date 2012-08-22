@@ -52,3 +52,31 @@ cp -r erlang_js-1.0.0/riak-1.0.3/lib/erlang_js-1.0.0 riak-1.0.3/dev/dev4/lib/.
 *Please run this patch before proceeding on to the next script*
 
 ### rtdev-setup-releases.sh
+The `rtdev-setup-releases.sh` will get the releases you just built into a local git repository. Currently, running this script from the same directory that you just built all of your releases into. Currently this script initializes this repository into `/tmp/rt` but it's probably worth making that configurable in the near term.
+
+### rtdev-current.sh
+`rtdev-current.sh` is where it gets interesting. You need to run that from the riak source folder you're wanting to test as the current version of riak. Also, make sure that you've already run `make devrel` or `make stagedevrel` before you run `rtdev-current.sh`.
+
+### Config file.
+Now that you've got your releases all ready and gitified, you'll need to tell riak_test about them. The method of choice is to create a `~/.riak_test.config` that looks something like this:
+
+```erlang
+{rtdev_mixed, [
+    {rt_deps, ["$PATH_TO_YOUR_RIAK_SOURCE/deps"]},
+    {rt_max_wait_time, 180000},
+    {rt_retry_delay, 500},
+    {rt_harness, rtdev},
+    {rtdev_path, [{root, "/tmp/rt"},
+                  {current, "/tmp/rt/current"},
+                  {"1.2.0", "/tmp/rt/riak-1.2.0"},
+                  {"1.1.4", "/tmp/rt/riak-1.1.4"},
+                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]}
+]}.
+
+```
+
+### Running riak_test for the first time
+Run a test! `./riak_test rtdev_mixed verify_build_cluster`
+
+Did that work? Great, try something harder: `./riak_test rtdev_mixed upgrade`
+
