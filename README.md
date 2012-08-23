@@ -17,7 +17,7 @@ You'll want to run this script from an empty directory. Also, you might be think
 R14B04=${R14B04:-$HOME/erlang-R14B04}
 ```
 
-**Kerlveat**: If you want kerl yo build you erlangs with serious 64-bit macintosh action, you'll need a `~/.kerlrc` file that looks like this:
+**Kerlveat**: If you want kerl to build erlangs with serious 64-bit macintosh action, you'll need a `~/.kerlrc` file that looks like this:
 
 ```
 KERL_CONFIGURE_OPTIONS="--enable-hipe --enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit"
@@ -25,13 +25,13 @@ KERL_CONFIGURE_OPTIONS="--enable-hipe --enable-smp-support --enable-threads --en
 
 The script will check that all these paths exist. If even one of them is missing, it will prompt you to install kerl, even if you already have kerl. If you say no, the script quits. If you say yes, or all of your erlang paths check out, then go get a cup of coffee, you'll be building for a little while.
 
-**Warning**: If you are running OS X 10.7+, then the erlang_js dependency won't compile for you, but fails silently. Fortunately, the precomipled OS X build includes this dependency in it's working form. Just run `rtdev-lion-fix.sh` after `rtdev-build-releases.sh` to patch it. **Please run this patch before proceeding on to the next script**
+**Warning**: If you are running OS X 10.7+ and trying to build Riak 1.0.3, then the erlang_js dependency won't compile for you, but it fails silently. Fortunately, the precomipled OS X build includes this dependency in it's working form. Just run `rtdev-lion-fix.sh` after `rtdev-build-releases.sh` to patch it. **Please run this patch before proceeding on to the next script**
 
 ### rtdev-setup-releases.sh
 The `rtdev-setup-releases.sh` will get the releases you just built into a local git repository. Currently, running this script from the same directory that you just built all of your releases into. Currently this script initializes this repository into `/tmp/rt` but it's probably worth making that configurable in the near term.
 
 ### rtdev-current.sh
-`rtdev-current.sh` is where it gets interesting. You need to run that from the riak source folder you're wanting to test as the current version of riak. Also, make sure that you've already run `make devrel` or `make stagedevrel` before you run `rtdev-current.sh`.
+`rtdev-current.sh` is where it gets interesting. You need to run that from the Riak source folder you're wanting to test as the current version of Riak. Also, make sure that you've already run `make devrel` or `make stagedevrel` before you run `rtdev-current.sh`.
 
 ### Config file.
 Now that you've got your releases all ready and gitified, you'll need to tell riak_test about them. The method of choice is to create a `~/.riak_test.config` that looks something like this:
