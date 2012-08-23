@@ -94,5 +94,6 @@ compilation_config(Conf) ->
     C2 = rebar_config:set(C1, plugins, undefined),
     ErlOpts = rebar_utils:erl_opts(Conf),
     ErlOpts1 = proplists:delete(src_dirs, ErlOpts),
-    ErlOpts2 = [{outdir, option(test_output, Conf)}, {src_dirs, option(test_paths, Conf)} | ErlOpts1],
+    ErlOpts2 = [{parse_transform,lager_transform},{outdir, option(test_output, Conf)}, {src_dirs, option(test_paths, Conf)} | ErlOpts1],
+    io:format("erl_opts: ~p~n", [ErlOpts2]),
     rebar_config:set(C2, erl_opts, ErlOpts2).
