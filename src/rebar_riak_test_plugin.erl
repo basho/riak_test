@@ -27,21 +27,21 @@
 -module(rebar_riak_test_plugin).
 
 -export([
-    rt_clean/2,
-    rt_compile/2,
+    clean/2,
+    compile/2,
     rt_run/2
 ]).
 
 %% ===================================================================
 %% Public API
 %% ===================================================================
-rt_clean(Config, AppFile) ->
+clean(Config, AppFile) ->
     case should_i_run(Config) of
         false -> ok;
         _ -> riak_test_clean(Config, AppFile)
     end.
 
-rt_compile(Config, AppFile) ->
+compile(Config, AppFile) ->
     case should_i_run(Config) of
         false -> ok;
         _ -> riak_test_compile(Config, AppFile)
@@ -85,6 +85,7 @@ riak_test_compile(Config, AppFile) ->
 riak_test_run(Config, _AppFile) ->
     RiakTestConfig = rebar_config:get_global(Config, config, "rtdev"),
     Test = rebar_config:get_global(Config, test, ""),
+    code:add_pathsz([rebar_utils:ebin_dir(), option(test_output, Config)]),
     riak_test:main([RiakTestConfig, Test]),
     ok.
     
