@@ -79,3 +79,71 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, #state{log=Logs}) ->
     {ok, lists:reverse(Logs)}.
+
+-ifdef(TEST).
+
+log_test_() ->
+    {foreach,
+        fun() ->
+                error_logger:tty(false),
+                application:load(lager),
+                application:set_env(lager, handlers, [{riak_test_lager_backend, debug}]),
+                application:set_env(lager, error_logger_redirect, false),
+                lager:start()
+        end,
+        fun(_) ->
+                application:stop(lager),
+                error_logger:tty(true)
+        end,
+        [
+            {"Test logging",
+                fun() ->
+                        lager:info("Here's a message"),
+                        lager:debug("Here's another message"),
+                        {ok, Logs} = gen_event:delete_handler(lager_event, riak_test_lager_backend, []),
+                        ?assertEqual(3, length(Logs)),
+                        
+                        ?assertMatch([_, "[debug]", "Lager installed handler riak_test_lager_backend into lager_event"], re:split(lists:nth(1, Logs), " ", [{return, list}, {parts, 3}])),
+                        ?assertMatch([_, "[info]", "Here's a message"], re:split(lists:nth(2, Logs), " ", [{return, list}, {parts, 3}])),
+                        ?assertMatch([_, "[debug]", "Here's another message"], re:split(lists:nth(3, Logs), " ", [{return, list}, {parts, 3}]))
+                        
+                end
+            }
+        ]
+    }.
+
+
+set_loglevel_test_() ->
+    {foreach,
+        fun() ->
+                error_logger:tty(false),
+                application:load(lager),
+                application:set_env(lager, handlers, [{riak_test_lager_backend, info}]),
+                application:set_env(lager, error_logger_redirect, false),
+                lager:start()
+        end,
+        fun(_) ->
+                application:stop(lager),
+                error_logger:tty(true)
+        end,
+        [
+            {"Get/set loglevel test",
+                fun() ->
+                        ?assertEqual(info, lager:get_loglevel(riak_test_lager_backend)),
+                        lager:set_loglevel(riak_test_lager_backend, debug),
+                        ?assertEqual(debug, lager:get_loglevel(riak_test_lager_backend))
+                end
+            },
+            {"Get/set invalid loglevel test",
+                fun() ->
+                        ?assertEqual(info, lager:get_loglevel(riak_test_lager_backend)),
+                        ?assertEqual({error, bad_log_level},
+                            lager:set_loglevel(riak_test_lager_backend, fatfinger)),
+                        ?assertEqual(info, lager:get_loglevel(riak_test_lager_backend))
+                end
+            }
+
+        ]
+    }.
+
+-endif.
