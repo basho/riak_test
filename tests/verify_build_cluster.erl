@@ -8,7 +8,7 @@
              wait_until_nodes_ready/1,
              wait_until_no_pending_changes/1]).
 
-verify_build_cluster() ->
+run() ->
     %% Deploy a set of new nodes
     lager:info("Deploying 3 nodes"),
     Nodes = rt:deploy_nodes(3),
@@ -30,4 +30,4 @@ verify_build_cluster() ->
     lager:info("Ensure each node owns a portion of the ring"),
     [?assertEqual(Nodes, owners_according_to(Node)) || Node <- Nodes],
     lager:info("verify_build_cluster: PASS"),
-    ok.
+    pass.
