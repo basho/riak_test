@@ -8,7 +8,7 @@
              wait_until_nodes_ready/1,
              wait_until_no_pending_changes/1]).
 
-run() ->
+confirm() ->
     %% Deploy a set of new nodes
     lager:info("Deploying 3 nodes"),
     Nodes = rt:deploy_nodes(3),

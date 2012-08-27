@@ -31,7 +31,7 @@ main(Args) ->
     %% rt:set_config(rt_harness, rtbe),
     rt:setup_harness(Test, HarnessArgs),
     TestA = list_to_atom(Test),
-    SingleTestResult = riak_test_runner:run(TestA),
+    SingleTestResult = riak_test_runner:confirm(TestA),
     io:format("STR: ~p~n", [SingleTestResult]),
     rt:cleanup_harness(),
     

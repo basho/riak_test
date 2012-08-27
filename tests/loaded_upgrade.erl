@@ -3,13 +3,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -define(SPAM_BUCKET, <<"scotts_spam">>).
 
-loaded_upgrade() ->
+confirm() ->
     _ = rt:get_os_env("BASHO_BENCH"),
     %% OldVsns = ["1.0.3", "1.1.4"],
     OldVsns = ["1.1.4"],
     [verify_upgrade(OldVsn) || OldVsn <- OldVsns],
     lager:info("Test ~p passed", [?MODULE]),
-    ok.
+    pass.
 
 verify_upgrade(OldVsn) ->
     Config = [{riak_search, [{enabled, true}]}],

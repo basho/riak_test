@@ -1,8 +1,8 @@
 -module(upgrade).
--export([upgrade/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-upgrade() ->
+confirm() ->
     Nodes = rt:build_cluster(["1.0.3", "1.0.3", "1.1.4", current]),
     [Node1, Node2, Node3, _Node4] = Nodes,
 
@@ -16,7 +16,7 @@ upgrade() ->
     rt:systest_read(Node1, 100, 1),
     %% ?assertEqual([], rt:systest_read(Node1, 100, 1)),
     wait_until_readable(Node1, 100),
-    ok.
+    pass.
 
 wait_until_readable(Node, N) ->
     rt:wait_until(Node,

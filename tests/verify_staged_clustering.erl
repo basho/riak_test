@@ -1,9 +1,9 @@
 -module(verify_staged_clustering).
--export([verify_staged_clustering/0]).
+-export([confirm/0]).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
-verify_staged_clustering() ->
+confirm() ->
     Nodes = rt:deploy_nodes(4),
     [Node1, Node2, Node3, Node4] = Nodes,
     Nodes123 = [Node1, Node2, Node3],
@@ -90,7 +90,7 @@ verify_staged_clustering() ->
     ?assertEqual(ok, rt:wait_until_all_members([Node1])),
 
     lager:info("Test verify_staged_clustering: Passed"),
-    ok.
+    pass.
 
 n(Atom) ->
     atom_to_list(Atom).
