@@ -1,5 +1,5 @@
 -module(verify_leave).
--export([verify_leave/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [build_cluster/1,
@@ -9,7 +9,7 @@
              status_of_according_to/2,
              remove/2]).
 
-verify_leave() ->
+confirm() ->
     %% Bring up a 3-node cluster for the test
     Nodes = build_cluster(3),
     [Node1, Node2, Node3] = Nodes,
@@ -37,4 +37,4 @@ verify_leave() ->
     Remaining2 = Remaining1 -- [Node3],
     [?assertEqual(Remaining2, owners_according_to(Node)) || Node <- Remaining2],
     [?assertEqual(invalid, status_of_according_to(Node3, Node)) || Node <- Remaining2],
-    ok.
+    pass.
