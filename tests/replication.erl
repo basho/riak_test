@@ -62,7 +62,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             %% write some initial data to A
             lager:info("Writing 100 keys to ~p", [AFirst]),
-            ?assertEqual([], rt:systest_write(AFirst, 1, 100, TestBucket, 2)),
+            ?assertEqual([], do_write(AFirst, 1, 100, TestBucket, 2)),
 
             %% setup servers/listeners on A
             Listeners = add_listeners(ANodes),
@@ -94,19 +94,19 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             wait_until_leader(AFirst),
             %% get the leader for the first cluster
             LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
-            [{Ip, Port, _}|_] = get_listeners(LeaderA)
+            [{Ip, Port, _}|_] = get_listeners(LeaderA),
+            timer:sleep(1000)
     end,
 
     %% write some data on A
     ?assertEqual(ok, wait_until_connection(LeaderA)),
-    lager:info("Writing 100 more keys to ~p", [AFirst]),
-    ?assertEqual([], rt:systest_write(AFirst, 101, 200, TestBucket, 2)),
+    lager:info("Writing 100 more keys to ~p", [LeaderA]),
+    ?assertEqual([], do_write(LeaderA, 101, 200, TestBucket, 2)),
     timer:sleep(5000),
 
     %% verify data is replicated to B
-    lager:info("Reading 100 keys written to ~p from ~p", [AFirst, BFirst]),
-    Res1 = rt:systest_read(BFirst, 101, 200, TestBucket, 2),
-    ?assertEqual([], Res1),
+    lager:info("Reading 100 keys written to ~p from ~p", [LeaderA, BFirst]),
+    ?assertEqual(0, wait_for_reads(BFirst, 101, 200, TestBucket, 2)),
 
     case Connected of
         false ->
@@ -119,8 +119,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             start_and_wait_until_fullsync_complete(LeaderA),
 
             lager:info("Check keys written before repl was connected are present"),
-            Res3 = rt:systest_read(BFirst, 1, 200, TestBucket, 2),
-            ?assertEqual([], Res3);
+            ?assertEqual(0, wait_for_reads(BFirst, 1, 200, TestBucket, 2));
         _ ->
             ok
     end,
@@ -144,13 +143,12 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Writing 100 more keys to ~p now that the old leader is down",
         [ASecond]),
 
-    ?assertEqual([], rt:systest_write(ASecond, 201, 300, TestBucket, 2)),
+    ?assertEqual([], do_write(ASecond, 201, 300, TestBucket, 2)),
     timer:sleep(1000),
 
     %% verify data is replicated to B
     lager:info("Reading 100 keys written to ~p from ~p", [ASecond, BFirst]),
-    Res4 = rt:systest_read(BFirst, 201, 300, TestBucket, 2),
-    ?assertEqual([], Res4),
+    ?assertEqual(0, wait_for_reads(BFirst, 201, 300, TestBucket, 2)),
 
     %% get the leader for the first cluster
     LeaderB = rpc:call(BFirst, riak_repl_leader, leader_node, []),
@@ -170,12 +168,11 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Writing 100 more keys to ~p now that the old leader is down",
         [ASecond]),
 
-    ?assertEqual([], rt:systest_write(ASecond, 301, 400, TestBucket, 2)),
+    ?assertEqual([], do_write(ASecond, 301, 400, TestBucket, 2)),
 
     %% verify data is replicated to B
     lager:info("Reading 101 keys written to ~p from ~p", [ASecond, BSecond]),
-    Res5 = rt:systest_read(BSecond, 301, 400, TestBucket, 2),
-    ?assertEqual([], Res5),
+    ?assertEqual(0, wait_for_reads(BSecond, 301, 400, TestBucket, 2)),
 
     %% Testing fullsync with downed nodes
     lager:info("Re-running fullsync with ~p and ~p down", [LeaderA, LeaderB]),
@@ -212,7 +209,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                     del_site(LeaderB, "site1"),
 
                     lager:info("write 100 keys to a realtime only bucket"),
-                    ?assertEqual([], rt:systest_write(ASecond, 1, 100,
+                    ?assertEqual([], do_write(ASecond, 1, 100,
                             RealtimeOnly, 2)),
 
                     lager:info("reconnect the 2 clusters"),
@@ -225,12 +222,12 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             LeaderA3 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
 
             lager:info("write 100 keys to a {repl, false} bucket"),
-            ?assertEqual([], rt:systest_write(ASecond, 1, 100, NoRepl, 2)),
+            ?assertEqual([], do_write(ASecond, 1, 100, NoRepl, 2)),
 
             case nodes_all_have_version(ANodes, "1.2.0") of
                 true ->
                     lager:info("write 100 keys to a fullsync only bucket"),
-                    ?assertEqual([], rt:systest_write(ASecond, 1, 100,
+                    ?assertEqual([], do_write(ASecond, 1, 100,
                             FullsyncOnly, 2)),
 
                     lager:info("Check the fullsync only bucket didn't replicate the writes"),
@@ -256,8 +253,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             case nodes_all_have_version(ANodes, "1.2.0") of
                 true ->
                     lager:info("Check fullsync only bucket is now replicated"),
-                    Res9 = rt:systest_read(BSecond, 1, 100, FullsyncOnly, 2),
-                    ?assertEqual([], Res9),
+                    ?assertEqual(0, wait_for_reads(BSecond, 1, 100,
+                            FullsyncOnly, 2)),
 
                     lager:info("Check realtime only bucket didn't replicate"),
                     Res10 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
@@ -265,14 +262,14 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
 
                     lager:info("Write 100 more keys into realtime only bucket"),
-                    ?assertEqual([], rt:systest_write(ASecond, 101, 200,
+                    ?assertEqual([], do_write(ASecond, 101, 200,
                             RealtimeOnly, 2)),
 
                     timer:sleep(5000),
 
                     lager:info("Check the realtime keys replicated"),
-                    Res11 = rt:systest_read(BSecond, 101, 200, RealtimeOnly, 2),
-                    ?assertEqual([], Res11),
+                    ?assertEqual(0, wait_for_reads(BSecond, 101, 200,
+                                RealtimeOnly, 2)),
 
                     lager:info("Check the older keys in the realtime bucket did not replicate"),
                     Res12 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
@@ -370,16 +367,17 @@ fake_site(Port) ->
 
 verify_listeners(Listeners) ->
     Strs = [IP ++ ":" ++ integer_to_list(Port) || {IP, Port, _} <- Listeners],
-    [verify_listener(Node, Strs) || {_, _, Node} <- Listeners].
+    [?assertEqual(ok, verify_listener(Node, Strs)) || {_, _, Node} <- Listeners].
 
 verify_listener(Node, Strs) ->
     lager:info("Verify listeners ~p ~p", [Node, Strs]),
-    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-    [verify_listener(Node, Str, Status) || Str <- Strs].
-
-verify_listener(Node, Str, Status) ->
-    lager:info("Verify listener ~s is seen by node ~p", [Str, Node]),
-    ?assert(lists:keymember(Str, 2, Status)).
+    rt:wait_until(Node,
+        fun(_) ->
+                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                lists:all(fun(Str) ->
+                            lists:keymember(Str, 2, Status)
+                    end, Strs)
+        end).
 
 add_listeners(Nodes=[FirstNode|_]) ->
     Ports = gen_ports(9010, length(Nodes)),
@@ -510,3 +508,23 @@ wait_until_connection(Node) ->
                         true
                 end
         end, 80, 500). %% 40 seconds is enough for repl
+
+wait_for_reads(Node, Start, End, Bucket, R) ->
+    rt:wait_until(Node,
+        fun(_) ->
+                rt:systest_read(Node, Start, End, Bucket, R) == []
+        end),
+    length(rt:systest_read(Node, Start, End, Bucket, R)).
+
+do_write(Node, Start, End, Bucket, W) ->
+    case rt:systest_write(Node, Start, End, Bucket, W) of
+        [] ->
+            [];
+        Errors ->
+            lager:warning("~p errors while writing: ~p",
+                [length(Errors), Errors]),
+            timer:sleep(1000),
+            lists:flatten([rt:systest_write(Node, S, S, Bucket, W) ||
+                    {S, _Error} <- Errors])
+    end.
+
