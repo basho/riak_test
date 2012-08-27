@@ -1,7 +1,11 @@
+%% @doc This lager backend keeps a buffer of logs in memory and returns them all
+%% when the handler terminates.
+
 -module(riak_test_lager_backend).
 
 -behavior(gen_event).
 
+%% gen_event callbacks
 -export([init/1,
          handle_call/2,
          handle_event/2,
@@ -9,6 +13,7 @@
          terminate/2,
          code_change/3]).
 
+%% holds the log messages for retreival on terminate
 -record(state, {level, verbose, log = []}).
 
 -ifdef(TEST).
@@ -18,6 +23,9 @@
 
 -include("deps/lager/include/lager.hrl").
 
+-spec(init(integer()|atom()|[term()]) -> {ok, #state{}} | {error, atom()}).
+%% @private
+%% @doc Initializes the event handler
 init(Level) when is_atom(Level) ->
     case lists:member(Level, ?LEVELS) of
         true ->
@@ -32,7 +40,10 @@ init([Level, Verbose]) ->
         _ ->
             {error, bad_log_level}
     end.
-    
+
+-spec(handle_event(tuple(), #state{}) -> {atom(), #state{}}).
+%% @private
+%% @doc handles the event, adding the log message to the gen_event's state.
 handle_event({log, Dest, Level, {Date, Time}, [LevelStr, Location, Message]},
     #state{level=L, verbose=Verbose, log = Logs} = State) when Level > L ->
     case lists:member(riak_test_lager_backend, Dest) of
@@ -59,6 +70,9 @@ handle_event({log, Level, {Date, Time}, [LevelStr, Location, Message]},
 handle_event(_Event, State) ->
     {ok, State}.
 
+-spec(handle_call(any(), #state{}) -> {atom(), #state{}}).
+%% @private
+%% @doc gets and sets loglevel. This is part of the lager backend api.
 handle_call(get_loglevel, #state{level=Level} = State) ->
     {ok, Level, State};
 handle_call({set_loglevel, Level}, State) ->
@@ -71,12 +85,20 @@ handle_call({set_loglevel, Level}, State) ->
 handle_call(_, State) -> 
     {ok, ok, State}.
 
+-spec(handle_info(any(), #state{}) -> {ok, #state{}}).
+%% @private
+%% @doc gen_event callback, does nothing.
 handle_info(_, State) ->
     {ok, State}.
 
+-spec(code_change(any(), #state{}, any()) -> {ok, #state{}}).
+%% @private
+%% @doc gen_event callback, does nothing.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+-spec(terminate(any(), #state{}) -> {ok, list()}).
+%% @doc gen_event callback, does nothing.
 terminate(_Reason, #state{log=Logs}) ->
     {ok, lists:reverse(Logs)}.
 
