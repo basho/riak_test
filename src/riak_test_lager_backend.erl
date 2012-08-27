@@ -41,7 +41,7 @@ init([Level, Verbose]) ->
             {error, bad_log_level}
     end.
 
--spec(handle_event(tuple(), #state{}) -> {atom(), #state{}}).
+-spec(handle_event(tuple(), #state{}) -> {ok, #state{}}).
 %% @private
 %% @doc handles the event, adding the log message to the gen_event's state.
 handle_event({log, Dest, Level, {Date, Time}, [LevelStr, Location, Message]},
@@ -70,7 +70,7 @@ handle_event({log, Level, {Date, Time}, [LevelStr, Location, Message]},
 handle_event(_Event, State) ->
     {ok, State}.
 
--spec(handle_call(any(), #state{}) -> {atom(), #state{}}).
+-spec(handle_call(any(), #state{}) -> {ok, any(), #state{}}).
 %% @private
 %% @doc gets and sets loglevel. This is part of the lager backend api.
 handle_call(get_loglevel, #state{level=Level} = State) ->
