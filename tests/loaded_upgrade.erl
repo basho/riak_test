@@ -3,6 +3,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -define(SPAM_BUCKET, <<"scotts_spam">>).
 
+%% @doc This test requires additional setup, here's how to do it.
+%% 1. Clone and build basho_bench
+%% 2. Set an environment variable "BASHO_BENCH" to the path you cloned to.
+%% 3. Get this file: https://github.com/basho/basho_expect/tree/master/search-corpus/spam.0-small.tar.gz
+%% 4. Unzip it somewhere.
+%% 5. Set an environment variable "SPAM_DIR" to the path you unzipped, including the "spam.0" dir
+
 confirm() ->
     _ = rt:get_os_env("BASHO_BENCH"),
     %% OldVsns = ["1.0.3", "1.1.4"],
