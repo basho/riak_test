@@ -9,7 +9,11 @@ add_deps(Path) ->
 
 
 main(Args) ->
-    [Config, Test | HarnessArgs]=Args,
+    %% @todo temporarily disabling the HarnessArgs feature until we get better
+    %% command line parsing in here. Soon.
+    %% [Config, Test | HarnessArgs]=Args,
+    [Config | Tests] = Args,
+    HarnessArgs = [],
     rt:load_config(Config),
 
     [add_deps(Dep) || Dep <- rt:config(rt_deps)],
@@ -29,16 +33,33 @@ main(Args) ->
     %% rt:set_config(rt_max_wait_time, 180000),
     %% rt:set_config(rt_retry_delay, 500),
     %% rt:set_config(rt_harness, rtbe),
+    TestResults = [ run_test(Test, HarnessArgs) || Test <- Tests],
+    
+    print_summary(TestResults),
+    ok.
+
+run_test(Test, HarnessArgs) ->
     rt:setup_harness(Test, HarnessArgs),
     TestA = list_to_atom(Test),
     SingleTestResult = riak_test_runner:confirm(TestA),
-    io:format("STR: ~p~n", [SingleTestResult]),
     rt:cleanup_harness(),
+    SingleTestResult.
     
-    io:format("Test Status: ~s~n", [proplists:get_value(status, SingleTestResult)]),
-    Logs = proplists:get_value(log, SingleTestResult),
+print_summary(TestResults) ->
+    io:format("~nTest Results:~n"),
     
-    io:format("Handled Log: ~n"),
-    [ io:put_chars(user, [Log, "\n"]) || Log <- Logs ],
+    Results = [ [ atom_to_list(proplists:get_value(test, SingleTestResult)),
+        proplists:get_value(status, SingleTestResult)] || SingleTestResult <- TestResults],
+    Width = test_name_width(Results),
+    [ io:format("~s: ~s~n", [string:left(Name, Width), Result]) || [Name, Result] <- Results],
     
+    PassCount = length(lists:filter(fun(X) -> proplists:get_value(status, X) =:= pass end, TestResults)),
+    FailCount = length(lists:filter(fun(X) -> proplists:get_value(status, X) =:= fail end, TestResults)),
+    io:format("---------------------------------------------~n"),
+    io:format("~w Tests Failed~n", [FailCount]),
+    io:format("~w Tests Passed~n", [PassCount]),
+    io:format("That's ~w% for those keeping score~n", [(PassCount / (PassCount + FailCount)) * 100]),
     ok.
+    
+test_name_width(Results) ->
+    lists:max([ length(X) || [X | _T] <- Results ]).
