@@ -254,6 +254,8 @@ stash_kv(Key, Value, Stash) ->
 stash_search({_I,{_F,_T}}=K, _Postings=V, Stash) ->
     dict:append_list(K, V, Stash).
 
+
+%% @todo broken when run in the style of rtdev_mixed.
 stash_path(Service, Partition) ->
     Path = rt:config(rtdev_path) ++ "/dev/data_stash",
     Path ++ "/" ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".
