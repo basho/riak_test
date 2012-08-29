@@ -111,6 +111,9 @@ deploy_nodes(NodeConfig) ->
     NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
     {Versions, Configs} = lists:unzip(NodeConfig),
     VersionMap = lists:zip(NodesN, Versions),
+    
+    %% Check that you have the right versions available
+    [ check_node(Version) || Version <- VersionMap ],
     rt:set_config(rt_nodes, NodeMap),
     rt:set_config(rt_versions, VersionMap),
 
@@ -242,4 +245,12 @@ get_cmd_result(Port, Acc) ->
             {Status, Output}
     after 0 ->
             timeout
+    end.
+
+check_node({_N, Version}) ->
+    case proplists:is_defined(Version, rt:config(rtdev_path)) of
+        true -> ok;
+        _ ->
+            lager:error("You don't have Riak ~s installed", [Version]), 
+            erlang:error("You don't have Riak " ++ Version ++ " installed" )
     end.
