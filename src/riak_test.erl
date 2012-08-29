@@ -7,13 +7,45 @@ add_deps(Path) ->
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
     ok.
 
+cli_options() ->
+%% Option Name, Short Code, Long Code, Argument Spec, Help Message
+[
+ {help,               $h, "help",             undefined,        "Print this usage page"},
+ {config,             $c, "conf",             string,           "specifies the project configuration"},
+ {tests,              $t, "tests",            string,           "specifies which tests to run"},
+ {suites,             $s, "suites",           string,           "which suites to run"},
+ {dir,                $d, "dir",              string,           "run all tests in the specified directory"}
+].
+
 
 main(Args) ->
-    %% @todo temporarily disabling the HarnessArgs feature until we get better
-    %% command line parsing in here. Soon.
-    %% [Config, Test | HarnessArgs]=Args,
-    [Config | Tests] = Args,
-    HarnessArgs = [],
+    %% @todo Fail cleanly if version of riak unavailable (e.g. 0.14.2)
+    %% @todo loaded_upgrade basho_bench polution
+    {ok, {ParsedArgs, HarnessArgs}} = getopt:parse(cli_options(), Args),
+        
+    Config = proplists:get_value(config, ParsedArgs),
+    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
+    Suites = proplists:get_all_values(suites, ParsedArgs),
+    case Suites of
+        [] -> ok;
+        _ -> io:format("Suites are not currently supported.")
+    end,
+    
+    Dirs = proplists:get_all_values(dir, ParsedArgs),
+    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+    %%case Dirs of
+    %%    [] -> ok;
+    %%    _ -> io:format("Directories are not currently supported.")
+    %%end,
+    
+    Tests = lists:foldr(fun(X, AccIn) -> 
+                            case lists:member(X, AccIn) of
+                                true -> AccIn;
+                                _ -> [X | AccIn]
+                            end
+                        end, [], lists:sort(DirTests ++ SpecificTests)),
+    io:format("Tests to run: ~p~n", [Tests]),
+    
     rt:load_config(Config),
 
     [add_deps(Dep) || Dep <- rt:config(rt_deps)],
@@ -63,3 +95,11 @@ print_summary(TestResults) ->
     
 test_name_width(Results) ->
     lists:max([ length(X) || [X | _T] <- Results ]).
+    
+load_tests_in_dir(Dir) ->
+    case filelib:is_dir(Dir) of
+        true -> 
+            code:add_path(Dir),
+            lists:sort([ string:substr(Filename, 1, length(Filename) - 5) || Filename <- filelib:wildcard("*.beam", Dir)]);
+        _ -> io:format("~s is not a dir!~n", [Dir])
+    end.
