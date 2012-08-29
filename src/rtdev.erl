@@ -114,6 +114,10 @@ deploy_nodes(NodeConfig) ->
     rt:set_config(rt_nodes, NodeMap),
     rt:set_config(rt_versions, VersionMap),
 
+    %% Stop all discoverable nodes, not just nodes we'll be using for this test.
+    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths),
+    
     %% Stop nodes if already running
     %% [run_riak(N, relpath(node_version(N)), "stop") || N <- Nodes],
     rt:pmap(fun(Node) ->
@@ -122,6 +126,7 @@ deploy_nodes(NodeConfig) ->
                     rt:wait_until_unpingable(Node)
             end, Nodes),
     %% ?debugFmt("Shutdown~n", []),
+
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
@@ -158,6 +163,25 @@ deploy_nodes(NodeConfig) ->
     lager:info("Deployed nodes: ~p", [Nodes]),
     Nodes.
 
+stop_all(DevPath) ->
+    case filelib:is_dir(DevPath) of
+        true ->
+            Devs = filelib:wildcard(DevPath ++ "/dev*"),
+            %% Works, but I'd like it to brag a little more about it.
+            Stop = fun(C) ->
+                Cmd = C ++ "/bin/riak stop",
+                [Output | _Tail] = string:tokens(os:cmd(Cmd), "\n"),
+                Status = case Output of
+                    "ok" -> "ok";
+                    _ -> "wasn't running"
+                end,
+                lager:debug("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
+            end,
+            rt:pmap(Stop, Devs);
+        _ -> lager:debug("~s is not a directory.", [DevPath])
+    end,
+    ok.
+    
 stop(Node) ->
     N = node_id(Node),
     run_riak(N, relpath(node_version(N)), "stop"),
