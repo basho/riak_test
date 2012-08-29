@@ -19,7 +19,6 @@ cli_options() ->
 
 
 main(Args) ->
-    %% @todo Fail cleanly if version of riak unavailable (e.g. 0.14.2)
     %% @todo loaded_upgrade basho_bench polution
     {ok, {ParsedArgs, HarnessArgs}} = getopt:parse(cli_options(), Args),
         
