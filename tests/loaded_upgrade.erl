@@ -10,6 +10,8 @@
 %% 4. Unzip it somewhere.
 %% 5. Set an environment variable "SPAM_DIR" to the path you unzipped, including the "spam.0" dir
 
+%% @todo basho_bench creates a lot of files. I wish it didn't.
+
 confirm() ->
     _ = rt:get_os_env("BASHO_BENCH"),
     %% OldVsns = ["1.0.3", "1.1.4"],
