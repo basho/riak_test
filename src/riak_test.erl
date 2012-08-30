@@ -25,6 +25,9 @@ main(Args) ->
     application:set_env(lager, handlers, [{lager_console_backend, LagerLevel}]),
     lager:start(),
     
+    %% add handler for specific test.
+    gen_event:add_handler(lager_event, riak_test_lager_backend, [LagerLevel, false]),
+    
     %% rt:set_config(rtdev_path, Path),
     %% rt:set_config(rt_max_wait_time, 180000),
     %% rt:set_config(rt_retry_delay, 500),
@@ -34,4 +37,10 @@ main(Args) ->
     %% st:TestFn(),
     TestA:TestA(),
     rt:cleanup_harness(),
+    
+    %% Custom Logging Voodoo
+    {ok, Logs} = gen_event:delete_handler(lager_event, riak_test_lager_backend, []),
+    io:format("Handled Log: ~n"),
+    [ io:put_chars(user, [Log, "\n"]) || Log <- Logs ],
+    
     ok.

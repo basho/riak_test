@@ -2,3 +2,4 @@ deps
 ebin
 log
 riak_test
+.eunit
