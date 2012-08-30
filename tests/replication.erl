@@ -91,18 +91,21 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             %% check the listener IPs were all imported into the site
             verify_site_ips(BFirst, "site1", Listeners);
         _ ->
-            wait_until_leader(AFirst),
+            lager:info("waiting for leader to converge on cluster A"),
+            ?assertEqual(ok, wait_until_leader_converge(ANodes)),
+            lager:info("waiting for leader to converge on cluster B"),
+            ?assertEqual(ok, wait_until_leader_converge(BNodes)),
             %% get the leader for the first cluster
             LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
-            [{Ip, Port, _}|_] = get_listeners(LeaderA),
-            timer:sleep(1000)
+            lager:info("Leader on cluster A is ~p", [LeaderA]),
+            [{Ip, Port, _}|_] = get_listeners(LeaderA)
     end,
 
     %% write some data on A
     ?assertEqual(ok, wait_until_connection(LeaderA)),
+    %io:format("~p~n", [rpc:call(LeaderA, riak_repl_console, status, [quiet])]),
     lager:info("Writing 100 more keys to ~p", [LeaderA]),
     ?assertEqual([], do_write(LeaderA, 101, 200, TestBucket, 2)),
-    timer:sleep(5000),
 
     %% verify data is replicated to B
     lager:info("Reading 100 keys written to ~p from ~p", [LeaderA, BFirst]),
@@ -144,7 +147,6 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
         [ASecond]),
 
     ?assertEqual([], do_write(ASecond, 201, 300, TestBucket, 2)),
-    timer:sleep(1000),
 
     %% verify data is replicated to B
     lager:info("Reading 100 keys written to ~p from ~p", [ASecond, BFirst]),
@@ -484,14 +486,40 @@ wait_until_leader(Node) ->
     Res = rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-                case proplists:get_value(leader, Status) of
-                    undefined ->
+                case Status of
+                    {badrpc, _} ->
                         false;
                     _ ->
-                        true
+                        case proplists:get_value(leader, Status) of
+                            undefined ->
+                                false;
+                            _ ->
+                                true
+                        end
                 end
         end),
     ?assertEqual(ok, Res).
+
+wait_until_leader_converge([Node|_] = Nodes) ->
+    rt:wait_until(Node,
+        fun(_) ->
+                length(lists:usort([begin
+                        Status = rpc:call(N, riak_repl_console, status, [quiet]),
+                        case Status of
+                            {badrpc, _} ->
+                                false;
+                            _ ->
+                                case proplists:get_value(leader, Status) of
+                                    undefined ->
+                                        false;
+                                    L ->
+                                        %lager:info("Leader for ~p is ~p",
+                                            %[N,L]),
+                                        L
+                                end
+                        end
+                end || N <- Nodes])) == 1
+        end).
 
 wait_until_connection(Node) ->
     rt:wait_until(Node,
