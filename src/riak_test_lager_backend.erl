@@ -21,7 +21,7 @@
 -compile([{parse_transform, lager_transform}]).
 -endif.
 
--include_lib("deps/lager/include/lager.hrl").
+-include_lib("lager/include/lager.hrl").
 
 -spec(init(integer()|atom()|[term()]) -> {ok, #state{}} | {error, atom()}).
 %% @private
