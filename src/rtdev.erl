@@ -29,9 +29,6 @@ run_git(Path, Cmd) ->
     os:cmd(gitcmd(Path, Cmd)).
 
 run_riak(N, Path, Cmd) ->
-    %% io:format("~p~n", [riakcmd(Path, N, Cmd)]),
-    %%?debugFmt("RR: ~p~n", [[N,Path,Cmd]]),
-    %%?debugFmt("~p~n", [os:cmd(riakcmd(Path, N, Cmd))]).
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
     os:cmd(riakcmd(Path, N, Cmd)).
 
@@ -201,7 +198,7 @@ admin(Node, Args) ->
     Cmd = riak_admin_cmd(Path, N, Args),
     lager:debug("Running: ~s", [Cmd]),
     Result = os:cmd(Cmd),
-    io:format("~s", [Result]),
+    lager:debug("~s", [Result]),
     ok.
 
 node_id(Node) ->
