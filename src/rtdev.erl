@@ -29,9 +29,6 @@ run_git(Path, Cmd) ->
     os:cmd(gitcmd(Path, Cmd)).
 
 run_riak(N, Path, Cmd) ->
-    %% io:format("~p~n", [riakcmd(Path, N, Cmd)]),
-    %%?debugFmt("RR: ~p~n", [[N,Path,Cmd]]),
-    %%?debugFmt("~p~n", [os:cmd(riakcmd(Path, N, Cmd))]).
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
     os:cmd(riakcmd(Path, N, Cmd)).
 
@@ -111,9 +108,16 @@ deploy_nodes(NodeConfig) ->
     NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
     {Versions, Configs} = lists:unzip(NodeConfig),
     VersionMap = lists:zip(NodesN, Versions),
+    
+    %% Check that you have the right versions available
+    [ check_node(Version) || Version <- VersionMap ],
     rt:set_config(rt_nodes, NodeMap),
     rt:set_config(rt_versions, VersionMap),
 
+    %% Stop all discoverable nodes, not just nodes we'll be using for this test.
+    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths),
+    
     %% Stop nodes if already running
     %% [run_riak(N, relpath(node_version(N)), "stop") || N <- Nodes],
     rt:pmap(fun(Node) ->
@@ -122,6 +126,7 @@ deploy_nodes(NodeConfig) ->
                     rt:wait_until_unpingable(Node)
             end, Nodes),
     %% ?debugFmt("Shutdown~n", []),
+
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
@@ -158,6 +163,25 @@ deploy_nodes(NodeConfig) ->
     lager:info("Deployed nodes: ~p", [Nodes]),
     Nodes.
 
+stop_all(DevPath) ->
+    case filelib:is_dir(DevPath) of
+        true ->
+            Devs = filelib:wildcard(DevPath ++ "/dev*"),
+            %% Works, but I'd like it to brag a little more about it.
+            Stop = fun(C) ->
+                Cmd = C ++ "/bin/riak stop",
+                [Output | _Tail] = string:tokens(os:cmd(Cmd), "\n"),
+                Status = case Output of
+                    "ok" -> "ok";
+                    _ -> "wasn't running"
+                end,
+                lager:debug("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
+            end,
+            rt:pmap(Stop, Devs);
+        _ -> lager:debug("~s is not a directory.", [DevPath])
+    end,
+    ok.
+    
 stop(Node) ->
     N = node_id(Node),
     run_riak(N, relpath(node_version(N)), "stop"),
@@ -174,7 +198,7 @@ admin(Node, Args) ->
     Cmd = riak_admin_cmd(Path, N, Args),
     lager:debug("Running: ~s", [Cmd]),
     Result = os:cmd(Cmd),
-    io:format("~s", [Result]),
+    lager:debug("~s", [Result]),
     ok.
 
 node_id(Node) ->
@@ -218,4 +242,12 @@ get_cmd_result(Port, Acc) ->
             {Status, Output}
     after 0 ->
             timeout
+    end.
+
+check_node({_N, Version}) ->
+    case proplists:is_defined(Version, rt:config(rtdev_path)) of
+        true -> ok;
+        _ ->
+            lager:error("You don't have Riak ~s installed", [Version]), 
+            erlang:error("You don't have Riak " ++ Version ++ " installed" )
     end.

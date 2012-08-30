@@ -1,10 +1,10 @@
 %% Automated test for issue riak_core#154
 %% Hinted handoff does not occur after a node has been restarted in Riak 1.1
 -module(gh_riak_core_154).
--export([gh_riak_core_154/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-gh_riak_core_154() ->
+confirm() ->
     %% Increase handoff concurrency on nodes
     NewConfig = [{riak_core, [{handoff_concurrency, 1024}]}],
     Nodes = rt:build_cluster(2, NewConfig),
@@ -30,4 +30,4 @@ gh_riak_core_154() ->
     ?assertEqual([], rt:systest_read(Node2, 1000, 3)),
 
     lager:info("gh_riak_core_154: passed"),
-    ok.
+    pass.

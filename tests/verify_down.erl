@@ -1,8 +1,8 @@
 -module(verify_down).
--export([verify_down/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-verify_down() ->
+confirm() ->
     Nodes = rt:deploy_nodes(3),
     [Node1, Node2, Node3] = Nodes,
 
@@ -45,4 +45,4 @@ verify_down() ->
     %% Verify that all three nodes are ready
     lager:info("Ensure all nodes are ready"),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
-    ok.
+    pass.

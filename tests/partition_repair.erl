@@ -14,7 +14,7 @@
 
 %% @doc This test verifies that partition repair successfully repairs
 %% all data after it has wiped out by a simulated disk crash.
-partition_repair() ->
+confirm() ->
     SpamDir = get_os_env("SPAM_DIR"),
     RingSize = list_to_integer(get_os_env("RING_SIZE", "16")),
     NVal = get_os_env("N_VAL", undefined),
@@ -88,7 +88,8 @@ partition_repair() ->
     lager:info("Emulate data loss for riak_kv, repair, verify correct data"),
     [kill_repair_verify(Owner, KVDataDir, riak_kv) || Owner <- Owners],
 
-    lager:info("TEST PASSED").
+    lager:info("TEST PASSED"),
+    pass.
 
 kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     StashPath = stash_path(Service, Partition),
@@ -253,6 +254,8 @@ stash_kv(Key, Value, Stash) ->
 stash_search({_I,{_F,_T}}=K, _Postings=V, Stash) ->
     dict:append_list(K, V, Stash).
 
+
+%% @todo broken when run in the style of rtdev_mixed.
 stash_path(Service, Partition) ->
     Path = rt:config(rtdev_path) ++ "/dev/data_stash",
     Path ++ "/" ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".

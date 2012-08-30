@@ -1,13 +1,13 @@
 -module(verify_basic_upgrade).
--export([verify_basic_upgrade/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-verify_basic_upgrade() ->
+confirm() ->
     OldVsns = ["1.0.3", "1.1.4"],
     [build_cluster(OldVsn, current) || OldVsn <- OldVsns],
     [build_cluster(current, OldVsn) || OldVsn <- OldVsns],
     lager:info("Test ~p passed", [?MODULE]),
-    ok.
+    pass.
 
 build_cluster(Vsn1, Vsn2) ->
     lager:info("Testing versions: ~p <- ~p", [Vsn1, Vsn2]),

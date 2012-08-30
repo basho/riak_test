@@ -1,8 +1,8 @@
 -module(rolling_capabilities).
--export([rolling_capabilities/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-rolling_capabilities() ->
+confirm() ->
     Count = 4,
     OldVsn = "1.1.4",
     %% Assuming default 1.1.4 app.config settings, the only difference
@@ -35,7 +35,7 @@ rolling_capabilities() ->
     lager:info("Verifying final/upgraded capabilities"),
     check_capabilities(Nodes, ExpectedNew),
     lager:info("Test ~p passed", [?MODULE]),
-    ok.
+    pass.
 
 check_capabilities(Nodes, Expected) ->
     [?assertEqual(ok, rt:wait_until_capability(Node, {App, Cap}, Val))

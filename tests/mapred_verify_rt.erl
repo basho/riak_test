@@ -3,11 +3,11 @@
 
 -module(mapred_verify_rt).
 
--export([mapred_verify_rt/0]).
+-export([confirm/0]).
 
 -define(NODE_COUNT, 3).
 
-mapred_verify_rt() ->
+confirm() ->
     lager:info("Build ~b node cluster", [?NODE_COUNT]),
     Nodes = rt:build_cluster(?NODE_COUNT),
     
@@ -23,4 +23,4 @@ mapred_verify_rt() ->
     lager:info("Run mapred_verify"),
     0 = mapred_verify:do_verification(MRVProps),
     lager:info("~s: PASS", [atom_to_list(?MODULE)]),
-    ok.
+    pass.
