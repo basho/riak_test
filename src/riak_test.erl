@@ -19,7 +19,6 @@ cli_options() ->
 
 
 main(Args) ->
-    %% @todo loaded_upgrade basho_bench polution
     {ok, {ParsedArgs, HarnessArgs}} = getopt:parse(cli_options(), Args),
         
     Config = proplists:get_value(config, ParsedArgs),
