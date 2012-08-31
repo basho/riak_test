@@ -574,15 +574,3 @@ pmap(F, L) ->
     L2 = [receive {pmap, N, R} -> {N,R} end || _ <- L],
     {_, L3} = lists:unzip(lists:keysort(1, L2)),
     L3.
-    
-%% You don't belong here, where do you belong?
-assertRegex(Pattern, String) ->
-    Opts = [caseless, multiline],
-    {ok, Re} = re:compile(Pattern, Opts),
-    case re:run(String, Re) of
-        {match, _Captured} ->
-            true;
-        _ ->
-            lager:error("Expected ~s to match: ~s", [Pattern, String]),
-            false
-    end.
