@@ -110,7 +110,11 @@ print_summary(TestResults, Verbose) ->
     io:format("---------------------------------------------~n"),
     io:format("~w Tests Failed~n", [FailCount]),
     io:format("~w Tests Passed~n", [PassCount]),
-    io:format("That's ~w% for those keeping score~n", [(PassCount / (PassCount + FailCount)) * 100]),
+    Percentage = case PassCount == 0 andalso FailCount == 0 of
+        true -> 0;
+        false -> (PassCount / (PassCount + FailCount)) * 100
+    end,
+    io:format("That's ~w% for those keeping score~n", [Percentage]),
     ok.
     
 test_name_width(Results) ->
