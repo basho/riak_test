@@ -86,7 +86,7 @@ riak_test_run(Config, _AppFile) ->
     RiakTestConfig = rebar_config:get_global(Config, config, "rtdev"),
     Test = rebar_config:get_global(Config, test, ""),
     code:add_pathsz([rebar_utils:ebin_dir(), option(test_output, Config)]),
-    riak_test:main([RiakTestConfig, Test]),
+    riak_test:main(["-c", RiakTestConfig, "-t", Test]),
     ok.
     
 compilation_config(Conf) ->

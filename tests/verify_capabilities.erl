@@ -1,8 +1,8 @@
 -module(verify_capabilities).
--export([verify_capabilities/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-verify_capabilities() ->
+confirm() ->
     lager:info("Deploying mixed set of nodes"),
     Nodes = rt:deploy_nodes([current, "0.14.2", "1.1.4", "1.0.3"]),
     [Node1, Node2, Node3, Node4] = Nodes,
@@ -97,7 +97,7 @@ verify_capabilities() ->
     ?assertEqual(legacy, rt:capability(Node1, {riak_core, vnode_routing})),
 
     [rt:stop(Node) || Node <- Nodes],
-    ok.
+    pass.
 
 crash_capability_server(Node) ->
     Pid = rpc:call(Node, erlang, whereis, [riak_core_capability]),

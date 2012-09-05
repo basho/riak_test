@@ -1,8 +1,8 @@
 -module(gh_riak_core_176).
--export([gh_riak_core_176/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-gh_riak_core_176() ->
+confirm() ->
     Nodes = rt:deploy_nodes(3),
     [Node1, Node2, Node3] = Nodes,
     Nodes12 = [Node1, Node2],
@@ -52,7 +52,7 @@ gh_riak_core_176() ->
     [?assertEqual(Nodes123, rt:owners_according_to(Node)) || Node <- Nodes123],
 
     lager:info("Test gh_riak_core_176 passed"),
-    ok.
+    pass.
     
 ip_tuple_to_string(T) ->
     L = tuple_to_list(T),

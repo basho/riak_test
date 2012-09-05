@@ -3,3 +3,5 @@ ebin
 log
 riak_test
 .eunit
+.DS_Store
+out

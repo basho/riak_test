@@ -2,7 +2,7 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
-gh_riak_core_155() ->
+confirm() ->
     [Node] = rt:build_cluster(1),
   
     %% Generate a valid preflist for our get requests
@@ -37,7 +37,7 @@ gh_riak_core_155() ->
      end || _ <- lists:seq(1,10)],
 
     lager:info("Test passed"),
-    ok.
+    pass.
 
 load_code(Module, Nodes) ->
     {Module, Bin, File} = code:get_object_code(Module),

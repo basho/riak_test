@@ -12,7 +12,7 @@
              status_of_according_to/2,
              wait_until_nodes_ready/1]).
 
-verify_claimant() ->
+confirm() ->
     Nodes = build_cluster(3),
     [Node1, Node2, _Node3] = Nodes,
 
@@ -53,4 +53,4 @@ verify_claimant() ->
     %% Ensure all nodes still believe node2 is the claimant
     lager:info("Ensure all nodes still believe ~p is the claimant", [Node2]),
     [?assertEqual(Node2, claimant_according_to(Node)) || Node <- Nodes],
-    ok.
+    pass.
