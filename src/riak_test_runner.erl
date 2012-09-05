@@ -16,7 +16,7 @@ confirm(TestModule, Outdir) ->
             lager:notice("Running Test ~s", [TestModule]), 
             execute(TestModule);
         _ ->
-            lager:info("~s is not a runable test", [TestModule]),
+            lager:info("~s is not a runnable test", [TestModule]),
             {not_a_runnable_test, undefined}
     end,
     
