@@ -45,12 +45,12 @@ stop_lager_backend() ->
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
     
 execute(TestModule) ->
-    try TestModule:confirm() of
-        ReturnVal -> {ReturnVal, undefined}
-    catch
-        _:Reason ->
-            lager:warning("~s failed: ~p", [TestModule, Reason]),
-            lager:warning("~p", [erlang:get_stacktrace()]),
-            {fail, Reason}
+    process_flag(trap_exit, true),
+    _Pid = spawn_link(TestModule, confirm, []),
+    receive
+        {'EXIT', _Pid, normal} -> {pass, undefined};
+        {'EXIT', _Pid, Error} ->
+            lager:warning("~s failed: ~p", [TestModule, Error]),
+            {fail, Error}
     end.
     
