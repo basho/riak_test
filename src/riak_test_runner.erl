@@ -46,11 +46,20 @@ stop_lager_backend() ->
     
 execute(TestModule) ->
     process_flag(trap_exit, true),
+    Runner = self(),
+    GroupLeader = group_leader(),
+    NewGroupLeader = riak_test_group_leader:new_group_leader(Runner),
+    group_leader(NewGroupLeader, self()),
+    
     _Pid = spawn_link(TestModule, confirm, []),
-    receive
+    Return = receive
         {'EXIT', _Pid, normal} -> {pass, undefined};
         {'EXIT', _Pid, Error} ->
             lager:warning("~s failed: ~p", [TestModule, Error]),
             {fail, Error}
-    end.
+    end,
+    group_leader(GroupLeader, self()),
+    Output = riak_test_group_leader:group_leader_sync(NewGroupLeader),
+    io:put_chars(Output),
+    Return.
     
