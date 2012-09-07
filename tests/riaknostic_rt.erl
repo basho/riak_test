@@ -13,7 +13,7 @@ riaknostic_rt() ->
     %% print it to the console and hope for the best.
     lager:info("1. Check download message"),
     {ok, RiaknosticOut1} = rt:admin(Node1, ["diag"]),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut1, "is not present!")),
+    ?assert(rt:str(RiaknosticOut1, "is not present!")),
     %%dut.cmd_output_match('Riak diagnostics utility is not present')
 
     %% Install
@@ -26,44 +26,44 @@ riaknostic_rt() ->
     %% Execute
     lager:info("2b. Check Riaknostic executes"),
     {ok, RiaknosticOut2b} = rt:admin(Node1, ["diag"]),
-    ?assertNot(riak_test_util:contains_substring(RiaknosticOut2b, "is not present!")),
-    ?assertNot(riak_test_util:contains_substring(RiaknosticOut2b, "[debug]")),
+    ?assertNot(rt:str(RiaknosticOut2b, "is not present!")),
+    ?assertNot(rt:str(RiaknosticOut2b, "[debug]")),
     
     %% Check usage message
     lager:info("3. Run Riaknostic usage message"),
     {ok, RiaknosticOut3} = rt:admin(Node1, ["diag", "--help"]),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut3, "Usage: riak-admin")),
+    ?assert(rt:str(RiaknosticOut3, "Usage: riak-admin")),
     
     %% Check commands list
     lager:info("4. Run Riaknostic commands list message"),
     {ok, RiaknosticOut4} = rt:admin(Node1, ["diag", "--list"]),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "Available diagnostic checks")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "  disk           ")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "  dumps          ")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "  memory_use     ")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "  nodes_connected")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "  ring_membership")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "  ring_preflists ")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "  ring_size      ")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut4, "  search         ")),
+    ?assert(rt:str(RiaknosticOut4, "Available diagnostic checks")),
+    ?assert(rt:str(RiaknosticOut4, "  disk           ")),
+    ?assert(rt:str(RiaknosticOut4, "  dumps          ")),
+    ?assert(rt:str(RiaknosticOut4, "  memory_use     ")),
+    ?assert(rt:str(RiaknosticOut4, "  nodes_connected")),
+    ?assert(rt:str(RiaknosticOut4, "  ring_membership")),
+    ?assert(rt:str(RiaknosticOut4, "  ring_preflists ")),
+    ?assert(rt:str(RiaknosticOut4, "  ring_size      ")),
+    ?assert(rt:str(RiaknosticOut4, "  search         ")),
     
     %% Check log levels
     lager:info("5. Run Riaknostic with a different log level"),
     {ok, RiaknosticOut5} = rt:admin(Node1, ["diag", "--level", "debug"]),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut5, "[debug]")),
+    ?assert(rt:str(RiaknosticOut5, "[debug]")),
 
     %% Check node conn failure when stopped
     lager:info("6. Riaknostic warns of node connection failure when stopped"),
     rt:stop(Node1),
     {ok, RiaknosticOut6} = rt:admin(Node1, ["diag"]),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut6, "[warning] Could not connect")),
+    ?assert(rt:str(RiaknosticOut6, "[warning] Could not connect")),
     
     %% Check node connection when started
     lager:info("7. Riaknostic connects to node when running"),
     rt:start(Node1),
     {ok, RiaknosticOut7} = rt:admin(Node1, ["diag", "--level", "debug"]),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut7, "[debug] Not connected")),
-    ?assert(riak_test_util:contains_substring(RiaknosticOut7, "[debug] Connected to local Riak node")),
+    ?assert(rt:str(RiaknosticOut7, "[debug] Not connected")),
+    ?assert(rt:str(RiaknosticOut7, "[debug] Connected to local Riak node")),
     
     %% Done!
     lager:info("Test riaknostic: PASS"),
