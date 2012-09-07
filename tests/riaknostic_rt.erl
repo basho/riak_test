@@ -1,11 +1,11 @@
 -module(riaknostic_rt).
--export([riaknostic_rt/0]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 %% Change when a new release comes out.
 -define(RIAKNOSTIC_URL, "https://github.com/basho/riaknostic/downloads/riaknostic-1.0.2.tar.gz").
 
-riaknostic_rt() ->
+confirm() ->
     %% Build a small cluster
     [Node1, _Node2] = rt:build_cluster(2, []),
 
