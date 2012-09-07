@@ -1,27 +1,27 @@
 -module(riak_test_group_leader).
 
--export([new_group_leader/1, group_leader_process/1, group_leader_sync/1]).
+-export([new_group_leader/1, group_leader_process/1]).
 
+% @doc stolen without shame from eunit_proc.erl
 new_group_leader(Runner) ->
-    %% We must use spawn/3 here (with explicit module and function
-    %% name), because the 'current function' status of the group leader
-    %% is used by the UNDER_EUNIT macro (in eunit.hrl). If we spawn
-    %% using a fun, the current function will be 'erlang:apply/2' during
-    %% early process startup, which will fool the macro.
     spawn_link(?MODULE, group_leader_process, [Runner]).
 
+% @doc stolen without shame from eunit_proc.erl
 group_leader_process(Runner) ->
     group_leader_loop(Runner, infinity, []).
 
+% @doc stolen without shame from eunit_proc.erl
 group_leader_loop(Runner, Wait, Buf) ->
     receive
     {io_request, From, ReplyAs, Req} ->
+        lager:notice("io_request"),
         P = process_flag(priority, normal),
         %% run this part under normal priority always
         Buf1 = io_request(From, ReplyAs, Req, Buf),
         process_flag(priority, P),
         group_leader_loop(Runner, Wait, Buf1);
     stop ->
+        lager:notice("stop"),
         %% quitting time: make a minimal pause, go low on priority,
         %% set receive-timeout to zero and schedule out again
         receive after 2 -> ok end,
@@ -31,18 +31,14 @@ group_leader_loop(Runner, Wait, Buf) ->
         %% discard any other messages
         group_leader_loop(Runner, Wait, Buf)
     after Wait ->
+        lager:notice("after after"),
         %% no more messages and nothing to wait for; we ought to
         %% have collected all immediately pending output now
         process_flag(priority, normal),
         Runner ! {self(), buffer_to_binary(Buf)}
     end.
 
-group_leader_sync(G) ->
-    G ! stop,
-    receive
-    {G, Buf} -> Buf
-    end.
-
+% @doc stolen without shame from eunit_proc.erl
 buffer_to_binary([B]) when is_binary(B) -> B;  % avoid unnecessary copying
 buffer_to_binary(Buf) -> list_to_binary(lists:reverse(Buf)).
 
@@ -58,12 +54,13 @@ io_request(From, ReplyAs, Req, Buf) ->
 io_reply(From, ReplyAs, Reply) ->
     From ! {io_reply, ReplyAs, Reply}.
 
-io_request({put_chars, Chars}, Buf) ->
-    {ok, [Chars | Buf]};
+io_request({put_chars, Chars}, _Buf) ->
+    log_chars(Chars),
+    {ok, []};
 io_request({put_chars, M, F, As}, Buf) ->
     try apply(M, F, As) of
     Chars ->
-        lager:debug("~p", [lists:flatten(Chars)]), 
+        log_chars(Chars), 
         {ok, []}
     catch
     C:T -> {{error, {C,T,erlang:get_stacktrace()}}, Buf}
@@ -99,3 +96,6 @@ io_requests([R | Rs], {ok, Buf}) ->
     io_requests(Rs, io_request(R, Buf));
 io_requests(_, Result) ->
     Result.
+
+log_chars(Chars) ->
+    [lager:debug("~s", [Line]) || Line <- string:tokens(lists:flatten(Chars), "\n")].

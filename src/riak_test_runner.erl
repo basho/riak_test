@@ -43,7 +43,8 @@ start_lager_backend(TestModule, Outdir) ->
 stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
-    
+
+%% @doc does some group_leader swapping, in the style of EUnit.
 execute(TestModule) ->
     process_flag(trap_exit, true),
     Runner = self(),
@@ -59,7 +60,5 @@ execute(TestModule) ->
             {fail, Error}
     end,
     group_leader(GroupLeader, self()),
-    Output = riak_test_group_leader:group_leader_sync(NewGroupLeader),
-    io:put_chars(Output),
     Return.
     
