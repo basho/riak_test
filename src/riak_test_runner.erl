@@ -44,12 +44,11 @@ stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
-%% @doc does some group_leader swapping, in the style of EUnit.
+%% does some group_leader swapping, in the style of EUnit.
 execute(TestModule) ->
     process_flag(trap_exit, true),
-    Runner = self(),
     GroupLeader = group_leader(),
-    NewGroupLeader = riak_test_group_leader:new_group_leader(Runner),
+    NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
     
     _Pid = spawn_link(TestModule, confirm, []),
