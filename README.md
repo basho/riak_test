@@ -20,7 +20,7 @@ R14B04=${R14B04:-$HOME/erlang-R14B04}
 **Kerlveat**: If you want kerl to build erlangs with serious 64-bit macintosh action, you'll need a `~/.kerlrc` file that looks like this:
 
 ```
-KERL_CONFIGURE_OPTIONS="--enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit"
+KERL_CONFIGURE_OPTIONS="--disable-hipe --enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit"
 ```
 
 The script will check that all these paths exist. If even one of them is missing, it will prompt you to install kerl, even if you already have kerl. If you say no, the script quits. If you say yes, or all of your erlang paths check out, then go get a cup of coffee, you'll be building for a little while.
