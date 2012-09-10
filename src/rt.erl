@@ -561,6 +561,20 @@ systest_read(Node, Start, End, Bucket, R) ->
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
 
+pbc(Node) ->
+    {ok, IP} = rpc:call(Node, application, get_env, [riak_api, pb_ip]),
+    {ok, PBPort} = rpc:call(Node, application, get_env, [riak_api, pb_port]),
+    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
+    Pid.
+
+pbc_read() -> todo.
+pbc_write(Pid, Bucket, Key, Value) -> 
+    Object = riakc_obj:new(Bucket, Key, Value),
+    riakc_pb_socket:put(Pid, Object).
+
+http_read() -> todo.
+http_write() -> todo.
+
 %% utility function
 pmap(F, L) ->
     Parent = self(),
