@@ -2,7 +2,7 @@
 
 ## Bootstraping Your Test Environment
 
-Welcome to the exciting world of riak_test. Running tests against a development version of Riak is just one of the things that you can do with riak_test. You can also test things involving upgrading from previous versions of Riak. Together, we'll get your test environment up and running. Scripts to help in this process are located in the `bin` directory of this project. 
+Welcome to the exciting world of riak_test. Running tests against a development version of Riak is just one of the things that you can do with riak_test. You can also test things involving upgrading from previous versions of Riak. Together, we'll get your test environment up and running. Scripts to help in this process are located in the `bin` directory of this project.
 
 ### rtdev-build-releases.sh
 The first one that we want to look at is `rtdev-build-releases.sh`. If left unchanged, this script is going to do the following:
@@ -20,7 +20,7 @@ R14B04=${R14B04:-$HOME/erlang-R14B04}
 **Kerlveat**: If you want kerl to build erlangs with serious 64-bit macintosh action, you'll need a `~/.kerlrc` file that looks like this:
 
 ```
-KERL_CONFIGURE_OPTIONS="--enable-hipe --enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit"
+KERL_CONFIGURE_OPTIONS="--enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit"
 ```
 
 The script will check that all these paths exist. If even one of them is missing, it will prompt you to install kerl, even if you already have kerl. If you say no, the script quits. If you say yes, or all of your erlang paths check out, then go get a cup of coffee, you'll be building for a little while.
@@ -55,4 +55,3 @@ Now that you've got your releases all ready and gitified, you'll need to tell ri
 Run a test! `./riak_test rtdev_mixed verify_build_cluster`
 
 Did that work? Great, try something harder: `./riak_test rtdev_mixed upgrade`
-
