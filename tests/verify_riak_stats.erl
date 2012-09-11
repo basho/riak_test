@@ -40,7 +40,6 @@ confirm() ->
     os:cmd(io_lib:format("curl -s -S -X PUT ~s/riak/~s/~s -d '~s'", [rt:http_url(Node1), "systest", "5", "12345"])),
     
     rt:systest_read(Node1, 5),
-    timer:sleep(10000),
     
     Stats2 = get_stats(Node1),
     
@@ -66,20 +65,35 @@ confirm() ->
                        <<"node_put_fsm_time_99">>,
                        <<"node_put_fsm_time_100">>]),
                        
-    lager:info("Force Read Repair"),
+    
+    lager:info("Make PBC Connection"),
+    Pid = rt:pbc(Node1),
+    
     Stats3 = get_stats(Node1),
 
-    lager:info("Make PBC Connection"),
     rt:systest_write(Node1, 1),
-    
-    _Pid = rt:pbc(Node1),
-    timer:sleep(10000),
     %% make sure the stats that were supposed to increment did
-    Stats4 = get_stats(Node1),
-    verify_inc(Stats3, Stats4, [{<<"pbc_connects_total">>, 1},
+    verify_inc(Stats2, Stats3, [{<<"pbc_connects_total">>, 1},
                                 {<<"pbc_connects">>, 1},
                                 {<<"pbc_active">>, 1}]),
     
+    
+
+    lager:info("Force Read Repair"),
+    rt:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
+    rt:pbc_set_bucket_prop(Pid, <<"testbucket">>, [{n_val, 4}]),
+    
+    Stats4 = get_stats(Node1),
+    verify_inc(Stats3, Stats4, [{<<"read_repairs_total">>, 0},
+                                {<<"read_repairs">>, 0}]),
+    
+    _Value = rt:pbc_read(Pid, <<"testbucket">>, <<"1">>),
+
+    Stats5 = get_stats(Node1),
+
+    verify_inc(Stats3, Stats5, [{<<"read_repairs_total">>, 1},
+                                {<<"read_repairs">>, 1}]),
+
     pass.
 
 verify_inc(Prev, Props, Keys) ->
@@ -94,6 +108,7 @@ verify_nz(Props, Keys) ->
     [?assertNotEqual(proplists:get_value(Key,Props,0), 0) || Key <- Keys].
 
 get_stats(Node) ->
+    timer:sleep(10000),
     StatString = os:cmd(io_lib:format("curl -s -S ~s/stats", [rt:http_url(Node)])),
     {struct, Stats} = mochijson2:decode(StatString),
     %%lager:debug(StatString),
