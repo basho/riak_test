@@ -578,8 +578,18 @@ pbc_write(Pid, Bucket, Key, Value) ->
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
 
-http_read() -> todo.
-http_write() -> todo.
+
+httpc(Node) ->
+    {ok, [{IP, Port}|_]} = rpc:call(Node, application, get_env, [riak_core, http]),
+    rhc:create(IP, Port, "riak", []).
+    
+httpc_read(C, Bucket, Key) -> 
+    {ok, Value} = rhc:get(C, Bucket, Key),
+    Value.
+
+httpc_write(C, Bucket, Key, Value) -> 
+    Object = riakc_obj:new(Bucket, Key, Value),
+    rhc:put(C, Object).
 
 %% utility function
 pmap(F, L) ->

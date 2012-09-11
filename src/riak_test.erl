@@ -56,6 +56,9 @@ main(Args) ->
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
     
+    %% ibrowse
+    application:load(ibrowse),
+    application:start(ibrowse),
     %% Start Lager
     application:load(lager),
     %% Fileoutput
