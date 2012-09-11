@@ -31,8 +31,6 @@ confirm() ->
     lager:info("perform 5 x  PUT and a GET to increment the stats"),
     lager:info("as the stat system only does calcs for > 5 readings"),
     
-    %% @todo Why do get counters not increment when systest_write is called, but not curl?
-    %% rt:systest_write(Node1, 5),
     C = rt:httpc(Node1),
     [rt:httpc_write(C, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
     [rt:httpc_read(C, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
