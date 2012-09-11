@@ -567,10 +567,16 @@ pbc(Node) ->
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
     Pid.
 
-pbc_read() -> todo.
+pbc_read(Pid, Bucket, Key) -> 
+    {ok, Value} = riakc_pb_socket:get(Pid, Bucket, Key),
+    Value.
+    
 pbc_write(Pid, Bucket, Key, Value) -> 
     Object = riakc_obj:new(Bucket, Key, Value),
     riakc_pb_socket:put(Pid, Object).
+
+pbc_set_bucket_prop(Pid, Bucket, PropList) ->
+    riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
 
 http_read() -> todo.
 http_write() -> todo.
