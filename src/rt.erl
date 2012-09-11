@@ -574,3 +574,9 @@ pmap(F, L) ->
     L2 = [receive {pmap, N, R} -> {N,R} end || _ <- L],
     {_, L3} = lists:unzip(lists:keysort(1, L2)),
     L3.
+
+str(String, Substr) ->
+    case string:str(String, Substr) of
+        0 -> false;
+        _ -> true
+    end.

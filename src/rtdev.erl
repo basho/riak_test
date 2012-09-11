@@ -199,7 +199,8 @@ admin(Node, Args) ->
     lager:debug("Running: ~s", [Cmd]),
     Result = os:cmd(Cmd),
     lager:debug("~s", [Result]),
-    ok.
+    io:format("~s", [Result]),
+    {ok, Result}.
 
 node_id(Node) ->
     NodeMap = rt:config(rt_nodes),
