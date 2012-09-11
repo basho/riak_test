@@ -52,6 +52,6 @@ Now that you've got your releases all ready and gitified, you'll need to tell ri
 ```
 
 ### Running riak_test for the first time
-Run a test! `./riak_test rtdev_mixed verify_build_cluster`
+Run a test! `./riak_test -c rtdev_mixed -t verify_build_cluster`
 
-Did that work? Great, try something harder: `./riak_test rtdev_mixed upgrade`
+Did that work? Great, try something harder: `./riak_test -c rtdev_mixed -t upgrade`

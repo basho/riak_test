@@ -19,10 +19,27 @@ cli_options() ->
  {outdir,             $o, "outdir",           string,           "output directory"}
 ].
 
+print_help() ->
+    getopt:usage(cli_options(),
+                 escript:script_name()),
+    halt(0).
+
+run_help([]) -> true;
+run_help(ParsedArgs) ->
+    lists:member(help, ParsedArgs).
 
 main(Args) ->
-    {ok, {ParsedArgs, HarnessArgs}} = getopt:parse(cli_options(), Args),
-        
+    
+    {ParsedArgs, HarnessArgs} = case getopt:parse(cli_options(), Args) of
+        {ok, {P, H}} -> {P, H};
+        _ -> print_help()
+    end,
+    
+    
+    case run_help(ParsedArgs) of 
+        true -> print_help();
+        _ -> ok
+    end,
     Verbose = proplists:is_defined(verbose, ParsedArgs),
     Config = proplists:get_value(config, ParsedArgs),
     SpecificTests = proplists:get_all_values(tests, ParsedArgs),
@@ -34,10 +51,6 @@ main(Args) ->
     
     Dirs = proplists:get_all_values(dir, ParsedArgs),
     DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
-    %%case Dirs of
-    %%    [] -> ok;
-    %%    _ -> io:format("Directories are not currently supported.")
-    %%end,
     
     Tests = lists:foldr(fun(X, AccIn) -> 
                             case lists:member(X, AccIn) of
