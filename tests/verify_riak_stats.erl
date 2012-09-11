@@ -33,13 +33,9 @@ confirm() ->
     
     %% @todo Why do get counters not increment when systest_write is called, but not curl?
     %% rt:systest_write(Node1, 5),
-    os:cmd(io_lib:format("curl -s -S -X PUT ~s/riak/~s/~s -d '~s'", [rt:http_url(Node1), "systest", "1", "12345"])),
-    os:cmd(io_lib:format("curl -s -S -X PUT ~s/riak/~s/~s -d '~s'", [rt:http_url(Node1), "systest", "2", "12345"])),
-    os:cmd(io_lib:format("curl -s -S -X PUT ~s/riak/~s/~s -d '~s'", [rt:http_url(Node1), "systest", "3", "12345"])),
-    os:cmd(io_lib:format("curl -s -S -X PUT ~s/riak/~s/~s -d '~s'", [rt:http_url(Node1), "systest", "4", "12345"])),
-    os:cmd(io_lib:format("curl -s -S -X PUT ~s/riak/~s/~s -d '~s'", [rt:http_url(Node1), "systest", "5", "12345"])),
-    
-    rt:systest_read(Node1, 5),
+    C = rt:httpc(Node1),
+    [rt:httpc_write(C, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
+    [rt:httpc_read(C, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
     
     Stats2 = get_stats(Node1),
     
