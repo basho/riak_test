@@ -4,6 +4,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/file.hrl").
 
+-define(UNIX_RW_R__R__, 8#100644).
+
 confirm() ->
     lager:info("Staring a node"),
     Nodes = [Node] = rt:deploy_nodes(1),
@@ -25,7 +27,6 @@ confirm() ->
     
     FileInfos = [ FileInfo || {ok, FileInfo} <- [rpc:call(Node, file, read_file_info, [File]) || File <- Files]],
     
-    %% Why 33188? Cause in base 8 it's 100644, does that look familiar? :)
-    [?assertEqual(33188, FileInfo#file_info.mode) || FileInfo <- FileInfos],
+    [?assertEqual(?UNIX_RW_R__R__, ?UNIX_RW_R__R__ band FileInfo#file_info.mode) || FileInfo <- FileInfos],
     pass.
     
