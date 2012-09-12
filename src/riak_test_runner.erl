@@ -43,14 +43,21 @@ start_lager_backend(TestModule, Outdir) ->
 stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
-    
+
+%% does some group_leader swapping, in the style of EUnit.
 execute(TestModule) ->
-    try TestModule:confirm() of
-        ReturnVal -> {ReturnVal, undefined}
-    catch
-        _:Reason ->
-            lager:warning("~s failed: ~p", [TestModule, Reason]),
-            lager:warning("~p", [erlang:get_stacktrace()]),
-            {fail, Reason}
-    end.
+    process_flag(trap_exit, true),
+    GroupLeader = group_leader(),
+    NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
+    group_leader(NewGroupLeader, self()),
+    
+    _Pid = spawn_link(TestModule, confirm, []),
+    Return = receive
+        {'EXIT', _Pid, normal} -> {pass, undefined};
+        {'EXIT', _Pid, Error} ->
+            lager:warning("~s failed: ~p", [TestModule, Error]),
+            {fail, Error}
+    end,
+    group_leader(GroupLeader, self()),
+    Return.
     
