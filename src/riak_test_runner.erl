@@ -48,8 +48,9 @@ execute(TestModule) ->
     try TestModule:confirm() of
         ReturnVal -> {ReturnVal, undefined}
     catch
-        error:Error ->
-            lager:warning("~s failed: ~p", [TestModule, Error]),
-            {fail, Error}
+        _:Reason ->
+            lager:warning("~s failed: ~p", [TestModule, Reason]),
+            lager:warning("~p", [erlang:get_stacktrace()]),
+            {fail, Reason}
     end.
     
