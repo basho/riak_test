@@ -33,6 +33,15 @@ run_riak(N, Path, Cmd) ->
     os:cmd(riakcmd(Path, N, Cmd)).
 
 setup_harness(_Test, _Args) ->
+    Path = relpath(root),
+    %% Stop all discoverable nodes, not just nodes we'll be using for this test.
+    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths),
+    
+    %% Reset nodes to base state
+    lager:info("Resetting nodes to fresh state"),
+    run_git(Path, "reset HEAD --hard"),
+    run_git(Path, "clean -fd"),
     ok.
 
 cleanup_harness() ->
@@ -71,10 +80,27 @@ upgrade(Node, NewVersion) ->
     start(Node),
     ok.
 
+update_app_config(all, Config) ->
+    lager:info("rtdev:update_app_config(all, ~p)", [Config]),
+    Fun = fun(DevPath, Conf) ->
+        case filelib:is_dir(DevPath) of
+            true ->
+                Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
+                AppConfigs = [ Dev ++ "/etc/app.config" || Dev <- Devs],
+                [update_app_config_file(AppConfig, Conf) || AppConfig <- AppConfigs];
+            _ -> lager:debug("~s is not a directory.", [DevPath])
+        end
+    end,
+    [ Fun(DevPath, Config) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
+    halt(0);
 update_app_config(Node, Config) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     ConfigFile = io_lib:format("~s/dev/dev~b/etc/app.config", [Path, N]),
+    update_app_config_file(ConfigFile, Config).
+
+update_app_config_file(ConfigFile, Config) ->
+    lager:info("rtdev:update_app_config_file(~s, ~p)", [ConfigFile, Config]),
     {ok, [BaseConfig]} = file:consult(ConfigFile),
     MergeA = orddict:from_list(Config),
     MergeB = orddict:from_list(BaseConfig),
@@ -113,28 +139,6 @@ deploy_nodes(NodeConfig) ->
     [ check_node(Version) || Version <- VersionMap ],
     rt:set_config(rt_nodes, NodeMap),
     rt:set_config(rt_versions, VersionMap),
-
-    %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths),
-    
-    %% Stop nodes if already running
-    %% [run_riak(N, relpath(node_version(N)), "stop") || N <- Nodes],
-    rt:pmap(fun(Node) ->
-                    N = node_id(Node),
-                    run_riak(N, relpath(node_version(N)), "stop"),
-                    rt:wait_until_unpingable(Node)
-            end, Nodes),
-    %% ?debugFmt("Shutdown~n", []),
-
-
-    %% Reset nodes to base state
-    lager:info("Resetting nodes to fresh state"),
-    %% run_git(Path, "status"),
-    run_git(Path, "reset HEAD --hard"),
-    run_git(Path, "clean -fd"),
-    %% run_git(Path, "status"),
-    %% ?debugFmt("Reset~n", []),
 
     create_dirs(Nodes),
 
@@ -252,3 +256,7 @@ check_node({_N, Version}) ->
             lager:error("You don't have Riak ~s installed", [Version]), 
             erlang:error("You don't have Riak " ++ Version ++ " installed" )
     end.
+
+set_backend(Backend) ->
+    lager:info("rtdev:set_backend(~p)", [Backend]),
+    update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]).

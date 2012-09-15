@@ -8,12 +8,15 @@
 confirm(TestModule, Outdir) ->
     start_lager_backend(TestModule, Outdir),
     
+    rt:setup_harness(TestModule, []),
+    
     %% Check for api compatibility
     {Status, Reason} = case proplists:get_value(confirm, 
                         proplists:get_value(exports, TestModule:module_info()),
                         -1) of
         0 ->
             lager:notice("Running Test ~s", [TestModule]), 
+            rt:set_backend(riak_kv_eleveldb_backend),
             execute(TestModule);
         _ ->
             lager:info("~s is not a runnable test", [TestModule]),

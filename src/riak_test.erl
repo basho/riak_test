@@ -16,7 +16,8 @@ cli_options() ->
  {suites,             $s, "suites",           string,           "which suites to run"},
  {dir,                $d, "dir",              string,           "run all tests in the specified directory"},
  {verbose,            $v, "verbose",          undefined,        "verbose output"},
- {outdir,             $o, "outdir",           string,           "output directory"}
+ {outdir,             $o, "outdir",           string,           "output directory"},
+ {report,             $r, "report",           undefined,        "you're reporting an official test run"}
 ].
 
 print_help() ->
@@ -35,39 +36,10 @@ main(Args) ->
         _ -> print_help()
     end,
     
-    
     case run_help(ParsedArgs) of 
         true -> print_help();
         _ -> ok
     end,
-    Verbose = proplists:is_defined(verbose, ParsedArgs),
-    Config = proplists:get_value(config, ParsedArgs),
-    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
-    Suites = proplists:get_all_values(suites, ParsedArgs),
-    case Suites of
-        [] -> ok;
-        _ -> io:format("Suites are not currently supported.")
-    end,
-    
-    Dirs = proplists:get_all_values(dir, ParsedArgs),
-    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
-    
-    Tests = lists:foldr(fun(X, AccIn) -> 
-                            case lists:member(X, AccIn) of
-                                true -> AccIn;
-                                _ -> [X | AccIn]
-                            end
-                        end, [], lists:sort(DirTests ++ SpecificTests)),
-    io:format("Tests to run: ~p~n", [Tests]),
-    
-    rt:load_config(Config),
-
-    [add_deps(Dep) || Dep <- rt:config(rt_deps)],
-    ENode = rt:config(rt_nodename, 'riak_test@127.0.0.1'),
-    Cookie = rt:config(rt_cookie, riak),
-    [] = os:cmd("epmd -daemon"),
-    net_kernel:start([ENode]),
-    erlang:set_cookie(node(), Cookie),
     
     %% ibrowse
     application:load(ibrowse),
@@ -85,7 +57,44 @@ main(Args) ->
     
     application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel}]),
     lager:start(),
+
+    Report = proplists:is_defined(report, ParsedArgs),
+    Verbose = proplists:is_defined(verbose, ParsedArgs),
+    Config = proplists:get_value(config, ParsedArgs),
+    Suites = proplists:get_all_values(suites, ParsedArgs),
+    case Suites of
+        [] -> ok;
+        _ -> io:format("Suites are not currently supported.")
+    end,
     
+    
+    Tests = case Report of
+        true -> 
+            Suite = giddyup:get_suite("basho-giddyup.herokuapp.com", "riak", "ubuntu-1004-64"),
+            io:format("Suite: ~p", [Suite]),
+            halt(0);
+        false ->
+            SpecificTests = proplists:get_all_values(tests, ParsedArgs),
+            Dirs = proplists:get_all_values(dir, ParsedArgs),
+            DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+            lists:foldr(fun(X, AccIn) -> 
+                            case lists:member(X, AccIn) of
+                                true -> AccIn;
+                                _ -> [X | AccIn]
+                            end
+                        end, [], lists:sort(DirTests ++ SpecificTests))
+    end,
+    io:format("Tests to run: ~p~n", [Tests]),
+    
+    rt:load_config(Config),
+
+    [add_deps(Dep) || Dep <- rt:config(rt_deps)],
+    ENode = rt:config(rt_nodename, 'riak_test@127.0.0.1'),
+    Cookie = rt:config(rt_cookie, riak),
+    [] = os:cmd("epmd -daemon"),
+    net_kernel:start([ENode]),
+    erlang:set_cookie(node(), Cookie),
+        
     %% rt:set_config(rtdev_path, Path),
     %% rt:set_config(rt_max_wait_time, 180000),
     %% rt:set_config(rt_retry_delay, 500),

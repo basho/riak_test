@@ -610,3 +610,8 @@ str(String, Substr) ->
         0 -> false;
         _ -> true
     end.
+
+-spec set_backend(atom()) -> ok.
+set_backend(Backend) ->
+    lager:info("rt:set_backend(~p)", [Backend]),
+    ?HARNESS:set_backend(Backend).
