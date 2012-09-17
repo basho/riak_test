@@ -9,6 +9,14 @@ previous versions of Riak. Together, we'll get your test environment
 up and running. Scripts to help in this process are located in the
 `bin` directory of this project.
 
+### rtdev-all.sh
+
+This script is for the lazy, and for those not running on OS/X 10.7+
+(Lion or later). It performs all of the setup steps described in the
+other scripts, including installing the current "master" branch from
+Github into "current". The releases will be built in `/tmp/rt-builds`
+and installed into `/tmp/rt`.
+
 ### rtdev-build-releases.sh
 
 The first one that we want to look at is `rtdev-build-releases.sh`. If
