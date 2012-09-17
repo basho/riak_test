@@ -11,9 +11,8 @@ up and running. Scripts to help in this process are located in the
 
 ### rtdev-all.sh
 
-This script is for the lazy, and for those not running on OS/X 10.7+
-(Lion or later). It performs all of the setup steps described in the
-other scripts, including installing the current "master" branch from
+This script is for the lazy. It performs all of the setup steps described
+in the other scripts, including installing the current "master" branch from
 Github into "current". The releases will be built in `/tmp/rt-builds`
 and installed into `/tmp/rt`.
 
