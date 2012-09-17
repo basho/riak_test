@@ -28,13 +28,13 @@ cd /tmp/rt-builds
 
 echo
 source $SCRIPT_DIR/rtdev-build-releases.sh
-echo "Cloning Riak master into current."
-git clone git://github.com/basho/riak.git current > /dev/null 2>&1
-echo
-build "current" $CURRENT_OTP
+build "current" $CURRENT_OTP "" "git://github.com/basho/riak.git"
 
+echo
 echo "= Installing Riak Releases ======================================"
 echo
 source $SCRIPT_DIR/rtdev-setup-releases.sh
 
 cd $ORIGDIR
+echo
+echo "= Build complete! ==============================================="

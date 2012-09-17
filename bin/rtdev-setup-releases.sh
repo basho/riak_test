@@ -20,4 +20,3 @@ echo " - Creating the git repository"
 git init > /dev/null 2>&1
 git add .
 git commit -a -m "riak_test init" > /dev/null 2>&1
-echo "Done!"

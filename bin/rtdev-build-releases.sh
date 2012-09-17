@@ -56,6 +56,7 @@ build()
     SRCDIR=$1
     ERLROOT=$2
     DOWNLOAD=$3
+    GITURL=$4
 
     echo "Building $SRCDIR:"
 
@@ -73,6 +74,11 @@ build()
         TARBALL=`basename $DOWNLOAD`
         echo " - Expanding $TARBALL"
         tar xzf $TARBALL > /dev/null 2>&1
+    fi
+
+    if [ -n "$GITURL" ]; then
+        echo " - Cloning $GITURL"
+        git clone $GITURL $SRCDIR > /dev/null 2>&1
     fi
 
     echo " - Building devrel in $SRCDIR (this could take a while)"
