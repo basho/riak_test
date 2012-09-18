@@ -83,7 +83,7 @@ main(Args) ->
                 [
                     {id, -1},
                     {backend, Backend},
-                    {platform, "local"}
+                    {platform, <<"local">>}
                 ]
               } || Test <- lists:foldr(fun(X, AccIn) -> 
                             case lists:member(X, AccIn) of
@@ -103,15 +103,19 @@ main(Args) ->
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
     
-    TestResults = [ run_test(Test, Outdir, TestMetaData, HarnessArgs) || {Test, TestMetaData} <- Tests],
+    TestResults = [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests],
     
     print_summary(TestResults, Verbose),
     ok.
 
-run_test(Test, Outdir, TestMetaData, HarnessArgs) ->
+run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) ->
     rt:setup_harness(Test, HarnessArgs),
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
     rt:cleanup_harness(),
+    case Report of
+        undefined -> ok;
+        _ -> giddyup:post_result(SingleTestResult)
+    end,
     SingleTestResult.
     
 print_summary(TestResults, Verbose) ->

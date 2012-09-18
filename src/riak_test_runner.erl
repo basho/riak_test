@@ -25,8 +25,10 @@ confirm(TestModule, Outdir, TestMetaData) ->
     
     lager:notice("~s Test Run Complete", [TestModule]),
     {ok, Log} = stop_lager_backend(),
+    Logs = iolist_to_binary(lists:foldr(fun(L, Acc) -> [L ++ "\n" | Acc] end, [], Log)),
     
-    RetList = [{test, TestModule}, {status, Status}, {log, Log}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
+    
+    RetList = [{test, TestModule}, {status, Status}, {log, Logs}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
     case Status of
         fail -> RetList ++ [{reason, Reason}];
         _ -> RetList
