@@ -35,7 +35,7 @@ post_result(TestResult) ->
     case ibrowse:send_req(URL, [], post, mochijson2:encode(TestResult), [ {content_type, "application/json"}, {basic_auth, {"basho", "basho"}}]) of
         %%{ok, "200", _Headers, JSON} -> mochijson2:decode(JSON);
         %%_ -> []
-        {ok, ResponseCode, Headers, Body} ->
+        {ok, _ResponseCode, _Headers, _Body} ->
             %% lager:info("Post"),
             %% lager:info("Response Code: ~p", [ResponseCode]),
             %% lager:info("Headers: ~p", [Headers]),

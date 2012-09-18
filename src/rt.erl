@@ -624,3 +624,6 @@ set_backend(Backend) when Backend == riak_kv_bitcask_backend; Backend == riak_kv
 set_backend(Other) ->
     lager:warning("rt:set_backend does't recognize ~p as a legit backend, using the default.", [Other]),
     ?HARNESS:get_backends().
+
+get_version() ->
+    ?HARNESS:get_version().

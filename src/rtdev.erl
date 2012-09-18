@@ -290,3 +290,7 @@ set_backend(Backend) ->
     lager:info("rtdev:set_backend(~p)", [Backend]),
     update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
     get_backends().
+    
+get_version() ->
+    {ok, Version} = file:read_file(relpath(current) ++ "/VERSION"),
+    Version.

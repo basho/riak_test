@@ -49,6 +49,8 @@ main(Args) ->
     Config = proplists:get_value(config, ParsedArgs),
     rt:load_config(Config),
 
+    io:format("~p~n", [rt:get_version()]),
+
     %% Fileoutput
     Outdir = proplists:get_value(outdir, ParsedArgs),
     ConsoleLagerLevel = case Outdir of
