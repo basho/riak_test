@@ -92,7 +92,7 @@ riak_test_run(Config, _AppFile) ->
 compilation_config(Conf) ->
     C1 = rebar_config:set(Conf, riak_test, undefined),
     C2 = rebar_config:set(C1, plugins, undefined),
-    ErlOpts = rebar_utils:erl_opts(Conf),
+    ErlOpts = proplists:get_value(erl_opts, element(3, Conf)),
     ErlOpts1 = proplists:delete(src_dirs, ErlOpts),
     ErlOpts2 = [{parse_transform,lager_transform},{outdir, option(test_output, Conf)}, {src_dirs, option(test_paths, Conf)} | ErlOpts1],
     io:format("erl_opts: ~p~n", [ErlOpts2]),
