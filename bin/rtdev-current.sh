@@ -6,7 +6,7 @@ echo -n " - Determining version: "
 if [ -f $cwd/dependency_manifest.git ]; then
     VERSION=`cat $cwd/dependency_manifest.git | awk '/^-/ { print $NF }'`
 else
-    VERSION="$(git describe --tags)-$(git branch | grep '*' | awk '{print $2}')"
+    VERSION="$(git describe --tags)-$(git branch | awk '/\*/ {print $2}')"
 fi
 echo $VERSION
 cd /tmp/rt
@@ -20,7 +20,7 @@ cd $cwd
 echo " - Copying devrel to /tmp/rt/current"
 cp -a dev /tmp/rt/current
 echo " - Writing /tmp/rt/current/VERSION"
-echo $VERSION > /tmp/rt/current/VERSION
+echo -n $VERSION > /tmp/rt/current/VERSION
 cd /tmp/rt
 echo " - Reinitializing git state"
 git add .
