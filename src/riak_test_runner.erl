@@ -6,7 +6,7 @@
 %% @doc Runs a module's run/0 function after setting up a log capturing backend for lager. 
 %% It then cleans up that backend and returns the logs as part of the return proplist.
 confirm(TestModule, Outdir, TestMetaData) ->
-    start_lager_backend(TestModule, Outdir),
+    start_lager_backend(TestModule, Outdir),    
     rt:setup_harness(TestModule, []),
     
     %% Check for api compatibility
@@ -65,4 +65,3 @@ execute(TestModule) ->
     end,
     group_leader(GroupLeader, self()),
     Return.
-    

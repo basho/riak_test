@@ -49,8 +49,6 @@ main(Args) ->
     Config = proplists:get_value(config, ParsedArgs),
     rt:load_config(Config),
 
-    io:format("~p~n", [rt:get_version()]),
-
     %% Fileoutput
     Outdir = proplists:get_value(outdir, ParsedArgs),
     ConsoleLagerLevel = case Outdir of
@@ -74,6 +72,7 @@ main(Args) ->
         _ -> io:format("Suites are not currently supported.")
     end,
     
+    Version = rt:get_version(),
     
     Tests = case Report of
         undefined ->
@@ -85,7 +84,9 @@ main(Args) ->
                 [
                     {id, -1},
                     {backend, Backend},
-                    {platform, <<"local">>}
+                    {platform, <<"local">>},
+                    {version, Version},
+                    {project, list_to_binary(rt:config(project))}
                 ]
               } || Test <- lists:foldr(fun(X, AccIn) -> 
                             case lists:member(X, AccIn) of
@@ -110,8 +111,7 @@ main(Args) ->
     print_summary(TestResults, Verbose),
     ok.
 
-run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) ->
-    rt:setup_harness(Test, HarnessArgs),
+run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
     rt:cleanup_harness(),
     case Report of

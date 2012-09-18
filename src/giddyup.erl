@@ -3,6 +3,7 @@
 -export([get_suite/1, post_result/1]).
 
 get_suite(Platform) ->
+    Version = rt:get_version(),
     Schema = get_schema(Platform),
     Proj = kvc:path(project, Schema),
     Name = kvc:path(name, Proj),
@@ -13,7 +14,9 @@ get_suite(Platform) ->
         [
             {id, kvc:path(id, Test)},
             {backend, case kvc:path(tags.backend, Test) of [] -> undefined; X -> binary_to_atom(X, utf8) end},
-            {platform, list_to_binary(Platform)}
+            {platform, list_to_binary(Platform)},
+            {version, Version},
+            {project, Name}
         ]
       } || Test <- Tests].
     
