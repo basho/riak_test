@@ -49,6 +49,8 @@
          config/2
         ]).
 
+-export([partition/2, heal/1]).
+
 -define(HARNESS, (rt:config(rt_harness))).
 
 get_os_env(Var) ->
@@ -169,6 +171,22 @@ remove(Node, OtherNode) ->
 %% @doc Have `Node' mark `OtherNode' as down
 down(Node, OtherNode) ->
     rpc:call(Node, riak_kv_console, down, [[atom_to_list(OtherNode)]]).
+
+%% @doc partition the P1 from P2 nodes
+partition(P1, P2) ->
+    OldCookie = rpc:call(hd(P1), erlang, get_cookie, []),
+    NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
+    [true = rpc:call(N, erlang, set_cookie, [N, NewCookie]) || N <- P1],
+    [[true = rpc:call(N, erlang, disconnect_node, [P2N]) || N <- P1] || P2N <- P2],
+    {NewCookie, OldCookie, P1, P2}.
+
+%% @doc heal the partition created by call to partition/2
+%% OldCookie is the original shared cookie
+heal({_NewCookie, OldCookie, P1, P2}) ->
+    % set OldCookie on P1 Nodes
+    [true = rpc:call(N, erlang, set_cookie, [N, OldCookie]) || N <- P1],
+    rpc:multicall(P1++P2, riak_core_ring_events, force_sync_update, []), %% ALL NODES?
+    ok.
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd) ->
@@ -407,7 +425,7 @@ load_dot_config(ConfigName) ->
         {ok, Terms} ->
             Config = proplists:get_value(list_to_atom(ConfigName), Terms),
             [set_config(Key, Value) || {Key, Value} <- Config],
-            ok;            
+            ok;
         {error, Reason} ->
             erlang:error("Failed to parse config file", ["~/.riak_test.config", Reason])
  end.
@@ -418,7 +436,7 @@ load_config_file(File) ->
             [set_config(Key, Value) || {Key, Value} <- Terms],
             ok;
         {error, enoent} ->
-            {error, enoent};            
+            {error, enoent};
         {error, Reason} ->
             erlang:error("Failed to parse config file", [File, Reason])
     end.
@@ -567,11 +585,11 @@ pbc(Node) ->
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
     Pid.
 
-pbc_read(Pid, Bucket, Key) -> 
+pbc_read(Pid, Bucket, Key) ->
     {ok, Value} = riakc_pb_socket:get(Pid, Bucket, Key),
     Value.
-    
-pbc_write(Pid, Bucket, Key, Value) -> 
+
+pbc_write(Pid, Bucket, Key, Value) ->
     Object = riakc_obj:new(Bucket, Key, Value),
     riakc_pb_socket:put(Pid, Object).
 
@@ -582,12 +600,12 @@ pbc_set_bucket_prop(Pid, Bucket, PropList) ->
 httpc(Node) ->
     {ok, [{IP, Port}|_]} = rpc:call(Node, application, get_env, [riak_core, http]),
     rhc:create(IP, Port, "riak", []).
-    
-httpc_read(C, Bucket, Key) -> 
+
+httpc_read(C, Bucket, Key) ->
     {ok, Value} = rhc:get(C, Bucket, Key),
     Value.
 
-httpc_write(C, Bucket, Key, Value) -> 
+httpc_write(C, Bucket, Key, Value) ->
     Object = riakc_obj:new(Bucket, Key, Value),
     rhc:put(C, Object).
 
