@@ -58,7 +58,7 @@ rt_run(Config, AppFile) ->
 %% ===================================================================
 should_i_run(Config) ->
     %% Only run on the base dir
-    rebar_utils:processing_base_dir(Config) andalso proplists:is_defined(riak_test, element(3, Config)).
+    hd(lists:reverse(element(3, Config))) =:= local andalso proplists:is_defined(riak_test, element(3, Config)).
 
 option(Key, Config) ->
     case proplists:get_value(riak_test, element(3, Config), not_configured) of
