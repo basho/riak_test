@@ -1,5 +1,48 @@
 # Riak Test
 
+## What is Riak Test?
+
+`riak_test` is a system for testing Riak clusters. Tests are written
+in Erlang, and can interact with the cluster using distributed Erlang.
+It is intended that eventually `riak_test` will replace `basho_expect`.
+
+### How does it work?
+
+`riak_test` runs tests in a sandbox, typically `/tmp/rt`. The sanbox
+uses `git` to reset back to a clean state after tests are run. The
+contents of `/tmp/rt` might look something like this:
+
+```
+$ ls /tmp/rt
+current riak-1.0.3 riak-1.1.4 riak-1.2.0
+```
+
+Inside each of these directories is a `dev` folder, typically
+created with your normal `make [stage]devrel`. So how does
+this sandbox get populated to begin with?
+
+You'll create another directory that will contain full builds
+of different version of Riak for your platform. Typicallly this directory
+has been `~/test-releases`. The `dev/` directory from each of these
+releases will be copied into the sandbox (`/tmp/rt`).
+There are helper scripts in `bin/` which will
+help you get both `~/test-releases` and `/tmp/rt` all set up. A full
+tutorial for using them exists further down in this README.
+
+There is one folder in `/tmp/rt` that does not come from
+`~/test-releases`: `current`. The `current` folder can refer
+to any version of Riak, but is typically used for something
+like the `master` branch, a feature branch, or a release candidate.
+The `/tmp/rt/current` dev release gets populated from a devrel of Riak
+that can come from anywhere, but is usually your 'normal' git checkout
+of Riak. The `bin/rtdev-current.sh` can be run from within that folder
+to copy `dev/` into `/tmp/rt/current`.
+
+Once you have everything set up (again, instructions for this are below),
+you'll want to run and write tests. This repository also holds code for
+an Erlang application called `riak_test`. The actual tests exist in
+the `test/` directory.
+
 ## Bootstraping Your Test Environment
 
 Welcome to the exciting world of riak_test. Running tests against a
