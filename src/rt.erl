@@ -612,6 +612,15 @@ str(String, Substr) ->
     end.
 
 -spec set_backend(atom()) -> ok.
-set_backend(Backend) ->
+set_backend(bitcask) ->
+    set_backend(riak_kv_bitcask_backend);
+set_backend(eleveldb) -> 
+    set_backend(riak_kv_eleveldb_backend);
+set_backend(memory) ->
+    set_backend(riak_kv_memory_backend);
+set_backend(Backend) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
     lager:info("rt:set_backend(~p)", [Backend]),
-    ?HARNESS:set_backend(Backend).
+    ?HARNESS:set_backend(Backend);
+set_backend(Other) ->
+    lager:warning("rt:set_backend does't recognize ~p as a legit backend, using the default.", [Other]),
+    ?HARNESS:get_backends().

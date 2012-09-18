@@ -91,8 +91,7 @@ update_app_config(all, Config) ->
             _ -> lager:debug("~s is not a directory.", [DevPath])
         end
     end,
-    [ Fun(DevPath, Config) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
-    halt(0);
+    [ Fun(DevPath, Config) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))];
 update_app_config(Node, Config) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
@@ -115,6 +114,36 @@ update_app_config_file(ConfigFile, Config) ->
     NewConfigOut = io_lib:format("~p.", [NewConfig]),
     ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
     ok.
+    
+get_backends() ->
+    Fun = fun(DevPath) ->
+        GetBackend = fun(AppConfig) ->
+            {ok, [Config]} = file:consult(AppConfig),
+            kvc:path(riak_kv.storage_backend, Config)
+        end,
+        case filelib:is_dir(DevPath) of
+            true ->
+                Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
+                AppConfigs = [ Dev ++ "/etc/app.config" || Dev <- Devs],
+                [GetBackend(AppConfig) || AppConfig <- AppConfigs];
+            _ -> lager:debug("~s is not a directory.", [DevPath])
+        end
+    end,
+    Backends = lists:foldr(fun(X, AccIn) ->
+            case lists:member(X, AccIn) of
+                true -> AccIn;
+                _ -> [X | AccIn]
+            end
+        end, [],
+        lists:flatten([ Fun(DevPath) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))])
+    ),
+    case Backends of
+        [riak_kv_bitcask_backend] -> bitcask;
+        [riak_kv_eleveldb_backend] -> eleveldb;
+        [riak_kv_memory_backend] -> memory;
+        [Other] -> Other;
+        MoreThanOne -> MoreThanOne
+    end.
 
 node_path(Node) ->
     N = node_id(Node),
@@ -259,4 +288,5 @@ check_node({_N, Version}) ->
 
 set_backend(Backend) ->
     lager:info("rtdev:set_backend(~p)", [Backend]),
-    update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]).
+    update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
+    get_backends().

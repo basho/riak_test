@@ -1,34 +1,29 @@
 -module(giddyup).
 
--export([get_suite/3]).
+-export([get_suite/1]).
 
--define(SUITE_PATH, "http://~s/project/~s?platform=~s").
-
-get_suite(Host, Project, Platform) ->
-    Schema = get_schema(Host, Project, Platform),
+get_suite(Platform) ->
+    Schema = get_schema(Platform),
     Proj = kvc:path(project, Schema),
     Name = kvc:path(name, Proj),
     lager:info("Retrieved Project: ~s", [Name]),
     Tests = kvc:path(tests, Proj),
     [ {
-        kvc:path(id, Test),
         binary_to_atom(kvc:path(name, Test), utf8),
-        case kvc:path(tags.backend, Test) of [] -> na; X -> binary_to_atom(X, utf8) end
+        [
+            {id, kvc:path(id, Test)},
+            {backend, case kvc:path(tags.backend, Test) of [] -> undefined; X -> binary_to_atom(X, utf8) end},
+            {platform, Platform}
+        ]
       } || Test <- Tests].
     
-get_schema(Host, Project, Platform) ->
-    URL = io_lib:format(?SUITE_PATH, [Host, Project, Platform]),
+get_schema(Platform) ->
+    Host = rt:config(rt_giddyup_host),
+    Project = rt:config(rt_project),
+    URL = "http://" ++ Host ++ "/projects/" ++ Project ++ "?platform=" ++ Platform,
     lager:info("giddyup url: ~s", [URL]),
-    JSON = <<"{
-              \"project\":{
-                \"name\":\"riak\",
-                \"tests\":[
-                  {\"id\":1, \"name\":\"verify_build_cluster\",
-                   \"tags\":{\"platform\":\"ubuntu-1004-64\"}},
-                  {\"id\":2, \"name\":\"secondary_index_tests\",
-                  \"tags\":{\"backend\":\"eleveldb\", \"platform\":\"ubuntu-1004-64\"}}
-                ]
-              }
-            }">>,
-    mochijson2:decode(JSON).
     
+    case ibrowse:send_req(URL, [], get, [], [ {basic_auth, {"basho", "basho"}}]) of
+        {ok, "200", _Headers, JSON} -> mochijson2:decode(JSON);
+        _ -> []
+    end.
