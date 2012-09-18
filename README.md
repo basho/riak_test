@@ -22,7 +22,7 @@ created with your normal `make [stage]devrel`. So how does
 this sandbox get populated to begin with?
 
 You'll create another directory that will contain full builds
-of different version of Riak for your platform. Typicallly this directory
+of different version of Riak for your platform. Typically this directory
 has been `~/test-releases`. The `dev/` directory from each of these
 releases will be copied into the sandbox (`/tmp/rt`).
 There are helper scripts in `bin/` which will
