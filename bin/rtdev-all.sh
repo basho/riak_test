@@ -1,5 +1,18 @@
 #!/bin/bash
 
+ORIGDIR=`pwd`
+pushd `dirname $0` > /dev/null
+SCRIPT_DIR=`pwd`
+popd > /dev/null
+CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
+
+if [ -n $DEBUG ]; then
+    echo "Build dir:       $ORIGDIR"
+    echo "rtdev-* scripts: $SCRIPT_DIR"
+    echo "Erlang:          $CURRENT_OTP"
+    exit 1
+fi
+
 echo "================== riak_test Omnibus Installer =================="
 echo
 echo "This is an omnibus script that builds all the necessary versions "
@@ -13,10 +26,6 @@ if [[ $continue == n || $continue == N ]]; then
     echo "Aborting install!"
     exit 1
 fi
-
-ORIGDIR=`pwd`
-SCRIPT_DIR=$(dirname `stat $0 | awk '{print $NF}'`)
-CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
 
 echo
 echo "= Building Riak Releases ========================================"
