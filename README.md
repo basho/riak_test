@@ -1,10 +1,10 @@
 # Riak Test
+Welcome to the exciting world of `riak_test`. 
 
 ## What is Riak Test?
 
 `riak_test` is a system for testing Riak clusters. Tests are written
 in Erlang, and can interact with the cluster using distributed Erlang.
-It is intended that eventually `riak_test` will replace `basho_expect`.
 
 ### How does it work?
 
@@ -23,7 +23,8 @@ this sandbox get populated to begin with?
 
 You'll create another directory that will contain full builds
 of different version of Riak for your platform. Typically this directory
-has been `~/test-releases`. The `dev/` directory from each of these
+has been `~/test-releases` but it can be called anything and be anywhere
+that you'd like. The `dev/` directory from each of these
 releases will be copied into the sandbox (`/tmp/rt`).
 There are helper scripts in `bin/` which will
 help you get both `~/test-releases` and `/tmp/rt` all set up. A full
@@ -45,7 +46,7 @@ the `test/` directory.
 
 ## Bootstraping Your Test Environment
 
-Welcome to the exciting world of riak_test. Running tests against a
+Running tests against a
 development version of Riak is just one of the things that you can do
 with riak_test. You can also test things involving upgrading from
 previous versions of Riak. Together, we'll get your test environment
@@ -56,8 +57,15 @@ up and running. Scripts to help in this process are located in the
 
 This script is for the lazy. It performs all of the setup steps described
 in the other scripts, including installing the current "master" branch from
-Github into "current". The releases will be built in `/tmp/rt-builds`
-and installed into `/tmp/rt`.
+Github into "current". The releases will be built in you current working
+directory, so create an empty one in a place you'd like to store these
+builds for posterity, so that you don't have to rebuild them if your
+installation path (`/tmp/rt` by the way this script installs it) gets into
+a bad state, or deleted as tmpfs things tend to get during reboot.
+
+If you do want to restore your `/tmp/rt` folder to factory condition, see
+`rtdev-setup-releases.sh` and if you want to change the current riak under
+test, see `rtdev-current.sh`.
 
 ### rtdev-build-releases.sh
 
