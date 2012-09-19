@@ -57,7 +57,7 @@ up and running. Scripts to help in this process are located in the
 
 This script is for the lazy. It performs all of the setup steps described
 in the other scripts, including installing the current "master" branch from
-Github into "current". The releases will be built in you current working
+Github into "current". The releases will be built in your current working
 directory, so create an empty one in a place you'd like to store these
 builds for posterity, so that you don't have to rebuild them if your
 installation path (`/tmp/rt` by the way this script installs it) gets into
