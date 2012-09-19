@@ -7,10 +7,11 @@ popd > /dev/null
 CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
 
 if [ -n $DEBUG ]; then
+    echo "= Configuration ================================================="
     echo "Build dir:       $ORIGDIR"
     echo "rtdev-* scripts: $SCRIPT_DIR"
     echo "Erlang:          $CURRENT_OTP"
-    exit 1
+    echo
 fi
 
 echo "================== riak_test Omnibus Installer =================="
