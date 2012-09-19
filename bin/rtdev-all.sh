@@ -15,30 +15,37 @@ if [[ $continue == n || $continue == N ]]; then
 fi
 
 ORIGDIR=`pwd`
-pushd $(dirname `which "$0"`) >/dev/null; SCRIPT_DIR=$PWD; popd >/dev/null
+SCRIPT_DIR=$(dirname `stat $0 | awk '{print $NF}'`)
 CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
 
 echo
 echo "= Building Riak Releases ========================================"
 echo
 
-echo
 source $SCRIPT_DIR/rtdev-build-releases.sh
-build "current" $CURRENT_OTP "" "git://github.com/basho/riak.git"
 
 if [[ `uname -s` =~ ^Darwin ]]; then
   if [[ `sw_vers|grep ProductVersion|awk '{print $2}'` > "10.7" ]]; then
     echo
-    echo "= Patching OSX > 1.7 ======================================"
+    echo "= Patching OSX > 10.7 ======================================"
     echo
     source $SCRIPT_DIR/rtdev-lion-fix.sh
   fi
 fi
 
-echo
 echo "= Installing Riak Releases ======================================"
 echo
 source $SCRIPT_DIR/rtdev-setup-releases.sh
+
+echo
+echo "= Building and Installing Riak from Git ========================="
+echo
+
+cd $ORIGDIR
+build "current" $CURRENT_OTP "" "git://github.com/basho/riak.git"
+echo
+cd current
+source $SCRIPT_DIR/rtdev-current.sh
 
 cd $ORIGDIR
 echo

@@ -25,4 +25,3 @@ cd /tmp/rt
 echo " - Reinitializing git state"
 git add .
 git commit -a -m "riak_test init" --amend > /dev/null 2>&1
-echo "Done!"
