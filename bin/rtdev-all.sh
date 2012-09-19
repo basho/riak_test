@@ -6,7 +6,7 @@ SCRIPT_DIR=`pwd`
 popd > /dev/null
 CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
 
-if [ -n $DEBUG ]; then
+if [ -n $DEBUG_RTDEV ]; then
     echo "= Configuration ================================================="
     echo "Build dir:       $ORIGDIR"
     echo "rtdev-* scripts: $SCRIPT_DIR"
