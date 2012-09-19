@@ -21,10 +21,6 @@ CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
 echo
 echo "= Building Riak Releases ========================================"
 echo
-echo "Prepping build directory."
-mkdir -p /tmp/rt-builds
-
-cd /tmp/rt-builds
 
 echo
 source $SCRIPT_DIR/rtdev-build-releases.sh
