@@ -30,7 +30,7 @@ confirm(TestModule, Outdir, TestMetaData) ->
     
     RetList = [{test, TestModule}, {status, Status}, {log, Logs}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
     case Status of
-        fail -> RetList ++ [{reason, Reason}];
+        fail -> RetList ++ [{reason, iolist_to_binary(io_lib:format("~p", [Reason]))}];
         _ -> RetList
     end.
     
