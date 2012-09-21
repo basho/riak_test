@@ -561,32 +561,46 @@ systest_read(Node, Start, End, Bucket, R) ->
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
 
+%% @doc get me a protobuf client process and hold the mayo!
+-spec pbc(node()) -> pid().
 pbc(Node) ->
     {ok, IP} = rpc:call(Node, application, get_env, [riak_api, pb_ip]),
     {ok, PBPort} = rpc:call(Node, application, get_env, [riak_api, pb_port]),
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
     Pid.
 
+%% @doc does a read via the erlang protobuf client
+-spec pbc_read(pid(), binary(), binary()) -> binary().
 pbc_read(Pid, Bucket, Key) -> 
     {ok, Value} = riakc_pb_socket:get(Pid, Bucket, Key),
     Value.
-    
+
+%% @doc does a write via the erlang protobuf client
+-spec pbc_write(pid(), binary(), binary(), binary()) -> atom().
 pbc_write(Pid, Bucket, Key, Value) -> 
     Object = riakc_obj:new(Bucket, Key, Value),
     riakc_pb_socket:put(Pid, Object).
 
+%% @doc sets a bucket property/properties via the erlang protobuf client
+-spec pbc_set_bucket_prop(pid(), binary(), [proplists:property()]) -> atom().
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
 
-
+%% @doc get me an http client.
+-spec httpc(node()) -> term().
 httpc(Node) ->
     {ok, [{IP, Port}|_]} = rpc:call(Node, application, get_env, [riak_core, http]),
     rhc:create(IP, Port, "riak", []).
-    
+
+%% @doc does a read via the http erlang client.
+-spec httpc_read(term(), binary(), binary()) -> binary().
 httpc_read(C, Bucket, Key) -> 
     {ok, Value} = rhc:get(C, Bucket, Key),
     Value.
 
+
+%% @doc does a write via the http erlang client.
+-spec httpc_write(term(), binary(), binary(), binary()) -> atom().
 httpc_write(C, Bucket, Key, Value) -> 
     Object = riakc_obj:new(Bucket, Key, Value),
     rhc:put(C, Object).
@@ -605,8 +619,37 @@ pmap(F, L) ->
     {_, L3} = lists:unzip(lists:keysort(1, L2)),
     L3.
 
+%% @doc if String contains Substr, return true.
+-spec str(string(), string()) -> boolean().
 str(String, Substr) ->
     case string:str(String, Substr) of
         0 -> false;
         _ -> true
     end.
+
+%% @doc Sets the backend of ALL nodes that could be available to riak_test.
+%%      this is not limited to the nodes under test, but any node that
+%%      riak_test is able to find. It then queries each available node
+%%      for it's backend, and returns it if they're all equal. If different
+%%      nodes have different backends, it returns a list of backends.
+%%      Currently, there is no way to request multiple backends, so the
+%%      list return type should be considered an error.
+-spec set_backend(atom()) -> atom()|[atom()].
+set_backend(bitcask) ->
+    set_backend(riak_kv_bitcask_backend);
+set_backend(eleveldb) -> 
+    set_backend(riak_kv_eleveldb_backend);
+set_backend(memory) ->
+    set_backend(riak_kv_memory_backend);
+set_backend(Backend) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
+    lager:info("rt:set_backend(~p)", [Backend]),
+    ?HARNESS:set_backend(Backend);
+set_backend(Other) ->
+    lager:warning("rt:set_backend doesn't recognize ~p as a legit backend, using the default.", [Other]),
+    ?HARNESS:get_backends().
+
+%% @doc Gets the current version under test. In the case of an upgrade test
+%%      or something like that, it's the version you're upgrading to. 
+-spec get_version() -> binary().
+get_version() ->
+    ?HARNESS:get_version().
