@@ -645,7 +645,7 @@ set_backend(Backend) when Backend == riak_kv_bitcask_backend; Backend == riak_kv
     lager:info("rt:set_backend(~p)", [Backend]),
     ?HARNESS:set_backend(Backend);
 set_backend(Other) ->
-    lager:warning("rt:set_backend does't recognize ~p as a legit backend, using the default.", [Other]),
+    lager:warning("rt:set_backend doesn't recognize ~p as a legit backend, using the default.", [Other]),
     ?HARNESS:get_backends().
 
 %% @doc Gets the current version under test. In the case of an upgrade test
