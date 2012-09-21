@@ -116,26 +116,13 @@ update_app_config_file(ConfigFile, Config) ->
     ok.
     
 get_backends() ->
-    Fun = fun(DevPath) ->
-        GetBackend = fun(AppConfig) ->
-            {ok, [Config]} = file:consult(AppConfig),
-            kvc:path(riak_kv.storage_backend, Config)
-        end,
-        case filelib:is_dir(DevPath) of
-            true ->
-                Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
-                AppConfigs = [ Dev ++ "/etc/app.config" || Dev <- Devs],
-                [GetBackend(AppConfig) || AppConfig <- AppConfigs];
-            _ -> lager:debug("~s is not a directory.", [DevPath])
-        end
-    end,
     Backends = lists:foldr(fun(X, AccIn) ->
             case lists:member(X, AccIn) of
                 true -> AccIn;
                 _ -> [X | AccIn]
             end
         end, [],
-        lists:flatten([ Fun(DevPath) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))])
+        lists:flatten([ get_backends(DevPath) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))])
     ),
     case Backends of
         [riak_kv_bitcask_backend] -> bitcask;
@@ -144,6 +131,19 @@ get_backends() ->
         [Other] -> Other;
         MoreThanOne -> MoreThanOne
     end.
+
+get_backends(DevPath) ->
+    case filelib:is_dir(DevPath) of
+        true ->
+            Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
+            AppConfigs = [ Dev ++ "/etc/app.config" || Dev <- Devs],
+            [get_backend(AppConfig) || AppConfig <- AppConfigs];
+        _ -> lager:debug("~s is not a directory.", [DevPath])
+    end.
+
+get_backend(AppConfig) ->
+    {ok, [Config]} = file:consult(AppConfig),
+    kvc:path(riak_kv.storage_backend, Config).
 
 node_path(Node) ->
     N = node_id(Node),
