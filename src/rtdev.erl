@@ -80,6 +80,16 @@ upgrade(Node, NewVersion) ->
     start(Node),
     ok.
 
+all_the_app_configs(DevPath) ->
+    case filelib:is_dir(DevPath) of
+        true ->
+            Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
+            [ Dev ++ "/etc/app.config" || Dev <- Devs];
+        _ -> 
+            lager:debug("~s is not a directory.", [DevPath]),
+            []
+    end.
+
 update_app_config(all, Config) ->
     lager:info("rtdev:update_app_config(all, ~p)", [Config]),
     [ update_app_config(DevPath, Config) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))];
@@ -89,13 +99,7 @@ update_app_config(Node, Config) when is_atom(Node) ->
     ConfigFile = io_lib:format("~s/dev/dev~b/etc/app.config", [Path, N]),
     update_app_config_file(ConfigFile, Config);
 update_app_config(DevPath, Config) ->
-    case filelib:is_dir(DevPath) of
-        true ->
-            Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
-            AppConfigs = [ Dev ++ "/etc/app.config" || Dev <- Devs],
-            [update_app_config_file(AppConfig, Config) || AppConfig <- AppConfigs];
-        _ -> lager:debug("~s is not a directory.", [DevPath])
-    end.
+    [update_app_config_file(AppConfig, Config) || AppConfig <- all_the_app_configs(DevPath)].
 
 update_app_config_file(ConfigFile, Config) ->
     lager:info("rtdev:update_app_config_file(~s, ~p)", [ConfigFile, Config]),
@@ -126,13 +130,7 @@ get_backends() ->
     end.
 
 get_backends(DevPath) ->
-    case filelib:is_dir(DevPath) of
-        true ->
-            Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
-            AppConfigs = [ Dev ++ "/etc/app.config" || Dev <- Devs],
-            [get_backend(AppConfig) || AppConfig <- AppConfigs];
-        _ -> lager:debug("~s is not a directory.", [DevPath])
-    end.
+    [get_backend(AppConfig) || AppConfig <- all_the_app_configs(DevPath)].
 
 get_backend(AppConfig) ->
     {ok, [Config]} = file:consult(AppConfig),
