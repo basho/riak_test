@@ -7,46 +7,47 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--export([deploy_nodes/1,
-         deploy_nodes/2,
+-export([admin/2,
          build_cluster/1,
          build_cluster/2,
-         start/1,
-         stop/1,
-         join/2,
-         leave/1,
+         check_singleton_node/1,
+         claimant_according_to/1,
+         deploy_nodes/1,
+         deploy_nodes/2,
+         down/2,
          get_os_env/1,
          get_os_env/2,
          get_ring/1,
-         admin/2,
-         upgrade/2,
-         wait_until_pingable/1,
-         wait_until_unpingable/1,
-         wait_until_ready/1,
-         wait_until_no_pending_changes/1,
-         wait_until_nodes_ready/1,
-         wait_until/2,
-         remove/2,
-         down/2,
-         check_singleton_node/1,
-         owners_according_to/1,
+         join/2,
+         leave/1,
          members_according_to/1,
+         owners_according_to/1,
+         remove/2,
+         start/1,
          status_of_according_to/2,
-         claimant_according_to/1,
+         stop/1,
+         upgrade/2,
+         wait_until/2,
          wait_until_all_members/1,
          wait_until_all_members/2,
          wait_until_legacy_ringready/1,
-         wait_until_ring_converged/1]).
+         wait_until_no_pending_changes/1,
+         wait_until_nodes_ready/1,
+         wait_until_pingable/1,
+         wait_until_ready/1,
+         wait_until_ring_converged/1,
+         wait_until_unpingable/1
+        ]).
 
 %% Search API
 -export([enable_search_hook/2]).
 
--export([setup_harness/2,
-         cleanup_harness/0,
+-export([cleanup_harness/0,
+         config/1,
+         config/2,
          load_config/1,
          set_config/2,
-         config/1,
-         config/2
+         setup_harness/2
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
@@ -407,7 +408,7 @@ load_dot_config(ConfigName) ->
         {ok, Terms} ->
             Config = proplists:get_value(list_to_atom(ConfigName), Terms),
             [set_config(Key, Value) || {Key, Value} <- Config],
-            ok;            
+            ok;
         {error, Reason} ->
             erlang:error("Failed to parse config file", ["~/.riak_test.config", Reason])
  end.
@@ -418,7 +419,7 @@ load_config_file(File) ->
             [set_config(Key, Value) || {Key, Value} <- Terms],
             ok;
         {error, enoent} ->
-            {error, enoent};            
+            {error, enoent};
         {error, Reason} ->
             erlang:error("Failed to parse config file", [File, Reason])
     end.
@@ -567,11 +568,11 @@ pbc(Node) ->
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
     Pid.
 
-pbc_read(Pid, Bucket, Key) -> 
+pbc_read(Pid, Bucket, Key) ->
     {ok, Value} = riakc_pb_socket:get(Pid, Bucket, Key),
     Value.
-    
-pbc_write(Pid, Bucket, Key, Value) -> 
+
+pbc_write(Pid, Bucket, Key, Value) ->
     Object = riakc_obj:new(Bucket, Key, Value),
     riakc_pb_socket:put(Pid, Object).
 
@@ -582,12 +583,12 @@ pbc_set_bucket_prop(Pid, Bucket, PropList) ->
 httpc(Node) ->
     {ok, [{IP, Port}|_]} = rpc:call(Node, application, get_env, [riak_core, http]),
     rhc:create(IP, Port, "riak", []).
-    
-httpc_read(C, Bucket, Key) -> 
+
+httpc_read(C, Bucket, Key) ->
     {ok, Value} = rhc:get(C, Bucket, Key),
     Value.
 
-httpc_write(C, Bucket, Key, Value) -> 
+httpc_write(C, Bucket, Key, Value) ->
     Object = riakc_obj:new(Bucket, Key, Value),
     rhc:put(C, Object).
 
