@@ -116,14 +116,8 @@ update_app_config_file(ConfigFile, Config) ->
     ok.
     
 get_backends() ->
-    Backends = lists:foldr(fun(X, AccIn) ->
-            case lists:member(X, AccIn) of
-                true -> AccIn;
-                _ -> [X | AccIn]
-            end
-        end, [],
-        lists:flatten([ get_backends(DevPath) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))])
-    ),
+    Backends = lists:usort(
+        lists:flatten([ get_backends(DevPath) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))])),
     case Backends of
         [riak_kv_bitcask_backend] -> bitcask;
         [riak_kv_eleveldb_backend] -> eleveldb;

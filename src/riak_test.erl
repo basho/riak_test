@@ -86,14 +86,9 @@ main(Args) ->
                     {backend, Backend},
                     {platform, <<"local">>},
                     {version, Version},
-                    {project, list_to_binary(rt:config(project))}
+                    {project, list_to_binary(rt:config(rt_project))}
                 ]
-              } || Test <- lists:foldr(fun(X, AccIn) -> 
-                            case lists:member(X, AccIn) of
-                                true -> AccIn;
-                                _ -> [X | AccIn]
-                            end
-                        end, [], lists:sort(DirTests ++ SpecificTests))];
+              } || Test <- lists:usort(DirTests ++ SpecificTests)];
         Platform -> 
             giddyup:get_suite(Platform)
     end,
