@@ -6,7 +6,7 @@
 %% @doc This test requires additional setup, here's how to do it.
 %% 1. Clone and build basho_bench
 %% 2. Set an environment variable "BASHO_BENCH" to the path you cloned to.
-%% 3. Get this file: https://github.com/basho/basho_expect/tree/master/search-corpus/spam.0-small.tar.gz
+%% 3. Get this file: search-corpus/spam.0-1.tar.gz
 %% 4. Unzip it somewhere.
 %% 5. Set an environment variable "SPAM_DIR" to the path you unzipped, including the "spam.0" dir
 
