@@ -17,6 +17,7 @@ cli_options() ->
  {dir,                $d, "dir",              string,           "run all tests in the specified directory"},
  {verbose,            $v, "verbose",          undefined,        "verbose output"},
  {outdir,             $o, "outdir",           string,           "output directory"},
+ {backend,            $b, "backend",          atom,             "backend to test"},
  {report,             $r, "report",           string,           "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64"}
 ].
 
@@ -30,7 +31,6 @@ run_help(ParsedArgs) ->
     lists:member(help, ParsedArgs).
 
 main(Args) ->
-    
     {ParsedArgs, HarnessArgs} = case getopt:parse(cli_options(), Args) of
         {ok, {P, H}} -> {P, H};
         _ -> print_help()
@@ -61,8 +61,6 @@ main(Args) ->
     application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel}]),
     lager:start(),
 
-    Backend = bitcask,
-
     Report = proplists:get_value(report, ParsedArgs, undefined),
     Verbose = proplists:is_defined(verbose, ParsedArgs),
 
@@ -74,21 +72,28 @@ main(Args) ->
     
     Version = rt:get_version(),
     
+    Backends = case proplists:get_all_values(backend, ParsedArgs) of
+        [] -> [bitcask];
+        Other -> Other
+    end,
+    
     Tests = case Report of
         undefined ->
             SpecificTests = proplists:get_all_values(tests, ParsedArgs),
             Dirs = proplists:get_all_values(dir, ParsedArgs),
             DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
-            [ {
-                list_to_atom(Test), 
-                [
-                    {id, -1},
-                    {backend, Backend},
-                    {platform, <<"local">>},
-                    {version, Version},
-                    {project, list_to_binary(rt:config(rt_project, "undefined"))}
-                ]
-              } || Test <- lists:usort(DirTests ++ SpecificTests)];
+            lists:foldl(fun(Test, Tests) ->
+                    [{
+                      list_to_atom(Test), 
+                      [
+                          {id, -1},
+                          {backend, Backend},
+                          {platform, <<"local">>},
+                          {version, Version},
+                          {project, list_to_binary(rt:config(rt_project, "undefined"))}
+                      ]
+                    } || Backend <- Backends ] ++ Tests
+                end, [], lists:usort(DirTests ++ SpecificTests));
         Platform -> 
             giddyup:get_suite(Platform)
     end,
@@ -102,7 +107,6 @@ main(Args) ->
     erlang:set_cookie(node(), Cookie),
     
     TestResults = [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests],
-    
     print_summary(TestResults, Verbose),
     ok.
 
