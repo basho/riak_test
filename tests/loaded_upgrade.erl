@@ -209,7 +209,7 @@ init_search_tester(Nodes, Conns) ->
     #search{buckets=Buckets, runs=[]}.
 
 check_search(?SPAM_BUCKET, Nodes) ->
-    SearchResults = [{"postoffice.mr.net", 194},
+    SearchResults = [{"mx.example.net", 187},
                      {"ZiaSun", 1},
                      {"headaches", 4},
                      {"YALSP", 3},
@@ -415,7 +415,7 @@ search_populate_script(Bucket, IPs, SpamDir) ->
     write_terms(Config, Cfg).
 
 search_verify_script(Bucket, IPs) ->
-    Expect = [{"postoffice.mr.net", 194},
+    Expect = [{"mx.example.net", 187},
               {"ZiaSun", 1},
               {"headaches", 4},
               {"YALSP", 3},
