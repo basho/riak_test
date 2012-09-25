@@ -35,38 +35,20 @@ confirm() ->
     rt:stop(Node1),
     rt:wait_until_unpingable(Node1),
     
-    lager:info("Stopping Node2"),
-    rt:stop(Node2),
-    rt:wait_until_unpingable(Node2),
-    
-    lager:info("Starting Node1"),
-    rt:start(Node1),
-    rt:wait_until_pingable(Node1),
-    
-    lager:info("Check keys and buckets"),
-    check_it_all([Node1, Node3, Node4]),
-    
-    lager:info("Starting Node2"),
-    rt:start(Node2),
-    rt:wait_until_pingable(Node2),
-    
-    lager:info("Stopping Node3"),
-    rt:stop(Node3),
-    rt:wait_until_unpingable(Node3),
-
-    lager:info("Check keys and buckets"),
-    check_it_all([Node1, Node2, Node4]),
-
-    lager:info("Starting Node3"),
-    rt:start(Node3),
-    rt:wait_until_pingable(Node3),
-    
-    lager:info("Stopping Node4"),
-    rt:stop(Node4),
-    rt:wait_until_unpingable(Node4),
-    
-    lager:info("Check keys and buckets"),
-    check_it_all([Node1, Node2, Node3]),
+    %% Stop current node, restart previous node, verify
+    lists:foldl(fun(Node, Prev) ->
+            lager:info("Stopping Node ~p", [Node]),
+            rt:stop(Node),
+            rt:wait_until_unpingable(Node),
+            
+            lager:info("Starting Node ~p", [Prev]),
+            rt:start(Prev),
+            rt:wait_until_pingable(Prev),
+            
+            lager:info("Check keys and buckets"),
+            check_it_all(Nodes -- [Node]),
+            Node
+        end, Node1, [Node2, Node3, Node4]),
     
     lager:info("Stopping Node2"),
     rt:stop(Node2),
