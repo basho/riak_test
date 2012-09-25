@@ -17,40 +17,20 @@ confirm() ->
     put_buckets(Node1, ?NUM_BUCKETS),
     check_it_all([Node1]),
 
-    lager:info("An invitation to this party is cordially extended to node2."),
-    rt:join(Node2, Node1),
-    lager:info("Check keys and buckets during transfer"),
-    
-    check_it_all([Node1, Node2]),
-    lager:info("Wait until there are no pending changes"),
-    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
-    
-    lager:info("Check keys and buckets after transfer"),
-    check_it_all([Node1, Node2]),
-    
-    lager:info("An invitation to this party is cordially extended to node3."),
-    rt:join(Node3, Node1),
-    lager:info("Check keys and buckets during transfer"),
-    
-    check_it_all([Node1, Node2, Node3]),
-    lager:info("Wait until there are no pending changes"),
-    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
-    
-    lager:info("Check keys and buckets after transfer"),
-    check_it_all([Node1, Node2, Node3]),
+    lists:foldl(fun(Node, [N1|_] = Cluster) ->
+            lager:info("An invitation to this party is cordially extended to ~p.", [Node]),
+            rt:join(Node, N1),
+            lager:info("Check keys and buckets during transfer"),
+            Ns = lists:usort([Node|Cluster]),
+            check_it_all(Ns),
+            lager:info("Wait until there are no pending changes"),
+            ?assertEqual(ok, rt:wait_until_no_pending_changes(Ns)),
+            
+            lager:info("Check keys and buckets after transfer"),
+            check_it_all(Ns),
+            Ns
+        end, [Node1], [Node2, Node3, Node4]),
 
-
-    lager:info("An invitation to this party is cordially extended to node4."),
-    rt:join(Node4, Node1),
-    lager:info("Check keys and buckets during transfer"),
-    
-    check_it_all([Node1, Node2, Node3, Node4]),
-    lager:info("Wait until there are no pending changes"),
-    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
-    
-    lager:info("Check keys and buckets after transfer"),
-    check_it_all([Node1, Node2, Node3, Node4]),
-    
     lager:info("Stopping Node1"),
     rt:stop(Node1),
     rt:wait_until_unpingable(Node1),
