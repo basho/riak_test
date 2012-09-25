@@ -16,7 +16,8 @@ cli_options() ->
  {suites,             $s, "suites",           string,           "which suites to run"},
  {dir,                $d, "dir",              string,           "run all tests in the specified directory"},
  {verbose,            $v, "verbose",          undefined,        "verbose output"},
- {outdir,             $o, "outdir",           string,           "output directory"}
+ {outdir,             $o, "outdir",           string,           "output directory"},
+ {report,             $r, "report",           string,           "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64"}
 ].
 
 print_help() ->
@@ -35,45 +36,19 @@ main(Args) ->
         _ -> print_help()
     end,
     
-    
     case run_help(ParsedArgs) of 
         true -> print_help();
         _ -> ok
     end,
-    Verbose = proplists:is_defined(verbose, ParsedArgs),
-    Config = proplists:get_value(config, ParsedArgs),
-    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
-    Suites = proplists:get_all_values(suites, ParsedArgs),
-    case Suites of
-        [] -> ok;
-        _ -> io:format("Suites are not currently supported.")
-    end,
-    
-    Dirs = proplists:get_all_values(dir, ParsedArgs),
-    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
-    
-    Tests = lists:foldr(fun(X, AccIn) -> 
-                            case lists:member(X, AccIn) of
-                                true -> AccIn;
-                                _ -> [X | AccIn]
-                            end
-                        end, [], lists:sort(DirTests ++ SpecificTests)),
-    io:format("Tests to run: ~p~n", [Tests]),
-    
-    rt:load_config(Config),
-
-    [add_deps(Dep) || Dep <- rt:config(rt_deps)],
-    ENode = rt:config(rt_nodename, 'riak_test@127.0.0.1'),
-    Cookie = rt:config(rt_cookie, riak),
-    [] = os:cmd("epmd -daemon"),
-    net_kernel:start([ENode]),
-    erlang:set_cookie(node(), Cookie),
     
     %% ibrowse
     application:load(ibrowse),
     application:start(ibrowse),
     %% Start Lager
     application:load(lager),
+    Config = proplists:get_value(config, ParsedArgs),
+    rt:load_config(Config),
+
     %% Fileoutput
     Outdir = proplists:get_value(outdir, ParsedArgs),
     ConsoleLagerLevel = case Outdir of
@@ -85,29 +60,67 @@ main(Args) ->
     
     application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel}]),
     lager:start(),
+
+    Backend = bitcask,
+
+    Report = proplists:get_value(report, ParsedArgs, undefined),
+    Verbose = proplists:is_defined(verbose, ParsedArgs),
+
+    Suites = proplists:get_all_values(suites, ParsedArgs),
+    case Suites of
+        [] -> ok;
+        _ -> io:format("Suites are not currently supported.")
+    end,
     
-    %% rt:set_config(rtdev_path, Path),
-    %% rt:set_config(rt_max_wait_time, 180000),
-    %% rt:set_config(rt_retry_delay, 500),
-    %% rt:set_config(rt_harness, rtbe),
-        
-    TestResults = [ run_test(Test, Outdir, HarnessArgs) || Test <- Tests],
+    Version = rt:get_version(),
+    
+    Tests = case Report of
+        undefined ->
+            SpecificTests = proplists:get_all_values(tests, ParsedArgs),
+            Dirs = proplists:get_all_values(dir, ParsedArgs),
+            DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+            [ {
+                list_to_atom(Test), 
+                [
+                    {id, -1},
+                    {backend, Backend},
+                    {platform, <<"local">>},
+                    {version, Version},
+                    {project, list_to_binary(rt:config(rt_project))}
+                ]
+              } || Test <- lists:usort(DirTests ++ SpecificTests)];
+        Platform -> 
+            giddyup:get_suite(Platform)
+    end,
+    io:format("Tests to run: ~p~n", [Tests]),
+    
+    [add_deps(Dep) || Dep <- rt:config(rt_deps)],
+    ENode = rt:config(rt_nodename, 'riak_test@127.0.0.1'),
+    Cookie = rt:config(rt_cookie, riak),
+    [] = os:cmd("epmd -daemon"),
+    net_kernel:start([ENode]),
+    erlang:set_cookie(node(), Cookie),
+    
+    TestResults = [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests],
     
     print_summary(TestResults, Verbose),
     ok.
 
-run_test(Test, Outdir, HarnessArgs) ->
-    rt:setup_harness(Test, HarnessArgs),
-    TestA = list_to_atom(Test),
-    SingleTestResult = riak_test_runner:confirm(TestA, Outdir),
+run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
+    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
     rt:cleanup_harness(),
+    case Report of
+        undefined -> ok;
+        _ -> giddyup:post_result(SingleTestResult)
+    end,
     SingleTestResult.
     
 print_summary(TestResults, Verbose) ->
     io:format("~nTest Results:~n"),
     
     Results = [ 
-                [ atom_to_list(proplists:get_value(test, SingleTestResult)),
+                [ atom_to_list(proplists:get_value(test, SingleTestResult)) ++ "-" ++
+                  atom_to_list(proplists:get_value(backend, SingleTestResult)),
                   proplists:get_value(status, SingleTestResult), 
                   proplists:get_value(reason, SingleTestResult)] 
                 || SingleTestResult <- TestResults],
