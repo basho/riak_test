@@ -183,9 +183,11 @@ partition(P1, P2) ->
 %% @doc heal the partition created by call to partition/2
 %% OldCookie is the original shared cookie
 heal({_NewCookie, OldCookie, P1, P2}) ->
+    Cluster = P1 ++ P2,
     % set OldCookie on P1 Nodes
     [true = rpc:call(N, erlang, set_cookie, [N, OldCookie]) || N <- P1],
-    rpc:multicall(P1++P2, riak_core_ring_events, force_sync_update, []), %% ALL NODES?
+    wait_until_connected(Cluster),
+    rpc:abcast(Cluster, riak_core_node_watcher, broadcast),
     ok.
 
 %% @doc Spawn `Cmd' on the machine running the test harness
@@ -328,6 +330,15 @@ wait_until_legacy_ringready(Node) ->
                                   false
                           end
                   end).
+
+%% @doc wait until each node in Nodes is disterl connected to each.
+wait_until_connected(Nodes) ->
+    F = fun(Node) ->
+                Connected = rpc:call(Node, erlang, nodes, []),
+                lists:sort(Nodes) == lists:sort([Node]++Connected)
+        end,
+    [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
+    ok.
 
 %% @private
 is_ring_ready(Node) ->
