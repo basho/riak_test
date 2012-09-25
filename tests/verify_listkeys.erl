@@ -15,6 +15,7 @@ confirm() ->
     lager:info("Writing some known data to Node 1"),
     put_keys(Node1, ?BUCKET, ?NUM_KEYS),
     put_buckets(Node1, ?NUM_BUCKETS),
+    timer:sleep(2000),
     check_it_all([Node1]),
 
     lists:foldl(fun(Node, [N1|_] = Cluster) ->
@@ -80,6 +81,11 @@ list_keys(Node, Bucket, Attempt, Legacy, Num, ShouldPass) ->
             {ok, Keys} = riakc_pb_socket:list_keys(Pid, Bucket),
             ActualKeys = lists:usort(Keys),
             ExpectedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)]),
+            case ExpectedKeys -- ActualKeys of
+                [] -> ok;
+                Diff -> lager:info("ExpectedKeys -- ActualKeys: ~p", [Diff])
+            end,
+            ?assertEqual(length(ActualKeys), length(ExpectedKeys)),
             ?assertEqual(ActualKeys, ExpectedKeys);
         _ ->
             {Status, Message} = riakc_pb_socket:list_keys(Pid, Bucket),
@@ -106,6 +112,11 @@ list_buckets(Node, Attempt, Legacy, Num, ShouldPass) ->
     ActualBuckets = lists:usort(Buckets),
     case ShouldPass of
         true ->
+            case ExpectedBuckets -- ActualBuckets of 
+                [] -> ok;
+                Diff -> lager:info("ExpectedBuckets -- ActualBuckets: ~p", [Diff])
+            end,
+            ?assertEqual(length(ActualBuckets), length(ExpectedBuckets)),
             ?assertEqual(ActualBuckets, ExpectedBuckets);
         _ ->
             ?assert(length(ActualBuckets) < length(ExpectedBuckets)),
