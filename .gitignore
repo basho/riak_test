@@ -5,3 +5,4 @@ riak_test
 .eunit
 .DS_Store
 out
+search-corpus/spam.0
