@@ -86,7 +86,7 @@ main(Args) ->
                     {backend, Backend},
                     {platform, <<"local">>},
                     {version, Version},
-                    {project, list_to_binary(rt:config(rt_project))}
+                    {project, list_to_binary(rt:config(rt_project, "undefined"))}
                 ]
               } || Test <- lists:usort(DirTests ++ SpecificTests)];
         Platform -> 
