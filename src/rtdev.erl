@@ -223,7 +223,6 @@ admin(Node, Args) ->
     lager:debug("Running: ~s", [Cmd]),
     Result = os:cmd(Cmd),
     lager:debug("~s", [Result]),
-    io:format("~s", [Result]),
     {ok, Result}.
 
 riak(Node, Args) ->
@@ -231,7 +230,6 @@ riak(Node, Args) ->
     Path = relpath(node_version(N)),
     Result = run_riak(N, Path, Args),
     lager:debug("~s", [Result]),
-    io:format("~s", [Result]),
     {ok, Result}.
 
 node_id(Node) ->
