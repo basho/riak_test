@@ -5,8 +5,7 @@
 -define(BUCKET, <<"2ibucket">>).
 
 confirm() ->
-    NewConfig = [{riak_kv, [{storage_backend, riak_kv_eleveldb_backend}]}],
-    Nodes = rt:build_cluster(3, NewConfig),
+    Nodes = rt:build_cluster(3),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     
     Pid = rt:pbc(hd(Nodes)),
