@@ -6,7 +6,7 @@
 %% @doc This test requires additional setup, here's how to do it.
 %% 1. Clone and build basho_bench
 %% 2. Set an environment variable "BASHO_BENCH" to the path you cloned to.
-%% 3. Get this file: https://github.com/basho/basho_expect/tree/master/search-corpus/spam.0-small.tar.gz
+%% 3. Get this file: search-corpus/spam.0-1.tar.gz
 %% 4. Unzip it somewhere.
 %% 5. Set an environment variable "SPAM_DIR" to the path you unzipped, including the "spam.0" dir
 
@@ -209,7 +209,7 @@ init_search_tester(Nodes, Conns) ->
     #search{buckets=Buckets, runs=[]}.
 
 check_search(?SPAM_BUCKET, Nodes) ->
-    SearchResults = [{"postoffice.mr.net", 194},
+    SearchResults = [{"mx.example.net", 187},
                      {"ZiaSun", 1},
                      {"headaches", 4},
                      {"YALSP", 3},
@@ -415,7 +415,7 @@ search_populate_script(Bucket, IPs, SpamDir) ->
     write_terms(Config, Cfg).
 
 search_verify_script(Bucket, IPs) ->
-    Expect = [{"postoffice.mr.net", 194},
+    Expect = [{"mx.example.net", 187},
               {"ZiaSun", 1},
               {"headaches", 4},
               {"YALSP", 3},
