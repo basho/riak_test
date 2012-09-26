@@ -81,12 +81,7 @@ list_keys(Node, Bucket, Attempt, Legacy, Num, ShouldPass) ->
             {ok, Keys} = riakc_pb_socket:list_keys(Pid, Bucket),
             ActualKeys = lists:usort(Keys),
             ExpectedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)]),
-            case ExpectedKeys -- ActualKeys of
-                [] -> ok;
-                Diff -> lager:info("ExpectedKeys -- ActualKeys: ~p", [Diff])
-            end,
-            ?assertEqual(length(ActualKeys), length(ExpectedKeys)),
-            ?assertEqual(ActualKeys, ExpectedKeys);
+            assert_equal(ExpectedKeys, ActualKeys);
         _ ->
             {Status, Message} = riakc_pb_socket:list_keys(Pid, Bucket),
             ?assertEqual(error, Status),
@@ -112,17 +107,21 @@ list_buckets(Node, Attempt, Legacy, Num, ShouldPass) ->
     ActualBuckets = lists:usort(Buckets),
     case ShouldPass of
         true ->
-            case ExpectedBuckets -- ActualBuckets of 
-                [] -> ok;
-                Diff -> lager:info("ExpectedBuckets -- ActualBuckets: ~p", [Diff])
-            end,
-            ?assertEqual(length(ActualBuckets), length(ExpectedBuckets)),
-            ?assertEqual(ActualBuckets, ExpectedBuckets);
+            assert_equal(ExpectedBuckets, ActualBuckets);
         _ ->
             ?assert(length(ActualBuckets) < length(ExpectedBuckets)),
             lager:info("This case expects inconsistent bucket lists")
     end,
     riakc_pb_socket:stop(Pid).
+
+
+assert_equal(Expected, Actual) ->
+    case Expected -- Actual of 
+        [] -> ok;
+        Diff -> lager:info("Expected -- Actual: ~p", [Diff])
+    end,
+    ?assertEqual(length(Actual), length(Expected)),
+    ?assertEqual(Actual, Expected).
 
 check_it_all(Nodes) ->
     check_it_all(Nodes, true).
@@ -130,17 +129,5 @@ check_it_all(Nodes, ShouldPass) ->
     [check_a_node(N, ShouldPass) || N <- Nodes].
     
 check_a_node(Node, ShouldPass) ->
-    list_keys(Node, ?BUCKET, 1, false, ?NUM_KEYS, ShouldPass),
-    list_keys(Node, ?BUCKET, 1, true,  ?NUM_KEYS, ShouldPass),
-    list_keys(Node, ?BUCKET, 2, false, ?NUM_KEYS, ShouldPass),
-    list_keys(Node, ?BUCKET, 2, true,  ?NUM_KEYS, ShouldPass),
-    list_keys(Node, ?BUCKET, 3, false, ?NUM_KEYS, ShouldPass),
-    list_keys(Node, ?BUCKET, 3, true,  ?NUM_KEYS, ShouldPass),
-    
-    list_buckets(Node, 1, false, ?NUM_BUCKETS, ShouldPass),
-    list_buckets(Node, 1, true,  ?NUM_BUCKETS, ShouldPass),
-    list_buckets(Node, 2, false, ?NUM_BUCKETS, ShouldPass),
-    list_buckets(Node, 2, true,  ?NUM_BUCKETS, ShouldPass),
-    list_buckets(Node, 3, false, ?NUM_BUCKETS, ShouldPass),
-    list_buckets(Node, 3, true,  ?NUM_BUCKETS, ShouldPass).
-    
+    [list_keys(Node, ?BUCKET, Attempt, Legacy, ?NUM_KEYS, ShouldPass) || Attempt <- [1,2,3], Legacy <- [true, false]],
+    [list_buckets(Node, Attempt, Legacy, ?NUM_BUCKETS, ShouldPass) || Attempt <- [1,2,3], Legacy <- [true, false]].    
