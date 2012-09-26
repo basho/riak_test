@@ -216,6 +216,60 @@ start(Node) ->
     run_riak(N, relpath(node_version(N)), "start"),
     ok.
 
+attach(Node, Expected) ->
+    interactive(Node, "attach", Expected).
+
+console(Node, Expected) ->
+    interactive(Node, "console", Expected). 
+
+interactive(Node, Command, Exp) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    Cmd = riakcmd(Path, N, Command),
+    lager:debug("Opening a port for riak ~s.", [Command]),
+    P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, use_stdio, exit_status, binary, stderr_to_stdout]),
+    interactive_loop(P, Exp).
+
+interactive_loop(Port, Expected) ->
+    receive
+        {Port, {data, Data}} ->
+            Tokens = string:tokens(binary_to_list(Data), "\n"),
+            [lager:debug("~s", [Text]) || Text <- Tokens],
+            NewExpected = lists:foldl(fun(X, Expect) -> 
+                    [{Type, Text}|RemainingExpect] = Expect,
+                    case {Type, rt:str(X, Text)} of
+                        {expect, true} ->
+                            RemainingExpect;
+                        {expect, false} ->
+                            [{Type, Text}|RemainingExpect];
+                        {send, _} -> 
+                            port_command(Port, list_to_binary(Text ++ "\n")),
+                            [{sent, sent}|RemainingExpect];
+                        {sent, _} ->
+                            RemainingExpect
+                    end
+                end, Expected, Tokens),
+                NewerExpected = case NewExpected of
+                    [{sent, sent}|E] -> E;
+                    E -> E
+                end,
+                case NewerExpected of
+                    [] -> ?assert(true);
+                    _ -> interactive_loop(Port, NewerExpected)
+                end;
+        {Port, {exit_status,_}} ->
+            case Expected of
+                [] -> 
+                    ?assert(true),
+                    ok;
+                _ -> 
+                    ?assert(false),
+                    error
+            end
+        after rt:config(rt_max_wait_time) ->
+            ?assertEqual([], Expected)
+    end.
+
 admin(Node, Args) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),

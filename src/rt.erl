@@ -689,3 +689,9 @@ set_backend(Other) ->
 -spec get_version() -> binary().
 get_version() ->
     ?HARNESS:get_version().
+    
+attach(Node, Expected) ->
+    ?HARNESS:attach(Node, Expected).
+
+console(Node, Expected) ->
+    ?HARNESS:console(Node, Expected).

@@ -90,10 +90,17 @@ attach_test(Node) ->
     %% Sort of a punt on this test, it tests that attach
     %% connects to the pipe, but doesn't run any commands.
     %% This is probably okay for a basic cmd line test
+
     lager:info("Testing riak attach"),
     rt:start_and_wait(Node),
-    {ok, AttachOut} = rt:riak(Node, ["attach"]),
-    ?assert(rt:str(AttachOut, "erlang.pipe.1 \(^D to exit\)")),
+    %{ok, AttachOut} = rt:riak(Node, ["attach"]),
+    %?assert(rt:str(AttachOut, "erlang.pipe.1 \(^D to exit\)")),
+    
+    rt:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"}, 
+                     {send, "net_adm:ping('dev1@127.0.0.1')."}, 
+                     {expect, "pong"},
+                     {send, [4]}]), %% 4 = Ctrl + D
+    
     ok.
 
 restart_test(Node) ->
