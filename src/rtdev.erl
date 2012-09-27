@@ -293,3 +293,19 @@ get_version() ->
         {error, enoent} -> unknown;
         {ok, Version} -> Version
     end.
+
+teardown() ->
+    %% Stop all discoverable nodes, not just nodes we'll be using for this test.
+    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths).
+
+whats_up() ->
+    io:format("Here's what's running...~n"),
+    [ case string:str(Process, Path) of
+        0 -> whatev; %% The | grep is included in the process list, this clause is that
+        Index -> 
+            PLine = string:substr(Process, Index, string:str(Process, "/beam.smp")-Index),
+            [Dev, Node | _Junk ] = string:tokens(string:substr(PLine, length(Path) + 1), "/"),
+            io:format("   ~s/~s/~s~n", [Path, Dev, Node])
+        end || Process <- string:tokens(os:cmd("ps | grep beam"), "\n"), 
+               {_Ver, Path} <- proplists:delete(root, rt:config(rtdev_path))].
