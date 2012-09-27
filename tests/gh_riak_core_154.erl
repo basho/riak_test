@@ -13,7 +13,8 @@ confirm() ->
 
     lager:info("Write data while ~p is offline", [Node2]),
     rt:stop(Node2),
-    timer:sleep(5000),
+    lager:info("Sleeping for 10 seconds while node stops"),
+    timer:sleep(10000),
     ?assertEqual([], rt:systest_write(Node1, 1000, 3)),
 
     lager:info("Verify that ~p is missing data", [Node2]),
