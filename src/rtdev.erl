@@ -227,14 +227,29 @@ interactive(Node, Command, Exp) ->
     Path = relpath(node_version(N)),
     Cmd = riakcmd(Path, N, Command),
     lager:debug("Opening a port for riak ~s.", [Command]),
-    P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, use_stdio, exit_status, binary, stderr_to_stdout]),
+    P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, 
+                  [stream, use_stdio, exit_status, binary, stderr_to_stdout]),
     interactive_loop(P, Exp).
 
 interactive_loop(Port, Expected) ->
     receive
         {Port, {data, Data}} ->
+            %% We've gotten some data, so the port isn't done executing
+            %% Let's break it up by newline and display it.
             Tokens = string:tokens(binary_to_list(Data), "\n"),
             [lager:debug("~s", [Text]) || Text <- Tokens],
+            
+            %% Now we're going to take hd(Expected) which is either {expect, X}
+            %% or {send, X}. If it's {expect, X}, we foldl through the Tokenized
+            %% data looking for a partial match via rt:str/2. If we find one,
+            %% we pop hd off the stack and continue iterating through the list 
+            %% with the next hd until we run out of input. Once hd is a tuple 
+            %% {send, X}, we send that test to the port. The assumption is that 
+            %% once we send data, anything else we still have in the buffer is
+            %% meaningless, so we skip it. That's what that {sent, sent} thing
+            %% is about. If there were a way to abort mid-foldl, I'd have done 
+            %% that. {sent, _} -> is just a pass through to get out of the fold.
+            
             NewExpected = lists:foldl(fun(X, Expect) -> 
                     [{Type, Text}|RemainingExpect] = Expect,
                     case {Type, rt:str(X, Text)} of
@@ -249,24 +264,30 @@ interactive_loop(Port, Expected) ->
                             RemainingExpect
                     end
                 end, Expected, Tokens),
-                NewerExpected = case NewExpected of
-                    [{sent, sent}|E] -> E;
-                    E -> E
-                end,
-                case NewerExpected of
-                    [] -> ?assert(true);
-                    _ -> interactive_loop(Port, NewerExpected)
-                end;
+            %% Now that the fold is over, we should remove {sent, sent} if it's there.
+            %% The fold might have ended not matching anything or not sending anything
+            %% so it's possible we don't have to remove {sent, sent}. This will be passed
+            %% to interactive_loop's next iteration.
+            NewerExpected = case NewExpected of
+                [{sent, sent}|E] -> E;
+                E -> E
+            end,
+            %% If NewerExpected is empty, we've met all expected criteria and in order to boot
+            %% Otherwise, loop.
+            case NewerExpected of
+                [] -> ?assert(true);
+                _ -> interactive_loop(Port, NewerExpected)
+            end;
         {Port, {exit_status,_}} ->
-            case Expected of
-                [] -> 
-                    ?assert(true),
-                    ok;
-                _ -> 
-                    ?assert(false),
-                    error
-            end
+            %% This port has exited. Maybe the last thing we did was {send, [4]} which
+            %% as Ctrl-D would have exited the console. If Expected is empty, then 
+            %% We've met every expectation. Yay! If not, it means we've exited before 
+            %% something expected happened.
+            ?assertEqual([], Expected),
         after rt:config(rt_max_wait_time) ->
+            %% interactive_loop is going to wait until it matches expected behavior
+            %% If it doesn't, the test should fail; however, without a timeout it 
+            %% will just hang forever in search of expected behavior. See also: Parenting
             ?assertEqual([], Expected)
     end.
 
