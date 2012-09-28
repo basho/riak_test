@@ -287,3 +287,15 @@ get_version() ->
         {error, enoent} -> unknown;
         {ok, Version} -> Version
     end.
+
+teardown() ->
+    %% Stop all discoverable nodes, not just nodes we'll be using for this test.
+    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths).
+
+whats_up() ->
+    io:format("Here's what's running...~n"),
+    
+    Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
+    [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
+

@@ -108,6 +108,14 @@ main(Args) ->
 
     TestResults = [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests],
     print_summary(TestResults, Verbose),
+    
+    case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
+        {1, fail} -> 
+            so_kill_riak_maybe();
+        _ ->
+            lager:info("Multiple tests run or no failure"),
+            rt:teardown()
+    end,
     ok.
 
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
@@ -160,3 +168,16 @@ load_tests_in_dir(Dir) ->
             lists:sort([ string:substr(Filename, 1, length(Filename) - 5) || Filename <- filelib:wildcard("*.beam", Dir)]);
         _ -> io:format("~s is not a dir!~n", [Dir])
     end.
+
+so_kill_riak_maybe() ->
+    io:format("~n~nSo, we find ourselves in a tricky situation here. ~n"),
+    io:format("You've run a single test, and it has failed.~n"),
+    io:format("Would you like to leave Riak running in order to debug?~n"),
+    Input = io:get_chars("[Y/n] ", 1),
+    case Input of
+        "n" -> rt:teardown();
+        "N" -> rt:teardown();
+        _ -> 
+            io:format("Leaving Riak Up... "),
+            rt:whats_up()
+    end. 
