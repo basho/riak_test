@@ -178,6 +178,6 @@ so_kill_riak_maybe() ->
         "n" -> rt:teardown();
         "N" -> rt:teardown();
         _ -> 
-            io:format("Leaving Riak Up..."),
+            io:format("Leaving Riak Up... "),
             rt:whats_up()
     end. 
