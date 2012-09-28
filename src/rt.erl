@@ -41,10 +41,11 @@
 %% Search API
 -export([enable_search_hook/2]).
 
--export([setup_harness/2,
-         cleanup_harness/0,
+-export([cleanup_harness/0,
          load_config/1,
          set_config/2,
+         setup_harness/2,
+         teardown/0,
          config/1,
          config/2
         ]).
@@ -653,3 +654,11 @@ set_backend(Other) ->
 -spec get_version() -> binary().
 get_version() ->
     ?HARNESS:get_version().
+
+%% @doc Shutdown every node, this is for after a test run is complete.
+teardown() ->
+    ?HARNESS:teardown().
+
+%% @doc outputs some useful information about nodes that are up
+whats_up() ->
+    ?HARNESS:whats_up().
