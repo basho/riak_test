@@ -41,8 +41,7 @@
 %% Search API
 -export([enable_search_hook/2]).
 
--export([setup_harness/2,
-         cleanup_harness/0,
+-export([cleanup_harness/0,
          load_config/1,
          set_config/2,
          setup_harness/2,
