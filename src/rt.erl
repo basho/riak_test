@@ -7,47 +7,55 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--export([deploy_nodes/1,
-         deploy_nodes/2,
+-export([admin/2,
          build_cluster/1,
          build_cluster/2,
-         start/1,
-         stop/1,
-         join/2,
-         leave/1,
+         check_singleton_node/1,
+         claimant_according_to/1,
+         deploy_nodes/1,
+         deploy_nodes/2,
+         down/2,
          get_os_env/1,
          get_os_env/2,
          get_ring/1,
-         admin/2,
-         upgrade/2,
-         wait_until_pingable/1,
-         wait_until_unpingable/1,
-         wait_until_ready/1,
-         wait_until_no_pending_changes/1,
-         wait_until_nodes_ready/1,
-         wait_until/2,
-         remove/2,
-         down/2,
-         check_singleton_node/1,
-         owners_according_to/1,
+         is_pingable/1,
+         join/2,
+         leave/1,
          members_according_to/1,
+         owners_according_to/1,
+         riak/2,
+         remove/2,
+         start/1,
+         start_and_wait/1,
          status_of_according_to/2,
-         claimant_according_to/1,
+         stop/1,
+         stop_and_wait/1,
+         upgrade/2,
+         wait_until/2,
          wait_until_all_members/1,
          wait_until_all_members/2,
+         wait_until_connected/1,
          wait_until_legacy_ringready/1,
-         wait_until_ring_converged/1]).
+         wait_until_no_pending_changes/1,
+         wait_until_nodes_ready/1,
+         wait_until_pingable/1,
+         wait_until_ready/1,
+         wait_until_ring_converged/1,
+         wait_until_status_ready/1,
+         wait_until_unpingable/1
+        ]).
 
 %% Search API
 -export([enable_search_hook/2]).
 
 -export([cleanup_harness/0,
+         config/1,
+         config/2,
          load_config/1,
          set_config/2,
          setup_harness/2,
          teardown/0,
-         config/1,
-         config/2
+         whats_up/0
         ]).
 
 -export([partition/2, heal/1]).
@@ -103,12 +111,22 @@ deploy_nodes(NumNodes, InitialConfig) ->
 start(Node) ->
     ?HARNESS:start(Node).
 
+%% @doc Start the specified Riak node and wait for it to be pingable
+start_and_wait(Node) ->
+    start(Node),
+    ?assertEqual(ok, wait_until_pingable(Node)).
+
 async_start(Node) ->
     spawn(fun() -> start(Node) end).
 
 %% @doc Stop the specified Riak node
 stop(Node) ->
     ?HARNESS:stop(Node).
+
+%% @doc Stop the specified Riak node and wait until it is not pingable
+stop_and_wait(Node) ->
+    stop(Node),
+    ?assertEqual(ok, wait_until_unpingable(Node)).
 
 %% @doc Upgrade a Riak node to a specific version
 upgrade(Node, NewVersion) ->
@@ -163,6 +181,14 @@ try_leave(Node) ->
 
 admin(Node, Args) ->
     ?HARNESS:admin(Node, Args).
+
+%% @doc Call 'bin/riak' command on node Node and arguments Args
+riak(Node, Args) ->
+    ?HARNESS:riak(Node, Args).
+
+%% @doc Is the node up according to net_adm:ping
+is_pingable(Node) ->
+    net_adm:ping(Node) =:= pong.
 
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
@@ -220,6 +246,18 @@ check_singleton_node(Node) ->
 wait_until_ready(Node) ->
     ?assertEqual(ok, wait_until(Node, fun is_ready/1)),
     ok.
+
+%% @doc Wait until status can be read from riak_kv_console
+wait_until_status_ready(Node) ->
+    ?assertEqual(ok, wait_until(Node,
+                                fun(_) ->
+                                        case rpc:call(Node, riak_kv_console, status, [[]]) of
+                                            ok ->
+                                                true;
+                                            _ ->
+                                                false
+                                        end
+                                end)).
 
 %% @doc Given a list of nodes, wait until all nodes believe there are no
 %% on-going or pending ownership transfers.
