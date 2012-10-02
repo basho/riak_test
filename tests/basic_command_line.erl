@@ -41,9 +41,9 @@ console_test(Node) ->
 
     %% Stop node, to test console working
     rt:stop_and_wait(Node),
-    {ok, ConsolePass} = rt:riak(Node, ["console"]),
-
-    ?assert(rt:str(ConsolePass, "(abort with ^G)")),
+    rt:console(Node, [{expect, "\(abort with ^G\)"},
+                     {send, "riak_core_ring_manager:get_my_ring()."},
+                     {expect, "dict,"}]),
 
     ok.
 
