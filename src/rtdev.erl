@@ -261,7 +261,7 @@ interactive_loop(Port, Expected) ->
                             port_command(Port, list_to_binary(Text ++ "\n")),
                             [{sent, "sent"}|RemainingExpect];
                         {sent, _} ->
-                            RemainingExpect
+                            Expect
                     end
                 end, Expected, Tokens),
             %% Now that the fold is over, we should remove {sent, sent} if it's there.
@@ -269,7 +269,7 @@ interactive_loop(Port, Expected) ->
             %% so it's possible we don't have to remove {sent, sent}. This will be passed
             %% to interactive_loop's next iteration.
             NewerExpected = case NewExpected of
-                [{sent, sent}|E] -> E;
+                [{sent, "sent"}|E] -> E;
                 E -> E
             end,
             %% If NewerExpected is empty, we've met all expected criteria and in order to boot
