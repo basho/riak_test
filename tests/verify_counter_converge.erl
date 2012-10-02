@@ -12,17 +12,8 @@ confirm() ->
     inets:start(),
     Key = a,
 
-    Config = [
-            {riak_core,
-             [
-              {handoff_manager_timeout, 1000},
-              {vnode_management_timer, 1000},
-              {vnode_inactivity_timeout, 1000}
-             ]}
-           ],
-
-    [N1, N2, N3, N4]=Nodes = rt:build_cluster(4, Config),
-    [HP1, HP2, HP3, HP4]=Hosts=  get_host_ports(Nodes),
+    [N1, N2, N3, N4]=Nodes = rt:build_cluster(4),
+    [HP1, HP2, HP3, HP4]=Hosts =  get_host_ports(Nodes),
 
     increment_counter(HP1, Key),
     increment_counter(HP2, Key, 10),
@@ -41,7 +32,7 @@ confirm() ->
     %% increment one side
     increment_counter(HP1, Key, 5),
 
-    %% check vaue on one side is different from other
+    %% check vaule on one side is different from other
     [?assertEqual(13, get_counter(HP, Key)) || HP <- [HP1, HP2]],
     [?assertEqual(8, get_counter(HP, Key)) || HP <- [HP3, HP4]],
 
@@ -53,12 +44,14 @@ confirm() ->
     [?assertEqual(6, get_counter(HP, Key)) || HP <- [HP3, HP4]],
 
     %% heal
-    ok = rt:heal(PartInfo),
     lager:debug("Heal and check merged values"),
-    timer:sleep(1000),
+    ok = rt:heal(PartInfo),
+    ok = rt:wait_for_cluster_service(Nodes, riak_dt),
 
     %% verify all nodes agree
-    [?assertEqual(11, get_counter(HP, Key)) || HP <- Hosts],
+    [?assertEqual(ok, rt:wait_until(HP, fun(N) ->
+                                                11 == get_counter(N, Key)
+                                        end)) ||  HP <- Hosts],
 
     pass.
 
