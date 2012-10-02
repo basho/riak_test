@@ -40,7 +40,7 @@ confirm() ->
     decrement_counter(HP3, Key, 2),
 
     %% verify values differ
-    [?assertEqual(13, get_counter(HP, Key)) || HP <- [HP2, HP2]],
+    [?assertEqual(13, get_counter(HP, Key)) || HP <- [HP1, HP2]],
     [?assertEqual(6, get_counter(HP, Key)) || HP <- [HP3, HP4]],
 
     %% heal
