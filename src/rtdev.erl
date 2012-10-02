@@ -251,7 +251,10 @@ interactive_loop(Port, Expected) ->
             %% that. {sent, _} -> is just a pass through to get out of the fold.
 
             NewExpected = lists:foldl(fun(X, Expect) ->
-                    [{Type, Text}|RemainingExpect] = Expect,
+                    [{Type, Text}|RemainingExpect] = case Expect of
+                        [] -> [{done, "done"}|[]];
+                        E -> E
+                    end,
                     case {Type, rt:str(X, Text)} of
                         {expect, true} ->
                             RemainingExpect;
@@ -261,7 +264,9 @@ interactive_loop(Port, Expected) ->
                             port_command(Port, list_to_binary(Text ++ "\n")),
                             [{sent, "sent"}|RemainingExpect];
                         {sent, _} ->
-                            Expect
+                            Expect;
+                        {done, _} ->
+                            []
                     end
                 end, Expected, Tokens),
             %% Now that the fold is over, we should remove {sent, sent} if it's there.
