@@ -692,3 +692,9 @@ teardown() ->
 %% @doc outputs some useful information about nodes that are up
 whats_up() ->
     ?HARNESS:whats_up().
+
+attach(Node, Expected) ->
+    ?HARNESS:attach(Node, Expected).
+
+console(Node, Expected) ->
+    ?HARNESS:console(Node, Expected).

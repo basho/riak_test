@@ -37,7 +37,7 @@ setup_harness(_Test, _Args) ->
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
     RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
     rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths),
-    
+
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
     run_git(Path, "reset HEAD --hard"),
@@ -85,7 +85,7 @@ all_the_app_configs(DevPath) ->
         true ->
             Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
             [ Dev ++ "/etc/app.config" || Dev <- Devs];
-        _ -> 
+        _ ->
             lager:debug("~s is not a directory.", [DevPath]),
             []
     end.
@@ -117,7 +117,7 @@ update_app_config_file(ConfigFile, Config) ->
     NewConfigOut = io_lib:format("~p.", [NewConfig]),
     ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
     ok.
-    
+
 get_backends() ->
     Backends = lists:usort(
         lists:flatten([ get_backends(DevPath) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))])),
@@ -154,7 +154,7 @@ deploy_nodes(NodeConfig) ->
     NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
     {Versions, Configs} = lists:unzip(NodeConfig),
     VersionMap = lists:zip(NodesN, Versions),
-    
+
     %% Check that you have the right versions available
     [ check_node(Version) || Version <- VersionMap ],
     rt:set_config(rt_nodes, NodeMap),
@@ -205,7 +205,7 @@ stop_all(DevPath) ->
         _ -> lager:debug("~s is not a directory.", [DevPath])
     end,
     ok.
-    
+
 stop(Node) ->
     N = node_id(Node),
     run_riak(N, relpath(node_version(N)), "stop"),
@@ -216,6 +216,86 @@ start(Node) ->
     run_riak(N, relpath(node_version(N)), "start"),
     ok.
 
+attach(Node, Expected) ->
+    interactive(Node, "attach", Expected).
+
+console(Node, Expected) ->
+    interactive(Node, "console", Expected).
+
+interactive(Node, Command, Exp) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    Cmd = riakcmd(Path, N, Command),
+    lager:debug("Opening a port for riak ~s.", [Command]),
+    P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))},
+                  [stream, use_stdio, exit_status, binary, stderr_to_stdout]),
+    interactive_loop(P, Exp).
+
+interactive_loop(Port, Expected) ->
+    receive
+        {Port, {data, Data}} ->
+            %% We've gotten some data, so the port isn't done executing
+            %% Let's break it up by newline and display it.
+            Tokens = string:tokens(binary_to_list(Data), "\n"),
+            [lager:debug("~s", [Text]) || Text <- Tokens],
+
+            %% Now we're going to take hd(Expected) which is either {expect, X}
+            %% or {send, X}. If it's {expect, X}, we foldl through the Tokenized
+            %% data looking for a partial match via rt:str/2. If we find one,
+            %% we pop hd off the stack and continue iterating through the list
+            %% with the next hd until we run out of input. Once hd is a tuple
+            %% {send, X}, we send that test to the port. The assumption is that
+            %% once we send data, anything else we still have in the buffer is
+            %% meaningless, so we skip it. That's what that {sent, sent} thing
+            %% is about. If there were a way to abort mid-foldl, I'd have done
+            %% that. {sent, _} -> is just a pass through to get out of the fold.
+
+            NewExpected = lists:foldl(fun(X, Expect) ->
+                    [{Type, Text}|RemainingExpect] = case Expect of
+                        [] -> [{done, "done"}|[]];
+                        E -> E
+                    end,
+                    case {Type, rt:str(X, Text)} of
+                        {expect, true} ->
+                            RemainingExpect;
+                        {expect, false} ->
+                            [{Type, Text}|RemainingExpect];
+                        {send, _} ->
+                            port_command(Port, list_to_binary(Text ++ "\n")),
+                            [{sent, "sent"}|RemainingExpect];
+                        {sent, _} ->
+                            Expect;
+                        {done, _} ->
+                            []
+                    end
+                end, Expected, Tokens),
+            %% Now that the fold is over, we should remove {sent, sent} if it's there.
+            %% The fold might have ended not matching anything or not sending anything
+            %% so it's possible we don't have to remove {sent, sent}. This will be passed
+            %% to interactive_loop's next iteration.
+            NewerExpected = case NewExpected of
+                [{sent, "sent"}|E] -> E;
+                E -> E
+            end,
+            %% If NewerExpected is empty, we've met all expected criteria and in order to boot
+            %% Otherwise, loop.
+            case NewerExpected of
+                [] -> ?assert(true);
+                _ -> interactive_loop(Port, NewerExpected)
+            end;
+        {Port, {exit_status,_}} ->
+            %% This port has exited. Maybe the last thing we did was {send, [4]} which
+            %% as Ctrl-D would have exited the console. If Expected is empty, then
+            %% We've met every expectation. Yay! If not, it means we've exited before
+            %% something expected happened.
+            ?assertEqual([], Expected)
+        after rt:config(rt_max_wait_time) ->
+            %% interactive_loop is going to wait until it matches expected behavior
+            %% If it doesn't, the test should fail; however, without a timeout it
+            %% will just hang forever in search of expected behavior. See also: Parenting
+            ?assertEqual([], Expected)
+    end.
+
 admin(Node, Args) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
@@ -223,7 +303,13 @@ admin(Node, Args) ->
     lager:debug("Running: ~s", [Cmd]),
     Result = os:cmd(Cmd),
     lager:debug("~s", [Result]),
-    io:format("~s", [Result]),
+    {ok, Result}.
+
+riak(Node, Args) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    Result = run_riak(N, Path, Args),
+    lager:debug("~s", [Result]),
     {ok, Result}.
 
 node_id(Node) ->
@@ -260,7 +346,7 @@ cmd(Cmd) ->
 
 get_cmd_result(Port, Acc) ->
     receive
-	{Port, {data, Bytes}} ->
+        {Port, {data, Bytes}} ->
             get_cmd_result(Port, [Bytes|Acc]);
         {Port, {exit_status, Status}} ->
             Output = lists:flatten(lists:reverse(Acc)),
@@ -273,7 +359,7 @@ check_node({_N, Version}) ->
     case proplists:is_defined(Version, rt:config(rtdev_path)) of
         true -> ok;
         _ ->
-            lager:error("You don't have Riak ~s installed", [Version]), 
+            lager:error("You don't have Riak ~s installed", [Version]),
             erlang:error("You don't have Riak " ++ Version ++ " installed" )
     end.
 
@@ -281,7 +367,7 @@ set_backend(Backend) ->
     lager:info("rtdev:set_backend(~p)", [Backend]),
     update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
     get_backends().
-    
+
 get_version() ->
     case file:read_file(relpath(current) ++ "/VERSION") of
         {error, enoent} -> unknown;
@@ -295,7 +381,6 @@ teardown() ->
 
 whats_up() ->
     io:format("Here's what's running...~n"),
-    
+
     Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
-
