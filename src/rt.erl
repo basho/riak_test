@@ -4,7 +4,6 @@
 %% Please extend this module with new functions that prove useful between
 %% multiple independent tests.
 -module(rt).
--compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -export([admin/2,
@@ -59,6 +58,42 @@
         ]).
 
 -export([partition/2, heal/1]).
+
+-export([
+    update_app_config/2,
+    async_start/1,
+    slow_upgrade/3,
+    spawn_cmd/1,
+    wait_for_cmd/1,
+    cmd/1,
+    are_no_pending/1,
+    wait_for_service/2,
+    wait_for_cluster_service/2,
+    capability/2,
+    wait_until_capability/3,
+    rpc_get_env/2,
+    connection_info/1,
+    http_url/1,
+    systest_write/2,
+    systest_write/3,
+    systest_write/5,
+    systest_read/2,
+    systest_read/3,
+    systest_read/5,
+    pbc/1,
+    pbc_read/3,
+    pbc_write/4,
+    pbc_set_bucket_prop/3,
+    httpc/1,
+    httpc_read/3,
+    httpc_write/4,
+    pmap/2,
+    str/2,
+    set_backend/1,
+    get_version/0,
+    attach/2,
+    console/2
+]).
 
 -define(HARNESS, (rt:config(rt_harness))).
 
@@ -161,6 +196,8 @@ join(Node, PNode) ->
     ?assertEqual(ok, R),
     ok.
 
+%% @doc try_join tries different rpc:calls to join a node, because the module changed
+%%      in riak 1.2.0
 try_join(Node, PNode) ->
     case rpc:call(Node, riak_core, join, [PNode]) of
         {badrpc, _} ->
@@ -176,6 +213,8 @@ leave(Node) ->
     ?assertEqual(ok, R),
     ok.
 
+%% @doc try_leave tries different rpc:calls to leave a node, because the module changed
+%%      in riak 1.2.0
 try_leave(Node) ->
     case rpc:call(Node, riak_core, leave, []) of
         {badrpc, _} ->
@@ -185,6 +224,7 @@ try_leave(Node) ->
             Result
     end.
 
+%% @doc Call 'bin/riak-admin' command on node Node and arguments Args
 admin(Node, Args) ->
     ?HARNESS:admin(Node, Args).
 
@@ -206,6 +246,8 @@ down(Node, OtherNode) ->
     rpc:call(Node, riak_kv_console, down, [[atom_to_list(OtherNode)]]).
 
 %% @doc partition the P1 from P2 nodes
+%%      note: the nodes remained connected to riak_test@local,
+%%      which is how heal/1 can still work.
 partition(P1, P2) ->
     OldCookie = rpc:call(hd(P1), erlang, get_cookie, []),
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
@@ -244,6 +286,34 @@ check_singleton_node(Node) ->
     Owners = lists:usort([Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)]),
     ?assertEqual([Node], Owners),
     ok.
+
+%% @doc Utility function used to construct test predicates. Retries the
+%%      function `Fun' until it returns `true', or until the maximum
+%%      number of retries is reached. The retry limit is based on the
+%%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
+%%      specified `riak_test' config file.
+wait_until(Node, Fun) ->
+    MaxTime = rt:config(rt_max_wait_time),
+    Delay = rt:config(rt_retry_delay),
+    Retry = MaxTime div Delay,
+    wait_until(Node, Fun, Retry, Delay).
+
+%% @deprecated Use {@link wait_until/2} instead.
+wait_until(Node, Fun, Retry) ->
+    wait_until(Node, Fun, Retry, 500).
+
+%% @deprecated Use {@link wait_until/2} instead.
+wait_until(Node, Fun, Retry, Delay) ->
+    Pass = Fun(Node),
+    case {Retry, Pass} of
+        {_, true} ->
+            ok;
+        {0, _} ->
+            fail;
+        _ ->
+            timer:sleep(Delay),
+            wait_until(Node, Fun, Retry-1)
+    end.
 
 %% @doc Wait until the specified node is considered ready by `riak_core'.
 %%      As of Riak 1.0, a node is ready if it is in the `valid' or `leaving'
@@ -410,34 +480,6 @@ wait_until_unpingable(Node) ->
     ?assertEqual(ok, wait_until(Node, F)),
     ok.
 
-%% @doc Utility function used to construct test predicates. Retries the
-%%      function `Fun' until it returns `true', or until the maximum
-%%      number of retries is reached. The retry limit is based on the
-%%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
-%%      specified `riak_test' config file.
-wait_until(Node, Fun) ->
-    MaxTime = rt:config(rt_max_wait_time),
-    Delay = rt:config(rt_retry_delay),
-    Retry = MaxTime div Delay,
-    wait_until(Node, Fun, Retry, Delay).
-
-%% @deprecated Use {@link wait_until/2} instead.
-wait_until(Node, Fun, Retry) ->
-    wait_until(Node, Fun, Retry, 500).
-
-%% @deprecated Use {@link wait_until/2} instead.
-wait_until(Node, Fun, Retry, Delay) ->
-    Pass = Fun(Node),
-    case {Retry, Pass} of
-        {_, true} ->
-            ok;
-        {0, _} ->
-            fail;
-        _ ->
-            timer:sleep(Delay),
-            wait_until(Node, Fun, Retry-1)
-    end.
-
 capability(Node, Capability) ->
     rpc:call(Node, riak_core_capability, get, [Capability]).
 
@@ -556,9 +598,9 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
 
-%% Helper that returns first successful application get_env result,
-%% used when different versions of Riak use different app vars for
-%% the same setting.
+%% @doc Helper that returns first successful application get_env result,
+%%      used when different versions of Riak use different app vars for
+%%      the same setting.
 rpc_get_env(_, []) ->
     undefined;
 rpc_get_env(Node, [{App,Var}|Others]) ->
@@ -673,7 +715,6 @@ httpc_read(C, Bucket, Key) ->
     {ok, Value} = rhc:get(C, Bucket, Key),
     Value.
 
-
 %% @doc does a write via the http erlang client.
 -spec httpc_write(term(), binary(), binary(), binary()) -> atom().
 httpc_write(C, Bucket, Key, Value) ->
@@ -737,8 +778,20 @@ teardown() ->
 whats_up() ->
     ?HARNESS:whats_up().
 
+%% @doc Runs `riak attach' on a specific node, and tests for the expected behavoir.
+%%      Here's an example:
+%%      rt:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
+%%                       {send, "riak_core_ring_manager:get_my_ring()."},
+%%                       {expect, "dict,"},
+%%                       {send, [4]}]), %% 4 = Ctrl + D
+%%      {expect, String} scans the output for the existance of the String.
+%%         These tuples are processed in order.
+%%      {send, String} sends the string to the console.
+%%         Once a send is encountered, the buffer is discarded, and the next
+%%         expect will process based on the output following the sent data.
 attach(Node, Expected) ->
     ?HARNESS:attach(Node, Expected).
 
+%% @doc Runs `riak console' on a specific node, see rt:attach/2 for more info.
 console(Node, Expected) ->
     ?HARNESS:console(Node, Expected).
