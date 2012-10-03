@@ -62,12 +62,18 @@
 
 -define(HARNESS, (rt:config(rt_harness))).
 
+%% @doc Get the value of an OS Environment variable. The arity 1 version of
+%%      this function will fail the test if it is undefined.
 get_os_env(Var) ->
     case get_os_env(Var, undefined) of
-        undefined -> exit({os_env_var_undefined, Var});
+        undefined -> 
+            lager:error("ENV['~s'] is not defined", [Var]),
+            ?assert(false);
         Value -> Value
     end.
 
+%% @doc Get the value of an OS Evironment variable. The arity 2 version of
+%%      this function will return the Default if the OS var is undefined.
 get_os_env(Var, Default) ->
     case os:getenv(Var) of
         false -> Default;
