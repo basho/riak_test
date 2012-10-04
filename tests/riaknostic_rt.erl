@@ -5,10 +5,51 @@
 %% Change when a new release comes out.
 -define(RIAKNOSTIC_URL, "https://github.com/basho/riaknostic/downloads/riaknostic-1.0.2.tar.gz").
 
-confirm() ->
-    %% Build a small cluster
-    [Node1, _Node2] = rt:build_cluster(2, []),
+%% riaknostic is not supported on 1.0.3, sigh.
+-define(VERSIONS, ["1.1.4", "1.2.0", current]).
 
+confirm() ->
+    Passes = lists:map(fun check_on_vsn/1, ?VERSIONS),
+    all_pass(Passes).
+
+all_pass([]) ->
+    pass;
+all_pass([H|T]) ->
+    case H =:= pass of 
+        false -> fail;
+        _ -> all_pass(T)
+    end.
+
+check_on_vsn(Version) ->
+    %% Build a small cluster
+    lager:info("Checking version: ~s", [Version]),
+    %%V1 = rt:admin("version"),
+    %%lager:info("Version was: ~s", [V1]),
+    Nodes = rt:build_cluster(4, [Version, Version, Version, Version], 
+                             default),
+    [Node1|_Rest] = Nodes, 
+    V2 = rt:admin(Node1, ["version"]),
+    lager:debug("Version is: ~s", [V2]),
+    Result = riaknostic_test(Node1),
+    [rt:stop(Node) || Node <- Nodes],
+    Result.
+
+riaknostic_install_cmd(LibDir) ->
+    Local = rt:get_os_env("LOCAL_RIAKNOSTIC", ""),
+    case Local of 
+        "" -> 
+            Remote = case rt:get_os_env("REMOTE_RIAKNOSTIC", "") of 
+                         "" -> ?RIAKNOSTIC_URL;
+                         Other -> Other
+                     end,
+            io_lib:format("sh -c \"cd ~s && curl -O -L ~s && tar xzf ~s\"", 
+                          [LibDir, Remote, filename:basename(Remote)]);
+        Local -> 
+            io_lib:format("sh -c \"cd ~s && ln -s ~s riaknostic\"", 
+                          [LibDir, Local])
+    end.
+
+riaknostic_test(Node1) ->    
     %% Since we don't have command output matching yet, we'll just
     %% print it to the console and hope for the best.
     lager:info("1. Check download message"),
@@ -19,7 +60,7 @@ confirm() ->
     %% Install
     lager:info("2a. Install Riaknostic"),
     {ok, LibDir} = rpc:call(Node1, application, get_env, [riak_core, platform_lib_dir]),
-    Cmd = io_lib:format("sh -c \"cd ~s && curl -O -L ~s && tar xzf ~s\"", [LibDir, ?RIAKNOSTIC_URL, filename:basename(?RIAKNOSTIC_URL)]),
+    Cmd = riaknostic_install_cmd(LibDir),
     lager:info("Running command: ~s", [Cmd]),
     lager:debug("~p~n", [rpc:call(Node1, os, cmd, [Cmd])]),
     
@@ -46,6 +87,7 @@ confirm() ->
     ?assert(rt:str(RiaknosticOut4, "  ring_preflists ")),
     ?assert(rt:str(RiaknosticOut4, "  ring_size      ")),
     ?assert(rt:str(RiaknosticOut4, "  search         ")),
+    ?assert(rt:str(RiaknosticOut4, "  sysctl         ")),
     
     %% Check log levels
     lager:info("5. Run Riaknostic with a different log level"),
