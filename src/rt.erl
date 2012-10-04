@@ -115,13 +115,13 @@ get_os_env(Var, Default) ->
         Value -> Value
     end.
 
-%% @doc Get the raw ring for the given `Node'.
+%% @doc Get the raw ring for `Node'.
 get_ring(Node) ->
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
     Ring.
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
-%%      in the existing app.config with those in Config.
+%%      in the existing app.config with those in `Config'.
 update_app_config(Node, Config) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
@@ -152,7 +152,7 @@ deploy_nodes(NumNodes, InitialConfig) ->
 start(Node) ->
     ?HARNESS:start(Node).
 
-%% @doc Start the specified Riak node and wait for it to be pingable
+%% @doc Start the specified Riak `Node' and wait for it to be pingable
 start_and_wait(Node) ->
     start(Node),
     ?assertEqual(ok, wait_until_pingable(Node)).
@@ -160,16 +160,16 @@ start_and_wait(Node) ->
 async_start(Node) ->
     spawn(fun() -> start(Node) end).
 
-%% @doc Stop the specified Riak node
+%% @doc Stop the specified Riak `Node'.
 stop(Node) ->
     ?HARNESS:stop(Node).
 
-%% @doc Stop the specified Riak node and wait until it is not pingable
+%% @doc Stop the specified Riak `Node' and wait until it is not pingable
 stop_and_wait(Node) ->
     stop(Node),
     ?assertEqual(ok, wait_until_unpingable(Node)).
 
-%% @doc Upgrade a Riak node to a specific version
+%% @doc Upgrade a Riak `Node' to a specific version
 upgrade(Node, NewVersion) ->
     ?HARNESS:upgrade(Node, NewVersion).
 
@@ -206,14 +206,14 @@ try_join(Node, PNode) ->
             Result
     end.
 
-%% @doc Have the specified node leave the cluster
+%% @doc Have the `Node' leave the cluster
 leave(Node) ->
     R = try_leave(Node),
     lager:debug("[leave] ~p: ~p", [Node, R]),
     ?assertEqual(ok, R),
     ok.
 
-%% @doc try_leave tries different rpc:calls to leave a node, because the module changed
+%% @doc try_leave tries different rpc:calls to leave a `Node', because the module changed
 %%      in riak 1.2.0
 try_leave(Node) ->
     case rpc:call(Node, riak_core, leave, []) of
@@ -224,15 +224,15 @@ try_leave(Node) ->
             Result
     end.
 
-%% @doc Call 'bin/riak-admin' command on node Node and arguments Args
+%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'
 admin(Node, Args) ->
     ?HARNESS:admin(Node, Args).
 
-%% @doc Call 'bin/riak' command on node Node and arguments Args
+%% @doc Call 'bin/riak' command on `Node' with arguments `Args'
 riak(Node, Args) ->
     ?HARNESS:riak(Node, Args).
 
-%% @doc Is the node up according to net_adm:ping
+%% @doc Is the `Node' up according to net_adm:ping
 is_pingable(Node) ->
     net_adm:ping(Node) =:= pong.
 
@@ -245,9 +245,9 @@ remove(Node, OtherNode) ->
 down(Node, OtherNode) ->
     rpc:call(Node, riak_kv_console, down, [[atom_to_list(OtherNode)]]).
 
-%% @doc partition the P1 from P2 nodes
+%% @doc partition the `P1' from `P2' nodes
 %%      note: the nodes remained connected to riak_test@local,
-%%      which is how heal/1 can still work.
+%%      which is how `heal/1' can still work.
 partition(P1, P2) ->
     OldCookie = rpc:call(hd(P1), erlang, get_cookie, []),
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
@@ -255,8 +255,8 @@ partition(P1, P2) ->
     [[true = rpc:call(N, erlang, disconnect_node, [P2N]) || N <- P1] || P2N <- P2],
     {NewCookie, OldCookie, P1, P2}.
 
-%% @doc heal the partition created by call to partition/2
-%% OldCookie is the original shared cookie
+%% @doc heal the partition created by call to `partition/2'
+%%      `OldCookie' is the original shared cookie
 heal({_NewCookie, OldCookie, P1, P2}) ->
     Cluster = P1 ++ P2,
     % set OldCookie on P1 Nodes
@@ -779,19 +779,22 @@ whats_up() ->
     ?HARNESS:whats_up().
 
 %% @doc Runs `riak attach' on a specific node, and tests for the expected behavoir.
-%%      Here's an example:
+%%      Here's an example: ```
 %%      rt:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
 %%                       {send, "riak_core_ring_manager:get_my_ring()."},
 %%                       {expect, "dict,"},
-%%                       {send, [4]}]), %% 4 = Ctrl + D
-%%      {expect, String} scans the output for the existance of the String.
+%%                       {send, [4]}]), %% 4 = Ctrl + D'''
+%%      `{expect, String}' scans the output for the existance of the String.
 %%         These tuples are processed in order.
-%%      {send, String} sends the string to the console.
+%%
+%%      `{send, String}' sends the string to the console.
 %%         Once a send is encountered, the buffer is discarded, and the next
 %%         expect will process based on the output following the sent data.
+%%
 attach(Node, Expected) ->
     ?HARNESS:attach(Node, Expected).
 
-%% @doc Runs `riak console' on a specific node, see rt:attach/2 for more info.
+%% @doc Runs `riak console' on a specific node
+%% @see rt:attach/2
 console(Node, Expected) ->
     ?HARNESS:console(Node, Expected).
