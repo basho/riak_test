@@ -16,9 +16,13 @@
 # Or, alternatively, just substitute the paths to the kerl install paths as
 # that should work too.
 
-R14B03=${R14B03:-$HOME/erlang-R14B03}
-R14B04=${R14B04:-$HOME/erlang-R14B04}
-R15B01=${R15B01:-$HOME/erlang-R15B01}
+if [ "x$ERLANG_BASE" = "x" ]; then 
+    ERLANG_BASE="erlang-"
+fi 
+
+R14B03=${R14B03:-$HOME/${ERLANG_BASE}R14B03}
+R14B04=${R14B04:-$HOME/${ERLANG_BASE}R14B04}
+R15B01=${R15B01:-$HOME/${ERLANG_BASE}R15B01}
 
 checkbuild()
 {
