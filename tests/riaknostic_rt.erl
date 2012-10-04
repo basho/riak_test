@@ -2,26 +2,22 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-%% Change when a new release comes out.
--define(RIAKNOSTIC_URL, "https://github.com/basho/riaknostic/downloads/riaknostic-1.0.2.tar.gz").
+-define(RIAKNOSTIC_URL, "https://github.com/basho/riaknostic/downloads/riaknostic-LATEST.tar.gz").
 
-%% riaknostic is not supported on 1.0.3, sigh.
+%% riaknostic is not supported on 1.0.3.
 -define(VERSIONS, ["1.1.4", "1.2.0", current]).
 
 confirm() ->
     Passes = lists:map(fun check_on_vsn/1, ?VERSIONS),
-    all_pass(Passes).
-
-all_pass([]) ->
-    pass;
-all_pass([H|T]) ->
-    case H =:= pass of 
-        false -> fail;
-        _ -> all_pass(T)
+    %% this is never not going to be true, and in fact 
+    %% does nothing even if it fails, but it feels wrong 
+    %% to leave it out.
+    case lists:all(fun(X) -> X =:= pass end, Passes) of 
+        true -> pass;
+        false -> fail
     end.
 
 check_on_vsn(Version) ->
-    %% Build a small cluster
     lager:info("Checking version: ~s", [Version]),
     %%V1 = rt:admin("version"),
     %%lager:info("Version was: ~s", [V1]),
@@ -35,11 +31,11 @@ check_on_vsn(Version) ->
     Result.
 
 riaknostic_install_cmd(LibDir) ->
-    Local = rt:get_os_env("LOCAL_RIAKNOSTIC", ""),
+    Local = rt:get_os_env("LOCAL_RIAKNOSTIC", missing),
     case Local of 
-        "" -> 
-            Remote = case rt:get_os_env("REMOTE_RIAKNOSTIC", "") of 
-                         "" -> ?RIAKNOSTIC_URL;
+        missing -> 
+            Remote = case rt:get_os_env("REMOTE_RIAKNOSTIC", missing) of 
+                         missing -> ?RIAKNOSTIC_URL;
                          Other -> Other
                      end,
             io_lib:format("sh -c \"cd ~s && curl -O -L ~s && tar xzf ~s\"", 
