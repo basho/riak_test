@@ -1,17 +1,561 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
-<title>The riak_test application</title>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Module rt</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
 </head>
-<frameset cols="20%,80%">
-<frame src="modules-frame.html" name="modulesFrame" title="">
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
 
-<frame src="overview-summary.html" name="overviewFrame" title="">
-<noframes>
-<h2>This page uses frames</h2>
-<p>Your browser does not accept frames.
-<br>You should go to the <a href="overview-summary.html">non-frame version</a> instead.
-</p>
-</noframes>
-</frameset>
+<h1>Module rt</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+  Implements the base <code>riak_test</code> API, providing the ability to control
+  nodes in a Riak cluster as well as perform commonly reused operations.
+
+
+<h2><a name="description">Description</a></h2>
+  Implements the base <code>riak_test</code> API, providing the ability to control
+  nodes in a Riak cluster as well as perform commonly reused operations.
+  Please extend this module with new functions that prove useful between
+  multiple independent tests.
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-conn_info">conn_info()</a></h3>
+<p><tt>conn_info() = [{node(), <a href="#type-interfaces">interfaces()</a>}]</tt></p>
+
+
+<h3 class="typedecl"><a name="type-interface">interface()</a></h3>
+<p><tt>interface() = {http, tuple()} | {pb, tuple()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-interfaces">interfaces()</a></h3>
+<p><tt>interfaces() = [<a href="#type-interface">interface()</a>]</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#admin-2">admin/2</a></td><td>Call 'bin/riak-admin' command on <code>Node</code> with arguments <code>Args</code></td></tr>
+<tr><td valign="top"><a href="#async_start-1">async_start/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#attach-2">attach/2</a></td><td>Runs <code>riak attach</code> on a specific node, and tests for the expected behavoir.</td></tr>
+<tr><td valign="top"><a href="#build_cluster-1">build_cluster/1</a></td><td>Safely construct a new cluster and return a list of the deployed nodes.</td></tr>
+<tr><td valign="top"><a href="#build_cluster-2">build_cluster/2</a></td><td>Safely construct a <code>NumNode</code> size cluster using
+       <code>InitialConfig</code>.</td></tr>
+<tr><td valign="top"><a href="#capability-2">capability/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#check_singleton_node-1">check_singleton_node/1</a></td><td>Ensure that the specified node is a singleton node/cluster -- a node
+       that owns 100% of the ring.</td></tr>
+<tr><td valign="top"><a href="#claimant_according_to-1">claimant_according_to/1</a></td><td>Return a list of nodes that own partitions according to the ring
+       retrieved from the specified node.</td></tr>
+<tr><td valign="top"><a href="#cmd-1">cmd/1</a></td><td>Spawn <code>Cmd</code> on the machine running the test harness, returning
+       the exit status and result.</td></tr>
+<tr><td valign="top"><a href="#connection_info-1">connection_info/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#console-2">console/2</a></td><td>Runs <code>riak console</code> on a specific node.</td></tr>
+<tr><td valign="top"><a href="#deploy_nodes-1">deploy_nodes/1</a></td><td>Deploy a set of freshly installed Riak nodes, returning a list of the
+       nodes deployed.</td></tr>
+<tr><td valign="top"><a href="#deploy_nodes-2">deploy_nodes/2</a></td><td>Deploy a set of freshly installed Riak nodes with the given
+       <code>InitialConfig</code>, returning a list of the nodes deployed.</td></tr>
+<tr><td valign="top"><a href="#down-2">down/2</a></td><td>Have <code>Node</code> mark <code>OtherNode</code> as down.</td></tr>
+<tr><td valign="top"><a href="#enable_search_hook-2">enable_search_hook/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_os_env-1">get_os_env/1</a></td><td>Get the value of an OS Environment variable.</td></tr>
+<tr><td valign="top"><a href="#get_os_env-2">get_os_env/2</a></td><td>Get the value of an OS Evironment variable.</td></tr>
+<tr><td valign="top"><a href="#get_ring-1">get_ring/1</a></td><td>Get the raw ring for <code>Node</code>.</td></tr>
+<tr><td valign="top"><a href="#get_version-0">get_version/0</a></td><td>Gets the current version under test.</td></tr>
+<tr><td valign="top"><a href="#heal-1">heal/1</a></td><td>heal the partition created by call to <code>partition/2</code>
+       <code>OldCookie</code> is the original shared cookie.</td></tr>
+<tr><td valign="top"><a href="#http_url-1">http_url/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#httpc-1">httpc/1</a></td><td>get me an http client.</td></tr>
+<tr><td valign="top"><a href="#httpc_read-3">httpc_read/3</a></td><td>does a read via the http erlang client.</td></tr>
+<tr><td valign="top"><a href="#httpc_write-4">httpc_write/4</a></td><td>does a write via the http erlang client.</td></tr>
+<tr><td valign="top"><a href="#is_pingable-1">is_pingable/1</a></td><td>Is the <code>Node</code> up according to net_adm:ping.</td></tr>
+<tr><td valign="top"><a href="#join-2">join/2</a></td><td>Have <code>Node</code> send a join request to <code>PNode</code></td></tr>
+<tr><td valign="top"><a href="#leave-1">leave/1</a></td><td>Have the <code>Node</code> leave the cluster.</td></tr>
+<tr><td valign="top"><a href="#load_config-1">load_config/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#members_according_to-1">members_according_to/1</a></td><td>Return a list of cluster members according to the ring retrieved from
+       the specified node.</td></tr>
+<tr><td valign="top"><a href="#owners_according_to-1">owners_according_to/1</a></td><td>Return a list of nodes that own partitions according to the ring
+       retrieved from the specified node.</td></tr>
+<tr><td valign="top"><a href="#partition-2">partition/2</a></td><td>partition the <code>P1</code> from <code>P2</code> nodes
+       note: the nodes remained connected to riak_test@local,
+       which is how <code>heal/1</code> can still work.</td></tr>
+<tr><td valign="top"><a href="#pbc-1">pbc/1</a></td><td>get me a protobuf client process and hold the mayo!</td></tr>
+<tr><td valign="top"><a href="#pbc_read-3">pbc_read/3</a></td><td>does a read via the erlang protobuf client.</td></tr>
+<tr><td valign="top"><a href="#pbc_set_bucket_prop-3">pbc_set_bucket_prop/3</a></td><td>sets a bucket property/properties via the erlang protobuf client.</td></tr>
+<tr><td valign="top"><a href="#pbc_write-4">pbc_write/4</a></td><td>does a write via the erlang protobuf client.</td></tr>
+<tr><td valign="top"><a href="#pmap-2">pmap/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#remove-2">remove/2</a></td><td>Have <code>Node</code> remove <code>OtherNode</code> from the cluster.</td></tr>
+<tr><td valign="top"><a href="#riak-2">riak/2</a></td><td>Call 'bin/riak' command on <code>Node</code> with arguments <code>Args</code></td></tr>
+<tr><td valign="top"><a href="#rpc_get_env-2">rpc_get_env/2</a></td><td>Helper that returns first successful application get_env result,
+       used when different versions of Riak use different app vars for
+       the same setting.</td></tr>
+<tr><td valign="top"><a href="#set_backend-1">set_backend/1</a></td><td>Sets the backend of ALL nodes that could be available to riak_test.</td></tr>
+<tr><td valign="top"><a href="#slow_upgrade-3">slow_upgrade/3</a></td><td>Upgrade a Riak node to a specific version using the alternate
+       leave/upgrade/rejoin approach.</td></tr>
+<tr><td valign="top"><a href="#spawn_cmd-1">spawn_cmd/1</a></td><td>Spawn <code>Cmd</code> on the machine running the test harness.</td></tr>
+<tr><td valign="top"><a href="#start-1">start/1</a></td><td>Start the specified Riak node.</td></tr>
+<tr><td valign="top"><a href="#start_and_wait-1">start_and_wait/1</a></td><td>Start the specified Riak <code>Node</code> and wait for it to be pingable.</td></tr>
+<tr><td valign="top"><a href="#status_of_according_to-2">status_of_according_to/2</a></td><td>Return the cluster status of <code>Member</code> according to the ring
+       retrieved from <code>Node</code>.</td></tr>
+<tr><td valign="top"><a href="#stop-1">stop/1</a></td><td>Stop the specified Riak <code>Node</code>.</td></tr>
+<tr><td valign="top"><a href="#stop_and_wait-1">stop_and_wait/1</a></td><td>Stop the specified Riak <code>Node</code> and wait until it is not pingable.</td></tr>
+<tr><td valign="top"><a href="#str-2">str/2</a></td><td>if String contains Substr, return true.</td></tr>
+<tr><td valign="top"><a href="#systest_read-2">systest_read/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#systest_read-3">systest_read/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#systest_read-5">systest_read/5</a></td><td></td></tr>
+<tr><td valign="top"><a href="#systest_write-2">systest_write/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#systest_write-3">systest_write/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#systest_write-5">systest_write/5</a></td><td></td></tr>
+<tr><td valign="top"><a href="#teardown-0">teardown/0</a></td><td>Shutdown every node, this is for after a test run is complete.</td></tr>
+<tr><td valign="top"><a href="#update_app_config-2">update_app_config/2</a></td><td>Rewrite the given node's app.config file, overriding the varialbes
+       in the existing app.config with those in <code>Config</code>.</td></tr>
+<tr><td valign="top"><a href="#upgrade-2">upgrade/2</a></td><td>Upgrade a Riak <code>Node</code> to a specific version.</td></tr>
+<tr><td valign="top"><a href="#wait_for_cluster_service-2">wait_for_cluster_service/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#wait_for_cmd-1">wait_for_cmd/1</a></td><td>Wait for a command spawned by <code>spawn_cmd</code>, returning
+       the exit status and result.</td></tr>
+<tr><td valign="top"><a href="#wait_for_service-2">wait_for_service/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#wait_until-2">wait_until/2</a></td><td>Utility function used to construct test predicates.</td></tr>
+<tr><td valign="top"><a href="#wait_until_all_members-1">wait_until_all_members/1</a></td><td>Wait until all nodes in the list <code>Nodes</code> believe each other to be
+       members of the cluster.</td></tr>
+<tr><td valign="top"><a href="#wait_until_all_members-2">wait_until_all_members/2</a></td><td>Wait until all nodes in the list <code>Nodes</code> believes all nodes in the
+       list <code>Members</code> are members of the cluster.</td></tr>
+<tr><td valign="top"><a href="#wait_until_capability-3">wait_until_capability/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#wait_until_connected-1">wait_until_connected/1</a></td><td>wait until each node in Nodes is disterl connected to each.</td></tr>
+<tr><td valign="top"><a href="#wait_until_legacy_ringready-1">wait_until_legacy_ringready/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#wait_until_no_pending_changes-1">wait_until_no_pending_changes/1</a></td><td>Given a list of nodes, wait until all nodes believe there are no
+  on-going or pending ownership transfers.</td></tr>
+<tr><td valign="top"><a href="#wait_until_nodes_ready-1">wait_until_nodes_ready/1</a></td><td>Given a list of nodes, wait until all nodes are considered ready.</td></tr>
+<tr><td valign="top"><a href="#wait_until_pingable-1">wait_until_pingable/1</a></td><td>Wait until the specified node is pingable.</td></tr>
+<tr><td valign="top"><a href="#wait_until_ready-1">wait_until_ready/1</a></td><td>Wait until the specified node is considered ready by <code>riak_core</code>.</td></tr>
+<tr><td valign="top"><a href="#wait_until_ring_converged-1">wait_until_ring_converged/1</a></td><td>Given a list of nodes, wait until all nodes believe the ring has
+       converged (ie.</td></tr>
+<tr><td valign="top"><a href="#wait_until_status_ready-1">wait_until_status_ready/1</a></td><td>Wait until status can be read from riak_kv_console.</td></tr>
+<tr><td valign="top"><a href="#wait_until_unpingable-1">wait_until_unpingable/1</a></td><td>Wait until the specified node is no longer pingable.</td></tr>
+<tr><td valign="top"><a href="#whats_up-0">whats_up/0</a></td><td>outputs some useful information about nodes that are up.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="admin-2">admin/2</a></h3>
+<div class="spec">
+<p><tt>admin(Node, Args) -&gt; any()</tt></p>
+</div><p>Call 'bin/riak-admin' command on <code>Node</code> with arguments <code>Args</code></p>
+
+<h3 class="function"><a name="async_start-1">async_start/1</a></h3>
+<div class="spec">
+<p><tt>async_start(Node) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="attach-2">attach/2</a></h3>
+<div class="spec">
+<p><tt>attach(Node, Expected) -&gt; any()</tt></p>
+</div><p>Runs <code>riak attach</code> on a specific node, and tests for the expected behavoir.
+       Here's an example: <pre>       rt:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
+                        {send, "riak_core_ring_manager:get_my_ring()."},
+                        {expect, "dict,"},
+                        {send, [4]}]), %% 4 = Ctrl + D</pre><p>
+       <code>{expect, String}</code> scans the output for the existance of the String.          
+These tuples are processed in order.</p>
+ 
+       <code>{send, String}</code> sends the string to the console.
+          Once a send is encountered, the buffer is discarded, and the next
+          expect will process based on the output following the sent data.
+ </p>
+
+<h3 class="function"><a name="build_cluster-1">build_cluster/1</a></h3>
+<div class="spec">
+<p><tt>build_cluster(Versions) -&gt; any()</tt></p>
+</div><p>Safely construct a new cluster and return a list of the deployed nodes</p>
+
+<h3 class="function"><a name="build_cluster-2">build_cluster/2</a></h3>
+<div class="spec">
+<p><tt>build_cluster(NumNodes, InitialConfig) -&gt; any()</tt></p>
+</div><p>Safely construct a <code>NumNode</code> size cluster using
+       <code>InitialConfig</code>. Return a list of the deployed nodes.</p>
+
+<h3 class="function"><a name="capability-2">capability/2</a></h3>
+<div class="spec">
+<p><tt>capability(Node, Capability) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="check_singleton_node-1">check_singleton_node/1</a></h3>
+<div class="spec">
+<p><tt>check_singleton_node(Node) -&gt; any()</tt></p>
+</div><p>Ensure that the specified node is a singleton node/cluster -- a node
+       that owns 100% of the ring.</p>
+
+<h3 class="function"><a name="claimant_according_to-1">claimant_according_to/1</a></h3>
+<div class="spec">
+<p><tt>claimant_according_to(Node) -&gt; any()</tt></p>
+</div><p>Return a list of nodes that own partitions according to the ring
+       retrieved from the specified node.</p>
+
+<h3 class="function"><a name="cmd-1">cmd/1</a></h3>
+<div class="spec">
+<p><tt>cmd(Cmd) -&gt; any()</tt></p>
+</div><p>Spawn <code>Cmd</code> on the machine running the test harness, returning
+       the exit status and result</p>
+
+<h3 class="function"><a name="connection_info-1">connection_info/1</a></h3>
+<div class="spec">
+<p><tt>connection_info(Nodes::[node()]) -&gt; <a href="#type-conn_info">conn_info()</a></tt><br></p>
+</div>
+
+<h3 class="function"><a name="console-2">console/2</a></h3>
+<div class="spec">
+<p><tt>console(Node, Expected) -&gt; any()</tt></p>
+</div><p>Runs <code>riak console</code> on a specific node</p>
+<p><b>See also:</b> <a href="rt.html#attach-2">rt:attach/2</a>.</p>
+
+<h3 class="function"><a name="deploy_nodes-1">deploy_nodes/1</a></h3>
+<div class="spec">
+<p><tt>deploy_nodes(Versions) -&gt; any()</tt></p>
+</div><p>Deploy a set of freshly installed Riak nodes, returning a list of the
+       nodes deployed.</p>
+
+<h3 class="function"><a name="deploy_nodes-2">deploy_nodes/2</a></h3>
+<div class="spec">
+<p><tt>deploy_nodes(NumNodes::integer(), InitialConfig::any()) -&gt; [node()]</tt><br></p>
+</div><p>Deploy a set of freshly installed Riak nodes with the given
+       <code>InitialConfig</code>, returning a list of the nodes deployed.</p>
+
+<h3 class="function"><a name="down-2">down/2</a></h3>
+<div class="spec">
+<p><tt>down(Node, OtherNode) -&gt; any()</tt></p>
+</div><p>Have <code>Node</code> mark <code>OtherNode</code> as down</p>
+
+<h3 class="function"><a name="enable_search_hook-2">enable_search_hook/2</a></h3>
+<div class="spec">
+<p><tt>enable_search_hook(Node, Bucket) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="get_os_env-1">get_os_env/1</a></h3>
+<div class="spec">
+<p><tt>get_os_env(Var) -&gt; any()</tt></p>
+</div><p>Get the value of an OS Environment variable. The arity 1 version of
+       this function will fail the test if it is undefined.</p>
+
+<h3 class="function"><a name="get_os_env-2">get_os_env/2</a></h3>
+<div class="spec">
+<p><tt>get_os_env(Var, Default) -&gt; any()</tt></p>
+</div><p>Get the value of an OS Evironment variable. The arity 2 version of
+       this function will return the Default if the OS var is undefined.</p>
+
+<h3 class="function"><a name="get_ring-1">get_ring/1</a></h3>
+<div class="spec">
+<p><tt>get_ring(Node) -&gt; any()</tt></p>
+</div><p>Get the raw ring for <code>Node</code>.</p>
+
+<h3 class="function"><a name="get_version-0">get_version/0</a></h3>
+<div class="spec">
+<p><tt>get_version() -&gt; binary()</tt><br></p>
+</div><p>Gets the current version under test. In the case of an upgrade test
+       or something like that, it's the version you're upgrading to.</p>
+
+<h3 class="function"><a name="heal-1">heal/1</a></h3>
+<div class="spec">
+<p><tt>heal(X1) -&gt; any()</tt></p>
+</div><p>heal the partition created by call to <code>partition/2</code>
+       <code>OldCookie</code> is the original shared cookie</p>
+
+<h3 class="function"><a name="http_url-1">http_url/1</a></h3>
+<div class="spec">
+<p><tt>http_url(Nodes) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="httpc-1">httpc/1</a></h3>
+<div class="spec">
+<p><tt>httpc(Node::node()) -&gt; term()</tt><br></p>
+</div><p>get me an http client.</p>
+
+<h3 class="function"><a name="httpc_read-3">httpc_read/3</a></h3>
+<div class="spec">
+<p><tt>httpc_read(C::term(), Bucket::binary(), Key::binary()) -&gt; binary()</tt><br></p>
+</div><p>does a read via the http erlang client.</p>
+
+<h3 class="function"><a name="httpc_write-4">httpc_write/4</a></h3>
+<div class="spec">
+<p><tt>httpc_write(C::term(), Bucket::binary(), Key::binary(), Value::binary()) -&gt; atom()</tt><br></p>
+</div><p>does a write via the http erlang client.</p>
+
+<h3 class="function"><a name="is_pingable-1">is_pingable/1</a></h3>
+<div class="spec">
+<p><tt>is_pingable(Node) -&gt; any()</tt></p>
+</div><p>Is the <code>Node</code> up according to net_adm:ping</p>
+
+<h3 class="function"><a name="join-2">join/2</a></h3>
+<div class="spec">
+<p><tt>join(Node, PNode) -&gt; any()</tt></p>
+</div><p>Have <code>Node</code> send a join request to <code>PNode</code></p>
+
+<h3 class="function"><a name="leave-1">leave/1</a></h3>
+<div class="spec">
+<p><tt>leave(Node) -&gt; any()</tt></p>
+</div><p>Have the <code>Node</code> leave the cluster</p>
+
+<h3 class="function"><a name="load_config-1">load_config/1</a></h3>
+<div class="spec">
+<p><tt>load_config(ConfigName) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="members_according_to-1">members_according_to/1</a></h3>
+<div class="spec">
+<p><tt>members_according_to(Node) -&gt; any()</tt></p>
+</div><p>Return a list of cluster members according to the ring retrieved from
+       the specified node.</p>
+
+<h3 class="function"><a name="owners_according_to-1">owners_according_to/1</a></h3>
+<div class="spec">
+<p><tt>owners_according_to(Node) -&gt; any()</tt></p>
+</div><p>Return a list of nodes that own partitions according to the ring
+       retrieved from the specified node.</p>
+
+<h3 class="function"><a name="partition-2">partition/2</a></h3>
+<div class="spec">
+<p><tt>partition(P1, P2) -&gt; any()</tt></p>
+</div><p>partition the <code>P1</code> from <code>P2</code> nodes
+       note: the nodes remained connected to riak_test@local,
+       which is how <code>heal/1</code> can still work.</p>
+
+<h3 class="function"><a name="pbc-1">pbc/1</a></h3>
+<div class="spec">
+<p><tt>pbc(Node::node()) -&gt; pid()</tt><br></p>
+</div><p>get me a protobuf client process and hold the mayo!</p>
+
+<h3 class="function"><a name="pbc_read-3">pbc_read/3</a></h3>
+<div class="spec">
+<p><tt>pbc_read(Pid::pid(), Bucket::binary(), Key::binary()) -&gt; binary()</tt><br></p>
+</div><p>does a read via the erlang protobuf client</p>
+
+<h3 class="function"><a name="pbc_set_bucket_prop-3">pbc_set_bucket_prop/3</a></h3>
+<div class="spec">
+<p><tt>pbc_set_bucket_prop(Pid::pid(), Bucket::binary(), PropList::[<a href="proplists.html#type-property">proplists:property()</a>]) -&gt; atom()</tt><br></p>
+</div><p>sets a bucket property/properties via the erlang protobuf client</p>
+
+<h3 class="function"><a name="pbc_write-4">pbc_write/4</a></h3>
+<div class="spec">
+<p><tt>pbc_write(Pid::pid(), Bucket::binary(), Key::binary(), Value::binary()) -&gt; atom()</tt><br></p>
+</div><p>does a write via the erlang protobuf client</p>
+
+<h3 class="function"><a name="pmap-2">pmap/2</a></h3>
+<div class="spec">
+<p><tt>pmap(F, L) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="remove-2">remove/2</a></h3>
+<div class="spec">
+<p><tt>remove(Node, OtherNode) -&gt; any()</tt></p>
+</div><p>Have <code>Node</code> remove <code>OtherNode</code> from the cluster</p>
+
+<h3 class="function"><a name="riak-2">riak/2</a></h3>
+<div class="spec">
+<p><tt>riak(Node, Args) -&gt; any()</tt></p>
+</div><p>Call 'bin/riak' command on <code>Node</code> with arguments <code>Args</code></p>
+
+<h3 class="function"><a name="rpc_get_env-2">rpc_get_env/2</a></h3>
+<div class="spec">
+<p><tt>rpc_get_env(Node, Others) -&gt; any()</tt></p>
+</div><p>Helper that returns first successful application get_env result,
+       used when different versions of Riak use different app vars for
+       the same setting.</p>
+
+<h3 class="function"><a name="set_backend-1">set_backend/1</a></h3>
+<div class="spec">
+<p><tt>set_backend(Backend::atom()) -&gt; atom() | [atom()]</tt><br></p>
+</div><p>Sets the backend of ALL nodes that could be available to riak_test.
+       this is not limited to the nodes under test, but any node that
+       riak_test is able to find. It then queries each available node
+       for it's backend, and returns it if they're all equal. If different
+       nodes have different backends, it returns a list of backends.
+       Currently, there is no way to request multiple backends, so the
+       list return type should be considered an error.</p>
+
+<h3 class="function"><a name="slow_upgrade-3">slow_upgrade/3</a></h3>
+<div class="spec">
+<p><tt>slow_upgrade(Node, NewVersion, Nodes) -&gt; any()</tt></p>
+</div><p>Upgrade a Riak node to a specific version using the alternate
+       leave/upgrade/rejoin approach</p>
+
+<h3 class="function"><a name="spawn_cmd-1">spawn_cmd/1</a></h3>
+<div class="spec">
+<p><tt>spawn_cmd(Cmd) -&gt; any()</tt></p>
+</div><p>Spawn <code>Cmd</code> on the machine running the test harness</p>
+
+<h3 class="function"><a name="start-1">start/1</a></h3>
+<div class="spec">
+<p><tt>start(Node) -&gt; any()</tt></p>
+</div><p>Start the specified Riak node</p>
+
+<h3 class="function"><a name="start_and_wait-1">start_and_wait/1</a></h3>
+<div class="spec">
+<p><tt>start_and_wait(Node) -&gt; any()</tt></p>
+</div><p>Start the specified Riak <code>Node</code> and wait for it to be pingable</p>
+
+<h3 class="function"><a name="status_of_according_to-2">status_of_according_to/2</a></h3>
+<div class="spec">
+<p><tt>status_of_according_to(Member, Node) -&gt; any()</tt></p>
+</div><p>Return the cluster status of <code>Member</code> according to the ring
+       retrieved from <code>Node</code>.</p>
+
+<h3 class="function"><a name="stop-1">stop/1</a></h3>
+<div class="spec">
+<p><tt>stop(Node) -&gt; any()</tt></p>
+</div><p>Stop the specified Riak <code>Node</code>.</p>
+
+<h3 class="function"><a name="stop_and_wait-1">stop_and_wait/1</a></h3>
+<div class="spec">
+<p><tt>stop_and_wait(Node) -&gt; any()</tt></p>
+</div><p>Stop the specified Riak <code>Node</code> and wait until it is not pingable</p>
+
+<h3 class="function"><a name="str-2">str/2</a></h3>
+<div class="spec">
+<p><tt>str(String::string(), Substr::string()) -&gt; boolean()</tt><br></p>
+</div><p>if String contains Substr, return true.</p>
+
+<h3 class="function"><a name="systest_read-2">systest_read/2</a></h3>
+<div class="spec">
+<p><tt>systest_read(Node, Size) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="systest_read-3">systest_read/3</a></h3>
+<div class="spec">
+<p><tt>systest_read(Node, Size, R) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="systest_read-5">systest_read/5</a></h3>
+<div class="spec">
+<p><tt>systest_read(Node, Start, End, Bucket, R) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="systest_write-2">systest_write/2</a></h3>
+<div class="spec">
+<p><tt>systest_write(Node, Size) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="systest_write-3">systest_write/3</a></h3>
+<div class="spec">
+<p><tt>systest_write(Node, Size, W) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="systest_write-5">systest_write/5</a></h3>
+<div class="spec">
+<p><tt>systest_write(Node, Start, End, Bucket, W) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="teardown-0">teardown/0</a></h3>
+<div class="spec">
+<p><tt>teardown() -&gt; any()</tt></p>
+</div><p>Shutdown every node, this is for after a test run is complete.</p>
+
+<h3 class="function"><a name="update_app_config-2">update_app_config/2</a></h3>
+<div class="spec">
+<p><tt>update_app_config(Node, Config) -&gt; any()</tt></p>
+</div><p>Rewrite the given node's app.config file, overriding the varialbes
+       in the existing app.config with those in <code>Config</code>.</p>
+
+<h3 class="function"><a name="upgrade-2">upgrade/2</a></h3>
+<div class="spec">
+<p><tt>upgrade(Node, NewVersion) -&gt; any()</tt></p>
+</div><p>Upgrade a Riak <code>Node</code> to a specific version</p>
+
+<h3 class="function"><a name="wait_for_cluster_service-2">wait_for_cluster_service/2</a></h3>
+<div class="spec">
+<p><tt>wait_for_cluster_service(Nodes, Service) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="wait_for_cmd-1">wait_for_cmd/1</a></h3>
+<div class="spec">
+<p><tt>wait_for_cmd(CmdHandle) -&gt; any()</tt></p>
+</div><p>Wait for a command spawned by <code>spawn_cmd</code>, returning
+       the exit status and result</p>
+
+<h3 class="function"><a name="wait_for_service-2">wait_for_service/2</a></h3>
+<div class="spec">
+<p><tt>wait_for_service(Node, Service) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="wait_until-2">wait_until/2</a></h3>
+<div class="spec">
+<p><tt>wait_until(Node, Fun) -&gt; any()</tt></p>
+</div><p>Utility function used to construct test predicates. Retries the
+       function <code>Fun</code> until it returns <code>true</code>, or until the maximum
+       number of retries is reached. The retry limit is based on the
+       provided <code>rt_max_wait_time</code> and <code>rt_retry_delay</code> parameters in
+       specified <code>riak_test</code> config file.</p>
+
+<h3 class="function"><a name="wait_until_all_members-1">wait_until_all_members/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_all_members(Nodes) -&gt; any()</tt></p>
+</div><p>Wait until all nodes in the list <code>Nodes</code> believe each other to be
+       members of the cluster.</p>
+
+<h3 class="function"><a name="wait_until_all_members-2">wait_until_all_members/2</a></h3>
+<div class="spec">
+<p><tt>wait_until_all_members(Nodes, Members) -&gt; any()</tt></p>
+</div><p>Wait until all nodes in the list <code>Nodes</code> believes all nodes in the
+       list <code>Members</code> are members of the cluster.</p>
+
+<h3 class="function"><a name="wait_until_capability-3">wait_until_capability/3</a></h3>
+<div class="spec">
+<p><tt>wait_until_capability(Node, Capability, Value) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="wait_until_connected-1">wait_until_connected/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_connected(Nodes) -&gt; any()</tt></p>
+</div><p>wait until each node in Nodes is disterl connected to each.</p>
+
+<h3 class="function"><a name="wait_until_legacy_ringready-1">wait_until_legacy_ringready/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_legacy_ringready(Node) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="wait_until_no_pending_changes-1">wait_until_no_pending_changes/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_no_pending_changes(Nodes::[node()]) -&gt; ok | fail</tt><br></p>
+</div><p>Given a list of nodes, wait until all nodes believe there are no
+  on-going or pending ownership transfers.</p>
+
+<h3 class="function"><a name="wait_until_nodes_ready-1">wait_until_nodes_ready/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_nodes_ready(Nodes) -&gt; any()</tt></p>
+</div><p>Given a list of nodes, wait until all nodes are considered ready.
+       See <a href="#wait_until_ready-1"><code>wait_until_ready/1</code></a> for definition of ready.</p>
+
+<h3 class="function"><a name="wait_until_pingable-1">wait_until_pingable/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_pingable(Node) -&gt; any()</tt></p>
+</div><p>Wait until the specified node is pingable</p>
+
+<h3 class="function"><a name="wait_until_ready-1">wait_until_ready/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_ready(Node) -&gt; any()</tt></p>
+</div><p>Wait until the specified node is considered ready by <code>riak_core</code>.
+       As of Riak 1.0, a node is ready if it is in the <code>valid</code> or <code>leaving</code>
+       states. A ready node is guaranteed to have current preflist/ownership
+       information.</p>
+
+<h3 class="function"><a name="wait_until_ring_converged-1">wait_until_ring_converged/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_ring_converged(Nodes) -&gt; any()</tt></p>
+</div><p>Given a list of nodes, wait until all nodes believe the ring has
+       converged (ie. <code>riak_core_ring:is_ready</code> returns <code>true</code>).</p>
+
+<h3 class="function"><a name="wait_until_status_ready-1">wait_until_status_ready/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_status_ready(Node) -&gt; any()</tt></p>
+</div><p>Wait until status can be read from riak_kv_console</p>
+
+<h3 class="function"><a name="wait_until_unpingable-1">wait_until_unpingable/1</a></h3>
+<div class="spec">
+<p><tt>wait_until_unpingable(Node) -&gt; any()</tt></p>
+</div><p>Wait until the specified node is no longer pingable</p>
+
+<h3 class="function"><a name="whats_up-0">whats_up/0</a></h3>
+<div class="spec">
+<p><tt>whats_up() -&gt; any()</tt></p>
+</div><p>outputs some useful information about nodes that are up</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Oct 4 2012, 09:44:47.</i></p>
+</body>
 </html>
