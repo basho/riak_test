@@ -3,8 +3,7 @@ riak_test is a integration/system testing driver for Riak that runs
 tests written in Erlang. You write the tests, and riak_test handles
 bringing up a Riak cluster and running your tests against
 it. riak_test can generate a cluster directly from a devrel build of a
-Riak source tree, as well as integrate with basho_expect to generate
-clusters from generated Riak packages.
+Riak source tree.
 
 The devrel mode operates against a generated devrel that has been
 turned into a git repo, allowing riak_test to easily reset all nodes
@@ -13,29 +12,24 @@ preferred mode of operation as it is easy to setup and can easily test
 a work-in-progress development tree during implementation and
 code/automation review.
 
-The basho_expect mode is designed to allow the same system tests to be
-re-used for validating packages during the release cycle. In this
-mode, riak_test launches basho_expect in a new server mode that
-riak_test connects to and sends commands (eg. login to host, install
-riak, start riak, etc). The server mode is based on Thrift and can
-therefore be used from languages other than Erlang, say if you want to
-control basho_expect from Ruby. The Thrift dependency could be removed
-by finishing the pre-existing basho_expect Erlang port driver if
-desired.
-
 The following is an example of a riak_test test:
 
 <pre class="erlang">
 ```
+-module(verify_build_cluster).
+-compile([confirm/0]).
+-include_lib("eunit/include/eunit.hrl").
+
 -import(rt, [deploy_nodes/1,
              owners_according_to/1,
+             join/2,
              wait_until_nodes_ready/1,
              wait_until_no_pending_changes/1]).
 
-verify_build_cluster() ->
+confirm() ->
     %% Deploy a set of new nodes
     lager:info("Deploying 3 nodes"),
-    Nodes = deploy_nodes(3),
+    Nodes = rt:deploy_nodes(3),
 
     %% Ensure each node owns 100% of it's own ring
     lager:info("Ensure each nodes 100% of it's own ring"),
@@ -54,7 +48,7 @@ verify_build_cluster() ->
     lager:info("Ensure each node owns a portion of the ring"),
     [?assertEqual(Nodes, owners_according_to(Node)) || Node <- Nodes],
     lager:info("verify_build_cluster: PASS"),
-    ok.
+    pass.
 '''
 </pre>
 
@@ -62,58 +56,52 @@ Running the test in devrel mode gives the following output:
 
 <pre class="erlang">
 ```
-16:10:27.787 [info] Application lager started on node 'riak_test@127.0.0.1'
-16:10:27.792 [info] Deploying 3 nodes
-16:10:27.792 [info] Running: /tmp/rt/dev/dev1/bin/riak stop
-16:10:27.793 [info] Running: /tmp/rt/dev/dev2/bin/riak stop
-16:10:27.793 [info] Running: /tmp/rt/dev/dev3/bin/riak stop
-16:10:28.119 [info] Resetting nodes to fresh state
-16:10:28.119 [debug] Running: git --git-dir="/tmp/rt/dev/.git" --work-tree="/tmp/rt/dev" reset HEAD --hard
-16:10:34.313 [debug] Running: git --git-dir="/tmp/rt/dev/.git" --work-tree="/tmp/rt/dev" clean -fd
-16:10:34.374 [info] Running: /tmp/rt/dev/dev1/bin/riak start
-16:10:34.375 [info] Running: /tmp/rt/dev/dev2/bin/riak start
-16:10:34.375 [info] Running: /tmp/rt/dev/dev3/bin/riak start
-16:10:36.409 [debug] Supervisor inet_gethost_native_sup started undefined at pid <0.68.0>
-16:10:36.411 [debug] Supervisor kernel_safe_sup started inet_gethost_native:start_link() at pid <0.67.0>
-16:10:36.444 [info] Deployed nodes: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']
-16:10:36.444 [info] Ensure each nodes 100% of it's own ring
-16:10:36.445 [info] Join nodes together
-16:10:36.465 [debug] [join] 'dev2@127.0.0.1' to ('dev1@127.0.0.1'): ok
-16:10:36.491 [debug] [join] 'dev3@127.0.0.1' to ('dev1@127.0.0.1'): ok
-16:10:36.491 [info] Wait until all nodes are ready and there are no pending changes
-16:10:56.192 [info] Ensure each node owns a portion of the ring
-16:10:56.193 [info] verify_build_cluster: PASS
+08:56:50.474 [info] Resetting nodes to fresh state
+08:56:50.474 [debug] Running: git --git-dir="/tmp/rt/.git" --work-tree="/tmp/rt/" reset HEAD --hard
+08:56:52.522 [debug] Running: git --git-dir="/tmp/rt/.git" --work-tree="/tmp/rt/" clean -fd
+08:56:52.718 [notice] Running Test verify_build_cluster
+08:56:52.719 [info] rt:set_backend(riak_kv_bitcask_backend)
+08:56:52.719 [info] rtdev:set_backend(riak_kv_bitcask_backend)
+08:56:52.719 [info] rtdev:update_app_config(all, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.720 [info] rtdev:update_app_config_file(/tmp/rt/current/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.726 [info] rtdev:update_app_config_file(/tmp/rt/current/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.731 [info] rtdev:update_app_config_file(/tmp/rt/current/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.737 [info] rtdev:update_app_config_file(/tmp/rt/current/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.743 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.2.0/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.749 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.2.0/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.755 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.2.0/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.760 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.2.0/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.766 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.1.4/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.772 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.1.4/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.780 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.1.4/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.787 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.1.4/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.794 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.0.3/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.800 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.0.3/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.805 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.0.3/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.811 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.0.3/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.850 [info] Deploying 3 nodes
+08:56:52.850 [info] Riak path: "/tmp/rt"
+08:56:52.887 [info] Running: /tmp/rt/current/dev/dev1/bin/riak start
+08:56:52.887 [info] Running: /tmp/rt/current/dev/dev2/bin/riak start
+08:56:52.887 [info] Running: /tmp/rt/current/dev/dev3/bin/riak start
+08:56:58.528 [debug] Supervisor inet_gethost_native_sup started undefined at pid <0.142.0>
+08:56:58.528 [debug] Supervisor kernel_safe_sup started inet_gethost_native:start_link() at pid <0.141.0>
+08:56:58.570 [info] Deployed nodes: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']
+08:56:58.570 [info] Ensure each nodes 100% of it's own ring
+08:56:58.572 [info] Join nodes together
+08:56:58.601 [debug] [join] 'dev2@127.0.0.1' to ('dev1@127.0.0.1'): ok
+08:56:58.646 [debug] [join] 'dev3@127.0.0.1' to ('dev1@127.0.0.1'): ok
+08:56:58.646 [info] Wait until all nodes are ready and there are no pending changes
+08:57:07.245 [info] Ensure each node owns a portion of the ring
+08:57:07.249 [info] verify_build_cluster: PASS
+08:57:07.249 [notice] verify_build_cluster Test Run Complete
 '''
 </pre>
-
-Whereas running in basho_expect mode gives the following output:
-
-```
-16:20:13.066 [info] Application lager started on node 'riak_test@127.0.0.1'
-16:20:13.086 [info] Connecting to basho_expect at {"127.0.0.1",9000}
-16:20:13.090 [debug] Supervisor inet_gethost_native_sup started undefined at pid <0.53.0>
-16:20:13.092 [debug] Supervisor kernel_safe_sup started inet_gethost_native:start_link() at pid <0.52.0>
-16:20:13.100 [info] Logging into hosts: ["ubuntu10-64-1","ubuntu10-64-2","ubuntu10-64-3"]
-<snip basho_expect output>
-16:20:30.227 [info] Deploying 3 nodes
-16:20:32.378 [info] Re-installing riak on nodes
-<snip basho_expect output>
-16:22:16.905 [info] Starting riak on nodes
-<snip basho_expect output>
-16:22:30.141 [info] Deployed nodes: ['riak@192.168.60.10','riak@192.168.60.11','riak@192.168.60.12']
-16:22:30.141 [info] Ensure each nodes 100% of it's own ring
-16:22:30.143 [info] Join nodes together
-16:22:30.153 [debug] [join] 'riak@192.168.60.11' to ('riak@192.168.60.10'): ok
-16:22:30.164 [debug] [join] 'riak@192.168.60.12' to ('riak@192.168.60.10'): ok
-16:22:30.164 [info] Wait until all nodes are ready and there are no pending changes
-16:22:49.433 [info] Ensure each node owns a portion of the ring
-16:22:49.436 [info] verify_build_cluster: PASS
-'''
 
 As shown, the tests look similar to standard eunit tests and are
 straightforward Erlang. The {@link rt} module provides the basic
 commands to control Riak nodes, and abstracts everything away from
-the underlying harness: devrel or basho_expect. The `rt' module
+the underlying harness: devrel. The `rt' module
 also provides a set of useful existing built-in operations. It is
 expected that the `rt' module will be extended over time with more
 reusable functions.
@@ -150,8 +138,7 @@ is_ready(Node) ->
 '''
 </pre>
 
-Much like basho_bench, riak_test uses Erlang term based config files. The
-references `rtdev.config' file above:
+Erlang term based config files. The references `rtdev.config' file above:
 
 ```
 %% Deps should include the path to compiled Riak libs
@@ -170,29 +157,13 @@ references `rtdev.config' file above:
 {rtdev_path, "/tmp/rt"}.
 '''
 
-And the `rtbe.config' file:
-
-```
-%% Deps should include Riak libs and basho_expect
-{rt_deps, ["/Users/jtuple/basho/riak/deps",
-           "/Users/jtuple/basho/basho_expect"]}.
-{rt_max_wait_time, 180000}.
-{rt_retry_delay, 500}.
-
-%% Use the rtbe harness (in basho_expect source tree)
-{rt_harness, rtbe}.
-
-%% Host/Port to connect to basho_expect server.
-{rtbe_host, "127.0.0.1"}.
-{rtbe_port, 9000}.
-'''
-
 And to conclude, a slightly longer test that uses most of the built-in
 primitives including starting and stopping Riak nodes:
 
 <pre class="erlang">
 ```
-verify_claimant() ->
+-module(verify_claimant).
+confirm() ->
     Nodes = build_cluster(3),
     [Node1, Node2, _Node3] = Nodes,
 
@@ -233,7 +204,7 @@ verify_claimant() ->
     %% Ensure all nodes still believe node2 is the claimant
     lager:info("Ensure all nodes still believe ~p is the claimant", [Node2]),
     [?assertEqual(Node2, claimant_according_to(Node)) || Node <- Nodes],
-    ok.
+    pass.
 '''
 </pre>
 
@@ -266,27 +237,11 @@ To generate the versioned devrel, modify the following as necessary:
 
 You can then launch tests from within the riak_test directory:
 ```
-./riak_test rtdev.config verify_build_cluster
+./riak_test -c rtdev -t verify_build_cluster
 '''
 
 riak_test currently assumes tests are written such that there is one
 test per module and that the module contains a same named zero arity
 function that implements the test. For example, the above calls
-`verify_build_cluster:verify_build_cluster()'.
+`verify_build_cluster:confirm()'.
 
-To run run in basho_expect mode, you must first launch the basho_expect
-server and then run riak_test:
-```
-basho_expect$ python run_be_thrift.py &
-   riak_test$ ./riak_test rtbe.config verify_build_cluster ubuntu10-64-1 ubuntu10-64-2 ubuntu10-64-3
-'''
-
-To make this easier, there is an included script in basho_expect: `Run-riak-test' that operates
-more like traditional basho_expect tests. Just make sure to modify it to point to the right
-riak_test directory. The above simplifies to the following:
-```
-basho_expect$ ./Run-riak-test verify_build_cluster ubuntu10-64-1 ubuntu10-64-2 ubuntu10-64-3
-'''
-
-TODO: integrate with general basho_expect systest harness and ensure things work with
-Guttersnipe.
