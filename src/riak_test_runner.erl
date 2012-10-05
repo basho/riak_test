@@ -1,10 +1,10 @@
--module(riak_test_runner).
 %% @doc riak_test_runner runs a riak_test module's run/0 function. 
+-module(riak_test_runner).
 -export([confirm/3]).
 
 -spec(confirm(integer(), atom(), [{atom(), term()}]) -> [tuple()]).
 %% @doc Runs a module's run/0 function after setting up a log capturing backend for lager. 
-%% It then cleans up that backend and returns the logs as part of the return proplist.
+%%      It then cleans up that backend and returns the logs as part of the return proplist.
 confirm(TestModule, Outdir, TestMetaData) ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, []),
