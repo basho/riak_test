@@ -800,6 +800,20 @@ load_dot_config(ConfigName) ->
 
 %% @private
 load_config_file(File) ->
+    case file:read_file_info(File) of
+        {ok, _} ->
+            io:format("*********************************************************************************~n"),
+            io:format("WARNING! Use of config files is now deprecated, use ~~/.riak_test.config instead.~n"),
+            io:format("*********************************************************************************~n"),
+            io:format("Please acknowledge that you're aware that this functionality will be gone soon.~n"),
+            Input = io:get_chars("[y/N] ", 1),
+            case Input of
+                "y" -> ok;
+                "Y" -> ok;
+                _ -> exit(1)
+            end; 
+        _ -> meh
+    end, 
     case file:consult(File) of
         {ok, Terms} ->
             [set_config(Key, Value) || {Key, Value} <- Terms],
