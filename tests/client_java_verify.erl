@@ -48,7 +48,10 @@ java_unit_tests(HTTP_Host, HTTP_Port, _PB_Host, PB_Port) ->
     Cmd = io_lib:format("java -Dcom.basho.riak.host=~s -Dcom.basho.riak.http.port=~p -Dcom.basho.riak.pbc.port=~p -cp ~s:~s org.junit.runner.JUnitCore com.basho.riak.client.AllTests",
         [HTTP_Host, HTTP_Port, PB_Port, ?JAVA_FAT_FILENAME, ?JAVA_TESTS_FILENAME]),
     lager:info("Cmd: ~s", [Cmd]),
-    JavaLog = os:cmd(Cmd),
+
+    {ExitCode, JavaLog} = rt:stream_cmd(Cmd),
+    %%JavaLog = os:cmd(Cmd),
+    ?assertEqual(0, ExitCode),
     lager:info(JavaLog),
     ?assertNot(rt:str(JavaLog, "FAILURES!!!")),
     ok.
