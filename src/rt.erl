@@ -80,6 +80,7 @@
          stop/1,
          stop_and_wait/1,
          str/2,
+         stream_cmd/1,
          systest_read/2,
          systest_read/3,
          systest_read/5,
@@ -310,6 +311,42 @@ wait_for_cmd(CmdHandle) ->
 %%      the exit status and result
 cmd(Cmd) ->
     ?HARNESS:cmd(Cmd).
+
+%% @doc pretty much the same as os:cmd/1 but it will stream the output to lager.
+%%      If you're running a long running command, it will dump the output
+%%      once per second, as to not create the impression that nothing is happening.
+-spec stream_cmd(string()) -> string().
+stream_cmd(Cmd) ->
+    Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, in, exit_status]),
+    stream_cmd_loop(Port, "", "", now()).
+
+stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs}) ->
+    receive
+        {Port, {data, Data}} ->
+            {_, Now, _} = now(),
+            NewNewLineBuffer = case Now > Secs of
+                true ->
+                    lager:info(NewLineBuffer),
+                    "";
+                _ ->
+                    NewLineBuffer
+            end,
+            case rt:str(Data, "\n") of
+                true -> 
+                    lager:info(NewNewLineBuffer),
+                    Tokens = string:tokens(Data, "\n"),
+                    [ lager:info(Token) || Token <- Tokens ],
+                    stream_cmd_loop(Port, Buffer ++ NewNewLineBuffer ++ Data, "", Time);
+                _ ->
+                    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, now())
+            end;
+        {Port, {exit_status, Status}} ->
+            catch port_close(Port),
+            {Status, Buffer}
+    after rt:config(rt_max_wait_time) ->
+            {-1, Buffer}
+    end.
+
 
 %%%===================================================================
 %%% Status / Wait Functions
