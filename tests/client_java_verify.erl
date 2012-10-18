@@ -14,6 +14,7 @@ confirm() ->
     [Node1] = Nodes,
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
     
+    rpc:call(Node1, application, set_env, [erlang_js, script_timeout, 10000]), 
     [{Node1, ConnectionInfo}] = rt:connection_info([Node1]),
     {HTTP_Host, HTTP_Port} = orddict:fetch(http, ConnectionInfo),
     {PB_Host, PB_Port} = orddict:fetch(pb, ConnectionInfo),

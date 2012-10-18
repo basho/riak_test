@@ -838,8 +838,6 @@ load_dot_config(ConfigName) ->
             %% Now, overlay the specific project
             Config = proplists:get_value(list_to_atom(ConfigName), Terms),
             [set_config(Key, Value) || {Key, Value} <- Config],
-            %% Now dump the config for validation
-            io:format("App config: ~p~n", [application:get_all_env(riak_test)]),
             ok;
         {error, Reason} ->
             erlang:error("Failed to parse config file", ["~/.riak_test.config", Reason])

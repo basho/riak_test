@@ -67,6 +67,11 @@ main(Args) ->
     %% Start Lager
     application:load(lager),
     Config = proplists:get_value(config, ParsedArgs),
+
+    %% Loads application defaults
+    application:load(riak_test),
+
+    %% Loads from ~/.riak_test.config
     rt:load_config(Config),
 
     %% Fileoutput
