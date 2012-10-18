@@ -21,7 +21,6 @@ confirm() ->
 
     lager:info("Connection Info: http: ~p:~p pb: ~p:~p", [HTTP_Host, HTTP_Port, PB_Host, PB_Port]),
 
-    %% {Node, [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}]},
     java_unit_tests(HTTP_Host, HTTP_Port, PB_Host, PB_Port),
     pass.
 
@@ -32,20 +31,12 @@ prereqs() ->
     
     you_got_jars(?JAVA_FAT_BE_URL, ?JAVA_FAT_FILENAME),
     you_got_jars(?JAVA_TESTS_URL, ?JAVA_TESTS_FILENAME),
-    %% http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.0.6-SNAPSHOT-jar-with-dependencies-and-tests.jar
-    %% http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.0.6-SNAPSHOT-tests.jar
-    
     ok.
 
 java_unit_tests(HTTP_Host, HTTP_Port, _PB_Host, PB_Port) ->
-   
-    
-     lager:info("Run the Java unit tests from somewhere on the local machine."),
-    %% go to folder
-    
-    %% run the following:
-    
+    lager:info("Run the Java unit tests from somewhere on the local machine."),
 
+    %% run the following:
     Cmd = io_lib:format("java -Dcom.basho.riak.host=~s -Dcom.basho.riak.http.port=~p -Dcom.basho.riak.pbc.port=~p -cp ~s:~s org.junit.runner.JUnitCore com.basho.riak.client.AllTests",
         [HTTP_Host, HTTP_Port, PB_Port, ?JAVA_FAT_FILENAME, ?JAVA_TESTS_FILENAME]),
     lager:info("Cmd: ~s", [Cmd]),
