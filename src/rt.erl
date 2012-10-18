@@ -781,6 +781,8 @@ cleanup_harness() ->
     ?HARNESS:cleanup_harness().
 
 %% @private
+load_config(undefined) ->
+    load_dot_config("default");
 load_config(ConfigName) ->
     case load_config_file(ConfigName) of
         ok -> ok;
@@ -791,8 +793,16 @@ load_config(ConfigName) ->
 load_dot_config(ConfigName) ->
     case file:consult(filename:join([os:getenv("HOME"), ".riak_test.config"])) of
         {ok, Terms} ->
+            %% First, set up the defaults
+            case proplists:get_value(default, Terms) of 
+                undefined -> meh; %% No defaults set, move on.
+                Default -> [set_config(Key, Value) || {Key, Value} <- Default]
+            end,
+            %% Now, overlay the specific project
             Config = proplists:get_value(list_to_atom(ConfigName), Terms),
             [set_config(Key, Value) || {Key, Value} <- Config],
+            %% Now dump the config for validation
+            io:format("App config: ~p~n", [application:get_all_env(riak_test)]),
             ok;
         {error, Reason} ->
             erlang:error("Failed to parse config file", ["~/.riak_test.config", Reason])
@@ -800,6 +810,20 @@ load_dot_config(ConfigName) ->
 
 %% @private
 load_config_file(File) ->
+    case file:read_file_info(File) of
+        {ok, _} ->
+            io:format("*********************************************************************************~n"),
+            io:format("WARNING! Use of config files is now deprecated, use ~~/.riak_test.config instead.~n"),
+            io:format("*********************************************************************************~n"),
+            io:format("Please acknowledge that you're aware that this functionality will be gone soon.~n"),
+            Input = io:get_chars("[y/N] ", 1),
+            case Input of
+                "y" -> ok;
+                "Y" -> ok;
+                _ -> exit(1)
+            end; 
+        _ -> meh
+    end, 
     case file:consult(File) of
         {ok, Terms} ->
             [set_config(Key, Value) || {Key, Value} <- Terms],
