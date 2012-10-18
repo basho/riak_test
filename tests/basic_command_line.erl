@@ -115,7 +115,7 @@ attach_test(Node) ->
     %{ok, AttachOut} = rt:riak(Node, ["attach"]),
     %?assert(rt:str(AttachOut, "erlang.pipe.1 \(^D to exit\)")),
 
-    rt:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
+    rt:attach(Node, [{expect, "\(^D to exit\)"},
                      {send, "riak_core_ring_manager:get_my_ring()."},
                      {expect, "dict,"},
                      {send, [4]}]), %% 4 = Ctrl + D
