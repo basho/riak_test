@@ -74,6 +74,13 @@ main(Args) ->
     %% Loads from ~/.riak_test.config
     rt:load_config(Config),
 
+    %% Ensure existance of scratch_dir
+    case file:make_dir(rt:config(rt_scratch_dir)) of
+        ok -> great;
+        {eexist, _} -> great;
+        {ErrorType, ErrorReason} -> lager:error("Could not create scratch dir, {~p, ~p}", [ErrorType, ErrorReason])
+    end,
+
     %% Fileoutput
     Outdir = proplists:get_value(outdir, ParsedArgs),
     ConsoleLagerLevel = case Outdir of

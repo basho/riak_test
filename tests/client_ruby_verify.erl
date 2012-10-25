@@ -8,7 +8,7 @@ confirm() ->
     prereqs(),
     GemDir = dat_gem(),
     rt:update_app_config(all, [{riak_kv, [{test, true}, 
-                                          {add_paths, chomp(os:cmd("cd " ++ GemDir ++ " ; pwd")) ++ "/erl_src"}]}, 
+                                          {add_paths, GemDir ++ "/erl_src"}]}, 
                                {riak_search, [{enabled, true}, 
                                               {backend, riak_search_test_backend}]}]
                         ),
@@ -63,15 +63,15 @@ prereqs() ->
 % Download the ruby-client gem, unpack it and build it locally
 dat_gem() ->
     lager:info("Fetching riak-client gem"),
-    %GemInstalled = os:cmd("gem fetch riak-client"),
-    %GemFile = string:substr(GemInstalled, 12, length(GemInstalled) - 12),
-    GemFile = "riak-client",
+    GemInstalled = os:cmd("cd " ++ rt:config(rt_scratch_dir) ++ " ; gem fetch riak-client"),
+    GemFile = string:substr(GemInstalled, 12, length(GemInstalled) - 12),
+    %GemFile = "riak-client",
     lager:info("Downloaded gem: ~s", [GemFile]),
+
+    rt:stream_cmd(io_lib:format("gem unpack ~s.gem", [GemFile]), [{cd, rt:config(rt_scratch_dir)}]),
+
     Cmd = "bundle install --without=guard --no-deployment --binstubs --no-color",
     lager:info(Cmd),
-    {_Exit, _Log} = rt:stream_cmd(Cmd, [{cd, GemFile}, {env, [{"BUNDLE_PATH", "vendor/bundle"}]}]),
-    GemFile.
-
-
-chomp(String) ->
-    string:strip(String, right, $\n).
+    GemDir = rt:config(rt_scratch_dir) ++ "/" ++ GemFile,
+    {_Exit, _Log} = rt:stream_cmd(Cmd, [{cd, GemDir}, {env, [{"BUNDLE_PATH", "vendor/bundle"}]}]),
+    GemDir.

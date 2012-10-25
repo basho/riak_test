@@ -9,6 +9,7 @@
                   lager
                  ]},
   {env, [
+    {rt_scratch_dir, "/tmp/riak_test_scratch"},
     {rt_max_wait_time, 180000},
     {rt_retry_delay, 500},
     {rt_harness, rtdev},

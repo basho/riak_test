@@ -38,11 +38,10 @@ java_unit_tests(HTTP_Host, HTTP_Port, _PB_Host, PB_Port) ->
 
     %% run the following:
     Cmd = io_lib:format("java -Dcom.basho.riak.host=~s -Dcom.basho.riak.http.port=~p -Dcom.basho.riak.pbc.port=~p -cp ~s:~s org.junit.runner.JUnitCore com.basho.riak.client.AllTests",
-        [HTTP_Host, HTTP_Port, PB_Port, ?JAVA_FAT_FILENAME, ?JAVA_TESTS_FILENAME]),
+        [HTTP_Host, HTTP_Port, PB_Port, rt:config(rt_scratch_dir) ++ "/" ++ ?JAVA_FAT_FILENAME, rt:config(rt_scratch_dir) ++ "/" ++ ?JAVA_TESTS_FILENAME]),
     lager:info("Cmd: ~s", [Cmd]),
 
-    {ExitCode, JavaLog} = rt:stream_cmd(Cmd),
-    %%JavaLog = os:cmd(Cmd),
+    {ExitCode, JavaLog} = rt:stream_cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}]),
     ?assertEqual(0, ExitCode),
     lager:info(JavaLog),
     ?assertNot(rt:str(JavaLog, "FAILURES!!!")),
@@ -56,7 +55,8 @@ you_got_jars(Url, Filename) ->
             ok;
         {error, _} ->
             lager:info("Getting it ~p", [Filename]),
-            Log = os:cmd("curl  -O -L " ++ Url),
-            lager:info("curl log: ~p", [Log]);
+            rt:stream_cmd("curl  -O -L " ++ Url, [{cd, rt:config(rt_scratch_dir)}]);
+            %%Log = os:cmd("cd " ++ rt:config(rt_scratch_dir) ++ " ; curl  -O -L " ++ Url),
+            %%lager:info("curl log: ~p", [Log]);
         _ -> meh
     end.
