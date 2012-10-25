@@ -884,18 +884,16 @@ set_config(Key, Value) ->
 
 %% @private
 config(Key) ->
-    case application:get_env(riak_test, Key) of
-        {ok, Value} ->
-            Value;
-        undefined ->
-            erlang:error("Missing configuration key", [Key])
+    case kvc:path(Key, application:get_all_env(riak_test)) of
+        [] -> erlang:error("Missing configuration key", [Key]);
+        Value -> Value
     end.
 
 %% @private
 config(Key, Default) ->
-    case application:get_env(riak_test, Key) of
-        {ok, Value} ->
-            Value;
-        _ ->
-            Default
+    case kvc:path(Key, application:get_all_env(riak_test)) of
+        [] -> Default;
+        Value -> Value
     end.
+
+

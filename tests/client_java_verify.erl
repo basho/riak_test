@@ -3,10 +3,10 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% Change when a new release comes out.
--define(JAVA_FAT_BE_URL, "http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.0.6-SNAPSHOT-jar-with-dependencies-and-tests.jar").
--define(JAVA_FAT_FILENAME, "riak-client-1.0.6-SNAPSHOT-jar-with-dependencies-and-tests.jar").
--define(JAVA_TESTS_URL, "http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.0.6-SNAPSHOT-tests.jar").
--define(JAVA_TESTS_FILENAME, "riak-client-1.0.6-SNAPSHOT-tests.jar").
+-define(JAVA_FAT_BE_URL, rt:config(java.fat_be_url)).
+-define(JAVA_FAT_FILENAME, lists:last(string:tokens(?JAVA_FAT_BE_URL, "/"))).
+-define(JAVA_TESTS_URL, rt:config(java.tests_url)).
+-define(JAVA_TESTS_FILENAME, lists:last(string:tokens(?JAVA_TESTS_URL, "/"))).
 
 confirm() ->
     prereqs(),
@@ -56,7 +56,5 @@ you_got_jars(Url, Filename) ->
         {error, _} ->
             lager:info("Getting it ~p", [Filename]),
             rt:stream_cmd("curl  -O -L " ++ Url, [{cd, rt:config(rt_scratch_dir)}]);
-            %%Log = os:cmd("cd " ++ rt:config(rt_scratch_dir) ++ " ; curl  -O -L " ++ Url),
-            %%lager:info("curl log: ~p", [Log]);
         _ -> meh
     end.
