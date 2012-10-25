@@ -51,8 +51,8 @@ confirm() ->
     assertRangeQuery(Pid, [<<"obj10">>, <<"obj12">>], <<"$key">>, <<"obj10">>, <<"obj12">>),
 
     %% Verify the $key index, and riak_kv#367 regression
-    assertRangeQuery(Pid, [<<"obj5">>, <<"obj6">>], <<"$key">>, <<"obj5">>, <<"obj6">>),
-    assertRangeQuery(Pid, [<<"obj5">>], <<"$key">>, <<"obj5">>, <<"obj5">>),
+    assertRangeQuery(Pid, [<<"obj6">>], <<"$key">>, <<"obj6">>, <<"obj6">>),
+    assertRangeQuery(Pid, [<<"obj6">>, <<"obj7">>], <<"$key">>, <<"obj6">>, <<"obj7">>),
     pass.
 
 put_an_object(Pid, N) ->
