@@ -32,15 +32,15 @@ confirm() ->
              ]}
     ],
 
-    %Nodes = deploy_nodes(NumNodes, Conf),
-    Nodes = rt:deploy_nodes([
-        {"1.2.0", Conf},
-        {"1.2.0", Conf},
-        {"1.2.0", Conf},
-        {"1.2.0", Conf},
-        {"1.2.0", Conf},
-        {"1.2.0", Conf}
-        ]),
+    Nodes = deploy_nodes(NumNodes, Conf),
+    %%Nodes = rt:deploy_nodes([
+    %%    {"1.2.0", Conf},
+    %%    {"1.2.0", Conf},
+    %%    {"1.2.0", Conf},
+    %%    {"1.2.0", Conf},
+    %%    {"1.2.0", Conf},
+    %%    {"1.2.0", Conf}
+    %%    ]),
 
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
@@ -199,31 +199,42 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     start_and_wait_until_fullsync_complete(LeaderA2),
 
 
+    lager:info("Starting Joe's Repl Test"),
+
     %% @todo add stuff
     %% At this point, realtime sync should still work, but, it doesn't because of a bug in 1.2.1 
     %% Check that repl leader is LeaderA
     %% Check that LeaderA2 has ceeded socket back to LeaderA
 
     lager:info("Leader: ~p", [rpc:call(ASecond, riak_repl_leader, leader_node, [])]),
+    lager:info("LeaderA: ~p", [LeaderA]),
+    lager:info("LeaderA2: ~p", [LeaderA2]),
+
     ?assertEqual(ok, wait_until_connection(LeaderA)),
 
     lager:info("Simulation partition to force leader re-election"),
-    [ANotLeader] = ANodes -- [LeaderA2, LeaderA],
 
-    rpc:call(ANotLeader, erlang, disconnect_node, [LeaderA2]),
-    rpc:call(LeaderA2, erlang, disconnect_node, [ANotLeader]),
-    rpc:call(LeaderA, erlang, disconnect_node, [LeaderA2]),
-    rpc:call(LeaderA2, erlang, disconnect_node, [LeaderA]),
+    OldCookie = rpc:call(LeaderA2, erlang, get_cookie, []),
+    NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
+    rpc:call(LeaderA2, erlang, set_cookie, [LeaderA2, NewCookie]),
+
+    %[ANotLeader] = ANodes -- [LeaderA2, LeaderA],
+    %rpc:call(ANotLeader, erlang, disconnect_node, [LeaderA2]),
+    %rpc:call(LeaderA2, erlang, disconnect_node, [ANotLeader]),
+    %rpc:call(LeaderA, erlang, disconnect_node, [LeaderA2]),
+    %rpc:call(LeaderA2, erlang, disconnect_node, [LeaderA]),
     
     
     %%rpc:call(LeaderA, erlang, disconnect_node, [LeaderA2]),
 
-    %%[ rpc:call(LeaderA2, erlang, disconnect_node, [Node]) || Node <- ANodes -- [LeaderA2, LeaderA]],
-    %%[ rpc:call(Node, erlang, disconnect_node, [LeaderA2]) || Node <- ANodes -- [LeaderA2, LeaderA]],
+    [ rpc:call(LeaderA2, erlang, disconnect_node, [Node]) || Node <- ANodes -- [LeaderA2]],
+    [ rpc:call(Node, erlang, disconnect_node, [LeaderA2]) || Node <- ANodes -- [LeaderA2]],
 
     %rpc:call(LeaderA2, erlang, apply, [fun() -> [erlang:disconnect_node(N) || N <- nodes()] end, []]),
     timer:sleep(500),
     %rpc:call(LeaderA2, erlang, apply, [fun() -> [net_adm:ping(N) || N <- ANodes] end, []]),
+    rpc:call(LeaderA2, erlang, set_cookie, [LeaderA2, OldCookie]),
+
     [ rpc:call(LeaderA2, net_adm, ping, [Node]) || Node <- ANodes -- [LeaderA2]],
     [ rpc:call(Node, net_adm, ping, [LeaderA2]) || Node <- ANodes -- [LeaderA2]],
 
@@ -232,7 +243,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %timer:sleep(500),
     %rt:heal(HealingArgs),
 
-    ?assertEqual(ok, wait_until_is_leader(LeaderA)),
+    %?assertEqual(ok, wait_until_is_not_leader(LeaderA2)),
 
     lager:info("Leader: ~p", [rpc:call(ASecond, riak_repl_leader, leader_node, [])]),
     lager:info("Writing 2 more keys to ~p", [LeaderA]),
@@ -242,6 +253,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Reading 2 keys written to ~p from ~p", [LeaderA, BSecond]),
     ?assertEqual(0, wait_for_reads(BSecond, 1301, 1302, TestBucket, 2)),
 
+    lager:info("Finished Joe's Section"),
 
     lager:info("Restarting down node ~p", [LeaderB]),
     rt:start(LeaderB),
@@ -549,6 +561,21 @@ is_leader(Node) ->
             Leader =:= Node
     end.
 
+
+wait_until_is_not_leader(Node) ->
+    lager:info("wait_until_is_not_leader(~p)", [Node]),
+    rt:wait_until(Node, fun is_not_leader/1).
+
+is_not_leader(Node) ->
+    case rpc:call(Node, riak_repl_leader, leader_node, []) of
+        {badrpc, _} ->
+            lager:info("Badrpc"),
+            false;
+        Leader ->
+            lager:info("Checking: ~p =/= ~p", [Leader, Node]),
+            Leader =/= Node
+    end.
+
 wait_until_leader(Node) ->
     Res = rt:wait_until(Node,
         fun(_) ->
@@ -609,7 +636,9 @@ wait_for_reads(Node, Start, End, Bucket, R) ->
         fun(_) ->
                 rt:systest_read(Node, Start, End, Bucket, R) == []
         end),
-    length(rt:systest_read(Node, Start, End, Bucket, R)).
+    Reads = rt:systest_read(Node, Start, End, Bucket, R),
+    lager:info("Reads: ~p", [Reads]),
+    length(Reads).
 
 do_write(Node, Start, End, Bucket, W) ->
     case rt:systest_write(Node, Start, End, Bucket, W) of
