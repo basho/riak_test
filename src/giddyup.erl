@@ -41,10 +41,10 @@ get_suite(Platform) ->
 get_schema(Platform) ->
     Host = rt:config(giddyup_host),
     Project = rt:config(rt_project),
-    URL = "http://" ++ Host ++ "/projects/" ++ Project ++ "?platform=" ++ Platform,
+    Version = rt:get_version(),
+    URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
-    
-    case ibrowse:send_req(URL, [], get, [], [ basic_auth()]) of
+    case ibrowse:send_req(URL, [], get, [], []) of
         {ok, "200", _Headers, JSON} -> mochijson2:decode(JSON);
         _ -> []
     end.
