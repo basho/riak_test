@@ -231,7 +231,10 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     [ rpc:call(Node, erlang, disconnect_node, [LeaderA2]) || Node <- ANodes -- [LeaderA2]],
 
     %rpc:call(LeaderA2, erlang, apply, [fun() -> [erlang:disconnect_node(N) || N <- nodes()] end, []]),
-    timer:sleep(500),
+    wait_until_new_leader(hd(ANodes -- [LeaderA2]), LeaderA2),
+    InterimLeader = rpc:call(LeaderA, riak_repl_leader, leader_node, []),
+    lager:info("Interim leader: ~p", [InterimLeader]),
+
     %rpc:call(LeaderA2, erlang, apply, [fun() -> [net_adm:ping(N) || N <- ANodes] end, []]),
     rpc:call(LeaderA2, erlang, set_cookie, [LeaderA2, OldCookie]),
 
@@ -244,6 +247,10 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %rt:heal(HealingArgs),
 
     %?assertEqual(ok, wait_until_is_not_leader(LeaderA2)),
+
+    %% there's no point in writing anything until the leaders converge, as we
+    %% can drop writes in the middle of an election
+    wait_until_leader_converge(ANodes),
 
     lager:info("Leader: ~p", [rpc:call(ASecond, riak_repl_leader, leader_node, [])]),
     lager:info("Writing 2 more keys to ~p", [LeaderA]),
@@ -577,6 +584,9 @@ is_not_leader(Node) ->
     end.
 
 wait_until_leader(Node) ->
+    wait_until_new_leader(Node, undefined).
+
+wait_until_new_leader(Node, OldLeader) ->
     Res = rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
@@ -587,7 +597,9 @@ wait_until_leader(Node) ->
                         case proplists:get_value(leader, Status) of
                             undefined ->
                                 false;
-                            _ ->
+                            OldLeader ->
+                                false;
+                            _Other ->
                                 true
                         end
                 end
