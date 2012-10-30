@@ -273,6 +273,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                     disable_realtime(LeaderA, "B"),
                     wait_until_no_connection(LeaderA),
                     disconnect_cluster(LeaderA, "B"),
+                    timer:sleep(3000),
 
                     lager:info("write 100 keys to a realtime only bucket"),
                     ?assertEqual([], do_write(ASecond, 1, 100,
@@ -280,9 +281,9 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
                     lager:info("reconnect the 2 clusters"),
                     connect_cluster(LeaderA, "127.0.0.1", Port),
-                    timer:sleep(100),
+                    timer:sleep(3000),
                     enable_realtime(LeaderA, "B"),
-                    timer:sleep(100),
+                    timer:sleep(3000),
                     start_realtime(LeaderA, "B"),
                     ?assertEqual(ok, wait_until_connection(LeaderA));
                 _ ->
