@@ -9,7 +9,9 @@
                   {current, "/tmp/rt/current"},
                   {"1.2.0", "/tmp/rt/riak-1.2.0"},
                   {"1.1.4", "/tmp/rt/riak-1.1.4"},
-                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]}
+                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]},
+    {basho_bench, "/Users/joe/dev/basho/basho_bench"},
+    {spam_dir, "Users/joe/dev/basho/riak_test/search-corpus/spam.0"}
 ]}.
 
 {rtdev, [
