@@ -343,6 +343,9 @@ node_version(N) ->
 spawn_cmd(Cmd) ->
     Port = open_port({spawn, Cmd}, [stream, in, exit_status]),
     Port.
+spawn_cmd(Cmd, Opts) ->
+    Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
+    Port.
 
 wait_for_cmd(Port) ->
     rt:wait_until(node(),
@@ -363,6 +366,9 @@ wait_for_cmd(Port) ->
 
 cmd(Cmd) ->
     wait_for_cmd(spawn_cmd(Cmd)).
+
+cmd(Cmd, Opts) ->
+    wait_for_cmd(spawn_cmd(Cmd, Opts)).
 
 get_cmd_result(Port, Acc) ->
     receive

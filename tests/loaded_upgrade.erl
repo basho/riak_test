@@ -31,8 +31,21 @@
 
 %% @todo basho_bench creates a lot of files. I wish it didn't.
 
+%%prereqs() ->
+%%    config_or_os_env
+%%    BashoBench = case rt:get_os_env("BASHO_BENCH", undefined) of
+%%        undefined -> rt:config(basho_bench, undefined);
+%%        BB -> BB
+%%    end,
+%%    ?assertNotEqual(undefined, BashoBench),
+%%
+%%    SpamDir = case rt:get_os_env("SPAM_DIR", undefined) of
+%%        undefined -> rt:config() 
+
+
 confirm() ->
-    _ = rt:get_os_env("BASHO_BENCH"),
+    rt:config_or_os_env(basho_bench),
+    rt:config_or_os_env(spam_dir),
     %% OldVsns = ["1.0.3", "1.1.4"],
     OldVsns = ["1.1.4"],
     [verify_upgrade(OldVsn) || OldVsn <- OldVsns],
@@ -124,7 +137,11 @@ kv_populate(Bucket) when is_binary(Bucket) ->
 kv_populate(Bucket) ->
     Config = "bb-populate-" ++ Bucket ++ ".config",
     lager:info("Populating bucket ~s", [Bucket]),
-    ?assertMatch({0,_}, rt:cmd("$BASHO_BENCH/basho_bench " ++ Config)),
+    Cmd = "$BASHO_BENCH/basho_bench " ++ Config,
+    ?assertMatch({0,_}, rt:cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)},
+        {"SPAM_DIR", rt:config(spam_dir)}
+    ]}])),
     ok.
 
 kv_spawn_verify(Bucket) when is_binary(Bucket) ->
@@ -132,7 +149,11 @@ kv_spawn_verify(Bucket) when is_binary(Bucket) ->
 kv_spawn_verify(Bucket) ->
     Config = "bb-verify-" ++ Bucket ++ ".config",
     lager:info("Spawning k/v test against: ~s", [Bucket]),
-    rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config).
+    Cmd = "$BASHO_BENCH/basho_bench " ++ Config,
+    rt:spawn_cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)},
+        {"SPAM_DIR", rt:config(spam_dir)}
+    ]}]).
 
 kv_check_verify(Bucket, Port, Opts) ->
     lager:info("Checking k/v test against: ~p", [Bucket]),
@@ -153,7 +174,11 @@ kv_spawn_repair(Bucket) when is_binary(Bucket) ->
 kv_spawn_repair(Bucket) ->
     Config = "bb-repair-" ++ Bucket ++ ".config",
     lager:info("Read-repairing bucket ~s", [Bucket]),
-    rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config).
+    Cmd = "$BASHO_BENCH/basho_bench " ++ Config,
+    rt:spawn_cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)},
+        {"SPAM_DIR", rt:config(spam_dir)}
+    ]}]).
 
 %% ===================================================================
 %% map/reduce Tester
@@ -193,13 +218,20 @@ check_mapred_tester(MR=#mr{runs=Runs}) ->
 mapred_populate() ->
     Config = "bb-populate-mapred.config",
     lager:info("Populating map-reduce bucket"),
-    ?assertMatch({0,_}, rt:cmd("$BASHO_BENCH/basho_bench " ++ Config)),
+    Cmd = "$BASHO_BENCH/basho_bench " ++ Config,
+    ?assertMatch({0,_}, rt:cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)},
+        {"SPAM_DIR", rt:config(spam_dir)}
+    ]}])),
     ok.
 
 mapred_spawn_verify() ->
     Config = "bb-verify-mapred.config",
     lager:info("Spawning map/reduce test"),
-    rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config).
+    rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)},
+        {"SPAM_DIR", rt:config(spam_dir)}
+    ]}]).
 
 mapred_check_verify(Port) ->
     lager:info("Checking map/reduce test"),
@@ -217,7 +249,7 @@ mapred_check_verify(Port) ->
 -record(search, {buckets, runs}).
 
 init_search_tester(Nodes, Conns) ->
-    SpamDir = rt:get_os_env("SPAM_DIR"),
+    SpamDir = rt:config(spam_dir),
     IPs = [proplists:get_value(http, I) || {_, I} <- Conns],
     Buckets = [?SPAM_BUCKET],
     rt:enable_search_hook(hd(Nodes), ?SPAM_BUCKET),
@@ -278,14 +310,22 @@ search_populate(Bucket) when is_binary(Bucket) ->
 search_populate(Bucket) ->
     Config = "bb-populate-" ++ Bucket ++ ".config",
     lager:info("Populating search bucket: ~s", [Bucket]),
-    rt:cmd("$BASHO_BENCH/basho_bench " ++ Config).
+    Cmd = "$BASHO_BENCH/basho_bench " ++ Config,
+    rt:cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)},
+        {"SPAM_DIR", rt:config(spam_dir)}
+    ]}]).
 
 search_spawn_verify(Bucket) when is_binary(Bucket) ->
     search_spawn_verify(binary_to_list(Bucket));
 search_spawn_verify(Bucket) when is_list(Bucket) ->
     Config = "bb-verify-" ++ Bucket ++ ".config",
     lager:info("Spawning search test against: ~s", [Bucket]),
-    rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config).
+    Cmd = "$BASHO_BENCH/basho_bench " ++ Config,
+    rt:spawn_cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)},
+        {"SPAM_DIR", rt:config(spam_dir)}
+    ]}]).
 
 search_check_verify(Bucket, Port, Opts) ->
     lager:info("Checking search test against: ~p", [Bucket]),
@@ -325,7 +365,7 @@ kv_populate_script(Bucket, Host, Port) ->
            {http_raw_ips, [Host]},
            {http_raw_port, Port},
            {http_raw_path, "/riak/" ++ Bucket}],
-    Config = "bb-populate-" ++ Bucket ++ ".config",
+    Config = rt:config(rt_scratch_dir) ++ "/bb-populate-" ++ Bucket ++ ".config",
     write_terms(Config, Cfg),
     ok.
 
@@ -342,7 +382,7 @@ kv_verify_script(Bucket, Host, Port) ->
            {http_raw_port, Port},
            {http_raw_path, "/riak/" ++ Bucket},
            {shutdown_on_error, true}],
-    Config = "bb-verify-" ++ Bucket ++ ".config",
+    Config = rt:config(rt_scratch_dir) ++ "/bb-verify-" ++ Bucket ++ ".config",
     write_terms(Config, Cfg),
     ok.
 
@@ -359,7 +399,7 @@ kv_repair_script(Bucket, Host, Port) ->
            {http_raw_ips, [Host]},
            {http_raw_port, Port},
            {http_raw_path, "/riak/" ++ Bucket}],
-    Config = "bb-repair-" ++ Bucket ++ ".config",
+    Config = rt:config(rt_scratch_dir) ++ "/bb-repair-" ++ Bucket ++ ".config",
     write_terms(Config, Cfg),
     ok.
 
@@ -385,7 +425,7 @@ mapred_populate_script(Host, Port) ->
            {value_generator,
             {function, basho_bench_driver_riakc_pb, mapred_ordered_valgen, []}}],
 
-    Config = "bb-populate-mapred.config",
+    Config = rt:config(rt_scratch_dir) ++ "/bb-populate-mapred.config",
     write_terms(Config, Cfg),
     ok.
 
@@ -403,7 +443,7 @@ mapred_verify_script(Host, Port) ->
            {value_generator, {fixed_bin, 1}},
            {riakc_pb_keylist_length, 1000},
            {shutdown_on_error, true}],
-    Config = "bb-verify-mapred.config",
+    Config = rt:config(rt_scratch_dir) ++ "/bb-verify-mapred.config",
     write_terms(Config, Cfg),
     ok.
 
@@ -430,7 +470,7 @@ search_populate_script(Bucket, IPs, SpamDir) ->
            {http_raw_path, "/riak/" ++ Bucket},
            {shutdown_on_error, true}],
 
-    Config = "bb-populate-" ++ Bucket ++ ".config",
+    Config = rt:config(rt_scratch_dir) ++ "/bb-populate-" ++ Bucket ++ ".config",
     write_terms(Config, Cfg).
 
 search_verify_script(Bucket, IPs) ->
@@ -451,7 +491,7 @@ search_verify_script(Bucket, IPs) ->
            {http_raw_path, "/riak/" ++ Bucket},
            {shutdown_on_error, true}],
 
-    Config = "bb-verify-" ++ Bucket ++ ".config",
+    Config = rt:config(rt_scratch_dir) ++ "/bb-verify-" ++ Bucket ++ ".config",
     write_terms(Config, Cfg).
 
 write_terms(File, Terms) ->
