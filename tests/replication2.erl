@@ -208,19 +208,9 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
     rpc:call(LeaderA2, erlang, set_cookie, [LeaderA2, NewCookie]),
 
-    %[ANotLeader] = ANodes -- [LeaderA2, LeaderA],
-    %rpc:call(ANotLeader, erlang, disconnect_node, [LeaderA2]),
-    %rpc:call(LeaderA2, erlang, disconnect_node, [ANotLeader]),
-    %rpc:call(LeaderA, erlang, disconnect_node, [LeaderA2]),
-    %rpc:call(LeaderA2, erlang, disconnect_node, [LeaderA]),
-    
-    
-    %%rpc:call(LeaderA, erlang, disconnect_node, [LeaderA2]),
-
     [ rpc:call(LeaderA2, erlang, disconnect_node, [Node]) || Node <- ANodes -- [LeaderA2]],
     [ rpc:call(Node, erlang, disconnect_node, [LeaderA2]) || Node <- ANodes -- [LeaderA2]],
 
-    %rpc:call(LeaderA2, erlang, apply, [fun() -> [erlang:disconnect_node(N) || N <- nodes()] end, []]),
     wait_until_new_leader(hd(ANodes -- [LeaderA2]), LeaderA2),
     InterimLeader = rpc:call(LeaderA, riak_core_cluster_mgr, get_leader, []),
     lager:info("Interim leader: ~p", [InterimLeader]),
@@ -230,13 +220,6 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     [ rpc:call(LeaderA2, net_adm, ping, [Node]) || Node <- ANodes -- [LeaderA2]],
     [ rpc:call(Node, net_adm, ping, [LeaderA2]) || Node <- ANodes -- [LeaderA2]],
-
-    %lager:info("Simulation partition to force leader re-election"),
-    %HealingArgs = rt:partition(ANodes -- [LeaderA2], [LeaderA2]),
-    %timer:sleep(500),
-    %rt:heal(HealingArgs),
-
-    %?assertEqual(ok, wait_until_is_not_leader(LeaderA2)),
 
     %% there's no point in writing anything until the leaders converge, as we
     %% can drop writes in the middle of an election
@@ -354,6 +337,88 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             ?assertEqual(100, length(Res13));
         _ ->
             ok
+    end,
+
+    lager:info("Testing offline realtime queueing"),
+
+    LeaderA4 = rpc:call(ASecond, riak_core_cluster_mgr, get_leader, []),
+
+    lager:info("Stopping realtime, queue will build"),
+    stop_realtime(LeaderA4, "B"),
+    timer:sleep(3000),
+
+    lager:info("Writing 100 keys"),
+    ?assertEqual([], do_write(LeaderA4, 800, 900,
+            TestBucket, 2)),
+
+    lager:info("Starting realtime"),
+    start_realtime(LeaderA4, "B"),
+    timer:sleep(3000),
+
+    lager:info("Reading keys written while repl was stopped"),
+    ?assertEqual(0, wait_for_reads(BSecond, 800, 900,
+            TestBucket, 2)),
+
+    lager:info("Testing realtime migration on node shutdown"),
+    Target = hd(ANodes -- [LeaderA4]),
+
+    lager:info("Stopping realtime, queue will build"),
+    stop_realtime(LeaderA4, "B"),
+    timer:sleep(3000),
+
+    lager:info("Writing 100 keys"),
+    ?assertEqual([], do_write(Target, 900, 1000,
+            TestBucket, 2)),
+
+    io:format("queue status: ~p",
+              [rpc:call(Target, riak_repl2_rtq, status, [])]),
+
+    lager:info("Stopping node ~p", [Target]),
+
+    rt:stop(Target),
+    rt:wait_until_unpingable(Target),
+
+    lager:info("Starting realtime"),
+    start_realtime(LeaderA4, "B"),
+    timer:sleep(3000),
+
+    lager:info("Reading keys written while repl was stopped"),
+    ?assertEqual(0, wait_for_reads(BSecond, 900, 1000,
+            TestBucket, 2)),
+
+    lager:info("Restarting node ~p", [Target]),
+
+    rt:start(Target),
+    rt:wait_until_pingable(Target),
+    timer:sleep(5000),
+
+    %% do the stop in the background while we're writing keys
+    spawn(fun() ->
+                timer:sleep(200),
+                %lager:info("Stopping riak_repl on node ~p", [Target]),
+                %rpc:call(Target, application, stop, [riak_repl])
+                lager:info("Stopping node ~p again", [Target]),
+                rt:stop(Target)
+        end),
+
+    lager:info("Writing 1000 keys"),
+    Errors = rt:systest_write(Target, 1000, 2000,
+            TestBucket, 2),
+    WriteErrors = length(Errors),
+
+    lager:info("got ~p write failures", [WriteErrors]),
+    timer:sleep(3000),
+
+    lager:info("checking number of read failures on secondary cluster"),
+    ReadErrors = length(rt:systest_read(BSecond, 1000, 2000, TestBucket, 2)),
+    lager:info("got ~p read failures", [ReadErrors]),
+    case WriteErrors >= ReadErrors of
+        true ->
+            ok;
+        false ->
+            lager:error("Got more read errors: ~p than write errors: ~p",
+                        [ReadErrors, WriteErrors]),
+            ?assert(false)
     end,
 
     lager:info("Test passed"),
@@ -706,3 +771,6 @@ start_realtime(Node, Cluster) ->
     Res = rpc:call(Node, riak_repl_console, realtime, [["start", Cluster]]),
     ?assertEqual(ok, Res).
 
+stop_realtime(Node, Cluster) ->
+    Res = rpc:call(Node, riak_repl_console, realtime, [["stop", Cluster]]),
+    ?assertEqual(ok, Res).

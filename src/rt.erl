@@ -628,11 +628,13 @@ systest_write(Node, Start, End, Bucket, W) ->
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
                 Obj = riak_object:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
-                case C:put(Obj, W) of
+                try C:put(Obj, W) of
                     ok ->
                         Acc;
                     Other ->
                         [{N, Other} | Acc]
+                catch What:Why ->
+                    [{N, {What, Why}} | Acc]
                 end
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
