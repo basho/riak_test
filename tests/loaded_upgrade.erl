@@ -71,20 +71,24 @@ verify_upgrade(OldVsn) ->
 
     Conns = rt:connection_info(Nodes),
     NodeConn = proplists:get_value(Node1, Conns),
+    lager:info("NodeConn: ~p", [NodeConn]),
 
     KV1 = init_kv_tester(NodeConn),
     MR1 = init_mapred_tester(NodeConn),
+    TwoI1 = init_2i_tester(NodeConn),
     Search1 = init_search_tester(Nodes, Conns),
 
     [begin
          KV2 = spawn_kv_tester(KV1),
          MR2 = spawn_mapred_tester(MR1),
+         TwoI2 = spawn_2i_tester(TwoI1),
          Search2 = spawn_search_tester(Search1),
          lager:info("Upgrading ~p", [Node]),
          rt:upgrade(Node, current),
          %% rt:slow_upgrade(Node, current, Nodes),
          _KV3 = check_kv_tester(KV2),
          _MR3 = check_mapred_tester(MR2),
+         _TwoI3 = check_2i_tester(TwoI2),
          _Search3 = check_search_tester(Search2, false),
          lager:info("Ensuring keys still exist"),
          rt:wait_for_cluster_service(Nodes, riak_kv),
@@ -342,6 +346,69 @@ search_check_verify(Bucket, Port, Opts) ->
     end.
 
 %% ===================================================================
+%% 2i Tester
+%% ===================================================================
+
+-record(twoi, {runs}).
+
+init_2i_tester(Conn) ->
+    lager:info("init_2i_tester(~p)", [Conn]),
+    {PBHost, PBPort} = proplists:get_value(pb, Conn),
+    {HTTPHost, HTTPPort} = proplists:get_value(http, Conn),
+    generate_2i_scripts(<<"2ibuquot">>, [{PBHost, PBPort}], [{HTTPHost, HTTPPort}]),
+    twoi_populate(),
+    #twoi{runs=[]}.
+
+spawn_2i_tester(TwoI) ->
+    Count = 3,
+    Runs = [twoi_spawn_verify() || _ <- lists:seq(1,Count)],
+    TwoI#twoi{runs=Runs}.
+
+check_2i_tester(TwoI=#twoi{runs=Runs}) ->
+    Failed = [failed || Run <- Runs,
+                        ok /= twoi_check_verify(Run)],
+    [begin
+         lager:info("Failed 2i test"),
+         lager:info("Re-running until test passes to check for data loss"),
+         Result =
+             rt:wait_until(node(),
+                           fun(_) ->
+                                   Rerun = twoi_spawn_verify(),
+                                   ok == twoi_check_verify(Rerun)
+                           end),
+         ?assertEqual(ok, Result),
+         lager:info("2i test finally passed"),
+         ok
+     end || _ <- Failed],
+    TwoI#twoi{runs=[]}.
+
+twoi_populate() ->
+    Config = "bb-populate-2i.config",
+    lager:info("Populating 2i bucket"),
+    Cmd = "$BASHO_BENCH/basho_bench " ++ Config,
+    ?assertMatch({0,_}, rt:cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)}
+    ]}])),
+    ok.
+
+twoi_spawn_verify() ->
+    Config = "bb-verify-2i.config",
+    lager:info("Spawning 2i test"),
+    rt:spawn_cmd("$BASHO_BENCH/basho_bench " ++ Config, [{cd, rt:config(rt_scratch_dir)}, {env, [
+        {"BASHO_BENCH", rt:config(basho_bench)}
+    ]}]).
+
+twoi_check_verify(Port) ->
+    lager:info("Checking 2i test"),
+    case rt:wait_for_cmd(Port) of
+        {0,_} ->
+            ok;
+        _ ->
+            fail
+    end.
+
+
+%% ===================================================================
 %% basho_bench K/V scripts
 %% ===================================================================
 
@@ -493,6 +560,51 @@ search_verify_script(Bucket, IPs) ->
 
     Config = rt:config(rt_scratch_dir) ++ "/bb-verify-" ++ Bucket ++ ".config",
     write_terms(Config, Cfg).
+
+%% ===================================================================
+%% basho_bench 2i scritps
+%% ===================================================================
+generate_2i_scripts(Bucket, PBIPs, HTTPIPs) ->
+    twoi_populate_script(Bucket, PBIPs, HTTPIPs),
+    twoi_verify_script(Bucket, PBIPs, HTTPIPs),
+    ok.
+
+twoi_populate_script(Bucket, PBIPs, HTTPIPs) ->
+    Cfg = [ {driver, basho_bench_driver_2i},
+            {operations, [{{put_pb, 5}, 1}]},
+            {mode, max},
+            {duration, 10000},
+            {concurrent, 1},
+            {key_generator, {sequential_int, 10000}},
+            {value_generator, {fixed_bin, 10000}},
+            {riakc_pb_bucket, Bucket},
+            {pb_ips, PBIPs}, 
+            {pb_replies, 1},
+            {http_ips, HTTPIPs}],
+    Config = rt:config(rt_scratch_dir) ++ "/bb-populate-2i.config",
+    write_terms(Config, Cfg),
+    ok.
+
+twoi_verify_script(Bucket, PBIPs, HTTPIPs) ->
+    Cfg = [ {driver, basho_bench_driver_2i},
+            {operations, [
+                {{query_http, 10}, 1},
+                {{query_mr,   10}, 1},
+                {{query_pb,   10}, 1}
+            ]},
+            {mode, max},
+            {duration, 1},
+            {concurrent, 3},
+            {key_generator, {uniform_int, 10000}},
+            {value_generator, {fixed_bin, 10000}},
+            {riakc_pb_bucket, Bucket},
+            {pb_ips, PBIPs},
+            {pb_replies, 1},
+            {http_ips, HTTPIPs},
+            {enforce_keyrange, 10000}],
+    Config = rt:config(rt_scratch_dir) ++ "/bb-verify-2i.config",
+    write_terms(Config, Cfg),
+    ok.
 
 write_terms(File, Terms) ->
     {ok, IO} = file:open(File, [write]),
