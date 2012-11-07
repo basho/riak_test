@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 echo "Making $(pwd) the current release:"
 cwd=$(pwd)
