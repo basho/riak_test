@@ -53,6 +53,14 @@ confirm() ->
     pass.
 
 verify_upgrade(OldVsn) ->
+
+    %% Only run 2i for level
+    global:send(riak_test, metadata),
+    TestMetaData = receive 
+        {metadata, TestMeta} -> TestMeta 
+    end,
+    Backend = proplists:get_value(backend, TestMetaData),
+
     Config = [{riak_search, [{enabled, true}]}],
     %% Uncomment to use settings more prone to cause races
     %% Config = [{riak_core, [{handoff_concurrency, 1024},
@@ -75,20 +83,29 @@ verify_upgrade(OldVsn) ->
 
     KV1 = init_kv_tester(NodeConn),
     MR1 = init_mapred_tester(NodeConn),
-    TwoI1 = init_2i_tester(NodeConn),
     Search1 = init_search_tester(Nodes, Conns),
-
+    
+    TwoI1 = case Backend of
+        eleveldb -> init_2i_tester(NodeConn);
+        _ -> undefined
+    end,
     [begin
          KV2 = spawn_kv_tester(KV1),
          MR2 = spawn_mapred_tester(MR1),
-         TwoI2 = spawn_2i_tester(TwoI1),
+         TwoI2 = case TwoI1 of 
+            undefined -> undefined;
+            _ -> spawn_2i_tester(TwoI1)
+         end,
          Search2 = spawn_search_tester(Search1),
          lager:info("Upgrading ~p", [Node]),
          rt:upgrade(Node, current),
          %% rt:slow_upgrade(Node, current, Nodes),
          _KV3 = check_kv_tester(KV2),
          _MR3 = check_mapred_tester(MR2),
-         _TwoI3 = check_2i_tester(TwoI2),
+         _TwoI3 = case TwoI1 of
+            undefined -> undefined;
+            _ -> check_2i_tester(TwoI2)
+         end,
          _Search3 = check_search_tester(Search2, false),
          lager:info("Ensuring keys still exist"),
          rt:wait_for_cluster_service(Nodes, riak_kv),
