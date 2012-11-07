@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # You need to use this script once to build a set of devrels for prior
 # releases of Riak (for mixed version / upgrade testing). You should
