@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Creates a mixed-version directory structure for running riak_test
 # using rtdev-mixed.config settings. Should be run inside a directory
