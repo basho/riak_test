@@ -8,7 +8,7 @@ confirm() ->
     prereqs(),
     GemDir = dat_gem(),
     rt:update_app_config(all, [{riak_kv, [{test, true}, 
-                                          {add_paths, GemDir ++ "/erl_src"}]}, 
+                                          {add_paths, filename:join([GemDir, "erl_src"])}]}, 
                                {riak_search, [{enabled, true}, 
                                               {backend, riak_search_test_backend}]}]
                         ),
@@ -74,6 +74,8 @@ dat_gem() ->
 
     Cmd = "bundle install --without=guard --no-deployment --binstubs --no-color",
     lager:info(Cmd),
-    GemDir = rt:config(rt_scratch_dir) ++ "/" ++ GemFile,
+    %%GemDir = rt:config(rt_scratch_dir) ++ "/" ++ GemFile,
+    GemDir = filename:join([rt:config(rt_scratch_dir), GemFile]),
+    
     {_Exit, _Log} = rt:stream_cmd(Cmd, [{cd, GemDir}, {env, [{"BUNDLE_PATH", "vendor/bundle"}]}]),
     GemDir.
