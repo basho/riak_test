@@ -57,6 +57,8 @@ prereqs() ->
     lager:info("Installing Bundler gem"),
     os:cmd("gem install bundler --no-rdoc --no-ri"),
 
+    lager:info("Installing multi_json gem"),
+    os:cmd("gem install multi_json --no-rdoc --no-ri"),
     ok.
 
 
