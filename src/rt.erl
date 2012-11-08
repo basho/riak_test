@@ -32,6 +32,7 @@
          attach/2,
          build_cluster/1,
          build_cluster/2,
+         build_cluster/3,
          capability/2,
          check_singleton_node/1,
          claimant_according_to/1,
