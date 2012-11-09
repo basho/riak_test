@@ -30,7 +30,8 @@ confirm() ->
     %% of riak_test.
     RiakRootDir = rtdev:node_path(Node1),
 
-    Cmd = io_lib:format("bin/rspec --profile --tag integration --tag ~~nodegen --no-color -fd", []),
+    Cmd = "bin/rspec --profile --tag integration --tag \~nodegen --no-color -fd",
+    
     lager:info("Cmd: ~s", [Cmd]),
 
     {Code, RubyLog} = rt:stream_cmd(Cmd, [{cd, GemDir}, {env, [
