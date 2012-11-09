@@ -234,7 +234,16 @@ init_meck(Node, {M,F}) ->
     init_meck(Node, {M,F,[]});
 init_meck(Node, {M,F,A}) ->
     lager:info("Init meck ~s ~s ~p on node ~s", [M, F, A, Node]),
+    ModToMeck = mod_to_meck(M),
+    Opts = [passthrough, unstick, no_link],
+    ok = rpc:call(Node, meck, new, [ModToMeck, Opts]),
     ok = rpc:call(Node, M, F, A).
+
+%% @doc Convert `MeckName' into module name it is mecking.  Assumes
+%%      that `MeckName' ends with `_mecks'
+mod_to_meck(MeckName) ->
+    S = atom_to_list(MeckName),
+    list_to_atom(string:substr(S, 1, length(S) - 6)).
 
 remote_compile_and_load(Node, F) ->
     lager:info("Compiling and loading file ~s on node ~s", [F, Node]),
