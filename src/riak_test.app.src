@@ -9,6 +9,7 @@
                   lager
                  ]},
   {env, [
+    {rt_scratch_dir, "/tmp/riak_test_scratch"},
     {rt_max_wait_time, 180000},
     {rt_retry_delay, 500},
     {rt_harness, rtdev},
@@ -16,6 +17,9 @@
                   {current, "/tmp/rt/current"},
                   {"1.2.0", "/tmp/rt/riak-1.2.0"},
                   {"1.1.4", "/tmp/rt/riak-1.1.4"},
-                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]}
+                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]},
+    {java, [{fat_be_url, "http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.0.6-SNAPSHOT-jar-with-dependencies-and-tests.jar"},
+            {tests_url, "http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.0.6-SNAPSHOT-tests.jar"}
+    ]}
   ]}
  ]}.

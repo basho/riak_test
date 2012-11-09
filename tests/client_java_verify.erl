@@ -3,10 +3,10 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% Change when a new release comes out.
--define(JAVA_FAT_BE_URL, "http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.0.6-SNAPSHOT-jar-with-dependencies-and-tests.jar").
--define(JAVA_FAT_FILENAME, "riak-client-1.0.6-SNAPSHOT-jar-with-dependencies-and-tests.jar").
--define(JAVA_TESTS_URL, "http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.0.6-SNAPSHOT-tests.jar").
--define(JAVA_TESTS_FILENAME, "riak-client-1.0.6-SNAPSHOT-tests.jar").
+-define(JAVA_FAT_BE_URL, rt:config(java.fat_be_url)).
+-define(JAVA_FAT_FILENAME, lists:last(string:tokens(?JAVA_FAT_BE_URL, "/"))).
+-define(JAVA_TESTS_URL, rt:config(java.tests_url)).
+-define(JAVA_TESTS_FILENAME, lists:last(string:tokens(?JAVA_TESTS_URL, "/"))).
 
 confirm() ->
     prereqs(),
@@ -38,11 +38,10 @@ java_unit_tests(HTTP_Host, HTTP_Port, _PB_Host, PB_Port) ->
 
     %% run the following:
     Cmd = io_lib:format("java -Dcom.basho.riak.host=~s -Dcom.basho.riak.http.port=~p -Dcom.basho.riak.pbc.port=~p -cp ~s:~s org.junit.runner.JUnitCore com.basho.riak.client.AllTests",
-        [HTTP_Host, HTTP_Port, PB_Port, ?JAVA_FAT_FILENAME, ?JAVA_TESTS_FILENAME]),
+        [HTTP_Host, HTTP_Port, PB_Port, rt:config(rt_scratch_dir) ++ "/" ++ ?JAVA_FAT_FILENAME, rt:config(rt_scratch_dir) ++ "/" ++ ?JAVA_TESTS_FILENAME]),
     lager:info("Cmd: ~s", [Cmd]),
 
-    {ExitCode, JavaLog} = rt:stream_cmd(Cmd),
-    %%JavaLog = os:cmd(Cmd),
+    {ExitCode, JavaLog} = rt:stream_cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}]),
     ?assertEqual(0, ExitCode),
     lager:info(JavaLog),
     ?assertNot(rt:str(JavaLog, "FAILURES!!!")),
@@ -56,7 +55,6 @@ you_got_jars(Url, Filename) ->
             ok;
         {error, _} ->
             lager:info("Getting it ~p", [Filename]),
-            Log = os:cmd("curl  -O -L " ++ Url),
-            lager:info("curl log: ~p", [Log]);
+            rt:stream_cmd("curl  -O -L " ++ Url, [{cd, rt:config(rt_scratch_dir)}]);
         _ -> meh
     end.
