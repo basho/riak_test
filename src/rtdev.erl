@@ -197,8 +197,6 @@ deploy_nodes(NodeConfig) ->
     %% Ensure nodes started
     [ok = rt:wait_until_pingable(N) || N <- Nodes],
 
-    ok = load_mecks(Nodes),
-
     %% %% Enable debug logging
     %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
 
@@ -208,49 +206,6 @@ deploy_nodes(NodeConfig) ->
 
     lager:info("Deployed nodes: ~p", [Nodes]),
     Nodes.
-
-%% @doc Load the mecks on the nodes under test.
--spec load_mecks([node()]) -> ok.
-load_mecks(Nodes) ->
-    case rt:config(load_mecks, true) of
-        false ->
-            ok;
-        true ->
-            Mecks = rt:config(mecks, []),
-            rt:pmap(fun(N) -> load_meck_code(N, Mecks) end, Nodes),
-            ok
-    end.
-
-load_meck_code(Node, Mecks) ->
-    %% TODO: validate this env var very early and fail if not there
-    Dir = rt:config(rt_dir),
-    MeckCode = filelib:wildcard(filename:join([Dir, "deps", "meck", "src", "*.erl"])),
-    [ok = remote_compile_and_load(Node, F) || F <- MeckCode],
-    MeckFiles = filelib:wildcard(filename:join([Dir, "mecks", "*.erl"])),
-    [ok = remote_compile_and_load(Node, F) || F <- MeckFiles],
-    [ok = init_meck(Node, Meck) || Meck <- Mecks].
-
-init_meck(Node, {M,F}) ->
-    init_meck(Node, {M,F,[]});
-init_meck(Node, {M,F,A}) ->
-    lager:info("Init meck ~s ~s ~p on node ~s", [M, F, A, Node]),
-    ModToMeck = mod_to_meck(M),
-    Opts = [passthrough, unstick, no_link],
-    ok = rpc:call(Node, meck, new, [ModToMeck, Opts]),
-    ok = rpc:call(Node, M, F, A).
-
-%% @doc Convert `MeckName' into module name it is mecking.  Assumes
-%%      that `MeckName' ends with `_mecks'
-mod_to_meck(MeckName) ->
-    S = atom_to_list(MeckName),
-    list_to_atom(string:substr(S, 1, length(S) - 6)).
-
-remote_compile_and_load(Node, F) ->
-    lager:info("Compiling and loading file ~s on node ~s", [F, Node]),
-    {ok, _, Bin} = rpc:call(Node, compile, file, [F, [binary]]),
-    ModName = list_to_atom(filename:basename(F, ".erl")),
-    {module, _} = rpc:call(Node, code, load_binary, [ModName, F, Bin]),
-    ok.
 
 stop_all(DevPath) ->
     case filelib:is_dir(DevPath) of

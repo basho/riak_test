@@ -196,7 +196,9 @@ deploy_nodes(NumNodes, InitialConfig) ->
 
 %% @doc Start the specified Riak node
 start(Node) ->
-    ?HARNESS:start(Node).
+    ?HARNESS:start(Node),
+    ?assertEqual(ok, wait_until_pingable(Node)),
+    ok = load_mecks([Node]).
 
 %% @doc Start the specified Riak `Node' and wait for it to be pingable
 start_and_wait(Node) ->
@@ -204,7 +206,10 @@ start_and_wait(Node) ->
     ?assertEqual(ok, wait_until_pingable(Node)).
 
 async_start(Node) ->
-    spawn(fun() -> start(Node) end).
+    spawn(fun() -> start(Node) end),
+    ?assertEqual(ok, wait_until_pingable(Node)),
+    ok = load_mecks([Node]).
+
 
 %% @doc Stop the specified Riak `Node'.
 stop(Node) ->
@@ -890,3 +895,38 @@ config(Key, Default) ->
         _ ->
             Default
     end.
+
+%% @doc Load the mecks on the nodes under test.
+-spec load_mecks([node()]) -> ok.
+load_mecks(Nodes) ->
+    case rt:config(load_mecks, true) of
+        false ->
+            ok;
+        true ->
+            Mecks = rt:config(mecks, []),
+            rt:pmap(fun(N) -> load_meck_code(N, Mecks) end, Nodes),
+            ok
+    end.
+
+load_meck_code(Node, Mecks) ->
+    %% TODO: validate this env var very early and fail if not there
+    Dir = rt:config(rt_dir),
+    MeckCode = filelib:wildcard(filename:join([Dir, "deps", "meck", "src", "*.erl"])),
+    [ok = remote_compile_and_load(Node, F) || F <- MeckCode],
+    MeckFiles = filelib:wildcard(filename:join([Dir, "mecks", "*.erl"])),
+    [ok = remote_compile_and_load(Node, F) || F <- MeckFiles],
+    [ok = init_meck(Node, Meck) || Meck <- Mecks].
+
+init_meck(Node, {M,F}) ->
+    init_meck(Node, {M,F,[]});
+init_meck(Node, {M,F,A}) ->
+    lager:info("Init meck {~s, ~s, ~p} on node ~s", [M, F, A, Node]),
+    ok = rpc:call(Node, M, init, []),
+    ok = rpc:call(Node, M, F, A).
+
+remote_compile_and_load(Node, F) ->
+    lager:info("Compiling and loading file ~s on node ~s", [F, Node]),
+    {ok, _, Bin} = rpc:call(Node, compile, file, [F, [binary]]),
+    ModName = list_to_atom(filename:basename(F, ".erl")),
+    {module, _} = rpc:call(Node, code, load_binary, [ModName, F, Bin]),
+    ok.
