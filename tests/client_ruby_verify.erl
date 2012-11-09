@@ -4,12 +4,12 @@
 
 %% @todo Only Memory backend is supported
 
-confirm() -> 
+confirm() ->
     prereqs(),
     GemDir = dat_gem(),
-    rt:update_app_config(all, [{riak_kv, [{test, true}, 
-                                          {add_paths, filename:join([GemDir, "erl_src"])}]}, 
-                               {riak_search, [{enabled, true}, 
+    rt:update_app_config(all, [{riak_kv, [{test, true},
+                                          {add_paths, filename:join([GemDir, "erl_src"])}]},
+                               {riak_search, [{enabled, true},
                                               {backend, riak_search_test_backend}]}]
                         ),
 
@@ -20,18 +20,18 @@ confirm() ->
     [{Node1, ConnectionInfo}] = rt:connection_info([Node1]),
     {_HTTP_Host, HTTP_Port} = orddict:fetch(http, ConnectionInfo),
     {_PB_Host, PB_Port} = orddict:fetch(pb, ConnectionInfo),
-    
-    %% Ruby Client Tests require a path to riak, to grab the PIPE_DIR 
+
+    %% Ruby Client Tests require a path to riak, to grab the PIPE_DIR
     %% from riak && riak-admin. Work will need to be done on the
     %% ruby-client side to enable this test to work with remote nodes.
     %% Fortunately for us, riak_test does not support remote nodes, so
-    %% all is fine in ruby land... for now. 
-    %% That's why I'm calling rtdev directly, violating a cardinal rule 
+    %% all is fine in ruby land... for now.
+    %% That's why I'm calling rtdev directly, violating a cardinal rule
     %% of riak_test.
     RiakRootDir = rtdev:node_path(Node1),
 
     Cmd = "bin/rspec --profile --tag integration --tag \~nodegen --no-color -fd",
-    
+
     lager:info("Cmd: ~s", [Cmd]),
 
     {Code, RubyLog} = rt:stream_cmd(Cmd, [{cd, GemDir}, {env, [
@@ -58,8 +58,6 @@ prereqs() ->
     lager:info("Installing Bundler gem"),
     os:cmd("gem install bundler --no-rdoc --no-ri"),
 
-    lager:info("Installing multi_json gem"),
-    os:cmd("gem install multi_json --no-rdoc --no-ri"),
     ok.
 
 
@@ -73,10 +71,10 @@ dat_gem() ->
 
     rt:stream_cmd(io_lib:format("gem unpack ~s.gem", [GemFile]), [{cd, rt:config(rt_scratch_dir)}]),
 
-    Cmd = "bundle install --without=guard --no-deployment --binstubs --no-color",
+    Cmd = "bundle install --without=guard --binstubs --no-color --path=vendor/bundle",
     lager:info(Cmd),
-    %%GemDir = rt:config(rt_scratch_dir) ++ "/" ++ GemFile,
+
     GemDir = filename:join([rt:config(rt_scratch_dir), GemFile]),
-    
+
     {_Exit, _Log} = rt:stream_cmd(Cmd, [{cd, GemDir}, {env, [{"BUNDLE_PATH", "vendor/bundle"}]}]),
     GemDir.
