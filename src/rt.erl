@@ -81,6 +81,7 @@
          stop_and_wait/1,
          str/2,
          stream_cmd/1,
+         stream_cmd/2,
          systest_read/2,
          systest_read/3,
          systest_read/5,
@@ -139,6 +140,8 @@ get_os_env(Var, Default) ->
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in `Config'.
+update_app_config(all, Config) ->
+    ?HARNESS:update_app_config(all, Config);
 update_app_config(Node, Config) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
@@ -315,9 +318,15 @@ cmd(Cmd) ->
 %% @doc pretty much the same as os:cmd/1 but it will stream the output to lager.
 %%      If you're running a long running command, it will dump the output
 %%      once per second, as to not create the impression that nothing is happening.
--spec stream_cmd(string()) -> string().
+-spec stream_cmd(string()) -> {integer(), string()}.
 stream_cmd(Cmd) ->
-    Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, in, exit_status]),
+    Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, exit_status]),
+    stream_cmd_loop(Port, "", "", now()).
+
+%% @doc same as rt:stream_cmd/1, but with options, like open_port/2
+-spec stream_cmd(string(), string()) -> {integer(), string()}.
+stream_cmd(Cmd, Opts) ->
+    Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, exit_status] ++ Opts),
     stream_cmd_loop(Port, "", "", now()).
 
 stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs}) ->
@@ -875,18 +884,16 @@ set_config(Key, Value) ->
 
 %% @private
 config(Key) ->
-    case application:get_env(riak_test, Key) of
-        {ok, Value} ->
-            Value;
-        undefined ->
-            erlang:error("Missing configuration key", [Key])
+    case kvc:path(Key, application:get_all_env(riak_test)) of
+        [] -> erlang:error("Missing configuration key", [Key]);
+        Value -> Value
     end.
 
 %% @private
 config(Key, Default) ->
-    case application:get_env(riak_test, Key) of
-        {ok, Value} ->
-            Value;
-        _ ->
-            Default
+    case kvc:path(Key, application:get_all_env(riak_test)) of
+        [] -> Default;
+        Value -> Value
     end.
+
+
