@@ -2,7 +2,7 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
-replication_upgrade() ->
+confirm() ->
     FromVersion = replication:get_os_env("REPL_FROM", "1.1.4"),
     ToVersion = replication:get_os_env("REPL_TO", "current"),
     lager:info("Doing rolling replication upgrade test from ~p to ~p",

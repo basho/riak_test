@@ -266,6 +266,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                     connect_cluster(LeaderA, "127.0.0.1", Port),
                     timer:sleep(3000),
                     enable_realtime(LeaderA, "B"),
+                    enable_fullsync(LeaderA, "B"),
                     timer:sleep(3000),
                     start_realtime(LeaderA, "B"),
                     ?assertEqual(ok, wait_until_connection(LeaderA));
@@ -765,7 +766,7 @@ disable_realtime(Node, Cluster) ->
 
 enable_fullsync(Node, Cluster) ->
     Res = rpc:call(Node, riak_repl_console, fullsync, [["enable", Cluster]]),
-    ?assertMatch({ok, _}, Res).
+    ?assertEqual(ok, Res).
 
 start_realtime(Node, Cluster) ->
     Res = rpc:call(Node, riak_repl_console, realtime, [["start", Cluster]]),
