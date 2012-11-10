@@ -277,8 +277,16 @@ case you need to do 3 things.  See [gh_riak_core_155][] for an example.
 After step 3 the meck will stay in effect for the duration of the
 node's life.  Thus, if you restart it the meck will go away.
 
+[em]: https://github.com/basho/riak_test/tree/4c72e13a229a52b005d9b7924f6f307cdca1ed7e/mecks
+
 [error_logger]: http://www.erlang.org/doc/man/error_logger.html
 
 [funs]: http://www.erlang.org/doc/programming_examples/funs.html
 
+[gh_riak_core_155]: https://github.com/basho/riak_test/blob/4c72e13a229a52b005d9b7924f6f307cdca1ed7e/tests/gh_riak_core_155.erl#L43
+
+[hm]: https://github.com/basho/riak_test/blob/4c72e13a229a52b005d9b7924f6f307cdca1ed7e/mecks/hashtree_mecks.erl
+
 [meck]: https://github.com/eproxus/meck
+
+[rcrm]: https://github.com/basho/riak_test/blob/4c72e13a229a52b005d9b7924f6f307cdca1ed7e/mecks/riak_core_ring_manager_mecks.erl
