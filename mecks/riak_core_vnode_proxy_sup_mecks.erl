@@ -11,5 +11,4 @@ delay_start_proxies(Ms) ->
                       meck:passthrough([Mod]);
                  (Mod) ->
                       meck:passthrough([Mod])
-              end),
-    ok.
+              end).
