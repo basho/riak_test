@@ -159,3 +159,126 @@ Run a test! `./riak_test -c rtdev -t verify_build_cluster`
 
 Did that work? Great, try something harder: `./riak_test -c
 rtdev_mixed -t upgrade`
+
+
+Using Mecks
+----------
+
+Riak Test has the ability to alter specific behavior of Erlang and
+Riak on the nodes under test.  Specifically, it provides the ability
+to redefine any number of functions, on-the-fly, for any test.  Some
+examples:
+
+* Redefined `riak_core_ring_manager:ring_trans` to be a noop.  See
+  [riak_core_ring_manager_mecks.erl][rcrm].
+
+* Delay the completion of `hashtree:update_perform`.  See
+  [hashtree_mecks][hm].
+
+* Cause partial writes by removing vnodes from the preflist in the put
+  fsm.
+
+* Periodically drop ring changed events on the floor.
+
+* Have a specific KV vnode die after 60 seconds.
+
+The possibilities are endless.  Riak Test uses [meck][] allowing you to
+change the behavior of any function you want.  You can change the
+function arguments.  You can cause side effects.  You can change the
+return value.  You can completely replace the function with your own
+definition.  You can effect global state like ETS tables and
+distribute Erlang.  The fundamental concept is that it allows you to
+Redefined any function and optionally call back into the original
+function if you still want it to perform its work but modify it in
+some way.
+
+### How To Write Mecks
+
+First, look at the [existing mecks][em] to get an idea of what a Riak
+Test meck definition looks like.  Riak Test relies on some conventions
+to make mecks easier to write and to give some sense of structure.
+Here are a list of rules to keep in mind when writing mecks.
+
+* The module name of the meck should be `<module_name_to_meck>_mecks`.
+  E.g. if you want to meck the module `lists` then the file
+  `lists_mecks.erl` should be created under the mecks dir.  This
+  convention is **mandatory** for the meck macros to work correctly.
+
+* All exported functions should add an _expect_ to the function it
+  wishes to alter.  The term _expect_ comes from mock nomenclature.
+  The idea is to "mock" a function so that it performs in the specific
+  way you want it to.  You do this to isolate code to make testing
+  easier.  E.g. replace a database call with a mock that returns a
+  static result set so you can test the code that parses the result
+  set.  It's the same idea in Riak Test except the focus is on
+  altering or replacing function definitions in order to help diagnose
+  what happens when things go wrong.
+
+* The last line of all exported functions should be a call to the
+  macro `?M_EXPECT(FunName, Definition)`.  Where `FunName` is the
+  function name as an atom and `Definition` is a [fun][funs] which
+  redefines the execution of `FunName`.  If `FunName` has multiple
+  arities then meck will automatically mock the correct one based on
+  the arity of the fun.
+
+* If you still want to call into the original function then call
+  `meck:passthrough([Arg1, Arg2, ...])`.  Notice the args need to be
+  wrapped in a list.
+
+* It is highly recommended that you add logging calls to your mock.
+  This way there is an indication in the riak logs that a specific
+  function call has been changed.  Keep in mind that these logs could
+  be saved somewhere and logged at 3 months later.
+
+* All logging calls **must** use the `?M_` macros.  Because of the way
+  these modules are compiled no lager parse transform is performed.
+  The macros use [error_logger][] which is automatically converted
+  into equivalent lager statements by lager itself.
+
+### How To Use Mecks
+
+There are two ways to use mecks--via the config file of
+programmatically in the test.  These methods may be used together.
+
+Using the config file allows you to apply any number of mecks to any
+test.  The meck is applied to all nodes and is effect for the entire
+duration of the run.  Even after a node restart the mecks will be
+re-loaded and re-initialized.  To use mecks add the section `{mecks,
+[{MeckModName, Fun}, {MeckModName, Fun, Args}]}` to your project conf
+in the configuration file.  Here is an example of using the noop ring
+trans and hashtree mecks.
+
+    {chaos, [
+        {mecks, [{riak_core_ring_manager_mecks, noop_ring_trans},
+                 {hashtree_mecks, update_perform_sleep, [60]}]},
+    ]}.
+
+This will apply all the listed mecks any time a node is started and
+they will stay in effect for the entire duration of the run.  In some
+cases you may want to control when the meck goes into effect.  In this
+case you need to do 3 things.  See [gh_riak_core_155][] for an example.
+
+1. Make sure the specific meck you want to control is **not** in the
+   mecks list.
+
+2. Before calling any of the specific meck functions
+   (e.g. `hashtree_mecks:update_perform_sleep(60)`) first call the
+   `init` function.  This function is automatically created by the
+   meck header file.  Remember this call needs to be made on the
+   remote node(s), not the Riak Test node.  E.g. `ok = rpc:call(Node,
+   riak_core_vnode_proxy_sup_mecks, init, [])`.
+
+3. Make a remote call to the meck functions you wish to apply.
+   E.g. `ok = rpc:call(Node, riak_core_vnode_proxy_sup_mecks,
+   delay_start_proxies, [3000])`.  At this point the
+   `riak_core_vnode_proxy_sup:start_proxies` function has been altered
+   to sleep for 3 seconds before continuing with its normal work.
+
+After step 3 the meck will stay in effect for the duration of the
+node's life.  Thus, if you restart it the meck will go away.
+
+[error_logger]: http://www.erlang.org/doc/man/error_logger.html
+
+[funs]: http://www.erlang.org/doc/programming_examples/funs.html
+
+[meck]: https://github.com/eproxus/meck
