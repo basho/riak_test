@@ -369,7 +369,6 @@ search_check_verify(Bucket, Port, Opts) ->
 -record(twoi, {runs}).
 
 init_2i_tester(Conn) ->
-    lager:info("init_2i_tester(~p)", [Conn]),
     {PBHost, PBPort} = proplists:get_value(pb, Conn),
     {HTTPHost, HTTPPort} = proplists:get_value(http, Conn),
     generate_2i_scripts(<<"2ibuquot">>, [{PBHost, PBPort}], [{HTTPHost, HTTPPort}]),
@@ -449,7 +448,7 @@ kv_populate_script(Bucket, Host, Port) ->
            {http_raw_ips, [Host]},
            {http_raw_port, Port},
            {http_raw_path, "/riak/" ++ Bucket}],
-    Config = rt:config(rt_scratch_dir) ++ "/bb-populate-" ++ Bucket ++ ".config",
+    Config = filename:join([rt:config(rt_scratch_dir), io_lib:format("bb-populate-~s.config", [Bucket])]),
     write_terms(Config, Cfg),
     ok.
 
@@ -466,7 +465,7 @@ kv_verify_script(Bucket, Host, Port) ->
            {http_raw_port, Port},
            {http_raw_path, "/riak/" ++ Bucket},
            {shutdown_on_error, true}],
-    Config = rt:config(rt_scratch_dir) ++ "/bb-verify-" ++ Bucket ++ ".config",
+    Config = filename:join([rt:config(rt_scratch_dir), io_lib:format("bb-verify-~s.config", [Bucket])]),
     write_terms(Config, Cfg),
     ok.
 
@@ -483,7 +482,7 @@ kv_repair_script(Bucket, Host, Port) ->
            {http_raw_ips, [Host]},
            {http_raw_port, Port},
            {http_raw_path, "/riak/" ++ Bucket}],
-    Config = rt:config(rt_scratch_dir) ++ "/bb-repair-" ++ Bucket ++ ".config",
+    Config = filename:join([rt:config(rt_scratch_dir), io_lib:format("bb-repair-~s.config", [Bucket])]),
     write_terms(Config, Cfg),
     ok.
 
@@ -508,8 +507,7 @@ mapred_populate_script(Host, Port) ->
            {key_generator, {int_to_str, {sequential_int, 10000}}},
            {value_generator,
             {function, basho_bench_driver_riakc_pb, mapred_ordered_valgen, []}}],
-
-    Config = rt:config(rt_scratch_dir) ++ "/bb-populate-mapred.config",
+    Config = filename:join([rt:config(rt_scratch_dir), "bb-populate-mapred.config"]),
     write_terms(Config, Cfg),
     ok.
 
@@ -527,7 +525,7 @@ mapred_verify_script(Host, Port) ->
            {value_generator, {fixed_bin, 1}},
            {riakc_pb_keylist_length, 1000},
            {shutdown_on_error, true}],
-    Config = rt:config(rt_scratch_dir) ++ "/bb-verify-mapred.config",
+    Config = filename:join([rt:config(rt_scratch_dir), "bb-verify-mapred.config"]),
     write_terms(Config, Cfg),
     ok.
 
@@ -553,8 +551,7 @@ search_populate_script(Bucket, IPs, SpamDir) ->
            {http_raw_ips, IPs},
            {http_raw_path, "/riak/" ++ Bucket},
            {shutdown_on_error, true}],
-
-    Config = rt:config(rt_scratch_dir) ++ "/bb-populate-" ++ Bucket ++ ".config",
+    Config = filename:join([rt:config(rt_scratch_dir), io_lib:format("bb-populate-~s.config", [Bucket])]),
     write_terms(Config, Cfg).
 
 search_verify_script(Bucket, IPs) ->
@@ -574,8 +571,7 @@ search_verify_script(Bucket, IPs) ->
            {http_solr_path, "/solr/" ++ Bucket},
            {http_raw_path, "/riak/" ++ Bucket},
            {shutdown_on_error, true}],
-
-    Config = rt:config(rt_scratch_dir) ++ "/bb-verify-" ++ Bucket ++ ".config",
+    Config = filename:join([rt:config(rt_scratch_dir), io_lib:format("bb-verify-~s.config", [Bucket])]),
     write_terms(Config, Cfg).
 
 %% ===================================================================
@@ -598,7 +594,7 @@ twoi_populate_script(Bucket, PBIPs, HTTPIPs) ->
             {pb_ips, PBIPs}, 
             {pb_replies, 1},
             {http_ips, HTTPIPs}],
-    Config = rt:config(rt_scratch_dir) ++ "/bb-populate-2i.config",
+    Config = filename:join([rt:config(rt_scratch_dir), "bb-populate-2i.config"]),
     write_terms(Config, Cfg),
     ok.
 
@@ -619,7 +615,7 @@ twoi_verify_script(Bucket, PBIPs, HTTPIPs) ->
             {pb_replies, 1},
             {http_ips, HTTPIPs},
             {enforce_keyrange, 10000}],
-    Config = rt:config(rt_scratch_dir) ++ "/bb-verify-2i.config",
+    Config = filename:join([rt:config(rt_scratch_dir), "bb-verify-2i.config"]),
     write_terms(Config, Cfg),
     ok.
 
