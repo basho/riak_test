@@ -5,7 +5,7 @@
 # that contains devrels for prior Riak releases. Easy way to create this
 # is to use the rtdev-build-releases.sh script
 
-RT_DEST_DIR=${RT_DEST_DIR?"/tmp/rt"}
+: ${RT_DEST_DIR:="/tmp/rt"}
 
 echo "Setting up releases from $(pwd):"
 echo " - Creating $RT_DEST_DIR"

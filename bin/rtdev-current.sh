@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-RT_DEST_DIR=${RT_DEST_DIR?"/tmp/rt"}
+: ${RT_DEST_DIR:="/tmp/rt"}
 
 echo "Making $(pwd) the current release:"
 cwd=$(pwd)
