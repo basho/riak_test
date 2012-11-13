@@ -25,7 +25,7 @@
 -spec(metadata() -> [{atom(), term()}]).
 %% @doc fetches test metadata from spawned test process
 metadata() ->
-    global:send(riak_test, metadata),
+    riak_test ! metadata,
     receive 
         {metadata, TestMeta} -> TestMeta 
     end.
