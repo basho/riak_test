@@ -55,10 +55,7 @@ confirm() ->
 verify_upgrade(OldVsn) ->
 
     %% Only run 2i for level
-    global:send(riak_test, metadata),
-    TestMetaData = receive 
-        {metadata, TestMeta} -> TestMeta 
-    end,
+    TestMetaData = riak_test_runner:metadata(),
     Backend = proplists:get_value(backend, TestMetaData),
 
     Config = [{riak_search, [{enabled, true}]}],

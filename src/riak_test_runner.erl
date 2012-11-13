@@ -20,7 +20,15 @@
 
 %% @doc riak_test_runner runs a riak_test module's run/0 function. 
 -module(riak_test_runner).
--export([confirm/3]).
+-export([confirm/3, metadata/0]).
+
+-spec(metadata() -> [{atom(), term()}]).
+%% @doc fetches test metadata from spawned test process
+metadata() ->
+    global:send(riak_test, metadata),
+    receive 
+        {metadata, TestMeta} -> TestMeta 
+    end.
 
 -spec(confirm(integer(), atom(), [{atom(), term()}]) -> [tuple()]).
 %% @doc Runs a module's run/0 function after setting up a log capturing backend for lager. 
@@ -53,8 +61,7 @@ confirm(TestModule, Outdir, TestMetaData) ->
         fail -> RetList ++ [{reason, iolist_to_binary(io_lib:format("~p", [Reason]))}];
         _ -> RetList
     end.
-    
-    
+
 start_lager_backend(TestModule, Outdir) ->
     case Outdir of
         undefined -> ok;
@@ -64,7 +71,7 @@ start_lager_backend(TestModule, Outdir) ->
     end,
     gen_event:add_handler(lager_event, riak_test_lager_backend, [debug, false]),
     lager:set_loglevel(riak_test_lager_backend, debug).
-    
+
 stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
@@ -91,7 +98,6 @@ execute(TestModule, TestMetaData) ->
     Return = rec_loop(Pid, TestModule, TestMetaData),
     group_leader(GroupLeader, self()),
     Return.
-
 
 rec_loop(Pid, TestModule, TestMetaData) ->
     receive
