@@ -30,7 +30,16 @@ confirm() ->
     lager:info("Build ~b node cluster", [?NODE_COUNT]),
     Nodes = rt:build_cluster(?NODE_COUNT),
     
-    PrivDir = code:priv_dir(mapred_verify),
+
+    %% @todo longer term fix is probably one or more of:
+    %% 1) add a mapred_veryify section to riak_test.config
+    %% 2) learn to use this "inclextra" bit of rebar to package tests.def 
+    %%    in the escript: https://github.com/basho/rebar/blob/master/src/rebar_escripter.erl#L57
+    PrivDir = case code:priv_dir(mapred_verify) of
+        {error, bad_name} ->
+            erlang:error("Could not determine priv dir for mapred_verify. Make sure that your riak_test.config contains \"deps\"");
+        PD -> PD
+    end,
     MRVProps = [{node, hd(Nodes)},
                 %% don't need 'path' because riak_test does that for us
                 {keycount, 1000},

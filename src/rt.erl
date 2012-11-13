@@ -32,13 +32,17 @@
          attach/2,
          build_cluster/1,
          build_cluster/2,
+         build_cluster/3,
          capability/2,
          check_singleton_node/1,
          claimant_according_to/1,
          cleanup_harness/0,
          cmd/1,
+         cmd/2,
          config/1,
          config/2,
+         config_or_os_env/1,
+         config_or_os_env/2,
          connection_info/1,
          console/2,
          deploy_nodes/1,
@@ -74,6 +78,7 @@
          setup_harness/2,
          slow_upgrade/3,
          spawn_cmd/1,
+         spawn_cmd/2,
          start/1,
          start_and_wait/1,
          status_of_according_to/2,
@@ -305,6 +310,10 @@ heal({_NewCookie, OldCookie, P1, P2}) ->
 spawn_cmd(Cmd) ->
     ?HARNESS:spawn_cmd(Cmd).
 
+%% @doc Spawn `Cmd' on the machine running the test harness
+spawn_cmd(Cmd, Opts) ->
+    ?HARNESS:spawn_cmd(Cmd, Opts).
+
 %% @doc Wait for a command spawned by `spawn_cmd', returning
 %%      the exit status and result
 wait_for_cmd(CmdHandle) ->
@@ -314,6 +323,11 @@ wait_for_cmd(CmdHandle) ->
 %%      the exit status and result
 cmd(Cmd) ->
     ?HARNESS:cmd(Cmd).
+
+%% @doc Spawn `Cmd' on the machine running the test harness, returning
+%%      the exit status and result
+cmd(Cmd, Opts) ->
+    ?HARNESS:cmd(Cmd, Opts).
 
 %% @doc pretty much the same as os:cmd/1 but it will stream the output to lager.
 %%      If you're running a long running command, it will dump the output
@@ -355,7 +369,6 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
     after rt:config(rt_max_wait_time) ->
             {-1, Buffer}
     end.
-
 
 %%%===================================================================
 %%% Status / Wait Functions
@@ -896,4 +909,34 @@ config(Key, Default) ->
         Value -> Value
     end.
 
+-spec config_or_os_env(atom()) -> term().
+config_or_os_env(Config) ->
+    OSEnvVar = to_upper(atom_to_list(Config)),
+    case {get_os_env(OSEnvVar, undefined), config(Config, undefined)} of
+        {undefined, undefined} -> erlang:error("Neither riak_test.~p nor ENV['~p'] are defined", [Config, OSEnvVar]);
+        {undefined, V} -> 
+            lager:debug("Found riak_test.~s: ~s", [Config, V]),
+            V;
+        {V, _} ->
+            lager:debug("Found ENV[~s]: ~s", [OSEnvVar, V]),
+            rt:set_config(Config, V),
+            V 
+    end.
 
+-spec config_or_os_env(atom(), term()) -> term().
+config_or_os_env(Config, Default) ->
+    OSEnvVar = to_upper(atom_to_list(Config)),
+    case {get_os_env(OSEnvVar, undefined), config(Config, undefined)} of
+        {undefined, undefined} -> Default;
+        {undefined, V} ->
+            lager:debug("Found riak_test.~s: ~s", [Config, V]),
+            V;
+        {V, _} ->
+            lager:debug("Found ENV[~s]: ~s", [OSEnvVar, V]),
+            rt:set_config(Config, V),
+            V 
+    end.
+
+to_upper(S) -> lists:map(fun char_to_upper/1, S).
+char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
+char_to_upper(C) -> C.
