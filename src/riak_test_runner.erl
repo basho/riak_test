@@ -88,12 +88,6 @@ execute(TestModule, TestMetaData) ->
         BadArity ->
             spawn_link(fun() -> erlang:error("~p:confirm/~p is not exported.", [TestModule, BadArity]) end)
     end,
-    %% Return = receive
-    %%     {'EXIT', Pid, normal} -> {pass, undefined};
-    %%     {'EXIT', Pid, Error} ->
-    %%         lager:warning("~s failed: ~p", [TestModule, Error]),
-    %%         {fail, Error}
-    %% end,
     Return = rec_loop(Pid, TestModule, TestMetaData),
     group_leader(GroupLeader, self()),
     Return.
