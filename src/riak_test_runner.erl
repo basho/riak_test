@@ -83,18 +83,8 @@ execute(TestModule, TestMetaData) ->
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
     
-    Pid = case proplists:get_value(confirm, 
-                        proplists:get_value(exports, TestModule:module_info()),
-                        -1) of
-        1 ->
-            spawn_link(TestModule, confirm, [TestMetaData]);
-        0 ->
-            spawn_link(TestModule, confirm, []);
-        %% This isn't reachable, because Arities greater than 1 are caught in confirm/3.
-        %% still, better safe than sorry.
-        BadArity ->
-            spawn_link(fun() -> erlang:error("~p:confirm/~p is not exported.", [TestModule, BadArity]) end)
-    end,
+    Pid = spawn_link(TestModule, confirm, []),
+
     Return = rec_loop(Pid, TestModule, TestMetaData),
     group_leader(GroupLeader, self()),
     Return.
