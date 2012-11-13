@@ -29,20 +29,6 @@
 %% 4. Unzip it somewhere.
 %% 5. Set an environment variable "SPAM_DIR" to the path you unzipped, including the "spam.0" dir
 
-%% @todo basho_bench creates a lot of files. I wish it didn't.
-
-%%prereqs() ->
-%%    config_or_os_env
-%%    BashoBench = case rt:get_os_env("BASHO_BENCH", undefined) of
-%%        undefined -> rt:config(basho_bench, undefined);
-%%        BB -> BB
-%%    end,
-%%    ?assertNotEqual(undefined, BashoBench),
-%%
-%%    SpamDir = case rt:get_os_env("SPAM_DIR", undefined) of
-%%        undefined -> rt:config() 
-
-
 confirm() ->
     rt:config_or_os_env(basho_bench),
     rt:config_or_os_env(spam_dir),
