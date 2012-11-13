@@ -20,7 +20,15 @@
 
 %% @doc riak_test_runner runs a riak_test module's run/0 function. 
 -module(riak_test_runner).
--export([confirm/3]).
+-export([confirm/3, metadata/0]).
+
+-spec(metadata() -> [{atom(), term()}]).
+%% @doc fetches test metadata from spawned test process
+metadata() ->
+    riak_test ! metadata,
+    receive 
+        {metadata, TestMeta} -> TestMeta 
+    end.
 
 -spec(confirm(integer(), atom(), [{atom(), term()}]) -> [tuple()]).
 %% @doc Runs a module's run/0 function after setting up a log capturing backend for lager. 
@@ -36,7 +44,7 @@ confirm(TestModule, Outdir, TestMetaData) ->
         0 ->
             lager:notice("Running Test ~s", [TestModule]), 
             SetBackend = rt:set_backend(proplists:get_value(backend, TestMetaData)),
-            {S, R} = execute(TestModule),
+            {S, R} = execute(TestModule, TestMetaData),
             {S, R, SetBackend};
         _ ->
             lager:info("~s is not a runnable test", [TestModule]),
@@ -53,8 +61,7 @@ confirm(TestModule, Outdir, TestMetaData) ->
         fail -> RetList ++ [{reason, iolist_to_binary(io_lib:format("~p", [Reason]))}];
         _ -> RetList
     end.
-    
-    
+
 start_lager_backend(TestModule, Outdir) ->
     case Outdir of
         undefined -> ok;
@@ -64,24 +71,31 @@ start_lager_backend(TestModule, Outdir) ->
     end,
     gen_event:add_handler(lager_event, riak_test_lager_backend, [debug, false]),
     lager:set_loglevel(riak_test_lager_backend, debug).
-    
+
 stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
 %% does some group_leader swapping, in the style of EUnit.
-execute(TestModule) ->
+execute(TestModule, TestMetaData) ->
     process_flag(trap_exit, true),
     GroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
     
-    _Pid = spawn_link(TestModule, confirm, []),
-    Return = receive
-        {'EXIT', _Pid, normal} -> {pass, undefined};
-        {'EXIT', _Pid, Error} ->
-            lager:warning("~s failed: ~p", [TestModule, Error]),
-            {fail, Error}
-    end,
+    Pid = spawn_link(TestModule, confirm, []),
+
+    Return = rec_loop(Pid, TestModule, TestMetaData),
     group_leader(GroupLeader, self()),
     Return.
+
+rec_loop(Pid, TestModule, TestMetaData) ->
+    receive
+        metadata ->
+            Pid ! {metadata, TestMetaData},
+            rec_loop(Pid, TestModule, TestMetaData);
+        {'EXIT', Pid, normal} -> {pass, undefined};
+        {'EXIT', Pid, Error} ->
+            lager:warning("~s failed: ~p", [TestModule, Error]),
+            {fail, Error}
+    end.

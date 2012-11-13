@@ -341,7 +341,9 @@ node_version(N) ->
     orddict:fetch(N, VersionMap).
 
 spawn_cmd(Cmd) ->
-    Port = open_port({spawn, Cmd}, [stream, in, exit_status]),
+    spawn_cmd(Cmd, []).
+spawn_cmd(Cmd, Opts) ->
+    Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
     Port.
 
 wait_for_cmd(Port) ->
@@ -362,7 +364,10 @@ wait_for_cmd(Port) ->
     get_cmd_result(Port, []).
 
 cmd(Cmd) ->
-    wait_for_cmd(spawn_cmd(Cmd)).
+    cmd(Cmd, []).
+
+cmd(Cmd, Opts) ->
+    wait_for_cmd(spawn_cmd(Cmd, Opts)).
 
 get_cmd_result(Port, Acc) ->
     receive

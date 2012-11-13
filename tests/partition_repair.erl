@@ -121,6 +121,9 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     %% [Name, _] = string:tokens(atom_to_list(Node), "@"),
     %% Path = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data/merge_index/" ++ integer_to_list(Partition),
     lager:info("Killing data for ~p on ~p at ~p", [Partition, Node, Path]),
+    
+    %% @todo Warning: ?assertCmd assumes rtdev, and assuming rtdev is a riak_test no-no going forward.
+    %% This will break (as will most all other instances of ?assertCmds)
     ?assertCmd("rm -rf " ++ Path),
 
     %% force restart of vnode since some data is kept in memory

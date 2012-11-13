@@ -38,7 +38,7 @@ cli_options() ->
  {verbose,            $v, "verbose",          undefined,        "verbose output"},
  {outdir,             $o, "outdir",           string,           "output directory"},
  {backend,            $b, "backend",          atom,             "backend to test [memory | bitcask | eleveldb]"},
- {report,             $r, "report",           string,           "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)"}
+ {report,             $r, "report",           string,           "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~~/.riak_test.config"}
 ].
 
 print_help() ->
@@ -51,6 +51,7 @@ run_help(ParsedArgs) ->
     lists:member(help, ParsedArgs).
 
 main(Args) ->
+    register(riak_test, self()), 
     {ParsedArgs, HarnessArgs} = case getopt:parse(cli_options(), Args) of
         {ok, {P, H}} -> {P, H};
         _ -> print_help()
@@ -93,7 +94,13 @@ main(Args) ->
     application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel}]),
     lager:start(),
 
-    Report = proplists:get_value(report, ParsedArgs, undefined),
+    %% Report
+    Report = case proplists:get_value(report, ParsedArgs, undefined) of
+        undefined -> undefined;
+        "config" -> rt:config(platform, undefined);
+        R -> R
+    end,
+
     Verbose = proplists:is_defined(verbose, ParsedArgs),
 
     Suites = proplists:get_all_values(suites, ParsedArgs),
@@ -129,6 +136,7 @@ main(Args) ->
         Platform ->
             giddyup:get_suite(Platform)
     end,
+
     io:format("Tests to run: ~p~n", [Tests]),
 
     [add_deps(Dep) || Dep <- rt:config(rt_deps)],
