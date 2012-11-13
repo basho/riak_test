@@ -25,3 +25,12 @@
 {other_project, [
     {rt_project, "other"}
 ]}.
+
+{intercept_example,
+ [
+  {load_intercepts, true},                      % true is default
+  {intercepts,
+   [
+    {riak_kv_vnode, [{{put,7}, dropped_put}]}
+   ]}
+ ]}.
