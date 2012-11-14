@@ -32,8 +32,8 @@
 confirm() ->
     rt:config_or_os_env(basho_bench),
     rt:config_or_os_env(spam_dir),
-    %% OldVsns = ["1.0.3", "1.1.4"],
-    OldVsns = ["1.1.4"],
+    %% OldVsns = [legacy, previous],
+    OldVsns = [previous],
     [verify_upgrade(OldVsn) || OldVsn <- OldVsns],
     lager:info("Test ~p passed", [?MODULE]),
     pass.
