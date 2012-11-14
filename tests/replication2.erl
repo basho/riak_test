@@ -733,7 +733,8 @@ do_write(Node, Start, End, Bucket, W) ->
     end.
 
 name_cluster(Node, Name) ->
-    Res = rpc:call(Node, riak_repl_console, clustername, [[Name]]),
+    lager:info("Naming cluster ~p",[Name]),
+    Res = rpc:call(Node, riak_repl_console, clustername, [Name]),
     ?assertEqual(ok, Res).
 
 connect_cluster(Node, IP, Port) ->
