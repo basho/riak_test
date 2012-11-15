@@ -85,9 +85,18 @@ execute(TestModule, TestMetaData) ->
     
     Pid = spawn_link(TestModule, confirm, []),
 
-    Return = rec_loop(Pid, TestModule, TestMetaData),
+    {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
     group_leader(GroupLeader, self()),
-    Return.
+    case Status of
+        fail ->
+            ErrorHeader = "================ " ++ atom_to_list(TestModule) ++ " failure stack trace =====================",
+            io:format(ErrorHeader),
+            io:format("~n~p~n", [Reason]),
+            io:format([ $= || _X <- lists:seq(1,length(ErrorHeader))]),
+            io:format("~n");
+        _ -> meh
+    end,
+    {Status, Reason}.
 
 rec_loop(Pid, TestModule, TestMetaData) ->
     receive
