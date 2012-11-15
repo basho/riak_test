@@ -225,7 +225,8 @@ stop_all(DevPath) ->
                 end,
                 lager:debug("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
             end,
-            rt:pmap(Stop, Devs);
+            [Stop(D) || D <- Devs];
+            %rt:pmap(Stop, Devs);
         _ -> lager:debug("~s is not a directory.", [DevPath])
     end,
     ok.
@@ -405,7 +406,8 @@ get_version() ->
 
 teardown() ->
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()).
+    [stop_all(X ++ "/dev") || X <- devpaths()].
+    %%rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()).
 
 whats_up() ->
     io:format("Here's what's running...~n"),
