@@ -74,7 +74,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             name_cluster(AFirst, "A"),
             name_cluster(BFirst, "B"),
-
+            % cluster name not set errors if we don't sleep
+            timer:sleep(5000),
             %% get the leader for the first cluster
             wait_until_leader(AFirst),
             LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
@@ -734,7 +735,7 @@ do_write(Node, Start, End, Bucket, W) ->
 
 name_cluster(Node, Name) ->
     lager:info("Naming cluster ~p",[Name]),
-    Res = rpc:call(Node, riak_repl_console, clustername, [Name]),
+    Res = rpc:call(Node, riak_repl_console, clustername, [[Name]]),
     ?assertEqual(ok, Res).
 
 connect_cluster(Node, IP, Port) ->
