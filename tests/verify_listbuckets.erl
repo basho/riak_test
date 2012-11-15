@@ -17,11 +17,11 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(verify_listkeys).
+-module(verify_listbuckets).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(BUCKET, <<"listkeys_bucket">>).
+-define(BUCKET, <<"listbuckets_bucket">>).
 -define(NUM_BUCKETS, 1200).
 -define(NUM_KEYS, 1000).
 
@@ -40,13 +40,13 @@ confirm() ->
     lists:foldl(fun(Node, [N1|_] = Cluster) ->
             lager:info("An invitation to this party is cordially extended to ~p.", [Node]),
             rt:join(Node, N1),
-            lager:info("Check keys and buckets during transfer"),
+            lager:info("Check buckets during transfer"),
             Ns = lists:usort([Node|Cluster]),
             check_it_all(Ns),
             lager:info("Wait until there are no pending changes"),
             ?assertEqual(ok, rt:wait_until_no_pending_changes(Ns)),
             
-            lager:info("Check keys and buckets after transfer"),
+            lager:info("Check buckets after transfer"),
             check_it_all(Ns),
             Ns
         end, [Node1], [Node2, Node3, Node4]),
@@ -65,7 +65,7 @@ confirm() ->
             rt:start(Prev),
             rt:wait_until_pingable(Prev),
             
-            lager:info("Check keys and buckets"),
+            lager:info("Check buckets"),
             check_it_all(Nodes -- [Node]),
             Node
         end, Node1, [Node2, Node3, Node4]),
@@ -90,24 +90,6 @@ put_keys(Node, Bucket, Num) ->
     [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)],
     riakc_pb_socket:stop(Pid).
 
-list_keys(Node, Bucket, Attempt, Legacy, Num, ShouldPass) ->
-    Pid = rt:pbc(Node),
-    lager:info("Listing keys on ~p. Legacy: ~p, Attempt #~p", [Node, Legacy, Attempt]),
-    rpc:call(Node, application, set_env, [riak_kv, legacy_keylisting, Legacy]),
-    
-    case ShouldPass of
-        true ->
-            {ok, Keys} = riakc_pb_socket:list_keys(Pid, Bucket),
-            ActualKeys = lists:usort(Keys),
-            ExpectedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)]),
-            assert_equal(ExpectedKeys, ActualKeys);
-        _ ->
-            {Status, Message} = riakc_pb_socket:list_keys(Pid, Bucket),
-            ?assertEqual(error, Status),
-            ?assertEqual(<<"insufficient_vnodes_available">>, Message)
-    end,
-    riakc_pb_socket:stop(Pid).
-    
 put_buckets(Node, Num) ->
     Pid = rt:pbc(Node),
     Buckets = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
@@ -148,5 +130,4 @@ check_it_all(Nodes, ShouldPass) ->
     [check_a_node(N, ShouldPass) || N <- Nodes].
     
 check_a_node(Node, ShouldPass) ->
-    [list_keys(Node, ?BUCKET, Attempt, Legacy, ?NUM_KEYS, ShouldPass) || Attempt <- [1,2,3], Legacy <- [true, false]],
     [list_buckets(Node, Attempt, Legacy, ?NUM_BUCKETS, ShouldPass) || Attempt <- [1,2,3], Legacy <- [true, false]].    
