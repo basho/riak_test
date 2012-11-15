@@ -32,17 +32,16 @@
 confirm() ->
     rt:config_or_os_env(basho_bench),
     rt:config_or_os_env(spam_dir),
-    %% OldVsns = [legacy, previous],
-    OldVsns = [previous],
-    [verify_upgrade(OldVsn) || OldVsn <- OldVsns],
+    verify_upgrade(),
     lager:info("Test ~p passed", [?MODULE]),
     pass.
 
-verify_upgrade(OldVsn) ->
+verify_upgrade() ->
 
-    %% Only run 2i for level
     TestMetaData = riak_test_runner:metadata(),
+    %% Only run 2i for level
     Backend = proplists:get_value(backend, TestMetaData),
+    OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
     Config = [{riak_search, [{enabled, true}]}],
     %% Uncomment to use settings more prone to cause races
