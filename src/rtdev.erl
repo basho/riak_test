@@ -86,14 +86,19 @@ upgrade(Node, NewVersion) ->
     stop(Node),
     OldPath = relpath(Version),
     NewPath = relpath(NewVersion),
-    C1 = io_lib:format("cp -a \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
+    
+    Commands = [
+        io_lib:format("cp -a \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
                        [OldPath, N, NewPath, N]),
-    C2 = io_lib:format("cp -a \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
-                       [OldPath, N, NewPath, N]),
-    lager:info("Running: ~s", [C1]),
-    os:cmd(C1),
-    lager:info("Running: ~s", [C2]),
-    os:cmd(C2),
+        io_lib:format("rm -rf ~s/dev/dev~b/data/*",
+                       [OldPath, N]),
+        io_lib:format("cp -a \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
+                       [OldPath, N, NewPath, N])
+    ],
+    [ begin
+        lager:info("Running: ~s", [Cmd]),
+        os:cmd(Cmd)
+    end || Cmd <- Commands],
     VersionMap = orddict:store(N, NewVersion, rt:config(rt_versions)),
     rt:set_config(rt_versions, VersionMap),
     start(Node),
