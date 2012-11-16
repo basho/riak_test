@@ -21,65 +21,159 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+%% 1.3 {riak_kv, anti_entropy} -> [disabled, enabled_v1]
 confirm() ->
     lager:info("Deploying mixed set of nodes"),
-    Nodes = rt:deploy_nodes([current, "0.14.2", "1.1.4", "1.0.3"]),
-    [Node1, Node2, Node3, Node4] = Nodes,
+    Nodes = rt:deploy_nodes([current, previous, legacy]),
+    [CNode, PNode, LNode] = Nodes,
 
-    lager:info("Verify vnode_routing == proxy"),
-    ?assertEqual(ok, rt:wait_until_capability(Node1, {riak_core, vnode_routing}, proxy)),
+    lager:info("Verify staged_joins == true"),
+    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
+
+    %% This test is written with the intent that 1.3 is 'current'
+    CCapabilities = rt:capability(CNode, all),
+    assert_capability(CCapabilities, {riak_kv, legacy_keylisting}, false),
+    assert_capability(CCapabilities, {riak_kv, listkeys_backpressure}, true),
+    assert_capability(CCapabilities, {riak_core, staged_joins}, true),
+    assert_capability(CCapabilities, {riak_kv, index_backpressure}, true),
+    assert_capability(CCapabilities, {riak_pipe, trace_format}, ordsets),
+    assert_capability(CCapabilities, {riak_kv, mapred_2i_pipe}, true),
+    assert_capability(CCapabilities, {riak_kv, mapred_system}, pipe),
+    assert_capability(CCapabilities, {riak_kv, vnode_vclocks}, true),
+    assert_capability(CCapabilities, {riak_core, vnode_routing}, proxy),
+    assert_supported(CCapabilities, {riak_core, staged_joins}, [true,false]),
+    assert_supported(CCapabilities, {riak_core, vnode_routing}, [proxy,legacy]),
+    assert_supported(CCapabilities, {riak_kv, index_backpressure}, [true,false]),
+    assert_supported(CCapabilities, {riak_kv, legacy_keylisting}, [false]),
+    assert_supported(CCapabilities, {riak_kv, listkeys_backpressure}, [true,false]),
+    assert_supported(CCapabilities, {riak_kv, mapred_2i_pipe}, [true,false]),
+    assert_supported(CCapabilities, {riak_kv, mapred_system}, [pipe]),
+    assert_supported(CCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
+    assert_supported(CCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
 
     lager:info("Crash riak_core_capability server"),
-    crash_capability_server(Node1),
+    crash_capability_server(CNode),
     timer:sleep(1000),
 
-    lager:info("Verify vnode_routing == proxy after crash"),
-    ?assertEqual(proxy, rt:capability(Node1, {riak_core, vnode_routing})),
+    lager:info("Verify staged_joins == true after crash"),
+    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
 
-    lager:info("Building current + 0.14.2 cluster"),
-    rt:join(Node2, Node1),
-    ?assertEqual(ok, rt:wait_until_all_members([Node1], [Node1, Node2])),
-    ?assertEqual(ok, rt:wait_until_legacy_ringready(Node1)),
-
-    lager:info("Verifying vnode_routing == legacy"),
-    ?assertEqual(ok, rt:wait_until_capability(Node1, {riak_core, vnode_routing}, legacy)),
-
+    lager:info("Building current + legacy cluster"),
+    rt:join(LNode, CNode),
+    ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode])),
+    ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
+    
+    LCapabilities = rt:capability(CNode, all),
+    assert_capability(LCapabilities, {riak_kv, legacy_keylisting}, false),
+    assert_capability(LCapabilities, {riak_kv, listkeys_backpressure}, true),
+    assert_capability(LCapabilities, {riak_core, staged_joins}, false),
+    assert_capability(LCapabilities, {riak_kv, index_backpressure}, false),
+    assert_capability(LCapabilities, {riak_pipe, trace_format}, sets),
+    assert_capability(LCapabilities, {riak_kv, mapred_2i_pipe}, true),
+    assert_capability(LCapabilities, {riak_kv, mapred_system}, pipe),
+    assert_capability(LCapabilities, {riak_kv, vnode_vclocks}, true),
+    assert_capability(LCapabilities, {riak_core, vnode_routing}, proxy),
+    assert_supported(LCapabilities, {riak_core, staged_joins}, [true,false]),
+    assert_supported(LCapabilities, {riak_core, vnode_routing}, [proxy,legacy]),
+    assert_supported(LCapabilities, {riak_kv, index_backpressure}, [true,false]),
+    assert_supported(LCapabilities, {riak_kv, legacy_keylisting}, [false]),
+    assert_supported(LCapabilities, {riak_kv, listkeys_backpressure}, [true,false]),
+    assert_supported(LCapabilities, {riak_kv, mapred_2i_pipe}, [true,false]),
+    assert_supported(LCapabilities, {riak_kv, mapred_system}, [pipe]),
+    assert_supported(LCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
+    assert_supported(LCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
+                    
     lager:info("Crash riak_core_capability server"),
-    crash_capability_server(Node1),
+    crash_capability_server(CNode),
     timer:sleep(1000),
 
-    lager:info("Verify vnode_routing == legacy after crash"),
-    ?assertEqual(legacy, rt:capability(Node1, {riak_core, vnode_routing})),
+    lager:info("Verify staged_joins == false after crash"),
+    ?assertEqual(false, rt:capability(CNode, {riak_core, staged_joins})),
 
-    lager:info("Adding 1.1.4 node to cluster"),
-    rt:join(Node3, Node2),
-    ?assertEqual(ok, rt:wait_until_all_members([Node1], [Node1, Node2, Node3])),
-    ?assertEqual(ok, rt:wait_until_legacy_ringready(Node1)),
+    lager:info("Adding previous node to cluster"),
+    rt:join(PNode, LNode),
+    ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
+    ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
-    lager:info("Verifying vnode_routing == legacy"),
-    ?assertEqual(legacy, rt:capability(Node1, {riak_core, vnode_routing})),
+    lager:info("Verify staged_joins == true after crash"),
+    ?assertEqual(false, rt:capability(CNode, {riak_core, staged_joins})),
+    
+    PCapabilities = rt:capability(CNode, all),
+    assert_capability(PCapabilities, {riak_kv, legacy_keylisting}, false),
+    assert_capability(PCapabilities, {riak_kv, listkeys_backpressure}, true),
+    assert_capability(PCapabilities, {riak_core, staged_joins}, false),
+    assert_capability(PCapabilities, {riak_kv, index_backpressure}, false),
+    assert_capability(PCapabilities, {riak_pipe, trace_format}, sets),
+    assert_capability(PCapabilities, {riak_kv, mapred_2i_pipe}, true),
+    assert_capability(PCapabilities, {riak_kv, mapred_system}, pipe),
+    assert_capability(PCapabilities, {riak_kv, vnode_vclocks}, true),
+    assert_capability(PCapabilities, {riak_core, vnode_routing}, proxy),
+    assert_supported(PCapabilities, {riak_core, staged_joins}, [true,false]),
+    assert_supported(PCapabilities, {riak_core, vnode_routing}, [proxy,legacy]),
+    assert_supported(PCapabilities, {riak_kv, index_backpressure}, [true,false]),
+    assert_supported(PCapabilities, {riak_kv, legacy_keylisting}, [false]),
+    assert_supported(PCapabilities, {riak_kv, listkeys_backpressure}, [true,false]),
+    assert_supported(PCapabilities, {riak_kv, mapred_2i_pipe}, [true,false]),
+    assert_supported(PCapabilities, {riak_kv, mapred_system}, [pipe]),
+    assert_supported(PCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
+    assert_supported(PCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
 
-    lager:info("Upgrade 0.14.2 node"),
-    rt:upgrade(Node2, current),
+    lager:info("Upgrade Legacy node"),
+    rt:upgrade(LNode, current),
 
-    lager:info("Verifying vnode_routing == proxy"),
-    ?assertEqual(ok, rt:wait_until_capability(Node1, {riak_core, vnode_routing}, proxy)),
+    lager:info("Verify staged_joins == true after upgrade of legacy -> current"),
+    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
 
-    lager:info("Adding 1.0.3 node to cluster"),
-    rt:join(Node4, Node1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node1, Node2, Node3, Node4])),
+    PCap2 = rt:capability(CNode, all),
+    assert_capability(PCap2, {riak_kv, legacy_keylisting}, false),
+    assert_capability(PCap2, {riak_kv, listkeys_backpressure}, true),
+    assert_capability(PCap2, {riak_core, staged_joins}, true),
+    assert_capability(PCap2, {riak_kv, index_backpressure}, false),
+    assert_capability(PCap2, {riak_pipe, trace_format}, sets),
+    assert_capability(PCap2, {riak_kv, mapred_2i_pipe}, true),
+    assert_capability(PCap2, {riak_kv, mapred_system}, pipe),
+    assert_capability(PCap2, {riak_kv, vnode_vclocks}, true),
+    assert_capability(PCap2, {riak_core, vnode_routing}, proxy),
+    assert_supported(PCap2, {riak_core, staged_joins}, [true,false]),
+    assert_supported(PCap2, {riak_core, vnode_routing}, [proxy,legacy]),
+    assert_supported(PCap2, {riak_kv, index_backpressure}, [true,false]),
+    assert_supported(PCap2, {riak_kv, legacy_keylisting}, [false]),
+    assert_supported(PCap2, {riak_kv, listkeys_backpressure}, [true,false]),
+    assert_supported(PCap2, {riak_kv, mapred_2i_pipe}, [true,false]),
+    assert_supported(PCap2, {riak_kv, mapred_system}, [pipe]),
+    assert_supported(PCap2, {riak_kv, vnode_vclocks}, [true,false]),
+    assert_supported(PCap2, {riak_pipe, trace_format}, [ordsets,sets]),
+    
+    
+    
+    lager:info("Upgrading Previous node"),
+    rt:upgrade(PNode, current),
 
-    lager:info("Verifying vnode_routing == legacy"),
-    ?assertEqual(legacy, rt:capability(Node1, {riak_core, vnode_routing})),
+    lager:info("Verifying index_backpressue changes to true"),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_kv, index_backpressure}, true)),
 
-    lager:info("Upgrading 1.0.3 node"),
-    rt:upgrade(Node4, current),
+    lager:info("Verifying riak_pipe,trace_format changes to ordsets"),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_pipe, trace_format}, ordsets)),
 
-    lager:info("Verifying vnode_routing changes to proxy"),
-    ?assertEqual(ok, rt:wait_until_capability(Node1, {riak_core, vnode_routing}, proxy)),
-
-    lager:info("Upgrade 1.1.4 node"),
-    rt:upgrade(Node3, current),
+    CCap2 = rt:capability(CNode, all),
+    assert_capability(CCap2, {riak_kv, legacy_keylisting}, false),
+    assert_capability(CCap2, {riak_kv, listkeys_backpressure}, true),
+    assert_capability(CCap2, {riak_core, staged_joins}, true),
+    assert_capability(CCap2, {riak_kv, index_backpressure}, true),
+    assert_capability(CCap2, {riak_pipe, trace_format}, ordsets),
+    assert_capability(CCap2, {riak_kv, mapred_2i_pipe}, true),
+    assert_capability(CCap2, {riak_kv, mapred_system}, pipe),
+    assert_capability(CCap2, {riak_kv, vnode_vclocks}, true),
+    assert_capability(CCap2, {riak_core, vnode_routing}, proxy),
+    assert_supported(CCap2, {riak_core, staged_joins}, [true,false]),
+    assert_supported(CCap2, {riak_core, vnode_routing}, [proxy,legacy]),
+    assert_supported(CCap2, {riak_kv, index_backpressure}, [true,false]),
+    assert_supported(CCap2, {riak_kv, legacy_keylisting}, [false]),
+    assert_supported(CCap2, {riak_kv, listkeys_backpressure}, [true,false]),
+    assert_supported(CCap2, {riak_kv, mapred_2i_pipe}, [true,false]),
+    assert_supported(CCap2, {riak_kv, mapred_system}, [pipe]),
+    assert_supported(CCap2, {riak_kv, vnode_vclocks}, [true,false]),
+    assert_supported(CCap2, {riak_pipe, trace_format}, [ordsets,sets]),
 
     %% All nodes are now current version. Test override behavior.
     Override = fun(undefined, Prefer) ->
@@ -101,23 +195,31 @@ confirm() ->
     [rt:update_app_config(Node, Override(legacy, proxy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == legacy"),
-    ?assertEqual(legacy, rt:capability(Node1, {riak_core, vnode_routing})),
+    ?assertEqual(legacy, rt:capability(CNode, {riak_core, vnode_routing})),
 
     lager:info("Override: (use: proxy), (prefer: legacy)"),
     [rt:update_app_config(Node, Override(proxy, legacy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == proxy"),
-    ?assertEqual(proxy, rt:capability(Node1, {riak_core, vnode_routing})),
+    ?assertEqual(proxy, rt:capability(CNode, {riak_core, vnode_routing})),
 
     lager:info("Override: (prefer: legacy)"),
     [rt:update_app_config(Node, Override(undefined, legacy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == legacy"),
-    ?assertEqual(legacy, rt:capability(Node1, {riak_core, vnode_routing})),
+    ?assertEqual(legacy, rt:capability(CNode, {riak_core, vnode_routing})),
 
     [rt:stop(Node) || Node <- Nodes],
     pass.
 
+assert_capability(Capabilities, Capability, Value) ->
+    lager:info("Checking Capability Setting ~p =:= ~p", [Capability, Value]),
+    ?assertEqual(Value, proplists:get_value(Capability, Capabilities)).
+
+assert_supported(Capabilities, Capability, Value) ->
+    lager:info("Checking Capability Supported Values ~p =:= ~p", [Capability, Value]),
+    ?assertEqual(Value, proplists:get_value(Capability, proplists:get_value('$supported', Capabilities))).
+    
 crash_capability_server(Node) ->
     Pid = rpc:call(Node, erlang, whereis, [riak_core_capability]),
     rpc:call(Node, erlang, exit, [Pid, kill]).

@@ -55,8 +55,7 @@ run_riak(N, Path, Cmd) ->
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths),
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
@@ -87,14 +86,19 @@ upgrade(Node, NewVersion) ->
     stop(Node),
     OldPath = relpath(Version),
     NewPath = relpath(NewVersion),
-    C1 = io_lib:format("cp -a \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
+    
+    Commands = [
+        io_lib:format("cp -p -P -R \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
                        [OldPath, N, NewPath, N]),
-    C2 = io_lib:format("cp -a \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
-                       [OldPath, N, NewPath, N]),
-    lager:info("Running: ~s", [C1]),
-    os:cmd(C1),
-    lager:info("Running: ~s", [C2]),
-    os:cmd(C2),
+        io_lib:format("rm -rf ~s/dev/dev~b/data/*",
+                       [OldPath, N]),
+        io_lib:format("cp -p -P -R \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
+                       [OldPath, N, NewPath, N])
+    ],
+    [ begin
+        lager:info("Running: ~s", [Cmd]),
+        os:cmd(Cmd)
+    end || Cmd <- Commands],
     VersionMap = orddict:store(N, NewVersion, rt:config(rt_versions)),
     rt:set_config(rt_versions, VersionMap),
     start(Node),
@@ -112,7 +116,7 @@ all_the_app_configs(DevPath) ->
 
 update_app_config(all, Config) ->
     lager:info("rtdev:update_app_config(all, ~p)", [Config]),
-    [ update_app_config(DevPath, Config) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))];
+    [ update_app_config(DevPath, Config) || DevPath <- devpaths()];
 update_app_config(Node, Config) when is_atom(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
@@ -140,7 +144,7 @@ update_app_config_file(ConfigFile, Config) ->
 
 get_backends() ->
     Backends = lists:usort(
-        lists:flatten([ get_backends(DevPath) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))])),
+        lists:flatten([ get_backends(DevPath) || DevPath <- devpaths()])),
     case Backends of
         [riak_kv_bitcask_backend] -> bitcask;
         [riak_kv_eleveldb_backend] -> eleveldb;
@@ -221,7 +225,7 @@ stop_all(DevPath) ->
                 end,
                 lager:debug("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
             end,
-            rt:pmap(Stop, Devs);
+            [Stop(D) || D <- Devs];
         _ -> lager:debug("~s is not a directory.", [DevPath])
     end,
     ok.
@@ -401,11 +405,13 @@ get_version() ->
 
 teardown() ->
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths).
+    [stop_all(X ++ "/dev") || X <- devpaths()].
 
 whats_up() ->
     io:format("Here's what's running...~n"),
 
     Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
+
+devpaths() ->
+    lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))]).

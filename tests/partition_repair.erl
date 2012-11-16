@@ -23,8 +23,6 @@
 
 -import(rt, [deploy_nodes/1,
              enable_search_hook/2,
-             get_os_env/1,
-             get_os_env/2,
              get_ring/1,
              join/2,
              update_app_config/2]).
@@ -34,20 +32,21 @@
 %% @doc This test verifies that partition repair successfully repairs
 %% all data after it has wiped out by a simulated disk crash.
 confirm() ->
-    SpamDir = get_os_env("SPAM_DIR"),
-    RingSize = list_to_integer(get_os_env("RING_SIZE", "16")),
-    NVal = get_os_env("N_VAL", undefined),
-    KVBackend = get_os_env("KV_BACKEND", "bitcask"),
-    NumNodes = list_to_integer(get_os_env("NUM_NODES", "4")),
-    HOConcurrency = list_to_integer(get_os_env("HO_CONCURRENCY", "2")),
-    {KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
+    SpamDir = rt:config_or_os_env(spam_dir),
+    RingSize = list_to_integer(rt:config_or_os_env(ring_size, "16")),
+    NVal = rt:config_or_os_env(n_val, undefined),
+    TestMetaData = riak_test_runner:metadata(),
+    KVBackend = proplists:get_value(backend, TestMetaData),
+
+    NumNodes = list_to_integer(rt:config_or_os_env(num_nodes, "4")),
+    HOConcurrency = list_to_integer(rt:config_or_os_env(ho_concurrency, "2")),
+    {_KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
     Bucket = <<"scotts_spam">>,
 
     lager:info("Build a cluster"),
     lager:info("riak_search enabled: true"),
     lager:info("ring_creation_size: ~p", [RingSize]),
     lager:info("n_val: ~p", [NVal]),
-    lager:info("KV backend: ~s", [KVBackend]),
     lager:info("num nodes: ~p", [NumNodes]),
     lager:info("riak_core handoff_concurrency: ~p", [HOConcurrency]),
     lager:info("riak_core vnode_management_timer 1000"),
@@ -58,10 +57,6 @@ confirm() ->
               {handoff_manager_timeout, 1000},
               {vnode_management_timer, 1000},
               {handoff_concurrency, HOConcurrency}
-             ]},
-            {riak_kv,
-             [
-              {storage_backend, KVBackendMod}
              ]},
             {riak_search,
              [
@@ -279,7 +274,7 @@ stash_search({_I,{_F,_T}}=K, _Postings=V, Stash) ->
 
 %% @todo broken when run in the style of rtdev_mixed.
 stash_path(Service, Partition) ->
-    Path = rt:config(rtdev_path) ++ "/dev/data_stash",
+    Path = rt:config(rtdev_path.root) ++ "/dev/data_stash",
     Path ++ "/" ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".
 
 file_list(Dir) ->
@@ -304,12 +299,12 @@ wait_for_repair(Service, {Partition, Node}, Tries) ->
 
 data_path(Node, Suffix, Partition) ->
     [Name, _] = string:tokens(atom_to_list(Node), "@"),
-    Base = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data",
+    Base = rt:config(rtdev_path.current) ++ "/dev/" ++ Name ++ "/data",
     Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
 
-backend_mod_dir("bitcask") ->
+backend_mod_dir(bitcask) ->
     {riak_kv_bitcask_backend, "bitcask"};
-backend_mod_dir("leveldb") ->
+backend_mod_dir(eleveldb) ->
     {riak_kv_eleveldb_backend, "leveldb"}.
 
 
@@ -338,7 +333,7 @@ set_search_schema_nval(Bucket, NVal) ->
     %% than allowing the internal format to be modified and set you
     %% must send the update in the external format.
     BucketStr = binary_to_list(Bucket),
-    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt:config(rtdev_path)]),
+    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt:config(rtdev_path.current)]),
     GetSchema = ?FMT("~s show-schema ~s > current-schema",
                      [SearchCmd, BucketStr]),
     ModifyNVal = ?FMT("sed -E 's/n_val, [0-9]+/n_val, ~s/' "
