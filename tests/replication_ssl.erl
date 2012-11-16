@@ -2,7 +2,7 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
-replication_ssl() ->
+confirm() ->
     %% TODO: Don't hardcode # of nodes
     NumNodes = 6,
     ClusterASize = list_to_integer(replication:get_os_env("CLUSTER_A_SIZE", "3")),
@@ -210,7 +210,7 @@ replication_ssl() ->
 
     replication:replication(ANodes, BNodes, false),
 
-    ok.
+    pass.
 
 merge_config(Mixin, Base) ->
     lists:ukeymerge(1, lists:keysort(1, Mixin), lists:keysort(1, Base)).
