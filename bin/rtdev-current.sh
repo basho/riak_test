@@ -19,7 +19,7 @@ rm -rf $RT_DEST_DIR/current
 mkdir $RT_DEST_DIR/current
 cd $cwd
 echo " - Copying devrel to $RT_DEST_DIR/current"
-cp -a dev $RT_DEST_DIR/current
+cp -p -P -R dev $RT_DEST_DIR/current
 echo " - Writing $RT_DEST_DIR/current/VERSION"
 echo -n $VERSION > $RT_DEST_DIR/current/VERSION
 cd $RT_DEST_DIR

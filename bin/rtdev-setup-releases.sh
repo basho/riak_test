@@ -16,7 +16,7 @@ for rel in */dev; do
     vsn=$(dirname "$rel")
     echo " - Initializing $RT_DEST_DIR/$vsn"
     mkdir "$RT_DEST_DIR/$vsn"
-    cp -a "$rel" "$RT_DEST_DIR/$vsn"
+    cp -p -P -R "$rel" "$RT_DEST_DIR/$vsn"
 done
 cd $RT_DEST_DIR
 echo " - Creating the git repository"

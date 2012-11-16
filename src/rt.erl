@@ -537,6 +537,8 @@ wait_until_unpingable(Node) ->
     ?assertEqual(ok, wait_until(Node, F)),
     ok.
 
+capability(Node, all) ->
+    rpc:call(Node, riak_core_capability, all, []); 
 capability(Node, Capability) ->
     rpc:call(Node, riak_core_capability, get, [Capability]).
 
