@@ -88,11 +88,11 @@ upgrade(Node, NewVersion) ->
     NewPath = relpath(NewVersion),
     
     Commands = [
-        io_lib:format("cp -a \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
+        io_lib:format("cp -p -P -R \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
                        [OldPath, N, NewPath, N]),
         io_lib:format("rm -rf ~s/dev/dev~b/data/*",
                        [OldPath, N]),
-        io_lib:format("cp -a \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
+        io_lib:format("cp -p -P -R \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
                        [OldPath, N, NewPath, N])
     ],
     [ begin
