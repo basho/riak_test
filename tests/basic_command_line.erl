@@ -110,12 +110,6 @@ ping_down_test(Node) ->
     ok.
 
 attach_up_test(Node) ->
-
-    %% check /usr/sbin/riak attach')
-    %% Sort of a punt on this test, it tests that attach
-    %% connects to the pipe, but doesn't run any commands.
-    %% This is probably okay for a basic cmd line test
-
     lager:info("Testing riak attach"),
 
     rt:attach(Node, [{expect, "\(^D to exit\)"},
