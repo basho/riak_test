@@ -41,7 +41,7 @@ confirm() ->
             {"PB_PORT", integer_to_list(PB_Port)},
             {"RIAK_VERSION", binary_to_list(rt:get_version())}
         ]}]),
-    ?assert(rt:str(RubyLog, "0 failures")),
+    ?assert(rt:str(RubyLog, " 0 failures")),
     ?assert(Code =:= 0),
     pass.
 
