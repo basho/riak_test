@@ -50,7 +50,7 @@ prereqs() ->
     ?assertNot(rt:str(Ruby, "not found")),
 
     RubyVersion = os:cmd("ruby -v"),
-    ?assert(rt:str(RubyVersion, "1.9.3")),
+    ?assert(rt:str(RubyVersion, "1.9.") orelse rt:str(RubyVersion, "1.8.7")),
 
     Gem = os:cmd("which gem"),
     ?assertNot(rt:str(Gem, "not found")),
