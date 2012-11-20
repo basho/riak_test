@@ -6,3 +6,4 @@ riak_test
 .DS_Store
 out
 search-corpus/spam.0
+erl_crash.dump
