@@ -139,7 +139,11 @@ main(Args) ->
 
     io:format("Tests to run: ~p~n", [Tests]),
 
-    [add_deps(Dep) || Dep <- rt:config(rt_deps)],
+    %% Two hard-coded deps...
+    add_deps(rt:get_deps()),
+    add_deps("deps"),
+
+    [add_deps(Dep) || Dep <- rt:config(rt_deps, [])],
     ENode = rt:config(rt_nodename, 'riak_test@127.0.0.1'),
     Cookie = rt:config(rt_cookie, riak),
     [] = os:cmd("epmd -daemon"),
