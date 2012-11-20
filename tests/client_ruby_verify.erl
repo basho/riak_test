@@ -7,15 +7,13 @@
 confirm() ->
     prereqs(),
     GemDir = dat_gem(),
-    rt:update_app_config(all, [{riak_kv, [{test, true},
-                                          {add_paths, filename:join([GemDir, "erl_src"])}]},
+    Nodes = rt:deploy_nodes([{current,
+                              [{riak_kv, [{test, true},
+                                          {add_paths, [filename:join([GemDir, "erl_src"])]}]},
                                {riak_search, [{enabled, true},
-                                              {backend, riak_search_test_backend}]}]
-                        ),
-
-    Nodes = rt:deploy_nodes(1),
+                                              {search_backend, riak_search_test_backend}]}]}],
+                            [riak_search]),
     [Node1] = Nodes,
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
     [{Node1, ConnectionInfo}] = rt:connection_info([Node1]),
     {_HTTP_Host, HTTP_Port} = orddict:fetch(http, ConnectionInfo),
