@@ -14,15 +14,14 @@
                   {"1.0.3", "/tmp/rt/riak-1.0.3"}]},
     {basho_bench, "/Users/joe/dev/basho/basho_bench"},
     {spam_dir, "/Users/joe/dev/basho/riak_test/search-corpus/spam.0"},
-    {platform, "osx-64"}
+    {platform, "osx-64"},
+    {rt_deps, []}
 ]}.
 
 {rtdev, [
-    {rt_project, "riak"},
-    {rt_deps, ["/Users/joe/dev/basho/riak/deps"]}
+    {rt_project, "riak"}
 ]}.
 
 {other_project, [
-    {rt_project, "other"},
-    {rt_deps, ["/Users/joe/dev/basho/riak/deps"]}
+    {rt_project, "other"}
 ]}.
