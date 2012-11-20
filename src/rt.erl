@@ -49,6 +49,7 @@
          deploy_nodes/2,
          down/2,
          enable_search_hook/2,
+         get_deps/0,
          get_os_env/1,
          get_os_env/2,
          get_ring/1,
@@ -116,6 +117,10 @@
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
+
+%% @doc gets riak deps from the appropriate harness
+-spec get_deps() -> list().
+get_deps() -> ?HARNESS:get_deps().
 
 %% @doc if String contains Substr, return true.
 -spec str(string(), string()) -> boolean().
@@ -915,7 +920,9 @@ config(Key, Default) ->
 config_or_os_env(Config) ->
     OSEnvVar = to_upper(atom_to_list(Config)),
     case {get_os_env(OSEnvVar, undefined), config(Config, undefined)} of
-        {undefined, undefined} -> erlang:error("Neither riak_test.~p nor ENV['~p'] are defined", [Config, OSEnvVar]);
+        {undefined, undefined} ->
+            MSG = io_lib:format("Neither riak_test.~p nor ENV['~p'] are defined", [Config, OSEnvVar]),
+            erlang:error(binary_to_list(iolist_to_binary(MSG)));
         {undefined, V} -> 
             lager:debug("Found riak_test.~s: ~s", [Config, V]),
             V;
