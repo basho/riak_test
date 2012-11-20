@@ -915,7 +915,9 @@ config(Key, Default) ->
 config_or_os_env(Config) ->
     OSEnvVar = to_upper(atom_to_list(Config)),
     case {get_os_env(OSEnvVar, undefined), config(Config, undefined)} of
-        {undefined, undefined} -> erlang:error("Neither riak_test.~p nor ENV['~p'] are defined", [Config, OSEnvVar]);
+        {undefined, undefined} ->
+            MSG = io_lib:format("Neither riak_test.~p nor ENV['~p'] are defined", [Config, OSEnvVar]),
+            erlang:error(binary_to_list(iolist_to_binary(MSG)));
         {undefined, V} -> 
             lager:debug("Found riak_test.~s: ~s", [Config, V]),
             V;
