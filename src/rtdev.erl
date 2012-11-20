@@ -27,6 +27,9 @@
 -define(DEV(N), list_to_atom(?DEVS(N))).
 -define(PATH, (rt:config(rtdev_path))).
 
+get_deps() ->
+    lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
+
 riakcmd(Path, N, Cmd) ->
     io_lib:format("~s/dev/dev~b/bin/riak ~s", [Path, N, Cmd]).
 

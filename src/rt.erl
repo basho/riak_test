@@ -49,6 +49,7 @@
          deploy_nodes/2,
          down/2,
          enable_search_hook/2,
+         get_deps/0,
          get_os_env/1,
          get_os_env/2,
          get_ring/1,
@@ -116,6 +117,10 @@
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
+
+%% @doc gets riak deps from the appropriate harness
+-spec get_deps() -> list().
+get_deps() -> ?HARNESS:get_deps().
 
 %% @doc if String contains Substr, return true.
 -spec str(string(), string()) -> boolean().
