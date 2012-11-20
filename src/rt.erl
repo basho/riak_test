@@ -191,21 +191,25 @@ connection_info(Nodes) ->
 %%      nodes deployed.
 %% @todo Re-add -spec after adding multi-version support
 deploy_nodes(Versions) when is_list(Versions) ->
-    NodeConfig = lists:map(fun({Vsn,Config}) ->
-                                   {Vsn, Config};
-                              (Vsn) ->
-                                   {Vsn, default}
-                           end, Versions),
-    ?HARNESS:deploy_nodes(NodeConfig);
-deploy_nodes(NumNodes) ->
-    deploy_nodes(NumNodes, default).
+    deploy_nodes(Versions, [riak_kv]);
+deploy_nodes(NumNodes) when is_integer(NumNodes) ->
+    deploy_nodes([ current || _ <- lists:seq(1, NumNodes)]).
 
 %% @doc Deploy a set of freshly installed Riak nodes with the given
 %%      `InitialConfig', returning a list of the nodes deployed.
 -spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
-deploy_nodes(NumNodes, InitialConfig) ->
+deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
     NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
-    ?HARNESS:deploy_nodes(NodeConfig).
+    deploy_nodes(NodeConfig);
+deploy_nodes(Versions, Services) ->
+    NodeConfig = [ version_to_config(Version) || Version <- Versions ],
+    Nodes = ?HARNESS:deploy_nodes(NodeConfig),
+    lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
+    [ ok = wait_for_service(Node, Service) || Node <- Nodes, Service <- Services ],
+    Nodes.
+
+version_to_config({_, _}=Config) -> Config;
+version_to_config(Version) -> {Version, default}.
 
 %% @doc Start the specified Riak node
 start(Node) ->
