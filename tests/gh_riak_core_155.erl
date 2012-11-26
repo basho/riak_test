@@ -62,18 +62,22 @@ load_code(Module, Nodes) ->
     {Module, Bin, File} = code:get_object_code(Module),
     {_, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]).
 
+%% NOTE: Don't call lager in this function.  This function is compiled
+%% using the lager version specified by Riak Test's rebar.config but
+%% that may not match the version used by Riak where this function is
+%% called.
 setup_mocks() ->
     application:start(lager),
     meck:new(riak_core_vnode_proxy_sup, [unstick, passthrough, no_link]),
     meck:expect(riak_core_vnode_proxy_sup, start_proxies,
                 fun(Mod=riak_kv_vnode) ->
-                        lager:info("Delaying start of riak_kv_vnode proxies"),
+                        error_logger:info_msg("Delaying start of riak_kv_vnode proxies"),
                         timer:sleep(3000),
                         meck:passthrough([Mod]);
                    (Mod) ->
                         meck:passthrough([Mod])
                 end),
-    lager:info("Installed mocks").
+    error_logger:info_msg("Installed mocks").
 
 perform_gets(Count, Node, PL, BKey) ->
     rpc:call(Node, riak_kv_vnode, get, [PL, BKey, make_ref()]),
