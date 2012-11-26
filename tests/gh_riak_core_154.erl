@@ -33,8 +33,8 @@ confirm() ->
 
     lager:info("Write data while ~p is offline", [Node2]),
     rt:stop(Node2),
-    lager:info("Sleeping for 10 seconds while node stops"),
-    timer:sleep(10000),
+    lager:info("Waiting for ~p to be unpingable", [Node2]),
+    rt:wait_until_unpingable(Node2),
     ?assertEqual([], rt:systest_write(Node1, 1000, 3)),
 
     lager:info("Verify that ~p is missing data", [Node2]),
@@ -43,10 +43,10 @@ confirm() ->
     ?assertMatch([{_,{error,notfound}}|_],
                  rt:systest_read(Node2, 1000, 3)),
 
-    lager:info("Restart ~p and sleep for 5 min, allowing handoff to occur",
+    lager:info("Restart ~p and wait for handoff to occur",
                [Node1]),
     rt:start(Node1),
-    timer:sleep(300000),
+    rt:wait_until_no_pending_changes(Node1),
 
     lager:info("Verify that ~p has all data", [Node2]),
     rt:stop(Node1),
