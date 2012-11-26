@@ -468,7 +468,7 @@ wait_until_no_pending_changes(Nodes) ->
 
 wait_for_service(Node, Service) ->
     F = fun(N) ->
-                Services = rpc:call(N, riak_core_node_watcher, services, []),
+                Services = rpc:call(N, riak_core_node_watcher, services, [N]),
                 lists:member(Service, Services)
         end,
     ?assertEqual(ok, wait_until(Node, F)),

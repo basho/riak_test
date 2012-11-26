@@ -63,7 +63,8 @@ confirm() ->
             
             lager:info("Starting Node ~p", [Prev]),
             rt:start(Prev),
-            rt:wait_until_pingable(Prev),
+            lager:info("Waiting for riak_kv service to be ready in ~p", [Prev]),
+            rt:wait_for_service(Prev, riak_kv),
             
             lager:info("Check keys and buckets"),
             check_it_all(Nodes -- [Node]),
