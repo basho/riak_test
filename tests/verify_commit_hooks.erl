@@ -27,8 +27,12 @@ confirm() ->
     lager:info("Loading the hooks module into ~p", [Node]),
     ?assertMatch({module, _},
                  rpc:call(Node, code, load_binary, [Module, Filename, Binary])),
-    lager:info("Installing precommit hooks on ~p", [Node]),
-    ?assertEqual(ok, rpc:call(Node, hooks, set_precommit, [])),
+
+    lager:info("Setting pid of test (~p) in application environment of ~p for postcommit hook", [self(), Node]),
+    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_test, test_pid, self()])),
+
+    lager:info("Installing commit hooks on ~p", [Node]),
+    ?assertEqual(ok, rpc:call(Node, hooks, set_hooks, [])),
 
     lager:info("Checking precommit atom failure reason."),
     HTTP = rt:httpc(Node),
@@ -56,4 +60,16 @@ confirm() ->
     lager:info("Checking fix for BZ1244 - riak_kv_wm_object makes call to riak_client:get/3 with invalid type for key"),
     ?assertMatch({error, {ok, "201", _, _}},
                  rt:httpc_write(HTTP, <<"bz1244bucket">>, undefined, <<"value">>)),
-    pass.
+
+    lager:info("Checking that postcommit fires."),
+    ?assertMatch(ok, rt:httpc_write(HTTP, <<"postcommit">>, <<"key">>, <<"value">>)),
+
+    receive
+        {wrote, _Bucket, _Key}=Msg ->
+            ?assertEqual({wrote, <<"postcommit">>, <<"key">>}, Msg),
+            pass
+    after 2000
+        ->
+            lager:error("Postcommit did not send a message within 2 seconds!"),
+            ?assert(false)
+    end.

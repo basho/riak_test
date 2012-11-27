@@ -69,11 +69,15 @@ set_precommit() ->
 
 set_postcommit() ->
     {ok, C} = riak:local_client(),
-    C:set_bucket(<<"fail">>,[{postcommit, [{struct,[{<<"mod">>,<<"hooks">>},{<<"fun">>, <<"postcommit_log">>}]}]}]).
+    C:set_bucket(<<"postcommit">>,[{postcommit, [{struct,[{<<"mod">>,<<"hooks">>},{<<"fun">>, <<"postcommit_msg">>}]}]}]).
 
-postcommit_log(Obj) ->
+postcommit_msg(Obj) ->
     Bucket = riak_object:bucket(Obj),
     Key = riak_object:key(Obj),
-    File = binary_to_list(<<"/tmp/", Bucket/binary, "_", Key/binary>>),
-    Str = lists:flatten(io_lib:format("~p\n", [Obj])),
-    file:write_file(File, Str).
+    case application:get_env(riak_test, test_pid) of
+        {ok, RTPid} when is_pid(RTPid) ->
+            RTPid ! {wrote, Bucket, Key};
+        _ ->
+            error_logger:error_msg("No riak_test pid to send the postcommit to!")
+    end,
+    ok.
