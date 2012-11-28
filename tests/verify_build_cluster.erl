@@ -18,35 +18,71 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_build_cluster).
--compile(export_all).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/1,
-             owners_according_to/1,
-             join/2,
-             wait_until_nodes_ready/1,
+-import(rt, [wait_until_nodes_ready/1,
              wait_until_no_pending_changes/1]).
 
 confirm() ->
     %% Deploy a set of new nodes
-    lager:info("Deploying 3 nodes"),
-    Nodes = rt:deploy_nodes(3),
+    lager:info("Deploying 4 nodes"),
+    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4),
 
     %% Ensure each node owns 100% of it's own ring
     lager:info("Ensure each nodes 100% of it's own ring"),
-    [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
+    [?assertEqual([Node], rt:owners_according_to(Node)) || Node <- Nodes],
 
-    %% Join nodes
-    lager:info("Join nodes together"),
-    [Node1|OtherNodes] = Nodes,
-    [join(Node, Node1) || Node <- OtherNodes],
+    lager:info("joining Node 2 to the cluster"),
+    rt:join(Node2, Node1),
+    wait_and_validate([Node1, Node2]),
 
-    lager:info("Wait until all nodes are ready and there are no pending changes"),
-    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
-    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
+    lager:info("joining Node 3 to the cluster"),
+    rt:join(Node3, Node1),
+    wait_and_validate([Node1, Node2, Node3]),
 
-    %% Ensure each node owns a portion of the ring
-    lager:info("Ensure each node owns a portion of the ring"),
-    [?assertEqual(Nodes, owners_according_to(Node)) || Node <- Nodes],
-    lager:info("verify_build_cluster: PASS"),
+    lager:info("joining Node 4 to the cluster"),
+    rt:join(Node4, Node1),
+    wait_and_validate(Nodes),
+
+    % 1 down
+    rt:stop(Node1),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node1)),
+    wait_and_validate(Nodes, [Node2, Node3, Node4]),
+
+    % 2 down
+    rt:stop(Node2),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
+    wait_and_validate(Nodes, [Node3, Node4]),
+
+    % 1 & 2 up
+    rt:start(Node1),
+    wait_and_validate(Nodes, [Node1, Node3, Node4]),
+    rt:start(Node2),
+    wait_and_validate(Nodes),
+
+    % leave 1, 2, and 3
+    rt:leave(Node1),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node1)),
+    wait_and_validate([Node2, Node3, Node4]),
+
+    rt:leave(Node2),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
+    wait_and_validate([Node3, Node4]),
+    
+    rt:leave(Node3),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node3)),
+
+    % verify 4
+    wait_and_validate([Node4]),
+
     pass.
+
+wait_and_validate(Nodes) -> wait_and_validate(Nodes, Nodes).
+wait_and_validate(RingNodes, UpNodes) ->
+    lager:info("Wait until all nodes are ready and there are no pending changes"),
+    ?assertEqual(ok, rt:wait_until_nodes_ready(UpNodes)),
+    ?assertEqual(ok, rt:wait_until_no_pending_changes(UpNodes)),
+    lager:info("Ensure each node owns a portion of the ring"),
+    [?assertEqual(RingNodes, rt:owners_according_to(Node)) || Node <- UpNodes],
+    done.
