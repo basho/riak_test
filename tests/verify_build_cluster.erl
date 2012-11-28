@@ -50,33 +50,37 @@ confirm() ->
     rt:join(Node4, Node1),
     wait_and_validate(Nodes),
 
-    % 1 down
+    lager:info("taking Node 1 down"),
     rt:stop(Node1),
     ?assertEqual(ok, rt:wait_until_unpingable(Node1)),
     wait_and_validate(Nodes, [Node2, Node3, Node4]),
 
-    % 2 down
+    lager:info("taking Node 2 down"),
     rt:stop(Node2),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
     wait_and_validate(Nodes, [Node3, Node4]),
 
-    % 1 & 2 up
+    lager:info("bringing Node 1 up"),
     rt:start(Node1),
     ok = rt:wait_until_pingable(Node1),
     wait_and_validate(Nodes, [Node1, Node3, Node4]),
+    lager:info("bringing Node 2 up"),
     rt:start(Node2),
     ok = rt:wait_until_pingable(Node2),
     wait_and_validate(Nodes),
 
     % leave 1, 2, and 3
+    lager:info("leaving Node 1"),
     rt:leave(Node1),
     ?assertEqual(ok, rt:wait_until_unpingable(Node1)),
     wait_and_validate([Node2, Node3, Node4]),
 
+    lager:info("leaving Node 2"),
     rt:leave(Node2),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
     wait_and_validate([Node3, Node4]),
 
+    lager:info("leaving Node 3"),
     rt:leave(Node3),
     ?assertEqual(ok, rt:wait_until_unpingable(Node3)),
 
@@ -89,9 +93,11 @@ wait_and_validate(Nodes) -> wait_and_validate(Nodes, Nodes).
 wait_and_validate(RingNodes, UpNodes) ->
     lager:info("Wait until all nodes are ready and there are no pending changes"),
     ?assertEqual(ok, rt:wait_until_nodes_ready(UpNodes)),
+    ?assertEqual(ok, rt:wait_until_all_members(UpNodes)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(UpNodes)),
     lager:info("Ensure each node owns a portion of the ring"),
     [?assertEqual(RingNodes, rt:owners_according_to(Node)) || Node <- UpNodes],
+    [rt:wait_for_service(Node, riak_kv) || Node <- UpNodes],
     lager:info("Verify that you got much data... (this is how we do it)"),
     ?assertEqual([], rt:systest_read(hd(UpNodes), 0, 1000, <<"verify_build_cluster">>, 2)),
     done.
