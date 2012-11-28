@@ -112,6 +112,7 @@
          wait_until_ready/1,
          wait_until_ring_converged/1,
          wait_until_status_ready/1,
+         wait_until_transfers_complete/1,
          wait_until_unpingable/1,
          whats_up/0
         ]).
@@ -456,14 +457,25 @@ wait_until_status_ready(Node) ->
 %% @doc Given a list of nodes, wait until all nodes believe there are no
 %% on-going or pending ownership transfers.
 -spec wait_until_no_pending_changes([node()]) -> ok | fail.
-wait_until_no_pending_changes(Nodes) ->
-    F = fun(Node) ->
-                [rpc:call(NN, riak_core_vnode_manager, force_handoffs, [])
-                 || NN <- Nodes],
-                {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-                riak_core_ring:pending_changes(Ring) =:= []
+wait_until_no_pending_changes(Nodes0) ->
+    F = fun(Nodes) ->
+                rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
+                {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
+                Changes = [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
+                BadNodes =:= [] andalso length(Changes) =:= length(Nodes) andalso lists:all(fun(T) -> T end, Changes)
         end,
-    [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
+    ?assertEqual(ok, wait_until(Nodes0, F)),
+    ok.
+
+%% @doc Waits until no transfers are in-flight or pending, checked by
+%% riak_core_status:transfers().
+-spec wait_until_transfers_complete([node()]) -> ok | fail.
+wait_until_transfers_complete([Node0|_]) ->
+    F = fun(Node) ->
+                {DownNodes, Transfers} = rpc:call(Node, riak_core_status, transfers, []),
+                DownNodes =:= [] andalso Transfers =:= []
+        end,
+    ?assertEqual(ok, wait_until(Node0, F)),
     ok.
 
 wait_for_service(Node, Service) ->
