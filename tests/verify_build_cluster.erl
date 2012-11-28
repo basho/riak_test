@@ -27,13 +27,18 @@
 confirm() ->
     %% Deploy a set of new nodes
     lager:info("Deploying 4 nodes"),
-    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4),
+    %% handoff_concurrency needs to be raised to make the leave operation faster.
+    %% most clusters go up to 10, but this one is one louder, isn't it?
+    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4, [{riak_core, [{handoff_concurrency, 11}]}]), 
 
     %% Ensure each node owns 100% of it's own ring
     lager:info("Ensure each nodes 100% of it's own ring"),
     [?assertEqual([Node], rt:owners_according_to(Node)) || Node <- Nodes],
 
-    lager:info("joining Node 2 to the cluster"),
+    lager:info("Loading some data up in this cluster."),
+    ?assertEqual([], rt:systest_write(Node1, 0, 1000, <<"verify_build_cluster">>, 2)),
+
+    lager:info("joining Node 2 to the cluster... It takes two to make a thing go right"),
     rt:join(Node2, Node1),
     wait_and_validate([Node1, Node2]),
 
@@ -57,8 +62,10 @@ confirm() ->
 
     % 1 & 2 up
     rt:start(Node1),
+    ok = rt:wait_until_pingable(Node1),
     wait_and_validate(Nodes, [Node1, Node3, Node4]),
     rt:start(Node2),
+    ok = rt:wait_until_pingable(Node2),
     wait_and_validate(Nodes),
 
     % leave 1, 2, and 3
@@ -69,7 +76,7 @@ confirm() ->
     rt:leave(Node2),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
     wait_and_validate([Node3, Node4]),
-    
+
     rt:leave(Node3),
     ?assertEqual(ok, rt:wait_until_unpingable(Node3)),
 
@@ -85,4 +92,6 @@ wait_and_validate(RingNodes, UpNodes) ->
     ?assertEqual(ok, rt:wait_until_no_pending_changes(UpNodes)),
     lager:info("Ensure each node owns a portion of the ring"),
     [?assertEqual(RingNodes, rt:owners_according_to(Node)) || Node <- UpNodes],
+    lager:info("Verify that you got much data... (this is how we do it)"),
+    ?assertEqual([], rt:systest_read(hd(UpNodes), 0, 1000, <<"verify_build_cluster">>, 2)),
     done.
