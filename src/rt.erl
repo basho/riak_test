@@ -662,6 +662,11 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
+    %% stop all connected nodes, 'cause it'll be faster that 
+    lager:info("RPC stopping these nodes ~p", [nodes()]),
+    [ rt:stop(Node) || Node <- nodes()],
+    %% Then do the more exhaustive harness thing, in case something was up
+    %% but not connected.
     ?HARNESS:teardown().
 
 %%%===================================================================
@@ -675,6 +680,7 @@ systest_write(Node, Size, W) ->
     systest_write(Node, 1, Size, <<"systest">>, W).
 
 systest_write(Node, Start, End, Bucket, W) ->
+    rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
                 Obj = riak_object:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
@@ -694,6 +700,7 @@ systest_read(Node, Size, R) ->
     systest_read(Node, 1, Size, <<"systest">>, R).
 
 systest_read(Node, Start, End, Bucket, R) ->
+    rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
                 case C:get(Bucket, <<N:32/integer>>, R) of
@@ -717,6 +724,7 @@ systest_read(Node, Start, End, Bucket, R) ->
 %% @doc get me a protobuf client process and hold the mayo!
 -spec pbc(node()) -> pid().
 pbc(Node) ->
+    rt:wait_for_service(Node, riak_kv),
     {ok, IP} = rpc:call(Node, application, get_env, [riak_api, pb_ip]),
     {ok, PBPort} = rpc:call(Node, application, get_env, [riak_api, pb_port]),
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
@@ -752,6 +760,7 @@ http_url(Node) ->
 %% @doc get me an http client.
 -spec httpc(node()) -> term().
 httpc(Node) ->
+    rt:wait_for_service(Node, riak_kv),
     {ok, [{IP, Port}|_]} = rpc:call(Node, application, get_env, [riak_core, http]),
     rhc:create(IP, Port, "riak", []).
 
