@@ -106,16 +106,6 @@ handle_grep_result(GrepStr, {ContinueFun, ContinueArgs}) ->
         _ -> apply(ContinueFun, ContinueArgs)
     end.
                   
-            
-       
-
 load_bdp_module(Node) ->
     {_Module, Bin, Filename} = code:get_object_code(cause_bdp), 
     rpc:call(Node, code, load_binary, [cause_bdp, Filename, Bin]).
-
-    
-    
-    
-    
-    
-    

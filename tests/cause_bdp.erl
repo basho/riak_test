@@ -39,5 +39,3 @@ spam_nodes(TargetNodes) ->
 spam(Node) ->
     timer:sleep(random:uniform(1500)), 
     catch rpc:call(Node, erlang, whereis, [rex]).
-
-
