@@ -46,7 +46,7 @@ confirm() ->
     lager:info("Ensure that ~p now own all partitions", [Nodes123]),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes123)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes123)),
-    [?assertEqual(Nodes123, rt:owners_according_to(Node)) || Node <- Nodes123],
+    rt:assert_nodes_agree_about_ownership(Nodes123),
 
     lager:info("Join ~p to the cluster", [Node4]),
     stage_join(Node4, Node1),
@@ -63,8 +63,8 @@ confirm() ->
     lager:info("Ensure that ~p now own all partitions", [Nodes134]),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes134)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes134)),
-    [?assertEqual(Nodes134, rt:owners_according_to(Node)) || Node <- Nodes134],
-
+    rt:assert_nodes_agree_about_ownership(Nodes134),
+    
     lager:info("Verify that ~p shutdown after being replaced", [Node2]),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
 
@@ -84,7 +84,7 @@ confirm() ->
     lager:info("Ensure that ~p now own all partitions", [Nodes124]),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes124)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes124)),
-    [?assertEqual(Nodes124, rt:owners_according_to(Node)) || Node <- Nodes124],
+    rt:assert_nodes_agree_about_ownership(Nodes124),
 
     lager:info("Stage leave of ~p", [Node2]),
     stage_leave(Node1, Node2),

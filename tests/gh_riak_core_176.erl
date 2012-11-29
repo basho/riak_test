@@ -56,8 +56,8 @@ confirm() ->
     rt:join(Node2, Node1),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes12)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes12)),
-    [?assertEqual(Nodes12, rt:owners_according_to(Node)) || Node <- Nodes12],
-
+    rt:assert_nodes_agree_about_ownership(Nodes12),
+    
     %% Check 0.0.0.0 address works
     lager:info("Change ~p handoff_ip to \"0.0.0.0\"", [Node3]),
     rt:update_app_config(Node3,
@@ -68,7 +68,7 @@ confirm() ->
     rt:join(Node3, Node1),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes123)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes123)),
-    [?assertEqual(Nodes123, rt:owners_according_to(Node)) || Node <- Nodes123],
+    rt:assert_nodes_agree_about_ownership(Nodes123),
 
     lager:info("Test gh_riak_core_176 passed"),
     pass.

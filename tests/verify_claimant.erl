@@ -63,6 +63,7 @@ confirm() ->
     lager:info("Restart ~p and wait for ring convergence", [Node1]),
     start(Node1),
     ?assertEqual(ok, wait_until_nodes_ready([Node1])),
+    ?assertEqual(ok, rt:wait_until_all_members(Nodes)),
     ?assertEqual(ok, wait_until_ring_converged(Nodes)),
 
     %% Ensure node has rejoined and is no longer down
