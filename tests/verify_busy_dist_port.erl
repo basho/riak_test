@@ -12,7 +12,20 @@
 %% 
 %% see: https://issues.basho.com/show_bug.cgi?id=1305 
 %% see: https://github.com/basho/basho_expect/blob/master/basho_expect/regression_az1018.py
+%% 
+%% -- ORIGINAL TICKET TEXT FROM AGILE ZEN (AZ1018) --
+%% As we discovered in a customer's production network, riak_sysmon has been
+%% mis-configured and buggy and therefore was not logging 'busy_dist_port' events
+%% when they were happening. While triaging the customer's cluster, we made
+%% several mistakes while assuming that those events weren't happening.
 %%
+%% Two fixes are required:
+%%
+%% Fix the riak_sysmon_filter:init() code.
+%% Tune the app.config settings to correct values.
+%% 
+%% -- END ORIGINAL TICKET --
+%% 
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
 %% except in compliance with the License.  You may obtain
