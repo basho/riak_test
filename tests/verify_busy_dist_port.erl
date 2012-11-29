@@ -51,17 +51,6 @@ confirm() ->
 
     [ begin lager:info("loading module on ~p", [N]), load_bdp_module(N) end || N <- Nodes],
 
-    lager:info("removing logfile on node 1 (~p)", [Node1]),
-    case rpc:call(Node1, cause_bdp, remove_log, []) of
-        ok -> 
-            lager:info("logfile successfully removed", []);
-        {error, enoent} -> 
-            lager:info("no need to remove logfile, it didn't exist", []);
-        {error, Reason} -> 
-            lager:info("error removing logfile: ~p. terminating", [Reason]),
-            throw({cannot_delete_logfile, Node1, Reason})
-    end,
-
     OsPid = rpc:call(Node2, os, getpid, []),
     lager:info("pausing node 2 (~p) pid ~s", [Node2, OsPid]),
     %% must use cast here, call will never return

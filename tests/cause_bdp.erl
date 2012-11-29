@@ -23,9 +23,6 @@
 -module(cause_bdp).
 -compile(export_all).
 
-remove_log() ->
-    file:delete(log_file()).
-
 log_file() ->
     log_dir() ++ "/console.log".
 
