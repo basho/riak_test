@@ -47,6 +47,7 @@ confirm() ->
                [Node2, NodeIP, AlternateIP]),
     NewConfig = [{riak_core, [{handoff_ip, AlternateIP}]}],
     rt:update_app_config(Node2, NewConfig),
+    rt:wait_for_service(Node2, riak_kv),
 
     lager:info("Write data to the cluster"),
     rt:systest_write(Node1, 100),
@@ -65,6 +66,7 @@ confirm() ->
 
     lager:info("Join ~p to the cluster and wait for handoff to finish",
                [Node3]),
+    rt:wait_for_service(Node3, riak_kv),
     rt:join(Node3, Node1),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes123)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes123)),
