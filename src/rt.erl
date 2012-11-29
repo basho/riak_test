@@ -28,6 +28,7 @@
 
 -export([
          admin/2,
+         assert_nodes_agree_about_ownership/1,
          async_start/1,
          attach/2,
          build_cluster/1,
@@ -586,6 +587,10 @@ get_ring(Node) ->
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
     Ring.
 
+assert_nodes_agree_about_ownership(Nodes) ->
+    ?assertEqual(ok, wait_until_all_members(Nodes)),
+    [ ?assertEqual({Node, Nodes}, {Node, owners_according_to(Node)}) || Node <- Nodes].
+
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.
 owners_according_to(Node) ->
@@ -651,7 +656,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
 
     %% Ensure each node owns a portion of the ring
-    [?assertEqual(Nodes, owners_according_to(Node)) || Node <- Nodes],
+    assert_nodes_agree_about_ownership(Nodes),
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
 
