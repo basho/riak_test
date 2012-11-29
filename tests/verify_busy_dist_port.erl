@@ -39,8 +39,15 @@ confirm() ->
     [ begin lager:info("loading module on ~p", [N]), load_bdp_module(N) end || N <- Nodes],
 
     lager:info("removing logfile on node 1 (~p)", [Node1]),
-    %% TODO: handle eaccess and friends
-    rpc:call(Node1, cause_bdp, remove_log, []),
+    case rpc:call(Node1, cause_bdp, remove_log, []) of
+        ok -> 
+            lager:info("logfile successfully removed", []);
+        {error, enoent} -> 
+            lager:info("no need to remove logfile, it didn't exist", []);
+        {error, Reason} -> 
+            lager:info("error removing logfile: ~p. terminating", [Reason]),
+            throw({cannot_delete_logfile, Node1, Reason})
+    end,
 
     OsPid = rpc:call(Node2, os, getpid, []),
     lager:info("pausing node 2 (~p) pid ~s", [Node2, OsPid]),
@@ -50,23 +57,45 @@ confirm() ->
     lager:info("flooding node 2 (paused) with messages from node 1"),
     rpc:call(Node1, cause_bdp, spam_nodes, [[Node2]]), 
 
-    %% TODO: something better than sleep
-    timer:sleep(15000),
-
     LogFile = rpc:call(Node1, cause_bdp, log_file, []),
     lager:info("checking ~p on node 1 for busy_dist_port messages", [LogFile]),
-
-    GrepRes = rpc:call(Node1, os, cmd, ["grep \"monitor busy_dist_port .*#Port\" " ++ LogFile]),
-    lager:info("grep result: ~p", [GrepRes]),
-    ?assert(length(GrepRes) > 0),
+    Success = check_log(Node1, LogFile, 30, 2),
 
     lager:info("continuing node 2 (~p) pid ~s", [Node2, OsPid]),
     %% NOTE: this call must be executed on the OS running Node2 in order to unpause it
     %%       and not break future test runs. The command cannot be executed via 
     %%       rpc:cast(Node2, os, cmd, ...) because Node2 is paused and will never process the 
     %%       message!
-    rt:cmd(lists:flatten(io_lib:format("kill -CONT ~p", [OsPid]))).
-        
+    rt:cmd(lists:flatten(io_lib:format("kill -CONT ~p", [OsPid]))),
+    
+    ?assert(Success).
+
+check_log(_Node, _LogFile, 0, _CI) ->
+    false;
+check_log(Node, LogFile, MaxChecks, CheckIntervalSecs) ->
+    timer:sleep(CheckIntervalSecs * 1000),
+    GrepRes = rpc:call(Node, os, cmd, ["grep \"monitor busy_dist_port .*#Port\" " ++ LogFile]),
+    lager:info("grep result: ~p", [GrepRes]),
+    case GrepRes of
+        [] -> %% nothing was found by grep
+            check_log(Node, LogFile, MaxChecks - 1, CheckIntervalSecs);
+        Res -> %% we found something!
+            handle_grep_result(
+              Res,
+              {fun check_log/4, [Node, LogFile, MaxChecks - 1, CheckIntervalSecs]}
+             )
+    end.
+
+%% le nasty hack, could get rid of this by using a proper port and checking exit code on grep
+handle_grep_result(GrepStr, {ContinueFun, ContinueArgs}) ->
+    case string:str(lists:flatten(GrepStr), "No such file") of
+        0 -> true; %% we found the busy_dist_port messages
+        _ -> apply(ContinueFun, ContinueArgs)
+    end.
+                  
+            
+       
+
 load_bdp_module(Node) ->
     {_Module, Bin, Filename} = code:get_object_code(cause_bdp), 
     rpc:call(Node, code, load_binary, [cause_bdp, Filename, Bin]).

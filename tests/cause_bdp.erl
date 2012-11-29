@@ -24,7 +24,7 @@
 -compile(export_all).
 
 remove_log() ->
-    filename:delete(log_file()).
+    file:delete(log_file()).
 
 log_file() ->
     log_dir() ++ "/console.log".
