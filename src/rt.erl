@@ -227,7 +227,7 @@ async_start(Node) ->
 
 %% @doc Stop the specified Riak `Node'.
 stop(Node) ->
-    ?HARNESS:stop(Node).
+    rpc:call(Node, init, stop, []).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
 stop_and_wait(Node) ->

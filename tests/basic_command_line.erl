@@ -85,7 +85,7 @@ start_test(Node) ->
 stop_test(Node) ->
     ?assert(rt:is_pingable(Node)),
 
-    ok = rt:stop(Node),
+    {ok, "ok\n"} = rt:riak(Node, "stop"),
 
     ?assertNot(rt:is_pingable(Node)),
     ok.
