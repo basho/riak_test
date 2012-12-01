@@ -23,13 +23,6 @@
 -module(cause_bdp).
 -compile(export_all).
 
-log_file() ->
-    log_dir() ++ "/console.log".
-
-log_dir() ->
-    {ok, LogDir} = application:get_env(riak_core, platform_log_dir),
-    filename:absname(LogDir).
-
 spam_nodes(TargetNodes) ->
         [[spawn(?MODULE, spam, [N]) || _ <- lists:seq(1,10*1000)] || N <- TargetNodes].
 

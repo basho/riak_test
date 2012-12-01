@@ -46,10 +46,14 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    [Node1, Node2] = Nodes = rt:build_cluster(2),
+    [Node1, Node2] = rt:build_cluster(2),
     lager:info("deployed 2 nodes"),
 
-    [ begin lager:info("loading module on ~p", [N]), load_bdp_module(N) end || N <- Nodes],
+    remote_load_modules(Node1, [cause_bdp, verify_bdp_event_handler, riak_test_lager_backend]),
+    Res = rpc:call(Node1, verify_bdp_event_handler, add_handler, [self()]),    
+    ok = rpc:call(Node1, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
+    ok = rpc:call(Node1, lager, set_loglevel, [riak_test_lager_backend, info]),
+    lager:info("RES: ~p", [Res]),
 
     OsPid = rpc:call(Node2, os, getpid, []),
     lager:info("pausing node 2 (~p) pid ~s", [Node2, OsPid]),
@@ -59,9 +63,25 @@ confirm() ->
     lager:info("flooding node 2 (paused) with messages from node 1"),
     rpc:call(Node1, cause_bdp, spam_nodes, [[Node2]]), 
 
-    LogFile = rpc:call(Node1, cause_bdp, log_file, []),
-    lager:info("checking ~p on node 1 for busy_dist_port messages", [LogFile]),
-    Success = check_log(Node1, LogFile, 30, 2),
+
+    receive
+        go ->
+            lager:info("busy_dist_port event fired on node 1 (~p), checking logs", [Node1])
+    after
+        60000 ->
+            lager:error("no busy_dist_port event fired on node 1 in 60s. test is borked",
+                        [])
+    end,
+
+    Logs = rpc:call(Node1, riak_test_lager_backend, get_logs, []),
+    Success = case re:run(Logs, "monitor busy_dist_port .*#Port", []) of
+                  {match, _} ->
+                      lager:info("found busy_dist_port message in log", []),
+                      true;
+                  nomatch -> 
+                      lager:error("busy_dist_port message not found in log", []),
+                      false
+              end,                                    
 
     lager:info("continuing node 2 (~p) pid ~s", [Node2, OsPid]),
     %% NOTE: this call must be executed on the OS running Node2 in order to unpause it
@@ -69,32 +89,12 @@ confirm() ->
     %%       rpc:cast(Node2, os, cmd, ...) because Node2 is paused and will never process the 
     %%       message!
     rt:cmd(lists:flatten(io_lib:format("kill -CONT ~p", [OsPid]))),
-    
+
     ?assert(Success).
 
-check_log(_Node, _LogFile, 0, _CI) ->
-    false;
-check_log(Node, LogFile, MaxChecks, CheckIntervalSecs) ->
-    timer:sleep(CheckIntervalSecs * 1000),
-    GrepRes = rpc:call(Node, os, cmd, ["grep \"monitor busy_dist_port .*#Port\" " ++ LogFile]),
-    lager:info("grep result: ~p", [GrepRes]),
-    case GrepRes of
-        [] -> %% nothing was found by grep
-            check_log(Node, LogFile, MaxChecks - 1, CheckIntervalSecs);
-        Res -> %% we found something!
-            handle_grep_result(
-              Res,
-              {fun check_log/4, [Node, LogFile, MaxChecks - 1, CheckIntervalSecs]}
-             )
-    end.
-
-%% le nasty hack, could get rid of this by using a proper port and checking exit code on grep
-handle_grep_result(GrepStr, {ContinueFun, ContinueArgs}) ->
-    case string:str(lists:flatten(GrepStr), "No such file") of
-        0 -> true; %% we found the busy_dist_port messages
-        _ -> apply(ContinueFun, ContinueArgs)
-    end.
-                  
-load_bdp_module(Node) ->
-    {_Module, Bin, Filename} = code:get_object_code(cause_bdp), 
-    rpc:call(Node, code, load_binary, [cause_bdp, Filename, Bin]).
+remote_load_modules(Node, Modules) ->
+    [remote_load_module(Node, M) || M <- Modules].
+          
+remote_load_module(Node, Mod) ->
+    {Mod, Bin, Filename} = code:get_object_code(Mod),
+    rpc:call(Node, code, load_binary, [Mod, Filename, Bin]).
