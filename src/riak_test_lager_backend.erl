@@ -32,6 +32,7 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+-export([get_logs/0]).
 
 %% holds the log messages for retreival on terminate
 -record(state, {level, verbose, log = []}).
@@ -42,6 +43,11 @@
 -endif.
 
 -include_lib("lager/include/lager.hrl").
+
+-spec get_logs() -> [iolist()] | {error, term()}.
+get_logs() ->
+    gen_event:call(lager_event, ?MODULE, get_logs, infinity).    
+
 
 -spec(init(integer()|atom()|[term()]) -> {ok, #state{}} | {error, atom()}).
 %% @private
@@ -64,7 +70,9 @@ init([Level, Verbose]) ->
 -spec(handle_event(tuple(), #state{}) -> {ok, #state{}}).
 %% @private
 %% @doc handles the event, adding the log message to the gen_event's state.
-handle_event({log, Dest, Level, {Date, Time}, [LevelStr, Location, Message]},
+%%      this function attempts to handle logging events in both the simple tuple 
+%%      and new record (introduced after lager 1.2.1) formats. 
+handle_event({log, Dest, Level, {Date, Time}, [LevelStr, Location, Message]}, %% lager 1.2.1
     #state{level=L, verbose=Verbose, log = Logs} = State) when Level > L ->
     case lists:member(riak_test_lager_backend, Dest) of
         true ->
@@ -78,7 +86,7 @@ handle_event({log, Dest, Level, {Date, Time}, [LevelStr, Location, Message]},
         false ->
             {ok, State}
     end;
-handle_event({log, Level, {Date, Time}, [LevelStr, Location, Message]},
+handle_event({log, Level, {Date, Time}, [LevelStr, Location, Message]}, %% lager 1.2.1
   #state{level=LogLevel, verbose=Verbose, log = Logs} = State) when Level =< LogLevel ->
     Log = case Verbose of
         true ->
@@ -87,8 +95,19 @@ handle_event({log, Level, {Date, Time}, [LevelStr, Location, Message]},
             [Time, " ", LevelStr, Message]
         end,
     {ok, State#state{log=[Log|Logs]}};
-handle_event(_Event, State) ->
-    {ok, State}.
+handle_event({log, {lager_msg, Dest, _Meta, Level, Timestamp, Message}}, State) -> %% lager master
+    case lager_util:level_to_num(Level) of
+        L when L =< State#state.level ->
+            handle_event({log, L, Timestamp, 
+                          [["[",atom_to_list(Level),"] "], " ", Message]}, 
+                         State);
+        L -> 
+            handle_event({log, Dest, L, Timestamp, 
+                          [["[",atom_to_list(Level),"] "], " ", Message]}, 
+                         State)
+    end;
+handle_event(Event, State) ->
+    {ok, State#state{log = [Event|State#state.log]}}.
 
 -spec(handle_call(any(), #state{}) -> {ok, any(), #state{}}).
 %% @private
@@ -102,6 +121,8 @@ handle_call({set_loglevel, Level}, State) ->
         _ ->
             {ok, {error, bad_log_level}, State}
     end;
+handle_call(get_logs, #state{log = Logs} = State) ->
+    {ok, Logs, State};
 handle_call(_, State) -> 
     {ok, ok, State}.
 
