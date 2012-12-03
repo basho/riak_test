@@ -35,7 +35,7 @@ confirm() ->
     riaknostic_bootstrap(Node1),
 
     %% Run through all tests on Node1
-    check_riaknostic_exectute(Node1),
+    check_riaknostic_execute(Node1),
     check_riaknostic_usage(Node1),
     check_riaknostic_command_list(Node1),
     check_riaknostic_log_levels(Node1),
@@ -66,7 +66,7 @@ riaknostic_install(true, Node) ->
     ok.
 
 %% Check that riaknostic executes
-check_riaknostic_exectute(Node) ->
+check_riaknostic_execute(Node) ->
     %% Execute
     lager:info("**  Check Riaknostic executes"),
     {ok, RiaknosticOut} = rt:admin(Node, ["diag"]),
