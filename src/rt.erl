@@ -107,7 +107,9 @@
          wait_until_capability/3,
          wait_until_connected/1,
          wait_until_legacy_ringready/1,
+         wait_until_owners_according_to/2,
          wait_until_no_pending_changes/1,
+         wait_until_nodes_agree_about_ownership/1,
          wait_until_nodes_ready/1,
          wait_until_pingable/1,
          wait_until_ready/1,
@@ -227,6 +229,7 @@ async_start(Node) ->
 
 %% @doc Stop the specified Riak `Node'.
 stop(Node) ->
+    lager:info("Stopping riak on ~p", [Node]),
     rpc:call(Node, init, stop, []).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
@@ -570,6 +573,17 @@ wait_until_capability(Node, Capability, Value) ->
                           Value == capability(Node, Capability)
                   end).
 
+wait_until_owners_according_to(Node, Nodes) ->
+    SortedNodes = lists:usort(Nodes),
+    F = fun(N) ->
+        owners_according_to(N) =:= SortedNodes
+    end,
+    ?assertEqual(ok, wait_until(Node, F)),
+    ok.
+
+wait_until_nodes_agree_about_ownership(Nodes) ->
+    Results = [ wait_until_owners_according_to(Node, Nodes) || Node <- Nodes ],
+    ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
 %%%===================================================================
 %%% Ring Functions
 %%%===================================================================
@@ -588,6 +602,7 @@ get_ring(Node) ->
     Ring.
 
 assert_nodes_agree_about_ownership(Nodes) ->
+    ?assertEqual(ok, wait_until_ring_converged(Nodes)),
     ?assertEqual(ok, wait_until_all_members(Nodes)),
     [ ?assertEqual({Node, Nodes}, {Node, owners_according_to(Node)}) || Node <- Nodes].
 
@@ -656,7 +671,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
 
     %% Ensure each node owns a portion of the ring
-    assert_nodes_agree_about_ownership(Nodes),
+    wait_until_nodes_agree_about_ownership(Nodes),
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
 
