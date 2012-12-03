@@ -59,15 +59,18 @@ confirm() ->
     pass.
 
 load_code(Module, Nodes) ->
-    {Module, Bin, File} = code:get_object_code(Module),
-    {_, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]).
+    case code:get_object_code(Module) of
+        {Module, Bin, File} ->
+            {_, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]);
+        error ->
+            error(lists:flatten(io_lib:format("unable to get_object_code(~s)", [Module])))
+    end.
 
 %% NOTE: Don't call lager in this function.  This function is compiled
 %% using the lager version specified by Riak Test's rebar.config but
 %% that may not match the version used by Riak where this function is
 %% called.
 setup_mocks() ->
-    application:start(lager),
     meck:new(riak_core_vnode_proxy_sup, [unstick, passthrough, no_link]),
     meck:expect(riak_core_vnode_proxy_sup, start_proxies,
                 fun(Mod=riak_kv_vnode) ->

@@ -33,7 +33,8 @@ confirm() ->
 
     %% Ensure each node owns 100% of it's own ring
     lager:info("Ensure each nodes 100% of it's own ring"),
-    [?assertEqual([Node], rt:owners_according_to(Node)) || Node <- Nodes],
+
+    [rt:wait_until_owners_according_to(Node, [Node]) || Node <- Nodes],
 
     lager:info("Loading some data up in this cluster."),
     ?assertEqual([], rt:systest_write(Node1, 0, 1000, <<"verify_build_cluster">>, 2)),
@@ -96,7 +97,7 @@ wait_and_validate(RingNodes, UpNodes) ->
     ?assertEqual(ok, rt:wait_until_all_members(UpNodes)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(UpNodes)),
     lager:info("Ensure each node owns a portion of the ring"),
-    [?assertEqual(RingNodes, rt:owners_according_to(Node)) || Node <- UpNodes],
+    [rt:wait_until_owners_according_to(Node, RingNodes) || Node <- UpNodes],
     [rt:wait_for_service(Node, riak_kv) || Node <- UpNodes],
     lager:info("Verify that you got much data... (this is how we do it)"),
     ?assertEqual([], rt:systest_read(hd(UpNodes), 0, 1000, <<"verify_build_cluster">>, 2)),
