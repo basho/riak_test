@@ -74,6 +74,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             %% setup servers/listeners on A
             Listeners = add_listeners(ANodes),
+            rt:wait_until_ring_converged(ANodes),
 
             %% verify servers are visible on all nodes
             verify_listeners(Listeners),
@@ -92,6 +93,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             add_site(hd(BNodes), {Ip, Port, "site1"}),
             FakeListeners = gen_fake_listeners(NumSites-1),
             add_fake_sites(BNodes, FakeListeners),
+            rt:wait_until_ring_converged(ANodes),
 
             %% verify sites are distributed on B
             verify_sites_balanced(NumSites, BNodes),
