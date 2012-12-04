@@ -299,6 +299,9 @@ data_path(Node, Suffix, Partition) ->
     Base = rt:config(rtdev_path.current) ++ "/dev/" ++ Name ++ "/data",
     Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
 
+backend_mod_dir(undefined) ->
+    %% riak_test defaults to bitcask when undefined
+    backend_mod_dir(bitcask);
 backend_mod_dir(bitcask) ->
     {riak_kv_bitcask_backend, "bitcask"};
 backend_mod_dir(eleveldb) ->
