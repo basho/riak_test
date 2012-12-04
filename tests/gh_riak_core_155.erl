@@ -36,8 +36,7 @@ confirm() ->
 
     %% Restart node, add mocks that delay proxy startup, and issue gets.
     %% Gets will come in before proxies started, and should trigger crash.
-    rt:stop(Node),
-    rt:wait_until_unpingable(Node),
+    rt:stop_and_wait(Node),
     rt:async_start(Node),
     rt:wait_until_pingable(Node),
 
@@ -48,7 +47,7 @@ confirm() ->
     load_code(meck_util, [Node]),
     load_code(meck_expect, [Node]),
     load_code(meck_code_gen, [Node]),
-    mocks_setup_ok = rpc:call(Node, ?MODULE, setup_mocks, []),
+    ok = rpc:call(Node, ?MODULE, setup_mocks, []),
 
     lager:info("Installed mocks to delay riak_kv proxy startup"),
     lager:info("Issuing 10000 gets against ~p", [Node]),
@@ -87,7 +86,7 @@ setup_mocks() ->
                         meck:passthrough([Mod])
                 end),
     error_logger:info_msg("Installed mocks"),
-    mocks_setup_ok.
+    ok.
 
 perform_gets(Count, Node, PL, BKey) ->
     rpc:call(Node, riak_kv_vnode, get, [PL, BKey, make_ref()]),
