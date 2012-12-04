@@ -34,6 +34,12 @@ confirm() ->
     pass.
 
 prereqs() ->
+    %% Cleanup from previous test runs as it causes a
+    %% virtualenv caremad explosion if it already exists
+    lager:info("[PREREQ] Cleaning up python scratch directory"),
+    CleanupCMD = io_lib:format("rm -rf ~s", [?PYTHON_CHECKOUT]),
+    os:cmd(CleanupCMD),
+
     %% Need python, yo
     lager:info("[PREREQ] Checking for presence of python"),
     ?assertNot(length(os:cmd("which python")) =:= 0),
@@ -53,13 +59,10 @@ prereqs() ->
 
     %% Checkout the project and a specific tag.
     lager:info("[PREREQ] Checking for riak-python-client in ~s", [rt:config(rt_scratch_dir)]),
-    case file:read_file_info(?PYTHON_CHECKOUT) of
-        {error, _} ->
-            lager:info("[PREREQ] Cloning riak-python-client from ~s", [?PYTHON_GIT_URL]),
-            Cmd = io_lib:format("git clone ~s ~s", [?PYTHON_GIT_URL, ?PYTHON_CHECKOUT]),
-            rt:stream_cmd(Cmd);
-        _ -> ok
-    end,
+
+    lager:info("[PREREQ] Cloning riak-python-client from ~s", [?PYTHON_GIT_URL]),
+    Cmd = io_lib:format("git clone ~s ~s", [?PYTHON_GIT_URL, ?PYTHON_CHECKOUT]),
+    rt:stream_cmd(Cmd),
 
     lager:info("[PREREQ] Resetting python client to tag '~s'", [?PYTHON_CLIENT_TAG]),
     TagCmd = io_lib:format("git reset --hard ~s", [?PYTHON_CLIENT_TAG]),
