@@ -91,7 +91,8 @@ execute(TestModule, TestMetaData) ->
         fail ->
             ErrorHeader = "================ " ++ atom_to_list(TestModule) ++ " failure stack trace =====================",
             ErrorFooter = [ $= || _X <- lists:seq(1,length(ErrorHeader))],
-            io:format("~s~n~p~n~s~n", [ErrorHeader, Reason, ErrorFooter]);
+            Error = io_lib:format("~n~s~n~p~n~s~n", [ErrorHeader, Reason, ErrorFooter]),
+            lager:error(Error);
         _ -> meh
     end,
     {Status, Reason}.
