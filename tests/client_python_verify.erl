@@ -34,6 +34,12 @@ confirm() ->
     pass.
 
 prereqs() ->
+    %% Cleanup from previous test runs as it causes a
+    %% virtualenv caremad explosion if it already exists
+    lager:info("[PREREQ] Cleaning up python scratch directory"),
+    CleanupCMD = io_lib:format("rm -rf ~s", [?PYTHON_CHECKOUT]),
+    os:cmd(CleanupCMD),
+
     %% Need python, yo
     lager:info("[PREREQ] Checking for presence of python"),
     ?assertNot(length(os:cmd("which python")) =:= 0),
