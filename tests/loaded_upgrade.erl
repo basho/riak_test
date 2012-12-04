@@ -59,6 +59,8 @@ verify_upgrade() ->
     rt:systest_write(Node1, 100, 3),
     ?assertEqual([], rt:systest_read(Node1, 100, 1)),
 
+    lager:info("Checking list_keys count periodically throughout this test. No news is good news :)"),
+    spawn_link(?MODULE, check_list_keys, [Node1]), 
     Conns = rt:connection_info(Nodes),
     NodeConn = proplists:get_value(Node1, Conns),
     lager:info("NodeConn: ~p", [NodeConn]),
@@ -96,6 +98,17 @@ verify_upgrade() ->
     lager:info("Upgrade complete, ensure search now passes"),
     check_search_tester(spawn_search_tester(Search1), true),
     ok.
+
+%% ===================================================================
+%% List Keys Tester
+%% ===================================================================
+check_list_keys(Node) ->
+    Pid = rt:pbc(Node),
+    {ok, Keys} = riakc_pb_socket:list_keys(Pid, <<"systest">>),
+    riakc_pb_socket:stop(Pid),
+    ?assertEqual(100, length(Keys)),
+    timer:sleep(3000),
+    check_list_keys(Node).
 
 %% ===================================================================
 %% K/V Tester
