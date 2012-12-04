@@ -21,12 +21,6 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/1,
-             enable_search_hook/2,
-             get_ring/1,
-             join/2,
-             update_app_config/2]).
-
 -define(FMT(S, L), lists:flatten(io_lib:format(S, L))).
 
 %% @doc This test verifies that partition repair successfully repairs
@@ -79,7 +73,7 @@ confirm() ->
     end,
 
     lager:info("Enable search hook"),
-    enable_search_hook(hd(Nodes), Bucket),
+    rt:enable_search_hook(hd(Nodes), Bucket),
 
     lager:info("Insert Scott's spam emails"),
     {ok, C} = riak:client_connect(hd(Nodes)),
@@ -88,7 +82,7 @@ confirm() ->
     lager:info("Stash ITFs for each partition"),
     %% need to load the module so riak can see the fold fun
     load_module_on_riak(Nodes, ?MODULE),
-    Ring = get_ring(hd(Nodes)),
+    Ring = rt:get_ring(hd(Nodes)),
     Owners = riak_core_ring:all_owners(Ring),
     [stash_data(riak_search, Owner) || Owner <- Owners],
 
@@ -302,6 +296,9 @@ data_path(Node, Suffix, Partition) ->
     Base = rt:config(rtdev_path.current) ++ "/dev/" ++ Name ++ "/data",
     Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
 
+backend_mod_dir(undefined) ->
+    %% riak_test defaults to bitcask when undefined
+    backend_mod_dir(bitcask);
 backend_mod_dir(bitcask) ->
     {riak_kv_bitcask_backend, "bitcask"};
 backend_mod_dir(eleveldb) ->
