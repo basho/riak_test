@@ -58,8 +58,6 @@ prereqs() ->
     ?assertCmd("virtualenv --help"),
 
     %% Checkout the project and a specific tag.
-    lager:info("[PREREQ] Checking for riak-python-client in ~s", [rt:config(rt_scratch_dir)]),
-
     lager:info("[PREREQ] Cloning riak-python-client from ~s", [?PYTHON_GIT_URL]),
     Cmd = io_lib:format("git clone ~s ~s", [?PYTHON_GIT_URL, ?PYTHON_CHECKOUT]),
     rt:stream_cmd(Cmd),
