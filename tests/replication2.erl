@@ -552,7 +552,7 @@ wait_until_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-                case proplists:get_value(server_stats, Status) of
+                case proplists:get_value(fullsync_coordinator, Status) of
                     [] ->
                         false;
                     [_C] ->

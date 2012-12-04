@@ -146,6 +146,23 @@ confirm() ->
             ]}
     ],
 
+    SSLConfig7 = [
+        {riak_repl,
+            [
+                {fullsync_on_connect, false},
+                {fullsync_interval, disabled},
+                {ssl_enabled, true},
+                {peer_common_name_acl, ["ca.cataclysm-software.net"]},
+                {certfile, filename:join([PrivDir,
+                            "certs/cacert.org/ny-cert-old.pem"])},
+                {keyfile, filename:join([PrivDir,
+                            "certs/cacert.org/ny-key.pem"])},
+                {cacertdir, filename:join([PrivDir,
+                            "certs/cacert.org/ca"])}
+            ]}
+    ],
+
+
     [Node1, Node2] = rt:deploy_nodes(2, BaseConf),
 
     Listeners = replication:add_listeners([Node1]),
@@ -182,6 +199,10 @@ confirm() ->
     lager:info("testing wildcard and strict ACLs with cacert.org certs"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),
+
+    lager:info("testing expired certificates fail"),
+    ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
+            {Node2, merge_config(SSLConfig7, BaseConf)})),
 
     lager:info("Connectivity tests passed"),
 
@@ -220,7 +241,13 @@ test_connection({Node1, Config1}, {Node2, Config2}) ->
     rt:wait_until_pingable(Node1),
     rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
-    replication:wait_until_connection(Node1).
+    timer:sleep(5000),
+    Status = rpc:call(Node1, riak_repl_console, status, [quiet]),
+    case proplists:get_value(server_stats, Status) of
+        [] -> fail;
+        _ -> ok
+    end.
+    %replication:wait_until_connection(Node1).
 
 
 
