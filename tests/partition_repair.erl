@@ -21,11 +21,8 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/1,
-             enable_search_hook/2,
-             get_ring/1,
-             join/2,
-             update_app_config/2]).
+-import(rt, [enable_search_hook/2,
+             get_ring/1]).
 
 -define(FMT(S, L), lists:flatten(io_lib:format(S, L))).
 
