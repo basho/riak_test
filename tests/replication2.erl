@@ -385,23 +385,28 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:wait_until_pingable(Target),
     timer:sleep(5000),
 
+    {ok, C} = riak:client_connect(Target),
+
     %% do the stop in the background while we're writing keys
     spawn(fun() ->
                 timer:sleep(200),
-                %lager:info("Stopping riak_repl on node ~p", [Target]),
-                %rpc:call(Target, application, stop, [riak_repl])
                 lager:info("Stopping node ~p again", [Target]),
-                rt:stop(Target)
-        end),
+                rt:stop(Target),
+                lager:info("Node stopped")
+           end),
 
     lager:info("Writing 1000 keys"),
-    Errors = rt:systest_write(Target, 1000, 2000,
-            TestBucket, 2),
+    Errors =
+        try
+          systest_write(C, 1000, 2000, TestBucket, 2)
+        catch
+          _:_ ->
+            lager:info("Shutdown timeout caught"),
+            []
+        end,
     WriteErrors = length(Errors),
-
     lager:info("got ~p write failures", [WriteErrors]),
     timer:sleep(3000),
-
     lager:info("checking number of read failures on secondary cluster"),
     ReadErrors = length(rt:systest_read(BSecond, 1000, 2000, TestBucket, 2)),
     lager:info("got ~p read failures", [ReadErrors]),
@@ -413,9 +418,31 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                         [ReadErrors, WriteErrors]),
             ?assert(false)
     end,
-
     lager:info("Test passed"),
     fin.
+
+
+
+systest_iterate(_C, [], _Bucket, _W, Acc) ->
+    Acc;
+
+systest_iterate(C, [N | NS], Bucket, W, Acc) ->
+    Obj = riak_object:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
+    try C:put(Obj, W) of
+      ok ->
+        systest_iterate(C, NS, Bucket, W, Acc);
+      {error, timeout} ->
+        lager:info("Timeout!"),
+        [{N, timeout} | Acc] ++ NS;
+      Other -> [{N, Other} | Acc]
+    catch
+      What:Why ->
+      lager:info("Baz3"),
+      [{N, {What, Why}} | Acc]
+    end.
+
+systest_write(C, Start, End, Bucket, W) ->
+    systest_iterate(C, lists:seq(Start, End), Bucket, W, []).
 
 make_cluster(Nodes) ->
     [First|Rest] = Nodes,
