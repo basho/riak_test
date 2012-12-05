@@ -35,6 +35,7 @@ confirm() ->
     status_up_test(Node),
     console_up_test(Node),
     start_up_test(Node),
+    getpid_up_test(Node),
 
     %% Stop the node, Verify node-down behavior
     stop_test(Node),
@@ -43,6 +44,7 @@ confirm() ->
     status_down_test(Node),
     console_test(Node),
     start_test(Node),
+    getpid_down_test(Node),
 
     pass.
 
@@ -140,4 +142,17 @@ status_down_test(Node) ->
     lager:info("Test riak-admin status while down"),
     {ok, StatusOut} = rt:admin(Node, ["status"]),
     ?assert(rt:str(StatusOut, "Node is not running!")),
+    ok.
+
+getpid_up_test(Node) ->
+    lager:info("Test riak getpid on ~s", [Node]),
+    {ok, PidOut} = rt:riak(Node, ["getpid"]),
+    ?assertNot(rt:str(PidOut, "")),
+    ?assert(rt:str(PidOut, rpc:call(Node, os, getpid, []))),
+    ok.
+
+getpid_down_test(Node) ->
+    lager:info("Test riak getpid fails on ~s", [Node]),
+    {ok, PidOut} = rt:riak(Node, ["getpid"]),
+    ?assert(rt:str(PidOut, "Node is not running!")),
     ok.
