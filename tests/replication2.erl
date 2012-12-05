@@ -257,8 +257,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("disconnect the 2 clusters"),
     disable_realtime(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
-    wait_until_no_connection(LeaderA),
     disconnect_cluster(LeaderA, "B"),
+    wait_until_no_connection(LeaderA),
     rt:wait_until_ring_converged(ANodes),
 
     lager:info("write 100 keys to a realtime only bucket"),
@@ -570,7 +570,7 @@ wait_until_no_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-                case proplists:get_value(server_stats, Status) of
+                case proplists:get_value(connected_clusters, Status) of
                     [] ->
                         true;
                     _ ->
