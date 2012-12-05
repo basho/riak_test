@@ -64,6 +64,14 @@ setup_harness(_Test, _Args) ->
     lager:info("Resetting nodes to fresh state"),
     run_git(Path, "reset HEAD --hard"),
     run_git(Path, "clean -fd"),
+
+    lager:info("Cleaning up lingering pipe directories"),
+    rt:pmap(fun(Dir) ->
+                    PipeDir = filename:join("/tmp", Dir),
+                    Files = filelib:wildcard("*.{r,w}", PipeDir),
+                    [ file:delete(filename:join(PipeDir, File)) || File <- Files],
+                    file:del_dir(PipeDir)
+            end, devpaths()),
     ok.
 
 cleanup_harness() ->
@@ -89,7 +97,7 @@ upgrade(Node, NewVersion) ->
     stop(Node),
     OldPath = relpath(Version),
     NewPath = relpath(NewVersion),
-    
+
     Commands = [
         io_lib:format("cp -p -P -R \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
                        [OldPath, N, NewPath, N]),
