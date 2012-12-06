@@ -22,6 +22,8 @@
 -module(riak_test).
 -export([main/1]).
 
+-type test_cfg() :: {atom(), [{atom(), list()}]}.
+
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
@@ -33,7 +35,7 @@ cli_options() ->
  {help,               $h, "help",             undefined,        "Print this usage page"},
  {config,             $c, "conf",             string,           "specifies the project configuration"},
  {tests,              $t, "tests",            string,           "specifies which tests to run"},
- {suites,             $s, "suites",           string,           "which suites to run"},
+ {suites,             $s, "suites",           string,           "which suites to run. 'all' runs test in all suites"},
  {dir,                $d, "dir",              string,           "run all tests in the specified directory"},
  {verbose,            $v, "verbose",          undefined,        "verbose output"},
  {outdir,             $o, "outdir",           string,           "output directory"},
@@ -104,35 +106,15 @@ main(Args) ->
     Verbose = proplists:is_defined(verbose, ParsedArgs),
 
     Suites = proplists:get_all_values(suites, ParsedArgs),
-    case Suites of
-        [] -> ok;
-        _ -> io:format("Suites are not currently supported.")
-    end,
-
-    Version = rt:get_version(),
-
-    Backends = case proplists:get_all_values(backend, ParsedArgs) of
-        [] -> [bitcask];
-        Other -> Other
-    end,
-
+    
     Tests = case Report of
         undefined ->
-            SpecificTests = proplists:get_all_values(tests, ParsedArgs),
-            Dirs = proplists:get_all_values(dir, ParsedArgs),
-            DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
-            lists:foldl(fun(Test, Tests) ->
-                    [{
-                      list_to_atom(Test),
-                      [
-                          {id, -1},
-                          {backend, Backend},
-                          {platform, <<"local">>},
-                          {version, Version},
-                          {project, list_to_binary(rt:config(rt_project, "undefined"))}
-                      ]
-                    } || Backend <- Backends ] ++ Tests
-                end, [], lists:usort(DirTests ++ SpecificTests));
+            case Suites of
+                undefined -> 
+                    specific_tests(ParsedArgs);
+                _ -> 
+                    suite_tests(Suites)
+            end;
         Platform ->
             giddyup:get_suite(Platform)
     end,
@@ -225,3 +207,89 @@ so_kill_riak_maybe() ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
     end. 
+
+%% Location of priv dir outside OTP application env
+%% This may be overkill if riak_test will only run from escript.
+local_priv_dir() ->
+    Mod = code:which(?MODULE),
+    case filelib:is_file(Mod) of
+        true -> %% relative to ebin/riak_test.beam
+            filename:join([filename:dirname(Mod), "..", "priv"]);
+        false -> %% Relative to escript
+            filename:join([filename:dirname(escript:script_name()), "priv"])
+    end.
+
+priv_dir() ->
+    case code:priv_dir(riak_test) of
+        {error, bad_name} -> 
+            local_priv_dir();
+        Dir -> 
+            case filelib:is_dir(Dir) of
+                true -> Dir;
+                _ -> local_priv_dir()
+            end
+    end.
+
+load_suites() ->
+    Fname = filename:join([priv_dir(), "suites.config"]),
+    file:consult(Fname).
+
+-spec sort_test_props(test_cfg()) -> test_cfg().
+sort_test_props({Name, Props}) when is_list(Props) ->
+    {Name, lists:usort(Props)}.
+
+%% Look up tests in suites configuration file.
+-spec suite_tests([string()]) -> [test_cfg()].
+suite_tests(SuitesOrig) when is_list(SuitesOrig) ->
+    SuiteAtoms = [list_to_atom(S) || S <- SuitesOrig],
+    {ok, Cfg} = load_suites(),
+    %% if 'all' passed, use union of all suites
+    Suites =
+        case lists:member(all, SuiteAtoms) of
+            true -> proplists:get_keys(Cfg);
+            false -> SuiteAtoms
+        end,
+    FlatTests =
+        lists:flatten([expand_test(proplists:get_all_values(S, Cfg))
+                      || S <- Suites ]),
+    lists:usort([sort_test_props(T) || T <- FlatTests]).
+
+specific_tests(ParsedArgs) ->
+    Backends = case proplists:get_all_values(backend, ParsedArgs) of
+        [] -> [bitcask];
+        Other -> Other
+    end,
+    Version = rt:get_version(),
+
+    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
+    Dirs = proplists:get_all_values(dir, ParsedArgs),
+    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+    lists:foldl(fun(Test, Tests) ->
+            [{
+              list_to_atom(Test),
+              [
+                  {id, -1},
+                  {backend, Backend},
+                  {platform, <<"local">>},
+                  {version, Version},
+                  {project, list_to_binary(rt:config(rt_project, "undefined"))}
+              ]
+            } || Backend <- Backends ] ++ Tests
+        end, [], lists:usort(DirTests ++ SpecificTests)).
+
+%% Expand tests with multiple backends into multiple test entries.
+%% Either {backend, [memory, bitcask]}  or {backend, memory},{backend, bitcask}
+%% will work.
+-spec expand_test(test_cfg() | [test_cfg()]) -> test_cfg() | [test_cfg()].
+expand_test(Test = {Name, Props}) when is_list(Props) ->
+    case proplists:get_all_values(backend, Props) of
+        [] -> Test;
+        L  ->
+            NoBackend = proplists:delete(backend, Props),
+            [ {Name, [{backend, B} | NoBackend]} || B <- lists:flatten(L)]
+    end;
+expand_test([T | More]) ->
+    [expand_test(T) | expand_test(More)];
+expand_test([]) -> 
+    [].
+  
