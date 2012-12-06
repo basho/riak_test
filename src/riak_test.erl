@@ -109,55 +109,10 @@ main(Args) ->
         _ -> io:format("Suites are not currently supported.")
     end,
 
-    Version = rt:get_version(),
-
-    Backends = case proplists:get_all_values(backend, ParsedArgs) of
-        [] -> [undefined];
-        Other -> Other
-    end,
-
-    %% Parse Command Line Tests
-    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
-    Dirs = proplists:get_all_values(dir, ParsedArgs),
-    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
-    CommandLineTests = lists:foldl(fun(Test, Tests) ->
-            [{
-              list_to_atom(Test),
-              [
-                  {id, -1},
-                  {backend, Backend},
-                  {platform, <<"local">>},
-                  {version, Version},
-                  {project, list_to_binary(rt:config(rt_project, "undefined"))}
-              ]
-            } || Backend <- Backends ] ++ Tests
-        end, [], lists:usort(DirTests ++ SpecificTests)),
-
-lager:info("CLI Test: ~p", CommandLineTests),
-
-    Tests = case {Report, CommandLineTests} of
-        {undefined, _} ->
-            CommandLineTests;
-        {Platform, []} ->
-            giddyup:get_suite(Platform);
-        {Platform, _} ->
-            lists:foldl(fun({Module, SMeta, CMeta}, Tests) ->
-                    case {kvc:path(backend, SMeta), kvc:path(backend, CMeta)} of
-                        {_X, undefined} -> [{Module, SMeta}|Tests];
-                        {undefined, X} -> [{Module, [{backend, X}|proplists:delete(backend, SMeta)]}|Tests];
-                        {_X, _X} -> [{Module, SMeta}|Tests];
-                        _ -> Tests
-                    end
-                end, 
-                [], 
-                [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform), 
-                                             {CModule, CMeta} <- CommandLineTests, 
-                                             SModule =:= CModule]
-            )
-    end,
+    CommandLineTests = parse_command_line_tests(ParsedArgs),
+    Tests = which_tests_to_run(Report, CommandLineTests),
 
     io:format("Tests to run: ~p~n", [Tests]),
-    exit(1),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
     add_deps("deps"),
@@ -180,6 +135,45 @@ lager:info("CLI Test: ~p", CommandLineTests),
             rt:teardown()
     end,
     ok.
+
+parse_command_line_tests(ParsedArgs) ->
+    Backends = case proplists:get_all_values(backend, ParsedArgs) of
+        [] -> [undefined];
+        Other -> Other
+    end,
+    %% Parse Command Line Tests
+    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
+    Dirs = proplists:get_all_values(dir, ParsedArgs),
+    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+    lists:foldl(fun(Test, Tests) ->
+            [{
+              list_to_atom(Test),
+              [
+                  {id, -1},
+                  {backend, Backend},
+                  {platform, <<"local">>},
+                  {version, rt:get_version()},
+                  {project, list_to_binary(rt:config(rt_project, "undefined"))}
+              ]
+            } || Backend <- Backends ] ++ Tests
+        end, [], lists:usort(DirTests ++ SpecificTests)).
+
+which_tests_to_run(undefined, CommandLineTests) -> CommandLineTests;
+which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
+which_tests_to_run(Platform, CommandLineTests) ->
+    lists:foldl(fun({Module, SMeta, CMeta}, Tests) ->
+            case {kvc:path(backend, SMeta), kvc:path(backend, CMeta)} of
+                {_X, undefined} -> [{Module, SMeta}|Tests];
+                {undefined, X} -> [{Module, [{backend, X}|proplists:delete(backend, SMeta)]}|Tests];
+                {_X, _X} -> [{Module, SMeta}|Tests];
+                _ -> Tests
+            end
+        end, 
+        [], 
+        [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform), 
+                                     {CModule, CMeta} <- CommandLineTests, 
+                                     SModule =:= CModule]
+    ).
 
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
