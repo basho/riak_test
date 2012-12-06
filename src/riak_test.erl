@@ -115,7 +115,7 @@ main(Args) ->
     case Tests of
         [] ->
             lager:warning("No tests are scheduled to run"),
-            init:stop();
+            init:stop(1);
         _ -> keep_on_keepin_on
     end,
 
