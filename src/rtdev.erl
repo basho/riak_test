@@ -339,6 +339,10 @@ riak(Node, Args) ->
     lager:debug("~s", [Result]),
     {ok, Result}.
 
+search_cmd(Node, Args) ->
+    {ok, Cwd} = file:get_cwd(),
+    rpc:call(Node, riak_search_cmd, command, [[Cwd | Args]]).
+
 node_id(Node) ->
     NodeMap = rt:config(rt_nodes),
     orddict:fetch(Node, NodeMap).
