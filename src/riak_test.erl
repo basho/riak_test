@@ -112,6 +112,13 @@ main(Args) ->
     CommandLineTests = parse_command_line_tests(ParsedArgs),
     Tests = which_tests_to_run(Report, CommandLineTests),
 
+    case Tests of
+        [] ->
+            lager:warning("No tests are scheduled to run"),
+            init:stop();
+        _ -> keep_on_keepin_on
+    end,
+
     io:format("Tests to run: ~p~n", [Tests]),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
