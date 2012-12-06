@@ -112,33 +112,52 @@ main(Args) ->
     Version = rt:get_version(),
 
     Backends = case proplists:get_all_values(backend, ParsedArgs) of
-        [] -> [bitcask];
+        [] -> [undefined];
         Other -> Other
     end,
 
-    Tests = case Report of
-        undefined ->
-            SpecificTests = proplists:get_all_values(tests, ParsedArgs),
-            Dirs = proplists:get_all_values(dir, ParsedArgs),
-            DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
-            lists:foldl(fun(Test, Tests) ->
-                    [{
-                      list_to_atom(Test),
-                      [
-                          {id, -1},
-                          {backend, Backend},
-                          {platform, <<"local">>},
-                          {version, Version},
-                          {project, list_to_binary(rt:config(rt_project, "undefined"))}
-                      ]
-                    } || Backend <- Backends ] ++ Tests
-                end, [], lists:usort(DirTests ++ SpecificTests));
-        Platform ->
-            giddyup:get_suite(Platform)
+    %% Parse Command Line Tests
+    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
+    Dirs = proplists:get_all_values(dir, ParsedArgs),
+    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+    CommandLineTests = lists:foldl(fun(Test, Tests) ->
+            [{
+              list_to_atom(Test),
+              [
+                  {id, -1},
+                  {backend, Backend},
+                  {platform, <<"local">>},
+                  {version, Version},
+                  {project, list_to_binary(rt:config(rt_project, "undefined"))}
+              ]
+            } || Backend <- Backends ] ++ Tests
+        end, [], lists:usort(DirTests ++ SpecificTests)),
+
+lager:info("CLI Test: ~p", CommandLineTests),
+
+    Tests = case {Report, CommandLineTests} of
+        {undefined, _} ->
+            CommandLineTests;
+        {Platform, []} ->
+            giddyup:get_suite(Platform);
+        {Platform, _} ->
+            lists:foldl(fun({Module, SMeta, CMeta}, Tests) ->
+                    case {kvc:path(backend, SMeta), kvc:path(backend, CMeta)} of
+                        {_X, undefined} -> [{Module, SMeta}|Tests];
+                        {undefined, X} -> [{Module, [{backend, X}|proplists:delete(backend, SMeta)]}|Tests];
+                        {_X, _X} -> [{Module, SMeta}|Tests];
+                        _ -> Tests
+                    end
+                end, 
+                [], 
+                [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform), 
+                                             {CModule, CMeta} <- CommandLineTests, 
+                                             SModule =:= CModule]
+            )
     end,
 
     io:format("Tests to run: ~p~n", [Tests]),
-
+    exit(1),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
     add_deps("deps"),
