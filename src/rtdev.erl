@@ -67,8 +67,15 @@ setup_harness(_Test, _Args) ->
 
     lager:info("Cleaning up lingering pipe directories"),
     rt:pmap(fun(Dir) ->
-                    PipeDir = filename:join("/tmp", Dir),
-                    Files = filelib:wildcard("*.{r,w}", PipeDir),
+                    %% when joining two absolute paths, filename:join intentionally
+                    %% throws away the first one. ++ gets us around that, while
+                    %% keeping some of the security of filename:join.
+                    %% the extra slashes will be pruned by filename:join, but this
+                    %% ensures that there will be at least one between "/tmp" and Dir
+                    PipeDir = filename:join(["/tmp//" ++ Dir, "dev"]),
+                    %% when using filelib:wildcard/2, there must be a wildchar char
+                    %% before the first '/'.
+                    Files = filelib:wildcard("dev?/*.{r,w}", PipeDir),
                     [ file:delete(filename:join(PipeDir, File)) || File <- Files],
                     file:del_dir(PipeDir)
             end, devpaths()),
