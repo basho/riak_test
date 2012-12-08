@@ -385,7 +385,18 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:wait_until_pingable(Target),
     timer:sleep(5000),
 
-    {ok, C} = riak:client_connect(Target),
+    pb_write_during_shutdown(Target, BSecond, TestBucket),
+    http_write_during_shutdown(Target, BSecond, TestBucket),
+
+    lager:info("Test passed"),
+    fin.
+
+pb_write_during_shutdown(Target, BSecond, TestBucket) ->
+    {ok, Port} = rpc:call(Target, application, get_env, [riak_api, pb_port]),
+
+    lager:info("Connecting to pb socket ~p:~p on ~p", ["127.0.0.1", Port,
+            Target]),
+    {ok, PBSock} = riakc_pb_socket:start("127.0.0.1", Port),
 
     %% do the stop in the background while we're writing keys
     spawn(fun() ->
@@ -395,10 +406,10 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                 lager:info("Node stopped")
            end),
 
-    lager:info("Writing 1000 keys"),
+    lager:info("Writing 10,000 keys"),
     Errors =
         try
-          systest_write(C, 1000, 2000, TestBucket, 2)
+          pb_write(PBSock, 1000, 11000, TestBucket, 2)
         catch
           _:_ ->
             lager:info("Shutdown timeout caught"),
@@ -408,41 +419,115 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("got ~p write failures", [WriteErrors]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster"),
-    ReadErrors = length(rt:systest_read(BSecond, 1000, 2000, TestBucket, 2)),
+    ReadErrors = length(rt:systest_read(BSecond, 1000, 11000, TestBucket, 2)),
     lager:info("got ~p read failures", [ReadErrors]),
+
+    rt:start(Target),
+    rt:wait_until_pingable(Target),
+    timer:sleep(5000),
+    ReadErrors2 = length(rt:systest_read(Target, 1000, 11000, TestBucket, 2)),
+    lager:info("got ~p read failures on ~p", [ReadErrors2, Target]),
     case WriteErrors >= ReadErrors of
         true ->
             ok;
         false ->
-            lager:error("Got more read errors: ~p than write errors: ~p",
-                        [ReadErrors, WriteErrors]),
+            lager:error("Got more read errors on ~p: ~p than write "
+                "errors on ~p: ~p",
+                        [BSecond, ReadErrors, Target, WriteErrors]),
             ?assert(false)
-    end,
-    lager:info("Test passed"),
-    fin.
-
-
-
-systest_iterate(_C, [], _Bucket, _W, Acc) ->
-    Acc;
-
-systest_iterate(C, [N | NS], Bucket, W, Acc) ->
-    Obj = riak_object:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
-    try C:put(Obj, W) of
-      ok ->
-        systest_iterate(C, NS, Bucket, W, Acc);
-      {error, timeout} ->
-        lager:info("Timeout!"),
-        [{N, timeout} | Acc] ++ NS;
-      Other -> [{N, Other} | Acc]
-    catch
-      What:Why ->
-      lager:info("Baz3"),
-      [{N, {What, Why}} | Acc]
     end.
 
-systest_write(C, Start, End, Bucket, W) ->
-    systest_iterate(C, lists:seq(Start, End), Bucket, W, []).
+pb_iterate(_Sock, [], _Bucket, _W, Acc) ->
+    Acc;
+
+pb_iterate(Sock, [N | NS], Bucket, W, Acc) ->
+    Obj = riakc_obj:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
+    NewAcc = try riakc_pb_socket:put(Sock, Obj, [{w, W}]) of
+        ok ->
+            Acc;
+        %{error, timeout} ->
+            %lager:info("Timeout!"),
+            %[{N, timeout} | Acc] ++ NS;
+        Other ->
+            [{N, Other} | Acc]
+    catch
+        What:Why ->
+            [{N, {What, Why}} | Acc]
+    end,
+    pb_iterate(Sock, NS, Bucket, W, NewAcc).
+
+pb_write(Sock, Start, End, Bucket, W) ->
+    pb_iterate(Sock, lists:seq(Start, End), Bucket, W, []).
+
+http_write_during_shutdown(Target, BSecond, TestBucket) ->
+    {ok, [{_IP, Port}|_]} = rpc:call(Target, application, get_env, [riak_core, http]),
+
+    lager:info("Connecting to http socket ~p:~p on ~p", ["127.0.0.1", Port,
+            Target]),
+    C = rhc:create("127.0.0.1", Port, "riak", []),
+
+    %% do the stop in the background while we're writing keys
+    spawn(fun() ->
+                timer:sleep(200),
+                lager:info("Stopping node ~p again", [Target]),
+                rt:stop(Target),
+                lager:info("Node stopped")
+           end),
+
+    lager:info("Writing 10,000 keys"),
+    Errors =
+        try
+          http_write(C, 1000, 11000, TestBucket, 2)
+        catch
+          _:_ ->
+            lager:info("Shutdown timeout caught"),
+            []
+        end,
+    WriteErrors = length(Errors),
+    lager:info("got ~p write failures", [WriteErrors]),
+    timer:sleep(3000),
+    lager:info("checking number of read failures on secondary cluster"),
+    ReadErrors = length(rt:systest_read(BSecond, 1000, 11000, TestBucket, 2)),
+    lager:info("got ~p read failures", [ReadErrors]),
+
+    rt:start(Target),
+    rt:wait_until_pingable(Target),
+    timer:sleep(5000),
+    ReadErrors2 = length(rt:systest_read(Target, 1000, 11000, TestBucket, 2)),
+    lager:info("got ~p read failures on ~p", [ReadErrors2, Target]),
+    case WriteErrors >= ReadErrors of
+        true ->
+            ok;
+        false ->
+            lager:error("Got more read errors on ~p: ~p than write "
+                "errors on ~p: ~p",
+                        [BSecond, ReadErrors, Target, WriteErrors]),
+            ?assert(false)
+    end.
+
+http_iterate(_Sock, [], _Bucket, _W, Acc) ->
+    Acc;
+
+http_iterate(Sock, [N | NS], Bucket, W, Acc) ->
+    Obj = riakc_obj:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
+    NewAcc = try rhc:put(Sock, Obj, [{w, W}]) of
+        ok ->
+            Acc;
+        %{error, timeout} ->
+            %lager:info("Timeout!"),
+            %[{N, timeout} | Acc] ++ NS;
+        Other ->
+            [{N, Other} | Acc]
+    catch
+        What:Why ->
+            [{N, {What, Why}} | Acc]
+    end,
+    http_iterate(Sock, NS, Bucket, W, NewAcc).
+
+http_write(Sock, Start, End, Bucket, W) ->
+    http_iterate(Sock, lists:seq(Start, End), Bucket, W, []).
+
+
 
 make_cluster(Nodes) ->
     [First|Rest] = Nodes,
