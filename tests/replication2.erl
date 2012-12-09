@@ -386,6 +386,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     timer:sleep(5000),
 
     pb_write_during_shutdown(Target, BSecond, TestBucket),
+    timer:sleep(5000),
     http_write_during_shutdown(Target, BSecond, TestBucket),
 
     lager:info("Test passed"),
@@ -407,7 +408,7 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
            end),
 
     lager:info("Writing 10,000 keys"),
-    Errors =
+    WriteErrors =
         try
           pb_write(PBSock, 1000, 11000, TestBucket, 2)
         catch
@@ -415,25 +416,34 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
             lager:info("Shutdown timeout caught"),
             []
         end,
-    WriteErrors = length(Errors),
-    lager:info("got ~p write failures", [WriteErrors]),
+    lager:info("got ~p write failures", [length(WriteErrors)]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster"),
-    ReadErrors = length(rt:systest_read(BSecond, 1000, 11000, TestBucket, 2)),
-    lager:info("got ~p read failures", [ReadErrors]),
+    ReadErrors = rt:systest_read(BSecond, 1000, 11000, TestBucket, 2),
+    lager:info("got ~p read failures", [length(ReadErrors)]),
 
     rt:start(Target),
     rt:wait_until_pingable(Target),
     timer:sleep(5000),
-    ReadErrors2 = length(rt:systest_read(Target, 1000, 11000, TestBucket, 2)),
-    lager:info("got ~p read failures on ~p", [ReadErrors2, Target]),
-    case WriteErrors >= ReadErrors of
+    ReadErrors2 = rt:systest_read(Target, 1000, 11000, TestBucket, 2),
+    lager:info("got ~p read failures on ~p", [length(ReadErrors2), Target]),
+    case length(WriteErrors) >= length(ReadErrors) of
         true ->
             ok;
         false ->
             lager:error("Got more read errors on ~p: ~p than write "
                 "errors on ~p: ~p",
-                        [BSecond, ReadErrors, Target, WriteErrors]),
+                        [BSecond, length(ReadErrors), Target,
+                            length(WriteErrors)]),
+            FailedKeys = lists:foldl(fun({Key, _}, Acc) ->
+                        case lists:keyfind(Key, 1, WriteErrors) of
+                            false ->
+                                [Key|Acc];
+                            _ ->
+                                Acc
+                        end
+                end, [], ReadErrors),
+            lager:info("failed keys ~p", [FailedKeys]),
             ?assert(false)
     end.
 
@@ -475,33 +485,42 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
            end),
 
     lager:info("Writing 10,000 keys"),
-    Errors =
+    WriteErrors =
         try
-          http_write(C, 1000, 11000, TestBucket, 2)
+          http_write(C, 12000, 22000, TestBucket, 2)
         catch
           _:_ ->
             lager:info("Shutdown timeout caught"),
             []
         end,
-    WriteErrors = length(Errors),
-    lager:info("got ~p write failures", [WriteErrors]),
+    lager:info("got ~p write failures", [length(WriteErrors)]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster"),
-    ReadErrors = length(rt:systest_read(BSecond, 1000, 11000, TestBucket, 2)),
-    lager:info("got ~p read failures", [ReadErrors]),
+    ReadErrors = rt:systest_read(BSecond, 12000, 22000, TestBucket, 2),
+    lager:info("got ~p read failures", [length(ReadErrors)]),
 
     rt:start(Target),
     rt:wait_until_pingable(Target),
     timer:sleep(5000),
-    ReadErrors2 = length(rt:systest_read(Target, 1000, 11000, TestBucket, 2)),
-    lager:info("got ~p read failures on ~p", [ReadErrors2, Target]),
-    case WriteErrors >= ReadErrors of
+    ReadErrors2 = rt:systest_read(Target, 12000, 22000, TestBucket, 2),
+    lager:info("got ~p read failures on ~p", [length(ReadErrors2), Target]),
+    case length(WriteErrors) >= length(ReadErrors) of
         true ->
             ok;
         false ->
             lager:error("Got more read errors on ~p: ~p than write "
                 "errors on ~p: ~p",
-                        [BSecond, ReadErrors, Target, WriteErrors]),
+                        [BSecond, length(ReadErrors), Target,
+                            length(WriteErrors)]),
+            FailedKeys = lists:foldl(fun({Key, _}, Acc) ->
+                        case lists:keyfind(Key, 1, WriteErrors) of
+                            false ->
+                                [Key|Acc];
+                            _ ->
+                                Acc
+                        end
+                end, [], ReadErrors),
+            lager:info("failed keys ~p", [FailedKeys]),
             ?assert(false)
     end.
 
