@@ -38,6 +38,7 @@
          check_singleton_node/1,
          claimant_according_to/1,
          cleanup_harness/0,
+         clean_cluster/1,
          cmd/1,
          cmd/2,
          config/1,
@@ -71,6 +72,8 @@
          pbc_read/3,
          pbc_set_bucket_prop/3,
          pbc_write/4,
+         pbc_put_dir/3,
+         pbc_put_file/4,
          pmap/2,
          remove/2,
          riak/2,
@@ -81,6 +84,7 @@
          slow_upgrade/3,
          spawn_cmd/1,
          spawn_cmd/2,
+         search_cmd/2,
          start/1,
          start_and_wait/1,
          status_of_according_to/2,
@@ -443,11 +447,13 @@ wait_until(Node, Fun, Retry, Delay) ->
 %%      states. A ready node is guaranteed to have current preflist/ownership
 %%      information.
 wait_until_ready(Node) ->
+    lager:info("Wait until ~p ready", [Node]),
     ?assertEqual(ok, wait_until(Node, fun is_ready/1)),
     ok.
 
 %% @doc Wait until status can be read from riak_kv_console
 wait_until_status_ready(Node) ->
+    lager:info("Wait until status ready in ~p", [Node]),
     ?assertEqual(ok, wait_until(Node,
                                 fun(_) ->
                                         case rpc:call(Node, riak_kv_console, status, [[]]) of
@@ -462,6 +468,7 @@ wait_until_status_ready(Node) ->
 %% on-going or pending ownership transfers.
 -spec wait_until_no_pending_changes([node()]) -> ok | fail.
 wait_until_no_pending_changes(Nodes0) ->
+    lager:info("Wait until no pending changes on ~p", [Nodes0]),
     F = fun(Nodes) ->
                 rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
                 {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
@@ -475,6 +482,7 @@ wait_until_no_pending_changes(Nodes0) ->
 %% riak_core_status:transfers().
 -spec wait_until_transfers_complete([node()]) -> ok | fail.
 wait_until_transfers_complete([Node0|_]) ->
+    lager:info("Wait until transfers complete ~p", [Node0]),
     F = fun(Node) ->
                 {DownNodes, Transfers} = rpc:call(Node, riak_core_status, transfers, []),
                 DownNodes =:= [] andalso Transfers =:= []
@@ -483,6 +491,7 @@ wait_until_transfers_complete([Node0|_]) ->
     ok.
 
 wait_for_service(Node, Service) ->
+    lager:info("Wait for service ~p on ~p", [Service, Node]),
     F = fun(N) ->
                 Services = rpc:call(N, riak_core_node_watcher, services, [N]),
                 lists:member(Service, Services)
@@ -491,6 +500,7 @@ wait_for_service(Node, Service) ->
     ok.
 
 wait_for_cluster_service(Nodes, Service) ->
+    lager:info("Wait for cluster service ~p in ~p", [Service, Nodes]),
     F = fun(N) ->
                 UpNodes = rpc:call(N, riak_core_node_watcher, nodes, [Service]),
                 (Nodes -- UpNodes) == []
@@ -501,6 +511,7 @@ wait_for_cluster_service(Nodes, Service) ->
 %% @doc Given a list of nodes, wait until all nodes are considered ready.
 %%      See {@link wait_until_ready/1} for definition of ready.
 wait_until_nodes_ready(Nodes) ->
+    lager:info("Wait until nodes are ready : ~p", [Nodes]),
     [?assertEqual(ok, wait_until(Node, fun is_ready/1)) || Node <- Nodes],
     ok.
 
@@ -512,6 +523,7 @@ wait_until_all_members(Nodes) ->
 %% @doc Wait until all nodes in the list `Nodes' believes all nodes in the
 %%      list `Members' are members of the cluster.
 wait_until_all_members(Nodes, Members) ->
+    lager:info("Wait until all members ~p ~p", [Nodes, Members]),
     S1 = ordsets:from_list(Members),
     F = fun(Node) ->
                 S2 = ordsets:from_list(members_according_to(Node)),
@@ -523,10 +535,12 @@ wait_until_all_members(Nodes, Members) ->
 %% @doc Given a list of nodes, wait until all nodes believe the ring has
 %%      converged (ie. `riak_core_ring:is_ready' returns `true').
 wait_until_ring_converged(Nodes) ->
+    lager:info("Wait until ring converged on ~p", [Nodes]),
     [?assertEqual(ok, wait_until(Node, fun is_ring_ready/1)) || Node <- Nodes],
     ok.
 
 wait_until_legacy_ringready(Node) ->
+    lager:info("Wait until legacy ring ready on ~p", [Node]),
     rt:wait_until(Node,
                   fun(_) ->
                           case rpc:call(Node, riak_kv_status, ringready, []) of
@@ -539,6 +553,7 @@ wait_until_legacy_ringready(Node) ->
 
 %% @doc wait until each node in Nodes is disterl connected to each.
 wait_until_connected(Nodes) ->
+    lager:info("Wait until connected ~p", [Nodes]),
     F = fun(Node) ->
                 Connected = rpc:call(Node, erlang, nodes, []),
                 lists:sort(Nodes) == lists:sort([Node]++Connected)--[node()]
@@ -548,6 +563,7 @@ wait_until_connected(Nodes) ->
 
 %% @doc Wait until the specified node is pingable
 wait_until_pingable(Node) ->
+    lager:info("Wait until ~p is pingable", [Node]),
     F = fun(N) ->
                 net_adm:ping(N) =:= pong
         end,
@@ -556,6 +572,7 @@ wait_until_pingable(Node) ->
 
 %% @doc Wait until the specified node is no longer pingable
 wait_until_unpingable(Node) ->
+    lager:info("Wait until ~p is not pingable", [Node]),
     F = fun(N) ->
                 net_adm:ping(N) =:= pang
         end,
@@ -582,8 +599,10 @@ wait_until_owners_according_to(Node, Nodes) ->
     ok.
 
 wait_until_nodes_agree_about_ownership(Nodes) ->
+    lager:info("Wait until nodes agree about ownership ~p", [Nodes]),
     Results = [ wait_until_owners_according_to(Node, Nodes) || Node <- Nodes ],
     ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
+
 %%%===================================================================
 %%% Ring Functions
 %%%===================================================================
@@ -591,6 +610,7 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
 %% @doc Ensure that the specified node is a singleton node/cluster -- a node
 %%      that owns 100% of the ring.
 check_singleton_node(Node) ->
+    lager:info("Check ~p is a singleton", [Node]),
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
     Owners = lists:usort([Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)]),
     ?assertEqual([Node], Owners),
@@ -674,6 +694,10 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     wait_until_nodes_agree_about_ownership(Nodes),
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
+
+clean_cluster(Nodes) ->
+    [stop_and_wait(Node) || Node <- Nodes],
+    ?HARNESS:clean_data_dir(Nodes).
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
@@ -763,6 +787,16 @@ pbc_write(Pid, Bucket, Key, Value) ->
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
 
+pbc_put_file(Pbc, Bucket, Key, Filename) ->
+    {ok, Contents} = file:read_file(Filename),
+    riakc_pb_socket:put(Pbc, riakc_obj:new(Bucket, Key, Contents)).
+
+pbc_put_dir(Pbc, Bucket, Dir) ->
+    lager:info("Putting files from dir ~p into bucket ~p", [Dir, Bucket]),
+    {ok, Files} = file:list_dir(Dir),
+    [pbc_put_file(Pbc, Bucket, list_to_binary(F), filename:join([Dir, F])) 
+    || F <- Files].
+
 %% @doc Returns HTTP URL information for a list of Nodes
 http_url(Nodes) when is_list(Nodes) ->
     [begin
@@ -803,6 +837,10 @@ admin(Node, Args) ->
 riak(Node, Args) ->
     ?HARNESS:riak(Node, Args).
 
+search_cmd(Node, Args) ->
+    {ok, Cwd} = file:get_cwd(),
+    rpc:call(Node, riak_search_cmd, command, [[Cwd | Args]]).
+
 %% @doc Runs `riak attach' on a specific node, and tests for the expected behavoir.
 %%      Here's an example: ```
 %%      rt:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
@@ -832,6 +870,7 @@ console(Node, Expected) ->
 %%     in the cluster may be used as the change is propagated via the
 %%     Ring.
 enable_search_hook(Node, Bucket) when is_binary(Bucket) ->
+    lager:info("Installing search hook for bucket ~p", [Bucket]),
     ?assertEqual(ok, rpc:call(Node, riak_search_kv_hook, install, [Bucket])).
 
 %%%===================================================================
@@ -994,3 +1033,4 @@ config_or_os_env(Config, Default) ->
 to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
 char_to_upper(C) -> C.
+
