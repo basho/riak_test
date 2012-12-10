@@ -172,6 +172,10 @@ create_dirs(Nodes) ->
     Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],
     [?assertCmd("mkdir -p " ++ Dir) || Dir <- Snmp].
 
+clean_data_dir(Nodes) when is_list(Nodes) ->
+    DataDirs = [node_path(Node) ++ "/data" || Node <- Nodes],
+    [?assertCmd("rm -rf " ++ Dir) || Dir <- DataDirs].
+
 deploy_nodes(NodeConfig) ->
     Path = relpath(root),
     lager:info("Riak path: ~p", [Path]),
@@ -338,10 +342,6 @@ riak(Node, Args) ->
     Result = run_riak(N, Path, Args),
     lager:debug("~s", [Result]),
     {ok, Result}.
-
-search_cmd(Node, Args) ->
-    {ok, Cwd} = file:get_cwd(),
-    rpc:call(Node, riak_search_cmd, command, [[Cwd | Args]]).
 
 node_id(Node) ->
     NodeMap = rt:config(rt_nodes),

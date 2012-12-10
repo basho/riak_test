@@ -61,7 +61,6 @@
          httpc/1,
          httpc_read/3,
          httpc_write/4,
-         put_dir/3,
          is_pingable/1,
          join/2,
          leave/1,
@@ -73,6 +72,8 @@
          pbc_read/3,
          pbc_set_bucket_prop/3,
          pbc_write/4,
+         pbc_put_dir/3,
+         pbc_put_file/4,
          pmap/2,
          remove/2,
          riak/2,
@@ -695,9 +696,8 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     Nodes.
 
 clean_cluster(Nodes) ->
-    DataDirs = [rtdev:node_path(Node) ++ "/data" || Node <- Nodes],
     [stop_and_wait(Node) || Node <- Nodes],
-    [?assertCmd("mv -f " ++ Dir ++ " " ++ Dir ++ "_old") || Dir <- DataDirs].
+    ?HARNESS:clean_data_dir(Nodes).
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
@@ -787,6 +787,16 @@ pbc_write(Pid, Bucket, Key, Value) ->
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
 
+pbc_put_file(Pbc, Bucket, Key, Filename) ->
+    {ok, Contents} = file:read_file(Filename),
+    riakc_pb_socket:put(Pbc, riakc_obj:new(Bucket, Key, Contents)).
+
+pbc_put_dir(Pbc, Bucket, Dir) ->
+    lager:info("Putting files from dir ~p into bucket ~p", [Dir, Bucket]),
+    {ok, Files} = file:list_dir(Dir),
+    [pbc_put_file(Pbc, Bucket, list_to_binary(F), filename:join([Dir, F])) 
+    || F <- Files].
+
 %% @doc Returns HTTP URL information for a list of Nodes
 http_url(Nodes) when is_list(Nodes) ->
     [begin
@@ -828,7 +838,8 @@ riak(Node, Args) ->
     ?HARNESS:riak(Node, Args).
 
 search_cmd(Node, Args) ->
-    ?HARNESS:search_cmd(Node, Args).
+    {ok, Cwd} = file:get_cwd(),
+    rpc:call(Node, riak_search_cmd, command, [[Cwd | Args]]).
 
 %% @doc Runs `riak attach' on a specific node, and tests for the expected behavoir.
 %%      Here's an example: ```
@@ -1023,14 +1034,3 @@ to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
 char_to_upper(C) -> C.
 
-put_file(Client, Bucket, Key, Filename) ->
-    {ok, Contents} = file:read_file(Filename),
-    Client:put(riak_object:new(Bucket, Key, Contents)).
-
--spec put_dir(atom(), binary(), string()) -> ok.
-put_dir(Node, Bucket, Dir) ->
-    lager:info("Putting files from dir ~p into bucket ~p", [Dir, Bucket]),
-    {ok, C} = riak:client_connect(Node),
-    {ok, Files} = file:list_dir(Dir),
-    [put_file(C, Bucket, list_to_binary(F), filename:join([Dir, F])) 
-    || F <- Files].

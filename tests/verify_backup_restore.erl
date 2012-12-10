@@ -18,8 +18,10 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc Test that verifies that all things go back to normal after performing a
-%% backup, modifying the data in the cluster and then performing a restore.
+%% @doc Verifies the functionality of the riak-admin backup and restore
+%% commands.  Restore re-puts the data store by backup.  Notice that this does
+%% not mean the data is restored to what it was.  Newer data may prevail
+%% depending on the configuration (last write wins, vector clocks used, etc).
 
 -module(verify_backup_restore).
 -export([confirm/0]).
@@ -54,7 +56,7 @@ confirm() ->
     AllTerms = lists:foldl(ConcatBin, <<"">>, Searches),
 
     lager:info("Indexing data for search from ~p", [SpamDir]),
-    rt:put_dir(Node0, ?SEARCH_BUCKET, SpamDir),
+    rt:pbc_put_dir(PbcPid, ?SEARCH_BUCKET, SpamDir),
     ExtraKey = <<"Extra1">>, 
     riakc_pb_socket:put(PbcPid, 
                         riakc_obj:new(?SEARCH_BUCKET, 
