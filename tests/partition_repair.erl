@@ -120,8 +120,8 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
                          [Partition, VNodeName]),
     ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
-    timer:sleep(100),
-    ?assertNot(rpc:call(Node, erlang, is_process_alive, [Pid])),
+    
+    rt:wait_until(Node, fun(N) -> not(rpc:call(N, erlang, is_process_alive, [Pid])) end),
 
     lager:info("Verify data is missing"),
     ?assertEqual(0, count_data(Service, {Partition, Node})),
