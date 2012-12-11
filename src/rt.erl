@@ -580,7 +580,9 @@ wait_until_unpingable(Node) ->
                 net_adm:ping(N) =:= pang
         end,
     TimeoutFun = fun(N) ->
-                         rpc:call(N, os, cmd, [io_lib:format("kill -9 ~s", [rpc:call(N, os, getpid, [])])]),
+                         OSPidToKill = rpc:call(N, os, getpid, []),
+                         lager:info("We tried it the easy way, but ~s wouldn't listen, so now it's 'kill -9' time", [N]),
+                         rpc:call(N, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
                          ok
         end,
     ?assertEqual(ok, wait_until(Node, F, TimeoutFun)),
