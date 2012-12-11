@@ -2,7 +2,8 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(PYTHON_CLIENT_TAG, "1.5.1").
+%% @todo set this to 1.5.2 or greater, once that's released
+-define(PYTHON_CLIENT_TAG, "1.5-stable").
 -define(PYTHON_CHECKOUT, filename:join([rt:config(rt_scratch_dir), "riak-python-client"])).
 -define(PYTHON_GIT_URL, "git://github.com/basho/riak-python-client.git").
 
