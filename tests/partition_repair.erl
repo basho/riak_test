@@ -120,8 +120,8 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
                          [Partition, VNodeName]),
     ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
-    timer:sleep(100),
-    ?assertNot(rpc:call(Node, erlang, is_process_alive, [Pid])),
+    
+    rt:wait_until(Node, fun(N) -> not(rpc:call(N, erlang, is_process_alive, [Pid])) end),
 
     lager:info("Verify data is missing"),
     ?assertEqual(0, count_data(Service, {Partition, Node})),
@@ -165,7 +165,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     %% NOTE: If the following assert fails then check the .notfound
     %% file written above...it contains all postings that were in the
     %% stash that weren't found after the repair.
-    ?assertEqual(ExpectToVerify, Verified),
+    ?assertEqual({Service, ExpectToVerify}, {Service, Verified}),
 
     {ok, [{BeforeP, _BeforeOwner}=B, _, {AfterP, _AfterOwner}=A]} = Return,
     lager:info("Verify before src partition ~p still has data", [B]),
