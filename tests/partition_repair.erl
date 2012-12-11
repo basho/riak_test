@@ -165,7 +165,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     %% NOTE: If the following assert fails then check the .notfound
     %% file written above...it contains all postings that were in the
     %% stash that weren't found after the repair.
-    ?assertEqual(ExpectToVerify, Verified),
+    ?assertEqual({Service, ExpectToVerify}, {Service, Verified}),
 
     {ok, [{BeforeP, _BeforeOwner}=B, _, {AfterP, _AfterOwner}=A]} = Return,
     lager:info("Verify before src partition ~p still has data", [B]),
