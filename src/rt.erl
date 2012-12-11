@@ -420,23 +420,26 @@ is_ring_ready(Node) ->
 %%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
 wait_until(Node, Fun) ->
+    wait_until(Node, Fun, fun(_N) -> fail end).
+
+wait_until(Node, Fun, TimeoutFun) ->
     MaxTime = rt:config(rt_max_wait_time),
     Delay = rt:config(rt_retry_delay),
     Retry = MaxTime div Delay,
-    wait_until(Node, Fun, Retry, Delay).
+    wait_until(Node, Fun, Retry, Delay, TimeoutFun).
 
 %% @deprecated Use {@link wait_until/2} instead.
-wait_until(Node, Fun, Retry) ->
-    wait_until(Node, Fun, Retry, 500).
+%% wait_until(Node, Fun, Retry) ->
+%%    wait_until(Node, Fun, Retry, 500).
 
 %% @deprecated Use {@link wait_until/2} instead.
-wait_until(Node, Fun, Retry, Delay) ->
+wait_until(Node, Fun, Retry, Delay, TimeoutFun) ->
     Pass = Fun(Node),
     case {Retry, Pass} of
         {_, true} ->
             ok;
         {0, _} ->
-            fail;
+            TimeoutFun(Node);
         _ ->
             timer:sleep(Delay),
             wait_until(Node, Fun, Retry-1)
@@ -576,7 +579,11 @@ wait_until_unpingable(Node) ->
     F = fun(N) ->
                 net_adm:ping(N) =:= pang
         end,
-    ?assertEqual(ok, wait_until(Node, F)),
+    TimeoutFun = fun(N) ->
+                         rpc:call(N, os, cmd, [io_lib:format("kill -9 ~s", [rpc:call(N, os, getpid, [])])]),
+                         ok
+        end,
+    ?assertEqual(ok, wait_until(Node, F, TimeoutFun)),
     ok.
 
 capability(Node, all) ->
