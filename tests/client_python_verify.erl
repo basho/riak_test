@@ -64,7 +64,10 @@ prereqs() ->
     rt:stream_cmd(Cmd),
 
     lager:info("[PREREQ] Resetting python client to tag '~s'", [?PYTHON_CLIENT_TAG]),
-    TagCmd = io_lib:format("git reset --hard ~s", [?PYTHON_CLIENT_TAG]),
+    %% @todo below is how to reset to a tag, use that when 1.5.2 is available
+    %%TagCmd = io_lib:format("git reset --hard ~s", [?PYTHON_CLIENT_TAG]),
+    rt:stream_cmd("git reset --hard", [{cd, ?PYTHON_CHECKOUT}]),
+    TagCmd = io_lib:format("git checkout -b ~s", [?PYTHON_CLIENT_TAG]),
     rt:stream_cmd(TagCmd, [{cd, ?PYTHON_CHECKOUT}]),
 
     lager:info("[PREREQ] Installing an isolated environment with virtualenv in ~s", [?PYTHON_CHECKOUT]),
