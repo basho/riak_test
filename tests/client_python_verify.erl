@@ -7,6 +7,11 @@
 -define(PYTHON_CHECKOUT, filename:join([rt:config(rt_scratch_dir), "riak-python-client"])).
 -define(PYTHON_GIT_URL, "git://github.com/basho/riak-python-client.git").
 
+%% Need python, yo
+-prereq("python").
+%% Virtualenv will isolate this so we don't have permissions issues.
+-prereq("virtualenv").
+
 confirm() ->
     prereqs(),
     Config = [{riak_search, [{enabled, true}]}],
@@ -41,10 +46,6 @@ prereqs() ->
     CleanupCMD = io_lib:format("rm -rf ~s", [?PYTHON_CHECKOUT]),
     os:cmd(CleanupCMD),
 
-    %% Need python, yo
-    lager:info("[PREREQ] Checking for presence of python"),
-    ?assertNot(length(os:cmd("which python")) =:= 0),
-
     %% Python should be at least 2.6, but not 3.x
     lager:info("[PREREQ] Checking for python version >= 2.6, < 3.0"),
     "Python 2." ++ [Minor|_] = os:cmd("python -V"),
@@ -54,9 +55,6 @@ prereqs() ->
     lager:info("[PREREQ] Checking for presence of setuptools"),
     ?assertCmd("python -c 'import setuptools'"),
 
-    %% Virtualenv will isolate this so we don't have permissions issues.
-    lager:info("[PREREQ] Checking for presence of virtualenv"),
-    ?assertCmd("virtualenv --help"),
 
     %% Checkout the project and a specific tag.
     lager:info("[PREREQ] Cloning riak-python-client from ~s", [?PYTHON_GIT_URL]),
