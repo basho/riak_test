@@ -2,6 +2,9 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+-prereq("ruby").
+-prereq("gem").
+
 %% @todo Only Memory backend is supported
 
 confirm() ->
@@ -44,14 +47,10 @@ confirm() ->
     pass.
 
 prereqs() ->
-    rt:assert_which("ruby"),
-
     lager:info("Checking ruby version is 1.8.7 or 1.9.*"),
     RubyVersion = os:cmd("ruby -v"),
     ?assert(rt:str(RubyVersion, "1.9.") orelse rt:str(RubyVersion, "1.8.7")),
 
-    rt:assert_which("gem"),
-    rt:assert_which("rspec"),
     rt:install_on_absence("bundle", "gem install bundler --no-rdoc --no-ri"),
     ok.
 
