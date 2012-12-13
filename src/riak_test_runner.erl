@@ -21,6 +21,7 @@
 %% @doc riak_test_runner runs a riak_test module's run/0 function. 
 -module(riak_test_runner).
 -export([confirm/3, metadata/0]).
+-include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
 %% @doc fetches test metadata from spawned test process
@@ -36,12 +37,12 @@ metadata() ->
 confirm(TestModule, Outdir, TestMetaData) ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, []),
-    
+
+    check_prereqs(TestModule),
+
     %% Check for api compatibility
-    {Status, Reason, Backend} = case proplists:get_value(confirm, 
-                        proplists:get_value(exports, TestModule:module_info()),
-                        -1) of
-        0 ->
+    {Status, Reason, Backend} = case erlang:function_exported(TestModule, confirm, 0) of
+        true ->
             lager:notice("Running Test ~s", [TestModule]), 
             SetBackend = rt:set_backend(proplists:get_value(backend, TestMetaData)),
             {S, R} = execute(TestModule, TestMetaData),
@@ -107,3 +108,11 @@ rec_loop(Pid, TestModule, TestMetaData) ->
             lager:warning("~s failed: ~p", [TestModule, Error]),
             {fail, Error}
     end.
+
+check_prereqs(Module) ->
+    Prereqs = proplists:get_all_values(prereq, Module:module_info(attributes)),
+    P2 = [ {Prereq, rt:which(Prereq)} || Prereq <- Prereqs],
+    lager:info("~s prereqs: ~p", [Module, P2]),
+    [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
+    GoodToGo = lists:all(fun({_, Present}) -> Present end, P2),
+    ?assertEqual({all_prereqs_present, true}, {all_prereqs_present, GoodToGo}).

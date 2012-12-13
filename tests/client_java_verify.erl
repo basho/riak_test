@@ -8,6 +8,9 @@
 -define(JAVA_TESTS_URL, rt:config(java.tests_url)).
 -define(JAVA_TESTS_FILENAME, lists:last(string:tokens(?JAVA_TESTS_URL, "/"))).
 
+-prereq("java").
+-prereq("curl").
+
 confirm() ->
     prereqs(),
     Nodes = rt:deploy_nodes(1),
@@ -25,10 +28,7 @@ confirm() ->
     pass.
 
 prereqs() ->
-    %% Does you have java available?
-    ?assertNot(length(os:cmd("which java")) =:= 0),
     %% Does you have the java client available?
-    
     you_got_jars(?JAVA_FAT_BE_URL, ?JAVA_FAT_FILENAME),
     you_got_jars(?JAVA_TESTS_URL, ?JAVA_TESTS_FILENAME),
     ok.
