@@ -52,7 +52,7 @@ prereqs() ->
 
     rt:assert_which("gem"),
     rt:assert_which("rspec"),
-    rt:install_on_absence("bundler", "gem install bundler --no-rdoc --no-ri"),
+    rt:install_on_absence("bundle", "gem install bundler --no-rdoc --no-ri"),
     ok.
 
 
