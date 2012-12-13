@@ -40,7 +40,7 @@ confirm() ->
     rt:async_start(Node),
     rt:wait_until_pingable(Node),
 
-    rt:load_modules_on_riak([?MODULE, meck, meck_code, meck_proc,
+    rt:load_modules_on_nodes([?MODULE, meck, meck_code, meck_proc,
                              meck_util, meck_expect, meck_code_gen], [Node]),
     ok = rpc:call(Node, ?MODULE, setup_mocks, []),
 

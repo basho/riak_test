@@ -67,7 +67,7 @@
          join/2,
          leave/1,
          load_config/1,
-         load_modules_on_riak/2,
+         load_modules_on_nodes/2,
          members_according_to/1,
          owners_according_to/1,
          partition/2,
@@ -393,10 +393,10 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
 %%%===================================================================
 %%% Remote code management
 %%%===================================================================
-load_modules_on_riak([], Nodes)
+load_modules_on_nodes([], Nodes)
   when is_list(Nodes) ->
     ok;
-load_modules_on_riak([Module | MoreModules], Nodes)
+load_modules_on_nodes([Module | MoreModules], Nodes)
   when is_list(Nodes) ->
     case code:get_object_code(Module) of
         {Module, Bin, File} ->
@@ -404,7 +404,7 @@ load_modules_on_riak([Module | MoreModules], Nodes)
         error ->
             error(lists:flatten(io_lib:format("unable to get_object_code(~s)", [Module])))
     end,
-    load_modules_on_riak(MoreModules, Nodes).
+    load_modules_on_nodes(MoreModules, Nodes).
 
 
 %%%===================================================================

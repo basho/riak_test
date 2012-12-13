@@ -49,7 +49,7 @@ confirm() ->
     [Node1, Node2] = rt:build_cluster(2),
     lager:info("deployed 2 nodes"),
 
-    rt:load_modules_on_riak([cause_bdp, verify_bdp_event_handler,
+    rt:load_modules_on_nodes([cause_bdp, verify_bdp_event_handler,
                              riak_test_lager_backend], [Node1]),
     Res = rpc:call(Node1, verify_bdp_event_handler, add_handler, [self()]),    
     ok = rpc:call(Node1, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),

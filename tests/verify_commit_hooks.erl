@@ -24,7 +24,7 @@
 confirm() ->
     [Node] = rt:deploy_nodes(1),
     lager:info("Loading the hooks module into ~p", [Node]),
-    rt:load_modules_on_riak([hooks], [Node]),
+    rt:load_modules_on_nodes([hooks], [Node]),
 
     lager:info("Setting pid of test (~p) in application environment of ~p for postcommit hook", [self(), Node]),
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_test, test_pid, self()])),
