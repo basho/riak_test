@@ -187,9 +187,14 @@ create_dirs(Nodes) ->
     Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],
     [?assertCmd("mkdir -p " ++ Dir) || Dir <- Snmp].
 
-clean_data_dir(Nodes) when is_list(Nodes) ->
-    DataDirs = [node_path(Node) ++ "/data" || Node <- Nodes],
-    [?assertCmd("rm -rf " ++ Dir) || Dir <- DataDirs].
+clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    DataDirs = [node_path(Node) ++ "/data/" ++ SubDir || Node <- Nodes],
+    lists:foreach(fun rm_dir/1, DataDirs).
+
+rm_dir(Dir) ->
+    lager:info("Removing directory ~s", [Dir]), 
+    ?assertCmd("rm -rf " ++ Dir),
+    ?assertEqual(false, filelib:is_dir(Dir)).
 
 deploy_nodes(NodeConfig) ->
     Path = relpath(root),

@@ -22,11 +22,9 @@
 -export([confirm/0]).
 
 confirm() ->
-    {Module, Binary, Filename} = code:get_object_code(hooks),
     [Node] = rt:deploy_nodes(1),
     lager:info("Loading the hooks module into ~p", [Node]),
-    ?assertMatch({module, _},
-                 rpc:call(Node, code, load_binary, [Module, Filename, Binary])),
+    rt:load_modules_on_riak([hooks], [Node]),
 
     lager:info("Setting pid of test (~p) in application environment of ~p for postcommit hook", [self(), Node]),
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_test, test_pid, self()])),

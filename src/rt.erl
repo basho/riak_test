@@ -39,6 +39,8 @@
          claimant_according_to/1,
          cleanup_harness/0,
          clean_cluster/1,
+         clean_data_dir/1,
+         clean_data_dir/2,
          cmd/1,
          cmd/2,
          config/1,
@@ -65,6 +67,7 @@
          join/2,
          leave/1,
          load_config/1,
+         load_modules_on_riak/2,
          members_according_to/1,
          owners_according_to/1,
          partition/2,
@@ -387,6 +390,22 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
     after rt:config(rt_max_wait_time) ->
             {-1, Buffer}
     end.
+%%%===================================================================
+%%% Remote code management
+%%%===================================================================
+load_modules_on_riak([], Nodes)
+  when is_list(Nodes) ->
+    ok;
+load_modules_on_riak([Module | MoreModules], Nodes)
+  when is_list(Nodes) ->
+    case code:get_object_code(Module) of
+        {Module, Bin, File} ->
+            {_, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]);
+        error ->
+            error(lists:flatten(io_lib:format("unable to get_object_code(~s)", [Module])))
+    end,
+    load_modules_on_riak(MoreModules, Nodes).
+
 
 %%%===================================================================
 %%% Status / Wait Functions
@@ -576,13 +595,13 @@ wait_until_pingable(Node) ->
 %% @doc Wait until the specified node is no longer pingable
 wait_until_unpingable(Node) ->
     lager:info("Wait until ~p is not pingable", [Node]),
+    OSPidToKill = rpc:call(Node, os, getpid, []),
     F = fun(N) ->
                 net_adm:ping(N) =:= pang
         end,
     TimeoutFun = fun(N) ->
-                         OSPidToKill = rpc:call(N, os, getpid, []),
                          lager:info("We tried it the easy way, but ~s wouldn't listen, so now it's 'kill -9' time", [N]),
-                         rpc:call(N, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+                         rpc:cast(N, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
                          ok
         end,
     ?assertEqual(ok, wait_until(Node, F, TimeoutFun)),
@@ -704,9 +723,18 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
 
-clean_cluster(Nodes) ->
+%% @doc Stop nodes and wipe out their data directories
+clean_cluster(Nodes) when is_list(Nodes) ->
     [stop_and_wait(Node) || Node <- Nodes],
-    ?HARNESS:clean_data_dir(Nodes).
+    clean_data_dir(Nodes).
+
+clean_data_dir(Nodes) ->
+    clean_data_dir(Nodes, ".").
+
+clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
+    clean_data_dir([Nodes], SubDir);
+clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    ?HARNESS:clean_data_dir(Nodes, SubDir).
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
@@ -778,7 +806,6 @@ pbc(Node) ->
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
     Pid.
 
-
 %% @doc does a read via the erlang protobuf client
 -spec pbc_read(pid(), binary(), binary()) -> binary().
 pbc_read(Pid, Bucket, Key) ->
@@ -796,14 +823,18 @@ pbc_write(Pid, Bucket, Key, Value) ->
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
 
-pbc_put_file(Pbc, Bucket, Key, Filename) ->
+%% @doc Puts the contents of the given file into the given bucket using the
+%% filename as a key and assuming a plain text content type.
+pbc_put_file(Pid, Bucket, Key, Filename) ->
     {ok, Contents} = file:read_file(Filename),
-    riakc_pb_socket:put(Pbc, riakc_obj:new(Bucket, Key, Contents)).
+    riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Contents, "text/plain")).
 
-pbc_put_dir(Pbc, Bucket, Dir) ->
+%% @doc Puts all files in the given directory into the given bucket using the
+%% filename as a key and assuming a plain text content type.
+pbc_put_dir(Pid, Bucket, Dir) ->
     lager:info("Putting files from dir ~p into bucket ~p", [Dir, Bucket]),
     {ok, Files} = file:list_dir(Dir),
-    [pbc_put_file(Pbc, Bucket, list_to_binary(F), filename:join([Dir, F])) 
+    [pbc_put_file(Pid, Bucket, list_to_binary(F), filename:join([Dir, F])) 
     || F <- Files].
 
 %% @doc Returns HTTP URL information for a list of Nodes
