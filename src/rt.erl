@@ -29,6 +29,7 @@
 -export([
          admin/2,
          assert_nodes_agree_about_ownership/1,
+         assert_which/1,
          async_start/1,
          attach/2,
          build_cluster/1,
@@ -63,6 +64,7 @@
          httpc/1,
          httpc_read/3,
          httpc_write/4,
+         install_on_absence/2,
          is_pingable/1,
          join/2,
          leave/1,
@@ -124,7 +126,8 @@
          wait_until_status_ready/1,
          wait_until_transfers_complete/1,
          wait_until_unpingable/1,
-         whats_up/0
+         whats_up/0,
+         which/1
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
@@ -158,6 +161,34 @@ get_os_env(Var, Default) ->
         false -> Default;
         Value -> Value
     end.
+
+%% @doc Wrap 'which' to give a good output if something is not installed
+which(Command) ->
+    lager:info("Checking for presence of ~s", [Command]),
+    Cmd = lists:flatten(io_lib:format("which ~s; echo $?", [Command])),
+    case rt:str(os:cmd(Cmd), "0") of
+        false ->
+            lager:warning("`~s` is not installed", [Command]),
+            false;
+        true ->
+            true
+    end.
+
+%% @doc like rt:which, but asserts on failure
+assert_which(Command) ->
+    ?assert(rt:which(Command)).
+
+%% @doc checks if Command is installed and runs InstallCommand if not
+%% ex:  rt:install_on_absence("bundler", "gem install bundler --no-rdoc --no-ri"),
+install_on_absence(Command, InstallCommand) ->
+    case rt:which(Command) of
+        false ->
+            lager:info("Attempting to install `~s` with command `~s`", [Command, InstallCommand]),
+            ?assertCmd(InstallCommand);
+        _True ->
+            ok
+    end.
+
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in `Config'.
@@ -738,7 +769,7 @@ clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
-    %% stop all connected nodes, 'cause it'll be faster that 
+    %% stop all connected nodes, 'cause it'll be faster that
     lager:info("RPC stopping these nodes ~p", [nodes()]),
     [ rt:stop(Node) || Node <- nodes()],
     %% Then do the more exhaustive harness thing, in case something was up
@@ -837,8 +868,8 @@ pbc_put_file(Pid, Bucket, Key, Filename) ->
 pbc_put_dir(Pid, Bucket, Dir) ->
     lager:info("Putting files from dir ~p into bucket ~p", [Dir, Bucket]),
     {ok, Files} = file:list_dir(Dir),
-    [pbc_put_file(Pid, Bucket, list_to_binary(F), filename:join([Dir, F])) 
-    || F <- Files].
+    [pbc_put_file(Pid, Bucket, list_to_binary(F), filename:join([Dir, F]))
+     || F <- Files].
 
 %% @doc Returns HTTP URL information for a list of Nodes
 http_url(Nodes) when is_list(Nodes) ->
@@ -1076,4 +1107,3 @@ config_or_os_env(Config, Default) ->
 to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
 char_to_upper(C) -> C.
-
