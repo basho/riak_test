@@ -40,13 +40,8 @@ confirm() ->
     rt:async_start(Node),
     rt:wait_until_pingable(Node),
 
-    load_code(?MODULE, [Node]),
-    load_code(meck, [Node]),
-    load_code(meck_code, [Node]),
-    load_code(meck_proc, [Node]),
-    load_code(meck_util, [Node]),
-    load_code(meck_expect, [Node]),
-    load_code(meck_code_gen, [Node]),
+    rt:load_modules_on_nodes([?MODULE, meck, meck_code, meck_proc,
+                             meck_util, meck_expect, meck_code_gen], [Node]),
     ok = rpc:call(Node, ?MODULE, setup_mocks, []),
 
     lager:info("Installed mocks to delay riak_kv proxy startup"),
@@ -61,14 +56,6 @@ confirm() ->
 
     lager:info("Test passed"),
     pass.
-
-load_code(Module, Nodes) ->
-    case code:get_object_code(Module) of
-        {Module, Bin, File} ->
-            {_, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]);
-        error ->
-            error(lists:flatten(io_lib:format("unable to get_object_code(~s)", [Module])))
-    end.
 
 %% NOTE: Don't call lager in this function.  This function is compiled
 %% using the lager version specified by Riak Test's rebar.config but

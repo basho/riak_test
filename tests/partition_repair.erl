@@ -76,12 +76,14 @@ confirm() ->
     rt:enable_search_hook(hd(Nodes), Bucket),
 
     lager:info("Insert Scott's spam emails"),
-    {ok, C} = riak:client_connect(hd(Nodes)),
-    [put_file(C, Bucket, F) || F <- file_list(SpamDir)],
+    Pbc = rt:pbc(hd(Nodes)),
+    rt:pbc_put_dir(Pbc, Bucket, SpamDir),
 
     lager:info("Stash ITFs for each partition"),
+    %% @todo Should riak_test guarantee that the scratch pad is clean instead?
+    ?assertCmd("rm -rf " ++ base_stash_path()),
     %% need to load the module so riak can see the fold fun
-    load_module_on_riak(Nodes, ?MODULE),
+    rt:load_modules_on_nodes([?MODULE], Nodes),
     Ring = rt:get_ring(hd(Nodes)),
     Owners = riak_core_ring:all_owners(Ring),
     [stash_data(riak_search, Owner) || Owner <- Owners],
@@ -106,14 +108,9 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),
 
     %% kill the partition data
-    Path = data_path(Node, DataSuffix, Partition),
-    %% [Name, _] = string:tokens(atom_to_list(Node), "@"),
-    %% Path = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data/merge_index/" ++ integer_to_list(Partition),
-    lager:info("Killing data for ~p on ~p at ~p", [Partition, Node, Path]),
-    
-    %% @todo Warning: ?assertCmd assumes rtdev, and assuming rtdev is a riak_test no-no going forward.
-    %% This will break (as will most all other instances of ?assertCmds)
-    ?assertCmd("rm -rf " ++ Path),
+    Path = DataSuffix ++ "/" ++ integer_to_list(Partition),
+    lager:info("Killing data for ~p on ~p at ~s", [Partition, Node, Path]),
+    rt:clean_data_dir([Node], Path),
 
     %% force restart of vnode since some data is kept in memory
     lager:info("Restarting ~p vnode for ~p on ~p", [Service, Partition, Node]),
@@ -265,11 +262,11 @@ stash_kv(Key, Value, Stash) ->
 stash_search({_I,{_F,_T}}=K, _Postings=V, Stash) ->
     dict:append_list(K, V, Stash).
 
+base_stash_path() ->
+    rt:config(rt_scratch_dir) ++ "/dev/data_stash/".
 
-%% @todo broken when run in the style of rtdev_mixed.
 stash_path(Service, Partition) ->
-    Path = rt:config(rtdev_path.root) ++ "/dev/data_stash",
-    Path ++ "/" ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".
+    base_stash_path() ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".
 
 file_list(Dir) ->
     filelib:wildcard(Dir ++ "/*").
@@ -304,21 +301,6 @@ backend_mod_dir(bitcask) ->
 backend_mod_dir(eleveldb) ->
     {riak_kv_eleveldb_backend, "leveldb"}.
 
-
-%%
-%% STUFF TO MOVE TO rt?
-%%
-put_file(C, Bucket, File) ->
-    K = list_to_binary(string:strip(os:cmd("basename " ++ File), right, $\n)),
-    {ok, Val} = file:read_file(File),
-    O = riak_object:new(Bucket, K, Val, "text/plain"),
-    ?assertEqual(ok, C:put(O)).
-
-load_module_on_riak(Nodes, Mod) ->
-    {Mod, Bin, File} = code:get_object_code(Mod),
-    [?assertEqual({module, Mod},
-                  rpc:call(Node, code, load_binary, [Mod, File, Bin]))
-     || Node <- Nodes].
 
 -spec set_search_schema_nval(binary(), pos_integer()) -> ok.
 set_search_schema_nval(Bucket, NVal) ->
