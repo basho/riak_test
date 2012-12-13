@@ -44,21 +44,15 @@ confirm() ->
     pass.
 
 prereqs() ->
-    lager:info("[PREREQ] Checking for presence of ruby"),
-    ?assertCmd("which ruby"),
+    rt:assert_which("ruby"),
 
-    lager:info("[PREREQ] Checking ruby version is 1.8.7 or 1.9.*"),
+    lager:info("Checking ruby version is 1.8.7 or 1.9.*"),
     RubyVersion = os:cmd("ruby -v"),
     ?assert(rt:str(RubyVersion, "1.9.") orelse rt:str(RubyVersion, "1.8.7")),
 
-    lager:info("[PREREQ] Checking for presence of gem"),
-    ?assertCmd("which gem"),
-
-    lager:info("[PREREQ] Checking for presence of rspec"),
-    ?assertCmd("which rspec"),
-
-    lager:info("[PREREQ] Installing Bundler gem"),
-    ?assertCmd("gem install bundler --no-rdoc --no-ri"),
+    rt:assert_which("gem"),
+    rt:assert_which("rspec"),
+    rt:install_on_absence("bundler", "gem install bundler --no-rdoc --no-ri"),
     ok.
 
 
