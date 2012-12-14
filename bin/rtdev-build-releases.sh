@@ -1,4 +1,6 @@
 #!/bin/bash
+trap "exit 1" TERM
+export PID=$$
 
 # You need to use this script once to build a set of devrels for prior
 # releases of Riak (for mixed version / upgrade testing). You should
@@ -11,18 +13,28 @@
 # Different versions of Riak were released using different Erlang versions,
 # make sure to build with the appropriate version.
 
-# This is based on my usage of having multiple Erlang versions in different
-# directories. If using kerl or whatever, modify to use kerl's activate logic.
-# Or, alternatively, just substitute the paths to the kerl install paths as
-# that should work too.
+# Looks for erlang directory under HOME/ERLANG_BASE or in kerl sub-dir
+erlpath()
+{
+    ERL_BASE=${1:-erlang-}
+    ERL_VERSION=$2
+    ERL_PATH=$HOME/${ERL_BASE}${ERL_VERSION}
+    if [ -d $ERL_PATH ]; then
+        echo "$ERL_PATH"
+    else
+        ERL_PATH=$HOME/.kerl/builds/erlang-${ERL_VERSION}/release_${ERL_VERSION}
+        if [ -d $ERL_PATH ]; then
+            echo "$ERL_PATH"
+	else
+            echo "Could not find erlang path for ${ERL_VERSION}" >&2
+            kill -s TERM $PID
+	fi
+    fi
+} 
 
-if [ "x$ERLANG_BASE" = "x" ]; then 
-    ERLANG_BASE="erlang-"
-fi 
-
-R14B03=${R14B03:-$HOME/${ERLANG_BASE}R14B03}
-R14B04=${R14B04:-$HOME/${ERLANG_BASE}R14B04}
-R15B01=${R15B01:-$HOME/${ERLANG_BASE}R15B01}
+R14B03=$(erlpath "$ERLANG_BASE" R14B03)
+R14B04=$(erlpath "$ERLANG_BASE" R14B04)
+R15B01=$(erlpath "$ERLANG_BASE" R15B01)
 
 checkbuild()
 {
