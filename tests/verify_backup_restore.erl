@@ -24,6 +24,7 @@
 %% depending on the configuration (last write wins, vector clocks used, etc).
 
 -module(verify_backup_restore).
+-behavior(riak_test).
 -export([confirm/0]).
 -include_lib("riakc/include/riakc.hrl").
 -include_lib("eunit/include/eunit.hrl").

@@ -21,6 +21,7 @@
 %% Automated test for issue riak_core#154
 %% Hinted handoff does not occur after a node has been restarted in Riak 1.1
 -module(gh_riak_core_154).
+-behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 

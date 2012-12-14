@@ -22,6 +22,7 @@
 
 -module(mapred_verify_rt).
 
+-behavior(riak_test).
 -export([confirm/0]).
 
 -define(NODE_COUNT, 3).

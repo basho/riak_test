@@ -21,6 +21,9 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
+-behavior(riak_test).
+-export([confirm/0]).
+
 -define(FMT(S, L), lists:flatten(io_lib:format(S, L))).
 
 %% @doc This test verifies that partition repair successfully repairs

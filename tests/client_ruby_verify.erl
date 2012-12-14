@@ -1,4 +1,5 @@
 -module(client_ruby_verify).
+-behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 

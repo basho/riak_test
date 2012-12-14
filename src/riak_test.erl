@@ -22,6 +22,14 @@
 -module(riak_test).
 -export([main/1]).
 
+%% Define the riak_test behavior
+-export([behaviour_info/1]).
+
+behaviour_info(callbacks) ->
+    [{confirm,0}];
+behaviour_info(_Other) ->
+    undefined.
+
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],

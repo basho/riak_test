@@ -18,6 +18,8 @@
 %%
 %% -------------------------------------------------------------------
 -module(gh_riak_core_155).
+-behavior(riak_test).
+-export([confirm/0]).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
