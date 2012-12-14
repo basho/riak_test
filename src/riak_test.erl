@@ -131,7 +131,7 @@ main(Args) ->
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
 
-    TestResults = [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests],
+    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests]),
     print_summary(TestResults, Verbose),
     
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
@@ -196,7 +196,7 @@ print_summary(TestResults, Verbose) ->
 
     Results = [
                 [ atom_to_list(proplists:get_value(test, SingleTestResult)) ++ "-" ++
-                  atom_to_list(proplists:get_value(backend, SingleTestResult)),
+                      backend_list(proplists:get_value(backend, SingleTestResult)),
                   proplists:get_value(status, SingleTestResult),
                   proplists:get_value(reason, SingleTestResult)]
                 || SingleTestResult <- TestResults],
@@ -224,6 +224,24 @@ print_summary(TestResults, Verbose) ->
 
 test_name_width(Results) ->
     lists:max([ length(X) || [X | _T] <- Results ]).
+
+backend_list(Backend) when is_atom(Backend) ->
+    atom_to_list(Backend);
+backend_list(Backends) when is_list(Backends) ->
+    FoldFun = fun(X, []) ->
+                      atom_to_list(X);
+                 (X, Acc) ->
+                      Acc ++ "," ++ atom_to_list(X)
+              end,
+    lists:foldl(FoldFun, [], Backends).
+
+results_filter(Result) ->
+    case proplists:get_value(status, Result) of
+        not_a_runnable_test ->
+            false;
+        _ ->
+            true
+    end.
 
 load_tests_in_dir(Dir) ->
     case filelib:is_dir(Dir) of
