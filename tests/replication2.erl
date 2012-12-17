@@ -25,6 +25,11 @@ confirm() ->
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
+            {riak_kv,
+                [
+                    {anti_entropy, {off, []}}
+                ]
+            },
             {riak_repl,
              [
                 {fullsync_on_connect, false},
@@ -401,7 +406,7 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
 
     %% do the stop in the background while we're writing keys
     spawn(fun() ->
-                timer:sleep(200),
+                timer:sleep(500),
                 lager:info("Stopping node ~p again", [Target]),
                 rt:stop(Target),
                 lager:info("Node stopped")
@@ -447,28 +452,6 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
             ?assert(false)
     end.
 
-pb_iterate(_Sock, [], _Bucket, _W, Acc) ->
-    Acc;
-
-pb_iterate(Sock, [N | NS], Bucket, W, Acc) ->
-    Obj = riakc_obj:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
-    NewAcc = try riakc_pb_socket:put(Sock, Obj, [{w, W}]) of
-        ok ->
-            Acc;
-        %{error, timeout} ->
-            %lager:info("Timeout!"),
-            %[{N, timeout} | Acc] ++ NS;
-        Other ->
-            [{N, Other} | Acc]
-    catch
-        What:Why ->
-            [{N, {What, Why}} | Acc]
-    end,
-    pb_iterate(Sock, NS, Bucket, W, NewAcc).
-
-pb_write(Sock, Start, End, Bucket, W) ->
-    pb_iterate(Sock, lists:seq(Start, End), Bucket, W, []).
-
 http_write_during_shutdown(Target, BSecond, TestBucket) ->
     {ok, [{_IP, Port}|_]} = rpc:call(Target, application, get_env, [riak_core, http]),
 
@@ -478,7 +461,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
 
     %% do the stop in the background while we're writing keys
     spawn(fun() ->
-                timer:sleep(200),
+                timer:sleep(500),
                 lager:info("Stopping node ~p again", [Target]),
                 rt:stop(Target),
                 lager:info("Node stopped")
@@ -496,13 +479,15 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("got ~p write failures", [length(WriteErrors)]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster"),
-    ReadErrors = rt:systest_read(BSecond, 12000, 22000, TestBucket, 2),
+    {ok, [{_IP, Port2}|_]} = rpc:call(BSecond, application, get_env, [riak_core, http]),
+    C2 = rhc:create("127.0.0.1", Port2, "riak", []),
+    ReadErrors = http_read(C2, 12000, 22000, TestBucket, 2),
     lager:info("got ~p read failures", [length(ReadErrors)]),
 
     rt:start(Target),
     rt:wait_until_pingable(Target),
     timer:sleep(5000),
-    ReadErrors2 = rt:systest_read(Target, 12000, 22000, TestBucket, 2),
+    ReadErrors2 = http_read(C, 12000, 22000, TestBucket, 2),
     lager:info("got ~p read failures on ~p", [length(ReadErrors2), Target]),
     case length(WriteErrors) >= length(ReadErrors) of
         true ->
@@ -524,29 +509,84 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
             ?assert(false)
     end.
 
-http_iterate(_Sock, [], _Bucket, _W, Acc) ->
+client_iterate(_Sock, [], _Bucket, _W, Acc, _Fun, Parent) ->
+    Parent ! {result, self(), Acc},
     Acc;
 
-http_iterate(Sock, [N | NS], Bucket, W, Acc) ->
-    Obj = riakc_obj:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
-    NewAcc = try rhc:put(Sock, Obj, [{w, W}]) of
+client_iterate(Sock, [N | NS], Bucket, W, Acc, Fun, Parent) ->
+    NewAcc = try Fun(Sock, Bucket, N, W) of
         ok ->
             Acc;
-        %{error, timeout} ->
-            %lager:info("Timeout!"),
-            %[{N, timeout} | Acc] ++ NS;
         Other ->
             [{N, Other} | Acc]
     catch
         What:Why ->
             [{N, {What, Why}} | Acc]
     end,
-    http_iterate(Sock, NS, Bucket, W, NewAcc).
+    client_iterate(Sock, NS, Bucket, W, NewAcc, Fun, Parent).
 
 http_write(Sock, Start, End, Bucket, W) ->
-    http_iterate(Sock, lists:seq(Start, End), Bucket, W, []).
+    F = fun(S, B, K, WVal) ->
+            X = list_to_binary(integer_to_list(K)),
+            Obj = riakc_obj:new(B, X, X),
+            rhc:put(S, Obj, [{w, WVal}])
+    end,
+    Keys = lists:seq(Start, End),
+    Partitions = partition_keys(Keys, 8),
+    Parent = self(),
+    Workers = [spawn_monitor(fun() -> client_iterate(Sock, K, Bucket, W, [], F,
+                    Parent) end) || K <- Partitions],
+    collect_results(Workers, []).
 
+pb_write(Sock, Start, End, Bucket, W) ->
+    %pb_iterate(Sock, lists:seq(Start, End), Bucket, W, []).
+    F = fun(S, B, K, WVal) ->
+            Obj = riakc_obj:new(B, <<K:32/integer>>, <<K:32/integer>>),
+            riakc_pb_socket:put(S, Obj, [{w, WVal}])
+    end,
+    Keys = lists:seq(Start, End),
+    Partitions = partition_keys(Keys, 8),
+    Parent = self(),
+    Workers = [spawn_monitor(fun() -> client_iterate(Sock, K, Bucket, W, [], F,
+                    Parent) end) || K <- Partitions],
+    collect_results(Workers, []).
 
+http_read(Sock, Start, End, Bucket, R) ->
+    F = fun(S, B, K, RVal) ->
+            X = list_to_binary(integer_to_list(K)),
+            case rhc:get(S, B, X, [{r, RVal}]) of
+                {ok, _} ->
+                    ok;
+                Error ->
+                    Error
+            end
+    end,
+    client_iterate(Sock, lists:seq(Start, End), Bucket, R, [], F, self()).
+
+partition_keys(Keys, PC) ->
+    partition_keys(Keys, PC, lists:duplicate(PC, [])).
+
+partition_keys([] , _, Acc) ->
+    Acc;
+partition_keys(Keys, PC, Acc) ->
+    In = lists:sublist(Keys, PC),
+    Rest = try lists:nthtail(PC, Keys)
+        catch _:_ -> []
+    end,
+    NewAcc = lists:foldl(fun(K, [H|T]) ->
+                T ++ [[K|H]]
+        end, Acc, In),
+    partition_keys(Rest, PC, NewAcc).
+
+collect_results([], Acc) ->
+    Acc;
+collect_results(Workers, Acc) ->
+    receive
+        {result, Pid, Res} ->
+            collect_results(lists:keydelete(Pid, 1, Workers), Res ++ Acc);
+        {'DOWN', _, _, Pid, _Reason} ->
+            collect_results(lists:keydelete(Pid, 1, Workers), Acc)
+    end.
 
 make_cluster(Nodes) ->
     [First|Rest] = Nodes,
