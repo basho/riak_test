@@ -1,3 +1,23 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2012 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
+
 %% @private
 -module(riak_test).
 -export([main/1]).
@@ -18,7 +38,7 @@ cli_options() ->
  {verbose,            $v, "verbose",          undefined,        "verbose output"},
  {outdir,             $o, "outdir",           string,           "output directory"},
  {backend,            $b, "backend",          atom,             "backend to test [memory | bitcask | eleveldb]"},
- {report,             $r, "report",           string,           "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)"}
+ {report,             $r, "report",           string,           "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~~/.riak_test.config"}
 ].
 
 print_help() ->
@@ -31,6 +51,7 @@ run_help(ParsedArgs) ->
     lists:member(help, ParsedArgs).
 
 main(Args) ->
+    register(riak_test, self()), 
     {ParsedArgs, HarnessArgs} = case getopt:parse(cli_options(), Args) of
         {ok, {P, H}} -> {P, H};
         _ -> print_help()
@@ -47,7 +68,19 @@ main(Args) ->
     %% Start Lager
     application:load(lager),
     Config = proplists:get_value(config, ParsedArgs),
+
+    %% Loads application defaults
+    application:load(riak_test),
+
+    %% Loads from ~/.riak_test.config
     rt:load_config(Config),
+
+    %% Ensure existance of scratch_dir
+    case file:make_dir(rt:config(rt_scratch_dir)) of
+        ok -> great;
+        {eexist, _} -> great;
+        {ErrorType, ErrorReason} -> lager:error("Could not create scratch dir, {~p, ~p}", [ErrorType, ErrorReason])
+    end,
 
     %% Fileoutput
     Outdir = proplists:get_value(outdir, ParsedArgs),
@@ -61,7 +94,13 @@ main(Args) ->
     application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel}]),
     lager:start(),
 
-    Report = proplists:get_value(report, ParsedArgs, undefined),
+    %% Report
+    Report = case proplists:get_value(report, ParsedArgs, undefined) of
+        undefined -> undefined;
+        "config" -> rt:config(platform, undefined);
+        R -> R
+    end,
+
     Verbose = proplists:is_defined(verbose, ParsedArgs),
 
     Suites = proplists:get_all_values(suites, ParsedArgs),
@@ -70,43 +109,29 @@ main(Args) ->
         _ -> io:format("Suites are not currently supported.")
     end,
 
-    Version = rt:get_version(),
+    CommandLineTests = parse_command_line_tests(ParsedArgs),
+    Tests = which_tests_to_run(Report, CommandLineTests),
 
-    Backends = case proplists:get_all_values(backend, ParsedArgs) of
-        [] -> [bitcask];
-        Other -> Other
+    case Tests of
+        [] ->
+            lager:warning("No tests are scheduled to run"),
+            init:stop(1);
+        _ -> keep_on_keepin_on
     end,
 
-    Tests = case Report of
-        undefined ->
-            SpecificTests = proplists:get_all_values(tests, ParsedArgs),
-            Dirs = proplists:get_all_values(dir, ParsedArgs),
-            DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
-            lists:foldl(fun(Test, Tests) ->
-                    [{
-                      list_to_atom(Test),
-                      [
-                          {id, -1},
-                          {backend, Backend},
-                          {platform, <<"local">>},
-                          {version, Version},
-                          {project, list_to_binary(rt:config(rt_project, "undefined"))}
-                      ]
-                    } || Backend <- Backends ] ++ Tests
-                end, [], lists:usort(DirTests ++ SpecificTests));
-        Platform ->
-            giddyup:get_suite(Platform)
-    end,
     io:format("Tests to run: ~p~n", [Tests]),
+    %% Two hard-coded deps...
+    add_deps(rt:get_deps()),
+    add_deps("deps"),
 
-    [add_deps(Dep) || Dep <- rt:config(rt_deps)],
+    [add_deps(Dep) || Dep <- rt:config(rt_deps, [])],
     ENode = rt:config(rt_nodename, 'riak_test@127.0.0.1'),
     Cookie = rt:config(rt_cookie, riak),
     [] = os:cmd("epmd -daemon"),
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
 
-    TestResults = [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests],
+    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests]),
     print_summary(TestResults, Verbose),
     
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
@@ -117,6 +142,45 @@ main(Args) ->
             rt:teardown()
     end,
     ok.
+
+parse_command_line_tests(ParsedArgs) ->
+    Backends = case proplists:get_all_values(backend, ParsedArgs) of
+        [] -> [undefined];
+        Other -> Other
+    end,
+    %% Parse Command Line Tests
+    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
+    Dirs = proplists:get_all_values(dir, ParsedArgs),
+    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+    lists:foldl(fun(Test, Tests) ->
+            [{
+              list_to_atom(Test),
+              [
+                  {id, -1},
+                  {backend, Backend},
+                  {platform, <<"local">>},
+                  {version, rt:get_version()},
+                  {project, list_to_binary(rt:config(rt_project, "undefined"))}
+              ]
+            } || Backend <- Backends ] ++ Tests
+        end, [], lists:usort(DirTests ++ SpecificTests)).
+
+which_tests_to_run(undefined, CommandLineTests) -> CommandLineTests;
+which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
+which_tests_to_run(Platform, CommandLineTests) ->
+    lists:foldl(fun({Module, SMeta, CMeta}, Tests) ->
+            case {kvc:path(backend, SMeta), kvc:path(backend, CMeta)} of
+                {_X, undefined} -> [{Module, SMeta}|Tests];
+                {undefined, X} -> [{Module, [{backend, X}|proplists:delete(backend, SMeta)]}|Tests];
+                {_X, _X} -> [{Module, SMeta}|Tests];
+                _ -> Tests
+            end
+        end, 
+        [], 
+        [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform), 
+                                     {CModule, CMeta} <- CommandLineTests, 
+                                     SModule =:= CModule]
+    ).
 
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
@@ -132,7 +196,7 @@ print_summary(TestResults, Verbose) ->
 
     Results = [
                 [ atom_to_list(proplists:get_value(test, SingleTestResult)) ++ "-" ++
-                  atom_to_list(proplists:get_value(backend, SingleTestResult)),
+                      backend_list(proplists:get_value(backend, SingleTestResult)),
                   proplists:get_value(status, SingleTestResult),
                   proplists:get_value(reason, SingleTestResult)]
                 || SingleTestResult <- TestResults],
@@ -160,6 +224,24 @@ print_summary(TestResults, Verbose) ->
 
 test_name_width(Results) ->
     lists:max([ length(X) || [X | _T] <- Results ]).
+
+backend_list(Backend) when is_atom(Backend) ->
+    atom_to_list(Backend);
+backend_list(Backends) when is_list(Backends) ->
+    FoldFun = fun(X, []) ->
+                      atom_to_list(X);
+                 (X, Acc) ->
+                      Acc ++ "," ++ atom_to_list(X)
+              end,
+    lists:foldl(FoldFun, [], Backends).
+
+results_filter(Result) ->
+    case proplists:get_value(status, Result) of
+        not_a_runnable_test ->
+            false;
+        _ ->
+            true
+    end.
 
 load_tests_in_dir(Dir) ->
     case filelib:is_dir(Dir) of

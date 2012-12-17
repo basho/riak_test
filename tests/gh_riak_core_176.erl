@@ -1,3 +1,22 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2012 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
 -module(gh_riak_core_176).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
@@ -28,6 +47,7 @@ confirm() ->
                [Node2, NodeIP, AlternateIP]),
     NewConfig = [{riak_core, [{handoff_ip, AlternateIP}]}],
     rt:update_app_config(Node2, NewConfig),
+    rt:wait_for_service(Node2, riak_kv),
 
     lager:info("Write data to the cluster"),
     rt:systest_write(Node1, 100),
@@ -37,8 +57,8 @@ confirm() ->
     rt:join(Node2, Node1),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes12)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes12)),
-    [?assertEqual(Nodes12, rt:owners_according_to(Node)) || Node <- Nodes12],
-
+    rt:wait_until_nodes_agree_about_ownership(Nodes12),
+    
     %% Check 0.0.0.0 address works
     lager:info("Change ~p handoff_ip to \"0.0.0.0\"", [Node3]),
     rt:update_app_config(Node3,
@@ -46,10 +66,11 @@ confirm() ->
 
     lager:info("Join ~p to the cluster and wait for handoff to finish",
                [Node3]),
+    rt:wait_for_service(Node3, riak_kv),
     rt:join(Node3, Node1),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes123)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes123)),
-    [?assertEqual(Nodes123, rt:owners_according_to(Node)) || Node <- Nodes123],
+    rt:wait_until_nodes_agree_about_ownership(Nodes123),
 
     lager:info("Test gh_riak_core_176 passed"),
     pass.

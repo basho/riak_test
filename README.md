@@ -129,9 +129,13 @@ to tell riak_test about them. The method of choice is to create a
 `~/.riak_test.config` that looks something like this:
 
 ```erlang
-{rtdev_mixed, [
-    {rt_deps, ["$PATH_TO_YOUR_RIAK_SOURCE/deps"]},
+{default, [
     {rt_max_wait_time, 180000},
+    {rt_retry_delay, 1000}
+]}.
+
+{rtdev, [
+    {rt_deps, ["$PATH_TO_YOUR_RIAK_SOURCE/deps"]},
     {rt_retry_delay, 500},
     {rt_harness, rtdev},
     {rtdev_path, [{root, "/tmp/rt"},
@@ -143,9 +147,15 @@ to tell riak_test about them. The method of choice is to create a
 
 ```
 
+The `default` section of the config file will be overridden by the config
+name you specify. For example, running the command below will use an
+`rt_retry_delay` of 500 and an `rt_max_wait_time` of 180000. If your 
+defaults contain every option you need, you can run riak_test without
+the `-c` argument.
+
 ### Running riak_test for the first time
 
-Run a test! `./riak_test -c rtdev_mixed -t verify_build_cluster`
+Run a test! `./riak_test -c rtdev -t verify_build_cluster`
 
 Did that work? Great, try something harder: `./riak_test -c
 rtdev_mixed -t upgrade`

@@ -1,15 +1,27 @@
-{rtdev_mixed, [
+{default, [
     {giddyup_host, "localhost:5000"},
     {giddyup_user, "user"},
     {giddyup_password, "password"},
-    {rt_project, "riak"},
-    {rt_deps, ["/Users/joe/dev/basho/riak/deps"]},
     {rt_max_wait_time, 180000},
     {rt_retry_delay, 500},
     {rt_harness, rtdev},
     {rtdev_path, [{root, "/tmp/rt"},
                   {current, "/tmp/rt/current"},
                   {"1.2.0", "/tmp/rt/riak-1.2.0"},
+                  {previous, "/tmp/rt/riak-1.2.0"},
                   {"1.1.4", "/tmp/rt/riak-1.1.4"},
-                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]}
+                  {legacy, "/tmp/rt/riak-1.1.4"},
+                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]},
+    {basho_bench, "/Users/joe/dev/basho/basho_bench"},
+    {spam_dir, "/Users/joe/dev/basho/riak_test/search-corpus/spam.0"},
+    {platform, "osx-64"},
+    {rt_deps, []}
+]}.
+
+{rtdev, [
+    {rt_project, "riak"}
+]}.
+
+{other_project, [
+    {rt_project, "other"}
 ]}.

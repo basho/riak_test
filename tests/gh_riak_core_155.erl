@@ -1,3 +1,22 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2012 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
 -module(gh_riak_core_155).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -17,14 +36,13 @@ confirm() ->
 
     %% Restart node, add mocks that delay proxy startup, and issue gets.
     %% Gets will come in before proxies started, and should trigger crash.
-    rt:stop(Node),
+    rt:stop_and_wait(Node),
     rt:async_start(Node),
     rt:wait_until_pingable(Node),
 
-    load_code(?MODULE, [Node]),
-    load_code(meck, [Node]),
-    load_code(meck_mod, [Node]),
-    rpc:call(Node, ?MODULE, setup_mocks, []),
+    rt:load_modules_on_nodes([?MODULE, meck, meck_code, meck_proc,
+                             meck_util, meck_expect, meck_code_gen], [Node]),
+    ok = rpc:call(Node, ?MODULE, setup_mocks, []),
 
     lager:info("Installed mocks to delay riak_kv proxy startup"),
     lager:info("Issuing 10000 gets against ~p", [Node]),
@@ -39,22 +57,23 @@ confirm() ->
     lager:info("Test passed"),
     pass.
 
-load_code(Module, Nodes) ->
-    {Module, Bin, File} = code:get_object_code(Module),
-    {_, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]).
-
+%% NOTE: Don't call lager in this function.  This function is compiled
+%% using the lager version specified by Riak Test's rebar.config but
+%% that may not match the version used by Riak where this function is
+%% called.
 setup_mocks() ->
-    application:start(lager),
+    error_logger:info_msg("Beginning setup_mocks"),
     meck:new(riak_core_vnode_proxy_sup, [unstick, passthrough, no_link]),
     meck:expect(riak_core_vnode_proxy_sup, start_proxies,
                 fun(Mod=riak_kv_vnode) ->
-                        lager:info("Delaying start of riak_kv_vnode proxies"),
+                        error_logger:info_msg("Delaying start of riak_kv_vnode proxies"),
                         timer:sleep(3000),
                         meck:passthrough([Mod]);
                    (Mod) ->
                         meck:passthrough([Mod])
                 end),
-    lager:info("Installed mocks").
+    error_logger:info_msg("Installed mocks"),
+    ok.
 
 perform_gets(Count, Node, PL, BKey) ->
     rpc:call(Node, riak_kv_vnode, get, [PL, BKey, make_ref()]),

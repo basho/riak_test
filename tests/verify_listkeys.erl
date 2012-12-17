@@ -1,3 +1,22 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2012 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
 -module(verify_listkeys).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
@@ -44,7 +63,8 @@ confirm() ->
             
             lager:info("Starting Node ~p", [Prev]),
             rt:start(Prev),
-            rt:wait_until_pingable(Prev),
+            lager:info("Waiting for riak_kv service to be ready in ~p", [Prev]),
+            rt:wait_for_service(Prev, riak_kv),
             
             lager:info("Check keys and buckets"),
             check_it_all(Nodes -- [Node]),
@@ -71,10 +91,9 @@ put_keys(Node, Bucket, Num) ->
     [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)],
     riakc_pb_socket:stop(Pid).
 
-list_keys(Node, Bucket, Attempt, Legacy, Num, ShouldPass) ->
+list_keys(Node, Bucket, Attempt, Num, ShouldPass) ->
     Pid = rt:pbc(Node),
-    lager:info("Listing keys on ~p. Legacy: ~p, Attempt #~p", [Node, Legacy, Attempt]),
-    rpc:call(Node, application, set_env, [riak_kv, legacy_keylisting, Legacy]),
+    lager:info("Listing keys on ~p. Attempt #~p", [Node, Attempt]),
     
     case ShouldPass of
         true ->
@@ -96,10 +115,9 @@ put_buckets(Node, Num) ->
     [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || Bucket <- Buckets],
     riakc_pb_socket:stop(Pid).
 
-list_buckets(Node, Attempt, Legacy, Num, ShouldPass) ->
+list_buckets(Node, Attempt, Num, ShouldPass) ->
     Pid = rt:pbc(Node),
-    lager:info("Listing buckets on ~p. Legacy: ~p, Attempt #~p", [Node, Legacy, Attempt]),
-    rpc:call(Node, application, set_env, [riak_kv, legacy_keylisting, Legacy]),
+    lager:info("Listing buckets on ~p. Attempt #~p", [Node, Attempt]),
     
     {Status, Buckets} = riakc_pb_socket:list_buckets(Pid),
     ?assertEqual(ok, Status),
@@ -129,5 +147,5 @@ check_it_all(Nodes, ShouldPass) ->
     [check_a_node(N, ShouldPass) || N <- Nodes].
     
 check_a_node(Node, ShouldPass) ->
-    [list_keys(Node, ?BUCKET, Attempt, Legacy, ?NUM_KEYS, ShouldPass) || Attempt <- [1,2,3], Legacy <- [true, false]],
-    [list_buckets(Node, Attempt, Legacy, ?NUM_BUCKETS, ShouldPass) || Attempt <- [1,2,3], Legacy <- [true, false]].    
+    [list_keys(Node, ?BUCKET, Attempt, ?NUM_KEYS, ShouldPass) || Attempt <- [1,2,3] ],
+    [list_buckets(Node, Attempt, ?NUM_BUCKETS, ShouldPass) || Attempt <- [1,2,3] ].    

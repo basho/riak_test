@@ -1,34 +1,46 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2012 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
 -module(partition_repair).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
-
--import(rt, [deploy_nodes/1,
-             enable_search_hook/2,
-             get_os_env/1,
-             get_os_env/2,
-             get_ring/1,
-             join/2,
-             update_app_config/2]).
 
 -define(FMT(S, L), lists:flatten(io_lib:format(S, L))).
 
 %% @doc This test verifies that partition repair successfully repairs
 %% all data after it has wiped out by a simulated disk crash.
 confirm() ->
-    SpamDir = get_os_env("SPAM_DIR"),
-    RingSize = list_to_integer(get_os_env("RING_SIZE", "16")),
-    NVal = get_os_env("N_VAL", undefined),
-    KVBackend = get_os_env("KV_BACKEND", "bitcask"),
-    NumNodes = list_to_integer(get_os_env("NUM_NODES", "4")),
-    HOConcurrency = list_to_integer(get_os_env("HO_CONCURRENCY", "2")),
-    {KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
+    SpamDir = rt:config_or_os_env(spam_dir),
+    RingSize = list_to_integer(rt:config_or_os_env(ring_size, "16")),
+    NVal = rt:config_or_os_env(n_val, undefined),
+    TestMetaData = riak_test_runner:metadata(),
+    KVBackend = proplists:get_value(backend, TestMetaData),
+
+    NumNodes = list_to_integer(rt:config_or_os_env(num_nodes, "4")),
+    HOConcurrency = list_to_integer(rt:config_or_os_env(ho_concurrency, "2")),
+    {_KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
     Bucket = <<"scotts_spam">>,
 
     lager:info("Build a cluster"),
     lager:info("riak_search enabled: true"),
     lager:info("ring_creation_size: ~p", [RingSize]),
     lager:info("n_val: ~p", [NVal]),
-    lager:info("KV backend: ~s", [KVBackend]),
     lager:info("num nodes: ~p", [NumNodes]),
     lager:info("riak_core handoff_concurrency: ~p", [HOConcurrency]),
     lager:info("riak_core vnode_management_timer 1000"),
@@ -39,10 +51,6 @@ confirm() ->
               {handoff_manager_timeout, 1000},
               {vnode_management_timer, 1000},
               {handoff_concurrency, HOConcurrency}
-             ]},
-            {riak_kv,
-             [
-              {storage_backend, KVBackendMod}
              ]},
             {riak_search,
              [
@@ -65,16 +73,18 @@ confirm() ->
     end,
 
     lager:info("Enable search hook"),
-    enable_search_hook(hd(Nodes), Bucket),
+    rt:enable_search_hook(hd(Nodes), Bucket),
 
     lager:info("Insert Scott's spam emails"),
-    {ok, C} = riak:client_connect(hd(Nodes)),
-    [put_file(C, Bucket, F) || F <- file_list(SpamDir)],
+    Pbc = rt:pbc(hd(Nodes)),
+    rt:pbc_put_dir(Pbc, Bucket, SpamDir),
 
     lager:info("Stash ITFs for each partition"),
+    %% @todo Should riak_test guarantee that the scratch pad is clean instead?
+    ?assertCmd("rm -rf " ++ base_stash_path()),
     %% need to load the module so riak can see the fold fun
-    load_module_on_riak(Nodes, ?MODULE),
-    Ring = get_ring(hd(Nodes)),
+    rt:load_modules_on_nodes([?MODULE], Nodes),
+    Ring = rt:get_ring(hd(Nodes)),
     Owners = riak_core_ring:all_owners(Ring),
     [stash_data(riak_search, Owner) || Owner <- Owners],
 
@@ -98,19 +108,17 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),
 
     %% kill the partition data
-    Path = data_path(Node, DataSuffix, Partition),
-    %% [Name, _] = string:tokens(atom_to_list(Node), "@"),
-    %% Path = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data/merge_index/" ++ integer_to_list(Partition),
-    lager:info("Killing data for ~p on ~p at ~p", [Partition, Node, Path]),
-    ?assertCmd("rm -rf " ++ Path),
+    Path = DataSuffix ++ "/" ++ integer_to_list(Partition),
+    lager:info("Killing data for ~p on ~p at ~s", [Partition, Node, Path]),
+    rt:clean_data_dir([Node], Path),
 
     %% force restart of vnode since some data is kept in memory
     lager:info("Restarting ~p vnode for ~p on ~p", [Service, Partition, Node]),
     {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
                          [Partition, VNodeName]),
     ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
-    timer:sleep(100),
-    ?assertNot(rpc:call(Node, erlang, is_process_alive, [Pid])),
+    
+    rt:wait_until(Node, fun(N) -> not(rpc:call(N, erlang, is_process_alive, [Pid])) end),
 
     lager:info("Verify data is missing"),
     ?assertEqual(0, count_data(Service, {Partition, Node})),
@@ -154,7 +162,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     %% NOTE: If the following assert fails then check the .notfound
     %% file written above...it contains all postings that were in the
     %% stash that weren't found after the repair.
-    ?assertEqual(ExpectToVerify, Verified),
+    ?assertEqual({Service, ExpectToVerify}, {Service, Verified}),
 
     {ok, [{BeforeP, _BeforeOwner}=B, _, {AfterP, _AfterOwner}=A]} = Return,
     lager:info("Verify before src partition ~p still has data", [B]),
@@ -254,11 +262,11 @@ stash_kv(Key, Value, Stash) ->
 stash_search({_I,{_F,_T}}=K, _Postings=V, Stash) ->
     dict:append_list(K, V, Stash).
 
+base_stash_path() ->
+    rt:config(rt_scratch_dir) ++ "/dev/data_stash/".
 
-%% @todo broken when run in the style of rtdev_mixed.
 stash_path(Service, Partition) ->
-    Path = rt:config(rtdev_path) ++ "/dev/data_stash",
-    Path ++ "/" ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".
+    base_stash_path() ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".
 
 file_list(Dir) ->
     filelib:wildcard(Dir ++ "/*").
@@ -282,29 +290,17 @@ wait_for_repair(Service, {Partition, Node}, Tries) ->
 
 data_path(Node, Suffix, Partition) ->
     [Name, _] = string:tokens(atom_to_list(Node), "@"),
-    Base = rt:config(rtdev_path) ++ "/dev/" ++ Name ++ "/data",
+    Base = rt:config(rtdev_path.current) ++ "/dev/" ++ Name ++ "/data",
     Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
 
-backend_mod_dir("bitcask") ->
+backend_mod_dir(undefined) ->
+    %% riak_test defaults to bitcask when undefined
+    backend_mod_dir(bitcask);
+backend_mod_dir(bitcask) ->
     {riak_kv_bitcask_backend, "bitcask"};
-backend_mod_dir("leveldb") ->
+backend_mod_dir(eleveldb) ->
     {riak_kv_eleveldb_backend, "leveldb"}.
 
-
-%%
-%% STUFF TO MOVE TO rt?
-%%
-put_file(C, Bucket, File) ->
-    K = list_to_binary(string:strip(os:cmd("basename " ++ File), right, $\n)),
-    {ok, Val} = file:read_file(File),
-    O = riak_object:new(Bucket, K, Val, "text/plain"),
-    ?assertEqual(ok, C:put(O)).
-
-load_module_on_riak(Nodes, Mod) ->
-    {Mod, Bin, File} = code:get_object_code(Mod),
-    [?assertEqual({module, Mod},
-                  rpc:call(Node, code, load_binary, [Mod, File, Bin]))
-     || Node <- Nodes].
 
 -spec set_search_schema_nval(binary(), pos_integer()) -> ok.
 set_search_schema_nval(Bucket, NVal) ->
@@ -316,7 +312,7 @@ set_search_schema_nval(Bucket, NVal) ->
     %% than allowing the internal format to be modified and set you
     %% must send the update in the external format.
     BucketStr = binary_to_list(Bucket),
-    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt:config(rtdev_path)]),
+    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt:config(rtdev_path.current)]),
     GetSchema = ?FMT("~s show-schema ~s > current-schema",
                      [SearchCmd, BucketStr]),
     ModifyNVal = ?FMT("sed -E 's/n_val, [0-9]+/n_val, ~s/' "

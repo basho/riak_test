@@ -1,3 +1,23 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2012 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
+
 %% @private
 -module(rtdev).
 -compile(export_all).
@@ -6,6 +26,9 @@
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
 -define(PATH, (rt:config(rtdev_path))).
+
+get_deps() ->
+    lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
 
 riakcmd(Path, N, Cmd) ->
     io_lib:format("~s/dev/dev~b/bin/riak ~s", [Path, N, Cmd]).
@@ -35,13 +58,27 @@ run_riak(N, Path, Cmd) ->
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths),
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
     run_git(Path, "reset HEAD --hard"),
     run_git(Path, "clean -fd"),
+
+    lager:info("Cleaning up lingering pipe directories"),
+    rt:pmap(fun(Dir) ->
+                    %% when joining two absolute paths, filename:join intentionally
+                    %% throws away the first one. ++ gets us around that, while
+                    %% keeping some of the security of filename:join.
+                    %% the extra slashes will be pruned by filename:join, but this
+                    %% ensures that there will be at least one between "/tmp" and Dir
+                    PipeDir = filename:join(["/tmp//" ++ Dir, "dev"]),
+                    %% when using filelib:wildcard/2, there must be a wildchar char
+                    %% before the first '/'.
+                    Files = filelib:wildcard("dev?/*.{r,w}", PipeDir),
+                    [ file:delete(filename:join(PipeDir, File)) || File <- Files],
+                    file:del_dir(PipeDir)
+            end, devpaths()),
     ok.
 
 cleanup_harness() ->
@@ -67,14 +104,19 @@ upgrade(Node, NewVersion) ->
     stop(Node),
     OldPath = relpath(Version),
     NewPath = relpath(NewVersion),
-    C1 = io_lib:format("cp -a \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
+
+    Commands = [
+        io_lib:format("cp -p -P -R \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
                        [OldPath, N, NewPath, N]),
-    C2 = io_lib:format("cp -a \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
-                       [OldPath, N, NewPath, N]),
-    lager:info("Running: ~s", [C1]),
-    os:cmd(C1),
-    lager:info("Running: ~s", [C2]),
-    os:cmd(C2),
+        io_lib:format("rm -rf ~s/dev/dev~b/data/*",
+                       [OldPath, N]),
+        io_lib:format("cp -p -P -R \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
+                       [OldPath, N, NewPath, N])
+    ],
+    [ begin
+        lager:info("Running: ~s", [Cmd]),
+        os:cmd(Cmd)
+    end || Cmd <- Commands],
     VersionMap = orddict:store(N, NewVersion, rt:config(rt_versions)),
     rt:set_config(rt_versions, VersionMap),
     start(Node),
@@ -92,7 +134,7 @@ all_the_app_configs(DevPath) ->
 
 update_app_config(all, Config) ->
     lager:info("rtdev:update_app_config(all, ~p)", [Config]),
-    [ update_app_config(DevPath, Config) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))];
+    [ update_app_config(DevPath, Config) || DevPath <- devpaths()];
 update_app_config(Node, Config) when is_atom(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
@@ -120,7 +162,7 @@ update_app_config_file(ConfigFile, Config) ->
 
 get_backends() ->
     Backends = lists:usort(
-        lists:flatten([ get_backends(DevPath) || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))])),
+        lists:flatten([ get_backends(DevPath) || DevPath <- devpaths()])),
     case Backends of
         [riak_kv_bitcask_backend] -> bitcask;
         [riak_kv_eleveldb_backend] -> eleveldb;
@@ -144,6 +186,15 @@ node_path(Node) ->
 create_dirs(Nodes) ->
     Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],
     [?assertCmd("mkdir -p " ++ Dir) || Dir <- Snmp].
+
+clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    DataDirs = [node_path(Node) ++ "/data/" ++ SubDir || Node <- Nodes],
+    lists:foreach(fun rm_dir/1, DataDirs).
+
+rm_dir(Dir) ->
+    lager:info("Removing directory ~s", [Dir]), 
+    ?assertCmd("rm -rf " ++ Dir),
+    ?assertEqual(false, filelib:is_dir(Dir)).
 
 deploy_nodes(NodeConfig) ->
     Path = relpath(root),
@@ -169,6 +220,9 @@ deploy_nodes(NodeConfig) ->
                     update_app_config(Node, Config)
             end,
             lists:zip(Nodes, Configs)),
+
+    %% create snmp dirs, for EE
+    create_dirs(Nodes),
 
     %% Start nodes
     %%[run_riak(N, relpath(node_version(N)), "start") || N <- Nodes],
@@ -201,7 +255,7 @@ stop_all(DevPath) ->
                 end,
                 lager:debug("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
             end,
-            rt:pmap(Stop, Devs);
+            [Stop(D) || D <- Devs];
         _ -> lager:debug("~s is not a directory.", [DevPath])
     end,
     ok.
@@ -321,7 +375,9 @@ node_version(N) ->
     orddict:fetch(N, VersionMap).
 
 spawn_cmd(Cmd) ->
-    Port = open_port({spawn, Cmd}, [stream, in, exit_status]),
+    spawn_cmd(Cmd, []).
+spawn_cmd(Cmd, Opts) ->
+    Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
     Port.
 
 wait_for_cmd(Port) ->
@@ -342,7 +398,10 @@ wait_for_cmd(Port) ->
     get_cmd_result(Port, []).
 
 cmd(Cmd) ->
-    wait_for_cmd(spawn_cmd(Cmd)).
+    cmd(Cmd, []).
+
+cmd(Cmd, Opts) ->
+    wait_for_cmd(spawn_cmd(Cmd, Opts)).
 
 get_cmd_result(Port, Acc) ->
     receive
@@ -376,11 +435,13 @@ get_version() ->
 
 teardown() ->
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    RTDevPaths = [ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))],
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, RTDevPaths).
+    [stop_all(X ++ "/dev") || X <- devpaths()].
 
 whats_up() ->
     io:format("Here's what's running...~n"),
 
     Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
+
+devpaths() ->
+    lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))]).

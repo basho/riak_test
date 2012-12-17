@@ -1,3 +1,22 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2012 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
 -module(giddyup).
 
 -export([get_suite/1, post_result/1]).
@@ -22,10 +41,10 @@ get_suite(Platform) ->
 get_schema(Platform) ->
     Host = rt:config(giddyup_host),
     Project = rt:config(rt_project),
-    URL = "http://" ++ Host ++ "/projects/" ++ Project ++ "?platform=" ++ Platform,
+    Version = rt:get_version(),
+    URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
-    
-    case ibrowse:send_req(URL, [], get, [], [ basic_auth()]) of
+    case ibrowse:send_req(URL, [], get, [], []) of
         {ok, "200", _Headers, JSON} -> mochijson2:decode(JSON);
         _ -> []
     end.
