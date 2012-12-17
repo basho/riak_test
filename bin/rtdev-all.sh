@@ -4,7 +4,27 @@ ORIGDIR=`pwd`
 pushd `dirname $0` > /dev/null
 SCRIPT_DIR=`pwd`
 popd > /dev/null
-CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
+
+# OTP Precedence: CURRENT_OTP > HOME/ERLANG_BASE{VERSION} > KERL_DIR
+if [ "x$ERLANG_BASE" = "x" ]; then 
+    ERLANG_BASE="erlang-"
+fi 
+OTP_VERSION=R15B01
+
+CURRENT_OTP=${CURRENT_OTP:-$HOME/${ERLANG_BASE}${OTP_VERSION}}
+if [ ! -d $CURRENT_OTP ]; then
+    CURRENT_OTP=$HOME/.kerl/builds/erlang-${OTP_VERSION}/release_${OTP_VERSION}
+fi
+
+if [ ! -d $CURRENT_OTP ]; then
+    echo "Could not find the Erlang/OTP directory."
+    echo "Specify it through an absolute path in $CURRENT_OTP "
+    echo "or prefix $ERLANG_BASE if in your home directory"
+    echo "i.e. if in ~/erlang-R15B01, $ERLANG_BASE=erlang-"
+    exit 1
+fi
+
+echo "OTP Directory :    $CURRENT_OTP"
 
 if [ -n "$DEBUG_RTDEV" ]; then
     echo "= Configuration ================================================="
