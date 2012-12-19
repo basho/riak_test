@@ -87,7 +87,7 @@ confirm() ->
     verify_query(Config, "a", "5", "_,prev,1/_,prev,1/_,prev,1/_,prev,1", 
                  ["v1", "v2", "v3", "v4"]),
     verify_query(Config, "a", "5", "_,prev,1/_,prev,1/_,next,1/_,next,1", 
-                 ["v3", "v4", "v4b", "v5", "v5b"]),
+                 ["v3", "v4", "v4", "v4b", "v5", "v5b"]),
     verify_query(Config, "a", "5", "b,next,1", 
                  []),
     verify_query(Config, "a", "5", "_,_,1",
@@ -125,7 +125,7 @@ get_return_values(Body) ->
                   length(Line) > 0, 
                   string:str(Line, ":") =:= 0, 
                   string:str(Line, "--") =:= 0],
-    lists:usort(Vs).
+    lists:sort(Vs).
 
 put_obj(Pbc, Bucket, Key, Value, Links) when is_list(Bucket), is_list(Key), 
                                              is_list(Value), is_list(Links) ->
