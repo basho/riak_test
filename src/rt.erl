@@ -268,6 +268,7 @@ async_start(Node) ->
 %% @doc Stop the specified Riak `Node'.
 stop(Node) ->
     lager:info("Stopping riak on ~p", [Node]),
+    timer:sleep(10000), %% I know, I know!
     rpc:call(Node, init, stop, []).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
