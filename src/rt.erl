@@ -760,7 +760,7 @@ clean_cluster(Nodes) when is_list(Nodes) ->
     clean_data_dir(Nodes).
 
 clean_data_dir(Nodes) ->
-    clean_data_dir(Nodes, ".").
+    clean_data_dir(Nodes, "").
 
 clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
     clean_data_dir([Nodes], SubDir);
