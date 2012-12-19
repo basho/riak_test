@@ -120,6 +120,8 @@ confirm() ->
 
     lager:info("Upgrade Legacy node"),
     rt:upgrade(LNode, current),
+    ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
+    ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
     lager:info("Verify staged_joins == true after upgrade of legacy -> current"),
     ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
@@ -143,8 +145,6 @@ confirm() ->
     assert_supported(PCap2, {riak_kv, mapred_system}, [pipe]),
     assert_supported(PCap2, {riak_kv, vnode_vclocks}, [true,false]),
     assert_supported(PCap2, {riak_pipe, trace_format}, [ordsets,sets]),
-    
-    
     
     lager:info("Upgrading Previous node"),
     rt:upgrade(PNode, current),
