@@ -56,6 +56,8 @@ confirm() ->
 
     verify_query(Config, "a", "1", "_,next,1", 
                  ["v2"]),
+    verify_query(Config, "a", "1", "_,_,1",
+                 ["v2"]),
     verify_query(Config, "a", "1", "b,next,1", 
                  []),
     verify_query(Config, "a", "1", "a,next,1", 
@@ -71,6 +73,15 @@ confirm() ->
     verify_query(Config, "a", "1", "_,next,0/_,next,0/_,prev,1/_,next,0/_,next,1", 
                  ["v2", "v4", "v4b"]),
 
+    verify_query(Config, "a", "3", "_,_,1",
+                 ["v2", "v4", "v4b"]),
+    verify_query(Config, "a", "3", "a,_,1",
+                 ["v2", "v4"]),
+    verify_query(Config, "a", "3", "b,_,1",
+                 ["v4b"]),
+    verify_query(Config, "a", "3", "_,_,0/_,next,1",
+                 ["v3", "v5", "v5b"]),
+
     verify_query(Config, "a", "5", "_,prev,1", 
                  ["v4"]),
     verify_query(Config, "a", "5", "_,prev,1/_,prev,1/_,prev,1/_,prev,1", 
@@ -79,6 +90,8 @@ confirm() ->
                  ["v3", "v4", "v4b", "v5", "v5b"]),
     verify_query(Config, "a", "5", "b,next,1", 
                  []),
+    verify_query(Config, "a", "5", "_,_,1",
+                 ["v1", "v4"]),
 
     lager:info("Au revoir mes amies"),
     riakc_pb_socket:stop(Pbc),
