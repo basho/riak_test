@@ -61,7 +61,7 @@ get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
 
 check_props_reset(Node, Bucket, DefaultProps) ->
     Current = get_current_bucket_props(Node, Bucket),
-    ?assertEqual(DefaultProps, Current).
+    ?assertEqual(lists:usort(DefaultProps), lists:usort(Current)).
 
 
 
