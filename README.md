@@ -180,6 +180,12 @@ tables.  This leads to the principle of intercepts.
 > If you can do it in Riak source code you can do it with an
 > intercept.
 
+[dropped_puts]: https://github.com/basho/riak_test/blob/d284dcfc22d5d84ad301804691b16dbda6d91aa8/intercepts/riak_kv_vnode_intercepts.erl#L7
+
+[hashtree_sleep]: https://github.com/basho/riak_test/blob/d284dcfc22d5d84ad301804691b16dbda6d91aa8/intercepts/hashtree_intercepts.erl#L5
+
+[ring_noop]: https://github.com/basho/riak_test/blob/d284dcfc22d5d84ad301804691b16dbda6d91aa8/intercepts/riak_core_ring_manager_intercepts.erl#L5
+
 ### Writing Intercepts
 
 Writing an intercept is nearly identical to writing any other Erlang
@@ -223,12 +229,6 @@ dropped_put(Preflist, BKey, Obj, ReqId, StartTime, Options, Sender) ->
     ?M:put_orig(NewPreflist, BKey, Obj, ReqId, StartTime, Options, Sender).
 ```
 
-[dropped_puts]: foo
-
-[hashtree_sleep]: foo
-
-[ring_noop]: foo
-
 ### How Do I Use Intercepts?
 
 Intercepts can be used in two ways: 1) added via the config, 2) added
@@ -249,10 +249,7 @@ you add them via one of the methods listed previously.
 
 Here is how you would add the `dropped_put` intercept via the config.
 
-TODO: take advantage of rules listed above and don't require
-explicitly listing intercept module.
-
-    {intercepts, [{riak_kv_vnode, riak_kv_vnode_intercepts, [{{put,7}, dropped_put}]}]}
+    {intercepts, [{riak_kv_vnode, [{{put,7}, dropped_put}]}]}
 
 Breaking this down, the config key is `intercepts` and its value is a
 list of intercepts to add.  Each intercept definition in the list
@@ -261,15 +258,13 @@ them with.  The example above would result in all calls to
 `riak_kv_vnode:put/7` being intercepted by
 `riak_kv_vnode_intercepts:dropped_put/7`.
 
-    {ModuleToIntercept, InterceptModule, [{{FunctionToIntercept, Arity}, InterceptFunction}]}
+    {ModuleToIntercept, [{{FunctionToIntercept, Arity}, InterceptFunction}]}
 
 #### Manual
 
 To add the `dropped_put` intercept manually you would do the following.
 
-TODO: Add an rt function to make this easier.
-
-    `rpc:call(Node, intercept, add, [riak_kv_vnode, riak_kv_vnode_intercepts, [{{put,7}, dropped_put}]])`
+    `rt_intercept:add(Node, {riak_kv_vnode, [{{put,7}, dropped_put}]})`
 
 ### How Does it Work?
 
