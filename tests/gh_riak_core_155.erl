@@ -23,7 +23,7 @@
 
 confirm() ->
     [Node] = rt:build_cluster(1),
-  
+
     %% Generate a valid preflist for our get requests
     rpc:call(Node, riak_core, wait_for_service, [riak_kv]),
     BKey = {<<"bucket">>, <<"value">>},
@@ -34,17 +34,16 @@ confirm() ->
     NewConfig = [{riak_core, [{delayed_start, 1000}]}],
     rt:update_app_config(Node, NewConfig),
 
-    %% Restart node, add mocks that delay proxy startup, and issue gets.
+    %% Restart node, add intercept that delay proxy startup, and issue gets.
     %% Gets will come in before proxies started, and should trigger crash.
     rt:stop_and_wait(Node),
     rt:async_start(Node),
     rt:wait_until_pingable(Node),
+    rt_intercept:load_intercepts([Node]),
+    rt_intercept:add(Node, {riak_core_vnode_proxy_sup,
+                            [{{start_proxies,1}, sleep_start_proxies}]}),
 
-    rt:load_modules_on_nodes([?MODULE, meck, meck_code, meck_proc,
-                             meck_util, meck_expect, meck_code_gen], [Node]),
-    ok = rpc:call(Node, ?MODULE, setup_mocks, []),
-
-    lager:info("Installed mocks to delay riak_kv proxy startup"),
+    lager:info("Installed intercept to delay riak_kv proxy startup"),
     lager:info("Issuing 10000 gets against ~p", [Node]),
     perform_gets(10000, Node, PL, BKey),
 
@@ -56,24 +55,6 @@ confirm() ->
 
     lager:info("Test passed"),
     pass.
-
-%% NOTE: Don't call lager in this function.  This function is compiled
-%% using the lager version specified by Riak Test's rebar.config but
-%% that may not match the version used by Riak where this function is
-%% called.
-setup_mocks() ->
-    error_logger:info_msg("Beginning setup_mocks"),
-    meck:new(riak_core_vnode_proxy_sup, [unstick, passthrough, no_link]),
-    meck:expect(riak_core_vnode_proxy_sup, start_proxies,
-                fun(Mod=riak_kv_vnode) ->
-                        error_logger:info_msg("Delaying start of riak_kv_vnode proxies"),
-                        timer:sleep(3000),
-                        meck:passthrough([Mod]);
-                   (Mod) ->
-                        meck:passthrough([Mod])
-                end),
-    error_logger:info_msg("Installed mocks"),
-    ok.
 
 perform_gets(Count, Node, PL, BKey) ->
     rpc:call(Node, riak_kv_vnode, get, [PL, BKey, make_ref()]),
