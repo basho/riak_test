@@ -21,5 +21,10 @@ done
 cd $RT_DEST_DIR
 echo " - Creating the git repository"
 git init > /dev/null 2>&1
+
+## Some versions of git and/or OS require these fields
+git config user.name "Riak Test"
+git config user.email "dev@basho.com"
+
 git add .
 git commit -a -m "riak_test init" > /dev/null 2>&1
