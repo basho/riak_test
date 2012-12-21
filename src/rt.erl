@@ -480,10 +480,6 @@ wait_until(Node, Fun, TimeoutFun) ->
     wait_until(Node, Fun, Retry, Delay, TimeoutFun).
 
 %% @deprecated Use {@link wait_until/2} instead.
-%% wait_until(Node, Fun, Retry) ->
-%%    wait_until(Node, Fun, Retry, 500).
-
-%% @deprecated Use {@link wait_until/2} instead.
 wait_until(Node, Fun, Retry, Delay, TimeoutFun) ->
     Pass = Fun(Node),
     case {Retry, Pass} of
