@@ -24,6 +24,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([confirm/0]).
+%% To run in the possibly remote node
+-export([test_dirs/1]).
 
 -define(SEARCH_REPO, "git@github.com:/basho/riak_search").
 
@@ -42,18 +44,10 @@ confirm() ->
     ?assertMatch({0, _}, rt:cmd("git clone --depth 1 "++?SEARCH_REPO,
                                  [{cd, Path}])),
     BaseDir = filename:join([Path, "riak_search", "tests", "riak_search"]),
-    {ok, SubDirs} = file:list_dir(BaseDir),
 
-    IsTest =
-        fun(Dir) ->
-                filelib:is_file(filename:join([BaseDir, Dir, "script.def"]))
-        end,
-
-    TestDirs = [filename:join([BaseDir, SubDir]) ||
-                  SubDir <- SubDirs, IsTest(SubDir),
-                  %% @todo Figure out why this one is not run by run_all.sh
-                  %% It does fail in a weird way if included
-                  SubDir /= "replication_test" ],
+    rt:load_modules_on_nodes([?MODULE], [Node0]),
+    TestDirs = rpc:call(Node0, ?MODULE, test_dirs, [BaseDir]),
+    ?assert(is_list(TestDirs)),
     Run =
         fun(Dir) ->
             lager:info("Running test in directory ~s", [Dir]),
@@ -64,3 +58,11 @@ confirm() ->
     pass.
 
 
+test_dirs(BaseDir) ->
+    {ok, SubDirs} = file:list_dir(BaseDir),
+    [filename:join([BaseDir, SubDir]) ||
+       SubDir <- SubDirs,
+       %% @todo Figure out why this one is not run by run_all.sh
+       %% It does fail in a weird way if included
+       SubDir /= "replication_test",
+       filelib:is_file(filename:join([BaseDir, SubDir, "script.def"]))].
