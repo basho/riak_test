@@ -55,7 +55,14 @@ confirm() ->
             {riak_search,
              [
               {enabled, true}
-             ]}
+             ]},
+            %% @TODO This is only to test whether the test failure happens
+            %% without AAE. The AAE errors found in the logs could be unrelated
+            {riak_kv,
+             [
+              {anti_entropy, {off, []}}
+             ]
+            }
             %% {lager,
             %%  [{handlers,
             %%    [{lager_file_backend,
