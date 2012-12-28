@@ -42,6 +42,7 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_busy_dist_port).
+-behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 

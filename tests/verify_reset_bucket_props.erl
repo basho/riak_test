@@ -18,6 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_reset_bucket_props).
+-behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 

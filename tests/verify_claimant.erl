@@ -18,7 +18,10 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_claimant).
--compile(export_all).
+
+-behavior(riak_test).
+-export([confirm/0]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [build_cluster/1,

@@ -19,6 +19,7 @@
 %% -------------------------------------------------------------------
 -module(verify_commit_hooks).
 -include_lib("eunit/include/eunit.hrl").
+-behavior(riak_test).
 -export([confirm/0]).
 
 confirm() ->
