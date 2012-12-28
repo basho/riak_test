@@ -27,7 +27,7 @@
 %% To run in the possibly remote node
 -export([test_dirs/1]).
 
--define(SEARCH_REPO, "git@github.com:/basho/riak_search").
+-define(SEARCH_REPO, "git://github.com/basho/riak_search").
 
 confirm() ->
     Config = [{riak_search, [{enabled, true}]}],
