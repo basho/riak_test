@@ -19,7 +19,9 @@
 %% -------------------------------------------------------------------
 -module(rpc_output).
 
+-behavior(riak_test).
 -export([confirm/0]).
+
 -include_lib("eunit/include/eunit.hrl").
 -compile([{parse_transform, lager_transform}]).
 

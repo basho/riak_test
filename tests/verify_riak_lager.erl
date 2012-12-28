@@ -19,7 +19,9 @@
 %% -------------------------------------------------------------------
 -module(verify_riak_lager).
 
+-behavior(riak_test).
 -export([confirm/0]).
+
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/file.hrl").
 

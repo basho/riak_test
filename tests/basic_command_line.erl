@@ -20,6 +20,7 @@
 -module(basic_command_line).
 -include_lib("eunit/include/eunit.hrl").
 
+-behavior(riak_test).
 -export([confirm/0]).
 
 confirm() ->
