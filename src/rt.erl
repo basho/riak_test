@@ -60,6 +60,7 @@
          get_ring/1,
          get_version/0,
          heal/1,
+         home_dir/0,
          http_url/1,
          httpc/1,
          httpc_read/3,
@@ -131,6 +132,11 @@
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
+
+%% @doc Return the home directory of the riak_test script.
+-spec home_dir() -> file:filename().
+home_dir() ->
+    filename:dirname(filename:absname(escript:script_name())).
 
 %% @doc gets riak deps from the appropriate harness
 -spec get_deps() -> list().
