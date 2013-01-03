@@ -40,7 +40,7 @@ add(Target, Intercept, Mapping) ->
 
     ProxyAC = make_proxy_abstract_code(Target, Intercept, Mapping,
                                        Original, TargetAC),
-    OrigAC = make_orig_absctract_code(Target, Original, TargetAC),
+    OrigAC = make_orig_abstract_code(Target, Original, TargetAC),
 
     ok = compile_and_load(Original, OrigAC),
     ok = compile_and_load(Target, ProxyAC).
@@ -55,9 +55,9 @@ compile_and_load(Module, AC) ->
     ok.
 
 %% @private
--spec make_orig_absctract_code(module(), module(), abstract_code()) ->
+-spec make_orig_abstract_code(module(), module(), abstract_code()) ->
                                       abstract_code().
-make_orig_absctract_code(Target, OrigName, TargetAC) ->
+make_orig_abstract_code(Target, OrigName, TargetAC) ->
     export_all(move_all_funs(Target, change_module_name(OrigName, TargetAC))).
 
 %% @private
