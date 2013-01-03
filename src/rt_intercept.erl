@@ -7,10 +7,7 @@ files_to_mods(Files) ->
     [list_to_atom(filename:basename(F, ".erl")) || F <- Files].
 
 intercept_files() ->
-    %% TODO: validate this env var very early and fail if not there
-    Dir = rt:config(rt_dir),
-    filelib:wildcard(filename:join([Dir, "intercepts", "*.erl"])).
-
+    filelib:wildcard(filename:join([rt:home_dir(), "intercepts", "*.erl"])).
 
 %% @doc Load the intercepts on the nodes under test.
 -spec load_intercepts([node()]) -> ok.
