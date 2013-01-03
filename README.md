@@ -159,3 +159,165 @@ Run a test! `./riak_test -c rtdev -t verify_build_cluster`
 
 Did that work? Great, try something harder: `./riak_test -c
 rtdev_mixed -t upgrade`
+
+
+Intercepts
+----------
+
+Intercepts are a powerful but easy to wield feature.  They allow you
+to change the behavior of any function and affect global state in an
+extremely lightweight manner.  You can modify
+[the KV vnode to simulate dropped puts][dropped_puts].  You can
+[sleep a call][hashtree_sleep] to discover what happens when certain
+calls take a long time to finish.  You can even
+[turn a call into a noop][ring_noop] to really cause havoc on a
+cluster.  These are just some examples.  You should also be able to
+change any function you want, including dependency functions and even
+Erlang functions.  Furthermore, any state you can reach from a
+function call can be affected such as function arguments but also ETS
+tables.  This leads to the principle of intercepts.
+
+> If you can do it in Riak source code you can do it with an
+> intercept.
+
+[dropped_puts]: https://github.com/basho/riak_test/blob/d284dcfc22d5d84ad301804691b16dbda6d91aa8/intercepts/riak_kv_vnode_intercepts.erl#L7
+
+[hashtree_sleep]: https://github.com/basho/riak_test/blob/d284dcfc22d5d84ad301804691b16dbda6d91aa8/intercepts/hashtree_intercepts.erl#L5
+
+[ring_noop]: https://github.com/basho/riak_test/blob/d284dcfc22d5d84ad301804691b16dbda6d91aa8/intercepts/riak_core_ring_manager_intercepts.erl#L5
+
+### Writing Intercepts
+
+Writing an intercept is nearly identical to writing any other Erlang
+source with a few easy to remember conventions added.
+
+1. All intercepts must live under the `intercepts` dir.
+
+2. All intercept modules should be named the same as the module they
+  affect with the suffix `_intercepts` added.  E.g. `riak_kv_vnode` =>
+  `riak_kv_vnode_intercepts`.
+
+3. All intercept modules should include the `intercept.hrl` file.
+   This includes macros to properly log messages.  You **cannot** call
+   lager.
+
+4. All intercept modules should declare the macro `M` who's value is
+   the affected module with the suffix `_orig` added.  E.g. for
+   `riak_kv_vnode` add the line `-define(M, riak_kv_vnode_orig)`.
+   This, along with the next convention is needed to call into the
+   original function.
+
+5. To call the origin function use the `?M:` follow by the name of the
+   function with the `_orig` suffix appended.  E.g. to call
+   `riak_kv_vnode:put` you would type `?M:put_orig`.
+
+6. To log a message use the `I_` macros.  E.g. to log an info message
+   use `?I_INFO`.
+
+The easiest way to understand the above conventions is to see them all
+at work in an example.
+
+```erlang
+-module(riak_kv_vnode_intercepts).
+-compile(export_all).
+-include("intercept.hrl").
+-define(M, riak_kv_vnode_orig).
+
+dropped_put(Preflist, BKey, Obj, ReqId, StartTime, Options, Sender) ->
+    NewPreflist = lists:sublist(Preflist, length(Preflist) - 1),
+    ?I_INFO("Preflist modified from ~p to ~p", [Preflist, NewPreflist]),
+    ?M:put_orig(NewPreflist, BKey, Obj, ReqId, StartTime, Options, Sender).
+```
+
+### How Do I Use Intercepts?
+
+Intercepts can be used in two ways: 1) added via the config, 2) added
+via `rpc:call` in the test.  The first way is most convenient, is
+persistent (survives node restarts), and is in effect for all tests.
+The second method requires additional code, is specific to a test, is
+ephemeral (does not survive a node restart), but allows more fine
+grained control.
+
+In both cases intercepts can be disabled by adding the following to
+your config.  By default intercepts will be loaded and compiled, but
+not added.  That is, they will be available but not in effect unless
+you add them via one of the methods listed previously.
+
+    {load_intercepts, false}
+
+#### Config
+
+Here is how you would add the `dropped_put` intercept via the config.
+
+    {intercepts, [{riak_kv_vnode, [{{put,7}, dropped_put}]}]}
+
+Breaking this down, the config key is `intercepts` and its value is a
+list of intercepts to add.  Each intercept definition in the list
+describes which functions to intercept and what functions to intercept
+them with.  The example above would result in all calls to
+`riak_kv_vnode:put/7` being intercepted by
+`riak_kv_vnode_intercepts:dropped_put/7`.
+
+    {ModuleToIntercept, [{{FunctionToIntercept, Arity}, InterceptFunction}]}
+
+#### Manual
+
+To add the `dropped_put` intercept manually you would do the following.
+
+    `rt_intercept:add(Node, {riak_kv_vnode, [{{put,7}, dropped_put}]})`
+
+### How Does it Work?
+
+Knowing the implementation details is not needed to use intercepts but
+this knowledge could come in handy if problems are encountered.  There
+are two parts to understand: 1) how the intercept code works and 2)
+how intercepts are applied on-the-fly in Riak Test.  It's important to
+keep one thing in mind.
+
+> Intercepts are based entirely on code generation and hot-swapping.
+> The overhead of an intercept is always 1 or 2 function calls.  1 if
+> a function is not being intercepted, 2 if it is and you call the
+> original function.
+
+The intercept code turns your original module into three.  Based on
+the mapping passed to `intercept:add` code is generated to re-route
+requests to your intercept code or forward them to the original code.
+E.g. if defining intercepts on `riak_kv_vnode` the following modules
+will exist.
+
+* `riak_kv_vnode_orig` - Contains the original code from
+  `riak_kv_vnode` but modified so that all original functions have the
+  suffix `_orig` added to them and the original function definitions
+  become passthrus to `riak_kv_vnode`, the proxy.
+
+* `riak_kv_vnode_intercepts` - This contains code of your intercept as
+  you defined it.  No modification of the code is performed.
+
+* `riak_kv_vnode` - What once contained the original code is now a
+  proxy.  All functions passthru to `riak_kv_vnode_orig`.  Unless an
+  intercept is registered in the mapping passed to `intercept:add`.
+  In that case the call will forward to `riak_kv_vnode_intercepts`.
+
+The interceptor code also modifies the original module and proxy to
+export all functions.  This fact, along with the fact that all the
+original functions in `riak_kv_vnode_orig` will callback into the
+proxy, means that you can intercept private functions as well.
+
+In order for Riak Test to use intercepts they need to be compiled,
+loaded, and registered on the nodes under test.  You can't use the
+bytecode generated by Riak Tests' rebar because the Erlang version
+used will often be different from that included with your Riak nodes.
+You could require that the user compile with the oldest Erlang version
+supported but that is extra burden on the user and still doesn't
+guarantee things will work if there is a jump of more than 2 majors in
+Erlang version.  No, this should be easy to use and thus the intercept
+code is compiled **on** the Riak nodes guaranteeing that the bytecode
+will be compatible.
+
+After the code is compiled and loaded the intercepts need to be added.
+All intercepts defined in the user's `riak_test.config` will be added
+automatically any time a node is started.  Thus, intercepts defined in
+the config survive restarts and are essentially always in play.  A
+user can also manually add an intercept by making an `rpc` call from
+the test code to the remote node.  This method is ephemeral and the
+intercept will not survive restarts.
