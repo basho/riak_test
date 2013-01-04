@@ -29,7 +29,7 @@ confirm() ->
     [CNode, PNode, LNode] = Nodes,
 
     lager:info("Verify staged_joins == true"),
-    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
     %% This test is written with the intent that 1.3 is 'current'
     CCapabilities = rt:capability(CNode, all),
@@ -53,11 +53,10 @@ confirm() ->
     assert_supported(CCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
 
     lager:info("Crash riak_core_capability server"),
-    crash_capability_server(CNode),
-    timer:sleep(1000),
+    restart_capability_server(CNode),
 
     lager:info("Verify staged_joins == true after crash"),
-    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
     lager:info("Building current + legacy cluster"),
     rt:join(LNode, CNode),
@@ -85,19 +84,18 @@ confirm() ->
     assert_supported(LCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
                     
     lager:info("Crash riak_core_capability server"),
-    crash_capability_server(CNode),
-    timer:sleep(1000),
+    restart_capability_server(CNode),
 
     lager:info("Verify staged_joins == false after crash"),
-    ?assertEqual(false, rt:capability(CNode, {riak_core, staged_joins})),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, false)),
 
     lager:info("Adding previous node to cluster"),
     rt:join(PNode, LNode),
     ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
     ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
-    lager:info("Verify staged_joins == true after crash"),
-    ?assertEqual(false, rt:capability(CNode, {riak_core, staged_joins})),
+    lager:info("Verify staged_joins == false after crash"),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, false)),
     
     PCapabilities = rt:capability(CNode, all),
     assert_capability(PCapabilities, {riak_kv, legacy_keylisting}, false),
@@ -125,7 +123,7 @@ confirm() ->
     ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
     lager:info("Verify staged_joins == true after upgrade of legacy -> current"),
-    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
     PCap2 = rt:capability(CNode, all),
     assert_capability(PCap2, {riak_kv, legacy_keylisting}, false),
@@ -221,7 +219,16 @@ assert_supported(Capabilities, Capability, Value) ->
     lager:info("Checking Capability Supported Values ~p =:= ~p", [Capability, Value]),
     ?assertEqual(Value, proplists:get_value(Capability, proplists:get_value('$supported', Capabilities))).
     
-crash_capability_server(Node) ->
+restart_capability_server(Node) ->
     Pid = rpc:call(Node, erlang, whereis, [riak_core_capability]),
-    rpc:call(Node, erlang, exit, [Pid, kill]).
+    rpc:call(Node, erlang, exit, [Pid, kill]),
+    HasNewPid =
+        fun(N) ->
+            case rpc:call(N, erlang, whereis, [riak_core_capability]) of
+                Pid -> false;
+                NewPid when is_pid(NewPid) -> true;
+                _ -> false
+            end
+        end,
+    rt:wait_until(Node, HasNewPid).
 
