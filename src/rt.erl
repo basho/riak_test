@@ -108,6 +108,7 @@
          teardown/0,
          update_app_config/2,
          upgrade/2,
+         versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -779,6 +780,8 @@ teardown() ->
     %% but not connected.
     ?HARNESS:teardown().
 
+versions() ->
+    ?HARNESS:versions().
 %%%===================================================================
 %%% Basic Read/Write Functions
 %%%===================================================================
