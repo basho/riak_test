@@ -145,6 +145,37 @@ confirm() ->
     lager:info("Checking to see if D is still dirty"),
     wait_until_coord_has_dirty(DirtyD),
 
+    % Clear out all dirty state
+    replication2:start_and_wait_until_fullsync_complete(LeaderA),
+
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    lager:info("Brutally kill the sink nodes"),
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    spawn(fun() ->
+                timer:sleep(1000),
+                [rt:brutal_kill(Node) || Node <- BNodes]
+          end),
+    % 3000 may need to be increased if the test fails here on
+    % a fast machine
+    lager:info("Writing 3000 more keys to ~p", [LeaderA]),
+    ?assertEqual([], replication2:do_write(LeaderA, 0, 3000, TestBucket, 2)),
+
+    wait_until_coord_has_any_dirty(LeaderA),
+
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    lager:info("Check rt_dirty state after shutdown"),
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    [ rt:stop_and_wait(Node) || Node <- ANodes],
+    [ rt:start_and_wait(Node) || Node <- ANodes],
+    wait_until_coord_has_any_dirty(LeaderA),
+
     pass.
 
 get_dirty_stat(Node) ->
@@ -172,6 +203,23 @@ wait_until_coord_has_dirty(Node) ->
                             Nodes = string:tokens(NodeString,","),
                             lager:info("Nodes = ~p",[Nodes]),
                             lists:member(erlang:atom_to_list(Node), Nodes)
+                    end
+            end),
+    ?assertEqual(ok, Res).
+
+wait_until_coord_has_any_dirty(SourceLeader) ->
+    Res = rt:wait_until(SourceLeader,
+                        fun(_) ->
+                    lager:info("Checking for any dirty nodes"),
+                    Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
+                    case Status of
+                        {badrpc, _} -> false;
+                        [] -> false;
+                        [{_,Stats}|_Rest] ->
+                            NodeString = proplists:get_value(fullsync_suggested, Stats),
+                            Nodes = string:tokens(NodeString,","),
+                            lager:info("Nodes = ~p",[Nodes]),
+                            length(Nodes) > 0
                     end
             end),
     ?assertEqual(ok, Res).
