@@ -457,3 +457,6 @@ whats_up() ->
 
 devpaths() ->
     lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))]).
+
+versions() ->
+    proplists:get_keys(rt:config(rtdev_path)) -- [root].
