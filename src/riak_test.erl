@@ -22,6 +22,9 @@
 -module(riak_test).
 -export([main/1]).
 
+%% Define the riak_test behavior
+-callback confirm() -> pass | fail.
+
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],

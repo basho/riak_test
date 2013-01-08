@@ -96,5 +96,5 @@ build "riak-1.0.3" $R14B03 http://s3.amazonaws.com/downloads.basho.com/riak/1.0/
 echo
 build "riak-1.1.4" $R14B04 http://s3.amazonaws.com/downloads.basho.com/riak/1.1/1.1.4/riak-1.1.4.tar.gz
 echo
-build "riak-1.2.0" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.2/1.2.0/riak-1.2.0.tar.gz
+build "riak-1.2.1" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.2/1.2.1/riak-1.2.1.tar.gz
 echo

@@ -60,6 +60,7 @@
          get_ring/1,
          get_version/0,
          heal/1,
+         home_dir/0,
          http_url/1,
          httpc/1,
          httpc_read/3,
@@ -107,6 +108,7 @@
          teardown/0,
          update_app_config/2,
          upgrade/2,
+         versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -127,10 +129,16 @@
          wait_until_transfers_complete/1,
          wait_until_unpingable/1,
          whats_up/0,
-         which/1
+         which/1,
+         brutal_kill/1
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
+
+%% @doc Return the home directory of the riak_test script.
+-spec home_dir() -> file:filename().
+home_dir() ->
+    filename:dirname(filename:absname(escript:script_name())).
 
 %% @doc gets riak deps from the appropriate harness
 -spec get_deps() -> list().
@@ -480,10 +488,6 @@ wait_until(Node, Fun, TimeoutFun) ->
     wait_until(Node, Fun, Retry, Delay, TimeoutFun).
 
 %% @deprecated Use {@link wait_until/2} instead.
-%% wait_until(Node, Fun, Retry) ->
-%%    wait_until(Node, Fun, Retry, 500).
-
-%% @deprecated Use {@link wait_until/2} instead.
 wait_until(Node, Fun, Retry, Delay, TimeoutFun) ->
     Pass = Fun(Node),
     case {Retry, Pass} of
@@ -639,6 +643,13 @@ wait_until_unpingable(Node) ->
     ?assertEqual(ok, wait_until(Node, F, TimeoutFun)),
     ok.
 
+% when you just can't wait
+brutal_kill(Node) ->
+   lager:info("Killing node ~p", [Node]),
+   OSPidToKill = rpc:call(Node, os, getpid, []),
+   rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+   ok.
+
 capability(Node, all) ->
     rpc:call(Node, riak_core_capability, all, []);
 capability(Node, Capability) ->
@@ -777,6 +788,8 @@ teardown() ->
     %% but not connected.
     ?HARNESS:teardown().
 
+versions() ->
+    ?HARNESS:versions().
 %%%===================================================================
 %%% Basic Read/Write Functions
 %%%===================================================================

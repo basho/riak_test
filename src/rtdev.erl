@@ -53,7 +53,19 @@ run_git(Path, Cmd) ->
 
 run_riak(N, Path, Cmd) ->
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
-    os:cmd(riakcmd(Path, N, Cmd)).
+    R = os:cmd(riakcmd(Path, N, Cmd)),
+    case Cmd of
+        "start" ->
+            case rt_intercept:are_intercepts_loaded(?DEV(N)) of
+                false ->
+                    ok = rt_intercept:load_intercepts([?DEV(N)]);
+                true ->
+                    ok
+            end,
+            R;
+        _ ->
+            R
+    end.
 
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
@@ -445,3 +457,6 @@ whats_up() ->
 
 devpaths() ->
     lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))]).
+
+versions() ->
+    proplists:get_keys(rt:config(rtdev_path)) -- [root].

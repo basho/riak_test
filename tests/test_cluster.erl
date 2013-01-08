@@ -18,7 +18,8 @@
 %%
 %% -------------------------------------------------------------------
 -module(test_cluster).
--compile(export_all).
+-behavior(riak_test).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->

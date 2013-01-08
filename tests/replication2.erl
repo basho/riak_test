@@ -1,4 +1,5 @@
 -module(replication2).
+-behavior(riak_test).
 -export([confirm/0]).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").

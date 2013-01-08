@@ -18,17 +18,24 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_capabilities).
+-behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 %% 1.3 {riak_kv, anti_entropy} -> [disabled, enabled_v1]
 confirm() ->
     lager:info("Deploying mixed set of nodes"),
-    Nodes = rt:deploy_nodes([current, previous, legacy]),
+    Legacy = case lists:member(legacy, rt:versions()) of
+        true -> legacy;
+        _ -> current
+    end,
+
+    Nodes = rt:deploy_nodes([current, previous, Legacy]),
     [CNode, PNode, LNode] = Nodes,
 
+    lager:info("Verifying known capabilities on a Current 1-node cluster"),
     lager:info("Verify staged_joins == true"),
-    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
     %% This test is written with the intent that 1.3 is 'current'
     CCapabilities = rt:capability(CNode, all),
@@ -52,79 +59,87 @@ confirm() ->
     assert_supported(CCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
 
     lager:info("Crash riak_core_capability server"),
-    crash_capability_server(CNode),
-    timer:sleep(1000),
+    restart_capability_server(CNode),
 
     lager:info("Verify staged_joins == true after crash"),
-    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
-    lager:info("Building current + legacy cluster"),
+    lager:info("Building current + ~s cluster", [Legacy]),
     rt:join(LNode, CNode),
     ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode])),
     ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
-    
-    LCapabilities = rt:capability(CNode, all),
-    assert_capability(LCapabilities, {riak_kv, legacy_keylisting}, false),
-    assert_capability(LCapabilities, {riak_kv, listkeys_backpressure}, true),
-    assert_capability(LCapabilities, {riak_core, staged_joins}, false),
-    assert_capability(LCapabilities, {riak_kv, index_backpressure}, false),
-    assert_capability(LCapabilities, {riak_pipe, trace_format}, sets),
-    assert_capability(LCapabilities, {riak_kv, mapred_2i_pipe}, true),
-    assert_capability(LCapabilities, {riak_kv, mapred_system}, pipe),
-    assert_capability(LCapabilities, {riak_kv, vnode_vclocks}, true),
-    assert_capability(LCapabilities, {riak_core, vnode_routing}, proxy),
-    assert_supported(LCapabilities, {riak_core, staged_joins}, [true,false]),
-    assert_supported(LCapabilities, {riak_core, vnode_routing}, [proxy,legacy]),
-    assert_supported(LCapabilities, {riak_kv, index_backpressure}, [true,false]),
-    assert_supported(LCapabilities, {riak_kv, legacy_keylisting}, [false]),
-    assert_supported(LCapabilities, {riak_kv, listkeys_backpressure}, [true,false]),
-    assert_supported(LCapabilities, {riak_kv, mapred_2i_pipe}, [true,false]),
-    assert_supported(LCapabilities, {riak_kv, mapred_system}, [pipe]),
-    assert_supported(LCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
-    assert_supported(LCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
+
+    case Legacy of
+        legacy ->
+            LCapabilities = rt:capability(CNode, all),
+            assert_capability(LCapabilities, {riak_kv, legacy_keylisting}, false),
+            assert_capability(LCapabilities, {riak_kv, listkeys_backpressure}, true),
+            assert_capability(LCapabilities, {riak_core, staged_joins}, false),
+            assert_capability(LCapabilities, {riak_kv, index_backpressure}, false),
+            assert_capability(LCapabilities, {riak_pipe, trace_format}, sets),
+            assert_capability(LCapabilities, {riak_kv, mapred_2i_pipe}, true),
+            assert_capability(LCapabilities, {riak_kv, mapred_system}, pipe),
+            assert_capability(LCapabilities, {riak_kv, vnode_vclocks}, true),
+            assert_capability(LCapabilities, {riak_core, vnode_routing}, proxy),
+            assert_supported(LCapabilities, {riak_core, staged_joins}, [true,false]),
+            assert_supported(LCapabilities, {riak_core, vnode_routing}, [proxy,legacy]),
+            assert_supported(LCapabilities, {riak_kv, index_backpressure}, [true,false]),
+            assert_supported(LCapabilities, {riak_kv, legacy_keylisting}, [false]),
+            assert_supported(LCapabilities, {riak_kv, listkeys_backpressure}, [true,false]),
+            assert_supported(LCapabilities, {riak_kv, mapred_2i_pipe}, [true,false]),
+            assert_supported(LCapabilities, {riak_kv, mapred_system}, [pipe]),
+            assert_supported(LCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
+            assert_supported(LCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
                     
-    lager:info("Crash riak_core_capability server"),
-    crash_capability_server(CNode),
-    timer:sleep(1000),
+            lager:info("Crash riak_core_capability server"),
+            restart_capability_server(CNode),
 
-    lager:info("Verify staged_joins == false after crash"),
-    ?assertEqual(false, rt:capability(CNode, {riak_core, staged_joins})),
+            lager:info("Verify staged_joins == false after crash"),
+            ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, false)),
 
-    lager:info("Adding previous node to cluster"),
-    rt:join(PNode, LNode),
-    ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
-    ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
+            lager:info("Adding previous node to cluster"),
+            rt:join(PNode, LNode),
+            ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
+            ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
-    lager:info("Verify staged_joins == true after crash"),
-    ?assertEqual(false, rt:capability(CNode, {riak_core, staged_joins})),
-    
-    PCapabilities = rt:capability(CNode, all),
-    assert_capability(PCapabilities, {riak_kv, legacy_keylisting}, false),
-    assert_capability(PCapabilities, {riak_kv, listkeys_backpressure}, true),
-    assert_capability(PCapabilities, {riak_core, staged_joins}, false),
-    assert_capability(PCapabilities, {riak_kv, index_backpressure}, false),
-    assert_capability(PCapabilities, {riak_pipe, trace_format}, sets),
-    assert_capability(PCapabilities, {riak_kv, mapred_2i_pipe}, true),
-    assert_capability(PCapabilities, {riak_kv, mapred_system}, pipe),
-    assert_capability(PCapabilities, {riak_kv, vnode_vclocks}, true),
-    assert_capability(PCapabilities, {riak_core, vnode_routing}, proxy),
-    assert_supported(PCapabilities, {riak_core, staged_joins}, [true,false]),
-    assert_supported(PCapabilities, {riak_core, vnode_routing}, [proxy,legacy]),
-    assert_supported(PCapabilities, {riak_kv, index_backpressure}, [true,false]),
-    assert_supported(PCapabilities, {riak_kv, legacy_keylisting}, [false]),
-    assert_supported(PCapabilities, {riak_kv, listkeys_backpressure}, [true,false]),
-    assert_supported(PCapabilities, {riak_kv, mapred_2i_pipe}, [true,false]),
-    assert_supported(PCapabilities, {riak_kv, mapred_system}, [pipe]),
-    assert_supported(PCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
-    assert_supported(PCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
+            lager:info("Verify staged_joins == false after crash"),
+            ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, false)),
+            
+            PCapabilities = rt:capability(CNode, all),
+            assert_capability(PCapabilities, {riak_kv, legacy_keylisting}, false),
+            assert_capability(PCapabilities, {riak_kv, listkeys_backpressure}, true),
+            assert_capability(PCapabilities, {riak_core, staged_joins}, false),
+            assert_capability(PCapabilities, {riak_kv, index_backpressure}, false),
+            assert_capability(PCapabilities, {riak_pipe, trace_format}, sets),
+            assert_capability(PCapabilities, {riak_kv, mapred_2i_pipe}, true),
+            assert_capability(PCapabilities, {riak_kv, mapred_system}, pipe),
+            assert_capability(PCapabilities, {riak_kv, vnode_vclocks}, true),
+            assert_capability(PCapabilities, {riak_core, vnode_routing}, proxy),
+            assert_supported(PCapabilities, {riak_core, staged_joins}, [true,false]),
+            assert_supported(PCapabilities, {riak_core, vnode_routing}, [proxy,legacy]),
+            assert_supported(PCapabilities, {riak_kv, index_backpressure}, [true,false]),
+            assert_supported(PCapabilities, {riak_kv, legacy_keylisting}, [false]),
+            assert_supported(PCapabilities, {riak_kv, listkeys_backpressure}, [true,false]),
+            assert_supported(PCapabilities, {riak_kv, mapred_2i_pipe}, [true,false]),
+            assert_supported(PCapabilities, {riak_kv, mapred_system}, [pipe]),
+            assert_supported(PCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
+            assert_supported(PCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
 
-    lager:info("Upgrade Legacy node"),
-    rt:upgrade(LNode, current),
-    ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
-    ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
+            lager:info("Upgrade Legacy node"),
+            rt:upgrade(LNode, current),
+            ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
+            ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
+            lager:info("Verify staged_joins == true after upgrade of legacy -> current");
+        _ ->
+            lager:info("Legacy Riak not available, skipping legacy tests"),
+            lager:info("Adding previous node to cluster"),
+            rt:join(PNode, LNode),
+            ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
+            ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
+            lager:info("Verify staged_joins == true after adding previous")
+    end,
 
-    lager:info("Verify staged_joins == true after upgrade of legacy -> current"),
-    ?assertEqual(true, rt:capability(CNode, {riak_core, staged_joins})),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
     PCap2 = rt:capability(CNode, all),
     assert_capability(PCap2, {riak_kv, legacy_keylisting}, false),
@@ -220,7 +235,16 @@ assert_supported(Capabilities, Capability, Value) ->
     lager:info("Checking Capability Supported Values ~p =:= ~p", [Capability, Value]),
     ?assertEqual(Value, proplists:get_value(Capability, proplists:get_value('$supported', Capabilities))).
     
-crash_capability_server(Node) ->
+restart_capability_server(Node) ->
     Pid = rpc:call(Node, erlang, whereis, [riak_core_capability]),
-    rpc:call(Node, erlang, exit, [Pid, kill]).
+    rpc:call(Node, erlang, exit, [Pid, kill]),
+    HasNewPid =
+        fun(N) ->
+            case rpc:call(N, erlang, whereis, [riak_core_capability]) of
+                Pid -> false;
+                NewPid when is_pid(NewPid) -> true;
+                _ -> false
+            end
+        end,
+    rt:wait_until(Node, HasNewPid).
 

@@ -18,6 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 -module(riaknostic_rt).
+-behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 

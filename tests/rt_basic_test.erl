@@ -18,6 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 -module(rt_basic_test).
+-behavior(riak_test).
 -export([confirm/0]).
 
 confirm() ->
