@@ -27,17 +27,26 @@ get_suite(Platform) ->
     Name = kvc:path(project.name, Schema),
     lager:info("Retrieved Project: ~s", [Name]),
     Tests = kvc:path(project.tests, Schema),
-    [ {
-        binary_to_atom(kvc:path(name, Test), utf8),
-        [
-            {id, kvc:path(id, Test)},
-            {backend, case kvc:path(tags.backend, Test) of [] -> undefined; X -> binary_to_atom(X, utf8) end},
-            {platform, list_to_binary(Platform)},
-            {version, rt:get_version()},
-            {project, Name}
-        ]
-      } || Test <- Tests].
-    
+    TestProps  =
+        fun(Test) ->
+            [
+                {id, kvc:path(id, Test)},
+                {backend,
+                 case kvc:path(tags.backend, Test) of
+                     [] -> undefined;
+                     X -> binary_to_atom(X, utf8)
+                 end},
+                {platform, list_to_binary(Platform)},
+                {version, rt:get_version()},
+                {project, Name}
+            ] ++
+            case kvc:path(tags.upgrade_version, Test) of
+                [] -> [];
+                UpgradeVsn -> [{upgrade_version, binary_to_atom(UpgradeVsn, utf8)}]
+            end
+        end,
+    [ { binary_to_atom(kvc:path(name, Test), utf8), TestProps(Test) } || Test <- Tests].
+
 get_schema(Platform) ->
     Host = rt:config(giddyup_host),
     Project = rt:config(rt_project),
