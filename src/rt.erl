@@ -129,7 +129,8 @@
          wait_until_transfers_complete/1,
          wait_until_unpingable/1,
          whats_up/0,
-         which/1
+         which/1,
+         brutal_kill/1
         ]).
 
 -define(HARNESS, (rt:config(rt_harness))).
@@ -641,6 +642,13 @@ wait_until_unpingable(Node) ->
         end,
     ?assertEqual(ok, wait_until(Node, F, TimeoutFun)),
     ok.
+
+% when you just can't wait
+brutal_kill(Node) ->
+   lager:info("Killing node ~p", [Node]),
+   OSPidToKill = rpc:call(Node, os, getpid, []),
+   rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+   ok.
 
 capability(Node, all) ->
     rpc:call(Node, riak_core_capability, all, []);
