@@ -497,7 +497,7 @@ wait_until(Node, Fun, Retry, Delay, TimeoutFun) ->
             TimeoutFun(Node);
         _ ->
             timer:sleep(Delay),
-            wait_until(Node, Fun, Retry-1)
+            wait_until(Node, Fun, Retry-1, Delay, TimeoutFun)
     end.
 
 %% @doc Wait until the specified node is considered ready by `riak_core'.
