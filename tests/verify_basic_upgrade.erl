@@ -41,7 +41,7 @@ confirm() ->
 upgrade(Node, NewVsn) ->
     lager:info("Upgrading ~p to ~p", [Node, NewVsn]),
     rt:upgrade(Node, NewVsn),
-    timer:sleep(1000),
+    rt:wait_for_service(Node, riak_kv),
     lager:info("Ensuring keys still exist"),
     rt:systest_read(Node, 100, 1),
     ?assertEqual([], rt:systest_read(Node, 100, 1)),
