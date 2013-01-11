@@ -107,6 +107,9 @@ verify_recursive_countdown_1([RN|_]) ->
 
 verify_recursive_countdown_2([RN|_]) ->
     lager:info("Verify nondeterministic recurse_input"),
+    verify_recursive_countdown_2(RN, 10).
+
+verify_recursive_countdown_2(RN, Retries) when Retries > 0 ->
     Spec = [#fitting_spec{name=counter,
                           module=riak_pipe_w_rec_countdown,
                           arg=testeoi}],
@@ -118,17 +121,16 @@ verify_recursive_countdown_2([RN|_]) ->
     ?assertEqual([{counter,0},{counter,0},{counter,0},
                   {counter,1},{counter,2},{counter,3}],
                  Res),
-    try
-        [{counter,
-          {trace,[restart],{vnode,{restart,_}}}}] = Trc
-    catch error:{badmatch,[]} ->
-            %% If `Trace' is empty, the done/eoi race was
-            %% not triggered.  So, in theory, we should
-            %% re-run the test.  Except that EUnit tests
-            %% aren't good at checking non-deterministic
-            %% tests.
-            lager:warning("Warning: recursive countdown test"
-                          " #2 did not trigger the done/eoi"
-                          " race it tests."
-                          " Consider re-running.")
-    end.
+    case Trc of
+        [{counter,{trace,[restart],{vnode,{restart,_}}}}] ->
+            ok;
+        [] ->
+            lager:info("recursive countdown test #2 did not"
+                       " trigger the done/eoi race it tests."
+                       " Retries left: ~b", [Retries-1]),
+            verify_recursive_countdown_2(RN, Retries-1)
+    end;
+verify_recursive_countdown_2(_, _) ->
+    lager:warning("recursive countdown test #2 did not"
+                  " trigger the done/eoi race it tests."
+                  " Consider re-running.").

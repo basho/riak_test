@@ -447,7 +447,9 @@ send_100_100(Pipe) ->
 
 verify_queue_limit([RN|_]) ->
     lager:info("Verify queue size limits are enforced"),
+    verify_queue_limit(RN, 10).
 
+verify_queue_limit(RN, Retries) when Retries > 0 ->
     {eoi, Res, Trace} =
         rpc:call(RN, riak_pipe, generic_transform,
                  [fun sleep1fun/1,
@@ -464,10 +466,13 @@ verify_queue_limit([RN|_]) ->
     
     case Full of
         [] ->
-            lager:warning("Queues were never full; consider rerunning");
+            lager:info("Queues were never full; Retries left: ~b",
+                       [Retries-1]);
         _ ->
             ok
-    end.
+    end;
+verify_queue_limit(_, _) ->
+    lager:warning("Queues were never full; Consider re-running.").
 
 %% IMPORTANT: this test must be run on a ONE-node cluster, because
 %% riak_pipe_w_crash uses ETS to determine a "restart" situation, and
