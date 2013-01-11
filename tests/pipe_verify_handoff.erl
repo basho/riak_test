@@ -45,7 +45,8 @@
          confirm/0,
          
          %% test machinery
-         runner_wait/1
+         runner_wait/1,
+         collector/0
         ]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -95,28 +96,14 @@ confirm() ->
     P1Status1 = pipe_status(Primary, Pipe1),
     P2Status1 = pipe_status(Primary, Pipe2),
 
-    lager:info("Enable tracing"),
-    %% We seem to have lots of SMP racing games when
-    %% using riak_core_tracer.
-    rpc:call(Primary, erlang, system_flag, [multi_scheduling, block]),
+    lager:info("Start and register intercept log collector"),
+    Collector = spawn_link(Primary, ?MODULE, collector, []),
+    rpc:call(Primary, erlang, register, [riak_test_collector, Collector]),
 
-    %% The ?T() macro is a bit annoying here, because we
-    %% need to know the #fitting_details in order to use
-    %% it.  But the tracing that I'd like to do at the
-    %% vnode level doesn't have that record available to
-    %% it, and it looks like it's a royal pain to add it.
-    %% So we'll steal something from Jon's playbook and
-    %% use riak_core_tracer instead.
-    rpc:call(Primary, riak_core_tracer, start_link, []),
-    rpc:call(Primary, riak_core_tracer, reset, []),
-    rpc:call(Primary, riak_core_tracer, filter,
-             [[{riak_pipe_vnode, handle_handoff_command}],
-              fun({trace, _Pid, call,
-                   {riak_pipe_vnode, handle_handoff_command,
-                    [Cmd, _Sender, _State]}}) ->
-                      element(1, Cmd)
-              end]),
-    rpc:call(Primary, riak_core_tracer, collect, [10*1000]),
+    lager:info("Install pipe vnode intercept"),
+    Intercept = {riak_pipe_vnode,
+                 [{{handle_handoff_command,3}, log_handoff_command}]},
+    ok = rt_intercept:add(Primary, Intercept),
 
     lager:info("Join Secondary to Primary"),
     %% Give slave a chance to start and master to notice it.
@@ -154,10 +141,8 @@ confirm() ->
 
     %% VM trace verification
     timer:sleep(1000),
-    lager:info("Stop and collect traces"),
-    rpc:call(Primary, riak_core_tracer, stop_collect, []),
-    PTraces = rpc:call(Primary, riak_core_tracer, results, []),
-    rpc:call(Primary, erlang, system_flag, [multi_scheduling, unblock]),
+    lager:info("Collect intercept log"),
+    PTraces = get_collection(Collector),
 
     %% time to compare things
 
@@ -178,8 +163,8 @@ confirm() ->
                                    P1MovedPrimaryToSecondary,
                                    P2MovedPrimaryToSecondary),
 
-    PFoldReqs = [X || {_, riak_core_fold_req_v1}=X <- PTraces],
-    PArchives = [X || {_, cmd_archive}=X <- PTraces],
+    PFoldReqs = [X || riak_core_fold_req_v1=X <- PTraces],
+    PArchives = [X || cmd_archive=X <- PTraces],
 
     %% number of active vnodes migrating from Primary to Secondary,
     %% should be one fold per move, otherwise inputs were directed
@@ -254,3 +239,21 @@ partitions_on_node(Node, PipeStatus) ->
 pipe_status(Node, Pipe) ->
     [{_Name, Status}] = rpc:call(Node, riak_pipe, status, [Pipe]),
     Status.
+
+%% @doc entry point for collector process
+collector() ->
+    collector([]).
+collector(Acc) ->
+    receive
+        {send_collection, Ref, Pid} ->
+            Pid ! {collection, Ref, lists:reverse(Acc)};
+        Any ->
+            collector([Any|Acc])
+    end.
+
+get_collection(Collector) ->
+    Ref = make_ref(),
+    Collector ! {send_collection, Ref, self()},
+    receive {collection, Ref, Collection} ->
+            Collection
+    end.
