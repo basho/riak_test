@@ -37,6 +37,7 @@ add(Node, {Target, Intercept, Mapping}) ->
     ok = rpc:call(Node, intercept, add, [Target, Intercept, Mapping]).
 
 remote_compile_and_load(Node, F) ->
+    rt:wait_until_pingable(Node),
     lager:info("Compiling and loading file ~s on node ~s", [F, Node]),
     {ok, _, Bin} = rpc:call(Node, compile, file, [F, [binary]]),
     ModName = list_to_atom(filename:basename(F, ".erl")),
