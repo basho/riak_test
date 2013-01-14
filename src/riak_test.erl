@@ -41,6 +41,7 @@ cli_options() ->
  {verbose,            $v, "verbose",          undefined,        "verbose output"},
  {outdir,             $o, "outdir",           string,           "output directory"},
  {backend,            $b, "backend",          atom,             "backend to test [memory | bitcask | eleveldb]"},
+ {upgrade_version,    $u, "upgrade",  atom,                     "which version to upgrade from [ previous | legacy ]"},
  {report,             $r, "report",           string,           "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~~/.riak_test.config"}
 ].
 
@@ -151,6 +152,10 @@ parse_command_line_tests(ParsedArgs) ->
         [] -> [undefined];
         Other -> Other
     end,
+    Upgrades = case proplists:get_all_values(upgrade_version, ParsedArgs) of
+                   [] -> [undefined];
+                   UpgradeList -> UpgradeList
+               end,
     %% Parse Command Line Tests
     SpecificTests = proplists:get_all_values(tests, ParsedArgs),
     Dirs = proplists:get_all_values(dir, ParsedArgs),
@@ -161,29 +166,45 @@ parse_command_line_tests(ParsedArgs) ->
               [
                   {id, -1},
                   {backend, Backend},
+                  {upgrade_version, Upgrade},
                   {platform, <<"local">>},
                   {version, rt:get_version()},
                   {project, list_to_binary(rt:config(rt_project, "undefined"))}
               ]
-            } || Backend <- Backends ] ++ Tests
+            } || Backend <- Backends,
+                 Upgrade <- Upgrades ] ++ Tests
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
 which_tests_to_run(undefined, CommandLineTests) -> CommandLineTests;
 which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
 which_tests_to_run(Platform, CommandLineTests) ->
-    lists:foldl(fun({Module, SMeta, CMeta}, Tests) ->
-            case {kvc:path(backend, SMeta), kvc:path(backend, CMeta)} of
-                {_X, undefined} -> [{Module, SMeta}|Tests];
-                {undefined, X} -> [{Module, [{backend, X}|proplists:delete(backend, SMeta)]}|Tests];
-                {_X, _X} -> [{Module, SMeta}|Tests];
-                _ -> Tests
-            end
-        end, 
-        [], 
+    Suite = filter_zip_suite(Platform, CommandLineTests),
+    lists:foldr(fun filter_merge_tests/2, [], Suite).
+
+filter_zip_suite(Platform, CommandLineTests) ->
         [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform), 
                                      {CModule, CMeta} <- CommandLineTests, 
-                                     SModule =:= CModule]
-    ).
+                                     SModule =:= CModule].
+
+filter_merge_tests({Module, SMeta, CMeta}, Tests) ->
+    case filter_merge_meta(SMeta, CMeta, [backend, upgrade_version]) of
+        false ->
+            Tests;
+        Meta ->
+            [{Module, Meta}|Tests]
+    end.
+
+filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
+    case {kvc:path(Field, SMeta), kvc:path(Field, CMeta)} of
+        {X, X} ->
+            filter_merge_meta(SMeta, CMeta, Rest);
+        {_, undefined} ->
+            filter_merge_meta(SMeta, CMeta, Rest);
+        {undefined, X} ->
+            filter_merge_meta(lists:keystore(Field, 1, SMeta, {Field, X}), CMeta, Rest);
+        _ ->
+            false
+    end.
 
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
