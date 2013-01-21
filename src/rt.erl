@@ -601,6 +601,14 @@ wait_until_status_ready(Node) ->
                                         end
                                 end)).
 
+-spec no_pending_changes([node()]) -> true | false.
+no_pending_changes(Nodes) ->
+    rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
+    {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
+    Changes = [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
+    BadNodes =:= [] andalso length(Changes) =:= length(Nodes)
+        andalso lists:all(fun(T) -> T end, Changes).
+
 %% @doc Given a list of nodes, wait until all nodes believe there are no
 %% on-going or pending ownership transfers.
 -spec wait_until_no_pending_changes([node()]) -> ok | fail.
@@ -1028,6 +1036,7 @@ clean_data_dir(Nodes) ->
 clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
     clean_data_dir([Nodes], SubDir);
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    lager:info("Wiping data directory ~s clean for ~p", [SubDir, Nodes]),
     ?HARNESS:clean_data_dir(Nodes, SubDir).
 
 %% @doc Shutdown every node, this is for after a test run is complete.
