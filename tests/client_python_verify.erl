@@ -71,5 +71,5 @@ prereqs() ->
     rt:stream_cmd(TagCmd, [{cd, ?PYTHON_CHECKOUT}]),
 
     lager:info("[PREREQ] Installing an isolated environment with virtualenv in ~s", [?PYTHON_CHECKOUT]),
-    rt:stream_cmd("virtualenv --clear --no-site-packages .", [{cd, ?PYTHON_CHECKOUT}]),
+    rt:stream_cmd("virtualenv --clear --no-site-packages -P `which python` .", [{cd, ?PYTHON_CHECKOUT}]),
     ok.
