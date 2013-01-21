@@ -49,7 +49,8 @@ prereqs() ->
 
     %% Python should be at least 2.6, but not 3.x
     lager:info("[PREREQ] Checking for python version >= 2.6, < 3.0"),
-    "Python 2." ++ [Minor|_] = os:cmd("python -V"),
+    "Python 2." ++ [Minor|_] = Version = os:cmd("python -V"),
+    lager:info("[PREREQ] Got python version: ~s", [Version]),
     ?assert(Minor =:= $6 orelse Minor =:= $7),
 
     %% Need setuptools too
