@@ -497,7 +497,7 @@ wait_until(Node, Fun, Retry, Delay, TimeoutFun) ->
             TimeoutFun(Node);
         _ ->
             timer:sleep(Delay),
-            wait_until(Node, Fun, Retry-1)
+            wait_until(Node, Fun, Retry-1, Delay, TimeoutFun)
     end.
 
 %% @doc Wait until the specified node is considered ready by `riak_core'.
@@ -759,10 +759,11 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     [join(Node, Node1) || Node <- OtherNodes],
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
-    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
 
     %% Ensure each node owns a portion of the ring
     wait_until_nodes_agree_about_ownership(Nodes),
+    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
+
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
 

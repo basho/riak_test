@@ -34,6 +34,10 @@ checkbuild()
         else
             if [ ! -x kerl ]; then
                 echo "   - Fetching kerl."
+                if [ ! `which curl` ]; then
+                    echo "You need 'curl' to be able to run this script, exiting"
+                    exit 1
+                fi
                 curl -O https://raw.github.com/spawngrid/kerl/master/kerl > /dev/null 2>&1; chmod a+x kerl
             fi
         fi

@@ -23,25 +23,40 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+    TestMetaData = riak_test_runner:metadata(),
     Count = 4,
-    OldVsn = "1.1.4",
+    OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
+
+    ExpectedCurrent = [{riak_core, vnode_routing, proxy},
+                       {riak_core, staged_joins, true},
+                       {riak_kv, legacy_keylisting, false},
+                       {riak_kv, listkeys_backpressure, true},
+                       {riak_kv, mapred_2i_pipe, true},
+                       {riak_kv, mapred_system, pipe},
+                       {riak_kv, vnode_vclocks, true},
+                       {riak_kv, anti_entropy, enabled_v1}],
+
     %% Assuming default 1.1.4 app.config settings, the only difference
     %% between rolling and upgraded should be 'staged_joins'. Explicitly
     %% test rolling values to ensure we don't fallback to default settings.
-    ExpectedOld = [{riak_core, vnode_routing, proxy},
-                   {riak_core, staged_joins, false},
-                   {riak_kv, legacy_keylisting, false},
-                   {riak_kv, listkeys_backpressure, true},
-                   {riak_kv, mapred_2i_pipe, true},
-                   {riak_kv, mapred_system, pipe},
-                   {riak_kv, vnode_vclocks, true}],
-    ExpectedNew = [{riak_core, vnode_routing, proxy},
-                   {riak_core, staged_joins, true},
-                   {riak_kv, legacy_keylisting, false},
-                   {riak_kv, listkeys_backpressure, true},
-                   {riak_kv, mapred_2i_pipe, true},
-                   {riak_kv, mapred_system, pipe},
-                   {riak_kv, vnode_vclocks, true}],
+    ExpectedOld = case OldVsn of
+        legacy ->   [{riak_core, vnode_routing, proxy},
+                     {riak_core, staged_joins, false},
+                     {riak_kv, legacy_keylisting, false},
+                     {riak_kv, listkeys_backpressure, true},
+                     {riak_kv, mapred_2i_pipe, true},
+                     {riak_kv, mapred_system, pipe},
+                     {riak_kv, vnode_vclocks, true}];
+        previous -> [{riak_core, vnode_routing, proxy},
+                     {riak_core, staged_joins, true},
+                     {riak_kv, legacy_keylisting, false},
+                     {riak_kv, listkeys_backpressure, true},
+                     {riak_kv, mapred_2i_pipe, true},
+                     {riak_kv, mapred_system, pipe},
+                     {riak_kv, vnode_vclocks, true}];
+        _ -> []
+    end,
+    
     lager:info("Deploying Riak ~p cluster", [OldVsn]),
     Nodes = rt:build_cluster([OldVsn || _ <- lists:seq(1,Count)]),
     lists:foldl(fun(Node, Upgraded) ->
@@ -53,12 +68,18 @@ confirm() ->
                         Upgraded2
                 end, [], Nodes),
     lager:info("Verifying final/upgraded capabilities"),
-    check_capabilities(Nodes, ExpectedNew),
+    check_capabilities(Nodes, ExpectedCurrent),
     lager:info("Test ~p passed", [?MODULE]),
     pass.
 
 check_capabilities(Nodes, Expected) ->
-    [?assertEqual(ok, rt:wait_until_capability(Node, {App, Cap}, Val))
-     || {App, Cap, Val} <- Expected,
-        Node <- Nodes],
+
+    CapCheck = fun(Node) ->
+        Caps = rt:capability(Node, all),
+        Results = [ proplists:get_value({ExpProj, ExpCap}, Caps) =:= ExpVal || {ExpProj, ExpCap, ExpVal} <- Expected ],
+        lists:all(fun(X) -> X =:= true end, Results)
+    end,
+
+    [?assertEqual(ok, rt:wait_until(N, CapCheck)) || N <- Nodes],
     ok.
+
