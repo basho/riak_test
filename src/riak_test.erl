@@ -33,16 +33,16 @@ add_deps(Path) ->
 cli_options() ->
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
 [
- {help,               $h, "help",             undefined,        "Print this usage page"},
- {config,             $c, "conf",             string,           "specifies the project configuration"},
- {tests,              $t, "tests",            string,           "specifies which tests to run"},
- {suites,             $s, "suites",           string,           "which suites to run"},
- {dir,                $d, "dir",              string,           "run all tests in the specified directory"},
- {verbose,            $v, "verbose",          undefined,        "verbose output"},
- {outdir,             $o, "outdir",           string,           "output directory"},
- {backend,            $b, "backend",          atom,             "backend to test [memory | bitcask | eleveldb]"},
- {upgrade_version,    $u, "upgrade",  atom,                     "which version to upgrade from [ previous | legacy ]"},
- {report,             $r, "report",           string,           "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~~/.riak_test.config"}
+ {help,               $h, "help",     undefined,  "Print this usage page"},
+ {config,             $c, "conf",     string,     "specifies the project configuration"},
+ {tests,              $t, "tests",    string,     "specifies which tests to run"},
+ {suites,             $s, "suites",   string,     "which suites to run"},
+ {dir,                $d, "dir",      string,     "run all tests in the specified directory"},
+ {verbose,            $v, "verbose",  undefined,  "verbose output"},
+ {outdir,             $o, "outdir",   string,     "output directory"},
+ {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
+ {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
+ {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~~/.riak_test.config"}
 ].
 
 print_help() ->
@@ -55,7 +55,7 @@ run_help(ParsedArgs) ->
     lists:member(help, ParsedArgs).
 
 main(Args) ->
-    register(riak_test, self()), 
+    register(riak_test, self()),
     {ParsedArgs, HarnessArgs} = case getopt:parse(cli_options(), Args) of
         {ok, {P, H}} -> {P, H};
         _ -> print_help()
@@ -137,9 +137,9 @@ main(Args) ->
 
     TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests]),
     print_summary(TestResults, Verbose),
-    
+
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
-        {1, fail} -> 
+        {1, fail} ->
             so_kill_riak_maybe();
         _ ->
             lager:info("Multiple tests run or no failure"),
@@ -182,8 +182,8 @@ which_tests_to_run(Platform, CommandLineTests) ->
     lists:foldr(fun filter_merge_tests/2, [], Suite).
 
 filter_zip_suite(Platform, CommandLineTests) ->
-        [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform), 
-                                     {CModule, CMeta} <- CommandLineTests, 
+        [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform),
+                                     {CModule, CMeta} <- CommandLineTests,
                                      SModule =:= CModule].
 
 filter_merge_tests({Module, SMeta, CMeta}, Tests) ->
@@ -283,7 +283,7 @@ so_kill_riak_maybe() ->
     case Input of
         "n" -> rt:teardown();
         "N" -> rt:teardown();
-        _ -> 
+        _ ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
-    end. 
+    end.
