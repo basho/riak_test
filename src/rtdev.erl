@@ -132,6 +132,7 @@ upgrade(Node, NewVersion) ->
     VersionMap = orddict:store(N, NewVersion, rt:config(rt_versions)),
     rt:set_config(rt_versions, VersionMap),
     start(Node),
+    rt:wait_until_pingable(Node),
     ok.
 
 all_the_app_configs(DevPath) ->
