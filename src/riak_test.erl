@@ -165,14 +165,14 @@ parse_command_line_tests(ParsedArgs) ->
               list_to_atom(Test),
               [
                   {id, -1},
-                  {backend, Backend},
-                  {upgrade_version, Upgrade},
                   {platform, <<"local">>},
                   {version, rt:get_version()},
                   {project, list_to_binary(rt:config(rt_project, "undefined"))}
-              ]
-            } || Backend <- Backends,
-                 Upgrade <- Upgrades ] ++ Tests
+              ] ++
+              [ {backend, Backend} || Backend =/= undefined ] ++
+              [ {upgrade_version, Upgrade} || Upgrade =/= undefined ]}
+             || Backend <- Backends,
+                Upgrade <- Upgrades ] ++ Tests
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
 which_tests_to_run(undefined, CommandLineTests) -> CommandLineTests;
