@@ -598,6 +598,14 @@ wait_until_status_ready(Node) ->
                                         end
                                 end)).
 
+-spec no_pending_changes([node()]) -> true | false.
+no_pending_changes(Nodes) ->
+    rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
+    {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
+    Changes = [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
+    BadNodes =:= [] andalso length(Changes) =:= length(Nodes)
+        andalso lists:all(fun(T) -> T end, Changes).
+
 %% @doc Given a list of nodes, wait until all nodes believe there are no
 %% on-going or pending ownership transfers.
 -spec wait_until_no_pending_changes([node()]) -> ok | fail.
@@ -834,7 +842,7 @@ wait_until_aae_trees_built(Nodes) ->
                 true ->
                     lager:debug("Check if really built by locking"),
                     %% Try to lock each partition. If you get not_built,
-                    %% the manager has not detected the built process has 
+                    %% the manager has not detected the built process has
                     %% died yet.
                     %% Notice that the process locking is spawned by the
                     %% pmap. That's important! as it should die eventually
@@ -856,7 +864,7 @@ wait_until_aae_trees_built(Nodes) ->
                     AllBuilt =
                     lists:all(fun(V) -> V == true end,
                               rt:pmap(IdxBuilt, Partitions)),
-                    lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),  
+                    lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),
                     AllBuilt
             end
     end,
@@ -994,6 +1002,7 @@ clean_data_dir(Nodes) ->
 clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
     clean_data_dir([Nodes], SubDir);
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    lager:info("Wiping data directory ~s clean for ~p", [SubDir, Nodes]),
     ?HARNESS:clean_data_dir(Nodes, SubDir).
 
 %% @doc Shutdown every node, this is for after a test run is complete.
@@ -1564,4 +1573,3 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
-
