@@ -10,19 +10,8 @@
              wait_until_no_pending_changes/1]).
 
 confirm() ->
-    %% TODO: Don't hardcode # of nodes
-    NumNodes = 6,
-    ClusterASize = list_to_integer(get_os_env("CLUSTER_A_SIZE", "3")),
-    %% ClusterBSize = NumNodes - ClusterASize,
-    %% ClusterBSize = list_to_integer(get_os_env("CLUSTER_B_SIZE"), "2"),
-
-    %% Nodes = rt:nodes(NumNodes),
-    %% lager:info("Create dirs"),
-    %% create_dirs(Nodes),
-
-    %% Backends now configured via cli or giddyup
-    %%Backend = list_to_atom(get_os_env("RIAK_BACKEND",
-    %%        "riak_kv_bitcask_backend")),
+    NumNodes = rt:config(num_nodes, 6),
+    ClusterASize = rt:config(cluster_a_size, 3),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
@@ -34,15 +23,6 @@ confirm() ->
     ],
 
     Nodes = deploy_nodes(NumNodes, Conf),
-    %%Nodes = rt:deploy_nodes([
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf}
-    %%    ]),
-
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
@@ -492,18 +472,6 @@ get_listeners(Node) ->
 
 gen_ports(Start, Len) ->
     lists:seq(Start, Start + Len - 1).
-
-get_os_env(Var) ->
-    case get_os_env(Var, undefined) of
-        undefined -> exit({os_env_var_undefined, Var});
-        Value -> Value
-    end.
-
-get_os_env(Var, Default) ->
-    case os:getenv(Var) of
-        false -> Default;
-        Value -> Value
-    end.
 
 verify_site_ips(Leader, Site, Listeners) ->
     Status = rpc:call(Leader, riak_repl_console, status, [quiet]),
