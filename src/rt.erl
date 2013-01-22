@@ -852,7 +852,7 @@ pbc(Node) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, IP} = rpc:call(Node, application, get_env, [riak_api, pb_ip]),
     {ok, PBPort} = rpc:call(Node, application, get_env, [riak_api, pb_port]),
-    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
+    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, [{auto_reconnect, true}]),
     Pid.
 
 %% @doc does a read via the erlang protobuf client

@@ -23,6 +23,9 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 -define(SPAM_BUCKET, <<"scotts_spam">>).
+-define(MAX_LIST_KEYS_ATTEMPTS, 4).
+-define(MAX_CLIENT_RECONNECT_ATTEMPTS, 100).
+-define(CLIENT_RECONNECT_INTERVAL, 100).
 
 %% @doc This test requires additional setup, here's how to do it.
 %% 1. Clone and build basho_bench
@@ -62,7 +65,7 @@ verify_upgrade() ->
     ?assertEqual([], rt:systest_read(Node1, 100, 1)),
 
     lager:info("Checking list_keys count periodically throughout this test."),
-    spawn_link(?MODULE, check_list_keys, [rt:pbc(Node1)]), 
+    spawn_link(?MODULE, check_list_keys, [Node1]),
 
     Conns = rt:connection_info(Nodes),
     NodeConn = proplists:get_value(Node1, Conns),
@@ -105,17 +108,53 @@ verify_upgrade() ->
 %% ===================================================================
 %% List Keys Tester
 %% ===================================================================
-check_list_keys(Pid) ->
-    check_list_keys(Pid, 0).
+
+check_list_keys(Node) ->
+    check_list_keys(rt:pbc(Node), 0).
+
 check_list_keys(Pid, Attempt) ->
     case Attempt rem 20 of
         0 -> lager:debug("Performing list_keys check #~p", [Attempt]);
         _ -> nothing
     end,
-    {ok, Keys} = riakc_pb_socket:list_keys(Pid, <<"systest">>),
+    {ok, Keys} = list_keys(Pid, <<"systest">>),
     ?assertEqual(100, length(Keys)),
     timer:sleep(3000),
     check_list_keys(Pid, Attempt + 1).
+
+%% List keys with time out recovery.
+list_keys(Pid, Bucket) ->
+    list_keys(Pid, Bucket, ?MAX_LIST_KEYS_ATTEMPTS,
+              riakc_pb_socket:default_timeout(list_keys_timeout)).
+
+list_keys(_, _, 0, _) ->
+    {error, "list_keys timed out too many times"};
+list_keys(Pid, Bucket, Attempts, TimeOut) ->
+    Res = riakc_pb_socket:list_keys(Pid, Bucket, TimeOut),
+    case Res of
+        {error, Err} when Err =:= timeout; is_tuple(Err), element(1, Err) == timeout ->
+            ?assertMatch(ok, wait_for_reconnect(Pid)),
+            NewAttempts = Attempts - 1,
+            NewTimeOut = TimeOut * 2,
+            lager:info("List keys timed out, trying ~p more times, new time out = ~p",
+                       [NewAttempts, NewTimeOut]),
+            list_keys(Pid, Bucket, NewAttempts, NewTimeOut);
+        _ -> Res
+    end.
+
+
+wait_for_reconnect(Pid) ->
+    wait_for_reconnect(Pid, ?MAX_CLIENT_RECONNECT_ATTEMPTS, ?CLIENT_RECONNECT_INTERVAL).
+
+wait_for_reconnect(Pid, 0, _) ->
+    lager:error("Could not reconnect client ~p to Riak after timed out list keys", [Pid]),
+    {error, pbc_client_reconnect_timed_out};
+wait_for_reconnect(Pid, Attempts, Delay) ->
+    timer:sleep(Delay),
+    case riakc_pb_socket:is_connected(Pid) of
+        true -> ok;
+        _ -> wait_for_reconnect(Pid, Attempts-1, Delay)
+    end.
 
 %% ===================================================================
 %% K/V Tester
