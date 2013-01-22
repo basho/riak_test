@@ -5,9 +5,7 @@
 
 %% Change when a new release comes out.
 -define(JAVA_FAT_BE_URL, rt:config(java.fat_be_url)).
--define(JAVA_FAT_FILENAME, lists:last(string:tokens(?JAVA_FAT_BE_URL, "/"))).
 -define(JAVA_TESTS_URL, rt:config(java.tests_url)).
--define(JAVA_TESTS_FILENAME, lists:last(string:tokens(?JAVA_TESTS_URL, "/"))).
 
 -prereq("java").
 -prereq("curl").
@@ -30,16 +28,19 @@ confirm() ->
 
 prereqs() ->
     %% Does you have the java client available?
-    you_got_jars(?JAVA_FAT_BE_URL, ?JAVA_FAT_FILENAME),
-    you_got_jars(?JAVA_TESTS_URL, ?JAVA_TESTS_FILENAME),
+    rt:download(?JAVA_FAT_BE_URL),
+    rt:download(?JAVA_TESTS_URL),
     ok.
 
 java_unit_tests(HTTP_Host, HTTP_Port, _PB_Host, PB_Port) ->
     lager:info("Run the Java unit tests from somewhere on the local machine."),
 
     %% run the following:
-    Cmd = io_lib:format("java -Dcom.basho.riak.host=~s -Dcom.basho.riak.http.port=~p -Dcom.basho.riak.pbc.port=~p -cp ~s:~s org.junit.runner.JUnitCore com.basho.riak.client.AllTests",
-        [HTTP_Host, HTTP_Port, PB_Port, rt:config(rt_scratch_dir) ++ "/" ++ ?JAVA_FAT_FILENAME, rt:config(rt_scratch_dir) ++ "/" ++ ?JAVA_TESTS_FILENAME]),
+    Cmd = io_lib:format(
+        "java -Dcom.basho.riak.host=~s -Dcom.basho.riak.http.port=~p -Dcom.basho.riak.pbc.port=~p -cp ~s:~s org.junit.runner.JUnitCore com.basho.riak.client.AllTests",
+        [HTTP_Host, HTTP_Port, PB_Port, 
+        rt:config(rt_scratch_dir) ++ "/" ++ rt:url_to_filename(?JAVA_FAT_BE_URL), 
+        rt:config(rt_scratch_dir) ++ "/" ++ rt:url_to_filename(?JAVA_TESTS_URL)]),
     lager:info("Cmd: ~s", [Cmd]),
 
     {ExitCode, JavaLog} = rt:stream_cmd(Cmd, [{cd, rt:config(rt_scratch_dir)}]),
@@ -47,15 +48,3 @@ java_unit_tests(HTTP_Host, HTTP_Port, _PB_Host, PB_Port) ->
     lager:info(JavaLog),
     ?assertNot(rt:str(JavaLog, "FAILURES!!!")),
     ok.
-    
-
-you_got_jars(Url, Filename) ->
-    case file:read_file_info(Filename) of
-        {ok, _} ->
-            lager:info("Got it ~p", [Filename]),
-            ok;
-        {error, _} ->
-            lager:info("Getting it ~p", [Filename]),
-            rt:stream_cmd("curl  -O -L " ++ Url, [{cd, rt:config(rt_scratch_dir)}]);
-        _ -> meh
-    end.
