@@ -194,8 +194,10 @@ filter_merge_tests({Module, SMeta, CMeta}, Tests) ->
             [{Module, Meta}|Tests]
     end.
 
+filter_merge_meta(SMeta, _CMeta, []) ->
+    SMeta;
 filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
-    case {kvc:path(Field, SMeta), kvc:path(Field, CMeta)} of
+    case {kvc:value(Field, SMeta, undefined), kvc:value(Field, CMeta, undefined)} of
         {X, X} ->
             filter_merge_meta(SMeta, CMeta, Rest);
         {_, undefined} ->
