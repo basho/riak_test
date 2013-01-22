@@ -53,6 +53,7 @@
          deploy_nodes/1,
          deploy_nodes/2,
          down/2,
+         download/1,
          enable_search_hook/2,
          get_deps/0,
          get_os_env/1,
@@ -108,6 +109,7 @@
          teardown/0,
          update_app_config/2,
          upgrade/2,
+         url_to_filename/1,
          versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
@@ -182,6 +184,20 @@ which(Command) ->
             true
     end.
 
+download(Url) ->
+    lager:info("Downloading ~s", [Url]),
+    Filename = url_to_filename(Url),
+    case filelib:is_file(filename:join(rt:config(rt_scratch_dir), Filename))  of
+        true ->
+            lager:info("Got it ~p", [Filename]),
+            ok;
+        _ ->
+            lager:info("Getting it ~p", [Filename]),
+            rt:stream_cmd("curl  -O -L " ++ Url, [{cd, rt:config(rt_scratch_dir)}])
+    end.
+
+url_to_filename(Url) ->
+    lists:last(string:tokens(Url, "/")).
 %% @doc like rt:which, but asserts on failure
 assert_which(Command) ->
     ?assert(rt:which(Command)).
