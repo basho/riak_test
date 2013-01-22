@@ -24,34 +24,35 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-	%Bring up a small cluster
-	[Node1] = rt:deploy_nodes(1),
-	?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
+    %% Bring up a small cluster
+    [Node1] = rt:deploy_nodes(1),
+    ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
-	lager:info("perform 5 x  PUT and a GET to increment the stats"),
+    lager:info("perform 5 x  PUT and a GET to increment the stats"),
     lager:info("as the stat system only does calcs for > 5 readings"),
-    %TODO: Add cats/pugs to test other stats
+
+    %% TODO: Add cats/pugs to test other stats
     C = rt:httpc(Node1),
     [rt:httpc_write(C, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
     [rt:httpc_read(C, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
     timer:sleep(10000),
     Stats = get_stats(Node1),
     Keys = [{vnodeGets,<<"vnode_gets">>},
-			    {vnodePuts,<<"vnode_puts">>},
-			    {nodeGets,<<"node_gets">>},
-			    {nodePuts,<<"node_puts">>},
-			    {nodeGetTimeMean,<<"node_get_fsm_time_mean">>},
-			    {nodeGetTimeMedian,<<"node_get_fsm_time_median">>},
-			    {nodeGetTime95,<<"node_get_fsm_time_95">>},
-			    {nodeGetTime99,<<"node_get_fsm_time_99">>},
-			    {nodeGetTime100,<<"node_get_fsm_time_100">>},
-			    {nodePutTimeMean,<<"node_put_fsm_time_mean">>},
-			    {nodePutTimeMedian,<<"node_put_fsm_time_median">>},
-			    {nodePutTime95,<<"node_put_fsm_time_95">>},
-			    {nodePutTime99,<<"node_put_fsm_time_99">>},
-			    {nodePutTime100,<<"node_put_fsm_time_100">>}],
-	verify_eq(Stats, Keys),
-	pass.
+            {vnodePuts,<<"vnode_puts">>},
+            {nodeGets,<<"node_gets">>},
+            {nodePuts,<<"node_puts">>},
+            {nodeGetTimeMean,<<"node_get_fsm_time_mean">>},
+            {nodeGetTimeMedian,<<"node_get_fsm_time_median">>},
+            {nodeGetTime95,<<"node_get_fsm_time_95">>},
+            {nodeGetTime99,<<"node_get_fsm_time_99">>},
+            {nodeGetTime100,<<"node_get_fsm_time_100">>},
+            {nodePutTimeMean,<<"node_put_fsm_time_mean">>},
+            {nodePutTimeMedian,<<"node_put_fsm_time_median">>},
+            {nodePutTime95,<<"node_put_fsm_time_95">>},
+            {nodePutTime99,<<"node_put_fsm_time_99">>},
+            {nodePutTime100,<<"node_put_fsm_time_100">>}],
+    verify_eq(Stats, Keys),
+    pass.
 
 verify_eq(Stats, Keys) ->
     [begin
@@ -67,6 +68,6 @@ get_stats(Node) ->
     Stats.
 
 get_snmp(StatName) ->
-	{value, OID} = snmpa:name_to_oid(StatName).
-	[Stat] = snmpa:get(snmp_master_agent, [OID ++ [0]]).
+    {value, OID} = snmpa:name_to_oid(StatName),
+    [Stat] = snmpa:get(snmp_master_agent, [OID ++ [0]]),
     Stat.
