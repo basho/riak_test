@@ -65,7 +65,7 @@ verify_upgrade() ->
     ?assertEqual([], rt:systest_read(Node1, 100, 1)),
 
     lager:info("Checking list_keys count periodically throughout this test."),
-    spawn_link(?MODULE, check_list_keys, [rt:pbc(Node1)]),
+    spawn_link(?MODULE, check_list_keys, [Node1]),
 
     Conns = rt:connection_info(Nodes),
     NodeConn = proplists:get_value(Node1, Conns),
@@ -109,8 +109,9 @@ verify_upgrade() ->
 %% List Keys Tester
 %% ===================================================================
 
-check_list_keys(Pid) ->
-    check_list_keys(Pid, 0).
+check_list_keys(Node) ->
+    check_list_keys(rt:pbc(Node), 0).
+
 check_list_keys(Pid, Attempt) ->
     case Attempt rem 20 of
         0 -> lager:debug("Performing list_keys check #~p", [Attempt]);
