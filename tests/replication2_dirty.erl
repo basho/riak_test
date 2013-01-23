@@ -11,12 +11,9 @@
 confirm() ->
     TestHash = erlang:md5(term_to_binary(os:timestamp())),
     TestBucket = <<TestHash/binary, "-systest_a">>,
-    _FullsyncOnly = <<TestHash/binary, "-fullsync_only">>,
-    _RealtimeOnly = <<TestHash/binary, "-realtime_only">>,
-    _NoRepl = <<TestHash/binary, "-no_repl">>,
 
-    NumNodes = 6,
-    ClusterASize = list_to_integer(replication2:get_os_env("CLUSTER_A_SIZE", "3")),
+    NumNodes = rt:config(num_nodes, 6),
+    ClusterASize = rt:config(cluster_a_size, 4),
     lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
             {riak_repl,

@@ -23,6 +23,9 @@
 
 {rtee, [
     {rt_project, "riak_ee"},
+    {cluster_a_size, 3},
+    {num_nodes, 6},
+    {repl_upgrade_order, "forwards"},
     {rtdev_path, [{root, "/Users/dparfitt/rt/riak_ee"},
                   {current, "/Users/dparfitt/rt/riak_ee/current"},
                   {previous, "/Users/dparfitt/rt/riak_ee/riak_ee-1.2.1"},

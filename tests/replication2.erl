@@ -10,19 +10,8 @@
              wait_until_no_pending_changes/1]).
 
 confirm() ->
-    %% TODO: Don't hardcode # of nodes
-    NumNodes = 6,
-    ClusterASize = list_to_integer(get_os_env("CLUSTER_A_SIZE", "3")),
-    %% ClusterBSize = NumNodes - ClusterASize,
-    %% ClusterBSize = list_to_integer(get_os_env("CLUSTER_B_SIZE"), "2"),
-
-    %% Nodes = rt:nodes(NumNodes),
-    %% lager:info("Create dirs"),
-    %% create_dirs(Nodes),
-
-    %% Backends now configured via cli or giddyup
-    %%Backend = list_to_atom(get_os_env("RIAK_BACKEND",
-    %%        "riak_kv_bitcask_backend")),
+    NumNodes = rt:config(num_nodes, 6),
+    ClusterASize = rt:config(cluster_a_size, 3),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
@@ -39,15 +28,6 @@ confirm() ->
     ],
 
     Nodes = deploy_nodes(NumNodes, Conf),
-    %%Nodes = rt:deploy_nodes([
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf},
-    %%    {"1.2.0", Conf}
-    %%    ]),
-
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
@@ -615,18 +595,6 @@ nodes_all_have_version(Nodes, Version) ->
 client_count(Node) ->
     Clients = rpc:call(Node, supervisor, which_children, [riak_repl_client_sup]),
     length(Clients).
-
-get_os_env(Var) ->
-    case get_os_env(Var, undefined) of
-        undefined -> exit({os_env_var_undefined, Var});
-        Value -> Value
-    end.
-
-get_os_env(Var, Default) ->
-    case os:getenv(Var) of
-        false -> Default;
-        Value -> Value
-    end.
 
 make_bucket(Node, Name, Args) ->
     Res = rpc:call(Node, riak_core_bucket, set_bucket, [Name, Args]),

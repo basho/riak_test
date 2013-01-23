@@ -5,25 +5,11 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    %% TODO: Don't hardcode # of nodes
-    NumNodes = 6,
-    ClusterASize = list_to_integer(replication:get_os_env("CLUSTER_A_SIZE", "3")),
-    %% ClusterBSize = NumNodes - ClusterASize,
-    %% ClusterBSize = list_to_integer(get_os_env("CLUSTER_B_SIZE"), "2"),
+    NumNodes = rt:config(num_nodes, 6),
+    ClusterASize = rt:config(cluster_a_size, 3),
 
-    %% Nodes = rt:nodes(NumNodes),
-    %% lager:info("Create dirs"),
-    %% create_dirs(Nodes),
-
-    Backend = list_to_atom(replication:get_os_env("RIAK_BACKEND",
-            "riak_kv_bitcask_backend")),
-
-    lager:info("Deploy ~p nodes using ~p backend", [NumNodes, Backend]),
+    lager:info("Deploy ~p nodes", [NumNodes]),
     BaseConf = [
-            {riak_kv,
-             [
-                {storage_backend, Backend}
-             ]},
             {riak_repl,
              [
                 {fullsync_on_connect, false},
