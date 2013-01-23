@@ -9,6 +9,9 @@
              wait_until_nodes_ready/1,
              wait_until_no_pending_changes/1]).
 
+%% export functions shared with other replication tests...
+-export([make_bucket/3]).
+
 confirm() ->
     NumNodes = rt:config(num_nodes, 6),
     ClusterASize = rt:config(cluster_a_size, 3),
@@ -251,15 +254,17 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     lager:info("Nodes restarted"),
 
+
     case nodes_all_have_version(ANodes, "1.1.0") of
         true ->
 
-            make_bucket(LeaderA, NoRepl, [{repl, false}]),
+            FollowsA = ANodes -- [LeaderA],
+            make_bucket([LeaderA|FollowsA], NoRepl, [{repl, false}]),
 
             case nodes_all_have_version(ANodes, "1.2.0") of
                 true ->
-                    make_bucket(LeaderA, RealtimeOnly, [{repl, realtime}]),
-                    make_bucket(LeaderA, FullsyncOnly, [{repl, fullsync}]),
+                    make_bucket([LeaderA|FollowsA], RealtimeOnly, [{repl, realtime}]),
+                    make_bucket([LeaderA|FollowsA], FullsyncOnly, [{repl, fullsync}]),
 
                     %% disconnect the other cluster, so realtime doesn't happen
                     lager:info("disconnect the 2 clusters"),
@@ -483,8 +488,9 @@ verify_site_ips(Leader, Site, Listeners) ->
             Listeners]),
     ?assertEqual(ExpectedIPs, IPs).
 
-make_bucket(Node, Name, Args) ->
+make_bucket([Node|_]=Nodes, Name, Args) ->
     Res = rpc:call(Node, riak_core_bucket, set_bucket, [Name, Args]),
+    rt:wait_until_ring_converged(Nodes),
     ?assertEqual(ok, Res).
 
 start_and_wait_until_fullsync_complete(Node) ->

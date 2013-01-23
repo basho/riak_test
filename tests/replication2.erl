@@ -234,10 +234,11 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     lager:info("Nodes restarted"),
 
-    make_bucket(LeaderA, NoRepl, [{repl, false}]),
+    FollowsA = ANodes -- [LeaderA],
+    make_bucket([LeaderA|FollowsA], NoRepl, [{repl, false}]),
 
-    make_bucket(LeaderA, RealtimeOnly, [{repl, realtime}]),
-    make_bucket(LeaderA, FullsyncOnly, [{repl, fullsync}]),
+    make_bucket([LeaderA|FollowsA], RealtimeOnly, [{repl, realtime}]),
+    make_bucket([LeaderA|FollowsA], FullsyncOnly, [{repl, fullsync}]),
 
     %% disconnect the other cluster, so realtime doesn't happen
     lager:info("disconnect the 2 clusters"),
@@ -596,9 +597,8 @@ client_count(Node) ->
     Clients = rpc:call(Node, supervisor, which_children, [riak_repl_client_sup]),
     length(Clients).
 
-make_bucket(Node, Name, Args) ->
-    Res = rpc:call(Node, riak_core_bucket, set_bucket, [Name, Args]),
-    ?assertEqual(ok, Res).
+make_bucket(Nodes, Name, Args) ->
+    replication:make_bucket(Nodes, Name, Args).
 
 start_and_wait_until_fullsync_complete(Node) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
