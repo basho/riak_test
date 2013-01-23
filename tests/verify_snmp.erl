@@ -30,12 +30,6 @@ confirm() ->
     [Node1] = rt:deploy_nodes(1),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
-    lager:info("Doing some reads and writes to record some stats."),
-    
-    rt:systest_write(Node1, 10),
-    rt:systest_read(Node1, 10),
-
-    Stats = get_stats(Node1),
     Keys = [{vnodeGets,<<"vnode_gets">>},
             {vnodePuts,<<"vnode_puts">>},
             {nodeGets,<<"node_gets">>},
@@ -50,31 +44,44 @@ confirm() ->
             {nodePutTime95,<<"node_put_fsm_time_95">>},
             {nodePutTime99,<<"node_put_fsm_time_99">>},
             {nodePutTime100,<<"node_put_fsm_time_100">>}],
-    verify_eq(Stats, Keys, Node1),
+
+    lager:info("Waiting for SNMP to start."),
+
+    rpc:call(Node1, riak_core, wait_for_application, [snmp]),
+    rpc:call(Node1, riak_core, wait_for_application, [riak_snmp]),
+
+    lager:info("Mapping SNMP names to OIDs"),
+
+    OIDPairs = [ begin
+                     {value, OID} = rpc:call(Node1, snmpa, name_to_oid, [SKey]),
+                     {OID ++ [0], HKey}
+                 end || {SKey, HKey} <- Keys ],
+
+    lager:info("Doing some reads and writes to record some stats."),
+
+    rt:systest_write(Node1, 10),
+    rt:systest_read(Node1, 10),
+
+    lager:info("Fetching HTTP stats"),
+
+    Stats = get_stats(Node1),
+
+    lager:info("Waiting for stats to propagate to SNMP"),
+
+    verify_eq(Stats, OIDPairs, Node1),
     pass.
 
 verify_eq(Stats, Keys, Node) ->
-    [ begin
-          Http = proplists:get_value(StatKey, Stats),
-          lager:info("Waiting until ~p matches HTTP value: ~p", [SnmpKey, Http]),
-          ?assertEqual(ok, wait_until_stat_matches(Node, SnmpKey, Http))
-      end
-      || {SnmpKey, StatKey} <- Keys].
+    {OIDs, HKeys} = lists:unzip(Keys),
+    ?assertEqual(ok,
+                 rt:wait_until(Node,
+                               fun(N) ->
+                                       SStats = rpc:call(N, snmpa, get, [snmp_master_agent, OIDs]),
+                                       SPairs = lists:zip(SStats, HKeys),
+                                       lists:all(fun({A,B}) -> A == proplists:get_value(B, Stats) end, SPairs)
+                               end)).
 
 get_stats(Node) ->
     StatString = os:cmd(io_lib:format("curl -s -S ~s/stats", [rt:http_url(Node)])),
     {struct, Stats} = mochijson2:decode(StatString),
     Stats.
-
-get_snmp(Node, StatName) ->
-    {value, OID} = rpc:call(Node, snmpa, name_to_oid, [StatName]),
-    [Stat] = rpc:call(Node, snmpa, get, [snmp_master_agent, [OID ++ [0]]]),
-    Stat.
-
-wait_until_stat_matches(Node, SnmpKey, Http) ->
-    rt:wait_until(Node,
-                  fun(N) ->
-                          Snmp = get_snmp(N, SnmpKey),
-                          lager:debug("SNMP: ~p is ~p", [SnmpKey, Snmp]),
-                          Http == Snmp
-                  end).
