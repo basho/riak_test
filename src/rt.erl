@@ -921,7 +921,7 @@ httpc(Node) ->
 %% @doc does a read via the http erlang client.
 -spec httpc_read(term(), binary(), binary()) -> binary().
 httpc_read(C, Bucket, Key) ->
-    {ok, Value} = rhc:get(C, Bucket, Key),
+    {_, Value} = rhc:get(C, Bucket, Key),
     Value.
 
 %% @doc does a write via the http erlang client.
