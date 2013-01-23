@@ -131,21 +131,26 @@ to tell riak_test about them. The method of choice is to create a
 
 ```erlang
 {default, [
-    {rt_max_wait_time, 180000},
-    {rt_retry_delay, 1000}
+    {giddyup_host, "localhost:5000"},
+    {giddyup_user, "user"},
+    {giddyup_password, "password"},
+    {rt_max_wait_time, 600000},
+    {rt_retry_delay, 1000},
+    {rt_harness, rtdev},
+    {rt_scratch_dir, "/tmp/riak_test_scratch"},
+    {basho_bench, "~/basho/basho_bench"},
+    {spam_dir, "~/basho/riak_test/search-corpus/spam.0"},
+    {platform, "osx-64"}
 ]}.
 
 {rtdev, [
-    {rt_deps, ["$PATH_TO_YOUR_RIAK_SOURCE/deps"]},
-    {rt_retry_delay, 500},
-    {rt_harness, rtdev},
-    {rtdev_path, [{root, "$HOME/rt/riak"},
-                  {current, "$HOME/rt/riak/current"},
-                  {"1.2.0", "$HOME/rt/riak/riak-1.2.1"},
-                  {"1.1.4", "$HOME/rt/riak/riak-1.1.4"},
-                  {"1.0.3", "$HOME/rt/riak/riak-1.0.3"}]}
+    {rt_project, "riak"},
+    {rtdev_path, [{root,     "~/rt/riak"},
+                  {current,  "~/rt/riak/current"},
+                  {previous, "~/rt/riak/riak-1.2.1"},
+                  {legacy,   "~/rt/riak/riak-1.1.4"}
+                 ]}
 ]}.
-
 ```
 
 The `default` section of the config file will be overridden by the config
