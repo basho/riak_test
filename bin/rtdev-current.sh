@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-: ${RT_DEST_DIR:="$HOME/rtdev"}
+: ${RT_DEST_DIR:="$HOME/rt/riak"}
 
 echo "Making $(pwd) the current release:"
 cwd=$(pwd)

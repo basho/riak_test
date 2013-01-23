@@ -1,29 +1,33 @@
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
 {default, [
     {giddyup_host, "localhost:5000"},
     {giddyup_user, "user"},
     {giddyup_password, "password"},
-    {rt_max_wait_time, 180000},
-    {rt_retry_delay, 500},
+    {rt_max_wait_time, 600000},
+    {rt_retry_delay, 1000},
     {rt_harness, rtdev},
-    {rtdev_path, [{root, "/tmp/rt"},
-                  {current, "/tmp/rt/current"},
-                  {"1.2.0", "/tmp/rt/riak-1.2.0"},
-                  {previous, "/tmp/rt/riak-1.2.0"},
-                  {"1.1.4", "/tmp/rt/riak-1.1.4"},
-                  {legacy, "/tmp/rt/riak-1.1.4"},
-                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]},
-    {basho_bench, "/Users/joe/dev/basho/basho_bench"},
-    {spam_dir, "/Users/joe/dev/basho/riak_test/search-corpus/spam.0"},
-    {platform, "osx-64"},
-    {rt_deps, []}
+    {rt_scratch_dir, "/tmp/riak_test_scratch"},
+    {basho_bench, "/Users/dparfitt/basho/basho_bench"},
+    {spam_dir, "/Users/dparfitt/riak_test/search-corpus/spam.0"},
+    {platform, "osx-64"}
 ]}.
 
 {rtdev, [
-    {rt_project, "riak"}
+    {rt_project, "riak"},
+    {rtdev_path, [{root, "/Users/dparfitt/rt/riak"},
+                  {current, "/Users/dparfitt/rt/riak/current"},
+                  {previous, "/Users/dparfitt/rt/riak/riak-1.2.1"},
+                  {legacy, "/Users/dparfitt/rt/riak/riak-1.1.4"}
+                 ]}
 ]}.
 
-{other_project, [
-    {rt_project, "other"}
+{rtee, [
+    {rt_project, "riak_ee"},
+    {rtdev_path, [{root, "/Users/dparfitt/rt/riak_ee"},
+                  {current, "/Users/dparfitt/rt/riak_ee/current"},
+                  {previous, "/Users/dparfitt/rt/riak_ee/riak_ee-1.2.1"},
+                  {legacy, "/Users/dparfitt/rt/riak_ee/riak_ee-1.1.4"}
+                 ]}
 ]}.
 
 {intercept_example,
@@ -34,3 +38,5 @@
     {riak_kv_vnode, [{{put,7}, dropped_put}]}
    ]}
  ]}.
+
+
