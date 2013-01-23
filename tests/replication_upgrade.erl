@@ -61,7 +61,7 @@ confirm() ->
     replication:replication(ANodes, BNodes, false),
     %% upgrade the nodes, one at a time
     lists:foreach(fun(Node) ->
-                rtdev:upgrade(Node, currrent),
+                rtdev:upgrade(Node, current),
                 rt:wait_until_pingable(Node),
                 timer:sleep(1000),
                 replication:replication(ANodes, BNodes, true)
