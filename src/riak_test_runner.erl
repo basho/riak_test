@@ -84,6 +84,9 @@ execute(TestModule, TestMetaData) ->
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
     
+    {0, UName} = rt:cmd("uname -a"),
+    lager:info("Test Runner `uname -a` : ~s", [UName]),
+
     Pid = spawn_link(TestModule, confirm, []),
 
     {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
