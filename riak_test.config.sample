@@ -22,8 +22,7 @@
 ]}.
 
 {rtee, [
-    {},
-    {rt_project, "riak"},
+    {rt_project, "riak_ee"},
     {rtdev_path, [{root, "/Users/dparfitt/rt/riak_ee"},
                   {current, "/Users/dparfitt/rt/riak_ee/current"},
                   {previous, "/Users/dparfitt/rt/riak_ee/riak_ee-1.2.1"},
