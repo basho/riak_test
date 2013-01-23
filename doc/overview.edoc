@@ -57,33 +57,33 @@ Running the test in devrel mode gives the following output:
 <pre class="erlang">
 ```
 08:56:50.474 [info] Resetting nodes to fresh state
-08:56:50.474 [debug] Running: git --git-dir="/tmp/rt/.git" --work-tree="/tmp/rt/" reset HEAD --hard
-08:56:52.522 [debug] Running: git --git-dir="/tmp/rt/.git" --work-tree="/tmp/rt/" clean -fd
+08:56:50.474 [debug] Running: git --git-dir="~/rt/riak/.git" --work-tree="~/rt/riak/" reset HEAD --hard
+08:56:52.522 [debug] Running: git --git-dir="~/rt/riak/.git" --work-tree="~/rt/riak/" clean -fd
 08:56:52.718 [notice] Running Test verify_build_cluster
 08:56:52.719 [info] rt:set_backend(riak_kv_bitcask_backend)
 08:56:52.719 [info] rtdev:set_backend(riak_kv_bitcask_backend)
 08:56:52.719 [info] rtdev:update_app_config(all, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.720 [info] rtdev:update_app_config_file(/tmp/rt/current/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.726 [info] rtdev:update_app_config_file(/tmp/rt/current/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.731 [info] rtdev:update_app_config_file(/tmp/rt/current/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.737 [info] rtdev:update_app_config_file(/tmp/rt/current/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.743 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.2.0/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.749 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.2.0/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.755 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.2.0/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.760 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.2.0/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.766 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.1.4/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.772 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.1.4/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.780 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.1.4/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.787 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.1.4/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.794 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.0.3/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.800 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.0.3/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.805 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.0.3/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
-08:56:52.811 [info] rtdev:update_app_config_file(/tmp/rt/riak-1.0.3/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.720 [info] rtdev:update_app_config_file(~/rt/riak/current/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.726 [info] rtdev:update_app_config_file(~/rt/riak/current/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.731 [info] rtdev:update_app_config_file(~/rt/riak/current/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.737 [info] rtdev:update_app_config_file(~/rt/riak/current/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.743 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.2.0/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.749 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.2.0/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.755 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.2.0/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.760 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.2.0/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.766 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.1.4/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.772 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.1.4/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.780 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.1.4/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.787 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.1.4/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.794 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.0.3/dev/dev1/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.800 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.0.3/dev/dev2/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.805 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.0.3/dev/dev3/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
+08:56:52.811 [info] rtdev:update_app_config_file(~/rt/riak/riak-1.0.3/dev/dev4/etc/app.config, [{riak_kv,[{storage_backend,riak_kv_bitcask_backend}]}])
 08:56:52.850 [info] Deploying 3 nodes
-08:56:52.850 [info] Riak path: "/tmp/rt"
-08:56:52.887 [info] Running: /tmp/rt/current/dev/dev1/bin/riak start
-08:56:52.887 [info] Running: /tmp/rt/current/dev/dev2/bin/riak start
-08:56:52.887 [info] Running: /tmp/rt/current/dev/dev3/bin/riak start
+08:56:52.850 [info] Riak path: "~/rt/riak"
+08:56:52.887 [info] Running: ~/rt/riak/current/dev/dev1/bin/riak start
+08:56:52.887 [info] Running: ~/rt/riak/current/dev/dev2/bin/riak start
+08:56:52.887 [info] Running: ~/rt/riak/current/dev/dev3/bin/riak start
 08:56:58.528 [debug] Supervisor inet_gethost_native_sup started undefined at pid <0.142.0>
 08:56:58.528 [debug] Supervisor kernel_safe_sup started inet_gethost_native:start_link() at pid <0.141.0>
 08:56:58.570 [info] Deployed nodes: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']
@@ -154,7 +154,7 @@ Erlang term based config files. The references `rtdev.config' file above:
 {rt_harness, rtdev}.
 
 %% Path to generated devrel of Riak that is git-versioned
-{rtdev_path, "/tmp/rt"}.
+{rtdev_path, "~/rt/riak"}.
 '''
 
 And to conclude, a slightly longer test that uses most of the built-in
@@ -227,12 +227,12 @@ directory and ensure the `rtdev_path' setting in `rtdev.config' is accurate.
 To generate the versioned devrel, modify the following as necessary:
 ```
        riak$ make devrel
-       riak$ mkdir /tmp/rt
-       riak$ cp -r dev /tmp/rt/dev
-       riak$ cd /tmp/rt/dev
-/tmp/rt/dev$ git init
-/tmp/rt/dev$ git add .
-/tmp/rt/dev$ git commit -m "initial"
+       riak$ mkdir ~/rt/riak
+       riak$ cp -r dev ~/rt/riak/dev
+       riak$ cd ~/rt/riak/dev
+~/rt/riak/dev$ git init
+~/rt/riak/dev$ git add .
+~/rt/riak/dev$ git commit -m "initial"
 '''
 
 You can then launch tests from within the riak_test directory:

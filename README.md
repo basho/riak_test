@@ -8,12 +8,12 @@ in Erlang, and can interact with the cluster using distributed Erlang.
 
 ### How does it work?
 
-`riak_test` runs tests in a sandbox, typically `/tmp/rt`. The sanbox
+`riak_test` runs tests in a sandbox, typically `$HOME/rt/riak`. The sanbox
 uses `git` to reset back to a clean state after tests are run. The
-contents of `/tmp/rt` might look something like this:
+contents of `$HOME/rt/riak` might look something like this:
 
 ```
-$ ls /tmp/rt
+$ ls $HOME/rt/riak
 current riak-1.0.3 riak-1.1.4 riak-1.2.0
 ```
 
@@ -25,19 +25,19 @@ You'll create another directory that will contain full builds
 of different version of Riak for your platform. Typically this directory
 has been `~/test-releases` but it can be called anything and be anywhere
 that you'd like. The `dev/` directory from each of these
-releases will be copied into the sandbox (`/tmp/rt`).
+releases will be copied into the sandbox (`$HOME/rt/riak`).
 There are helper scripts in `bin/` which will
-help you get both `~/test-releases` and `/tmp/rt` all set up. A full
+help you get both `~/test-releases` and `$HOME/rt/riak` all set up. A full
 tutorial for using them exists further down in this README.
 
-There is one folder in `/tmp/rt` that does not come from
+There is one folder in `$HOME/rt/riak` that does not come from
 `~/test-releases`: `current`. The `current` folder can refer
 to any version of Riak, but is typically used for something
 like the `master` branch, a feature branch, or a release candidate.
-The `/tmp/rt/current` dev release gets populated from a devrel of Riak
+The `$HOME/rt/riak/current` dev release gets populated from a devrel of Riak
 that can come from anywhere, but is usually your 'normal' git checkout
 of Riak. The `bin/rtdev-current.sh` can be run from within that folder
-to copy `dev/` into `/tmp/rt/current`.
+to copy `dev/` into `$HOME/rt/riak/current`.
 
 Once you have everything set up (again, instructions for this are below),
 you'll want to run and write tests. This repository also holds code for
@@ -60,10 +60,10 @@ in the other scripts, including installing the current "master" branch from
 Github into "current". The releases will be built in your current working
 directory, so create an empty one in a place you'd like to store these
 builds for posterity, so that you don't have to rebuild them if your
-installation path (`/tmp/rt` by the way this script installs it) gets into
-a bad state, or deleted as tmpfs things tend to get during reboot.
+installation path (`$HOME/rt/riak` by the way this script installs it) gets into
+a bad state.
 
-If you do want to restore your `/tmp/rt` folder to factory condition, see
+If you do want to restore your `$HOME/rt/riak` folder to factory condition, see
 `rtdev-setup-releases.sh` and if you want to change the current riak under
 test, see `rtdev-current.sh`.
 
@@ -73,7 +73,7 @@ The first one that we want to look at is `rtdev-build-releases.sh`. If
 left unchanged, this script is going to do the following:
 
 1. Download the source for the past three major Riak versions (e.g.
-   1.0.3, 1.1.4, and 1.2.0)
+   1.0.3, 1.1.4, and 1.2.1)
 1. Build the proper version of Erlang that release was built with,
    using kerl (which it will also download)
 1. Build those releases of Riak.
@@ -85,6 +85,7 @@ installation:
 
 ```bash
 R14B04=${R14B04:-$HOME/erlang-R14B04}
+R15B03=${R15B03:-$HOME/erlang-R15B03}
 ```
 
 **Kerlveat**: If you want kerl to build erlangs with serious 64-bit
@@ -112,7 +113,7 @@ proceeding on to the next script**
 The `rtdev-setup-releases.sh` will get the releases you just built
 into a local git repository. Currently, running this script from the
 same directory that you just built all of your releases into.
-Currently this script initializes this repository into `/tmp/rt` but
+Currently this script initializes this repository into `$HOME/rt/riak` but
 it's probably worth making that configurable in the near term.
 
 ### rtdev-current.sh
@@ -138,11 +139,11 @@ to tell riak_test about them. The method of choice is to create a
     {rt_deps, ["$PATH_TO_YOUR_RIAK_SOURCE/deps"]},
     {rt_retry_delay, 500},
     {rt_harness, rtdev},
-    {rtdev_path, [{root, "/tmp/rt"},
-                  {current, "/tmp/rt/current"},
-                  {"1.2.0", "/tmp/rt/riak-1.2.0"},
-                  {"1.1.4", "/tmp/rt/riak-1.1.4"},
-                  {"1.0.3", "/tmp/rt/riak-1.0.3"}]}
+    {rtdev_path, [{root, "$HOME/rt/riak"},
+                  {current, "$HOME/rt/riak/current"},
+                  {"1.2.0", "$HOME/rt/riak/riak-1.2.1"},
+                  {"1.1.4", "$HOME/rt/riak/riak-1.1.4"},
+                  {"1.0.3", "$HOME/rt/riak/riak-1.0.3"}]}
 ]}.
 
 ```
