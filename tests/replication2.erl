@@ -6,11 +6,10 @@
 
 -import(rt, [deploy_nodes/2,
              join/2,
+             log_to_nodes/2,
+             log_to_nodes/3,
              wait_until_nodes_ready/1,
              wait_until_no_pending_changes/1]).
-
--import(repl_util, [log_to_nodes/2,
-                    log_to_nodes/3]).
 
 confirm() ->
     NumNodes = rt:config(num_nodes, 6),
