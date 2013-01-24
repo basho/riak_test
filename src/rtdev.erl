@@ -431,8 +431,8 @@ check_node({_N, Version}) ->
     case proplists:is_defined(Version, rt:config(rtdev_path)) of
         true -> ok;
         _ ->
-            lager:error("You don't have Riak ~s installed", [Version]),
-            erlang:error("You don't have Riak " ++ Version ++ " installed" )
+            lager:error("You don't have Riak ~s installed or configured", [Version]),
+            erlang:error("You don't have Riak " ++ atom_to_list(Version) ++ " installed or configured")
     end.
 
 set_backend(Backend) ->
