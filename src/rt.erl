@@ -72,6 +72,8 @@
          leave/1,
          load_config/1,
          load_modules_on_nodes/2,
+         log_to_nodes/2,
+         log_to_nodes/3,
          members_according_to/1,
          owners_according_to/1,
          partition/2,
@@ -1012,6 +1014,25 @@ get_version() ->
 %% @doc outputs some useful information about nodes that are up
 whats_up() ->
     ?HARNESS:whats_up().
+
+%% @doc Log a message to the console of the specified test nodes.
+%%      Messages are prefixed by the string "---riak_test--- "
+%%      Uses lager:info/1 'Fmt' semantics
+log_to_nodes(Nodes, Fmt) ->
+    log_to_nodes(Nodes, Fmt, []).
+
+%% @doc Log a message to the console of the specified test nodes.
+%%      Messages are prefixed by the string "---riak_test--- "
+%%      Uses lager:info/2 'LFmt' and 'LArgs' semantics
+log_to_nodes(Nodes, LFmt, LArgs) ->
+    Module = lager,
+    Function = log,
+    Meta = [],
+    Args = case LArgs of
+               [] -> [info, Meta, "---riak_test--- " ++ LFmt];
+               _  -> [info, Meta, "---riak_test--- " ++ LFmt, LArgs]
+           end,
+    [rpc:call(Node, Module, Function, Args) || Node <- Nodes].
 
 %% @private utility function
 pmap(F, L) ->

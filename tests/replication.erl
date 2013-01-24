@@ -32,10 +32,10 @@ confirm() ->
     lager:info("BNodes: ~p", [BNodes]),
 
     lager:info("Build cluster A"),
-    make_cluster(ANodes),
+    repl_util:make_cluster(ANodes),
 
     lager:info("Build cluster B"),
-    make_cluster(BNodes),
+    repl_util:make_cluster(BNodes),
 
     replication(ANodes, BNodes, false),
     pass.
@@ -369,12 +369,6 @@ verify_sites_balanced(NumSites, BNodes0) ->
         false ->
             ok
     end.
-
-make_cluster(Nodes) ->
-    [First|Rest] = Nodes,
-    [join(Node, First) || Node <- Rest],
-    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
-    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)).
 
 %% does the node meet the version requirement?
 node_has_version(Node, Version) ->
