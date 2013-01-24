@@ -258,13 +258,12 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     case nodes_all_have_version(ANodes, "1.1.0") of
         true ->
 
-            FollowsA = ANodes -- [LeaderA],
-            make_bucket([LeaderA|FollowsA], NoRepl, [{repl, false}]),
+            make_bucket(ANodes, NoRepl, [{repl, false}]),
 
             case nodes_all_have_version(ANodes, "1.2.0") of
                 true ->
-                    make_bucket([LeaderA|FollowsA], RealtimeOnly, [{repl, realtime}]),
-                    make_bucket([LeaderA|FollowsA], FullsyncOnly, [{repl, fullsync}]),
+                    make_bucket(ANodes, RealtimeOnly, [{repl, realtime}]),
+                    make_bucket(ANodes, FullsyncOnly, [{repl, fullsync}]),
 
                     %% disconnect the other cluster, so realtime doesn't happen
                     lager:info("disconnect the 2 clusters"),
