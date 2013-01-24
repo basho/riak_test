@@ -9,6 +9,9 @@
              wait_until_nodes_ready/1,
              wait_until_no_pending_changes/1]).
 
+-import(repl_util, [log_to_nodes/2,
+                    log_to_nodes/3]).
+
 confirm() ->
     NumNodes = rt:config(num_nodes, 6),
     ClusterASize = rt:config(cluster_a_size, 3),
@@ -34,15 +37,18 @@ confirm() ->
     lager:info("BNodes: ~p", [BNodes]),
 
     lager:info("Build cluster A"),
-    make_cluster(ANodes),
+    repl_util:make_cluster(ANodes),
 
     lager:info("Build cluster B"),
-    make_cluster(BNodes),
+    repl_util:make_cluster(BNodes),
 
     replication(ANodes, BNodes, false),
     pass.
 
 replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
+
+    AllNodes = ANodes ++ BNodes,
+    log_to_nodes(AllNodes, "Starting replication2 test"),
 
     TestHash = erlang:md5(term_to_binary(os:timestamp())),
     TestBucket = <<TestHash/binary, "-systest_a">>,
@@ -92,6 +98,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                 [riak_core, cluster_mgr])
     end,
 
+    log_to_nodes(AllNodes, "Write data to A, verify replication to B via realtime"),
+
     %% write some data on A
     ?assertEqual(ok, wait_for_connection(LeaderA, "B")),
     %io:format("~p~n", [rpc:call(LeaderA, riak_repl_console, status, [quiet])]),
@@ -110,6 +118,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             Res2 = rt:systest_read(BFirst, 1, 100, TestBucket, 2),
             ?assertEqual(100, length(Res2)),
 
+            log_to_nodes(AllNodes, "Test fullsync with leader ~p", [LeaderA]),
             start_and_wait_until_fullsync_complete(LeaderA),
 
             lager:info("Check keys written before repl was connected are present"),
@@ -121,6 +130,9 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %%
     %% Failover tests
     %%
+
+    log_to_nodes(AllNodes, "Failover tests"),
+    log_to_nodes(AllNodes, "Testing master failover: stopping ~p", [LeaderA]),
 
     lager:info("Testing master failover: stopping ~p", [LeaderA]),
     rt:stop(LeaderA),
@@ -146,6 +158,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %% get the leader for the first cluster
     LeaderB = rpc:call(BFirst, riak_core_cluster_mgr, get_leader, []),
 
+    log_to_nodes(AllNodes, "Testing client failover: stopping ~p", [LeaderB]),
+
     lager:info("Testing client failover: stopping ~p", [LeaderB]),
     rt:stop(LeaderB),
     rt:wait_until_unpingable(LeaderB),
@@ -168,6 +182,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     ?assertEqual(0, wait_for_reads(BSecond, 301, 400, TestBucket, 2)),
 
     %% Testing fullsync with downed nodes
+    log_to_nodes(AllNodes, "Test fullsync with ~p and ~p down", [LeaderA, LeaderB]),
     lager:info("Re-running fullsync with ~p and ~p down", [LeaderA, LeaderB]),
 
     start_and_wait_until_fullsync_complete(LeaderA2),
@@ -176,12 +191,14 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %% Per-bucket repl settings tests
     %%
 
+    log_to_nodes(AllNodes, "Test fullsync after restarting ~p", [LeaderA]),
+
     lager:info("Restarting down node ~p", [LeaderA]),
     rt:start(LeaderA),
     rt:wait_until_pingable(LeaderA),
     start_and_wait_until_fullsync_complete(LeaderA2),
 
-
+    log_to_nodes(AllNodes, "Starting Joe's Repl Test"),
     lager:info("Starting Joe's Repl Test"),
 
     %% @todo add stuff
@@ -194,6 +211,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("LeaderA2: ~p", [LeaderA2]),
 
     ?assertEqual(ok, wait_until_connection(LeaderA)),
+
+    log_to_nodes(AllNodes, "Simulate partition to force leader re-election"),
 
     lager:info("Simulation partition to force leader re-election"),
 
@@ -226,6 +245,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Reading 2 keys written to ~p from ~p", [LeaderA, BSecond]),
     ?assertEqual(0, wait_for_reads(BSecond, 1301, 1302, TestBucket, 2)),
 
+    log_to_nodes(AllNodes, "Finished Joe's Section"),
     lager:info("Finished Joe's Section"),
 
     lager:info("Restarting down node ~p", [LeaderB]),
@@ -264,6 +284,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     ?assertEqual(ok, wait_until_connection(LeaderA)),
 
     LeaderA3 = rpc:call(ASecond, riak_core_cluster_mgr, get_leader, []),
+
+    log_to_nodes(AllNodes, "Test fullsync and realtime independence"),
 
     lager:info("write 100 keys to a {repl, false} bucket"),
     ?assertEqual([], do_write(ASecond, 1, 100, NoRepl, 2)),
@@ -317,6 +339,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     Res13 = rt:systest_read(BSecond, 1, 100, NoRepl, 2),
     ?assertEqual(100, length(Res13)),
 
+    log_to_nodes(AllNodes, "Testing offline realtime queueing"),
     lager:info("Testing offline realtime queueing"),
 
     LeaderA4 = rpc:call(ASecond, riak_core_cluster_mgr, get_leader, []),
@@ -338,6 +361,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     ?assertEqual(0, wait_for_reads(BSecond, 800, 900,
             TestBucket, 2)),
 
+    log_to_nodes(AllNodes, "Testing realtime migration on node shutdown"),
     lager:info("Testing realtime migration on node shutdown"),
     Target = hd(ANodes -- [LeaderA4]),
 
