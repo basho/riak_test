@@ -165,16 +165,15 @@ confirm() ->
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     spawn(fun() ->
+                % wait a second and then kill off sink nodes
+                % once a second
                 timer:sleep(1000),
-                [rt:brutal_kill(Node) || Node <- BNodes]
+                [begin
+                  timer:sleep(1000),
+                  rt:brutal_kill(Node)
+                 end || Node <- BNodes]
           end),
-    % 3000 may need to be increased if the test fails here on
-    % a fast machine
-    lager:info("Writing 3000 more keys to ~p", [LeaderA]),
-    ?assertEqual([], repl_util:do_write(LeaderA, 0, 3000, TestBucket, 2)),
-
-    wait_until_coord_has_any_dirty(LeaderA),
-
+    write_until_coord_has_any_dirty(LeaderA, TestBucket),
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -234,6 +233,26 @@ wait_until_coord_has_any_dirty(SourceLeader) ->
                     end
             end),
     ?assertEqual(ok, Res).
+
+write_until_coord_has_any_dirty(SourceLeader, TestBucket) ->
+    Res = rt:wait_until(SourceLeader,
+                        fun(_) ->
+                    lager:info("Writing data while checking for any dirty nodes"),
+                    ?assertEqual([], replication2:do_write(SourceLeader, 0, 5000, TestBucket, 2)),
+                    Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
+                    case Status of
+                        {badrpc, _} -> false;
+                        [] -> false;
+                        [{_,Stats}|_Rest] ->
+                            NodeString = proplists:get_value(fullsync_suggested, Stats),
+                            Nodes = string:tokens(NodeString,","),
+                            lager:info("Nodes = ~p",[Nodes]),
+                            length(Nodes) > 0
+                    end
+            end),
+    ?assertEqual(ok, Res).
+
+
 
 %% yeah yeah, copy paste, I know
 wait_until_node_clean(Node) ->
