@@ -132,7 +132,10 @@ list_keys(_, _, 0, _) ->
 list_keys(Pid, Bucket, Attempts, TimeOut) ->
     Res = riakc_pb_socket:list_keys(Pid, Bucket, TimeOut),
     case Res of
-        {error, Err} when Err =:= timeout; is_tuple(Err), element(1, Err) == timeout ->
+        {error, Err} when
+          Err =:= timeout;
+          Err =:= <<"timeout">>;
+          is_tuple(Err), element(1, Err) =:= timeout ->
             ?assertMatch(ok, wait_for_reconnect(Pid)),
             NewAttempts = Attempts - 1,
             NewTimeOut = TimeOut * 2,
