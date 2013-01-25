@@ -475,10 +475,9 @@ is_pingable(Node) ->
     net_adm:ping(Node) =:= pong.
 
 is_mixed_cluster(Nodes) ->
-    {Versions, BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt:config(rt_max_wait_time)),
-    length(BadNodes) == 0 andalso 
-    length(lists:usort(Versions)) > 1 andalso
-    length(Versions) == length(Nodes).
+    %% If the nodes are bad, we don't care what version they are
+    {Versions, _BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt:config(rt_max_wait_time)),
+    length(lists:usort(Versions)) > 1.
 
 %% @private
 is_ready(Node) ->
