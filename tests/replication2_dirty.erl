@@ -1,6 +1,5 @@
 -module(replication2_dirty).
 -export([confirm/0]).
--compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
@@ -25,50 +24,58 @@ confirm() ->
 
     Nodes = deploy_nodes(NumNodes, Conf),
     {[AFirst|_] = ANodes, [BFirst|_] = BNodes} = lists:split(ClusterASize, Nodes),
+
+    AllNodes = ANodes ++ BNodes,
+    rt:log_to_nodes(AllNodes, "Starting replication2_dirty test"),
+
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
 
+    rt:log_to_nodes(AllNodes, "Building and connecting Clusters"),
+
     lager:info("Build cluster A"),
-    replication2:make_cluster(ANodes),
+    repl_util:make_cluster(ANodes),
 
     lager:info("Build cluster B"),
-    replication2:make_cluster(BNodes),
+    repl_util:make_cluster(BNodes),
 
-    replication2:name_cluster(AFirst, "A"),
-    replication2:name_cluster(BFirst, "B"),
+    repl_util:name_cluster(AFirst, "A"),
+    repl_util:name_cluster(BFirst, "B"),
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
     %% get the leader for the first cluster
-    replication2:wait_until_leader(AFirst),
+    repl_util:wait_until_leader(AFirst),
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
     %LeaderB = rpc:call(BFirst, riak_core_cluster_mgr, get_leader, []),
 
     {ok, {_IP, Port}} = rpc:call(BFirst, application, get_env,
                                  [riak_core, cluster_mgr]),
-    replication2:connect_cluster(LeaderA, "127.0.0.1", Port),
+    repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
 
-    ?assertEqual(ok, replication2:wait_for_connection(LeaderA, "B")),
-    replication2:enable_realtime(LeaderA, "B"),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
+    repl_util:enable_realtime(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
-    replication2:start_realtime(LeaderA, "B"),
+    repl_util:start_realtime(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
-    replication2:enable_fullsync(LeaderA, "B"),
+    repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
 
     % nothing should be dirty initially
     lager:info("Waiting until all nodes clean"),
     wait_until_all_nodes_clean(LeaderA),
 
+    rt:log_to_nodes(AllNodes, "Test basic realtime replication from A -> B"),
+
     %% write some data on A
-    ?assertEqual(ok, replication2:wait_for_connection(LeaderA, "B")),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
     %io:format("~p~n", [rpc:call(LeaderA, riak_repl_console, status, [quiet])]),
     lager:info("Writing 2000 more keys to ~p", [LeaderA]),
-    ?assertEqual([], replication2:do_write(LeaderA, 101, 2000, TestBucket, 2)),
+    ?assertEqual([], repl_util:do_write(LeaderA, 101, 2000, TestBucket, 2)),
 
     %% verify data is replicated to B
     lager:info("Reading 2000 keys written to ~p from ~p", [LeaderA, BFirst]),
-    ?assertEqual(0, replication2:wait_for_reads(BFirst, 101, 2000, TestBucket, 2)),
+    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 101, 2000, TestBucket, 2)),
 
     [ ?assertEqual(0, get_dirty_stat(Node)) || Node <- ANodes],
     [ ?assertEqual(0, get_dirty_stat(Node)) || Node <- BNodes],
@@ -77,6 +84,8 @@ confirm() ->
 
     lager:info("Waiting until all nodes clean"),
     wait_until_all_nodes_clean(LeaderA),
+
+    rt:log_to_nodes(AllNodes, "Verify fullsync after manual dirty flag set"),
 
     lager:info("Manually setting rt_dirty state"),
 
@@ -88,12 +97,13 @@ confirm() ->
     wait_until_coord_has_dirty(LeaderA),
 
     lager:info("Starting fullsync"),
-    replication2:start_and_wait_until_fullsync_complete(LeaderA),
+    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
     lager:info("Wait for all nodes to show up clean"),
     wait_until_all_nodes_clean(LeaderA),
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    rt:log_to_nodes(AllNodes, "Multiple node test"),
     lager:info("Multiple node test"),
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -110,12 +120,13 @@ confirm() ->
     wait_until_coord_has_dirty(DirtyB),
 
     lager:info("Starting fullsync"),
-    replication2:start_and_wait_until_fullsync_complete(LeaderA),
+    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
     lager:info("Wait for all nodes to show up clean"),
     wait_until_all_nodes_clean(LeaderA),
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    rt:log_to_nodes(AllNodes, "Multiple node test, one failed during fullsync"),
     lager:info("Multiple node test, one failed during fullsync"),
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -135,7 +146,7 @@ confirm() ->
                 ResultC = rpc:call(DirtyD, riak_repl_stats, rt_source_errors, []),
                 lager:info("Result = ~p", [ResultC])
            end),
-    replication2:start_and_wait_until_fullsync_complete(LeaderA),
+    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 
     lager:info("Checking to see if C is still clean"),
     wait_until_node_clean(DirtyC),
@@ -143,11 +154,12 @@ confirm() ->
     wait_until_coord_has_dirty(DirtyD),
 
     % Clear out all dirty state
-    replication2:start_and_wait_until_fullsync_complete(LeaderA),
+    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    rt:log_to_nodes(AllNodes, "Brutally kill the sink nodes"),
     lager:info("Brutally kill the sink nodes"),
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -159,13 +171,14 @@ confirm() ->
     % 3000 may need to be increased if the test fails here on
     % a fast machine
     lager:info("Writing 3000 more keys to ~p", [LeaderA]),
-    ?assertEqual([], replication2:do_write(LeaderA, 0, 3000, TestBucket, 2)),
+    ?assertEqual([], repl_util:do_write(LeaderA, 0, 3000, TestBucket, 2)),
 
     wait_until_coord_has_any_dirty(LeaderA),
 
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    rt:log_to_nodes(AllNodes, "Check rt_dirty state after shutdown"),
     lager:info("Check rt_dirty state after shutdown"),
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -173,6 +186,7 @@ confirm() ->
     [ rt:start_and_wait(Node) || Node <- ANodes],
     wait_until_coord_has_any_dirty(LeaderA),
 
+    rt:log_to_nodes(AllNodes, "Test completed"),
     pass.
 
 get_dirty_stat(Node) ->
