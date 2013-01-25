@@ -67,6 +67,7 @@
          httpc_read/3,
          httpc_write/4,
          install_on_absence/2,
+         is_mixed_cluster/1,
          is_pingable/1,
          join/2,
          leave/1,
@@ -472,6 +473,12 @@ load_modules_on_nodes([Module | MoreModules], Nodes)
 %% @doc Is the `Node' up according to net_adm:ping
 is_pingable(Node) ->
     net_adm:ping(Node) =:= pong.
+
+is_mixed_cluster(Nodes) ->
+    {Versions, BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt:config(rt_max_wait_time)),
+    length(BadNodes) == 0 andalso 
+    length(lists:usort(Versions)) > 1 andalso
+    length(Versions) == length(Nodes).
 
 %% @private
 is_ready(Node) ->
