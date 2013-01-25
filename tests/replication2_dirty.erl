@@ -238,7 +238,7 @@ write_until_coord_has_any_dirty(SourceLeader, TestBucket) ->
     Res = rt:wait_until(SourceLeader,
                         fun(_) ->
                     lager:info("Writing data while checking for any dirty nodes"),
-                    ?assertEqual([], replication2:do_write(SourceLeader, 0, 5000, TestBucket, 2)),
+                    ?assertEqual([], repl_util:do_write(SourceLeader, 0, 5000, TestBucket, 2)),
                     Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
                     case Status of
                         {badrpc, _} -> false;
