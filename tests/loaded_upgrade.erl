@@ -60,6 +60,7 @@ verify_upgrade() ->
     Vsns = [{OldVsn, Config} || _ <- lists:seq(2,NumNodes)],
     Nodes = rt:build_cluster([{current, Config} | Vsns]),
     [Node1|OldNodes] = Nodes,
+    _HeadMon = init_node_monitor(Node1, self()),
     lager:info("Writing 100 keys to ~p", [Node1]),
     rt:systest_write(Node1, 100, 3),
     ?assertEqual([], rt:systest_read(Node1, 100, 1)),
@@ -74,7 +75,7 @@ verify_upgrade() ->
     KV1 = init_kv_tester(NodeConn),
     MR1 = init_mapred_tester(NodeConn),
     Search1 = init_search_tester(Nodes, Conns),
-    
+
     TwoI1 = case Backend of
         eleveldb -> init_2i_tester(NodeConn);
         _ -> undefined
@@ -82,13 +83,14 @@ verify_upgrade() ->
     [begin
          KV2 = spawn_kv_tester(KV1),
          MR2 = spawn_mapred_tester(MR1),
-         TwoI2 = case TwoI1 of 
+         TwoI2 = case TwoI1 of
             undefined -> undefined;
             _ -> spawn_2i_tester(TwoI1)
          end,
          Search2 = spawn_search_tester(Search1),
          lager:info("Upgrading ~p", [Node]),
          rt:upgrade(Node, current),
+         _NodeMon = init_node_monitor(Node, self()),
          %% rt:slow_upgrade(Node, current, Nodes),
          _KV3 = check_kv_tester(KV2),
          _MR3 = check_mapred_tester(MR2),
@@ -339,7 +341,7 @@ check_search(?SPAM_BUCKET, Nodes) ->
     Actual = lists:usort(Results),
     case {rt:is_mixed_cluster(Nodes), Expected == Actual} of
         {false, _} -> ?assertEqual(Expected, Actual);
-        {true, false} -> 
+        {true, false} ->
             lager:info(
                 "[KNOWN ISSUE] Search returned inaccurate results; however, the cluster is in a mixed state"
                 );
@@ -642,7 +644,7 @@ twoi_populate_script(Bucket, PBIPs, HTTPIPs) ->
             {key_generator, {sequential_int, 10000}},
             {value_generator, {fixed_bin, 10000}},
             {riakc_pb_bucket, Bucket},
-            {pb_ips, PBIPs}, 
+            {pb_ips, PBIPs},
             {pb_replies, 1},
             {http_ips, HTTPIPs}],
     Config = filename:join([rt:config(rt_scratch_dir), "bb-populate-2i.config"]),
@@ -674,3 +676,28 @@ write_terms(File, Terms) ->
     {ok, IO} = file:open(File, [write]),
     [io:fwrite(IO, "~p.~n", [T]) || T <- Terms],
     file:close(IO).
+
+%% ===================================================================
+%% Monitor nodes after they upgrade
+%% ===================================================================
+init_node_monitor(Node, TestProc) ->
+    spawn_link(fun() -> node_monitor(Node, TestProc) end).
+
+node_monitor(Node, TestProc) ->
+    lager:info("Monitoring node ~p to make sure it stays up.", [Node]),
+    erlang:process_flag(trap_exit, true),
+    erlang:monitor_node(Node, true),
+    node_monitor_loop(Node, TestProc).
+
+node_monitor_loop(Node, TestProc) ->
+    receive
+        {nodedown, Node} ->
+            lager:error("Node ~p exited after upgrade!", [Node]),
+            ?assertEqual(nodeup, {nodedown, Node});
+        {'EXIT', TestProc, _} ->
+            erlang:monitor_node(Node, false),
+            ok;
+        Other ->
+            lager:warn("Node monitor for ~p got unknown message ~p", [Node, Other]),
+            node_monitor_loop(Node, TestProc)
+    end.
