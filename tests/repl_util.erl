@@ -1,6 +1,29 @@
 -module(repl_util).
--export([make_cluster/1, name_cluster/2]).
--compile(export_all).
+-export([make_cluster/1,
+         name_cluster/2,
+         node_has_version/2,
+         nodes_with_version/2,
+         nodes_all_have_version/2,
+         wait_until_is_leader/1,
+         is_leader/1,
+         wait_until_is_not_leader/1,
+         wait_until_leader/1,
+         wait_until_new_leader/2,
+         wait_until_leader_converge/1,
+         wait_until_connection/1,
+         wait_until_no_connection/1,
+         wait_for_reads/5,
+         start_and_wait_until_fullsync_complete/1,
+         connect_cluster/3,
+         disconnect_cluster/2,
+         wait_for_connection/2,
+         enable_realtime/2,
+         disable_realtime/2,
+         enable_fullsync/2,
+         start_realtime/2,
+         stop_realtime/2,
+         do_write/5
+        ]).
 -include_lib("eunit/include/eunit.hrl").
 
 make_cluster(Nodes) ->
@@ -192,3 +215,20 @@ do_write(Node, Start, End, Bucket, W) ->
             lists:flatten([rt:systest_write(Node, S, S, Bucket, W) ||
                     {S, _Error} <- Errors])
     end.
+
+%% does the node meet the version requirement?
+node_has_version(Node, Version) ->
+    NodeVersion =  rtdev:node_version(rtdev:node_id(Node)),
+    case NodeVersion of
+        current ->
+            %% current always satisfies any version check
+            true;
+        _ ->
+            NodeVersion >= Version
+    end.
+
+nodes_with_version(Nodes, Version) ->
+    [Node || Node <- Nodes, node_has_version(Node, Version)].
+
+nodes_all_have_version(Nodes, Version) ->
+    Nodes == nodes_with_version(Nodes, Version).

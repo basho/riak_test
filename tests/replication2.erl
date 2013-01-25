@@ -1,7 +1,6 @@
 -module(replication2).
 -behavior(riak_test).
 -export([confirm/0]).
--compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
@@ -591,27 +590,3 @@ collect_results(Workers, Acc) ->
         {'DOWN', _, _, Pid, _Reason} ->
             collect_results(lists:keydelete(Pid, 1, Workers), Acc)
     end.
-
-%% does the node meet the version requirement?
-node_has_version(Node, Version) ->
-    NodeVersion =  rtdev:node_version(rtdev:node_id(Node)),
-    case NodeVersion of
-        current ->
-            %% current always satisfies any version check
-            true;
-        _ ->
-            NodeVersion >= Version
-    end.
-
-nodes_with_version(Nodes, Version) ->
-    [Node || Node <- Nodes, node_has_version(Node, Version)].
-
-nodes_all_have_version(Nodes, Version) ->
-    Nodes == nodes_with_version(Nodes, Version).
-
-client_count(Node) ->
-    Clients = rpc:call(Node, supervisor, which_children, [riak_repl_client_sup]),
-    length(Clients).
-
-
-

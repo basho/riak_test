@@ -1,6 +1,5 @@
 -module(replication2_dirty).
 -export([confirm/0]).
--compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
