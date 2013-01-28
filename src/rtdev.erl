@@ -475,3 +475,10 @@ devpaths() ->
 
 versions() ->
     proplists:get_keys(rt:config(rtdev_path)) -- [root].
+
+get_node_logs() ->
+    Root = proplists:get_value(root, ?PATH),
+    [ begin
+          {ok, Data} = file:read_file(Filename),
+          {Filename, Data}
+      end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
