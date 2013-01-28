@@ -343,8 +343,9 @@ check_search(?SPAM_BUCKET, Nodes) ->
         {false, _} -> ?assertEqual(Expected, Actual);
         {true, false} ->
             lager:info(
-                "[KNOWN ISSUE] Search returned inaccurate results; however, the cluster is in a mixed state"
-                );
+              "[KNOWN ISSUE] Search returned inaccurate results; however, the cluster is in a mixed state. Got: ~p",
+              [Actual]
+             );
         _ -> ok %% this is the success case, no need to do anything else
     end,
     ok.
