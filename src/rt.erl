@@ -56,6 +56,7 @@
          download/1,
          enable_search_hook/2,
          get_deps/0,
+         get_node_logs/0,
          get_os_env/1,
          get_os_env/2,
          get_ring/1,
@@ -1165,3 +1166,8 @@ config_or_os_env(Config, Default) ->
 to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
 char_to_upper(C) -> C.
+
+%% @doc Downloads any extant log files from the harness's running
+%%   nodes.
+get_node_logs() ->
+    ?HARNESS:get_node_logs().
