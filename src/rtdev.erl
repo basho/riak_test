@@ -209,6 +209,19 @@ rm_dir(Dir) ->
     ?assertCmd("rm -rf " ++ Dir),
     ?assertEqual(false, filelib:is_dir(Dir)).
 
+add_default_node_config(Nodes) ->
+    case rt:config(rt_default_config, undefined) of
+        undefined -> ok;
+        Defaults when is_list(Defaults) ->
+            rt:pmap(fun(Node) ->
+                            update_app_config(Node, Defaults)
+                    end, Nodes),
+            ok;
+        BadValue ->
+            lager:error("Invalid value for rt_default_config : ~p", [BadValue]),
+            throw({invalid_config, {rt_default_config, BadValue}})
+    end.
+
 deploy_nodes(NodeConfig) ->
     Path = relpath(root),
     lager:info("Riak path: ~p", [Path]),
@@ -227,6 +240,7 @@ deploy_nodes(NodeConfig) ->
     create_dirs(Nodes),
 
     %% Set initial config
+    add_default_node_config(Nodes),
     rt:pmap(fun({_, default}) ->
                     ok;
                ({Node, Config}) ->
