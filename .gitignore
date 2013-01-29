@@ -7,3 +7,5 @@ riak_test
 out
 search-corpus/spam.0
 erl_crash.dump
+.eqc-info
+current_counterexample.eqc
