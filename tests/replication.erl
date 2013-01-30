@@ -32,15 +32,21 @@ confirm() ->
     lager:info("BNodes: ~p", [BNodes]),
 
     lager:info("Build cluster A"),
+    rt:log_to_nodes(Nodes, "Build cluster A"),
     repl_util:make_cluster(ANodes),
 
     lager:info("Build cluster B"),
+    rt:log_to_nodes(Nodes, "Build cluster B"),
     repl_util:make_cluster(BNodes),
 
     replication(ANodes, BNodes, false),
     pass.
 
 replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
+
+    AllNodes = ANodes ++ BNodes,
+
+    rt:log_to_nodes(AllNodes, "Starting replication test"),
 
     TestHash = erlang:md5(term_to_binary(os:timestamp())),
     TestBucket = <<TestHash/binary, "-systest_a">>,
@@ -56,6 +62,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             lager:info("Writing 100 keys to ~p", [AFirst]),
             ?assertEqual([], do_write(AFirst, 1, 100, TestBucket, 2)),
 
+            rt:log_to_nodes(AllNodes, "Adding listeners"),
             %% setup servers/listeners on A
             Listeners = add_listeners(ANodes),
             rt:wait_until_ring_converged(ANodes),
@@ -70,6 +77,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             %% list of listeners not on the leader node
             NonLeaderListeners = lists:keydelete(LeaderA, 3, Listeners),
 
+            rt:log_to_nodes(AllNodes, "Setup replication sites"),
             %% setup sites on B
             %% TODO: make `NumSites' an argument
             NumSites = 4,
@@ -79,6 +87,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             add_fake_sites(BNodes, FakeListeners),
             rt:wait_until_ring_converged(ANodes),
 
+            rt:log_to_nodes(AllNodes, "Verify replication sites"),
             %% verify sites are distributed on B
             verify_sites_balanced(NumSites, BNodes),
 
@@ -95,12 +104,14 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             [{Ip, Port, _}|_] = get_listeners(LeaderA)
     end,
 
+    rt:log_to_nodes(AllNodes, "Write data to A"),
     %% write some data on A
     ?assertEqual(ok, wait_until_connection(LeaderA)),
     %io:format("~p~n", [rpc:call(LeaderA, riak_repl_console, status, [quiet])]),
     lager:info("Writing 100 more keys to ~p", [LeaderA]),
     ?assertEqual([], do_write(LeaderA, 101, 200, TestBucket, 2)),
 
+    rt:log_to_nodes(AllNodes, "Verify data received on B"),
     %% verify data is replicated to B
     lager:info("Reading 100 keys written to ~p from ~p", [LeaderA, BFirst]),
     ?assertEqual(0, wait_for_reads(BFirst, 101, 200, TestBucket, 2)),
@@ -125,6 +136,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %% Failover tests
     %%
 
+    rt:log_to_nodes(AllNodes, "Testing master failover: stopping ~p", [LeaderA]),
     lager:info("Testing master failover: stopping ~p", [LeaderA]),
     rt:stop(LeaderA),
     rt:wait_until_unpingable(LeaderA),
