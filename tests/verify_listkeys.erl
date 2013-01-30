@@ -45,7 +45,8 @@ confirm() ->
             Ns = lists:usort([Node|Cluster]),
             check_it_all(Ns),
             lager:info("Wait until there are no pending changes"),
-            ?assertEqual(ok, rt:wait_until_no_pending_changes(Ns)),
+            rt:wait_until_no_pending_changes(Ns),
+            rt:wait_for_cluster_service(Ns, riak_kv),
             
             lager:info("Check keys and buckets after transfer"),
             check_it_all(Ns),
@@ -64,11 +65,12 @@ confirm() ->
             
             lager:info("Starting Node ~p", [Prev]),
             rt:start(Prev),
+            UpNodes = Nodes -- [Node], 
             lager:info("Waiting for riak_kv service to be ready in ~p", [Prev]),
-            rt:wait_for_service(Prev, riak_kv),
+            rt:wait_for_cluster_service(UpNodes, riak_kv),
             
             lager:info("Check keys and buckets"),
-            check_it_all(Nodes -- [Node]),
+            check_it_all(UpNodes),
             Node
         end, Node1, [Node2, Node3, Node4]),
     
