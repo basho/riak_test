@@ -267,7 +267,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
                     %% disconnect the other cluster, so realtime doesn't happen
                     lager:info("disconnect the 2 clusters"),
-                    del_site(LeaderB, "site1"),
+                    del_site(BNodes, "site1"),
+                    ?assertEqual(ok, wait_until_no_connection(LeaderA)),
 
                     lager:info("write 100 keys to a realtime only bucket"),
                     ?assertEqual([], do_write(ASecond, 1, 100,
@@ -411,10 +412,11 @@ add_site(Node, {IP, Port, Name}) ->
     ?assertEqual(ok, Res),
     timer:sleep(timer:seconds(5)).
 
-del_site(Node, Name) ->
+del_site([Node|_]=Nodes, Name) ->
     lager:info("Del site ~p at ~p", [Name, Node]),
     Res = rpc:call(Node, riak_repl_console, del_site, [[Name]]),
     ?assertEqual(ok, Res),
+    rt:wait_until_ring_converged(Nodes),
     timer:sleep(timer:seconds(5)).
 
 fake_site(Port) ->
@@ -612,6 +614,23 @@ wait_until_connection(Node) ->
                         true
                 end
         end). %% 40 seconds is enough for repl
+
+wait_until_no_connection(Node) ->
+    rt:wait_until(Node,
+        fun(_) ->
+                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                case proplists:get_value(server_stats, Status) of
+                    [] ->
+                        true;
+                    [_C] ->
+                        false;
+                    Conns ->
+                        lager:warning("multiple connections detected: ~p",
+                            [Conns]),
+                        false
+                end
+        end). %% 40 seconds is enough for repl
+
 
 wait_for_reads(Node, Start, End, Bucket, R) ->
     rt:wait_until(Node,
