@@ -251,12 +251,16 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %% can drop writes in the middle of an election
     wait_until_leader_converge(ANodes),
 
-    lager:info("Leader: ~p", [rpc:call(ASecond, riak_repl_leader, leader_node, [])]),
-    lager:info("Writing 2 more keys to ~p", [LeaderA]),
-    ?assertEqual([], do_write(LeaderA, 1301, 1302, TestBucket, 2)),
+    LeaderA3 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
+
+    wait_until_connection(LeaderA3),
+
+    lager:info("Leader: ~p", [LeaderA3]),
+    lager:info("Writing 2 more keys to ~p", [LeaderA3]),
+    ?assertEqual([], do_write(LeaderA3, 1301, 1302, TestBucket, 2)),
 
     %% verify data is replicated to B
-    lager:info("Reading 2 keys written to ~p from ~p", [LeaderA, BSecond]),
+    lager:info("Reading 2 keys written to ~p from ~p", [LeaderA3, BSecond]),
     ?assertEqual(0, wait_for_reads(BSecond, 1301, 1302, TestBucket, 2)),
 
     lager:info("Finished Joe's Section"),
@@ -293,7 +297,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                     timer:sleep(1000)
             end,
 
-            LeaderA3 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
+            LeaderA4 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
 
             lager:info("write 100 keys to a {repl, false} bucket"),
             ?assertEqual([], do_write(ASecond, 1, 100, NoRepl, 2)),
@@ -322,7 +326,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             %% do a fullsync, make sure that fullsync_only is replicated, but
             %% realtime_only and no_repl aren't
-            start_and_wait_until_fullsync_complete(LeaderA3),
+            start_and_wait_until_fullsync_complete(LeaderA4),
 
             case nodes_all_have_version(ANodes, "1.2.0") of
                 true ->
