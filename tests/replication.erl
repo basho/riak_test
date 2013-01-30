@@ -167,6 +167,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     ?assertEqual([], do_write(ASecond, 301, 400, TestBucket, 2)),
 
     %% verify data is replicated to B
+    rt:wait_until_pingable(BSecond),
     lager:info("Reading 101 keys written to ~p from ~p", [ASecond, BSecond]),
     ?assertEqual(0, wait_for_reads(BSecond, 301, 400, TestBucket, 2)),
 
@@ -253,7 +254,6 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:wait_until_pingable(LeaderB),
 
     lager:info("Nodes restarted"),
-
 
     case nodes_all_have_version(ANodes, "1.1.0") of
         true ->

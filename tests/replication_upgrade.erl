@@ -44,25 +44,32 @@ confirm() ->
             erlang:exit()
     end,
 
-    lager:info("Upgrading nodes in order: ~p", [NodeUpgrades]),
-
     ClusterASize = rt:config(cluster_a_size, 3),
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
 
     lager:info("Build cluster A"),
-    replication:make_cluster(ANodes),
+    repl_util:make_cluster(ANodes),
 
     lager:info("Build cluster B"),
-    replication:make_cluster(BNodes),
+    repl_util:make_cluster(BNodes),
+
+    lager:info("Replication First pass...homogenous cluster"),
 
     %% initial replication run, homogeneous cluster
     replication:replication(ANodes, BNodes, false),
+
+    lager:info("Upgrading nodes in order: ~p", [NodeUpgrades]),
+    rt:log_to_nodes(Nodes, "Upgrading nodes in order: ~p", [NodeUpgrades]),
     %% upgrade the nodes, one at a time
     lists:foreach(fun(Node) ->
+                lager:info("Upgrade node: ~p", [Node]),
+                rt:log_to_nodes(Nodes, "Upgrade node: ~p", [Node]),
                 rtdev:upgrade(Node, current),
                 rt:wait_until_pingable(Node),
                 timer:sleep(1000),
+                lager:info("Replication with upgraded node: ~p", [Node]),
+                rt:log_to_nodes(Nodes, "Replication with upgraded node: ~p", [Node]),
                 replication:replication(ANodes, BNodes, true)
         end, NodeUpgrades).
