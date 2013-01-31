@@ -212,10 +212,10 @@ confirm() ->
     [rt:wait_until_pingable(N) || N <- Nodes],
 
     lager:info("Build cluster A"),
-    replication:make_cluster(ANodes),
+    repl_util:make_cluster(ANodes),
 
     lager:info("Build cluster B"),
-    replication:make_cluster(BNodes),
+    repl_util:make_cluster(BNodes),
 
     replication:replication(ANodes, BNodes, false),
 
