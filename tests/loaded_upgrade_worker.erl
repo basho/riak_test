@@ -14,10 +14,10 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, assert_equal/3]).
+-export([start_link/3, assert_equal/3]).
 
--export([list_keys_tester/3, kv_tester/3, mapred_tester/3, 
-         twoi_tester/3, search_tester/3]).
+-export([list_keys_tester/4, kv_tester/4, mapred_tester/4, 
+         twoi_tester/4, search_tester/4]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -45,9 +45,9 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Name, Node) ->
+start_link(Name, Node, Backend) ->
     lager:debug("Spawning loaded_upgrade_worker for ~p", [Name]),
-    gen_server:start_link({local, Name}, ?MODULE, [Name, Node], []).
+    gen_server:start_link({local, Name}, ?MODULE, [Name, Node, Backend], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -64,32 +64,28 @@ start_link(Name, Node) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Name, Node]) ->
+init([Name, Node, Backend]) ->
+    rt:wait_for_service(Node, riak_kv),
     lager:debug("loaded_upgrade_worker:init([~p]) ~p", [Node, self()]),
 
     ListKeysPBC = rt:pbc(Node),
-    ListKeysPid = spawn_link(?MODULE, list_keys_tester, [Name, 0, ListKeysPBC]),
+    ListKeysPid = spawn_link(?MODULE, list_keys_tester, [Name, Node, 0, ListKeysPBC]),
 
     MapRedPBC = rt:pbc(Node),
-    MapRedPid = spawn_link(?MODULE, mapred_tester, [Name, 0, MapRedPBC]),
+    MapRedPid = spawn_link(?MODULE, mapred_tester, [Name, Node, 0, MapRedPBC]),
     
     KVPBC = rt:pbc(Node),
-    KVPid = spawn_link(?MODULE, kv_tester, [Name, 0, KVPBC]),
+    KVPid = spawn_link(?MODULE, kv_tester, [Name, Node, 0, KVPBC]),
     
-    %% TODO: pass backend in as an init param
-    TestMetaData = riak_test_runner:metadata(self()),
-    %% Only run 2i for level
-    Backend = proplists:get_value(backend, TestMetaData),
-    lager:info("BACKEND! ~p", [Backend]),
     TwoIPid = case Backend of
         eleveldb ->
             TwoIPBC = rt:pbc(Node),
-            spawn_link(?MODULE, twoi_tester, [Name, 0, TwoIPBC]);
+            spawn_link(?MODULE, twoi_tester, [Name, Node, 0, TwoIPBC]);
         _ -> undefined
     end,
 
     SearchPBC = rt:pbc(Node),
-    SearchPid = spawn_link(?MODULE, search_tester, [Name, 0, SearchPBC]),
+    SearchPid = spawn_link(?MODULE, search_tester, [Name, Node, 0, SearchPBC]),
     {ok, #state{name=Name, 
                 node=Node, 
                 list_keys=ListKeysPid, 
@@ -99,18 +95,6 @@ init([Name, Node]) ->
                 search=SearchPid
                }}.
 
-%    PBC = rt:pbc(Node),
-%    HTTPC = rt:httpc(Node),
-%    lager:debug("Created Clients ~p", [Name]),
-%    State = #state{
-%       node = Node,
-%       name = Name,
-%       pbc = PBC,
-%       httpc = HTTPC
-%      },
-%    Pid = spawn_link(?MODULE, test_fun, [State]),
-%    lager:debug("Spawned tester ~p", [Name]),
-%    {ok, State#state{runner=Pid}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -185,109 +169,101 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%%test_fun(State=#state{count=Count}) ->
-%%    [ F() || F <- generate_test_funs(State)],
-%%    test_fun(State#state{count=Count+1}).
+list_keys_tester(Name, Node, Count, PBC) ->
+    %%lager:debug("<~p> listkeys test #~p", [Name, Count]),
+    case riakc_pb_socket:list_keys(PBC, <<"objects">>) of
+        {ok, Keys} ->
+            ActualKeys = lists:usort(Keys),
+            ExpectedKeys = lists:usort([new_loaded_upgrade:int_to_key(K) || K <- lists:seq(0, 100)]),
+            assert_equal(Name, ExpectedKeys, ActualKeys),
+            list_keys_tester(Name, Node, Count + 1, PBC);
+        {error, Reason} ->
+            lager:debug("<~p> list keys connection error ~p", [Name, Reason]),
+            list_keys_tester(Name, Node, Count, rt:pbc(Node))            
+    end.
 
-%%generate_test_funs(#state{name=Name, pbc=PBC, httpc=_HTTPC, count=Count}) ->    
-%%    [
-%%     %% List Keys
-%%     fun() ->
-%%        io:format("< ~p > listkeys test #~p", [Name, Count]),
-%%        {ok, Keys} = riakc_pb_socket:list_keys(PBC, <<"objects">>), 
-%%        ActualKeys = lists:usort(Keys),
-%%        ExpectedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, 100)]),
-%%        assert_equal(Name, ExpectedKeys, ActualKeys)    
-%%     end,
-%%     %% KV
-%%     fun() ->
-%%        io:format("< ~p > kv test #~p", [Name, Count]),
-%%        Key = Count rem 8000,
-%%        Val = rt:pbc_read(PBC, new_loaded_upgrade:bucket(kv), new_loaded_upgrade:int_to_key(Key)),
-%%        ?assertEqual(new_loaded_upgrade:kv_valgen(Key), riakc_obj:get_value(Val))
-%%     end,
-     %% MapRed
-%%     fun() ->
-%%        io:format("< ~p > mapred test #~p", [Name, Count]),
-%%        case riakc_pb_socket:mapred(PBC, new_loaded_upgrade:bucket(mapred), new_loaded_upgrade:erlang_mr()) of
-%%            {ok, [{1, [10000]}]} ->
-%%                ?assert(true);
-%%            {ok, R} ->
-%%                io:format("< ~p > bad mapred result: ~p", [Name, R]),
-%%                ?assert(false);
-%%            {error, Reason} ->
-%%                io:format("< ~p > mapred error: ~p", [Name, Reason]),
-%%                ?assert(false)
-%%        end
-%%     End
-%%    ].
 
-list_keys_tester(Name, Count, PBC) ->
-    io:format("<~p> listkeys test #~p", [Name, Count]),
-    {ok, Keys} = riakc_pb_socket:list_keys(PBC, <<"objects">>), 
-    ActualKeys = lists:usort(Keys),
-    ExpectedKeys = lists:usort([new_loaded_upgrade:int_to_key(K) || K <- lists:seq(0, 100)]),
-    assert_equal(Name, ExpectedKeys, ActualKeys),
-    list_keys_tester(Name, Count + 1, PBC).
-
-kv_tester(Name, Count, PBC) ->
-    io:format("<~p> kv test #~p", [Name, Count]),
+kv_tester(Name, Node, Count, PBC) ->
+    %%lager:debug("<~p> kv test #~p", [Name, Count]),
     Key = Count rem 8000,
-    Val = rt:pbc_read(PBC, new_loaded_upgrade:bucket(kv), new_loaded_upgrade:int_to_key(Key)),
-    ?assertEqual(new_loaded_upgrade:kv_valgen(Key), riakc_obj:get_value(Val)),
-    kv_tester(Name, Count + 1, PBC).
+    case riakc_pb_socket:get(PBC, new_loaded_upgrade:bucket(kv), new_loaded_upgrade:int_to_key(Key)) of
+        {ok, Val} ->
+            ?assertEqual(new_loaded_upgrade:kv_valgen(Key), riakc_obj:get_value(Val)),
+            kv_tester(Name, Node, Count + 1, PBC);            
+        {error, Reason} ->
+            lager:debug("<~p> kv_tester connection error ~p", [Name, Reason]),
+            kv_tester(Name, Node, Count, rt:pbc(Node))
+    end.
 
-
-mapred_tester(Name, Count, PBC) ->
-    io:format("<~p> mapred test #~p", [Name, Count]),
+mapred_tester(Name, Node, Count, PBC) ->
+    %%lager:debug("<~p> mapred test #~p", [Name, Count]),
     case riakc_pb_socket:mapred(PBC, new_loaded_upgrade:bucket(mapred), new_loaded_upgrade:erlang_mr()) of
         {ok, [{1, [10000]}]} ->
-            ?assert(true);
+            ?assert(true),
+            mapred_tester(Name, Node, Count + 1, PBC);
         {ok, R} ->
             io:format("< ~p > bad mapred result: ~p", [Name, R]),
             ?assert(false);
-        {error, Reason} ->
-            io:format("< ~p > mapred error: ~p", [Name, Reason]),
+        {error, disconnected} ->
+            lager:debug("<~p> mapred connection error: ~p", [Name, disconnected]),
+            mapred_tester(Name, Node, Count, rt:pbc(Node));
+        {error, {timeout, _}} ->
+            %% Finkmaster Flex says timeouts are ok
+            mapred_tester(Name, Node, Count + 1, rt:pbc(Node));
+       {error, Reason} ->
+            lager:debug("< ~p > mapred error: ~p", [Name, Reason]),
             ?assert(false)
-    end,
-    mapred_tester(Name, Count + 1, PBC).
+    end.
 
-twoi_tester(Name, Count, PBC) ->
-    io:format("<~p> 2i test #~p", [Name, Count]),
+twoi_tester(Name, Node, Count, PBC) ->
+    %%lager:debug("<~p> 2i test #~p", [Name, Count]),
     Key = Count rem 8000,
     ExpectedKeys = [new_loaded_upgrade:int_to_key(Key)],
-    {ok, BinKeys} = riakc_pb_socket:get_index(
+    case {
+      riakc_pb_socket:get_index(
                               PBC, 
                               new_loaded_upgrade:bucket(twoi), 
                               {binary_index, "plustwo"}, 
                               new_loaded_upgrade:int_to_key(Key + 2)),
-    {ok, IntKeys} = riakc_pb_socket:get_index(
+      riakc_pb_socket:get_index(
                               PBC, 
                               new_loaded_upgrade:bucket(twoi), 
                               {integer_index, "plusone"}, 
-                              Key + 1),
-    assert_equal(Name, ExpectedKeys, BinKeys),
-    assert_equal(Name, ExpectedKeys, IntKeys),
-    twoi_tester(Name, Count + 1, PBC).
+                              Key + 1)
+     } of 
+        {{ok, BinKeys}, {ok, IntKeys}} ->           
+            assert_equal(Name, ExpectedKeys, BinKeys),
+            assert_equal(Name, ExpectedKeys, IntKeys),
+            twoi_tester(Name, Node, Count + 1, PBC);
+        {{error, Reason}, _} ->
+            lager:debug("<~p> 2i connection error: ~p", [Name, Reason]),
+            twoi_tester(Name, Node, Count, rt:pbc(Node));
+        {_, {error, Reason}} ->
+            lager:debug("<~p> 2i connection error: ~p", [Name, Reason]),
+            twoi_tester(Name, Node, Count, rt:pbc(Node))
+    end.
 
-search_tester(Name, Count, PBC) ->
-    io:format("<~p> search test #~p", [Name, Count]),
-    
-    {ok, Results1} = riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), <<"mx.example.net">>),
-    {ok, Results2} = riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), <<"ZiaSun">>),
-    {ok, Results3} = riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), <<"headaches">>),
-    {ok, Results4} = riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), <<"YALSP">>),
-    {ok, Results5} = riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), <<"mister">>),
-    {ok, Results6} = riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), <<"prohibiting">>),
+search_tester(Name, Node, Count, PBC) ->
+    %%lager:debug("<~p> search test #~p", [Name, Count]),
+    {Term, Size} = search_check(Count),
+    case riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), Term) of
+        {ok, Result} ->
+            ?assertEqual(Size, Result#search_results.num_found),
+            search_tester(Name, Node, Count + 1, PBC);
+        {error, Reason} ->
+            lager:debug("<~p> search connection error: ~p", [Name, Reason]),
+            search_tester(Name, Node, Count, rt:pbc(Node))
+    end.
 
-    ?assertEqual(187, Results1#search_results.num_found),
-    ?assertEqual(1, Results2#search_results.num_found),
-    ?assertEqual(4, Results3#search_results.num_found),
-    ?assertEqual(3, Results4#search_results.num_found),
-    ?assertEqual(0, Results5#search_results.num_found),
-    ?assertEqual(5, Results6#search_results.num_found),
-
-    search_tester(Name, Count + 1, PBC).
+search_check(Count) ->
+    case Count rem 6 of
+        0 -> { <<"mx.example.net">>, 187};
+        1 -> { <<"ZiaSun">>, 1};
+        2 -> { <<"headaches">>, 4};
+        3 -> { <<"YALSP">>, 3};
+        4 -> { <<"mister">>, 0};
+        5 -> { <<"prohibiting">>, 5}
+    end.
 
 assert_equal(Name, Expected, Actual) ->
     case Expected -- Actual of 

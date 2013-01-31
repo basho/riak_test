@@ -5,15 +5,18 @@
 -export([confirm/0]).
 
 -export([kv_valgen/1, bucket/1, erlang_mr/0, int_to_key/1]).
+
+-define(TIME_BETWEEN_UPGRADES, 300000).
+
 confirm() ->
 
     %% Build Cluster
     TestMetaData = riak_test_runner:metadata(),
     %% Only run 2i for level
-    _Backend = proplists:get_value(backend, TestMetaData),
+    Backend = proplists:get_value(backend, TestMetaData),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
-    Config = [{riak_search, [{enabled, true}]}],
+    Config = [{riak_search, [{enabled, true}]}, {riak_pipe, [{worker_limit, 100}]}],
     NumNodes = 4,
     Vsns = [{OldVsn, Config} || _ <- lists:seq(1,NumNodes)],
     Nodes = rt:build_cluster(Vsns),
@@ -23,14 +26,30 @@ confirm() ->
     %% Let's spawn workers against it.
     timer:sleep(10000),
 
-    %% TODO: teach this supervisor to take 1 node, and not be registered. 
-    %% Then, kill a specific supervisor
-    rt_worker_sup:start_link([{concurrent, 10}, {nodes, Nodes}]),
+    %% TODO: Then, kill a specific supervisor
+    Sups = [
+        {rt_worker_sup:start_link([
+            {concurrent, 10},
+            {node, Node},
+            {backend, Backend}
+        ]), Node}
+    || Node <- Nodes],
 
     %% TODO: Replace with a recieve block 
-    timer:sleep(60000),
+    timer:sleep(?TIME_BETWEEN_UPGRADES),
 
-    ?assert(false),
+    [begin
+        exit(Sup, normal),
+        lager:info("Upgrading ~p", [Node]),
+        rt:upgrade(Node, current),
+        rt_worker_sup:start_link([
+            {concurrent, 10},
+            {node, Node},
+            {backend, Backend}
+        ]),
+        timer:sleep(?TIME_BETWEEN_UPGRADES)
+    end || {{ok, Sup}, Node} <- Sups],
+
     pass.
 
 
