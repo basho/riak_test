@@ -20,7 +20,7 @@
 
 %% @doc riak_test_runner runs a riak_test module's run/0 function. 
 -module(riak_test_runner).
--export([confirm/3, metadata/0]).
+-export([confirm/3, metadata/0, metadata/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
@@ -28,6 +28,12 @@
 metadata() ->
     riak_test ! metadata,
     receive 
+        {metadata, TestMeta} -> TestMeta 
+    end.
+
+metadata(Pid) ->
+    riak_test ! {metadata, Pid},
+    receive
         {metadata, TestMeta} -> TestMeta 
     end.
 
@@ -105,6 +111,9 @@ rec_loop(Pid, TestModule, TestMetaData) ->
     receive
         metadata ->
             Pid ! {metadata, TestMetaData},
+            rec_loop(Pid, TestModule, TestMetaData);
+        {metadata, P} ->
+            P ! {metadata, TestMetaData},
             rec_loop(Pid, TestModule, TestMetaData);
         {'EXIT', Pid, normal} -> {pass, undefined};
         {'EXIT', Pid, Error} ->
