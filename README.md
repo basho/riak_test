@@ -159,6 +159,19 @@ name you specify. For example, running the command below will use an
 defaults contain every option you need, you can run riak_test without
 the `-c` argument.
 
+Some configuration parameters:
+ 
+#### rt_default_config
+Default configuration parameters that will be used for nodes deployed by riak_test.  Tests can
+override these.
+
+```erlang
+{rtdev, [
+    { rt_default_config,
+        [ {riak_core, [ {ring_creation_size, 16} ]} ] }
+]}
+```
+
 ### Running riak_test for the first time
 
 Run a test! `./riak_test -c rtdev -t verify_build_cluster`
