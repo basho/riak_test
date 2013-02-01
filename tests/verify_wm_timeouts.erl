@@ -13,10 +13,11 @@ confirm() ->
                                 "-d 'foobarbaz\n'", 
                                 [rt:http_url(Node)])),
 
-    {_Mod, Bin, File} = code:get_object_code(?MODULE),
-    rpc:call(Node, code, load_binary, [?MODULE, 
-                                       File, Bin]),
-    ok = rpc:call(Node, ?MODULE, setup_mocks, []),
+    rt_intercept:load_intercepts([Node]),
+    rt_intercept:add(Node, {riak_kv_get_fsm,
+                            [{{prepare,2}, slow_prepare}]}),
+    rt_intercept:add(Node, {riak_kv_put_fsm,
+                            [{{prepare,2}, slow_prepare}]}),
     
     lager:info("testing GET timeout"),
     %%curl must be installed locally for this to work.
@@ -51,27 +52,8 @@ confirm() ->
                                 [rt:http_url(Node)])),
     ?assertEqual(LGET, "foobarbaz\n"),
     
-    ok = rpc:call(Node, ?MODULE, unload_mocks, []),
     pass.    
 
-setup_mocks() ->
-    error_logger:info_msg("Beginning setup_mocks"),
-    meck:new(riak_kv_get_fsm, [unstick, passthrough, no_link]),
-    meck:new(riak_kv_put_fsm, [unstick, passthrough, no_link]),
-    meck:expect(riak_kv_put_fsm, prepare,
-                fun delay/2),
-    meck:expect(riak_kv_get_fsm, prepare,
-                fun delay/2),
-    error_logger:info_msg("Installed mocks"),
-    ok.
 
-delay(timeout, State) ->
-    error_logger:info_msg("Adding delay"),
-    timer:sleep(1000),
-    meck:passthrough([timeout, State]).
 
-unload_mocks() ->
-    error_logger:info_msg("unloading mocks"),
-    meck:unload(),
-    error_logger:info_msg("mocks unloaded"),
-    ok.
+
