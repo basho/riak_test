@@ -1,5 +1,10 @@
 .PHONY: deps
 
+APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
+	xmerl webtool eunit syntax_tools compiler hipe mnesia public_key \
+	observer
+PLT = $(HOME)/.riak-test_dialyzer_plt
+
 all: deps compile
 	./rebar skip_deps=true escriptize
 
@@ -20,3 +25,37 @@ clean:
 
 distclean: clean
 	@rm -rf riak_test deps
+
+##################
+# Dialyzer targets
+##################
+
+# public targets
+dialyzer: compile $(PLT)
+	dialyzer -Wno_return -Wunmatched_returns --plt $(PLT) ebin | \
+		egrep -v -f ./dialyzer.ignore-warnings
+
+build_plt: compile build_plt_internal
+
+clean_plt:
+	@echo
+	@echo "Are you sure?  It takes about 1/2 hour to re-build."
+	@echo Deleting $(PLT) in 5 seconds.
+	@echo
+	sleep 5
+	rm $(PLT)
+
+# internal targets
+# build plt file. assumes 'compile' was already run, e.g. from 'dialyzer' target
+$(PLT):
+	build_plt_internal
+
+# This target requires 'compile' to run first
+build_plt_internal:
+	@echo
+	@echo "Building dialyzer's plt file. This can take 1/2 hour."
+	@echo "  Because it wasn't here:" $(PLT)
+	@echo "  Consider using R15B03 or later for 100x faster build time!"
+	@echo
+	@sleep 1
+	dialyzer --build_plt --output_plt $(PLT) --apps $(APPS)

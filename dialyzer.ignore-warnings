@@ -1,0 +1,145 @@
+############## Warnings from dependencies that we might/should fix?
+^mochiglobal.erl:
+^mochiweb.erl:
+^mochiweb_http.erl:
+^mochiweb_request.erl:
+^mochiweb_socket_server.erl:
+^protobuffs_compile.erl:
+^riak_kv_pb.erl:
+^riak_pb.erl:
+^riak_repl_pb.erl:
+^riak_repl_pb_api.erl:
+^riak_search_pb.erl:
+^webmachine.erl:
+^webmachine_decision_core.erl:
+^webmachine_logger.erl:
+^webmachine_mochiweb.erl:
+^webmachine_perf_logger.erl:
+^webmachine_request.erl:
+^webmachine_resource.erl:
+^webmachine_sup.erl:
+############## Warnings from dependencies that are outside our scope
+^bread.erl:
+^dtop.erl:
+^dtopConsumer.erl:
+^eper.erl:
+^erlcloud.erl:
+^erlcloud_elb.erl:
+^erlcloud_s3.erl:
+^folsom_ets.erl:
+^folsom_metrics_spiral.erl:
+^folsom_sample_exdec.erl:
+^folsom_sup.erl:
+^giddyup.erl:
+^gperfGtk.erl:
+^ibrowse_http_client.erl
+^leexinc.hrl:
+^logReader.erl:
+^mapred_verify.erl:
+^meck.erl:
+^meck_cover.erl:
+^ntopConsumer.erl:
+^otp_mib.erl:
+^pokemon_pb.erl:
+^prfDog.erl:
+^prfHost.erl:
+^prfSys.erl:
+^prfTarg.erl:
+^prfTrc.erl:
+^prf_crypto.erl:
+^redbug.erl:
+^reloader.erl:
+^rhc.erl:
+^rhc_listkeys.erl:
+^rhc_obj.erl:
+^riak_test.erl:
+^riak_test_group_leader.erl:
+^riak_test_runner.erl:
+^rt.erl:
+^rtdev.erl:
+^sherk.erl:
+^sherk_aquire.erl:
+^sherk_ets.erl:
+^sherk_scan.erl:
+^sherk_tab.erl:
+^sherk_target.erl:
+^snmp_shadow.erl:
+^snmpa.erl:
+^ttb.erl:
+^watchdog.erl:
+############## datatypes due to riak_kv stuff in this repo
+  riak_kv_backend:fold_buckets_fun/0
+  riak_kv_backend:fold_keys_fun/0
+  riak_kv_backend:fold_objects_fun/0
+  riak_object:bucket/0
+  riak_object:get_metadata/1
+  riak_object:get_value/1
+  riak_object:get_values/1
+  riak_object:key/0
+  riak_object:key/1
+  riak_object:new/3
+  riak_object:update_metadata/2
+############## functions due to riak_kv stuff in this repo
+  app_helper:get_prop_or_env/3
+  app_helper:get_prop_or_env/4
+############## harmless/intentional missing functions
+  dtrace:init/0
+  edoc:application/3
+  edoc:get_doc/3
+  edoc:layout/2
+  edoc_data:overview/4
+  edoc_data:package/4
+  edoc_extract:file/4
+  edoc_lib:copy_file/2
+  edoc_lib:join_uri/2
+  edoc_lib:run_layout/2
+  edoc_lib:segment/2
+  edoc_lib:strip_space/1
+  edoc_lib:transpose/1
+  edoc_lib:write_file/3
+  edoc_lib:write_file/4
+  edoc_lib:write_info_file/4
+  edoc_refs:relative_package_path/2
+  edoc_report:report/2
+  edoc_report:warning/2
+  erlsom:sax/3
+  eunit:test/1
+  eunit_lib:command/1
+  fdsrv:bind_socket/2
+  fdsrv:start/0
+  fdsrv:stop/0
+  gtknode:cmd/2
+  gtknode:start/1
+  rebar_config:get_global/3
+  rebar_config:set/3
+  rebar_erlc_compiler:compile/2
+  rebar_file_utils:rm_rf/1
+  rebar_utils:ebin_dir/0
+  riak:client_connect/1
+  riak:stop/1
+  riak_core_bucket:get_bucket/1
+  riak_core_ring:all_members/1
+  riak_core_ring:all_owners/1
+  riak_core_ring:claimant/1
+  riak_core_ring:member_status/2
+  riak_core_ring:pending_changes/1
+  riak_core_ring:ready_members/1
+  riak_core_ring:ring_ready/1
+  riak_cs_dummy_reader:get_manifest/1
+  riak_cs_dummy_reader:start_link/1
+  riak_kv_mapred_filters:build_exprs/1
+  xmerl:export_simple/2
+  xmerl:export_simple/3
+  xmerl:export_simple_content/2
+  xmerl_html:'#element#'/5
+  xmerl_lib:end_tag/1
+  xmerl_lib:expand_element/1
+  xmerl_lib:find_attribute/2
+  xmerl_lib:mapxml/2
+  xmerl_lib:start_tag/2
+  xmerl_scan:string/1
+  xmerl_scan:string/2
+  xmerl_ucs:from_utf16be/1
+  xmerl_ucs:from_utf8/1
+  xmerl_ucs:to_utf8/1
+  xmerl_xpath:string/2
