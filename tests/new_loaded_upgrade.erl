@@ -6,17 +6,22 @@
 
 -export([kv_valgen/1, bucket/1, erlang_mr/0, int_to_key/1]).
 
--define(TIME_BETWEEN_UPGRADES, 300000).
+-define(TIME_BETWEEN_UPGRADES, 300).
 
 confirm() ->
 
+    case whereis(loaded_upgrade) of
+        undefined -> meh;
+        _ -> unregister(loaded_upgrade)
+    end, 
+    register(loaded_upgrade, self()),
     %% Build Cluster
     TestMetaData = riak_test_runner:metadata(),
     %% Only run 2i for level
     Backend = proplists:get_value(backend, TestMetaData),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
-    Config = [{riak_search, [{enabled, true}]}, {riak_pipe, [{worker_limit, 100}]}],
+    Config = [{riak_search, [{enabled, true}]}, {riak_pipe, [{worker_limit, 200}]}],
     NumNodes = 4,
     Vsns = [{OldVsn, Config} || _ <- lists:seq(1,NumNodes)],
     Nodes = rt:build_cluster(Vsns),
@@ -36,7 +41,8 @@ confirm() ->
     || Node <- Nodes],
 
     %% TODO: Replace with a recieve block 
-    timer:sleep(?TIME_BETWEEN_UPGRADES),
+    %%timer:sleep(?TIME_BETWEEN_UPGRADES * 100),
+    upgrade_recv_loop(),
 
     [begin
         exit(Sup, normal),
@@ -47,10 +53,41 @@ confirm() ->
             {node, Node},
             {backend, Backend}
         ]),
-        timer:sleep(?TIME_BETWEEN_UPGRADES)
+
+        upgrade_recv_loop()
+
     end || {{ok, Sup}, Node} <- Sups],
 
     pass.
+
+
+upgrade_recv_loop() ->
+    {_, StartSecs, _} = now(),
+    lager:info("StartSecs : ~p", [StartSecs]),
+    EndSecs = StartSecs + ?TIME_BETWEEN_UPGRADES,
+    upgrade_recv_loop(EndSecs).
+
+upgrade_recv_loop(EndSecs) ->
+    {_, Now, _} = now(),
+    case Now > EndSecs of
+        true ->
+            lager:info("Done waiting 'cause ~p > ~p", [Now, EndSecs]);
+        _ ->
+        receive
+            {mapred, bad_result} ->
+                ?assert(false);
+            {kv, not_equal} ->
+                ?assert(false);
+            {listkeys, not_equal} ->
+                ?assert(false);
+            Msg ->
+                lager:info("Received Mesg ~p", [Msg]),
+                upgrade_recv_loop(EndSecs)
+        after (EndSecs - Now) * 1000 ->
+            lager:info("Done waiting 'cause ~p is up", [EndSecs - Now])
+        end
+    end.
+
 
 
 seed_cluster(_Nodes=[Node1|_]) ->

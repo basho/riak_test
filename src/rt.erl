@@ -475,10 +475,13 @@ load_modules_on_nodes([Module | MoreModules], Nodes)
 is_pingable(Node) ->
     net_adm:ping(Node) =:= pong.
 
-is_mixed_cluster(Nodes) ->
+is_mixed_cluster(Nodes) when is_list(Nodes) ->
     %% If the nodes are bad, we don't care what version they are
     {Versions, _BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt:config(rt_max_wait_time)),
-    length(lists:usort(Versions)) > 1.
+    length(lists:usort(Versions)) > 1;
+is_mixed_cluster(Node) ->
+    Nodes = rpc:call(Node, erlang, nodes, []),
+    is_mixed_cluster(Nodes).
 
 %% @private
 is_ready(Node) ->
@@ -574,7 +577,7 @@ wait_until_transfers_complete([Node0|_]) ->
     ok.
 
 wait_for_service(Node, Service) ->
-    lager:info("Wait for service ~p on ~p", [Service, Node]),
+    %%lager:info("Wait for service ~p on ~p", [Service, Node]),
     F = fun(N) ->
                 Services = rpc:call(N, riak_core_node_watcher, services, [N]),
                 lists:member(Service, Services)

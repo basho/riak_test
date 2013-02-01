@@ -28,4 +28,4 @@ init(Props) ->
 
     lager:debug("About to go all supervisor on ~p~n", [ChildSpecs]),
 
-    {ok, {{one_for_one, 5, 60}, ChildSpecs}}.
+    {ok, {{one_for_one, 1000, 60}, ChildSpecs}}.
