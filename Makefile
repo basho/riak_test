@@ -35,8 +35,6 @@ dialyzer: compile $(PLT)
 	dialyzer -Wno_return -Wunmatched_returns --plt $(PLT) ebin | \
 		egrep -v -f ./dialyzer.ignore-warnings
 
-build_plt: compile build_plt_internal
-
 clean_plt:
 	@echo
 	@echo "Are you sure?  It takes about 1/2 hour to re-build."
@@ -48,10 +46,6 @@ clean_plt:
 # internal targets
 # build plt file. assumes 'compile' was already run, e.g. from 'dialyzer' target
 $(PLT):
-	build_plt_internal
-
-# This target requires 'compile' to run first
-build_plt_internal:
 	@echo
 	@echo "Building dialyzer's plt file. This can take 1/2 hour."
 	@echo "  Because it wasn't here:" $(PLT)
