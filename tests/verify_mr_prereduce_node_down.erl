@@ -50,14 +50,13 @@ confirm() ->
     rt:stop(ToKill),
 
     %% store our test data
-    C = rt:pbc(Primary),
     Bucket = <<"verify_mr_prereduce_node_down">>,
     ObjCount = 100,
     lager:info("Loading ~b objects of test data", [ObjCount]),
-    [ ok = riakc_pb_socket:put(C, test_object(Bucket, N), [{w, 3}])
-      || N <- lists:seq(1, ObjCount) ],
+    [] = rt:systest_write(Primary, 1, ObjCount, Bucket, 3),
 
     %% run the query a bunch
+    C = rt:pbc(Primary),
     TestCount = 100,
     lager:info("Running the MR query ~b times", [TestCount]),
     Runs = [ run_query(C, Bucket) || _ <- lists:seq(1, TestCount) ],
@@ -80,10 +79,6 @@ confirm() ->
 
     lager:info("~s: PASS", [atom_to_list(?MODULE)]),
     pass.
-
-%% objects keyed by an ordinal, with a value of N
-test_object(Bucket, N) ->
-    riakc_obj:new(Bucket, list_to_binary(integer_to_list(N)), N).
 
 %% result should be a count of the objects in the bucket
 run_query(C, Bucket) ->
