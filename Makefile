@@ -32,7 +32,7 @@ distclean: clean
 
 # public targets
 dialyzer: compile $(PLT)
-	dialyzer -Wno_return -Wunmatched_returns --plt $(PLT) ebin | \
+	dialyzer -Wno_return -Wunmatched_returns --plt $(PLT) ebin deps/*/ebin | \
 		egrep -v -f ./dialyzer.ignore-warnings
 
 clean_plt:
