@@ -2,7 +2,7 @@
 
 APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
 	xmerl webtool eunit syntax_tools compiler hipe mnesia public_key \
-	observer
+	observer wx gs
 PLT = $(HOME)/.riak-test_dialyzer_plt
 
 all: deps compile

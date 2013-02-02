@@ -72,6 +72,7 @@
   riak_kv_backend:fold_keys_fun/0
   riak_kv_backend:fold_objects_fun/0
   riak_object:bucket/0
+  riak_object:bucket/1
   riak_object:get_metadata/1
   riak_object:get_value/1
   riak_object:get_values/1
@@ -107,8 +108,7 @@
   eunit_lib:command/1
   fdsrv:bind_socket/2
   fdsrv:start/0
-  fdsrv:stop/0
-  gtknode:cmd/2
+  fdsrv:stop/0  gtknode:cmd/2
   gtknode:start/1
   rebar_config:get_global/3
   rebar_config:set/3
@@ -143,3 +143,11 @@
   xmerl_ucs:from_utf8/1
   xmerl_ucs:to_utf8/1
   xmerl_xpath:string/2
+################## Others that I don't know what to do with yet
+  hashtree_orig:update_perform_orig/1
+  riak:local_client/0
+  riak_core_util:chash_std_keyfun/1
+  riak_core_vnode_master:sync_command/4
+  riak_core_vnode_proxy_sup_orig:start_proxies_orig/1
+  riak_kv_vnode_orig:handle_command_orig/3
+  riak_kv_vnode_orig:put_orig/7
