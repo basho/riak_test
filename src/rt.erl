@@ -826,6 +826,14 @@ systest_write(Node, Size) ->
 systest_write(Node, Size, W) ->
     systest_write(Node, 1, Size, <<"systest">>, W).
 
+%% @doc Write (End-Start)+1 objects to Node. Objects keys will be
+%% `Start', `Start+1' ... `End', each encoded as a 32-bit binary
+%% (`<<Key:32/integer>>'). Object values are the same as their keys.
+%%
+%% The return value of this function is a list of errors
+%% encountered. If all writes were successful, return value is an
+%% empty list. Each error has the form `{N :: integer(), Error :: term()}',
+%% where N is the unencoded key of the object that failed to store.
 systest_write(Node, Start, End, Bucket, W) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
