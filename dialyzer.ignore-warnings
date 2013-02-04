@@ -52,11 +52,6 @@
 ^rhc.erl:
 ^rhc_listkeys.erl:
 ^rhc_obj.erl:
-^riak_test.erl:
-^riak_test_group_leader.erl:
-^riak_test_runner.erl:
-^rt.erl:
-^rtdev.erl:
 ^sherk.erl:
 ^sherk_aquire.erl:
 ^sherk_ets.erl:
@@ -151,3 +146,15 @@
   riak_core_vnode_proxy_sup_orig:start_proxies_orig/1
   riak_kv_vnode_orig:handle_command_orig/3
   riak_kv_vnode_orig:put_orig/7
+################# Types that we can't fix from here
+^intercept.erl:
+^kvc.erl:
+^mech_code.erl:
+^mech_code_gen.erl:
+^mech_proc.erl:
+^mech_ret_spec.erl:
+^mochiutf8.erl:
+^protobuffs.erl:
+^riak_pb_codec.erl:
+^riak_pb_kv_codec.erl:
+^riakc_pb_socket.erl:
