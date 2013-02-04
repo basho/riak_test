@@ -30,7 +30,6 @@
 ^folsom_metrics_spiral.erl:
 ^folsom_sample_exdec.erl:
 ^folsom_sup.erl:
-^giddyup.erl:
 ^gperfGtk.erl:
 ^ibrowse_http_client.erl
 ^leexinc.hrl:
