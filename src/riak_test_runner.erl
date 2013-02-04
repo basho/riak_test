@@ -96,8 +96,7 @@ execute(TestModule, TestMetaData) ->
             ErrorHeader = "================ " ++ atom_to_list(TestModule) ++ " failure stack trace =====================",
             ErrorFooter = [ $= || _X <- lists:seq(1,length(ErrorHeader))],
             Error = io_lib:format("~n~s~n~p~n~s~n", [ErrorHeader, Reason, ErrorFooter]),
-            lager:error(Error),
-            cat_node_logs();
+            lager:error(Error);
         _ -> meh
     end,
     {Status, Reason}.
@@ -120,13 +119,3 @@ check_prereqs(Module) ->
     [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
     GoodToGo = lists:all(fun({_, Present}) -> Present end, P2),
     ?assertEqual({all_prereqs_present, true}, {all_prereqs_present, GoodToGo}).
-
-cat_node_logs() ->
-    Files = rt:get_node_logs(),
-    lager:error("================ Printing node logs and crash dumps ================~n~n", []),
-    cat_node_logs(Files).
-
-cat_node_logs([]) -> ok;
-cat_node_logs([{Filename, Content}|Rest]) ->
-    lager:error("================ Log: ~s =====================~n~s~n~n", [Filename, Content]),
-    cat_node_logs(Rest).
