@@ -167,7 +167,7 @@ list_keys_tester(Name, Node, Count, Pid) ->
     case riakc_pb_socket:list_keys(PBC, <<"objects">>) of
         {ok, Keys} ->
             ActualKeys = lists:usort(Keys),
-            ExpectedKeys = lists:usort([new_loaded_upgrade:int_to_key(K) || K <- lists:seq(0, 100)]),
+            ExpectedKeys = lists:usort([loaded_upgrade:int_to_key(K) || K <- lists:seq(0, 100)]),
             case assert_equal(Name, ExpectedKeys, ActualKeys) of
                 true -> cool;
                 _ -> loaded_upgrade ! {listkeys, not_equal}
@@ -184,9 +184,9 @@ list_keys_tester(Name, Node, Count, Pid) ->
 kv_tester(Name, Node, Count, Pid) ->
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
-    case riakc_pb_socket:get(PBC, new_loaded_upgrade:bucket(kv), new_loaded_upgrade:int_to_key(Key)) of
+    case riakc_pb_socket:get(PBC, loaded_upgrade:bucket(kv), loaded_upgrade:int_to_key(Key)) of
         {ok, Val} ->
-            case new_loaded_upgrade:kv_valgen(Key) == riakc_obj:get_value(Val) of
+            case loaded_upgrade:kv_valgen(Key) == riakc_obj:get_value(Val) of
                 true -> cool;
                 _ -> loaded_upgrade ! {kv, not_equal}
             end;
@@ -200,7 +200,7 @@ kv_tester(Name, Node, Count, Pid) ->
 mapred_tester(Name, Node, Count, Pid) ->
     PBC = pb_pid_recycler(Pid, Node),
     %%lager:debug("<~p> mapred test #~p", [Name, Count]),
-    case riakc_pb_socket:mapred(PBC, new_loaded_upgrade:bucket(mapred), new_loaded_upgrade:erlang_mr()) of
+    case riakc_pb_socket:mapred(PBC, loaded_upgrade:bucket(mapred), loaded_upgrade:erlang_mr()) of
         {ok, [{1, [10000]}]} ->
             ok;
         {ok, _R} ->
@@ -240,16 +240,16 @@ mapred_tester(Name, Node, Count, Pid) ->
 twoi_tester(Name, Node, Count, Pid) ->
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
-    ExpectedKeys = [new_loaded_upgrade:int_to_key(Key)],
+    ExpectedKeys = [loaded_upgrade:int_to_key(Key)],
     case {
       riakc_pb_socket:get_index(
                               PBC,
-                              new_loaded_upgrade:bucket(twoi),
+                              loaded_upgrade:bucket(twoi),
                               {binary_index, "plustwo"},
-                              new_loaded_upgrade:int_to_key(Key + 2)),
+                              loaded_upgrade:int_to_key(Key + 2)),
       riakc_pb_socket:get_index(
                               PBC, 
-                              new_loaded_upgrade:bucket(twoi),
+                              loaded_upgrade:bucket(twoi),
                               {integer_index, "plusone"},
                               Key + 1)
      } of 
@@ -275,7 +275,7 @@ twoi_tester(Name, Node, Count, Pid) ->
 search_tester(Name, Node, Count, Pid) ->
     PBC = pb_pid_recycler(Pid, Node),
     {Term, Size} = search_check(Count),
-    case riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), Term) of
+    case riakc_pb_socket:search(PBC, loaded_upgrade:bucket(search), Term) of
         {ok, Result} ->
             ?assertEqual(Size, Result#search_results.num_found);
         {error, disconnected} ->
