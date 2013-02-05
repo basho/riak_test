@@ -6,7 +6,7 @@
 
 -export([kv_valgen/1, bucket/1, erlang_mr/0, int_to_key/1]).
 
--define(TIME_BETWEEN_UPGRADES, 300).
+-define(TIME_BETWEEN_UPGRADES, 300). %% Seconds!
 
 confirm() ->
 
@@ -62,16 +62,21 @@ confirm() ->
 
 
 upgrade_recv_loop() ->
-    {_, StartSecs, _} = now(),
-    lager:info("StartSecs : ~p", [StartSecs]),
-    EndSecs = StartSecs + ?TIME_BETWEEN_UPGRADES,
-    upgrade_recv_loop(EndSecs).
-
-upgrade_recv_loop(EndSecs) ->
-    {_, Now, _} = now(),
-    case Now > EndSecs of
+    {SMega, SSec, SMicro} = os:timestamp(),
+    EndSecs = SSec + ?TIME_BETWEEN_UPGRADES,
+    EndTime = case EndSecs > 1000000 of
         true ->
-            lager:info("Done waiting 'cause ~p > ~p", [Now, EndSecs]);
+            {SMega + 1, EndSecs - 1000000, SMicro};
+        _ ->
+            {SMega, EndSecs, SMicro}
+    end,
+    upgrade_recv_loop(EndTime).
+
+upgrade_recv_loop(EndTime) ->
+    Now = os:timestamp(),
+    case Now > EndTime of
+        true ->
+            lager:info("Done waiting 'cause ~p > ~p", [Now, EndTime]);
         _ ->
         receive
             {mapred, bad_result} ->
@@ -82,9 +87,9 @@ upgrade_recv_loop(EndSecs) ->
                 ?assert(false);
             Msg ->
                 lager:info("Received Mesg ~p", [Msg]),
-                upgrade_recv_loop(EndSecs)
-        after (EndSecs - Now) * 1000 ->
-            lager:info("Done waiting 'cause ~p is up", [EndSecs - Now])
+                upgrade_recv_loop(EndTime)
+        after timer:now_diff(EndTime, Now) div 1000 ->
+            lager:info("Done waiting 'cause ~p is up", [?TIME_BETWEEN_UPGRADES])
         end
     end.
 

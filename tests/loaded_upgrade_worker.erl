@@ -46,7 +46,6 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(Name, Node, Backend) ->
-    lager:debug("Spawning loaded_upgrade_worker for ~p", [Name]),
     gen_server:start_link({local, Name}, ?MODULE, [Name, Node, Backend], []).
 
 %%%===================================================================
@@ -66,26 +65,20 @@ start_link(Name, Node, Backend) ->
 %%--------------------------------------------------------------------
 init([Name, Node, Backend]) ->
     rt:wait_for_service(Node, riak_kv),
-    lager:debug("loaded_upgrade_worker:init([~p]) ~p", [Node, self()]),
 
-    ListKeysPBC = rt:pbc(Node),
-    ListKeysPid = spawn_link(?MODULE, list_keys_tester, [Name, Node, 0, ListKeysPBC]),
+    ListKeysPid = spawn_link(?MODULE, list_keys_tester, [Name, Node, 0, undefined]),
 
-    MapRedPBC = rt:pbc(Node),
-    MapRedPid = spawn_link(?MODULE, mapred_tester, [Name, Node, 0, MapRedPBC]),
+    MapRedPid = spawn_link(?MODULE, mapred_tester, [Name, Node, 0, undefined]),
     
-    KVPBC = rt:pbc(Node),
-    KVPid = spawn_link(?MODULE, kv_tester, [Name, Node, 0, KVPBC]),
+    KVPid = spawn_link(?MODULE, kv_tester, [Name, Node, 0, undefined]),
     
     TwoIPid = case Backend of
         eleveldb ->
-            TwoIPBC = rt:pbc(Node),
-            spawn_link(?MODULE, twoi_tester, [Name, Node, 0, TwoIPBC]);
+            spawn_link(?MODULE, twoi_tester, [Name, Node, 0, undefined]);
         _ -> undefined
     end,
 
-    SearchPBC = rt:pbc(Node),
-    SearchPid = spawn_link(?MODULE, search_tester, [Name, Node, 0, SearchPBC]),
+    SearchPid = spawn_link(?MODULE, search_tester, [Name, Node, 0, undefined]),
     {ok, #state{name=Name, 
                 node=Node, 
                 list_keys=ListKeysPid, 
@@ -169,8 +162,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-list_keys_tester(Name, Node, Count, PBC) ->
-    %%lager:debug("<~p> listkeys test #~p", [Name, Count]),
+list_keys_tester(Name, Node, Count, Pid) ->
+    PBC = pb_pid_recycler(Pid, Node),
     case riakc_pb_socket:list_keys(PBC, <<"objects">>) of
         {ok, Keys} ->
             ActualKeys = lists:usort(Keys),
@@ -178,94 +171,89 @@ list_keys_tester(Name, Node, Count, PBC) ->
             case assert_equal(Name, ExpectedKeys, ActualKeys) of
                 true -> cool;
                 _ -> loaded_upgrade ! {listkeys, not_equal}
-            end,
-            list_keys_tester(Name, Node, Count + 1, PBC);
+            end;
         {error, timeout} ->
-            loaded_upgrade ! {listkeys, timeout},
-            list_keys_tester(Name, Node, Count + 1, PBC);
+            loaded_upgrade ! {listkeys, timeout};
         {error, {timeout, _}} ->
-            loaded_upgrade ! {listkeys, timeout},
-            list_keys_tester(Name, Node, Count + 1, PBC);
-        {error, Reason} ->
-            lager:debug("<~p> list keys connection error ~p", [Name, Reason]),
-            list_keys_tester(Name, Node, Count, pb_pid_recycler(PBC, Node))            
-    end.
+            loaded_upgrade ! {listkeys, timeout};
+        Unexpected ->
+            loaded_upgrade ! {listkeys, Unexpected}
+    end,
+    list_keys_tester(Name, Node, Count + 1, PBC).
 
-
-kv_tester(Name, Node, Count, PBC) ->
-    %%lager:debug("<~p> kv test #~p", [Name, Count]),
+kv_tester(Name, Node, Count, Pid) ->
+    PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
     case riakc_pb_socket:get(PBC, new_loaded_upgrade:bucket(kv), new_loaded_upgrade:int_to_key(Key)) of
         {ok, Val} ->
             case new_loaded_upgrade:kv_valgen(Key) == riakc_obj:get_value(Val) of
                 true -> cool;
                 _ -> loaded_upgrade ! {kv, not_equal}
-            end,
-            kv_tester(Name, Node, Count + 1, PBC);            
+            end;
         {error, disconnected} ->
-            kv_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
-        {error, Reason} ->
-            loaded_upgrade ! {kv, {error, Reason}},
-            kv_tester(Name, Node, Count, pb_pid_recycler(PBC, Node))
-    end.
+            ok;
+        Unexpected ->
+            loaded_upgrade ! {kv, Unexpected}
+    end,
+    kv_tester(Name, Node, Count + 1, PBC).
 
-mapred_tester(Name, Node, Count, PBC) ->
+mapred_tester(Name, Node, Count, Pid) ->
+    PBC = pb_pid_recycler(Pid, Node),
     %%lager:debug("<~p> mapred test #~p", [Name, Count]),
     case riakc_pb_socket:mapred(PBC, new_loaded_upgrade:bucket(mapred), new_loaded_upgrade:erlang_mr()) of
         {ok, [{1, [10000]}]} ->
-            mapred_tester(Name, Node, Count + 1, PBC);
-        {ok, R} ->
-            io:format("< ~p > bad mapred result: ~p", [Name, R]),
-            loaded_upgrade ! {mapred, bad_result},
-            mapred_tester(Name, Node, Count + 1, PBC);
+            ok;
+        {ok, _R} ->
+            loaded_upgrade ! {mapred, bad_result};
         {error, disconnected} ->
-            %%lager:debug("<~p> mapred connection error: ~p", [Name, disconnected]),
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
         %% Finkmaster Flex says timeouts are ok
         {error, timeout} ->
-            mapred_tester(Name, Node, Count + 1, PBC);
+            ok;
         {error, {timeout, _}} ->
-            mapred_tester(Name, Node, Count + 1, PBC);
+            ok;
         {error, <<"{\"phase\":\"listkeys\",\"error\":\"{badmatch,{'EXIT',noproc}}", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
+        {error, <<"{\"phase\":\"listkeys\",\"error\":\"{badmatch,{'EXIT',timeout}}", _/binary>>} ->
+            ok;
         {error, <<"{\"phase\":0,\"error\":\"badarg", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
         {error, <<"{\"phase\":0,\"error\":\"[preflist_exhausted]", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
         {error, <<"{\"phase\":0,\"error\":\"{badmatch,{'EXIT',timeout}}", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
         {error, <<"{\"phase\":\"listkeys\",\"error\":\"function_clause\",\"input\":\"{cover,", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
         {error, <<"{\"phase\":\"listkeys\",\"error\":\"badarg\",\"input\":\"{cover,", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
         {error, <<"Error processing stream message: exit:{ucs,{bad_utf8_character_code}}:[{xmerl_ucs,", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
         {error, <<"{\"phase\":0,\"error\":\"[{vnode_down,{shutdown,{gen_fsm,sync_send_event,", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            ok;
         {error, <<"{\"phase\":0,\"error\":\"[{vnode_down,noproc}]", _/binary>>} ->
-            mapred_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
-        {error, Reason} ->
-            lager:debug("< ~p > mapred error: ~p", [Name, Reason]),
-            loaded_upgrade ! {error, Reason}
-    end.
+            ok;
+        Unexpected ->
+            loaded_upgrade ! {mapred, Unexpected}
+    end,
+    mapred_tester(Name, Node, Count + 1, PBC).
 
-twoi_tester(Name, Node, Count, PBC) ->
-    %%lager:debug("<~p> 2i test #~p", [Name, Count]),
+twoi_tester(Name, Node, Count, Pid) ->
+    PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
     ExpectedKeys = [new_loaded_upgrade:int_to_key(Key)],
     case {
       riakc_pb_socket:get_index(
-                              PBC, 
-                              new_loaded_upgrade:bucket(twoi), 
-                              {binary_index, "plustwo"}, 
+                              PBC,
+                              new_loaded_upgrade:bucket(twoi),
+                              {binary_index, "plustwo"},
                               new_loaded_upgrade:int_to_key(Key + 2)),
       riakc_pb_socket:get_index(
                               PBC, 
-                              new_loaded_upgrade:bucket(twoi), 
-                              {integer_index, "plusone"}, 
+                              new_loaded_upgrade:bucket(twoi),
+                              {integer_index, "plusone"},
                               Key + 1)
      } of 
-        {{ok, BinKeys}, {ok, IntKeys}} ->           
+        {{ok, BinKeys}, {ok, IntKeys}} ->
             case {assert_equal(Name, ExpectedKeys, BinKeys), assert_equal(Name, ExpectedKeys, IntKeys)} of
                 {true, true} -> cool;
                 {false, false} ->
@@ -274,36 +262,45 @@ twoi_tester(Name, Node, Count, PBC) ->
                     loaded_upgrade ! {twoi, bin_no_match};
                 {true, false} ->
                     loaded_upgrade ! {twoi, int_no_match}
-            end,
-            twoi_tester(Name, Node, Count + 1, PBC);
+            end;
         {{error, Reason}, _} ->
-            lager:debug("<~p> 2i connection error: ~p", [Name, Reason]),
-            twoi_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));
+            loaded_upgrade ! {twoi, {error, Reason}};
         {_, {error, Reason}} ->
-            lager:debug("<~p> 2i connection error: ~p", [Name, Reason]),
-            twoi_tester(Name, Node, Count, pb_pid_recycler(PBC, Node))
-    end.
+            loaded_upgrade ! {twoi, {error, Reason}};
+        Unexpected ->
+            loaded_upgrade ! Unexpected
+    end,
+    twoi_tester(Name, Node, Count + 1, PBC).
 
-search_tester(Name, Node, Count, PBC) ->
-    %%lager:debug("<~p> search test #~p", [Name, Count]),
+search_tester(Name, Node, Count, Pid) ->
+    PBC = pb_pid_recycler(Pid, Node),
     {Term, Size} = search_check(Count),
     case riakc_pb_socket:search(PBC, new_loaded_upgrade:bucket(search), Term) of
         {ok, Result} ->
-            ?assertEqual(Size, Result#search_results.num_found),
-            search_tester(Name, Node, Count + 1, PBC);
+            ?assertEqual(Size, Result#search_results.num_found);
         {error, disconnected} ->
             %% oh well, reconnect
-            search_tester(Name, Node, Count, pb_pid_recycler(PBC, Node)); 
-        {error, Reason} when is_binary(Reason) ->
-            case string:str(binary_to_list(Reason), "badfun") of
-                0 -> %% This is not badfun, probably a connection issue
-                    lager:debug("<~p> search connection error: ~p", [Name, Reason]),
-                    search_tester(Name, Node, Count, pb_pid_recycler(PBC, Node));      
-                _ -> %% this is badfun
-                    ?assert(rt:is_mixed_cluster(Node)),
-                    search_tester(Name, Node, Count + 1, PBC)
-            end
-    end.
+            ok;
+
+        {error, <<"Error processing incoming message: throw:{timeout,range_loop}:[{riak_search_backend", _/binary>>} ->
+            case rt:is_mixed_cluster(Node) of
+                true -> 
+                    ok;
+                _ ->
+                    loaded_upgrade ! {search, {timeout, range_loop}}
+            end;
+
+        %%{error, Reason} when is_binary(Reason) ->
+        %%    case string:str(binary_to_list(Reason), "badfun") of
+        %%        0 -> %% This is not badfun, probably a connection issue
+        %%            ok;
+        %%        _ -> %% this is badfun
+        %%            ?assert(rt:is_mixed_cluster(Node))
+        %%    end
+        Unexpected ->
+            loaded_upgrade ! {search, Unexpected}
+    end,
+    search_tester(Name, Node, Count + 1, PBC).
 
 search_check(Count) ->
     case Count rem 6 of
@@ -322,6 +319,8 @@ assert_equal(Name, Expected, Actual) ->
     end,
     Actual == Expected.
 
+pb_pid_recycler(undefined, Node) ->
+    rt:pbc(Node);
 pb_pid_recycler(Pid, Node) ->
     case riakc_pb_socket:is_connected(Pid) of
         true ->
