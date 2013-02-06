@@ -54,6 +54,7 @@ confirm() ->
             {backend, Backend}
         ]),
 
+        _NodeMon = init_node_monitor(Node, self()),
         upgrade_recv_loop()
 
     end || {{ok, Sup}, Node} <- Sups],
@@ -92,8 +93,6 @@ upgrade_recv_loop(EndTime) ->
             lager:info("Done waiting 'cause ~p is up", [?TIME_BETWEEN_UPGRADES])
         end
     end.
-
-
 
 seed_cluster(_Nodes=[Node1|_]) ->
     lager:info("Seeding Cluster"),
@@ -183,3 +182,28 @@ mr_seed(Pid) ->
         riakc_pb_socket:put(Pid, Obj)
       end || Key <- lists:seq(0, 9999)].
 
+
+%% ===================================================================
+%% Monitor nodes after they upgrade
+%% ===================================================================
+init_node_monitor(Node, TestProc) ->
+    spawn_link(fun() -> node_monitor(Node, TestProc) end).
+
+node_monitor(Node, TestProc) ->
+    lager:info("Monitoring node ~p to make sure it stays up.", [Node]),
+    erlang:process_flag(trap_exit, true),
+    erlang:monitor_node(Node, true),
+    node_monitor_loop(Node, TestProc).
+
+node_monitor_loop(Node, TestProc) ->
+    receive
+        {nodedown, Node} ->
+            lager:error("Node ~p exited after upgrade!", [Node]),
+            ?assertEqual(nodeup, {nodedown, Node});
+        {'EXIT', TestProc, _} ->
+            erlang:monitor_node(Node, false),
+            ok;
+        Other ->
+            lager:warn("Node monitor for ~p got unknown message ~p", [Node, Other]),
+            node_monitor_loop(Node, TestProc)
+    end.
