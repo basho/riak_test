@@ -576,14 +576,15 @@ wait_until_transfers_complete([Node0|_]) ->
     ?assertEqual(ok, wait_until(Node0, F)),
     ok.
 
-wait_for_service(Node, Service) ->
-    %%lager:info("Wait for service ~p on ~p", [Service, Node]),
+wait_for_service(Node, Services) when is_list(Services) ->
     F = fun(N) ->
-                Services = rpc:call(N, riak_core_node_watcher, services, [N]),
-                lists:member(Service, Services)
+                CurrServices = rpc:call(N, riak_core_node_watcher, services, [N]),
+                lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services) 
         end,
     ?assertEqual(ok, wait_until(Node, F)),
-    ok.
+    ok;
+wait_for_service(Node, Service) ->
+    wait_for_service(Node, [Service]).
 
 wait_for_cluster_service(Nodes, Service) ->
     lager:info("Wait for cluster service ~p in ~p", [Service, Nodes]),
