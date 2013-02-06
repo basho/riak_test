@@ -64,7 +64,7 @@ start_link(Name, Node, Backend) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Name, Node, Backend]) ->
-    rt:wait_for_service(Node, riak_kv),
+    rt:wait_for_service(Node, [riak_search,riak_kv,riak_pipe]),
 
     ListKeysPid = spawn_link(?MODULE, list_keys_tester, [Name, Node, 0, undefined]),
 
@@ -290,6 +290,14 @@ search_tester(Name, Node, Count, Pid) ->
                     loaded_upgrade ! {search, {timeout, range_loop}}
             end;
 
+        {error,<<"Error processing incoming message: error:{case_clause,", _/binary>>} ->
+            %% although it doesn't say so, this is the infamous badfun
+            case rt:is_mixed_cluster(Node) of
+                true -> 
+                    ok;
+                _ ->
+                    loaded_upgrade ! {search, {error, badfun}}
+            end;
         %%{error, Reason} when is_binary(Reason) ->
         %%    case string:str(binary_to_list(Reason), "badfun") of
         %%        0 -> %% This is not badfun, probably a connection issue
