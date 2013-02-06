@@ -182,9 +182,9 @@ which_tests_to_run(Platform, CommandLineTests) ->
     lists:foldr(fun filter_merge_tests/2, [], Suite).
 
 filter_zip_suite(Platform, CommandLineTests) ->
-        [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform),
-                                     {CModule, CMeta} <- CommandLineTests,
-                                     SModule =:= CModule].
+    [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform),
+                                 {CModule, CMeta} <- CommandLineTests,
+                                 SModule =:= CModule].
 
 filter_merge_tests({Module, SMeta, CMeta}, Tests) ->
     case filter_merge_meta(SMeta, CMeta, [backend, upgrade_version]) of
@@ -216,8 +216,11 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
         _ ->
             {log, TestLog} = lists:keyfind(log, 1, SingleTestResult),
             NodeLogs = cat_node_logs(),
+            EncodedNodeLogs = unicode:characters_to_binary(iolist_to_binary(NodeLogs),
+                                                           latin1, utf8),
+            NewLogs = iolist_to_binary([TestLog, EncodedNodeLogs]),
             ResultWithNodeLogs = lists:keyreplace(log, 1, SingleTestResult,
-                                                  {log, iolist_to_binary([TestLog, NodeLogs])}),
+                                                  {log, NewLogs}),
             giddyup:post_result(ResultWithNodeLogs)
     end,
     SingleTestResult.
