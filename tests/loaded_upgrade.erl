@@ -162,7 +162,7 @@ seed_search(Pid, [File|Files]) ->
 
 kv_seed(Node) ->
     ValFun = fun(Key) ->
-            riakc_obj:new(bucket(kv), list_to_binary(["", integer_to_list(Key)]), kv_valgen(Key))
+            riakc_obj:new(bucket(kv), iolist_to_binary(io_lib:format("~p", [Key])), kv_valgen(Key))
     end,
     seed(Node, 0, 7999, ValFun).
 
@@ -177,7 +177,7 @@ int_to_key(KInt) ->
 %% bin_plustwo -> [<<"Key + 2">>]
 twoi_seed(Node) ->
     ValFun = fun(Key) ->
-        Obj = riakc_obj:new(bucket(twoi), list_to_binary(["", integer_to_list(Key)]), kv_valgen(Key)),
+        Obj = riakc_obj:new(bucket(twoi), iolist_to_binary(io_lib:format("~p", [Key])), kv_valgen(Key)),
         MD1 = riakc_obj:get_update_metadata(Obj),
         MD2 = riakc_obj:set_secondary_index(MD1, [
             {{integer_index, "plusone"}, [Key + 1, Key + 10000]},
@@ -195,7 +195,7 @@ mr_seed(Node) ->
 %% to be used along with sequential_int keygen to populate known
 %% mapreduce set
     ValFun = fun(Key) ->
-            Value = list_to_binary(["", integer_to_list(Key)]),
+            Value = iolist_to_binary(io_lib:format("~p", [Key])),
             riakc_obj:new(bucket(mapred), Value, Value)
         end,
     seed(Node, 0, 9999, ValFun).
