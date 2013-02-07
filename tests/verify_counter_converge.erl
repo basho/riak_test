@@ -27,12 +27,21 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(BUCKET, <<"test-counters">>).
+
 confirm() ->
     inets:start(),
     Key = a,
 
     [N1, N2, N3, N4]=Nodes = rt:build_cluster(4),
     [HP1, HP2, HP3, HP4]=Hosts =  get_host_ports(Nodes),
+
+    %% Counters REQUIRE allow_mult=true
+    AllowMult = [{allow_mult, true}],
+    lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
+               [?BUCKET, AllowMult, N1]),
+    rpc:call(N1, riak_core_bucket, set_bucket, [?BUCKET, AllowMult]),
+    rt:wait_until_ring_converged(Nodes),
 
     increment_counter(HP1, Key),
     increment_counter(HP2, Key, 10),
@@ -51,7 +60,7 @@ confirm() ->
     %% increment one side
     increment_counter(HP1, Key, 5),
 
-    %% check vaule on one side is different from other
+    %% check value on one side is different from other
     [?assertEqual(13, get_counter(HP, Key)) || HP <- [HP1, HP2]],
     [?assertEqual(8, get_counter(HP, Key)) || HP <- [HP3, HP4]],
 
@@ -65,7 +74,7 @@ confirm() ->
     %% heal
     lager:debug("Heal and check merged values"),
     ok = rt:heal(PartInfo),
-    ok = rt:wait_for_cluster_service(Nodes, riak_dt),
+    ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree
     [?assertEqual(ok, rt:wait_until(HP, fun(N) ->
@@ -86,33 +95,33 @@ increment_counter(HostPort, Key) ->
     increment_counter(HostPort, Key, 1).
 
 increment_counter(HostPort, Key, Amt) ->
-    update_counter(HostPort, Key, increment, Amt).
+    update_counter(HostPort, Key, Amt).
 
 decrement_counter(HostPort, Key) ->
     decrement_counter(HostPort, Key, 1).
 
 decrement_counter(HostPort, Key, Amt) ->
-    update_counter(HostPort, Key, decrement, Amt).
+    update_counter(HostPort, Key, -Amt).
 
-update_counter(HostPort, Key, Action, Amt) ->
-    post(HostPort, [Key, Action], integer_to_list(Amt)).
+update_counter(HostPort, Key, Amt) ->
+    post(HostPort, Key, integer_to_list(Amt)).
 
 %% HTTP API
-url({Host, Port}, PathElements) ->
-    Path = path([counters|PathElements]),
+url({Host, Port}, Key) ->
+    Path = path([buckets, binary_to_atom(?BUCKET, utf8), counters, Key]),
     lists:flatten(io_lib:format("http://~s:~p~s", [Host, Port, Path])).
 
 path(Elements) ->
     [lists:concat(['/', E]) || E <- Elements].
 
 get(HostPort, Key) ->
-    Url = url(HostPort, [Key]),
+    Url = url(HostPort, Key),
     {ok, {{_Version, 200, _}, _, Body}} =
         httpc:request(Url),
     list_to_integer(Body).
 
-post(HostPort, PathElements, Body) ->
-    Url = url(HostPort, PathElements),
+post(HostPort, Key, Body) ->
+    Url = url(HostPort, Key),
     {ok, {{_Version, 204, _}, _, _}} =
         httpc:request(post, {Url, [], [], Body}, [], []),
     ok.
