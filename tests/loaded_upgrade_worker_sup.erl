@@ -74,14 +74,14 @@ list_keys_tester(Node, Count, Pid) ->
             ExpectedKeys = lists:usort([loaded_upgrade:int_to_key(K) || K <- lists:seq(0, 100)]),
             case assert_equal(ExpectedKeys, ActualKeys) of
                 true -> cool;
-                _ -> loaded_upgrade ! {listkeys, not_equal}
+                _ -> loaded_upgrade ! {listkeys, Node, not_equal}
             end;
         {error, timeout} ->
-            loaded_upgrade ! {listkeys, timeout};
+            loaded_upgrade ! {listkeys, Node, timeout};
         {error, {timeout, _}} ->
-            loaded_upgrade ! {listkeys, timeout};
+            loaded_upgrade ! {listkeys, Node, timeout};
         Unexpected ->
-            loaded_upgrade ! {listkeys, Unexpected}
+            loaded_upgrade ! {listkeys, Node, Unexpected}
     end,
     list_keys_tester(Node, Count + 1, PBC).
 
@@ -92,12 +92,12 @@ kv_tester(Node, Count, Pid) ->
         {ok, Val} ->
             case loaded_upgrade:kv_valgen(Key) == riakc_obj:get_value(Val) of
                 true -> cool;
-                _ -> loaded_upgrade ! {kv, not_equal}
+                _ -> loaded_upgrade ! {kv, Node, not_equal}
             end;
         {error, disconnected} ->
             ok;
         Unexpected ->
-            loaded_upgrade ! {kv, Unexpected}
+            loaded_upgrade ! {kv, Node, Unexpected}
     end,
     kv_tester(Node, Count + 1, PBC).
 
@@ -107,7 +107,7 @@ mapred_tester(Node, Count, Pid) ->
         {ok, [{1, [10000]}]} ->
             ok;
         {ok, _R} ->
-            loaded_upgrade ! {mapred, bad_result};
+            loaded_upgrade ! {mapred, Node, bad_result};
         {error, disconnected} ->
             ok;
         %% Finkmaster Flex says timeouts are ok
@@ -136,7 +136,7 @@ mapred_tester(Node, Count, Pid) ->
         {error, <<"{\"phase\":0,\"error\":\"[{vnode_down,noproc}]", _/binary>>} ->
             ok;
         Unexpected ->
-            loaded_upgrade ! {mapred, Unexpected}
+            loaded_upgrade ! {mapred, Node, Unexpected}
     end,
     mapred_tester(Node, Count + 1, PBC).
 
@@ -160,18 +160,18 @@ twoi_tester(Node, Count, Pid) ->
             case {assert_equal(ExpectedKeys, BinKeys), assert_equal(ExpectedKeys, IntKeys)} of
                 {true, true} -> cool;
                 {false, false} ->
-                    loaded_upgrade ! {twoi, bolth_no_match};
+                    loaded_upgrade ! {twoi, Node, bolth_no_match};
                 {false, true} ->
-                    loaded_upgrade ! {twoi, bin_no_match};
+                    loaded_upgrade ! {twoi, Node, bin_no_match};
                 {true, false} ->
-                    loaded_upgrade ! {twoi, int_no_match}
+                    loaded_upgrade ! {twoi, Node, int_no_match}
             end;
         {{error, Reason}, _} ->
-            loaded_upgrade ! {twoi, {error, Reason}};
+            loaded_upgrade ! {twoi, Node, {error, Reason}};
         {_, {error, Reason}} ->
-            loaded_upgrade ! {twoi, {error, Reason}};
+            loaded_upgrade ! {twoi, Node, {error, Reason}};
         Unexpected ->
-            loaded_upgrade ! Unexpected
+            loaded_upgrade ! {twoi, Node, Unexpected}
     end,
     twoi_tester(Node, Count + 1, PBC).
 
@@ -190,7 +190,7 @@ search_tester(Node, Count, Pid) ->
                 true -> 
                     ok;
                 _ ->
-                    loaded_upgrade ! {search, {timeout, range_loop}}
+                    loaded_upgrade ! {search, Node, {timeout, range_loop}}
             end;
 
         {error,<<"Error processing incoming message: error:{case_clause,", _/binary>>} ->
@@ -199,10 +199,10 @@ search_tester(Node, Count, Pid) ->
                 true -> 
                     ok;
                 _ ->
-                    loaded_upgrade ! {search, {error, badfun}}
+                    loaded_upgrade ! {search, Node, {error, badfun}}
             end;
         Unexpected ->
-            loaded_upgrade ! {search, Unexpected}
+            loaded_upgrade ! {search, Node, Unexpected}
     end,
     search_tester(Node, Count + 1, PBC).
 

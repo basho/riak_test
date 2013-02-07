@@ -96,11 +96,11 @@ upgrade_recv_loop(EndTime) ->
             lager:info("Done waiting 'cause ~p > ~p", [Now, EndTime]);
         _ ->
         receive
-            {mapred, bad_result} ->
+            {mapred, _Node, bad_result} ->
                 ?assert(false);
-            {kv, not_equal} ->
+            {kv, _Node, not_equal} ->
                 ?assert(false);
-            {listkeys, not_equal} ->
+            {listkeys, _Node, not_equal} ->
                 ?assert(false);
             Msg ->
                 lager:info("Received Mesg ~p", [Msg]),
