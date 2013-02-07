@@ -42,7 +42,7 @@ init(Props) ->
     Backend = proplists:get_value(backend, Props),
 
     ChildSpecs = [
-        ?CHILD(Num, loaded_upgrade_worker, Node, Backend)
+        ?CHILD(Num, loaded_upgrade_worker_sup, Node, Backend)
     || Num <- lists:seq(1, WorkersPerNode)],
 
     lager:debug("Starting ~p workers to ~p", [WorkersPerNode, Node]),

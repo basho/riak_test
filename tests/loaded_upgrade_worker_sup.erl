@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(loaded_upgrade_worker).
+-module(loaded_upgrade_worker_sup).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
@@ -28,7 +28,7 @@
 -export([assert_equal/2]).
 
 -export([list_keys_tester/3, kv_tester/3, mapred_tester/3, 
-         twoi_tester/3, search_tester/3, start_link/2]).
+         twoi_tester/3, search_tester/3, tester_start_link/2]).
 
 -export([init/1]).
 -export([start_link/3]).
@@ -37,7 +37,7 @@
 -define(CHILD(Name, FunName, Node), { 
     list_to_atom(atom_to_list(Name) ++ "_" ++ atom_to_list(FunName)),
     {   ?MODULE, 
-        start_link, 
+        tester_start_link, 
         [FunName, Node]}, 
         permanent, 5000, worker, [?MODULE]}).
 
@@ -63,7 +63,7 @@ init([Name, Node, Backend]) ->
 %%% Internal functions
 %%%===================================================================
 
-start_link(Function, Node) ->
+tester_start_link(Function, Node) ->
     {ok, spawn_link(?MODULE, Function, [Node, 0, undefined])}.
 
 list_keys_tester(Node, Count, Pid) ->
