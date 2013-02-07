@@ -175,11 +175,22 @@ parse_command_line_tests(ParsedArgs) ->
                 Upgrade <- Upgrades ] ++ Tests
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
-which_tests_to_run(undefined, CommandLineTests) -> CommandLineTests;
+which_tests_to_run(undefined, CommandLineTests) ->
+    {Tests, NonTests} =
+        lists:partition(fun is_runnable_test/1, CommandLineTests),
+    lager:info("These modules are not runnable tests: ~p",
+               [[NTMod || {NTMod, _} <- NonTests]]),
+    Tests;
 which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
 which_tests_to_run(Platform, CommandLineTests) ->
     Suite = filter_zip_suite(Platform, CommandLineTests),
-    lists:foldr(fun filter_merge_tests/2, [], Suite).
+    {Tests, NonTests} =
+        lists:partition(fun is_runnable_test/1,
+                        lists:foldr(fun filter_merge_tests/2, [], Suite)),
+
+    lager:info("These modules are not runnable tests: ~p",
+               [[NTMod || {NTMod, _} <- NonTests]]),
+    Tests.
 
 filter_zip_suite(Platform, CommandLineTests) ->
     [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform),
@@ -207,6 +218,11 @@ filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
         _ ->
             false
     end.
+
+%% Check for api compatibility
+is_runnable_test({TestModule, _}) ->
+    code:ensure_loaded(TestModule),
+   erlang:function_exported(TestModule, confirm, 0).
 
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
