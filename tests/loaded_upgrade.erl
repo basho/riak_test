@@ -64,13 +64,13 @@ confirm() ->
         exit(Sup, normal),
         lager:info("Upgrading ~p", [Node]),
         rt:upgrade(Node, current),
-        rt_worker_sup:start_link([
+        NewSup = rt_worker_sup:start_link([
             {concurrent, 10},
             {node, Node},
             {backend, Backend}
         ]),
 
-        _NodeMon = init_node_monitor(Node, self()),
+        _NodeMon = init_node_monitor(Node, NewSup, self()),
         upgrade_recv_loop()
 
     end || {{ok, Sup}, Node} <- Sups],
@@ -213,24 +213,25 @@ seed(Node, Start, End, ValFun) ->
 %% ===================================================================
 %% Monitor nodes after they upgrade
 %% ===================================================================
-init_node_monitor(Node, TestProc) ->
-    spawn_link(fun() -> node_monitor(Node, TestProc) end).
+init_node_monitor(Node, Sup, TestProc) ->
+    spawn_link(fun() -> node_monitor(Node, Sup, TestProc) end).
 
-node_monitor(Node, TestProc) ->
+node_monitor(Node, Sup, TestProc) ->
     lager:info("Monitoring node ~p to make sure it stays up.", [Node]),
     erlang:process_flag(trap_exit, true),
     erlang:monitor_node(Node, true),
-    node_monitor_loop(Node, TestProc).
+    node_monitor_loop(Node, Sup, TestProc).
 
-node_monitor_loop(Node, TestProc) ->
+node_monitor_loop(Node, Sup, TestProc) ->
     receive
         {nodedown, Node} ->
             lager:error("Node ~p exited after upgrade!", [Node]),
+            exit(Sup, normal),
             ?assertEqual(nodeup, {nodedown, Node});
         {'EXIT', TestProc, _} ->
             erlang:monitor_node(Node, false),
             ok;
         Other ->
             lager:warn("Node monitor for ~p got unknown message ~p", [Node, Other]),
-            node_monitor_loop(Node, TestProc)
+            node_monitor_loop(Node, Sup, TestProc)
     end.
