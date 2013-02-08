@@ -1,0 +1,45 @@
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+{default, [
+    {giddyup_host, "localhost:5000"},
+    {giddyup_user, "user"},
+    {giddyup_password, "password"},
+    {rt_max_wait_time, 600000},
+    {rt_retry_delay, 1000},
+    {rt_harness, rtdev},
+    {rt_scratch_dir, "/tmp/riak_test_scratch"},
+    {basho_bench, "/home/jesse/work/basho/src/riak_test-jfw-encoding_capability/basho_bench"},
+    {spam_dir, "/home/jesse/work/basho/src/riak_test-jfw-encoding_capability/search-corpus/spam.0"},
+    {platform, "osx-64"}
+]}.
+
+{rtdev, [
+    {rt_project, "riak"},
+    {rtdev_path, [{root, "/home/jesse/work/basho/src/riak_ee-jfw-zlib_capability"},
+                  {current, "/home/jesse/work/basho/src/riak_ee-jfw-zlib_capability/dev/"},
+                  {previous, "/home/jesse/work/basho/src/riak_ee-jfw-zlib_capability/dev/"}, % prev version
+                  {legacy, "/home/jesse/work/basho/src/riak_ee-jfw-zlib_capability/dev"}
+                 ]}
+]}.
+
+{rtee, [
+    {rt_project, "riak_ee"},
+    {cluster_a_size, 3},
+    {num_nodes, 6},
+    {repl_upgrade_order, "forwards"},
+    {rtdev_path, [{root, "/home/jesse/work/basho/src/riak_ee-jfw-zlib_capability"},
+                  {current, "/home/jesse/work/basho/src/riak_ee-jfw-zlib_capability/dev"},
+                  {previous, "/Users/dparfitt/rt/riak_ee/riak_ee-1.2.1"},
+                  {legacy, "/Users/dparfitt/rt/riak_ee/riak_ee-1.1.4"}
+                 ]}
+]}.
+
+{intercept_example,
+ [
+  {load_intercepts, true},                      % true is default
+  {intercepts,
+   [
+    {riak_kv_vnode, [{{put,7}, dropped_put}]}
+   ]}
+ ]}.
+
+

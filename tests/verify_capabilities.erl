@@ -37,7 +37,7 @@ confirm() ->
     lager:info("Verify staged_joins == true"),
     ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
-    %% This test is written with the intent that 1.3 is 'current'
+    %% This test is written with the intent that 1.4 is 'current'
     CCapabilities = rt:capability(CNode, all),
     assert_capability(CCapabilities, {riak_kv, legacy_keylisting}, false),
     assert_capability(CCapabilities, {riak_kv, listkeys_backpressure}, true),
@@ -57,6 +57,7 @@ confirm() ->
     assert_supported(CCapabilities, {riak_kv, mapred_system}, [pipe]),
     assert_supported(CCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
     assert_supported(CCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
+    assert_supported(CCapabilities, {riak_core, handoff_data_encoding}, [encode_raw, encode_zlib]),
 
     lager:info("Crash riak_core_capability server"),
     restart_capability_server(CNode),
@@ -90,7 +91,7 @@ confirm() ->
             assert_supported(LCapabilities, {riak_kv, mapred_system}, [pipe]),
             assert_supported(LCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
             assert_supported(LCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
-                    
+
             lager:info("Crash riak_core_capability server"),
             restart_capability_server(CNode),
 
@@ -129,7 +130,11 @@ confirm() ->
             rt:upgrade(LNode, current),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
             ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
-            lager:info("Verify staged_joins == true after upgrade of legacy -> current");
+            lager:info("Verify staged_joins == true after upgrade of legacy -> current"),
+
+            % Check for handoff encoding support:
+            assert_supported(rt:capability(CNode, all), {riak_core, handoff_data_encoding}, [encode_raw, encode_zlib]);
+
         _ ->
             lager:info("Legacy Riak not available, skipping legacy tests"),
             lager:info("Adding previous node to cluster"),

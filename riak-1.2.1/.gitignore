@@ -1,0 +1,4 @@
+deps/*
+rel/riak
+dev/
+ebin/
