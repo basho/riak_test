@@ -67,6 +67,7 @@ tester_start_link(Function, Node) ->
     {ok, spawn_link(?MODULE, Function, [Node, 0, undefined])}.
 
 list_keys_tester(Node, Count, Pid) ->
+    folsom_metrics:notify({"listkeys_total", {inc, 1}}),
     PBC = pb_pid_recycler(Pid, Node),
     case riakc_pb_socket:list_keys(PBC, <<"objects">>) of
         {ok, Keys} ->
@@ -86,6 +87,7 @@ list_keys_tester(Node, Count, Pid) ->
     list_keys_tester(Node, Count + 1, PBC).
 
 kv_tester(Node, Count, Pid) ->
+    folsom_metrics:notify({"kv_total", {inc, 1}}),
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
     case riakc_pb_socket:get(PBC, loaded_upgrade:bucket(kv), loaded_upgrade:int_to_key(Key)) of
@@ -102,6 +104,7 @@ kv_tester(Node, Count, Pid) ->
     kv_tester(Node, Count + 1, PBC).
 
 mapred_tester(Node, Count, Pid) ->
+    folsom_metrics:notify({"mapred_total", {inc, 1}}),
     PBC = pb_pid_recycler(Pid, Node),
     case riakc_pb_socket:mapred(PBC, loaded_upgrade:bucket(mapred), loaded_upgrade:erlang_mr()) of
         {ok, [{1, [10000]}]} ->
@@ -141,6 +144,7 @@ mapred_tester(Node, Count, Pid) ->
     mapred_tester(Node, Count + 1, PBC).
 
 twoi_tester(Node, Count, Pid) ->
+    folsom_metrics:notify({"twoi_total", {inc, 1}}),
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
     ExpectedKeys = [loaded_upgrade:int_to_key(Key)],
@@ -176,6 +180,7 @@ twoi_tester(Node, Count, Pid) ->
     twoi_tester(Node, Count + 1, PBC).
 
 search_tester(Node, Count, Pid) ->
+    folsom_metrics:notify({"search_total", {inc, 1}}),
     PBC = pb_pid_recycler(Pid, Node),
     {Term, Size} = search_check(Count),
     case riakc_pb_socket:search(PBC, loaded_upgrade:bucket(search), Term) of

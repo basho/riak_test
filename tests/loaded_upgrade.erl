@@ -28,7 +28,8 @@
 -define(TIME_BETWEEN_UPGRADES, 300). %% Seconds!
 
 confirm() ->
-
+    start_folsom(),
+    
     case whereis(loaded_upgrade) of
         undefined -> meh;
         _ -> unregister(loaded_upgrade)
@@ -60,7 +61,9 @@ confirm() ->
         ]), Node}
     || Node <- Nodes],
 
+    print_error_rates(Backend),
     upgrade_recv_loop(),
+    print_error_rates(Backend),
 
     [begin
         exit(Sup, normal),
@@ -73,8 +76,8 @@ confirm() ->
         ]),
 
         _NodeMon = init_node_monitor(Node, NewSup, self()),
-        upgrade_recv_loop()
-
+        upgrade_recv_loop(),
+        print_error_rates(Backend)
     end || {{ok, Sup}, Node} <- Sups],
 
     pass.
@@ -106,13 +109,42 @@ upgrade_recv_loop(EndTime) ->
                 ?assertEqual(true, {listkeys, Node, not_equal});
             {search, Node, bad_result} ->
                 ?assertEqual(true, {search, Node, bad_result});
-            Msg ->
-                lager:info("Received Mesg ~p", [Msg]),
+            {Type, _Node, _Msg} ->
+                folsom_metrics:notify({atom_to_list(Type) ++ "_error", {inc, 1}}),
+                %%lager:info("Received Mesg ~p", [Msg]),
                 upgrade_recv_loop(EndTime)
         after timer:now_diff(EndTime, Now) div 1000 ->
             lager:info("Done waiting 'cause ~p is up", [?TIME_BETWEEN_UPGRADES])
         end
     end.
+
+start_folsom() ->
+    folsom:start(),
+    folsom_metrics:new_counter("listkeys_total"),
+    folsom_metrics:new_counter("listkeys_error"),
+    folsom_metrics:new_counter("kv_total"),
+    folsom_metrics:new_counter("kv_error"),
+    folsom_metrics:new_counter("mapred_total"),
+    folsom_metrics:new_counter("mapred_error"),
+    folsom_metrics:new_counter("twoi_total"),
+    folsom_metrics:new_counter("twoi_error"),
+    folsom_metrics:new_counter("search_total"),
+    folsom_metrics:new_counter("search_error"),
+    ok.
+
+error_rate(Type) ->
+    folsom_metrics:get_metric_value(atom_to_list(Type) ++ "_error") 
+        / folsom_metrics:get_metric_value(atom_to_list(Type) ++ "_total").
+
+print_error_rates(Backend) ->
+    Types = [listkeys, mapred, kv, search],
+    WorkerTypes = case Backend of
+                      eleveldb ->
+                          [twoi | Types];
+                      _ -> Types
+                  end,
+    [ lager:debug("~p error rate: ~p", [Type, error_rate(Type)]) || Type <- WorkerTypes ].
+
 
 seed_cluster(Nodes=[Node1|_]) ->
     lager:info("Seeding Cluster"),
