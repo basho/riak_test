@@ -50,9 +50,11 @@ confirm() ->
     %% Let's spawn workers against it.
     timer:sleep(10000),
 
+    Concurrent = rt:config(load_workers, 10),
+
     Sups = [
         {rt_worker_sup:start_link([
-            {concurrent, 10},
+            {concurrent, Concurrent},
             {node, Node},
             {backend, Backend}
         ]), Node}
@@ -65,7 +67,7 @@ confirm() ->
         lager:info("Upgrading ~p", [Node]),
         rt:upgrade(Node, current),
         NewSup = rt_worker_sup:start_link([
-            {concurrent, 10},
+            {concurrent, Concurrent},
             {node, Node},
             {backend, Backend}
         ]),
