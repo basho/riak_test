@@ -180,7 +180,10 @@ search_tester(Node, Count, Pid) ->
     {Term, Size} = search_check(Count),
     case riakc_pb_socket:search(PBC, loaded_upgrade:bucket(search), Term) of
         {ok, Result} ->
-            ?assertEqual(Size, Result#search_results.num_found);
+            case Size == Result#search_results.num_found of
+                true -> ok;
+                _ -> loaded_upgrade ! {search, Node, bad_result}
+            end;
         {error, disconnected} ->
             %% oh well, reconnect
             ok;
