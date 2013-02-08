@@ -209,6 +209,19 @@ rm_dir(Dir) ->
     ?assertCmd("rm -rf " ++ Dir),
     ?assertEqual(false, filelib:is_dir(Dir)).
 
+add_default_node_config(Nodes) ->
+    case rt:config(rt_default_config, undefined) of
+        undefined -> ok;
+        Defaults when is_list(Defaults) ->
+            rt:pmap(fun(Node) ->
+                            update_app_config(Node, Defaults)
+                    end, Nodes),
+            ok;
+        BadValue ->
+            lager:error("Invalid value for rt_default_config : ~p", [BadValue]),
+            throw({invalid_config, {rt_default_config, BadValue}})
+    end.
+
 deploy_nodes(NodeConfig) ->
     Path = relpath(root),
     lager:info("Riak path: ~p", [Path]),
@@ -227,6 +240,7 @@ deploy_nodes(NodeConfig) ->
     create_dirs(Nodes),
 
     %% Set initial config
+    add_default_node_config(Nodes),
     rt:pmap(fun({_, default}) ->
                     ok;
                ({Node, Config}) ->
@@ -431,8 +445,8 @@ check_node({_N, Version}) ->
     case proplists:is_defined(Version, rt:config(rtdev_path)) of
         true -> ok;
         _ ->
-            lager:error("You don't have Riak ~s installed", [Version]),
-            erlang:error("You don't have Riak " ++ Version ++ " installed" )
+            lager:error("You don't have Riak ~s installed or configured", [Version]),
+            erlang:error("You don't have Riak " ++ atom_to_list(Version) ++ " installed or configured")
     end.
 
 set_backend(Backend) ->
@@ -461,3 +475,10 @@ devpaths() ->
 
 versions() ->
     proplists:get_keys(rt:config(rtdev_path)) -- [root].
+
+get_node_logs() ->
+    Root = proplists:get_value(root, ?PATH),
+    [ begin
+          {ok, Data} = file:read_file(Filename),
+          {Filename, Data}
+      end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].

@@ -53,8 +53,10 @@
          deploy_nodes/1,
          deploy_nodes/2,
          down/2,
+         download/1,
          enable_search_hook/2,
          get_deps/0,
+         get_node_logs/0,
          get_os_env/1,
          get_os_env/2,
          get_ring/1,
@@ -66,11 +68,14 @@
          httpc_read/3,
          httpc_write/4,
          install_on_absence/2,
+         is_mixed_cluster/1,
          is_pingable/1,
          join/2,
          leave/1,
          load_config/1,
          load_modules_on_nodes/2,
+         log_to_nodes/2,
+         log_to_nodes/3,
          members_according_to/1,
          owners_according_to/1,
          partition/2,
@@ -108,6 +113,7 @@
          teardown/0,
          update_app_config/2,
          upgrade/2,
+         url_to_filename/1,
          versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
@@ -182,6 +188,20 @@ which(Command) ->
             true
     end.
 
+download(Url) ->
+    lager:info("Downloading ~s", [Url]),
+    Filename = url_to_filename(Url),
+    case filelib:is_file(filename:join(rt:config(rt_scratch_dir), Filename))  of
+        true ->
+            lager:info("Got it ~p", [Filename]),
+            ok;
+        _ ->
+            lager:info("Getting it ~p", [Filename]),
+            rt:stream_cmd("curl  -O -L " ++ Url, [{cd, rt:config(rt_scratch_dir)}])
+    end.
+
+url_to_filename(Url) ->
+    lists:last(string:tokens(Url, "/")).
 %% @doc like rt:which, but asserts on failure
 assert_which(Command) ->
     ?assert(rt:which(Command)).
@@ -455,6 +475,14 @@ load_modules_on_nodes([Module | MoreModules], Nodes)
 is_pingable(Node) ->
     net_adm:ping(Node) =:= pong.
 
+is_mixed_cluster(Nodes) when is_list(Nodes) ->
+    %% If the nodes are bad, we don't care what version they are
+    {Versions, _BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt:config(rt_max_wait_time)),
+    length(lists:usort(Versions)) > 1;
+is_mixed_cluster(Node) ->
+    Nodes = rpc:call(Node, erlang, nodes, []),
+    is_mixed_cluster(Nodes).
+
 %% @private
 is_ready(Node) ->
     case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
@@ -548,14 +576,15 @@ wait_until_transfers_complete([Node0|_]) ->
     ?assertEqual(ok, wait_until(Node0, F)),
     ok.
 
-wait_for_service(Node, Service) ->
-    lager:info("Wait for service ~p on ~p", [Service, Node]),
+wait_for_service(Node, Services) when is_list(Services) ->
     F = fun(N) ->
-                Services = rpc:call(N, riak_core_node_watcher, services, [N]),
-                lists:member(Service, Services)
+                CurrServices = rpc:call(N, riak_core_node_watcher, services, [N]),
+                lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services) 
         end,
     ?assertEqual(ok, wait_until(Node, F)),
-    ok.
+    ok;
+wait_for_service(Node, Service) ->
+    wait_for_service(Node, [Service]).
 
 wait_for_cluster_service(Nodes, Service) ->
     lager:info("Wait for cluster service ~p in ~p", [Service, Nodes]),
@@ -801,6 +830,14 @@ systest_write(Node, Size) ->
 systest_write(Node, Size, W) ->
     systest_write(Node, 1, Size, <<"systest">>, W).
 
+%% @doc Write (End-Start)+1 objects to Node. Objects keys will be
+%% `Start', `Start+1' ... `End', each encoded as a 32-bit binary
+%% (`<<Key:32/integer>>'). Object values are the same as their keys.
+%%
+%% The return value of this function is a list of errors
+%% encountered. If all writes were successful, return value is an
+%% empty list. Each error has the form `{N :: integer(), Error :: term()}',
+%% where N is the unencoded key of the object that failed to store.
 systest_write(Node, Start, End, Bucket, W) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
@@ -852,7 +889,7 @@ pbc(Node) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, IP} = rpc:call(Node, application, get_env, [riak_api, pb_ip]),
     {ok, PBPort} = rpc:call(Node, application, get_env, [riak_api, pb_port]),
-    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort),
+    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, [{auto_reconnect, true}]),
     Pid.
 
 %% @doc does a read via the erlang protobuf client
@@ -905,7 +942,7 @@ httpc(Node) ->
 %% @doc does a read via the http erlang client.
 -spec httpc_read(term(), binary(), binary()) -> binary().
 httpc_read(C, Bucket, Key) ->
-    {ok, Value} = rhc:get(C, Bucket, Key),
+    {_, Value} = rhc:get(C, Bucket, Key),
     Value.
 
 %% @doc does a write via the http erlang client.
@@ -996,6 +1033,25 @@ get_version() ->
 %% @doc outputs some useful information about nodes that are up
 whats_up() ->
     ?HARNESS:whats_up().
+
+%% @doc Log a message to the console of the specified test nodes.
+%%      Messages are prefixed by the string "---riak_test--- "
+%%      Uses lager:info/1 'Fmt' semantics
+log_to_nodes(Nodes, Fmt) ->
+    log_to_nodes(Nodes, Fmt, []).
+
+%% @doc Log a message to the console of the specified test nodes.
+%%      Messages are prefixed by the string "---riak_test--- "
+%%      Uses lager:info/2 'LFmt' and 'LArgs' semantics
+log_to_nodes(Nodes, LFmt, LArgs) ->
+    Module = lager,
+    Function = log,
+    Meta = [],
+    Args = case LArgs of
+               [] -> [info, Meta, "---riak_test--- " ++ LFmt];
+               _  -> [info, Meta, "---riak_test--- " ++ LFmt, LArgs]
+           end,
+    [rpc:call(Node, Module, Function, Args) || Node <- Nodes].
 
 %% @private utility function
 pmap(F, L) ->
@@ -1122,3 +1178,8 @@ config_or_os_env(Config, Default) ->
 to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
 char_to_upper(C) -> C.
+
+%% @doc Downloads any extant log files from the harness's running
+%%   nodes.
+get_node_logs() ->
+    ?HARNESS:get_node_logs().

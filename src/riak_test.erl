@@ -175,16 +175,27 @@ parse_command_line_tests(ParsedArgs) ->
                 Upgrade <- Upgrades ] ++ Tests
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
-which_tests_to_run(undefined, CommandLineTests) -> CommandLineTests;
+which_tests_to_run(undefined, CommandLineTests) ->
+    {Tests, NonTests} =
+        lists:partition(fun is_runnable_test/1, CommandLineTests),
+    lager:info("These modules are not runnable tests: ~p",
+               [[NTMod || {NTMod, _} <- NonTests]]),
+    Tests;
 which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
 which_tests_to_run(Platform, CommandLineTests) ->
     Suite = filter_zip_suite(Platform, CommandLineTests),
-    lists:foldr(fun filter_merge_tests/2, [], Suite).
+    {Tests, NonTests} =
+        lists:partition(fun is_runnable_test/1,
+                        lists:foldr(fun filter_merge_tests/2, [], Suite)),
+
+    lager:info("These modules are not runnable tests: ~p",
+               [[NTMod || {NTMod, _} <- NonTests]]),
+    Tests.
 
 filter_zip_suite(Platform, CommandLineTests) ->
-        [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform),
-                                     {CModule, CMeta} <- CommandLineTests,
-                                     SModule =:= CModule].
+    [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform),
+                                 {CModule, CMeta} <- CommandLineTests,
+                                 SModule =:= CModule].
 
 filter_merge_tests({Module, SMeta, CMeta}, Tests) ->
     case filter_merge_meta(SMeta, CMeta, [backend, upgrade_version]) of
@@ -194,8 +205,10 @@ filter_merge_tests({Module, SMeta, CMeta}, Tests) ->
             [{Module, Meta}|Tests]
     end.
 
+filter_merge_meta(SMeta, _CMeta, []) ->
+    SMeta;
 filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
-    case {kvc:path(Field, SMeta), kvc:path(Field, CMeta)} of
+    case {kvc:value(Field, SMeta, undefined), kvc:value(Field, CMeta, undefined)} of
         {X, X} ->
             filter_merge_meta(SMeta, CMeta, Rest);
         {_, undefined} ->
@@ -206,12 +219,25 @@ filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
             false
     end.
 
+%% Check for api compatibility
+is_runnable_test({TestModule, _}) ->
+    code:ensure_loaded(TestModule),
+   erlang:function_exported(TestModule, confirm, 0).
+
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
     rt:cleanup_harness(),
     case Report of
         undefined -> ok;
-        _ -> giddyup:post_result(SingleTestResult)
+        _ ->
+            {log, TestLog} = lists:keyfind(log, 1, SingleTestResult),
+            NodeLogs = cat_node_logs(),
+            EncodedNodeLogs = unicode:characters_to_binary(iolist_to_binary(NodeLogs),
+                                                           latin1, utf8),
+            NewLogs = iolist_to_binary([TestLog, EncodedNodeLogs]),
+            ResultWithNodeLogs = lists:keyreplace(log, 1, SingleTestResult,
+                                                  {log, NewLogs}),
+            giddyup:post_result(ResultWithNodeLogs)
     end,
     SingleTestResult.
 
@@ -287,3 +313,13 @@ so_kill_riak_maybe() ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
     end.
+
+cat_node_logs() ->
+    Files = rt:get_node_logs(),
+    Output = io_lib:format("================ Printing node logs and crash dumps ================~n~n", []),
+    cat_node_logs(Files, [Output]).
+
+cat_node_logs([], Output) -> Output;
+cat_node_logs([{Filename, Content}|Rest], Output) ->
+    Log = io_lib:format("================ Log: ~s =====================~n~s~n~n", [Filename, Content]),
+    cat_node_logs(Rest, [Output, Log]).
