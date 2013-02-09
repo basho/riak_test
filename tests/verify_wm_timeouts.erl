@@ -13,7 +13,6 @@ confirm() ->
                                 "-d 'foobarbaz\n'", 
                                 [rt:http_url(Node)])),
 
-    rt_intercept:load_intercepts([Node]),
     rt_intercept:add(Node, {riak_kv_get_fsm,
                             [{{prepare,2}, slow_prepare}]}),
     rt_intercept:add(Node, {riak_kv_put_fsm,
