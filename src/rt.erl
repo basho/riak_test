@@ -887,8 +887,15 @@ systest_read(Node, Start, End, Bucket, R) ->
 -spec pbc(node()) -> pid().
 pbc(Node) ->
     rt:wait_for_service(Node, riak_kv),
-    {ok, IP} = rpc:call(Node, application, get_env, [riak_api, pb_ip]),
-    {ok, PBPort} = rpc:call(Node, application, get_env, [riak_api, pb_port]),
+    {IP, PBPort} = case rpc:call(Node, application, get_env, [riak_api, pb_ip]) of
+                       {ok, IPAPI} ->
+                           {ok, PBPortAPI} = rpc:call(Node, application, get_env, [riak_api, pb_port]),
+                           {IPAPI, PBPortAPI};
+                       undefined ->
+                           {ok, PBIPKV} = rpc:call(Node, application, get_env, [riak_kv, pb_ip]),
+                           {ok, PBPortKV} = rpc:call(Node, application, get_env, [riak_kv, pb_port]),
+                           {PBIPKV, PBPortKV}
+                   end,
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, [{auto_reconnect, true}]),
     Pid.
 
