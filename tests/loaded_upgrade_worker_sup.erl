@@ -140,6 +140,8 @@ mapred_tester(Node, Count, Pid, Vsn) ->
     end,
     mapred_tester(Node, Count + 1, PBC, Vsn).
 
+twoi_tester(Node, Count, Pid, legacy) ->
+    twoi_tester(Node, Count + 1, Pid, legacy);
 twoi_tester(Node, Count, Pid, Vsn) ->
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
