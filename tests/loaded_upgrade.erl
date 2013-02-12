@@ -56,7 +56,8 @@ confirm() ->
         {rt_worker_sup:start_link([
             {concurrent, Concurrent},
             {node, Node},
-            {backend, Backend}
+            {backend, Backend},
+            {version, OldVsn}
         ]), Node}
     || Node <- Nodes],
 
@@ -69,7 +70,8 @@ confirm() ->
         NewSup = rt_worker_sup:start_link([
             {concurrent, Concurrent},
             {node, Node},
-            {backend, Backend}
+            {backend, Backend},
+            {version, current}
         ]),
 
         _NodeMon = init_node_monitor(Node, NewSup, self()),
