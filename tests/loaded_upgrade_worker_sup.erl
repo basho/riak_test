@@ -96,6 +96,8 @@ kv_tester(Node, Count, Pid, Vsn) ->
             end;
         {error, disconnected} ->
             ok;
+        {error, notfound} ->
+            loaded_upgrade ! {kv, Node, {notfound, Key}};
         Unexpected ->
             loaded_upgrade ! {kv, Node, Unexpected}
     end,
@@ -235,6 +237,7 @@ pb_pid_recycler(Pid, Node) ->
         true ->
             Pid;
         _ ->
+            riakc_pb_socket:stop(Pid),
             rt:pbc(Node)
     end.
     
