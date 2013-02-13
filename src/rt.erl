@@ -578,8 +578,14 @@ wait_until_transfers_complete([Node0|_]) ->
 
 wait_for_service(Node, Services) when is_list(Services) ->
     F = fun(N) ->
-                CurrServices = rpc:call(N, riak_core_node_watcher, services, [N]),
-                lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services)
+                case rpc:call(N, riak_core_node_watcher, services, [N]) of
+                    {badrpc, _Error} ->
+                        false;
+                    CurrServices when is_list(CurrServices) ->
+                        lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
+                    _ ->
+                        false
+                end
         end,
     ?assertEqual(ok, wait_until(Node, F)),
     ok;

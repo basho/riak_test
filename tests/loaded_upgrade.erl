@@ -56,7 +56,8 @@ confirm() ->
         {rt_worker_sup:start_link([
             {concurrent, Concurrent},
             {node, Node},
-            {backend, Backend}
+            {backend, Backend},
+            {version, OldVsn}
         ]), Node}
     || Node <- Nodes],
 
@@ -69,7 +70,8 @@ confirm() ->
         NewSup = rt_worker_sup:start_link([
             {concurrent, Concurrent},
             {node, Node},
-            {backend, Backend}
+            {backend, Backend},
+            {version, current}
         ]),
 
         _NodeMon = init_node_monitor(Node, NewSup, self()),
@@ -102,6 +104,8 @@ upgrade_recv_loop(EndTime) ->
                 ?assertEqual(true, {mapred, Node, bad_result});
             {kv, Node, not_equal} ->
                 ?assertEqual(true, {kv, Node, bad_result});
+            {kv, Node, {notfound, Key}} ->
+                ?assertEqual(true, {kv, Node, {notfound, Key}});
             {listkeys, Node, not_equal} ->
                 ?assertEqual(true, {listkeys, Node, not_equal});
             {search, Node, bad_result} ->
@@ -123,7 +127,6 @@ seed_cluster(Nodes=[Node1|_]) ->
     ?assertEqual([], rt:systest_read(Node1, 100, 1)),
 
     seed(Node1, 0, 100, fun(Key) ->
-        %%Bin = list_to_binary(["", integer_to_list(Key)]),
         Bin = iolist_to_binary(io_lib:format("~p", [Key])),
         riakc_obj:new(<<"objects">>, Bin, Bin)
     end),
@@ -209,7 +212,7 @@ seed(Node, Start, End, ValFun) ->
 
     [ begin
         Obj = ValFun(Key),
-        riakc_pb_socket:put(PBC, Obj)
+        riakc_pb_socket:put(PBC, Obj, [{w,3}])
     end || Key <- lists:seq(Start, End)],
 
     riakc_pb_socket:stop(PBC).

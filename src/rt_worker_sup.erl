@@ -23,11 +23,11 @@
 -behavior(supervisor).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(Id, Mod, Node, Backend), { 
+-define(CHILD(Id, Mod, Node, Backend, Vsn), { 
     list_to_atom(atom_to_list(Node) ++ "_loader_" ++ integer_to_list(Id)), 
     {   Mod, 
         start_link, 
-        [list_to_atom(atom_to_list(Node) ++ "_loader_" ++ integer_to_list(Id)), Node, Backend]}, 
+        [list_to_atom(atom_to_list(Node) ++ "_loader_" ++ integer_to_list(Id)), Node, Backend, Vsn]}, 
         permanent, 5000, worker, [Mod]}).
 
 -export([init/1]).
@@ -40,9 +40,10 @@ init(Props) ->
     WorkersPerNode = proplists:get_value(concurrent, Props),
     Node = proplists:get_value(node, Props),
     Backend = proplists:get_value(backend, Props),
+    Vsn = proplists:get_value(version, Props),
 
     ChildSpecs = [
-        ?CHILD(Num, loaded_upgrade_worker_sup, Node, Backend)
+        ?CHILD(Num, loaded_upgrade_worker_sup, Node, Backend, Vsn)
     || Num <- lists:seq(1, WorkersPerNode)],
 
     lager:debug("Starting ~p workers to ~p", [WorkersPerNode, Node]),

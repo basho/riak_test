@@ -27,33 +27,33 @@
 %% API
 -export([assert_equal/2]).
 
--export([list_keys_tester/3, kv_tester/3, mapred_tester/3, 
-         twoi_tester/3, search_tester/3, tester_start_link/2]).
+-export([list_keys_tester/4, kv_tester/4, mapred_tester/4, 
+         twoi_tester/4, search_tester/4, tester_start_link/3]).
 
 -export([init/1]).
--export([start_link/3]).
+-export([start_link/4]).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(Name, FunName, Node), { 
+-define(CHILD(Name, FunName, Node, Vsn), { 
     list_to_atom(atom_to_list(Name) ++ "_" ++ atom_to_list(FunName)),
     {   ?MODULE, 
         tester_start_link, 
-        [FunName, Node]}, 
+        [FunName, Node, Vsn]}, 
         permanent, 5000, worker, [?MODULE]}).
 
-start_link(Name, Node, Backend) ->
-    supervisor:start_link(?MODULE, [Name, Node, Backend]).
+start_link(Name, Node, Backend, Vsn) ->
+    supervisor:start_link(?MODULE, [Name, Node, Backend, Vsn]).
 
-init([Name, Node, Backend]) ->
+init([Name, Node, Backend, Vsn]) ->
     rt:wait_for_service(Node, [riak_search,riak_kv,riak_pipe]),
 
     ChildSpecs1 = [ 
-        ?CHILD(Name, FunName, Node) 
+        ?CHILD(Name, FunName, Node, Vsn) 
         || FunName <- [list_keys_tester, mapred_tester, kv_tester, search_tester]],
 
     ChildSpecs = case Backend of
         eleveldb ->
-            [?CHILD(Name, twoi_tester, Node) | ChildSpecs1];
+            [?CHILD(Name, twoi_tester, Node, Vsn) | ChildSpecs1];
         _ -> ChildSpecs1
     end,
     {ok, {{one_for_one, 1000, 60}, ChildSpecs}}.
@@ -63,10 +63,10 @@ init([Name, Node, Backend]) ->
 %%% Internal functions
 %%%===================================================================
 
-tester_start_link(Function, Node) ->
-    {ok, spawn_link(?MODULE, Function, [Node, 0, undefined])}.
+tester_start_link(Function, Node, Vsn) ->
+    {ok, spawn_link(?MODULE, Function, [Node, 0, undefined, Vsn])}.
 
-list_keys_tester(Node, Count, Pid) ->
+list_keys_tester(Node, Count, Pid, Vsn) ->
     PBC = pb_pid_recycler(Pid, Node),
     case riakc_pb_socket:list_keys(PBC, <<"objects">>) of
         {ok, Keys} ->
@@ -83,9 +83,9 @@ list_keys_tester(Node, Count, Pid) ->
         Unexpected ->
             loaded_upgrade ! {listkeys, Node, Unexpected}
     end,
-    list_keys_tester(Node, Count + 1, PBC).
+    list_keys_tester(Node, Count + 1, PBC, Vsn).
 
-kv_tester(Node, Count, Pid) ->
+kv_tester(Node, Count, Pid, Vsn) ->
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
     case riakc_pb_socket:get(PBC, loaded_upgrade:bucket(kv), loaded_upgrade:int_to_key(Key)) of
@@ -96,12 +96,14 @@ kv_tester(Node, Count, Pid) ->
             end;
         {error, disconnected} ->
             ok;
+        {error, notfound} ->
+            loaded_upgrade ! {kv, Node, {notfound, Key}};
         Unexpected ->
             loaded_upgrade ! {kv, Node, Unexpected}
     end,
-    kv_tester(Node, Count + 1, PBC).
+    kv_tester(Node, Count + 1, PBC, Vsn).
 
-mapred_tester(Node, Count, Pid) ->
+mapred_tester(Node, Count, Pid, Vsn) ->
     PBC = pb_pid_recycler(Pid, Node),
     case riakc_pb_socket:mapred(PBC, loaded_upgrade:bucket(mapred), loaded_upgrade:erlang_mr()) of
         {ok, [{1, [10000]}]} ->
@@ -138,9 +140,11 @@ mapred_tester(Node, Count, Pid) ->
         Unexpected ->
             loaded_upgrade ! {mapred, Node, Unexpected}
     end,
-    mapred_tester(Node, Count + 1, PBC).
+    mapred_tester(Node, Count + 1, PBC, Vsn).
 
-twoi_tester(Node, Count, Pid) ->
+twoi_tester(Node, Count, Pid, legacy) ->
+    twoi_tester(Node, Count + 1, Pid, legacy);
+twoi_tester(Node, Count, Pid, Vsn) ->
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
     ExpectedKeys = [loaded_upgrade:int_to_key(Key)],
@@ -173,9 +177,9 @@ twoi_tester(Node, Count, Pid) ->
         Unexpected ->
             loaded_upgrade ! {twoi, Node, Unexpected}
     end,
-    twoi_tester(Node, Count + 1, PBC).
+    twoi_tester(Node, Count + 1, PBC, Vsn).
 
-search_tester(Node, Count, Pid) ->
+search_tester(Node, Count, Pid, Vsn) ->
     PBC = pb_pid_recycler(Pid, Node),
     {Term, Size} = search_check(Count),
     case riakc_pb_socket:search(PBC, loaded_upgrade:bucket(search), Term) of
@@ -207,7 +211,7 @@ search_tester(Node, Count, Pid) ->
         Unexpected ->
             loaded_upgrade ! {search, Node, Unexpected}
     end,
-    search_tester(Node, Count + 1, PBC).
+    search_tester(Node, Count + 1, PBC, Vsn).
 
 search_check(Count) ->
     case Count rem 6 of
@@ -233,6 +237,7 @@ pb_pid_recycler(Pid, Node) ->
         true ->
             Pid;
         _ ->
+            riakc_pb_socket:stop(Pid),
             rt:pbc(Node)
     end.
     
