@@ -532,7 +532,7 @@ http_write(Sock, Start, End, Bucket, W) ->
     F = fun(S, B, K, WVal) ->
             X = list_to_binary(integer_to_list(K)),
             Obj = riakc_obj:new(B, X, X),
-            rhc:put(S, Obj, [{w, WVal}])
+            rhc:put(S, Obj, [{dw, WVal}])
     end,
     Keys = lists:seq(Start, End),
     Partitions = partition_keys(Keys, 8),
@@ -545,7 +545,7 @@ pb_write(Sock, Start, End, Bucket, W) ->
     %pb_iterate(Sock, lists:seq(Start, End), Bucket, W, []).
     F = fun(S, B, K, WVal) ->
             Obj = riakc_obj:new(B, <<K:32/integer>>, <<K:32/integer>>),
-            riakc_pb_socket:put(S, Obj, [{w, WVal}])
+            riakc_pb_socket:put(S, Obj, [{dw, WVal}])
     end,
     Keys = lists:seq(Start, End),
     Partitions = partition_keys(Keys, 8),
