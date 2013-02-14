@@ -64,13 +64,17 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             repl_util:name_cluster(AFirst, "A"),
             repl_util:name_cluster(BFirst, "B"),
+
+            %% we'll need to wait for cluster names before continuing
             rt:wait_until_ring_converged(ANodes),
             rt:wait_until_ring_converged(BNodes),
 
-            %% TODO: we'll need to wait for cluster names before continuing
+            lager:info("waiting for leader to converge on cluster A"),
+            ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
+            lager:info("waiting for leader to converge on cluster B"),
+            ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
 
             %% get the leader for the first cluster
-            repl_util:wait_until_leader(AFirst),
             LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
             {ok, {_IP, Port}} = rpc:call(BFirst, application, get_env,

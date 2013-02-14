@@ -70,8 +70,12 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             %% verify servers are visible on all nodes
             verify_listeners(Listeners),
 
+            lager:info("waiting for leader to converge on cluster A"),
+            ?assertEqual(ok, wait_until_leader_converge(ANodes)),
+            lager:info("waiting for leader to converge on cluster B"),
+            ?assertEqual(ok, wait_until_leader_converge(BNodes)),
+
             %% get the leader for the first cluster
-            wait_until_leader(AFirst),
             LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
 
             %% list of listeners not on the leader node
