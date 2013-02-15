@@ -226,7 +226,7 @@ is_runnable_test({TestModule, _}) ->
 
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
-    rt:cleanup_harness(),
+    rt:teardown(),
     case Report of
         undefined -> ok;
         _ ->
