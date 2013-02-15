@@ -24,7 +24,8 @@ confirm() ->
             {riak_repl,
              [
                 {fullsync_on_connect, false},
-                {fullsync_interval, disabled}
+                {fullsync_interval, disabled},
+                {diff_batch_size, 10}
              ]}
     ],
 
@@ -128,6 +129,36 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
         _ ->
             ok
     end,
+
+    %% disconnect the other cluster, so realtime doesn't happen
+    lager:info("disconnect the 2 clusters"),
+    repl_util:disable_realtime(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+    repl_util:disconnect_cluster(LeaderA, "B"),
+    repl_util:wait_until_no_connection(LeaderA),
+    rt:wait_until_ring_converged(ANodes),
+
+
+    lager:info("write 2000 keys"),
+    ?assertEqual([], repl_util:do_write(LeaderA, 50000, 52000,
+            TestBucket, 2)),
+
+    lager:info("reconnect the 2 clusters"),
+    repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
+    rt:wait_until_ring_converged(ANodes),
+    repl_util:enable_realtime(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+    repl_util:enable_fullsync(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+    repl_util:start_realtime(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+    ?assertEqual(ok, repl_util:wait_until_connection(LeaderA)),
+
+    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
+
+    lager:info("read 2000 keys"),
+    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 50000, 52000, TestBucket, 2)),
 
     %%
     %% Failover tests
