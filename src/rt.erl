@@ -38,7 +38,6 @@
          capability/2,
          check_singleton_node/1,
          claimant_according_to/1,
-         cleanup_harness/0,
          clean_cluster/1,
          clean_data_dir/1,
          clean_data_dir/2,
@@ -1083,10 +1082,6 @@ pmap(F, L) ->
 %% @private
 setup_harness(Test, Args) ->
     ?HARNESS:setup_harness(Test, Args).
-
-%% @private
-cleanup_harness() ->
-    ?HARNESS:cleanup_harness().
 
 %% @private
 load_config(undefined) ->

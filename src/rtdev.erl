@@ -93,9 +93,6 @@ setup_harness(_Test, _Args) ->
             end, devpaths()),
     ok.
 
-cleanup_harness() ->
-    ok.
-
 relpath(Vsn) ->
     Path = ?PATH,
     relpath(Vsn, Path).
