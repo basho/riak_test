@@ -21,7 +21,8 @@ confirm() ->
             {riak_repl,
              [
                 {fullsync_on_connect, false},
-                {fullsync_interval, disabled}
+                {fullsync_interval, disabled},
+                {diff_batch_size, 10}
              ]}
     ],
 
@@ -136,6 +137,26 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             ok
     end,
 
+    ASecond = hd(ANodes -- [LeaderA]),
+
+    %% disconnect the other cluster, so realtime doesn't happen
+    lager:info("disconnect the 2 clusters"),
+    del_site(BNodes, "site1"),
+    ?assertEqual(ok, wait_until_no_connection(LeaderA)),
+
+    lager:info("write 2000 keys"),
+    ?assertEqual([], do_write(ASecond, 50000, 52000,
+            TestBucket, 2)),
+
+    lager:info("reconnect the 2 clusters"),
+    add_site(hd(BNodes), {Ip, Port, "site1"}),
+    ?assertEqual(ok, wait_until_connection(LeaderA)),
+
+    start_and_wait_until_fullsync_complete(LeaderA),
+
+    lager:info("read 2000 keys"),
+    ?assertEqual(0, wait_for_reads(BFirst, 50000, 52000, TestBucket, 2)),
+
     %%
     %% Failover tests
     %%
@@ -144,7 +165,6 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Testing master failover: stopping ~p", [LeaderA]),
     rt:stop(LeaderA),
     rt:wait_until_unpingable(LeaderA),
-    ASecond = hd(ANodes -- [LeaderA]),
     wait_until_leader(ASecond),
 
     LeaderA2 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
