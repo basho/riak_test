@@ -31,7 +31,6 @@
         ]).
 -compile([export_all]). %% because we run ?MODULE:PrepareFun later
 -include_lib("eunit/include/eunit.hrl").
--include("rt_pipe.hrl").
 
 -define(INTS_BUCKET, <<"foonum">>).
 -define(NUM_INTS, 1000).
