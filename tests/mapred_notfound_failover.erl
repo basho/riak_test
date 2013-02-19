@@ -41,7 +41,6 @@ confirm() ->
     rt:set_backend(memory),
 
     Nodes = rt:build_cluster(1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
 
     %% for our custom reduce phase
     rt:load_modules_on_nodes([?MODULE], Nodes),

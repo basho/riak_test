@@ -44,7 +44,6 @@
 
 confirm() ->
     Nodes = rt:build_cluster(1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
 
     %% to pick up fake_builder/1
     rt:load_modules_on_nodes([?MODULE], Nodes),

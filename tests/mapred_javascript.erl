@@ -44,7 +44,6 @@
 
 confirm() ->
     Nodes = rt:build_cluster(1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
 
     load_test_data(Nodes),
     
