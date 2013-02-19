@@ -70,7 +70,6 @@ load_test_data([Node|_]) ->
     C = rt:pbc(Node),
     ok = riakc_pb_socket:put(C, Map),
     ok = riakc_pb_socket:put(C, Red),
-    unlink(C),
     riakc_pb_socket:stop(C).
 
 

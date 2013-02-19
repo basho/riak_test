@@ -79,7 +79,6 @@ replica_notfound(Node, {HashMod, HashFun},
     Obj = riakc_obj:new(MissingBucket, MissingKey, MissingValue),
     C = rt:pbc(Node),
     ok = riakc_pb_socket:put(C, Obj, [{w, 3}]),
-    unlink(C),
     riakc_pb_socket:stop(C),
     %% and now kill the first replica; this will make the vnode local
     %% to the kvget pipe fitting return an error (because it's the

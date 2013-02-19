@@ -83,7 +83,6 @@ load_test_data([Node|_]) ->
 
     C = rt:pbc(Node),
     ok = riakc_pb_socket:put(C, riakc_obj:update_metadata(Obj, MD)),
-    unlink(C),
     riakc_pb_socket:stop(C).
 
 rpcmr(Node, Inputs, Query) ->
