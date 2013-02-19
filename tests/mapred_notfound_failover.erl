@@ -40,7 +40,7 @@ confirm() ->
     %% notfound by killing a vnode
     rt:set_backend(memory),
 
-    Nodes = rt:build_cluster(1),
+    Nodes = rt:build_cluster(3),
 
     %% for our custom reduce phase
     rt:load_modules_on_nodes([?MODULE], Nodes),
@@ -84,9 +84,10 @@ replica_notfound(Node, {HashMod, HashFun},
     %% to the kvget pipe fitting return an error (because it's the
     %% memory backend), so it will have to look at another kv vnode
     Hash = rpc:call(Node, HashMod, HashFun, [{MissingBucket, MissingKey}]),
-    [{{PrimaryIndex, _},_}] =
+    [{{PrimaryIndex, PrimaryNode},_}] =
         rpc:call(Node, riak_core_apl, get_primary_apl, [Hash, 1, riak_kv]),
-    {ok, VnodePid} = rpc:call(Node, riak_core_vnode_manager,get_vnode_pid,
+    {ok, VnodePid} = rpc:call(PrimaryNode,
+                              riak_core_vnode_manager, get_vnode_pid,
                               [PrimaryIndex, riak_kv_vnode]),
     exit(VnodePid, kill).
 

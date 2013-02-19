@@ -40,7 +40,7 @@
 -define(LINK_BUCKET, <<"link bucket">>).
 
 confirm() ->
-    Nodes = rt:build_cluster(1),
+    Nodes = rt:build_cluster(3),
 
     load_test_data(Nodes),
     rt:load_modules_on_nodes([?MODULE], Nodes),

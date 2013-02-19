@@ -43,7 +43,7 @@
                       }">>).
 
 confirm() ->
-    Nodes = rt:build_cluster(1),
+    Nodes = rt:build_cluster(3),
 
     load_test_data(Nodes),
     
