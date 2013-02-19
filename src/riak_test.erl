@@ -135,7 +135,7 @@ main(Args) ->
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
 
-    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs) || {Test, TestMetaData} <- Tests]),
+    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
     print_summary(TestResults, Verbose),
 
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
@@ -224,9 +224,12 @@ is_runnable_test({TestModule, _}) ->
     code:ensure_loaded(TestModule),
    erlang:function_exported(TestModule, confirm, 0).
 
-run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs) ->
+run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
-    rt:teardown(),
+    case NumTests of
+        1 -> keep_them_up;
+        _ -> rt:teardown()
+    end,
     case Report of
         undefined -> ok;
         _ ->
