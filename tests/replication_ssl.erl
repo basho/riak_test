@@ -19,10 +19,13 @@ confirm() ->
 
     %% XXX for some reason, codew:priv_dir returns riak_test/riak_test/priv,
     %% which is wrong, so fix it.
-    PrivDir = re:replace(code:priv_dir(riak_test), "riak_test/riak_test",
+    PrivDir = re:replace(code:priv_dir(riak_test), "riak_test(/riak_test)*",
         "riak_test", [{return, list}]),
 
-    lager:info("priv dir: ~p", [PrivDir]),
+    ?assert(filelib:is_dir(PrivDir)),
+
+
+    lager:info("priv dir: ~p -> ~p", [code:priv_dir(riak_test), PrivDir]),
 
     SSLConfig1 = [
         {riak_repl,
@@ -230,12 +233,7 @@ test_connection({Node1, Config1}, {Node2, Config2}) ->
     rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
     timer:sleep(5000),
-    Status = rpc:call(Node1, riak_repl_console, status, [quiet]),
-    case proplists:get_value(server_stats, Status) of
-        [] -> fail;
-        _ -> ok
-    end.
-    %replication:wait_until_connection(Node1).
+    replication:wait_until_connection(Node1).
 
 
 

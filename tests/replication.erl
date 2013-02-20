@@ -88,14 +88,16 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             NumSites = 4,
             {Ip, Port, _} = hd(NonLeaderListeners),
             add_site(hd(BNodes), {Ip, Port, "site1"}),
+            rt:wait_until_ring_converged(BNodes),
             FakeListeners = gen_fake_listeners(NumSites-1),
             add_fake_sites(BNodes, FakeListeners),
-            rt:wait_until_ring_converged(ANodes),
+            rt:wait_until_ring_converged(BNodes),
 
             rt:log_to_nodes(AllNodes, "Verify replication sites"),
             %% verify sites are distributed on B
             verify_sites_balanced(NumSites, BNodes),
 
+            wait_until_connection(LeaderA),
             %% check the listener IPs were all imported into the site
             verify_site_ips(BFirst, "site1", Listeners);
         _ ->
@@ -638,6 +640,8 @@ wait_until_connection(Node) ->
                         case proplists:get_value(server_stats, Status) of
                             [] ->
                                 false;
+                            [{_, _, too_busy}] ->
+                                false;
                             [_C] ->
                                 true;
                             Conns ->
@@ -658,6 +662,8 @@ wait_until_no_connection(Node) ->
                         case proplists:get_value(server_stats, Status) of
                             [] ->
                                 true;
+                            [{_, _, too_busy}] ->
+                                false;
                             [_C] ->
                                 false;
                             Conns ->
