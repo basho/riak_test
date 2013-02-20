@@ -620,6 +620,8 @@ wait_until_connection(Node) ->
                         case proplists:get_value(server_stats, Status) of
                             [] ->
                                 false;
+                            [{_, _, too_busy}] ->
+                                false;
                             [_C] ->
                                 true;
                             Conns ->
@@ -640,6 +642,8 @@ wait_until_no_connection(Node) ->
                         case proplists:get_value(server_stats, Status) of
                             [] ->
                                 true;
+                            [{_, _, too_busy}] ->
+                                false;
                             [_C] ->
                                 false;
                             Conns ->
