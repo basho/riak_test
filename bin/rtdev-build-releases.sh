@@ -50,8 +50,19 @@ kerl()
 
     echo " - Building Erlang $RELEASE (this could take a while)"
     ./kerl build $RELEASE $BUILDNAME  > /dev/null 2>&1
+    RES = $?
+    if [ "$RES" -ne 0 ]; then
+        echo "[ERROR] Kerl build $BUILDNAME failed"
+        exit 1
+    fi
+
     echo " - Installing $RELEASE into $HOME/$BUILDNAME"
     ./kerl install $BUILDNAME $HOME/$BUILDNAME  > /dev/null 2>&1
+    RES = $?
+    if [ "$RES" -ne 0 ]; then
+        echo "[ERROR] Kerl install $BUILDNAME failed"
+        exit 1
+    fi
 }
 
 build()
@@ -91,6 +102,11 @@ build()
              C_INCLUDE_PATH=$ERLROOT/usr/include \
              LD_LIBRARY_PATH=$ERLROOT/usr/lib"
     $RUN make all devrel > /dev/null 2>&1
+    RES= $?
+    if [ "$RES" -ne 0 ]; then
+        echo "[ERROR] make devrel failed"
+        exit 1
+    fi
     cd ..
     echo " - $SRCDIR built."
 }
