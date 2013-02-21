@@ -426,6 +426,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     rt:start(Target),
     rt:wait_until_pingable(Target),
+    rt:wait_for_service(Target, riak_repl),
     timer:sleep(5000),
 
     pb_write_during_shutdown(Target, BSecond, TestBucket),
@@ -467,7 +468,7 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
 
     rt:start(Target),
     rt:wait_until_pingable(Target),
-    timer:sleep(5000),
+    rt:wait_for_service(Target, riak_repl),
     ReadErrors2 = rt:systest_read(Target, 1000, 11000, TestBucket, 2),
     lager:info("got ~p read failures on ~p", [length(ReadErrors2), Target]),
     case length(WriteErrors) >= length(ReadErrors) of
@@ -524,7 +525,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
 
     rt:start(Target),
     rt:wait_until_pingable(Target),
-    timer:sleep(5000),
+    rt:wait_for_service(Target, riak_repl),
     ReadErrors2 = http_read(C, 12000, 22000, TestBucket, 2),
     lager:info("got ~p read failures on ~p", [length(ReadErrors2), Target]),
     case length(WriteErrors) >= length(ReadErrors) of
