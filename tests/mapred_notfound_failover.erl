@@ -31,6 +31,7 @@
         ]).
 -compile([export_all]). %% because we run ?MODULE:PrepareFun later
 -include_lib("eunit/include/eunit.hrl").
+-include("rt_pipe.hrl").
 
 -define(INTS_BUCKET, <<"foonum">>).
 -define(NUM_INTS, 1000).
@@ -103,22 +104,13 @@ run_test([Node|_], PrepareFun) ->
     %% mapred_plan must happen on riak node to access ring manager
     PipeSpec = rpc:call(Node, riak_kv_mrc_pipe, mapred_plan, [Spec]),
     %% make it easier to fill
-    %% TODO: use record once rt_pipe.hrl from other branch is merged (#143)
-    %% SmallPipeSpec = [ S#fitting_spec{q_limit=QLimit} || S <- PipeSpec ],
-    SmallPipeSpec = [ setelement(7, S, QLimit) || S <- PipeSpec ],
+    SmallPipeSpec = [ S#fitting_spec{q_limit=QLimit} || S <- PipeSpec ],
     {ok, Pipe} = rpc:call(Node, riak_pipe, exec,
                           [SmallPipeSpec,
                            [{log, sink}, {trace, [error, queue_full]},
-                            %% TODO: use rt_pipe:self_sink() when #143 merges
-                            {sink, {fitting, %% #fitting{
-                                    self(),  %%          pid
-                                    make_ref(), %%       ref
-                                    sink, %%             chashfun
-                                    undefined}}]]), %%   nval}
+                            {sink, rt_pipe:self_sink()}]]),
     ExistingKey = {?INTS_BUCKET, <<"bar1">>},
-    %% TODO: use record once rt_pipe.hrl from other branch is merged (#143)
-    %% ChashFun = (hd(SmallPipeSpec))#fitting_spec.chashfun,
-    ChashFun = element(5, hd(SmallPipeSpec)),
+    ChashFun = (hd(SmallPipeSpec))#fitting_spec.chashfun,
     {MissingBucket, MissingKey} =
         find_adjacent_key(Node, ChashFun, ExistingKey),
 
@@ -134,9 +126,7 @@ run_test([Node|_], PrepareFun) ->
     [ ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, ExistingKey])
       || _ <- lists:seq(1, QLimit) ],
 
-    %% TODO: use record once rt_pipe.hrl from other branch is merged (#143)
-    %% {NValMod,NValFun} = (hd(SmallPipeSpec))#fitting_spec.nval,
-    {NValMod,NValFun} = element(6, hd(SmallPipeSpec)),
+    {NValMod,NValFun} = (hd(SmallPipeSpec))#fitting_spec.nval,
     NVal = rpc:call(Node, NValMod, NValFun, [ExistingKey]),
 
     %% each of N paths through the primary preflist
