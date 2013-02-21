@@ -49,7 +49,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     AllNodes = ANodes ++ BNodes,
     log_to_nodes(AllNodes, "Starting replication2 test"),
 
-    TestHash = erlang:md5(term_to_binary(os:timestamp())),
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-systest_a">>,
     FullsyncOnly = <<TestHash/binary, "-fullsync_only">>,
     RealtimeOnly = <<TestHash/binary, "-realtime_only">>,
