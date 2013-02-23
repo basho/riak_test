@@ -26,55 +26,76 @@ confirm() ->
     lager:info("Node not involved in this preflist ~p", [SafeNode]),
     %% connect to the only node in the preflist we won't break, to avoid
     %% random put forwarding
-    {ok, [{_IP, Port}|_]} = rpc:call(hd(PLNodes), application, get_env, [riak_core, http]),
-    C = rhc:create("127.0.0.1", Port, "riak", []),
-    Obj = riakc_obj:new(<<"foo">>, <<"bar">>, <<42:32/integer>>),
-    ?assertEqual(ok, rhc:put(C, Obj, [{pw, all}])),
-    ?assertMatch({ok, _}, rhc:get(C, <<"foo">>, <<"bar">>, [{pr, all}])),
-    %% stop the last node in the preflist, if we stopped the first we'd time
-    %% out the coordinating put
-    DeadNode = lists:last(PLNodes),
-    P1 = kill_dash_stop(DeadNode),
-    %% wait for the net_kernel to notice this node is dead
-    erlang:monitor_node(DeadNode, true),
-    receive
-        {nodedown, DeadNode} -> ok
-    end,
-    ?assertEqual(ok, rhc:put(C, Obj, [{pw, quorum}])),
-    ?assertMatch({ok, _},
-        rhc:get(C, <<"foo">>, <<"bar">>, [{pr, quorum}])),
+    {ok, C} = riak:client_connect(hd(PLNodes)),
+    Obj = riak_object:new(<<"foo">>, <<"bar">>, <<42:32/integer>>),
+    ?assertEqual(ok, C:put(Obj, [{pw, all}])),
+    ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
 
-    P2 = kill_dash_stop(lists:nth(2, PLNodes)),
-    timer:sleep(1000),
-    %% now, there's a magic window here where node_watcher thinks this node is
-    %% up, but its not, so the initial validation of PR/PW works, even though
-    %% we may not actually be getting PR/PW number of primaries responding
-    ?assertMatch({error, timeout},
-        rhc:get(C, <<"foo">>, <<"bar">>, [{pr, quorum}])),
-    ?assertEqual({error, timeout}, rhc:put(C, Obj, [{pw, quorum}])),
-    kill_dash_cont(P1),
-    ?assertEqual(ok, rhc:put(C, Obj, [{pw, quorum}])),
-    ?assertMatch({ok, _}, rhc:get(C, <<"foo">>, <<"bar">>, [{pr, quorum}])),
-    ?assertMatch({error, {pr_val_unsatisfied, 3, 2}},
-        rhc:get(C, <<"foo">>, <<"bar">>, [{pr, all}])),
-    ?assertEqual({error, {pw_val_unsatisfied, 3, 2}}, rhc:put(C, Obj, [{pw, all}])),
-    kill_dash_cont(P2),
+    %% install an intercept to emulate a node that kernel paniced or
+    %% something where it can take some time for the node_watcher to spot the
+    %% downed node
+    {{Index, Node}, _} = lists:last(Preflist2),
+    make_intercepts_tab(Node, Index),
+    rt_intercept:add(Node, {riak_kv_vnode,  [{{do_get,4}, drop_do_get},
+                {{do_put, 7}, drop_do_put}]}),
+    lager:info("disabling do_get for index ~p on ~p", [Index, Node]),
+    rt:log_to_nodes(Nodes, "disabling do_get for index ~p on ~p", [Index, Node]),
     timer:sleep(100),
-    ?assertEqual(ok, rhc:put(C, Obj, [{pw, all}])),
-    ?assertMatch({ok, _}, rhc:get(C, <<"foo">>, <<"bar">>, [{pr, all}])),
+
+    %% one vnode will never return, so we get timeouts
+    ?assertEqual({error, timeout},
+        C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
+    ?assertEqual({error, timeout}, C:put(Obj, [{pw, all}])),
+
+    %% we can still meet quorum, though
+    ?assertEqual(ok, C:put(Obj, [{pw, quorum}])),
+    ?assertMatch({ok, _},
+        C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
+
+    rt:stop(Node),
+    rt:wait_until_unpingable(Node),
+
+    %% there's now a fallback in the preflist, so PR/PW won't be satisfied
+    %% anymore
+    ?assertEqual({error, {pr_val_unsatisfied, 3, 2}},
+        C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
+    ?assertEqual({error, {pw_val_unsatisfied, 3, 2}}, C:put(Obj, [{pw, all}])),
+
+    %% emulate another node failure
+    {{Index2, Node2}, _} = lists:nth(2, Preflist2),
+    make_intercepts_tab(Node2, Index2),
+    rt_intercept:add(Node2, {riak_kv_vnode,  [{{do_get,4}, drop_do_get},
+                {{do_put, 7}, drop_do_put}]}),
+    lager:info("disabling do_get for index ~p on ~p", [Index2, Node2]),
+    rt:log_to_nodes(Nodes, "disabling do_get for index ~p on ~p", [Index2, Node2]),
+    timer:sleep(100),
+
+    %% can't even meet quorum now
+    ?assertEqual({error, timeout},
+        C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
+    ?assertEqual({error, timeout}, C:put(Obj, [{pw, quorum}])),
+
+    %% restart the node
+    rt:start(Node),
+    rt:wait_until_pingable(Node),
+    rt:wait_for_service(Node, riak_kv),
+
+    %% we can make quorum again
+    ?assertEqual(ok, C:put(Obj, [{pw, quorum}])),
+    ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
+    %% intercepts still in force on second node, so we'll get timeouts
+    ?assertEqual({error, timeout},
+        C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
+    ?assertEqual({error, timeout}, C:put(Obj, [{pw, all}])),
+
+    %% reboot the node
+    rt:stop(Node2),
+    rt:wait_until_unpingable(Node2),
+    rt:start(Node2),
+    rt:wait_until_pingable(Node2),
+    rt:wait_for_service(Node2, riak_kv),
+
+    %% everything is happy again
+    ?assertEqual(ok, C:put(Obj, [{pw, all}])),
+    ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
     pass.
-
-kill_dash_stop(Node) ->
-   lager:info("kill -STOP node ~p", [Node]),
-   OSPidToKill = rpc:call(Node, os, getpid, []),
-   os:cmd(io_lib:format("kill -STOP ~s", [OSPidToKill])),
-   lager:info("STOPped"),
-   OSPidToKill.
-
-kill_dash_cont(Pid) ->
-   lager:info("kill -CONT pid ~p", [Pid]),
-   os:cmd(io_lib:format("kill -CONT ~s", [Pid])),
-   lager:info("CONTinued"),
-   ok.
-
-
