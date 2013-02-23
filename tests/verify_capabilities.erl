@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2012-2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -22,6 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+%% 1.4 {riak_core, handoff_data_encoding} -> [encode_raw, encode_zlib]
 %% 1.3 {riak_kv, anti_entropy} -> [disabled, enabled_v1]
 confirm() ->
     lager:info("Deploying mixed set of nodes"),
@@ -59,6 +60,9 @@ confirm() ->
     assert_supported(CCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
     assert_supported(CCapabilities, {riak_core, handoff_data_encoding}, [encode_raw, encode_zlib]),
 
+    %% We've got a current-version node only, we should see raw selected as default:
+    assert_using(CNode, {riak_core, handoff_data_encoding}, encode_raw),
+
     lager:info("Crash riak_core_capability server"),
     restart_capability_server(CNode),
 
@@ -91,6 +95,9 @@ confirm() ->
             assert_supported(LCapabilities, {riak_kv, mapred_system}, [pipe]),
             assert_supported(LCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
             assert_supported(LCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
+
+            %% We've added a legacy server: we should see zlib selected by the current-version node:
+            assert_using(CNode, {riak_core, handoff_data_encoding}, encode_zlib),
 
             lager:info("Crash riak_core_capability server"),
             restart_capability_server(CNode),
@@ -126,14 +133,17 @@ confirm() ->
             assert_supported(PCapabilities, {riak_kv, vnode_vclocks}, [true,false]),
             assert_supported(PCapabilities, {riak_pipe, trace_format}, [ordsets,sets]),
 
+            %% We've added a previous version (1.2) we should (still) see zlib selected:
+            assert_using(CNode, {riak_core, handoff_data_encoding}, encode_zlib),
+
             lager:info("Upgrade Legacy node"),
             rt:upgrade(LNode, current),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
             ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
             lager:info("Verify staged_joins == true after upgrade of legacy -> current"),
 
-            % Check for handoff encoding support:
-            assert_supported(rt:capability(CNode, all), {riak_core, handoff_data_encoding}, [encode_raw, encode_zlib]);
+            %% We have upgraded the legacy node, but we should see zlib selected (previous node still not upgraded):
+            assert_using(CNode, {riak_core, handoff_data_encoding}, encode_zlib);
 
         _ ->
             lager:info("Legacy Riak not available, skipping legacy tests"),
@@ -195,6 +205,9 @@ confirm() ->
     assert_supported(CCap2, {riak_kv, vnode_vclocks}, [true,false]),
     assert_supported(CCap2, {riak_pipe, trace_format}, [ordsets,sets]),
 
+    %% We've upgraded both legacy and previous versions; we should see raw selected by everyone:
+    [assert_using(Node, {riak_core, handoff_data_encoding}, encode_raw) || Node <- [CNode, PNode, LNode]],
+
     %% All nodes are now current version. Test override behavior.
     Override = fun(undefined, Prefer) ->
                        [{riak_core, [{override_capability,
@@ -239,7 +252,17 @@ assert_capability(Capabilities, Capability, Value) ->
 assert_supported(Capabilities, Capability, Value) ->
     lager:info("Checking Capability Supported Values ~p =:= ~p", [Capability, Value]),
     ?assertEqual(Value, proplists:get_value(Capability, proplists:get_value('$supported', Capabilities))).
-    
+
+assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName) ->
+    lager:info("assert_using ~p =:= ~p", [ExpectedCapabilityName, CapabilityName]),
+    try ExpectedCapabilityName =:= rt:capability(Node, {CapabilityCategory, CapabilityName}) of
+        X -> X
+    catch
+        %% This is for catching a case in which a legacy node doesn't support capabilities at all:
+        exit:Exception -> lager:info("assert_using() caught exception: ~p", [Exception]), 
+                          false
+    end.
+
 restart_capability_server(Node) ->
     Pid = rpc:call(Node, erlang, whereis, [riak_core_capability]),
     rpc:call(Node, erlang, exit, [Pid, kill]),
