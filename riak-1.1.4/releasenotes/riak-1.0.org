@@ -1,0 +1,626 @@
+* Riak 1.0.3 Release Notes
+** Bugs Fixed
+-[[https://issues.basho.com/show_bug.cgi?id=1291][bz1291 - Incorrect match of erlang:decode_packet return value in mochiweb]]
+-[[https://issues.basho.com/show_bug.cgi?id=1306][bz1306 - get_fsm crashes when riak_object value is not a binary]]
+** Other Additions
+*** riak-admin top
+=riak-admin= can now run top against the server.  Top provides
+information about what the erlang processes inside of Riak are doing.
+Top reports process reductions (an indicator of CPU utilization),
+memory used and message queue sizes.
+
+Start with =riak-admin top= and exit with double-^C
+
+*** busy_port / busy_dist_port 
+Riak will now log whenever distributed erlang is overloaded by logging
+=busy_dist_port= messages on the console and to the logs.  If the
+message is being logged frequently, the buffer used for distributed
+erlang can be increased by adding +zdbbl KBytes in the =vm.args= file
+(in =/etc/riak= or =/opt/riak/etc= depending on platform).
+
+*** Bitcask Support for O_SYNC
+Bitcask has been reworked to perform I/O directly on the Erlang
+scheduler threads; this is the result of extensive load testing in a
+production environment. As a result of this change, it can now support
+=O_SYNC= on Linux.
+
+*** New Claim Algorithm 
+The new claim algorithm introduced in the 1.0 release has been set as
+the default for 1.0.3.
+
+The new claim algorithm significantly reduces the amount of ownerhip
+shuffling for clusters with more than N+2 nodes in them.  Changes to
+the cluster membership code in 1.0 made the original claim algorithm
+fall back to just reordering nodes in sequence in more cases than it
+used to, causing massive handoff activity on larger clusters.  Mixed
+clusters including pre-1.0 nodes will still use the original algorithm
+until all nodes are upgraded.
+
+*** Changes to Handoff Concurrency
+The default value for =handoff_concurrency= was set to 1 to err on the
+side of caution and not overload the cluster with handoff traffic.
+
+** Known Issues
+
+* Riak 1.0.2 Release Notes
+** Bugs Fixed
+-[[https://issues.basho.com/show_bug.cgi?id=1227][bz1227 - badstate crash in handoff]]
+-[[https://issues.basho.com/show_bug.cgi?id=1261][bz1261 - pipe mapreduce jobs fail in mixed 1.0.0/1.0.1 clusters]]
+-[[https://issues.basho.com/show_bug.cgi?id=1263][bz1263 - bitcask-backed vnodes handle requests while dropping]]
+-[[https://issues.basho.com/show_bug.cgi?id=1265][bz1265 - eleveldb not opened with configuration options from environment]]
+
+** Other Additions
+*** New stats
+Two new stats categories have been added to riak stats.
+
+-=node_get_fsm_siblings= reports the statstics on the number of siblings retrieved with get over the last minute.
+-=node_get_fsm_objsize= reports an estimate of the object sizes retrieved with get over the last minute.
+
+For both categories mean, median, max, 95th & 99th percentiles are given.  
+The new stats are available using riak-admin status or from the /stats endpoint.
+** Known Issues
+*** Pipe based MapReduce during rolling upgrades
+[[https://issues.basho.com/show_bug.cgi?id=1261][BZ1261]] 
+A bug was found that caused pipe-based MapReduce to be
+unusable during rolling upgrades from 1.0.0 to 1.0.1 (they work again
+once the upgrade is complete).  The problem has been fixed such that
+MapReduce will stay available when upgrading from 1.0.1 to 1.0.2, and
+also from 1.0.2 onward.
+
+If you are still using Riak 1.0.0, pipe-based MapReduce will still be
+unusable during the rolling upgrade to 1.0.2.  We apologize for the
+inconvenience.  If your MapReduce queries work on the legacy
+subsystem, you may want to switch back to it for the duration of your
+upgrade to 1.0.2.  To switch MapReduce subsystems, either edit the
+'mapred_system' setting in your app.config and restart each node, or
+connect to each nodes console and evaluate
+'application:set_env(riak_kv, mapred_system, Choice).' where 'Choice'
+is either 'legacy' or 'pipe'.
+
+*** Large Ring Sizes
+
+The new cluster protocol in 1.0 leads to a practical limit on the size
+of the ring in a Riak cluster. While there is no hard coded limit, large
+ring sizes lead to increasingly slower performance and potentially unstable
+clusters. This limitation will be addressed in a future major release of
+Riak. For the time being, it is recommended that users limit clusters to
+no more than 256, 512, 1024 partitions depending on the performance of the
+underlying hardware.
+
+*** Ownership Handoff Stall
+
+It has been observed that 1.0 clusters can end up in a state with ownership
+handoff failing to complete. This state should not happen under normal
+circumstances, but has been observed in cases where Riak nodes crashed due
+to unrelated issues (eg. running out of disk space/memory) during cluster
+membership changes. The behavior can be identified by looking at the output
+of =riak-admin ring_status= and looking for transfers that are waiting on an
+empty set. As an example:
+
+#+BEGIN_SRC
+============================== Ownership Handoff ==============================
+Owner:      riak@host1
+Next Owner: riak@host2
+
+Index: 123456789123456789123456789123456789123456789123
+  Waiting on: []
+  Complete:   [riak_kv_vnode,riak_pipe_vnode]
+#+END_SRC
+
+To fix this issue, copy/paste the following code sequence into an Erlang
+shell for each =Owner= node in =riak-admin ring_status= for which
+this case has been identified. The Erlang shell can be accessed with =riak attach=
+
+#+BEGIN_SRC
+fun() ->
+  Node = node(),
+  {_Claimant, _RingReady, _Down, _MarkedDown, Changes} =
+      riak_core_status:ring_status(),
+  Stuck =
+      [{Idx, Complete} || {{Owner, NextOwner}, Transfers} <- Changes,
+                          {Idx, Waiting, Complete, Status} <- Transfers,
+                          Owner =:= Node,
+                          Waiting =:= [],
+                          Status =:= awaiting],
+
+  RT = fun(Ring, _) ->
+           NewRing = lists:foldl(fun({Idx, Mods}, Ring1) ->
+                         lists:foldl(fun(Mod, Ring2) ->
+                             riak_core_ring:handoff_complete(Ring2, Idx, Mod)
+                         end, Ring1, Mods)
+                     end, Ring, Stuck),
+           {new_ring, NewRing}
+       end,
+
+  case Stuck of
+      [] ->
+          ok;
+      _ ->
+          riak_core_ring_manager:ring_trans(RT, []),
+          ok
+  end
+end().
+#+END_SRC
+
+*** Innostore on 32-bit systems
+
+Depending on the partition count and the default stack size of the
+operating system, using Innostore as the backend on 32-bit systems can
+cause problems. A symptom of this problem would be a message similar
+to this on the console or in the Riak error log:
+
+#+BEGIN_SRC
+10:22:38.719 [error] Failed to start riak_kv_innostore_backend for index 1415829711164312202009819681693899175291684651008. Reason: {eagain,[{erlang,open_port,[{spawn,innostore_drv},[binary]]},{innostore,connect,0},{riak_kv_innostore_backend,start,2},{riak_kv_vnode,init,1},{riak_core_vnode,init,1},{gen_fsm,init_it,6},{proc_lib,init_p_do_apply,3}]}
+10:22:38.871 [notice] "backend module failed to start."
+#+END_SRC
+
+The workaround for this problem is to reduce the stack size for the
+user Riak is run as (=riak= for most distributions). For example
+on Linux, the current stack size can be viewed using =ulimit -s= and
+can be altered by adding entries to the =/etc/security/limits.conf=
+file such as these:
+
+#+BEGIN_SRC
+riak             soft    stack           1024
+riak             hard    stack           1024
+#+END_SRC
+
+* Riak 1.0.1 Release Notes
+** Bugs Fixed
+-[[https://issues.basho.com/show_bug.cgi?id=15][bz0015 - Merge js-mapreduce.org and basic-mapreduce.txt]]
+-[[https://issues.basho.com/show_bug.cgi?id=1183][bz1183 - Handoff may cause riak_kv_w_reduce to over-reduce]]
+-[[https://issues.basho.com/show_bug.cgi?id=1184][bz1184 - riak_kv_w_reduce should respect reduce_phase_only_1 during handoff]]
+-[[https://issues.basho.com/show_bug.cgi?id=1213][bz1213 - HTTP and Javascript map phases can't use do_prereduce]]
+-[[https://issues.basho.com/show_bug.cgi?id=1225][bz1225 - Exact phrase search fails on repeated words]]
+-[[https://issues.basho.com/show_bug.cgi?id=1228][bz1228 - riak_core_ring_manager crashes with function clause and state of 'ok' ]]
+-[[https://issues.basho.com/show_bug.cgi?id=1234][bz1234 - Mixed 0.14/1.0.0 cluster puts can fail for clusters with more than N nodes]]
+-[[https://issues.basho.com/show_bug.cgi?id=1235][bz1235 - vnode crashes due to receiving handoff data in deleted state]]
+-[[https://issues.basho.com/show_bug.cgi?id=1236][bz1236 - riak_pipe vnode crash in Java client test suite]]
+-[[https://issues.basho.com/show_bug.cgi?id=1237][bz1237 - File descriptor leak in riak_kv_bitcask_backend fold]]
+-[[https://issues.basho.com/show_bug.cgi?id=1238][bz1238 - Prereduce uses map phase arg instead of reduce phase arg]]
+-[[https://issues.basho.com/show_bug.cgi?id=1242][bz1242 - Handoff stops when the ring is modified by fix-up modules]]
+-[[https://issues.basho.com/show_bug.cgi?id=1243][bz1243 - JSONified riak_object drops multiple index entries]]
+-[[https://issues.basho.com/show_bug.cgi?id=1244][bz1244 - riak_kv_wm_object makes call to riak_client:get/3 with invalid type for key]]
+-[[https://issues.basho.com/show_bug.cgi?id=1249][bz1249 - Backup/restore fail if ring is fixed-up]]
+-[[https://issues.basho.com/show_bug.cgi?id=1250][bz1250 - bitcask partition data isn't cleaned up after handoff]]
+
+* Riak 1.0.0 Release Notes
+
+** Major Features and Improvements for Riak
+*** 2i
+    Secondary Indexes (2I) makes it easier to find your data in
+    Riak.  With 2i, an application can index an object under an arbitrary
+    number of field/value pairs specified at write time.  Later, the
+    application can query the index, pulling back a list of keys that
+    match a given value or fall within a given range of values.  This
+    simple mechanism enables applications to model alternate keys,
+    one-to-many relationships, and many-to-many relationships in
+    Riak.  Indexing is atomic and real-time.  Querying is integrated with
+    MapReduce.  In this release, the query feature set is minimal: only
+    exact match and range queries are supported, and only on a single
+    field.  In addition, the system must be configured to use the
+    =riak_kv_eleveldb_backend=.  Future releases will bring support for more
+    complex queries and additional backends, depending upon user feedback.
+
+
+*** Backend Refactoring
+   There are 3 main areas of change with regard to the backend refactoring.
+**** Changes to the suite of available backends
+     - Added: eleveldb backend
+     -  Merged: ets and cache backend have been consolidated into a single 
+        memory backend.
+     -  Removed: dets, filesystem (fs), and gb_trees backends
+**** Standardized API
+     - All of the backend modules now share a common API.
+     - Vnode code has been greatly simplified.
+**** Asynchronous folding
+     - The vnode no longer has to be blocked by fold operations.
+     - A node for a backend capable of asynchronous folds starts a worker 
+       pool to handle fold requests.
+     - Asynchronous folds are done using read-only snapshots of the data.
+     - Bitcask, eleveldb, memory, and multi backends support asynchronous folding.
+     - Asynchronous folding may be disabled by adding ={async_folds, false}=
+       in the =riak_kv= section of the =app.config= file. 
+
+
+*** Lager
+    Lager is Riak’s new logging library.  It aims to alleviate some of the
+    shortcomings in Erlang/OTP’s bundled logging library; specifically
+    more readable log messages, support for external logfile rotation,
+    more granular log levels and runtime changes.
+
+
+*** LevelDB
+    Riak now has support for LevelDB, a fast key-value storage library
+    written at Google that provides an ordered mapping from string keys to
+    string values.  This backend provides a viable alternative to the
+    innostore backend, with better performance.  LevelDB has an append-only
+    design that provides high-performance writes.  Unlike Bitcask, however,
+    LevelDB keeps keys in sorted order and uses a multi-level cache to
+    keep portions of the keyspace in memory.  This design allows LevelDB to
+    effectively deal with very large keyspaces, but at the cost of
+    additional seeks on read.
+
+
+*** Pipe
+    Riak Pipe is the new plumbing for Riak's MapReduce system.  It improves
+    upon the legacy system in many ways, including built-in backpressure
+    to keep phases from overloading others downstream, and a design shaped
+    to make much better use of the parallel-processing resources available
+    in the cluster.  Riak Pipe is also a general queue-based parallel
+    processing system, which new applications may find is a more natural
+    starting point than bare Riak Core.   Riak Pipe is the default plumbing
+    for MapReduce queries on new clusters.   To move old clusters onto Riak
+    Pipe MapReduce, add ={mapred_system, pipe}= to the =riak_kv= section
+    of your node’s =app.config=.   To force Riak to use the legacy system for
+    MapReduce, set ={mapred_system, legacy}= in the =riak_kv= section of
+    =app.config= instead.
+
+
+*** URL encoding changes over REST API
+    Riak now decode URL encoded bucket/keys over the REST API, rather than
+    prior behavior which was to decode links but not decode
+    buckets/keys.  The default cluster behavior is configurable in
+    =riak_core= section of =app.config=: ={http_url_decoding, on}= provides the
+    new behavior (decode everything), missing/anything else provides the
+    current behavior.
+
+    The module =riak_kv_encoding_migrate.erl= is also provided to help
+    migrate existing encoded buckets/keys to their decoded equivalents
+
+
+*** Riak Clustering Overhaul
+    The clustering subsystem of Riak has been overhauled for 1.0, addressing a 
+    variety of bugs and limitations.
+    - When reassigning a partition to a new node, the partition data from
+      the existing owner is first transferred to the new owner before
+      officially changing the ownership in the ring. This fixes a bug
+      where 404s could appear while ownership was being changed.
+    - Adding/removing nodes to a cluster is now more robust, and it is no 
+      longer necessary to check for ring convergence (=riak-admin ringready=)
+      between adding/removing nodes. Adding multiple nodes all at once should 
+      "just work".  
+    - Handoff related to changing node owners can now occur while a cluster is 
+      under load, therefore allowing a Riak cluster to scale up and down during
+      load / normal operation.
+    - Various other clustering bug/fixes. See the fixed bug list for details.    
+**** Notes
+     - =riak-admin join= has new semantics.  The command is now a one-way
+       operation that joins a single node to cluster.  The node that the
+       command is executed under should be the desired joining node, and
+       the target of the command should be a member of the desired target
+       cluster.  The new command requires the joining node to be a singleton
+       (1-node) cluster.
+     - =riak-admin leave= is now the only safe way to remove a node from a
+       cluster.  The leave command ensures that the exiting node will
+       handoff all its partitions before leaving the cluster.  It should be
+       executed by the node intended to leave.
+     - =riak-admin remove= no longer exists. Use =riak-admin leave= to safely
+       remove a node from the cluster, or =riak-admin force-remove= to remove
+       an unrecoverable node.
+     - =riak-admin force-remove= immediately removes a node from the cluster
+       without having it first handoff data. All data replicas are therefore
+       lost. This is designed for cases where a node is unrecoverable
+     - The new cluster changes require all nodes to be up and reachable in
+       order for new members to be integrated into the cluster and for the
+       data to be rebalanced.  During brief node outages, the new protocol
+       will wait until all nodes are eventually back online and continue
+       automatically.  If it is known that a node will be offline for an
+       extended period, the new =riak-admin down= command can be used to
+       mark a node as offline and the cluster will then resume integrating
+       nodes and performing ring rebalances.  Nodes marked as down will
+       automatically rejoin and reintegrate into the cluster when they come
+       back online.
+     - When performing a rolling upgrade, the cluster will auto-negotiate
+       the proper gossip protocol, using the legacy gossip protocol while
+       there is a mixed-verison cluster. During the upgrade, executing
+       =riak-admin ringready= and =riak-admin transfers= from a non-1.0
+       node will fail. However, executing those commands from a 1.0 node
+       will succeed and give the desired information.
+
+
+*** Get/Put Improvements
+    The way that Riak versions and updates objects has been
+    overhauled.  ClientIds are no longer used when updating objects, the
+    server handles all versioning using a vector clock id per-vnode.
+    
+    New clusters are configured with the new vclock behavior turned on.
+    If you are performing a rolling upgrade of an existing cluster, once
+    all nodes have been upgraded the =app.config= needs to be updated to add
+    ={vnode_vclocks, true}=.
+    
+    Puts are now coordinated in the same way as on the original Dynamo
+    system.  Requests must be handled by a node in the preference list
+    (primary or fallback) for that bucket/key.   Nodes will automatically
+    forward to a valid node when necessary and increment the coord_redirs
+    stats counter.  The put is initially written to the local vnode before
+    forwarding to the remote vnodes.   This ensures that the updated vclock
+    for the riak object will replace the existing value or create siblings
+    in partitioning/failure scenario where the same client can see both
+    sides.
+    
+    Error proofing for the failure scenarios has made it so that clients
+    no longer have to be well behaved.   If =allow_mult= is set =true=, every
+    time you create a new object and put over an existing one it will
+    create a sibling.  Vector clocks should now be much smaller in size as
+    only a few vclock ids are now updated.  This should resolve a number of
+    issues due to vclock pruning causing siblings.
+    
+    Gets have been changed to return more information during failure.
+    Prior to 1.0 there were cases where Riak returned not found if not
+    enough valid responses were returned.  The case of not enough responses
+    has been changed to an error instead reported as 503 over HTTP or as
+    ={error, {r_val_unsatistfied, R, NumResponses}}= for Erlang/PBC clients.
+
+    New options have been added to the get requests for handling
+    notfound.  Prior to 1.0 only successful reads were counted towards R
+    and there was some logic to try and fail early rather than wait until
+    the request timed out if not enough replies were received
+    (basic_quorum).  This meant when a node went down and another node
+    didn’t response you would get a not found response that triggered a
+    read repair and then if you retrieved the object again it would be
+    present.
+    
+    Now that other enhancements have been made (delete and asynchronous
+    improvements to the vnodes) we can change notfounds to be counted
+    towards R and disable the basic_quorum logic by setting bucket
+    properties to =[{notfound_ok, true}, {basic_quorum, false}]= and reduce
+    the number of cases where notfound is returned on first request when
+    an object could be.
+
+*** Delete Changes
+
+    The changes to the vector clocks make it very important that the tombstones
+    written by deletes are removed from all vnodes.  In 0.14.2 the tombstone
+    was removed as it was confirmed that all vnodes had the tombstone stored.
+    For 1.0.0 this has been changed to delay the removal by a short period of
+    time (default 3s) and is aborted if the object is updated.  The behavior
+    is configurable by setting {delete_mode, Mode} in the riak_kv secion of
+    app.config and can be set to the following
+
+      keep - tombstones are kept forever
+
+      immediate - tombstones are removed without delay - 0.14.2 behavior.
+
+      NNNN - delay in milliseconds to check for changes before removing tombstone.
+             The default is 3000 for 3s.
+
+    The riak_client, HTTP and PBC interfaces have been modified to return vclock 
+    information for deleted objects.  riak_client:get accepts a deletedvclock
+    option which changes a deleted object read from {error, notfound} to
+    {error, {deleted, VClock}}.
+
+    The HTTP interface returns X-Riak-Vclock with 404s now.  The PBC interface
+    can request the vclock setting the deletedvclock option on get requests.
+
+    Clients that have not been updated to take advantage of the new information
+    may create siblings with tombstones if they create a new object over one
+    deleted recently enough the tombstone still exists.
+
+*** Backup/Restore Changes
+
+    Restore has been changed to restore the exact objects that were backed up.
+    This means that if they have been updated since the backup, or deleted
+    recently enough that the tombstone has not been removed, then the backed
+    up object will not be restored.  Waiting until the tombstones are removed
+    should enable the objects to be restored (however if delete_mode=keep
+    tombstones are never removed).
+
+    In 0.14.2 restoring an object would have updated the vclock with a random
+    client id and created a sibling, and if allow_mult=false the two resolved
+    by the last updated time.
+
+*** Search
+
+**** Integration into Riak
+
+Prior to the 1.0 release if you wanted a Riak cluster with search
+capability you needed to install the Riak Search package.  As of 1.0
+this functionality is now included with the standard and enterprise
+Riak packages.  By default this functionality is turned off but
+enabling it is a simple matter of changing the =enabled= flag to
+=true= in the =riak_search= section of the =app.config= file.
+
+**** Data Center Replication Support
+
+Multi-datacenter replication that comes with Riak EDS now fully
+supports Search.  Now, not only will the standard KV data be
+replicated but also any indexes created by Search.  To be clear, this
+includes all indexes no matter how they were created; whether by the
+Search bucket hook, =search-cmd index=, or the Solr-like interface.
+
+**** Removal of Java Support
+
+Prior to 1.0 Riak Search provided the ability to interface with the
+standard Lucene analyzers or even other customer analyzers written in
+Java.  While this certainly can be useful it added extra complexity to
+both the code and the running system.  After consulting with our
+clients and community it was determined that removing Java support
+makes the most sense at this point in time.
+
+**** Add field listing support to Solr-like interface
+
+[[https://github.com/basho/riak_search/pull/86][A patch submitted by Greg Pascale]] adds field listing support for
+Search's Solr-like interface.  This allows you to return only the
+fields you want by specifying a list of comma-separated field names
+for the query param =fl=.  Furthermore, if you specify only the unique
+field (which is =id= by default) then Search will perform an
+optimization and not fetch any of the underlying objects.  This is
+very nice if you're only interested in the keys of the matching
+objects as it potentially saves Search from doing a lot of unnecessary
+work.  However, note that if you specify something like
+=fl=id&sort=other_field= that Search will return a =400 Bad Request=.
+This is because the above optimization currently prevents Search from
+access to the =other_field=.
+
+**** Miscellaneous
+
+- [[https://github.com/basho/riak_search/pull/66][Fixed]] memory leak that could occur as the result of running
+  intersection queries.
+
+- The Solr-like interface now allows to "presort" based on key (where
+  key is the matching "document" id, in the case of an indexed bucket
+  this is the object key) which may be useful if the key has a
+  meaningful order.  For example, the timestamp of a tweet.
+
+- Removed the search shell.
+
+- Removed JavaScript extractor support.
+
+- Ability to enabled KV indexing by setting the =search= bucket
+  property to =true=.
+
+- [[https://github.com/basho/riak_search/pull/84][Streamlined]] custom extractor bucket property.
+
+- Fixed bug in =lucene_parser= to handle all errors returned from
+  calls to =lucene_scan:string=.
+
+** Known Issues
+*** Rolling Upgrade From Riak Search 14.2 to Riak 1.0.0
+
+There are a couple of caveats for rolling upgrade from 
+Riak Search 0.14.2 to Riak 1.0.0.
+
+First, there are some extra steps that need to be taken when
+installing the new package.  Instead of simply installing the new
+package you must uninstall the old one, move the data dir, and then
+install the new package.
+
+Second, while in a mixed cluster state some queries will return
+incorrect results.  It's tough to say which queries will exhibit this
+behavior because it depends on which node the data is stored and what
+node is making the query.  Essentially, if two nodes with different
+versions need to coordinate on a query it will produce incorrect
+results.  Once all nodes have been upgrade to 1.0.0 all queries will
+return the correct results.
+
+*** Intermittent CRASH REPORT on node leave (bz://1218)
+
+There is a harmless race condition that sometimes triggers a crash when a node leaves
+the cluster. It can be ignored.  It shows up on the console/logs as:
+
+ =(08:00:31.564 [notice] "node removal completed, exiting.")=
+
+=(08:00:31.578 [error] CRASH REPORT Process riak_core_ring_manager with 0 neighbours crashed with reason: timeout_value)=
+
+*** Node stats incorrectly report pbc_connects_total
+
+The new code path for recording stats is not currently incrementing the
+total number of protocol buffer connections made to the node, causing it 
+to incorrectly report 0 in both =riak-admin status= and =GET /stats= .
+
+*** Secondary Indexes not supported under Multi Backend
+
+Multi Backend does not correctly expose all capabilities of its
+child backends. This prohibits using Secondary Indexes with Multi
+Backend. Currently, Secondary Indexing is only supported for the
+ELevelDB backend (=riak_kv_eleveldb_backend=). Tracked as [[https://issues.basho.com/show_bug.cgi?id=1231][Bug 1231]].
+
+*** MapReduce reduce phase may run more often than requested
+
+If a reduce phase of a MapReduce query is handed off from one Riak
+Pipe vnode to another it immediately and unconditionally reduces the
+inputs it has accumulated.  This may cause the reduce function to be
+evaluated more often than requested by the batch size configuration
+options.  Tracked as [[https://issues.basho.com/show_bug.cgi?id=1183][Bug 1183]] and [[https://issues.basho.com/show_bug.cgi?id=1184][Bug 1184]].
+
+*** Potential Cluster/Gossip Overload
+
+The new cluster protocol is designed to ensure that a Riak cluster
+converges as quickly as possible. When running multiple Riak nodes on
+a single-machine, the underlying gossip mechanism may become CPU-bound
+for a period of time and cause cluster related commands to
+timeout. This includes the following =riak-admin= commands: =join,
+leave, remove, member_status, ring_status=.  Incoming client requests
+and other Riak operations will continue to function, although latency
+may be impacted. The cluster will continue to handle gossip messages
+and will eventually converge, resolving this issue. Note: This
+behavior only occurs when adding/removing nodes from the cluster, and
+will not occur when a cluster is stable. Also, this behavior has only
+been observed when running multiple nodes on a single machine, and has
+not been observed when running Riak on multiple servers or EC2
+instances.
+
+
+** Bugs Fixed
+-[[https://issues.basho.com/show_bug.cgi?id=0105][bz0105 - Python client new_binary doesn't set the content_type well]]
+-[[https://issues.basho.com/show_bug.cgi?id=0123][bz0123 - default_bucket_props in app.config is not merged with the hardcoded defaults]]
+-[[https://issues.basho.com/show_bug.cgi?id=0218][bz0218 - bin/riak-admin leave needs to remove abandoned ring files]]
+-[[https://issues.basho.com/show_bug.cgi?id=0260][bz0260 - Expose tombstones as conflicts when allow_mult is true]]
+-[[https://issues.basho.com/show_bug.cgi?id=0294][bz0294 - Possible race condition in nodetool]]
+-[[https://issues.basho.com/show_bug.cgi?id=0325][bz0325 - Patch for mapred_builtins.js - reduceMin and reduceMax]]
+-[[https://issues.basho.com/show_bug.cgi?id=0420][bz0420 - Links are incorrectly translated in riak_object:dejsonify_values/2]]
+-[[https://issues.basho.com/show_bug.cgi?id=0426][bz0426 - bin/riak-admin leave has poor console output]]
+-[[https://issues.basho.com/show_bug.cgi?id=0441][bz0441 - detect and report bad datafile entry]]
+-[[https://issues.basho.com/show_bug.cgi?id=0461][bz0461 - Guard against non-string values of content-type in riak-erlang-client]]
+-[[https://issues.basho.com/show_bug.cgi?id=464][bz0464 - riak-admin status has garbage cpu_nprocs/avg1/5/15 on Solaris]]
+-[[https://issues.basho.com/show_bug.cgi?id=475][bz0475 - k/v FSMs should fail if no nodes are available - currently they time out]]
+-[[https://issues.basho.com/show_bug.cgi?id=0502][bz0502 - Minor merge_index code cleanup]]
+-[[https://issues.basho.com/show_bug.cgi?id=0564][bz0564 - Planner's subprocesses run long after {timeout, range_loop} exception]]
+-[[https://issues.basho.com/show_bug.cgi?id=0599][bz0599 - Consider adding erlang:memory/0 information to stats output]]
+-[[https://issues.basho.com/show_bug.cgi?id=0605][bz0605 - riak_kv_wm_raw does not handle put_fsm timeout]]
+-[[https://issues.basho.com/show_bug.cgi?id=0617][bz0617 - Riak URL decodes keys submitted in the Link header]]
+-[[https://issues.basho.com/show_bug.cgi?id=0688][bz0688 - Ring does not settle when building large clusters ]]
+-[[https://issues.basho.com/show_bug.cgi?id=0710][bz0710 - "riak ping" exits with status 0 when ping fails]]
+-[[https://issues.basho.com/show_bug.cgi?id=0716][bz0716 - Handoff Sender crashes loudly when remote node dies]]
+-[[https://issues.basho.com/show_bug.cgi?id=0808][bz0808 - The use of fold/3 function in do_list_keys/6 in riak_kv_vnode does not allow backends to take advantage of bucket aware optimizations]]
+-[[https://issues.basho.com/show_bug.cgi?id=0823][bz0823 - Handoff processes crash irretrievably when receiving TCP garbage, resulting in node failure]]
+-[[https://issues.basho.com/show_bug.cgi?id=861][bz0861 - merge_index throws errors when data path contains a period]]
+-[[https://issues.basho.com/show_bug.cgi?id=0869][bz0869 - Any commands that change the ring should require the ringready command to return TRUE]]
+-[[https://issues.basho.com/show_bug.cgi?id=0878][bz0878 - riak-admin leave, then stop node, then restart -> handoff transfers do not resume]]
+-[[https://issues.basho.com/show_bug.cgi?id=0911][bz0911 - Fix #scope{} and #group{} operator preplanning]]
+-[[https://issues.basho.com/show_bug.cgi?id=0931][bz0931 - Cluster should not use partition ownership to find list of nodes]]
+-[[https://issues.basho.com/show_bug.cgi?id=0939][bz0939 - Fast map phase can overrun slower reduce phase]]
+-[[https://issues.basho.com/show_bug.cgi?id=948][bz0948 - Fix or remove commented out QC tests]]
+-[[https://issues.basho.com/show_bug.cgi?id=0953][bz0953 - Change Riak Search to use the Whitespace analyzer by default]]
+-[[https://issues.basho.com/show_bug.cgi?id=0954][bz0954 - Wildcard queries are broken with Whitespace analyzer]]
+-[[https://issues.basho.com/show_bug.cgi?id=963][bz0963 - UTF8_test errors]]
+-[[https://issues.basho.com/show_bug.cgi?id=0967][bz0967 - Upgrade riak_search to compile on Erlang R14B01]]
+-[[https://issues.basho.com/show_bug.cgi?id=970][bz0970 - Deleting a non-indexed object from an indexed bucket throws an error]]
+-[[https://issues.basho.com/show_bug.cgi?id=0989][bz0989 - riak_kv_map_master crashes when counters are out of date]]
+-[[https://issues.basho.com/show_bug.cgi?id=1003][bz1003 - REST API and PBC API have incompatible naming rules]]
+-[[https://issues.basho.com/show_bug.cgi?id=1024][bz1024 - Valid objects return notfound during heavy partition transfer]]
+-[[https://issues.basho.com/show_bug.cgi?id=1033][bz1033 - delete_resource doesn't handle case where object is no longer extant]] 
+-[[https://issues.basho.com/show_bug.cgi?id=1047][bz1047 - Javascript VM worker process is not restarted after crash]]
+-[[https://issues.basho.com/show_bug.cgi?id=1050][bz1050 - Add inline field support / filter support to the KV interface]]
+-[[https://issues.basho.com/show_bug.cgi?id=1052][bz1052 - riak_core_ring_handler:ensure_vnodes_started breaks on multiple vnode types]]
+-[[https://issues.basho.com/show_bug.cgi?id=1055][bz1055 - riak_core_vnode_master keeps unnecessary "exclusions list" in its state]]
+-[[https://issues.basho.com/show_bug.cgi?id=1065][bz1065 - mi_buffer_converter processes sit idle with large heap]]
+-[[https://issues.basho.com/show_bug.cgi?id=1067][bz1067 - deprecate riak_kv_util:try_cast/fallback]]
+-[[https://issues.basho.com/show_bug.cgi?id=1072][bz1072 - spiraltime crash (in riak_kv_stat)]]
+-[[https://issues.basho.com/show_bug.cgi?id=1075][bz1075 - java.net.SocketException: Connection reset by peer from proto client (thundering (small) herd)]]
+-[[https://issues.basho.com/show_bug.cgi?id=1077][bz1077 - nodetool needs to support Erlang SSL distribution]]
+-[[https://issues.basho.com/show_bug.cgi?id=1086][bz1086 - merge_index doesn't tolerate dashes in parent paths]]
+-[[https://issues.basho.com/show_bug.cgi?id=1097][bz1097 - Truncated data file then merge triggers error in bitcask_fileops:fold/3]]
+-[[https://issues.basho.com/show_bug.cgi?id=1103][bz1103 - RHEL/CentOS riaksearch init script uses 'riaksearch' as username but riaksearch install RPM creates 'riak' user]]
+-[[https://issues.basho.com/show_bug.cgi?id=1109][bz1109 - PB interface error when content-type is JSON and {not_found} in results]]
+-[[https://issues.basho.com/show_bug.cgi?id=1110][bz1110 - Riak Search integration with MapReduce does not work as of Riak Search 0.14.2rc9]]
+-[[https://issues.basho.com/show_bug.cgi?id=1116][bz1116 - riak_search_sup never starts riak_kv_js_manager]]
+-[[https://issues.basho.com/show_bug.cgi?id=1125][bz1125 - HTTP Delete returns a 204 when the RW param cannot be satisfied, expected 500]]
+-[[https://issues.basho.com/show_bug.cgi?id=1126][bz1126 - riak_kv_cache_backend doesn't stop]]
+-[[https://issues.basho.com/show_bug.cgi?id=1130][bz1130 - Debian packages should depend on 'sudo']]
+-[[https://issues.basho.com/show_bug.cgi?id=1131][bz1131 - js_thread_stack isn't described in /etc/riaksearch/app.config]]
+-[[https://issues.basho.com/show_bug.cgi?id=1144][bz1144 - Riak Search custom JS extractor not initializing VM pool properly]]
+-[[https://issues.basho.com/show_bug.cgi?id=1147][bz1147 - "Proxy Objects" are not cleaned]]
+-[[https://issues.basho.com/show_bug.cgi?id=1149][bz1149 - Delete op should not use user-supplied timeout for tombstone harvest]]
+-[[https://issues.basho.com/show_bug.cgi?id=1155][bz1155 - Regression in single negated term]]
+-[[https://issues.basho.com/show_bug.cgi?id=1165][bz1165 - mi_buffer doesn’t check length when reading terms]]
+-[[https://issues.basho.com/show_bug.cgi?id=1175][bz1175 - Riak_kv_pb_socket crashes when clientId is undefined]]
+-[[https://issues.basho.com/show_bug.cgi?id=1176][bz1176 - Error on HTTP POST or PUT that specifies indexes with integer values > 255 and returnbody=true]]
+-[[https://issues.basho.com/show_bug.cgi?id=1177][bz1177 - riak_kv_bitcask_backend.erl's use of symlinks breaks upgrade from 0.14.2]]
+-[[https://issues.basho.com/show_bug.cgi?id=1178][bz1178 - ring mgr and bucket fixups not playing well on startup]]
+-[[https://issues.basho.com/show_bug.cgi?id=1186][bz1186 - riak_kv_w_reduce batch size should default to 20]]
+-[[https://issues.basho.com/show_bug.cgi?id=1188][bz1188 - Worker pools don't complete work on vnode shutdown]]
+-[[https://issues.basho.com/show_bug.cgi?id=1191][bz1191 - Pipe-based mapred reverses inputs to reduce]]
+-[[https://issues.basho.com/show_bug.cgi?id=1195][bz1195 - Running "make rel" fails with riak-1.0.0pre3 source tarball]]
+-[[https://issues.basho.com/show_bug.cgi?id=1197][bz1197 - riak attach does not play well with scripting - stdin data may be lost]]
+-[[https://issues.basho.com/show_bug.cgi?id=1200][bz1200 - Bitcask backend merges repeatedly, and misplaces files]]
+-[[https://issues.basho.com/show_bug.cgi?id=1202][bz1202 - Bucket listing fails when there are indexed objects]]
+-[[https://issues.basho.com/show_bug.cgi?id=1214][bz1214 - Handoff crash with async enabled+leveldb]]
+-[[https://issues.basho.com/show_bug.cgi?id=1215][bz1215 - get FSM timeout causes new stats to crash]]
+-[[https://issues.basho.com/show_bug.cgi?id=1216][bz1216 - Not possible to control search hook order with bucket fixups]]
+-[[https://issues.basho.com/show_bug.cgi?id=1220][bz1220 - riak-admin ringready only shows 1.0 nodes in a mixed cluster]]
+-[[https://issues.basho.com/show_bug.cgi?id=1224][bz1224 - platform_data_dir (/data) is not being created before accessed for some packages]]
+-[[https://issues.basho.com/show_bug.cgi?id=1226][bz1226 - Riak creates identical vtags for the same bucket/key with different values]]
+-[[https://issues.basho.com/show_bug.cgi?id=1229][bz1229 - "Downed" (riak-admin down) nodes don't rejoin cluster]]
+

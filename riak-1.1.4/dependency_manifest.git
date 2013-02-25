@@ -1,0 +1,26 @@
+- Dependencies and their tags at build time of riak at riak-1.1.4
+deps/basho_metrics version 1.0.0-0-g4ed4c0e
+deps/basho_stats version 1.0.2-0-gbe9a054
+deps/bitcask version 1.5.1-0-g4c6d6df
+deps/cluster_info version 1.2.1-0-g1f1bcf0
+deps/ebloom version 1.1.1-0-g7dd7c51
+deps/edown version 0.3.0-40-ge32e40a
+deps/eleveldb version 1.1.1-0-g7e2a5aa
+deps/eper version 0.61-2-gfdfd63c
+deps/erlang_js version 1.0.2-0-g16bc10d
+deps/lager version 1.0.0-0-g09ecad6
+deps/luke version 0.2.5-0-g6873b97
+deps/meck version 0.7.2-2-gd6230ae
+deps/merge_index version 1.1.0-0-ge19bf98
+deps/mochiweb version 1.5.1-riak-1.0.x-fixes-0-g2984b74
+deps/poolboy version 0.6.1-0-g855802e
+deps/protobuffs version protobuffs-0.6.0-0-g762fd0a
+deps/riak_control version 0.1.2-0-gc7fd3a9
+deps/riak_core version 1.1.2-0-g2751120
+deps/riak_kv version 1.1.4-0-g18643de
+deps/riak_pipe version 1.1.2-0-g6442123
+deps/riak_search version 1.1.4-0-ga497f8b
+deps/riak_sysmon version 1.1.2-0-gaab7706
+deps/riakc version 1.2.1-0-g5fe8b3d
+deps/sext version 0.4.1-0-g362bdd1
+deps/webmachine version 1.9.1-0-g97acb28
