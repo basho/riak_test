@@ -99,3 +99,8 @@ confirm() ->
     ?assertEqual(ok, C:put(Obj, [{pw, all}])),
     ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
     pass.
+
+make_intercepts_tab(Node, Partition) ->
+    rpc:call(Node, ets, new, [intercepts_tab, named, public, set]),
+    rpc:call(Node, etc, insert, [intercepts_tab, {drop_do_get_partitions,
+                Partition}]).
