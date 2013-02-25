@@ -2,7 +2,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-y-import(rt, [deploy_nodes/2,
+-import(rt, [deploy_nodes/2,
 join/2,
              wait_until_nodes_ready/1,
              wait_until_no_pending_changes/1]).
