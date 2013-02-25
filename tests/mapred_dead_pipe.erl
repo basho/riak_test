@@ -31,6 +31,7 @@
         ]).
 -compile([export_all]). %% because we call ?MODULE:Testname
 -include_lib("eunit/include/eunit.hrl").
+-include("rt_pipe.hrl").
 
 -define(INTS_BUCKET, <<"foonum">>).
 -define(NUM_INTS, 5).
@@ -103,9 +104,7 @@ sender_shim(Pipe, TestProc) ->
             %% this is a hack to make sure that the async sender
             %% doesn't die immediately upon linking to the
             %% already-dead builder
-            %% TODO: use record once rt_pipe.hrl from other branch is merged (#143)
-            %% PipeB = Pipe#pipe{builder=erlang:spawn(Node, fake_builder(self()))},
-            PipeB = setelement(2, Pipe, erlang:spawn(fake_builder(self()))),
+            PipeB = Pipe#pipe{builder=erlang:spawn(fake_builder(self()))},
             {Sender, SenderRef} = riak_kv_mrc_pipe:send_inputs_async(
                                     PipeB, [{<<"foo">>, <<"bar">>}]),
             receive
@@ -113,9 +112,7 @@ sender_shim(Pipe, TestProc) ->
                     ok
             end,
             %% let the fake builder shut down now
-            %% TODO: use record once rt_pipe.hrl from other branch is merged (#143)
-            %% PipeB#pipe.builder ! test_over,
-            element(2, PipeB) ! test_over,
+            PipeB#pipe.builder ! test_over,
             %% and send the result back for processing
             TestProc ! {sender_death, Error}
     end.
