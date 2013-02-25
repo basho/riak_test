@@ -65,8 +65,9 @@ post_result(TestResult) ->
     lager:info("giddyup url: ~s", [URL]),
     case ibrowse:send_req(URL, [{"Content-Type", "application/json"}], post, mochijson2:encode(TestResult), [ {content_type, "application/json"}, basic_auth()]) of
 
-        {ok, RC=[$2|_], _Headers, _Body} ->
-            lager:info("Test Result sucessfully POSTed to GiddyUp! ResponseCode: ~s", [RC]),
+        {ok, RC=[$2|_], Headers, _Body} ->
+            {_, Location} = lists:keyfind("Location", 1, Headers),
+            lager:info("Test Result successfully POSTed to GiddyUp! ResponseCode: ~s, URL: ~s", [RC, Location]),
             ok;
         {ok, ResponseCode, Headers, Body} ->
             lager:info("Test Result did not generate the expected 2XX HTTP response code."),
