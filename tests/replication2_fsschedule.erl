@@ -1,4 +1,4 @@
--module(replication2_fullsync).
+-module(replication2_fsschedule).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -49,14 +49,13 @@ confirm() ->
     lager:info("Build cluster C"),
     repl_util:make_cluster(CNodes),
 
-
     repl_util:name_cluster(AFirst, "A"),
     repl_util:name_cluster(BFirst, "B"),
     repl_util:name_cluster(CFirst, "C"),
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
     rt:wait_until_ring_converged(CNodes),
-
+    
     %% get the leader for the first cluster
     repl_util:wait_until_leader(AFirst),
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
@@ -94,7 +93,7 @@ confirm() ->
     rt:log_to_nodes(AllNodes, "Test fullsync schedule from A -> [B,C]"),
 
     Start = riak_core_util:moment(),
-    lager:info("Waiting for fullsyncs can take several minutes"),
+    lager:info("Note: Waiting for fullsyncs can take several minutes"),
     wait_until_n_bnw_fullsyncs(LeaderA, "B", 3),
     Finish = riak_core_util:moment(),
     Diff = Finish - Start,
@@ -127,8 +126,9 @@ wait_until_n_bnw_fullsyncs(Node, DestCluster, N) ->
                 case Fullsyncs of
                     C when C >= N ->
                         true;
-                    Other ->
-                        lager:info("Total fullsyncs = ~p", [Other]),
+                    _Other ->
+                        %% keep this in for tracing
+                        %%lager:info("Total fullsyncs = ~p", [Other]),
                         false
                 end
         end),
