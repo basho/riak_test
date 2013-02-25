@@ -101,6 +101,10 @@ confirm() ->
     pass.
 
 make_intercepts_tab(Node, Partition) ->
-    rpc:call(Node, ets, new, [intercepts_tab, named, public, set]),
-    rpc:call(Node, etc, insert, [intercepts_tab, {drop_do_get_partitions,
-                Partition}]).
+    SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
+    intercepts_tab = rpc:call(Node, ets, new, [intercepts_tab, [named_table,
+                public, set, {heir, SupPid, {}}]]),
+    true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_get_partitions,
+                [Partition]}]),
+    true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_put_partitions,
+                [Partition]}]).
