@@ -1,6 +1,6 @@
 -module(replication2).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, replication/3]).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
