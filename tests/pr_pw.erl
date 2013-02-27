@@ -6,6 +6,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+    application:start(inets),
     lager:info("Deploy some nodes"),
     Nodes = rt:deploy_nodes(4),
     repl_util:make_cluster(Nodes),
@@ -27,9 +28,28 @@ confirm() ->
     %% connect to the only node in the preflist we won't break, to avoid
     %% random put forwarding
     {ok, C} = riak:client_connect(hd(PLNodes)),
+    {ok, [{_IP, HTTPPort}|_]} = rpc:call(hd(PLNodes), application, get_env,
+        [riak_core, http]),
+    UrlFun=fun(Key, Value, Params) ->
+            lists:flatten(io_lib:format("http://localhost:~b/riak/~s/~s~s",
+                    [HTTPPort, Key, Value, Params]))
+    end,
+
     Obj = riak_object:new(<<"foo">>, <<"bar">>, <<42:32/integer>>),
     ?assertEqual(ok, C:put(Obj, [{pw, all}])),
     ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
+
+    %% check pr/pw can't be violated
+    ?assertEqual({error, {pw_val_violation, evil}}, C:put(Obj, [{pw, evil}])),
+    ?assertEqual({error, {pr_val_violation, evil}}, C:get(<<"foo">>, <<"bar">>,
+            [{pr, evil}])),
+
+    ?assertMatch({ok, {{_, 400, _}, _, "pr query parameter must be"++_}},
+        httpc:request(get, {UrlFun(<<"foo">>, <<"bar">>, <<"?pr=evil">>), []}, [], [])),
+
+    ?assertMatch({ok, {{_, 400, _}, _, "pw query parameter must be"++_}},
+        httpc:request(put, {UrlFun(<<"foo">>, <<"bar">>,
+                    <<"?pw=evil">>), [], "text/plain", <<42:32/integer>>}, [], [])),
 
     %% install an intercept to emulate a node that kernel paniced or
     %% something where it can take some time for the node_watcher to spot the
@@ -60,6 +80,13 @@ confirm() ->
     ?assertEqual({error, {pr_val_unsatisfied, 3, 2}},
         C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
     ?assertEqual({error, {pw_val_unsatisfied, 3, 2}}, C:put(Obj, [{pw, all}])),
+
+    ?assertMatch({ok, {{_, 503, _}, _, "PR-value unsatisfied: 2/3\n"}},
+        httpc:request(get, {UrlFun(<<"foo">>, <<"bar">>, <<"?pr=all">>), []}, [], [])),
+
+    ?assertMatch({ok, {{_, 503, _}, _, "PW-value unsatisfied: 2/3\n"}},
+        httpc:request(put, {UrlFun(<<"foo">>, <<"bar">>,
+                    <<"?pw=all">>), [], "text/plain", <<42:32/integer>>}, [], [])),
 
     %% emulate another node failure
     {{Index2, Node2}, _} = lists:nth(2, Preflist2),
@@ -98,6 +125,25 @@ confirm() ->
     %% everything is happy again
     ?assertEqual(ok, C:put(Obj, [{pw, all}])),
     ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
+
+    %% make a vnode start to fail puts
+    make_intercepts_tab(Node2, Index2),
+    rt_intercept:add(Node2, {riak_kv_vnode,  [{{do_put, 7}, error_do_put}]}),
+    lager:info("failing do_put for index ~p on ~p", [Index2, Node2]),
+    rt:log_to_nodes(Nodes, "failing do_put for index ~p on ~p", [Index2, Node2]),
+    timer:sleep(100),
+
+    %% there's now a failing vnode in the preflist, so PW/DW won't be satisfied
+    %% anymore
+    ?assertEqual({error, {pw_val_unsatisfied, 3, 2}}, C:put(Obj, [{pw, all}])),
+    ?assertEqual({error, {dw_val_unsatisfied, 3, 2}}, C:put(Obj, [{dw, all}])),
+
+    ?assertMatch({ok, {{_, 503, _}, _, "PW-value unsatisfied: 2/3\n"}},
+        httpc:request(put, {UrlFun(<<"foo">>, <<"bar">>,
+                    <<"?pw=all">>), [], "text/plain", <<42:32/integer>>}, [], [])),
+    ?assertMatch({ok, {{_, 503, _}, _, "DW-value unsatisfied: 2/3\n"}},
+        httpc:request(put, {UrlFun(<<"foo">>, <<"bar">>,
+                    <<"?dw=all">>), [], "text/plain", <<42:32/integer>>}, [], [])),
     pass.
 
 make_intercepts_tab(Node, Partition) ->

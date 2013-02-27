@@ -54,3 +54,26 @@ drop_do_put(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State) ->
                     ?M:do_put_orig(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State)
             end
     end.
+
+%% @doc Simulate put failures by responding with failure messages.
+error_do_put(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State) ->
+    _Partition = element(2,State),
+    case ets:lookup(intercepts_tab, drop_do_put_partitions) of
+        [] ->
+            ?M:do_put_orig(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State);
+        [{drop_do_put_partitions, Partitions}] ->
+            case lists:member(_Partition, Partitions) of
+                true ->
+                    lager:log(info, self(), "failing put request for ~p",
+                        [_Partition]),
+                    %% ?I_INFO("Failing put for ~p on ~p", [_BKey, _Partition]),
+
+                    %% sleep for a while, so the vnode response order is
+                    %% deterministic
+                    timer:sleep(1000),
+                    riak_core_vnode:reply(_Sender, {fail, _Partition, _ReqId}),
+                    State;
+                false ->
+                    ?M:do_put_orig(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State)
+            end
+    end.
