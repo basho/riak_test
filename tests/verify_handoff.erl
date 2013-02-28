@@ -40,6 +40,10 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
 
     lager:info("Testing handoff (items ~p, encoding: ~p)", [NTestItems, HandoffEncoding]),
 
+    %% This resets nodes, cleans up stale directories, etc.:
+    lager:info("Cleaning up..."),
+    rt:setup_harness(dummy, dummy),
+
     lager:info("Spinning up test nodes"),
     [RootNode | TestNodes] = Nodes = deploy_test_nodes(TestMode, NTestNodes),
 
@@ -84,13 +88,13 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
     lager:info("Testing handoff for cluster."),
     lists:foreach(fun(TestNode) -> test_handoff(RootNode, TestNode, NTestItems) end, TestNodes),
 
-    %% Prepare for the next call to our test:
+    %% Prepare for the next call to our test (we aren't polite about it, it's faster that way):
     lager:info("Bringing down test nodes."),
-    lists:foreach(fun(N) -> rt:leave(N), timer:sleep(50000), rt:wait_until_unpingable(N) end, TestNodes),
+    lists:foreach(fun(N) -> rt:brutal_kill(N) end, TestNodes),
 
     %% The "root" node can't leave() since it's the only node left:
     lager:info("Stopping root node."),
-    rt:stop(RootNode), rt:wait_until_unpingable(RootNode).
+    rt:brutal_kill(RootNode).
 
 %% See if we get the same data back from our new nodes as we put into the root node:
 test_handoff(RootNode, NewNode, NTestItems) ->
@@ -100,7 +104,7 @@ test_handoff(RootNode, NewNode, NTestItems) ->
 
     lager:info("Joining new node with cluster."),
     rt:join(NewNode, RootNode),
-    timer:sleep(3000),
+    ?assertEqual(ok, rt:wait_until_nodes_ready([RootNode, NewNode])),
     rt:wait_until_no_pending_changes([RootNode, NewNode]),
 
     %% See if we get the same data back from the joined node that we added to the root node.
