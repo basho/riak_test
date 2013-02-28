@@ -8,10 +8,7 @@
 confirm() ->
     application:start(inets),
     lager:info("Deploy some nodes"),
-    Nodes = rt:deploy_nodes(4),
-    repl_util:make_cluster(Nodes),
-    timer:sleep(100),
-    rt:wait_until_ring_converged(Nodes),
+    Nodes = rt:build_cluster(4),
 
     %% calculate the preflist for foo/bar
     {ok, Ring} = rpc:call(hd(Nodes), riak_core_ring_manager, get_my_ring, []),
@@ -28,11 +25,10 @@ confirm() ->
     %% connect to the only node in the preflist we won't break, to avoid
     %% random put forwarding
     {ok, C} = riak:client_connect(hd(PLNodes)),
-    {ok, [{_IP, HTTPPort}|_]} = rpc:call(hd(PLNodes), application, get_env,
-        [riak_core, http]),
+    NodeUrl = rt:http_url(hd(PLNodes)),
     UrlFun=fun(Key, Value, Params) ->
-            lists:flatten(io_lib:format("http://localhost:~b/riak/~s/~s~s",
-                    [HTTPPort, Key, Value, Params]))
+            lists:flatten(io_lib:format("~s/riak/~s/~s~s",
+                    [NodeUrl, Key, Value, Params]))
     end,
 
     Obj = riak_object:new(<<"foo">>, <<"bar">>, <<42:32/integer>>),
@@ -72,8 +68,7 @@ confirm() ->
     ?assertMatch({ok, _},
         C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
 
-    rt:stop(Node),
-    rt:wait_until_unpingable(Node),
+    rt:stop_and_wait(Node),
 
     %% there's now a fallback in the preflist, so PR/PW won't be satisfied
     %% anymore
@@ -103,8 +98,7 @@ confirm() ->
     ?assertEqual({error, timeout}, C:put(Obj, [{pw, quorum}])),
 
     %% restart the node
-    rt:start(Node),
-    rt:wait_until_pingable(Node),
+    rt:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
 
     %% we can make quorum again
@@ -116,10 +110,8 @@ confirm() ->
     ?assertEqual({error, timeout}, C:put(Obj, [{pw, all}])),
 
     %% reboot the node
-    rt:stop(Node2),
-    rt:wait_until_unpingable(Node2),
-    rt:start(Node2),
-    rt:wait_until_pingable(Node2),
+    rt:stop_and_wait(Node2),
+    rt:start_and_wait(Node2),
     rt:wait_for_service(Node2, riak_kv),
 
     %% everything is happy again
