@@ -47,6 +47,7 @@
          %% {r, all, quorum},
          %% {w, one, quorum},
          %% {dw, 0, quorum},
+         %% {rw, 1, quorum},
          %% {basic_quorum, true, false},
          %% {notfound_ok, false, true},
          %% {backend, <<"custom">>, undefined},
