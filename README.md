@@ -138,17 +138,17 @@ to tell riak_test about them. The method of choice is to create a
     {rt_retry_delay, 1000},
     {rt_harness, rtdev},
     {rt_scratch_dir, "/tmp/riak_test_scratch"},
-    {basho_bench, "~/basho/basho_bench"},
-    {spam_dir, "~/basho/riak_test/search-corpus/spam.0"},
+    {basho_bench, "/home/you/basho/basho_bench"},
+    {spam_dir, "/home/you/basho/riak_test/search-corpus/spam.0"},
     {platform, "osx-64"}
 ]}.
 
 {rtdev, [
     {rt_project, "riak"},
-    {rtdev_path, [{root,     "~/rt/riak"},
-                  {current,  "~/rt/riak/current"},
-                  {previous, "~/rt/riak/riak-1.2.1"},
-                  {legacy,   "~/rt/riak/riak-1.1.4"}
+    {rtdev_path, [{root,     "/home/you/rt/riak"},
+                  {current,  "/home/you/rt/riak/current"},
+                  {previous, "/home/you/rt/riak/riak-1.2.1"},
+                  {legacy,   "/home/you/rt/riak/riak-1.1.4"}
                  ]}
 ]}.
 ```
