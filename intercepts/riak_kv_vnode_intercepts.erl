@@ -19,61 +19,61 @@ slow_handle_command(Req, Sender, State) ->
 
 %% @doc Simulate dropped gets/network partitions byresponding with
 %%      noreply during get requests.
-drop_do_get(_Sender, _BKey, _ReqId, State) ->
-    _Partition = element(2,State),
+drop_do_get(Sender, BKey, ReqId, State) ->
+    Partition = element(2,State),
     case ets:lookup(intercepts_tab, drop_do_get_partitions) of
         [] ->
-            ?M:do_get_orig(_Sender, _BKey, _ReqId, State);
+            ?M:do_get_orig(Sender, BKey, ReqId, State);
         [{drop_do_get_partitions, Partitions}] ->
-            case lists:member(_Partition, Partitions) of
+            case lists:member(Partition, Partitions) of
                 true ->
-                    %% ?I_INFO("Dropping get for ~p on ~p", [_BKey, _Partition]),
+                    %% ?I_INFO("Dropping get for ~p on ~p", [BKey, Partition]),
                     lager:log(info, self(), "dropping get request for ~p",
-                        [_Partition]),
+                        [Partition]),
                     {noreply, State};
                 false ->
-                    ?M:do_get_orig(_Sender, _BKey, _ReqId, State)
+                    ?M:do_get_orig(Sender, BKey, ReqId, State)
             end
     end.
 
 %% @doc Simulate dropped puts/network partitions byresponding with
 %%      noreply during put requests.
-drop_do_put(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State) ->
-    _Partition = element(2,State),
+drop_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
+    Partition = element(2,State),
     case ets:lookup(intercepts_tab, drop_do_put_partitions) of
         [] ->
-            ?M:do_put_orig(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State);
+            ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State);
         [{drop_do_put_partitions, Partitions}] ->
-            case lists:member(_Partition, Partitions) of
+            case lists:member(Partition, Partitions) of
                 true ->
                     lager:log(info, self(), "dropping put request for ~p",
-                        [_Partition]),
-                    %% ?I_INFO("Dropping put for ~p on ~p", [_BKey, _Partition]),
+                        [Partition]),
+                    %% ?I_INFO("Dropping put for ~p on ~p", [BKey, Partition]),
                     State;
                 false ->
-                    ?M:do_put_orig(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State)
+                    ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State)
             end
     end.
 
 %% @doc Simulate put failures by responding with failure messages.
-error_do_put(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State) ->
-    _Partition = element(2,State),
+error_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
+    Partition = element(2,State),
     case ets:lookup(intercepts_tab, drop_do_put_partitions) of
         [] ->
-            ?M:do_put_orig(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State);
+            ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State);
         [{drop_do_put_partitions, Partitions}] ->
-            case lists:member(_Partition, Partitions) of
+            case lists:member(Partition, Partitions) of
                 true ->
                     lager:log(info, self(), "failing put request for ~p",
-                        [_Partition]),
-                    %% ?I_INFO("Failing put for ~p on ~p", [_BKey, _Partition]),
+                        [Partition]),
+                    %% ?I_INFO("Failing put for ~p on ~p", [BKey, Partition]),
 
                     %% sleep for a while, so the vnode response order is
                     %% deterministic
                     timer:sleep(1000),
-                    riak_core_vnode:reply(_Sender, {fail, _Partition, _ReqId}),
+                    riak_core_vnode:reply(Sender, {fail, Partition, ReqId}),
                     State;
                 false ->
-                    ?M:do_put_orig(_Sender, _BKey, _RObj, _ReqId, _StartTime, _Options, State)
+                    ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State)
             end
     end.
