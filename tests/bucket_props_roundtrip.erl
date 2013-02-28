@@ -26,33 +26,30 @@
 -define(COMMIT_HOOK, {struct, [{<<"mod">>, <<"foo">>}, {<<"fun">>, <<"bar">>}]}).
 -define(CHASHFUN, {my_mod, my_chash}).
 -define(LINKFUN, {modfun, my_mod, my_link_fun}).
-
-%% TODO: rhc does not support all bucket properties, even though HTTP
-%% interface is not restricted.
 -define(PROPS,
         [
-         {n_val, 2, 3},
          {allow_mult, true, false},
-         %% {last_write_wins, true, false},
-         {precommit, [?COMMIT_HOOK], []},
+         {backend, <<"custom">>, undefined},
+         {basic_quorum, true, false},
+         {big_vclock, 100, 50},
+         {chash_keyfun, ?CHASHFUN, {riak_core_util, chash_std_keyfun}},
+         {dw, 0, quorum},
+         {last_write_wins, true, false},
+         {linkfun, ?LINKFUN, {modfun, riak_kv_wm_link_walker, mapreduce_linkfun}},
+         {n_val, 2, 3},
+         {notfound_ok, false, true},
+         {old_vclock, 10000, 86400},
          {postcommit, [?COMMIT_HOOK], []},
-         %% {chash_keyfun, ?CHASHFUN, {riak_core_util, chash_std_keyfun}},
-         %% {linkfun, ?LINKFUN, {modfun, riak_kv_wm_link_walker, mapreduce_linkfun}},
-         %% {old_vclock, 10000, 86400},
-         %% {young_vclock, 0, 20},
-         %% {big_vclock, 100, 50},
-         %% {small_vclock, 10, 50},
-         %% {pr, 2, 0},
-         %% {pw, all, 0},
-         %% {r, all, quorum},
-         %% {w, one, quorum},
-         %% {dw, 0, quorum},
-         %% {rw, 1, quorum},
-         %% {basic_quorum, true, false},
-         %% {notfound_ok, false, true},
-         %% {backend, <<"custom">>, undefined},
-         {search, true, false}
-         %% {repl, realtime, off}
+         {pr, 2, 0},
+         {precommit, [?COMMIT_HOOK], []},
+         {pw, all, 0},
+         {r, all, quorum},
+         {repl, realtime, false},
+         {rw, 1, quorum},
+         {search, true, false},
+         {small_vclock, 10, 50},
+         {w, one, quorum},
+         {young_vclock, 0, 20}
         ]).
 
 confirm() ->
