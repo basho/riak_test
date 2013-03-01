@@ -161,7 +161,8 @@ parse_command_line_tests(ParsedArgs) ->
         lists:foldl(fun extract_test_names/2,
                     {[], []},
                     proplists:get_all_values(tests, ParsedArgs)),
-    [code:add_patha(CodePath) || CodePath <- CodePaths],
+    [code:add_patha(CodePath) || CodePath <- CodePaths,
+                                 CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
     DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
     lists:foldl(fun(Test, Tests) ->
