@@ -24,12 +24,12 @@
 
 -define(BUCKET, <<"pbc_props_verify">>).
 -define(COMMIT_HOOK, {struct, [{<<"mod">>, <<"foo">>}, {<<"fun">>, <<"bar">>}]}).
--define(CHASHFUN, {my_mod, my_chash}).
--define(LINKFUN, {modfun, my_mod, my_link_fun}).
+-define(CHASHFUN, {riak_core_util, chash_bucketonly_keyfun}).
+-define(LINKFUN, {modfun, raw_link_walker, mapreduce_linkfun}).
 -define(PROPS,
         [
          {allow_mult, true, false},
-         {backend, <<"custom">>, undefined},
+         {backend, <<"custom">>, <<"other">>},
          {basic_quorum, true, false},
          {big_vclock, 100, 50},
          {chash_keyfun, ?CHASHFUN, {riak_core_util, chash_std_keyfun}},
@@ -62,16 +62,17 @@ confirm() ->
     pass.
 
 check_prop_set_and_get(Node, Prop, One, Two) ->
+    lager:info("-------- Testing roundtrip for property '~p' ---------", [Prop]),
     HTTP = rt:httpc(Node),
     PBC = rt:pbc(Node),
-    lager:info("HTTP set property ~p = ~p", [Prop, One]),
+    lager:info("HTTP set = ~p", [One]),
     http_set_property(HTTP, Prop, One),
-    lager:info("PBC get property ~p should == ~p", [Prop, One]),
+    lager:info("PBC get should == ~p", [One]),
     ?assertEqual(One, pbc_get_property(PBC, Prop)),
 
-    lager:info("PBC set property ~p = ~p", [Prop, Two]),
+    lager:info("PBC set = ~p", [Two]),
     pbc_set_property(PBC, Prop, Two),
-    lager:info("HTTP get property ~p should = ~p", [Prop, Two]),
+    lager:info("HTTP get should = ~p", [Two]),
     ?assertEqual(Two, http_get_property(HTTP, Prop)),
     ok.
 
