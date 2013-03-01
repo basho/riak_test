@@ -180,7 +180,8 @@ parse_command_line_tests(ParsedArgs) ->
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
-    {[filename:dirname(Test) | CodePaths], [filename:basename(Test) | TestNames]}.
+    {[filename:dirname(Test) | CodePaths],
+     [filename:rootname(filename:basename(Test)) | TestNames]}.
 
 which_tests_to_run(undefined, CommandLineTests) ->
     {Tests, NonTests} =
