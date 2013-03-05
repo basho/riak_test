@@ -296,7 +296,8 @@ async_start(Node) ->
 stop(Node) ->
     lager:info("Stopping riak on ~p", [Node]),
     timer:sleep(10000), %% I know, I know!
-    rpc:call(Node, init, stop, []).
+    ?HARNESS:stop(Node).
+    %%rpc:call(Node, init, stop, []).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
 stop_and_wait(Node) ->
@@ -665,13 +666,14 @@ wait_until_pingable(Node) ->
 %% @doc Wait until the specified node is no longer pingable
 wait_until_unpingable(Node) ->
     lager:info("Wait until ~p is not pingable", [Node]),
-    OSPidToKill = rpc:call(Node, os, getpid, []),
+    _OSPidToKill = rpc:call(Node, os, getpid, []),
     F = fun(N) ->
                 net_adm:ping(N) =:= pang
         end,
     TimeoutFun = fun(N) ->
                          lager:info("We tried it the easy way, but ~s wouldn't listen, so now it's 'kill -9' time", [N]),
-                         rpc:cast(N, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+                         lager:info("Not actually killing anything... long live `riak stop`"),
+                         %%rpc:cast(N, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
                          ok
         end,
     ?assertEqual(ok, wait_until(Node, F, TimeoutFun)),
@@ -817,8 +819,8 @@ clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
     %% stop all connected nodes, 'cause it'll be faster that
-    lager:info("RPC stopping these nodes ~p", [nodes()]),
-    [ rt:stop(Node) || Node <- nodes()],
+    %%lager:info("RPC stopping these nodes ~p", [nodes()]),
+    %%[ rt:stop(Node) || Node <- nodes()],
     %% Then do the more exhaustive harness thing, in case something was up
     %% but not connected.
     ?HARNESS:teardown().
