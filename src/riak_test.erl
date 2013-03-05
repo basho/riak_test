@@ -157,7 +157,12 @@ parse_command_line_tests(ParsedArgs) ->
                    UpgradeList -> UpgradeList
                end,
     %% Parse Command Line Tests
-    SpecificTests = proplists:get_all_values(tests, ParsedArgs),
+    {CodePaths, SpecificTests} =
+        lists:foldl(fun extract_test_names/2,
+                    {[], []},
+                    proplists:get_all_values(tests, ParsedArgs)),
+    [code:add_patha(CodePath) || CodePath <- CodePaths,
+                                 CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
     DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
     lists:foldl(fun(Test, Tests) ->
@@ -174,6 +179,10 @@ parse_command_line_tests(ParsedArgs) ->
              || Backend <- Backends,
                 Upgrade <- Upgrades ] ++ Tests
         end, [], lists:usort(DirTests ++ SpecificTests)).
+
+extract_test_names(Test, {CodePaths, TestNames}) ->
+    {[filename:dirname(Test) | CodePaths],
+     [filename:rootname(filename:basename(Test)) | TestNames]}.
 
 which_tests_to_run(undefined, CommandLineTests) ->
     {Tests, NonTests} =
