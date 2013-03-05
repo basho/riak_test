@@ -466,7 +466,9 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("checking number of read failures on secondary cluster"),
     ReadErrors = rt:systest_read(BSecond, 1000, 11000, TestBucket, 2),
     lager:info("got ~p read failures", [length(ReadErrors)]),
-
+    %% ensure node is down before we try to start it up again.
+    lager:info("pb_write_during_shutdown: Ensure node ~p is down before restart", [Target]),
+    ?assertEqual(ok, rt:wait_until_unpingable(Target)),
     rt:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
@@ -523,7 +525,9 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     C2 = rhc:create("127.0.0.1", Port2, "riak", []),
     ReadErrors = http_read(C2, 12000, 22000, TestBucket, 2),
     lager:info("got ~p read failures", [length(ReadErrors)]),
-
+    %% ensure node is down before we try to start it up again.
+    lager:info("pb_write_during_shutdown: Ensure node ~p is down before restart", [Target]),
+    ?assertEqual(ok, rt:wait_until_unpingable(Target)),
     rt:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
