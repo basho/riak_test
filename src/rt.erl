@@ -674,9 +674,14 @@ wait_until_unpingable(Node) ->
                          lager:info("We tried it the easy way, but ~s wouldn't listen, so now it's 'kill -9' time", [N]),
                          lager:info("Not actually killing anything... long live `riak stop`"),
                          %%rpc:cast(N, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
-                         ok
+                         fail
         end,
-    ?assertEqual(ok, wait_until(Node, F, TimeoutFun)),
+    %% Hard coding a 6 minute timeout on this wait only. This function is called to see that
+    %% riak has stopped. Riak stop should only take about 5 minutes before its timeouts kill 
+    %% the process. This wait should at least wait that long.
+    Delay = rt:config(rt_retry_delay),
+    Retry = 360000 div Delay,
+    ?assertEqual(ok, wait_until(Node, F, Retry, Delay, TimeoutFun)),
     ok.
 
 % when you just can't wait
