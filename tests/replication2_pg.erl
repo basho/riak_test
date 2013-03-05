@@ -9,7 +9,7 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
+%% Test BNW PG
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 setup_repl_clusters(Conf) ->
@@ -77,7 +77,7 @@ test_basic_pg() ->
               {proxy_get, enabled}
              ]}
            ],
-    {LeaderA, ANodes, _BNodes, _CNodes, AllNodes} =
+    {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
         setup_repl_clusters(Conf),
     rt:log_to_nodes(AllNodes, "Test without pg enabled"),
 
@@ -104,10 +104,31 @@ test_basic_pg() ->
     {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
     PidB = rt:pbc(FirstB),
     lager:info("Connected to cluster B"),
-    Result = riak_repl_pb_api:get(PidB,Bucket,Key,CidA),
-    
-    lager:info("VALUE = ~p", [Result]),
-    lager:info("Test finished"),
+    {ok, Result} = riak_repl_pb_api:get(PidB,Bucket,Key,CidA),
+    ?assertEqual(Value, riakc_obj:get_value(Result)),
+
+
+    PGEnableResult2 = rpc:call(LeaderA, riak_repl_console, proxy_get, [["disable","B"]]),
+    lager:info("Disable pg ~p", [PGEnableResult2]),
+    Status2 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, Status2) of
+        [] -> ok                 
+    end,
+
+    lager:info("Status 2 = ~p", [Status2]),
+
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+    timer:sleep(10000),
+    FailingResult = riak_repl_pb_api:get(PidB,Bucket,Key,CidA),
+    lager:info("Failing result = ~p", [FailingResult]),
+
+    %% case proplists:get_value(proxy_get_enabled, Status2) of
+    %%     undefined -> fail;
+    %%     EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
+    %% end,
+
     rt:clean_cluster(AllNodes),
     pass.
 
