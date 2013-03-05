@@ -42,7 +42,7 @@ cli_options() ->
  {outdir,             $o, "outdir",   string,     "output directory"},
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
- {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~~/.riak_test.config"}
+ {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"}
 ].
 
 print_help() ->
