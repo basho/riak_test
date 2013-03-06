@@ -43,6 +43,7 @@ run_test(TestMode, NTestItems, VClockEncoding) ->
     lager:info("Cleaning up..."),
     rt:setup_harness(dummy, dummy),
 
+    %% In reality, we could probably do this with a single node, but now the plumbing's already here:
     lager:info("Spinning up test nodes"),
     [RootNode, TestNode0, TestNode1] = Nodes = deploy_test_nodes(TestMode, 3),
 
@@ -60,11 +61,21 @@ try_encoding(TestNode, Encoding, NTestItems) ->
     rt:wait_for_service(TestNode, riak_kv),
     force_encoding(TestNode, Encoding),
 
+    %%  Do an initial write and see if we can get our data back (indirectly test vclock creation and 
+    %% encoding):
+    lager:info("Testing write-and-read..."),
     our_pbc_write(TestNode, NTestItems),
-
     Results = our_pbc_read(TestNode, NTestItems),
+    ?assertEqual(0, length(Results)),
+    lager:info("Ok, data looks all right."),
 
-    ?assertEqual(0, length(Results)).
+    %% Update the data and see if everything worked; the idea is to indirectly test vclock increment:
+    lager:info("Testing update..."),
+    our_pbc_write(TestNode, NTestItems, <<"hamachi">>),
+    Results = our_pbc_read(TestNode, NTestItems, <<"hamachi">>),
+    ?assertEqual(0, length(Results)),
+    lager:info("Ok, data looks all right.")
+.
 
 force_encoding(Node, EncodingMethod) ->
     case EncodingMethod of
@@ -96,15 +107,24 @@ force_encoding(Node, EncodingMethod) ->
 stopall(Nodes) ->
     lists:foreach(fun(N) -> rt:brutal_kill(N) end, Nodes).
 
+make_kv(N, VSuffix) -> 
+    K = <<N:32/integer>>,
+    V = <<K/binary, VSuffix/binary>>,
+    { K, V }.
+
 %% Unfortunately, the rt module's systest write/read doesn't wind up triggering a vclock, so
 %% we need our own version:
 our_pbc_write(Node, Size) ->
-    our_pbc_write(Node, 1, Size, <<"systest">>).
+    our_pbc_write(Node, 1, Size, <<"systest">>, <<>>).
 
-our_pbc_write(Node, Start, End, Bucket) ->
+our_pbc_write(Node, Size, Suffix) ->
+    our_pbc_write(Node, 1, Size, <<"systest">>, Suffix).
+
+our_pbc_write(Node, Start, End, Bucket, VSuffix) ->
     PBC = rt:pbc(Node),
     F = fun(N, Acc) ->
-                try rt:pbc_write(PBC, Bucket, <<N:32/integer>>, <<N:32/integer>>) of
+                {K, V} = make_kv(N, VSuffix),
+                try rt:pbc_write(PBC, Bucket, K, V) of
                     ok ->
                         Acc;
                     Other ->
@@ -118,21 +138,24 @@ our_pbc_write(Node, Start, End, Bucket) ->
 
 
 our_pbc_read(Node, Size) -> 
-    our_pbc_read(Node, 1, Size, <<"systest">>).
+    our_pbc_read(Node, 1, Size, <<"systest">>, <<>>).
 
-our_pbc_read(Node, Start, End, Bucket) ->
+our_pbc_read(Node, Size, Suffix) -> 
+    our_pbc_read(Node, 1, Size, <<"systest">>, Suffix).
+
+our_pbc_read(Node, Start, End, Bucket, VSuffix) ->
     PBC = rt:pbc(Node),
 
     %% Trundle along through the list, collecting mismatches:
     F = fun(N, Acc) ->
-        KV = <<N:32/integer>>,
+        {K, V} = make_kv(N, VSuffix),
 
-        ResultValue = riakc_pb_socket:get(PBC, Bucket, KV),
+        ResultValue = riakc_pb_socket:get(PBC, Bucket, K),
         case ResultValue of
                    {ok, Obj} ->
                                    ObjectValue = riakc_obj:get_value(Obj),
                                    case ObjectValue of
-                                    KV -> 
+                                    V -> 
                                             Acc;
                                     WrongVal -> 
                                             [{N, {wrong_val, WrongVal}} | Acc]
