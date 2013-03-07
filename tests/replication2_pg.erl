@@ -67,78 +67,172 @@ setup_repl_clusters(Conf) ->
     {LeaderA, ANodes, BNodes, CNodes, Nodes}.
 
 
-test_basic_pg() ->
-    %%TestHash = erlang:md5(term_to_binary(os:timestamp())),
-    %%TestBucket = <<TestHash/binary, "-systest_a">>,
+%% test_basic_pg() ->
+%%     %%TestHash = erlang:md5(term_to_binary(os:timestamp())),
+%%     %%TestBucket = <<TestHash/binary, "-systest_a">>,
 
+%%     Conf = [
+%%             {riak_repl,
+%%              [
+%%               {proxy_get, enabled}
+%%              ]}
+%%            ],
+%%     {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
+%%         setup_repl_clusters(Conf),
+%%     rt:log_to_nodes(AllNodes, "Testing basic pg"),
+
+%%     rt:wait_until_ring_converged(ANodes),
+
+%%     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
+%%     lager:info("Enabled pg ~p", [PGEnableResult]),
+%%     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+%%     case proplists:get_value(proxy_get_enabled, Status) of
+%%         undefined -> fail;
+%%         EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
+%%     end,
+
+%%     PidA = rt:pbc(LeaderA),
+%%     {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
+%%     lager:info("Cluster ID for A = ~p", [CidA]),
+    
+%%     Bucket = <<"test_bucket">>,
+%%     KeyA    = <<"test_key_foo">>,
+%%     ValueA = <<"0b:", "testdata">>,
+
+%%     Bucket = <<"test_bucket">>,
+%%     KeyB    = <<"test_key_bar">>,
+%%     ValueB = <<"0b:", "testdata">>,
+
+%%     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
+%%     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
+
+%%     {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
+%%     PidB = rt:pbc(FirstB),
+%%     lager:info("Connected to cluster B"),
+%%     {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
+%%     ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
+
+%%     rt:log_to_nodes(AllNodes, "Disabling pg on A"),
+%%     PGDisableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["disable","B"]]),
+%%     lager:info("Disable pg ~p", [PGDisableResult]),
+%%     Status2 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+%%     case proplists:get_value(proxy_get_enabled, Status2) of
+%%         [] -> ok                 
+%%     end,
+
+%%     rt:wait_until_ring_converged(ANodes),
+%%     rt:wait_until_ring_converged(BNodes),
+
+%%     %% After the clusters are disconnected, see if the object was 
+%%     %% written locally after the PG
+%%     {ok, PG2Value} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
+    
+%%     ?assertEqual(ValueA, riakc_obj:get_value(PG2Value)),
+
+%%     %% test an object that wasn't previously "proxy-gotten", it should fail
+%%     FailedResult = riak_repl_pb_api:get(PidB,Bucket,KeyB,CidA),    
+%%     ?assertEqual({error, notfound}, FailedResult),
+
+%%     rt:clean_cluster(AllNodes),
+%%     pass.
+
+test_12_pg() ->
     Conf = [
             {riak_repl,
              [
-              {proxy_get, enabled}
+              {proxy_get, enabled},
+              {fullsync_on_connect, false}
              ]}
            ],
-    {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
+    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
         setup_repl_clusters(Conf),
-    rt:log_to_nodes(AllNodes, "Test without pg enabled"),
-
-    rt:wait_until_ring_converged(ANodes),
-
-    PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
-    lager:info("Enabled pg ~p", [PGEnableResult]),
-    Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
-
-    case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
-        EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
-    end,
-
-    PidA = rt:pbc(LeaderA),
-    {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
-    lager:info("Cluster ID for A = ~p", [CidA]),
     
     Bucket = <<"test_bucket">>,
     KeyA    = <<"test_key_foo">>,
     ValueA = <<"0b:", "testdata">>,
 
-
-    Bucket = <<"test_bucket">>,
-    KeyB    = <<"test_key_bar">>,
-    ValueB = <<"0b:", "testdata">>,
-    rt:pbc_write(PidA, Bucket, KeyA, ValueA),
-    rt:pbc_write(PidA, Bucket, KeyB, ValueB),
-
+    rt:log_to_nodes(AllNodes, "Test 1.2 proxy_get"),
     {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
-    PidB = rt:pbc(FirstB),
-    lager:info("Connected to cluster B"),
-    {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
-    ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
-
-    PGDisableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["disable","B"]]),
-    lager:info("Disable pg ~p", [PGDisableResult]),
-    Status2 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
-
-    case proplists:get_value(proxy_get_enabled, Status2) of
-        [] -> ok                 
-    end,
-
     rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
 
-    %% After the clusters are disconnected, see if the object was 
-    %% written locally after the PG
-    {ok, PG2Value} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
+%%    ReplModeResult = rpc:call(LeaderA, riak_repl_console, modes, [["mode_repl12"]]),
+%%    lager:info("Repl mode ~p", [ReplModeResult]),
+
+    lager:info("Adding repl listener to cluster A"),
+    ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "9010"]],
+    Res = rpc:call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
+    ?assertEqual(ok, Res),
+
+    repl_util:wait_until_leader_converge(ANodes),
+    repl_util:wait_until_leader_converge(BNodes),
+    repl_util:wait_until_leader_converge(CNodes),
+
+    lager:info("Adding repl site to cluster B"),
+    SiteArgs = ["127.0.0.1", "9010", "rtmixed"],
+
+    LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
+    Res = rpc:call(LeaderB, riak_repl_console, add_site, [SiteArgs]),
     
-    ?assertEqual(ValueA, riakc_obj:get_value(PG2Value)),
+    repl_util:wait_until_leader_converge(ANodes),
+    repl_util:wait_until_leader_converge(BNodes),
+    repl_util:wait_until_leader_converge(CNodes),
 
-    %% test an object that wasn't previously "proxy-gotten", it should fail
-    FailedResult = riak_repl_pb_api:get(PidB,Bucket,KeyB,CidA),    
-    ?assertEqual({error, notfound}, FailedResult),
+    %%lager:info("write 100 keys"),
+    %%?assertEqual([], repl_util:do_write(FirstA, 1, 100, Bucket, 2)),
+    PidA = rt:pbc(LeaderA),
+    rt:pbc_write(PidA, Bucket, KeyA, ValueA),    
+    {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
+    lager:info("Cluster ID for A = ~p", [CidA]),   
+       
+    LeaderB2 = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
+    PidB = rt:pbc(LeaderB2),
+    lager:info("Connected to cluster B"),
 
+    %% this is probably going to be a local get, as realtime may have already received the object
+    {ok, PGResult} = riak_repl_pb_api:get(PidB, Bucket, KeyA, CidA),
+    ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
+    
     rt:clean_cluster(AllNodes),
     pass.
 
+
+%% test_pg_proxy() ->
+%%     Conf = [
+%%             {riak_repl,
+%%              [
+%%               {proxy_get, enabled}
+%%              ]}
+%%            ],
+%%     {LeaderA, ANodes, _BNodes, _CNodes, AllNodes} =
+%%         setup_repl_clusters(Conf),
+%%     rt:log_to_nodes(AllNodes, "Test without pg enabled"),
+
+%%     rt:wait_until_ring_converged(ANodes),
+
+%%     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
+%%     lager:info("Enabled pg ~p", [PGEnableResult]),
+%%     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+%%     case proplists:get_value(proxy_get_enabled, Status) of
+%%         undefined -> fail;
+%%         EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
+%%     end,
+
+%%     PidA = rt:pbc(LeaderA),
+%%     {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
+%%     lager:info("Cluster ID for A = ~p", [CidA]),   
+%%     rt:clean_cluster(AllNodes),
+%%     pass.
+
+
+%% test_bidirectional_pg() ->
+%% test_mixed_pg() ->
+
 confirm() ->
-    AllTests = [test_basic_pg()],
+    %AllTests = [test_basic_pg()],
+    AllTests = [test_12_pg()],
     case lists:all(fun (Result) -> Result == pass end, AllTests) of
         true ->  pass;
         false -> sadtrombone
