@@ -97,37 +97,42 @@ test_basic_pg() ->
     lager:info("Cluster ID for A = ~p", [CidA]),
     
     Bucket = <<"test_bucket">>,
-    Key    = <<"test_key">>,
-    Value = <<"0b:", "testdata">>,
-    rt:pbc_write(PidA, Bucket, Key, Value),
+    KeyA    = <<"test_key_foo">>,
+    ValueA = <<"0b:", "testdata">>,
+
+
+    Bucket = <<"test_bucket">>,
+    KeyB    = <<"test_key_bar">>,
+    ValueB = <<"0b:", "testdata">>,
+    rt:pbc_write(PidA, Bucket, KeyA, ValueA),
+    rt:pbc_write(PidA, Bucket, KeyB, ValueB),
 
     {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
     PidB = rt:pbc(FirstB),
     lager:info("Connected to cluster B"),
-    {ok, Result} = riak_repl_pb_api:get(PidB,Bucket,Key,CidA),
-    ?assertEqual(Value, riakc_obj:get_value(Result)),
+    {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
+    ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
 
-
-    PGEnableResult2 = rpc:call(LeaderA, riak_repl_console, proxy_get, [["disable","B"]]),
-    lager:info("Disable pg ~p", [PGEnableResult2]),
+    PGDisableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["disable","B"]]),
+    lager:info("Disable pg ~p", [PGDisableResult]),
     Status2 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status2) of
         [] -> ok                 
     end,
 
-    lager:info("Status 2 = ~p", [Status2]),
-
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
-    timer:sleep(10000),
-    FailingResult = riak_repl_pb_api:get(PidB,Bucket,Key,CidA),
-    lager:info("Failing result = ~p", [FailingResult]),
 
-    %% case proplists:get_value(proxy_get_enabled, Status2) of
-    %%     undefined -> fail;
-    %%     EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
-    %% end,
+    %% After the clusters are disconnected, see if the object was 
+    %% written locally after the PG
+    {ok, PG2Value} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
+    
+    ?assertEqual(ValueA, riakc_obj:get_value(PG2Value)),
+
+    %% test an object that wasn't previously "proxy-gotten", it should fail
+    FailedResult = riak_repl_pb_api:get(PidB,Bucket,KeyB,CidA),    
+    ?assertEqual({error, notfound}, FailedResult),
 
     rt:clean_cluster(AllNodes),
     pass.
