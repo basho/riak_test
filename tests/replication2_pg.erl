@@ -156,15 +156,17 @@ test_12_pg() ->
     rt:log_to_nodes(AllNodes, "Test 1.2 proxy_get"),
     {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
 
-    [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
+    ModeRes = rpc:call(FirstB, riak_repl_console, modes, [["mode_repl12"]]),
+    lager:info("ModeRes = ~p", [ModeRes]),
 
-    LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
+    [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
 
     PidA = rt:pbc(LeaderA),
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),    
     {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
     lager:info("Cluster ID for A = ~p", [CidA]), 
 
+    LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
     rt:log_to_nodes([LeaderB], "Trying to use PG while it's disabled"),
     PidB = rt:pbc(LeaderB),
     {error, notfound} = riak_repl_pb_api:get(PidB, Bucket, KeyA, CidA),
@@ -181,10 +183,15 @@ test_12_pg() ->
     Res = rpc:call(FirstB, riak_repl_console, add_site, [SiteArgs]),
     lager:info("Res = ~p", [Res]),
 
+    rt:log_to_nodes(AllNodes, "Waiting until connected"),
+    wait_until_12_connection(LeaderA),
+
     [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
-     
     lager:info("Trying proxy_get"),
-    {ok, PGResult} = riak_repl_pb_api:get(PidB, Bucket, KeyA, CidA),
+
+    LeaderB2 = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
+    PidB2 = rt:pbc(LeaderB2),
+    {ok, PGResult} = riak_repl_pb_api:get(PidB2, Bucket, KeyA, CidA),
     lager:info("PGResult: ~p", [PGResult]),
     ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
     
@@ -223,6 +230,28 @@ test_12_pg() ->
 
 %% test_bidirectional_pg() ->
 %% test_mixed_pg() ->
+
+wait_until_12_connection(Node) ->
+    rt:wait_until(Node,
+        fun(_) ->
+                case rpc:call(Node, riak_repl_console, status, [quiet]) of
+                    {badrpc, _} ->
+                        false;
+                    Status ->
+                        case proplists:get_value(server_stats, Status) of
+                            [] ->
+                                false;
+                            [{_, _, too_busy}] ->
+                                false;
+                            [_C] ->
+                                true;
+                            Conns ->
+                                lager:warning("multiple connections detected: ~p",
+                                    [Conns]),
+                                true
+                        end
+                end
+        end). %% 40 seconds is enough for repl
 
 confirm() ->
     AllTests = [test_basic_pg(), test_12_pg()],
