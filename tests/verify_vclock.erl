@@ -75,6 +75,12 @@ try_encoding(TestNode, Encoding, NTestItems) ->
     Results = our_pbc_read(TestNode, NTestItems, <<"hamachi">>),
     ?assertEqual(0, length(Results)),
     lager:info("Ok, data looks all right.")
+
+    %% Try to find some data that does not exist:
+    lager:info("Testing find-missing..."),
+    Results = our_pbc_read(TestNode, NTestItems, <<"saba">>),
+    ?assertEqual(NTestItems, length(Results)),
+    lager:info("Ok, data not found (as expected).")
 .
 
 force_encoding(Node, EncodingMethod) ->
