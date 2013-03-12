@@ -240,49 +240,60 @@ test_pg_proxy() ->
     {Bucket, KeyA, ValueA} = make_test_object("a"),
     {Bucket, KeyB, ValueB} = make_test_object("b"),
     {Bucket, KeyC, ValueC} = make_test_object("c"),
-    %%{Bucket, KeyD, ValueD} = make_test_object("d"),
+    {Bucket, KeyD, ValueD} = make_test_object("d"),
     %%{Bucket, KeyE, ValueE} = make_test_object("e"),
     %%{Bucket, KeyF, ValueF} = make_test_object("f"),
 
+    rt:pbc_write(PidA, Bucket, KeyA, ValueA),
+    rt:pbc_write(PidA, Bucket, KeyB, ValueB),
+    rt:pbc_write(PidA, Bucket, KeyC, ValueC),
+    rt:pbc_write(PidA, Bucket, KeyD, ValueD),
 
+    %% sanity check. You know, like the 10000 tests that autoconf runs 
+    %% before it actually does any work.
     {FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
     PidB = rt:pbc(FirstB),
     lager:info("Connected to cluster B"),
     {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
     ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
 
-    %% first, test gracefully
+    lager:info("Stopping leader on requester cluster"),
+    PGLeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
+    rt:log_to_nodes(AllNodes, "Killing leader on requester cluster"),
+    rt:stop(PGLeaderB),
+    [RunningBNode | _ ] = ANodes -- [PGLeaderB],
+    repl_util:wait_until_leader(RunningBNode),
+    lager:info("Now trying proxy_get"),
+    wait_until_pg(RunningBNode, PidB, Bucket, KeyC, CidA),
+    lager:info("If you got here, proxy_get worked after the pg block requesting leader was killed"),
+
+    lager:info("Stopping leader on provider cluster"),
     PGLeaderA = rpc:call(FirstA, riak_core_cluster_mgr, get_leader, []),
     rt:stop(PGLeaderA),
     rt:log_to_nodes(AllNodes, "Killing leader on provider cluster"),
     [RunningANode | _ ] = ANodes -- [PGLeaderA],
     repl_util:wait_until_leader(RunningANode),
-    {ok, PGResult2} = riak_repl_pb_api:get(PidB,Bucket,KeyB,CidA),
-    ?assertEqual(ValueB, riakc_obj:get_value(PGResult2)),
+    wait_until_pg(RunningBNode, PidB, Bucket, KeyD, CidA),
     lager:info("If you got here, proxy_get worked after the pg block providing leader was killed"),
-
-    PGLeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
-    rt:stop(PGLeaderB),
-    [RunningBNode | _ ] = ANodes -- [PGLeaderB],
-    repl_util:wait_until_leader(RunningBNode),
-    rt:log_to_nodes(AllNodes, "Killing leader on requester cluster"),
-    {ok, PGResult3} = riak_repl_pb_api:get(PidB,Bucket,KeyC,CidA),
-    ?assertEqual(ValueC, riakc_obj:get_value(PGResult3)),
-    lager:info("If you got here, proxy_get worked after the pg block requesting leader was killed"),
-
-
-    %% next, try brutal kills
-
-
-
+    lager:info("pg_proxy test complete. Time to obtain celebratory cheese sticks."),
 
     %% clean up so riak_test doesn't panic
     rt:start(PGLeaderA),
     rt:start(PGLeaderB),
-
     rt:clean_cluster(AllNodes),
     pass.
 
+wait_until_pg(Node, Pid, Bucket, Key, Cid) ->
+    rt:wait_until(Node,
+        fun(_) ->
+                lager:info("Waiting..."),
+                case riak_repl_pb_api:get(Pid,Bucket,Key,Cid) of
+                    {error, notfound} ->
+                        false;
+                    {ok, _Value} -> true;
+                    _ -> false
+                end
+        end).
 
 %% test_bidirectional_pg() ->
 
@@ -311,7 +322,7 @@ wait_until_12_connection(Node) ->
         end). %% 40 seconds is enough for repl
 
 confirm() ->
-    AllTests = [test_basic_pg(), test_12_pg(), test_pg_proxy()],
+    AllTests = [test_pg_proxy(), test_basic_pg(), test_12_pg()],
     case lists:all(fun (Result) -> Result == pass end, AllTests) of
         true ->  pass;
         false -> sadtrombone
