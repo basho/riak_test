@@ -283,21 +283,87 @@ test_pg_proxy() ->
     rt:clean_cluster(AllNodes),
     pass.
 
-wait_until_pg(Node, Pid, Bucket, Key, Cid) ->
-    rt:wait_until(Node,
-        fun(_) ->
-                lager:info("Waiting..."),
-                case riak_repl_pb_api:get(Pid,Bucket,Key,Cid) of
-                    {error, notfound} ->
-                        false;
-                    {ok, _Value} -> true;
-                    _ -> false
-                end
-        end).
 
-%% test_bidirectional_pg() ->
+test_bidirectional_pg() ->
+    Conf = [
+            {riak_repl,
+             [
+              {proxy_get, enabled},
+              {fullsync_on_connect, false}
+             ]}
+           ],
+    {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
+        setup_repl_clusters(Conf),
+    rt:log_to_nodes(AllNodes, "Testing bidirectional proxy-get"),
+
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+
+    {FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
+
+    LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
+
+
+    {ok, {_IP, APort}} = rpc:call(FirstA, application, get_env,
+                                  [riak_core, cluster_mgr]),
+    repl_util:connect_cluster(LeaderB, "127.0.0.1", APort),
+
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+
+    PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),   
+    PGEnableResult = rpc:call(LeaderB, riak_repl_console, proxy_get, [["enable","A"]]),   
+
+    lager:info("Enabled bidirectional pg ~p", [PGEnableResult]),
+    StatusA = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, StatusA) of
+        undefined -> fail;
+        EnabledForA -> lager:info("PG enabled for cluster ~p",[EnabledForA])
+    end,
+
+    StatusB = rpc:call(LeaderB, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, StatusB) of
+        undefined -> fail;
+        EnabledForB -> lager:info("PG enabled for cluster ~p",[EnabledForB])
+    end,
+
+    PidA = rt:pbc(LeaderA),
+    PidB = rt:pbc(FirstB),
+
+    {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
+    {ok,CidB}=riak_repl_pb_api:get_clusterid(PidB),
+    lager:info("Cluster ID for A = ~p", [CidA]),
+    lager:info("Cluster ID for A = ~p", [CidB]),
+
+    {Bucket, KeyA, ValueA} = make_test_object("a"),
+    {Bucket, KeyB, ValueB} = make_test_object("b"),
+    %% {Bucket, KeyC, ValueC} = make_test_object("c"),
+    %% {Bucket, KeyD, ValueD} = make_test_object("d"),
+
+    %% write some data to cluster A
+    rt:pbc_write(PidA, Bucket, KeyA, ValueA),
+
+    %% write some data to cluster B
+    rt:pbc_write(PidB, Bucket, KeyB, ValueB),
+
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+
+    lager:info("Trying first get"),        
+    wait_until_pg(LeaderB, PidB, Bucket, KeyA, CidA),
+    lager:info("First get worked"),        
+
+    lager:info("Trying second get"),        
+    wait_until_pg(LeaderA, PidA, Bucket, KeyB, CidB),
+    lager:info("Second get worked"),
+
+    rt:clean_cluster(AllNodes),
+    pass.
 
 %% test_mixed_pg() ->
+%% test_multiple_sink_pg() ->
 
 wait_until_12_connection(Node) ->
     rt:wait_until(Node,
@@ -322,7 +388,7 @@ wait_until_12_connection(Node) ->
         end). %% 40 seconds is enough for repl
 
 confirm() ->
-    AllTests = [test_pg_proxy(), test_basic_pg(), test_12_pg()],
+    AllTests = [test_bidirectional_pg(), test_pg_proxy(), test_basic_pg(), test_12_pg()],
     case lists:all(fun (Result) -> Result == pass end, AllTests) of
         true ->  pass;
         false -> sadtrombone
@@ -332,3 +398,15 @@ get_firsts(Nodes) ->
     {[AFirst|_] = _ANodes, Rest} = lists:split(2, Nodes),
     {[BFirst|_] = _BNodes, [CFirst|_] = _CNodes} = lists:split(2, Rest),
     {AFirst, BFirst, CFirst}.
+
+
+wait_until_pg(Node, Pid, Bucket, Key, Cid) ->
+    rt:wait_until(Node,
+        fun(_) ->
+                case riak_repl_pb_api:get(Pid,Bucket,Key,Cid) of
+                    {error, notfound} ->
+                        false;
+                    {ok, _Value} -> true;
+                    _ -> false
+                end
+        end).
