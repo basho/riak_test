@@ -75,17 +75,26 @@ make_test_object(Suffix) ->
     Value =  erlang:list_to_binary(ValueText),
     {Bucket, Key, Value}.
 
-test_basic_pg() ->
+test_basic_pg(Mode) ->
     Conf = [
             {riak_repl,
              [
-              {proxy_get, enabled}
+              {proxy_get, enabled},
+              {fullsync_on_connect, false}
              ]}
            ],
     {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
         setup_repl_clusters(Conf),
     rt:log_to_nodes(AllNodes, "Testing basic pg"),
 
+    case Mode of
+        mode_repl13 ->
+            ModeRes = rpc:call(LeaderA, riak_repl_console, modes, [["mode_repl13"]]),
+            lager:info("ModeRes = ~p", [ModeRes]);
+        mixed ->
+            lager:info("Using mode_repl12, mode_repl13"),
+            ok
+    end,
     rt:wait_until_ring_converged(ANodes),
 
     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
@@ -103,10 +112,6 @@ test_basic_pg() ->
 
     {Bucket, KeyA, ValueA} = make_test_object("a"),
     {Bucket, KeyB, ValueB} = make_test_object("b"),
-    %%{Bucket, KeyC, ValueC} = make_test_object("c"),
-    %%{Bucket, KeyD, ValueD} = make_test_object("d"),
-    %%{Bucket, KeyE, ValueE} = make_test_object("e"),
-    %%{Bucket, KeyF, ValueF} = make_test_object("f"),
 
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
@@ -142,7 +147,10 @@ test_basic_pg() ->
     rt:clean_cluster(AllNodes),
     pass.
 
-test_12_pg() ->
+%% test 1.2 replication (aka "Default" repl)
+%% Mode is either mode_repl12 or mixed. 
+%% "mixed" is the default in 1.3: mode_repl12, mode_repl13
+test_12_pg(Mode) ->
     Conf = [
             {riak_repl,
              [
@@ -155,17 +163,17 @@ test_12_pg() ->
 
     {Bucket, KeyA, ValueA} = make_test_object("a"),
     {Bucket, KeyB, ValueB} = make_test_object("b"),
-    %%{Bucket, KeyC, ValueC} = make_test_object("c"),
-    %%{Bucket, KeyD, ValueD} = make_test_object("d"),
-    %%{Bucket, KeyE, ValueE} = make_test_object("e"),
-    %%{Bucket, KeyF, ValueF} = make_test_object("f"),
 
     rt:log_to_nodes(AllNodes, "Test 1.2 proxy_get"),
     {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
-
-    ModeRes = rpc:call(FirstB, riak_repl_console, modes, [["mode_repl12"]]),
-    lager:info("ModeRes = ~p", [ModeRes]),
-
+    case Mode of
+        mode_repl12 ->
+            ModeRes = rpc:call(FirstB, riak_repl_console, modes, [["mode_repl12"]]),
+            lager:info("ModeRes = ~p", [ModeRes]);
+        mixed ->
+            lager:info("Using mode_repl12, mode_repl13"),
+            ok
+    end,
     [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
 
     PidA = rt:pbc(LeaderA),
@@ -207,20 +215,18 @@ test_12_pg() ->
     rt:clean_cluster(AllNodes),
     pass.
 
+%% test shutting down nodes in source + sink clusters
 test_pg_proxy() ->
-    %% To test:
-    %% Kill provider node
-    %% Kill requestor node
     Conf = [
             {riak_repl,
              [
-              {proxy_get, enabled}
+              {proxy_get, enabled},
+              {fullsync_on_connect, false}
              ]}
            ],
     {LeaderA, ANodes, _BNodes, _CNodes, AllNodes} =
         setup_repl_clusters(Conf),
-    rt:log_to_nodes(AllNodes, "Testing basic pg"),
-
+    rt:log_to_nodes(AllNodes, "Testing pg proxy"),
     rt:wait_until_ring_converged(ANodes),
 
     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
@@ -241,8 +247,6 @@ test_pg_proxy() ->
     {Bucket, KeyB, ValueB} = make_test_object("b"),
     {Bucket, KeyC, ValueC} = make_test_object("c"),
     {Bucket, KeyD, ValueD} = make_test_object("d"),
-    %%{Bucket, KeyE, ValueE} = make_test_object("e"),
-    %%{Bucket, KeyF, ValueF} = make_test_object("f"),
 
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
@@ -283,7 +287,7 @@ test_pg_proxy() ->
     rt:clean_cluster(AllNodes),
     pass.
 
-
+%% connect source + sink clusters, pg bidirectionally
 test_bidirectional_pg() ->
     Conf = [
             {riak_repl,
@@ -302,7 +306,6 @@ test_bidirectional_pg() ->
     {FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
 
     LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
-
 
     {ok, {_IP, APort}} = rpc:call(FirstA, application, get_env,
                                   [riak_core, cluster_mgr]),
@@ -335,12 +338,10 @@ test_bidirectional_pg() ->
     {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
     {ok,CidB}=riak_repl_pb_api:get_clusterid(PidB),
     lager:info("Cluster ID for A = ~p", [CidA]),
-    lager:info("Cluster ID for A = ~p", [CidB]),
+    lager:info("Cluster ID for B = ~p", [CidB]),
 
     {Bucket, KeyA, ValueA} = make_test_object("a"),
     {Bucket, KeyB, ValueB} = make_test_object("b"),
-    %% {Bucket, KeyC, ValueC} = make_test_object("c"),
-    %% {Bucket, KeyD, ValueD} = make_test_object("d"),
 
     %% write some data to cluster A
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
@@ -362,8 +363,131 @@ test_bidirectional_pg() ->
     rt:clean_cluster(AllNodes),
     pass.
 
-%% test_mixed_pg() ->
-%% test_multiple_sink_pg() ->
+%% Test multiple sinks against a single source
+test_multiple_sink_pg() ->
+    Conf = [
+            {riak_repl,
+             [
+              {proxy_get, enabled},
+              {fullsync_on_connect, false}
+             ]}
+           ],
+    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
+        setup_repl_clusters(Conf),
+    rt:log_to_nodes(AllNodes, "Testing basic pg"),
+
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+    rt:wait_until_ring_converged(CNodes),
+
+    PGEnableResultB = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
+    PGEnableResultC = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","C"]]),
+
+    lager:info("Enabled pg to C~p", [PGEnableResultB]),
+    lager:info("Enabled pg to C~p", [PGEnableResultC]),
+    Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, Status) of
+        undefined -> fail;
+        EnabledForC -> lager:info("PG enabled for cluster ~p",[EnabledForC])
+    end,
+
+    PidA = rt:pbc(LeaderA),
+    {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
+    lager:info("Cluster ID for A = ~p", [CidA]),
+
+    {Bucket, KeyA, ValueA} = make_test_object("a"),
+    {Bucket, KeyB, ValueB} = make_test_object("b"),
+
+    rt:pbc_write(PidA, Bucket, KeyA, ValueA),
+    rt:pbc_write(PidA, Bucket, KeyB, ValueB),
+
+    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
+
+    PidB = rt:pbc(FirstB),
+    PidC = rt:pbc(FirstC),
+
+    {ok, PGResultB} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
+    ?assertEqual(ValueA, riakc_obj:get_value(PGResultB)),
+
+    {ok, PGResultC} = riak_repl_pb_api:get(PidC,Bucket,KeyB,CidA),
+    ?assertEqual(ValueB, riakc_obj:get_value(PGResultC)),
+
+    rt:clean_cluster(AllNodes),
+    pass.
+
+%% test 1.2 + 1.3 repl being used at the same time
+test_mixed_pg() ->
+    Conf = [
+            {riak_repl,
+             [
+              {proxy_get, enabled},
+              {fullsync_on_connect, false}
+             ]}
+           ],
+    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
+        setup_repl_clusters(Conf),
+    rt:log_to_nodes(AllNodes, "Testing basic pg"),
+
+    rt:wait_until_ring_converged(ANodes),
+
+    PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
+    lager:info("Enabled pg ~p", [PGEnableResult]),
+    Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, Status) of
+        undefined -> fail;
+        EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
+    end,
+
+    PidA = rt:pbc(LeaderA),
+    {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
+    lager:info("Cluster ID for A = ~p", [CidA]),
+
+    {Bucket, KeyB, ValueB} = make_test_object("b"),
+    {Bucket, KeyC, ValueC} = make_test_object("c"),
+
+    rt:pbc_write(PidA, Bucket, KeyB, ValueB),
+    rt:pbc_write(PidA, Bucket, KeyC, ValueC),
+
+    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
+     
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+
+    rt:log_to_nodes([LeaderA], "Adding a listener"),
+    ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
+    Res = rpc:call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
+    ?assertEqual(ok, Res),
+
+    [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
+
+    rt:log_to_nodes([FirstC], "Adding a site"),
+    SiteArgs = ["127.0.0.1", "5666", "rtmixed"],
+    Res = rpc:call(FirstC, riak_repl_console, add_site, [SiteArgs]),
+    lager:info("Res = ~p", [Res]),
+
+    rt:log_to_nodes(AllNodes, "Waiting until connected"),
+    wait_until_12_connection(LeaderA),
+
+    [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
+    lager:info("Trying proxy_get"),
+
+    LeaderC = rpc:call(FirstC, riak_repl2_leader, leader_node, []),
+    PidB = rt:pbc(FirstB),
+    PidC = rt:pbc(LeaderC),
+
+    {ok, PGResultB} = riak_repl_pb_api:get(PidB, Bucket, KeyB, CidA),
+    lager:info("PGResultB: ~p", [PGResultB]),
+    ?assertEqual(ValueB, riakc_obj:get_value(PGResultB)),
+
+    {ok, PGResultC} = riak_repl_pb_api:get(PidC, Bucket, KeyC, CidA),
+    lager:info("PGResultC: ~p", [PGResultC]),
+    ?assertEqual(ValueC, riakc_obj:get_value(PGResultC)),
+
+    rt:clean_cluster(AllNodes),
+    pass.
+    
 
 wait_until_12_connection(Node) ->
     rt:wait_until(Node,
@@ -388,7 +512,17 @@ wait_until_12_connection(Node) ->
         end). %% 40 seconds is enough for repl
 
 confirm() ->
-    AllTests = [test_bidirectional_pg(), test_pg_proxy(), test_basic_pg(), test_12_pg()],
+    AllTests = 
+        [
+         test_basic_pg(mode_repl13),
+         test_basic_pg(mixed),         
+         test_12_pg(mode_repl12),
+         test_12_pg(mixed),
+         test_mixed_pg(),
+         test_multiple_sink_pg(), 
+         test_bidirectional_pg(), 
+         test_pg_proxy() 
+        ],
     case lists:all(fun (Result) -> Result == pass end, AllTests) of
         true ->  pass;
         false -> sadtrombone
