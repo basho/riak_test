@@ -9,7 +9,7 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Test BNW PG
+%% Test proxy_get in Default and Advanced mode of 1.3+ repl
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 setup_repl_clusters(Conf) ->
@@ -98,7 +98,7 @@ test_basic_pg(Mode) ->
     rt:wait_until_ring_converged(ANodes),
 
     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
-    lager:info("Enabled pg ~p", [PGEnableResult]),
+    lager:info("Enabled pg: ~p", [PGEnableResult]),
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
@@ -230,7 +230,7 @@ test_pg_proxy() ->
     rt:wait_until_ring_converged(ANodes),
 
     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
-    lager:info("Enabled pg ~p", [PGEnableResult]),
+    lager:info("Enabled pg: ~p", [PGEnableResult]),
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
@@ -383,8 +383,8 @@ test_multiple_sink_pg() ->
     PGEnableResultB = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
     PGEnableResultC = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","C"]]),
 
-    lager:info("Enabled pg to C~p", [PGEnableResultB]),
-    lager:info("Enabled pg to C~p", [PGEnableResultC]),
+    lager:info("Enabled pg to B:~p", [PGEnableResultB]),
+    lager:info("Enabled pg to C:~p", [PGEnableResultC]),
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
@@ -432,7 +432,7 @@ test_mixed_pg() ->
     rt:wait_until_ring_converged(ANodes),
 
     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
-    lager:info("Enabled pg ~p", [PGEnableResult]),
+    lager:info("Enabled pg ~p:", [PGEnableResult]),
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
