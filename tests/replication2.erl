@@ -81,9 +81,11 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             {ok, {_IP, Port}} = rpc:call(BFirst, application, get_env,
                 [riak_core, cluster_mgr]),
-            repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
 
+            lager:info("connect cluster A:~p to B on port ~p", [LeaderA, Port]),
+            repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
             ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
+
             repl_util:enable_realtime(LeaderA, "B"),
             rt:wait_until_ring_converged(ANodes),
             repl_util:start_realtime(LeaderA, "B"),
@@ -91,6 +93,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             repl_util:enable_fullsync(LeaderA, "B"),
             rt:wait_until_ring_converged(ANodes);
         _ ->
+            lager:info("clusters should already be connected"),
             lager:info("waiting for leader to converge on cluster A"),
             ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
             lager:info("waiting for leader to converge on cluster B"),
@@ -98,14 +101,18 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             %% get the leader for the first cluster
             LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
             lager:info("Leader on cluster A is ~p", [LeaderA]),
+            lager:info("BFirst on cluster B is ~p", [BFirst]),
             {ok, {_IP, Port}} = rpc:call(BFirst, application, get_env,
-                [riak_core, cluster_mgr])
+                [riak_core, cluster_mgr]),
+            lager:info("B is ~p with port ~p", [BFirst, Port])
     end,
 
-    log_to_nodes(AllNodes, "Write data to A, verify replication to B via realtime"),
-
-    %% write some data on A
+    %% make sure we are connected
+    lager:info("Wait for cluster connection A:~p -> B:~p:~p", [LeaderA, BFirst, Port]),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
+
+    log_to_nodes(AllNodes, "Write data to A, verify replication to B via realtime"),
+    %% write some data on A
     %io:format("~p~n", [rpc:call(LeaderA, riak_repl_console, status, [quiet])]),
     lager:info("Writing 100 more keys to ~p", [LeaderA]),
     ?assertEqual([], repl_util:do_write(LeaderA, 101, 200, TestBucket, 2)),
@@ -466,9 +473,11 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("checking number of read failures on secondary cluster"),
     ReadErrors = rt:systest_read(BSecond, 1000, 11000, TestBucket, 2),
     lager:info("got ~p read failures", [length(ReadErrors)]),
+
     %% ensure node is down before we try to start it up again.
     lager:info("pb_write_during_shutdown: Ensure node ~p is down before restart", [Target]),
     ?assertEqual(ok, rt:wait_until_unpingable(Target)),
+
     rt:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
@@ -518,16 +527,18 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
             lager:info("Shutdown timeout caught"),
             []
         end,
-    lager:info("got ~p write failures", [length(WriteErrors)]),
+    lager:info("got ~p write failures to ~p", [length(WriteErrors), Target]),
     timer:sleep(3000),
-    lager:info("checking number of read failures on secondary cluster"),
+    lager:info("checking number of read failures on secondary cluster node, ~p", [BSecond]),
     {ok, [{_IP, Port2}|_]} = rpc:call(BSecond, application, get_env, [riak_core, http]),
     C2 = rhc:create("127.0.0.1", Port2, "riak", []),
     ReadErrors = http_read(C2, 12000, 22000, TestBucket, 2),
-    lager:info("got ~p read failures", [length(ReadErrors)]),
+    lager:info("got ~p read failures from ~p", [length(ReadErrors), BSecond]),
+
     %% ensure node is down before we try to start it up again.
-    lager:info("pb_write_during_shutdown: Ensure node ~p is down before restart", [Target]),
+    lager:info("http: write_during_shutdown: Ensure node ~p is down before restart", [Target]),
     ?assertEqual(ok, rt:wait_until_unpingable(Target)),
+
     rt:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
