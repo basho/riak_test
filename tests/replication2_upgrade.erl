@@ -63,6 +63,7 @@ confirm() ->
     repl_util:make_cluster(BNodes),
 
     lager:info("Replication First pass...homogenous cluster"),
+    rt:log_to_nodes(Nodes, "Replication First pass...homogenous cluster"),
 
     %% initial "previous" replication run, homogeneous cluster
     replication2:replication(ANodes, BNodes, false),
@@ -71,12 +72,12 @@ confirm() ->
     rt:log_to_nodes(Nodes, "Upgrading nodes in order: ~p", [NodeUpgrades]),
     %% upgrade the nodes, one at a time
     lists:foreach(fun(Node) ->
-                lager:info("Upgrade node: ~p", [Node]),
-                rt:log_to_nodes(Nodes, "Upgrade node: ~p", [Node]),
-                rtdev:upgrade(Node, current),
-                rt:wait_until_pingable(Node),
-                timer:sleep(1000),
-                lager:info("Replication with upgraded node: ~p", [Node]),
-                rt:log_to_nodes(Nodes, "Replication with upgraded node: ~p", [Node]),
-                replication2:replication(ANodes, BNodes, true)
-        end, NodeUpgrades).
+                          lager:info("Upgrade node: ~p", [Node]),
+                          rt:log_to_nodes(Nodes, "Upgrade node: ~p", [Node]),
+                          rtdev:upgrade(Node, current),
+                          %% The upgrade did a wait for pingable
+                          timer:sleep(1000),
+                          lager:info("Replication with upgraded node: ~p", [Node]),
+                          rt:log_to_nodes(Nodes, "Replication with upgraded node: ~p", [Node]),
+                          replication2:replication(ANodes, BNodes, true)
+                  end, NodeUpgrades).
