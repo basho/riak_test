@@ -52,35 +52,35 @@ run_test(TestMode, NTestItems, VClockEncoding) ->
     try_encoding(TestNode0, encode_raw,  NTestItems),
     try_encoding(TestNode1, encode_zlib, NTestItems),
 
-stopall(Nodes),
-lager:info("Test verify_vclock passed."),
-pass.
+    stopall(Nodes),
+    lager:info("Test verify_vclock passed."),
+    pass.
 
 try_encoding(TestNode, Encoding, NTestItems) -> 
 
     rt:wait_for_service(TestNode, riak_kv),
     force_encoding(TestNode, Encoding),
 
+    %% Try to find some data that does not exist:
+    lager:info("Testing find-missing..."),
+    Results0 = our_pbc_read(TestNode, NTestItems, <<"saba">>),
+    ?assertEqual(NTestItems, length(Results0)),
+    lager:info("Ok, data not found (as expected)."),
+
     %%  Do an initial write and see if we can get our data back (indirectly test vclock creation and 
     %% encoding):
     lager:info("Testing write-and-read..."),
     our_pbc_write(TestNode, NTestItems),
-    Results = our_pbc_read(TestNode, NTestItems),
-    ?assertEqual(0, length(Results)),
+    Results1 = our_pbc_read(TestNode, NTestItems),
+    ?assertEqual(0, length(Results1)),
     lager:info("Ok, data looks all right."),
 
     %% Update the data and see if everything worked; the idea is to indirectly test vclock increment:
     lager:info("Testing update..."),
     our_pbc_write(TestNode, NTestItems, <<"hamachi">>),
-    Results = our_pbc_read(TestNode, NTestItems, <<"hamachi">>),
-    ?assertEqual(0, length(Results)),
+    Results2 = our_pbc_read(TestNode, NTestItems, <<"hamachi">>),
+    ?assertEqual(0, length(Results2)),
     lager:info("Ok, data looks all right.")
-
-    %% Try to find some data that does not exist:
-    lager:info("Testing find-missing..."),
-    Results = our_pbc_read(TestNode, NTestItems, <<"saba">>),
-    ?assertEqual(NTestItems, length(Results)),
-    lager:info("Ok, data not found (as expected).")
 .
 
 force_encoding(Node, EncodingMethod) ->
@@ -142,7 +142,6 @@ our_pbc_write(Node, Start, End, Bucket, VSuffix) ->
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
 
-
 our_pbc_read(Node, Size) -> 
     our_pbc_read(Node, 1, Size, <<"systest">>, <<>>).
 
@@ -156,6 +155,10 @@ our_pbc_read(Node, Start, End, Bucket, VSuffix) ->
     F = fun(N, Acc) ->
         {K, V} = make_kv(N, VSuffix),
 
+        AddFailure = fun(Reason, EntryN, Accumulator) ->
+                        [{EntryN, Reason} | Accumulator]
+                     end,
+
         ResultValue = riakc_pb_socket:get(PBC, Bucket, K),
         case ResultValue of
                    {ok, Obj} ->
@@ -168,15 +171,18 @@ our_pbc_read(Node, Start, End, Bucket, VSuffix) ->
                                    end;
 
                    {error, timeout} ->
-                                   lager:error("timeout");
+                                   lager:error("timeout"), 
+                                   AddFailure({error, timeout}, N, Acc);
                    {error, disconnected} ->
-                                   lager:error("disconnected");
+                                   lager:error("disconnected"),
+                                   AddFailure({error, disconnected}, N, Acc);
 
                    Other ->
-                        [{N, Other} | Acc]
+                        AddFailure(Other, N, Acc)
                 end
         end,
-    lists:foldl(F, [], lists:seq(Start, End)).
+    lists:foldl(F, [], lists:seq(Start, End))
+.
 
 %% For some testing purposes, making these limits smaller is helpful:
 deploy_test_nodes(false, N) -> 
