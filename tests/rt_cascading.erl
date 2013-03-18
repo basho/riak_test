@@ -40,6 +40,8 @@ simple_test_() ->
             ending = EndNode}
     end,
     fun(State) ->
+        repl_util:disable_realtime(State#simple_state.beginning, "middle"),
+        repl_util:disable_realtime(State#simple_state.middle, "end"),
         rt:stop_and_wait(State#simple_state.ending),
         rt:stop_and_wait(State#simple_state.middle),
         rt:stop_and_wait(State#simple_state.beginning)
@@ -78,6 +80,59 @@ simple_test_() ->
 
     ] end}}.
 
+circle_test_() ->
+    {timeout, 60000, {setup, fun() ->
+        Conf = conf(),
+        [One, Two, Three] = Nodes = rt:deploy_nodes(3, Conf),
+        [repl_util:make_cluster([N]) || N <- Nodes],
+        Names = ["one", "two", "three"],
+        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+
+        Connections = [
+            {One, 10026, "two"},
+            {Two, 10036, "three"},
+            {Three, 10016, "one"}
+        ],
+        lists:map(fun({Node, Port, Name}) ->
+            repl_util:connect_cluster(Node, "127.0.0.1", Port),
+            repl_util:enable_realtime(Node, Name),
+            repl_util:start_realtime(Node, Name)
+        end, Connections),
+        Nodes
+    end,
+    fun(Nodes) ->
+        ConnnectedTo = ["two", "three", "one"],
+        [repl_util:disable_realtime(Node, Name) || {Node, Name} <- lists:zip(Nodes, ConnnectedTo)],
+        [rt:stop_and_wait(Node) || Node <- Nodes]
+    end,
+    fun(Nodes) -> [
+
+        {"cascade all the way to the other end, but no futher", timeout, 6000, fun() ->
+            Client = rt:pbc(hd(Nodes)),
+            Bin = <<"cascading">>,
+            Obj = riakc_obj:new(<<"objects">>, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w,1}]),
+            Put = riakc_pb_socket:get(Client, <<"objects">>, Bin),
+            ?assertEqual(Bin, maybe_eventually_exists(lists:last(Nodes), <<"objects">>, Bin)),
+            % we want to ensure there's not a cascade back to the beginning, so
+            % there's no event we can properly wait for. All we can do is wait
+            % and make sure we didn't update/write the object.
+            timer:sleep(1000),
+            Got = riakc_pb_socket:get(Client, <<"objects">>, Bin),
+            EndClient = rt:pbc(lists:last(Nodes)),
+            EndGot = riakc_pb_socket:get(EndClient, <<"objects">>, Bin),
+            ?debugFmt("~n"
+                "    Result of original put: ~p~n"
+                "    Result of last got: ~p~n"
+                "    Result of end got: ~p~n"
+                , [Put, Got, EndGot]),
+            Status = rpc:call(hd(Nodes), riak_repl2_rt, status, []),
+            [SinkData] = proplists:get_value(sinks, Status, [[]]),
+            ?assertEqual(undefined, proplists:get_value(expect_seq, SinkData))
+        end}
+
+    ] end}}.
+
 %% =====
 %% utility functions for teh happy
 %% ====
@@ -98,7 +153,6 @@ maybe_eventually_exists(Node, Bucket, Key, MaxTries, WaitMs) ->
     maybe_eventually_exists(Got, Pid, Node, Bucket, Key, MaxTries - 1, WaitMs).
 
 maybe_eventually_exists({error, notfound}, Pid, Node, Bucket, Key, MaxTries, WaitMs) when MaxTries > 0 ->
-    lager:debug("didn't find it, I'll try again after ~p ms", [WaitMs]),
     timer:sleep(WaitMs),
     Got = riakc_pb_socket:get(Pid, Bucket, Key),
     maybe_eventually_exists(Got, Pid, Node, Bucket, Key, MaxTries - 1, WaitMs);
