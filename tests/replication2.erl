@@ -438,11 +438,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     fin.
 
 pb_write_during_shutdown(Target, BSecond, TestBucket) ->
-    {ok, Port} = rpc:call(Target, application, get_env, [riak_api, pb_port]),
-
-    lager:info("Connecting to pb socket ~p:~p on ~p", ["127.0.0.1", Port,
-            Target]),
-    {ok, PBSock} = riakc_pb_socket:start("127.0.0.1", Port),
+    PBSock = rt:pbc(Target),
 
     %% do the stop in the background while we're writing keys
     spawn(fun() ->
