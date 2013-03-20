@@ -247,14 +247,24 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 -spec connection_info([node()]) -> conn_info().
 connection_info(Nodes) ->
     [begin
-         {ok, PB_IP} = rpc_get_env(Node, [{riak_api, pb_ip},
-                                          {riak_kv, pb_ip}]),
-         {ok, PB_Port} = rpc_get_env(Node, [{riak_api, pb_port},
-                                            {riak_kv, pb_port}]),
+         {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
          {ok, [{HTTP_IP, HTTP_Port}]} =
              rpc:call(Node, application, get_env, [riak_core, http]),
          {Node, [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}]}
      end || Node <- Nodes].
+
+-spec get_pb_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
+get_pb_conn_info(Node) ->
+    case rpc_get_env(Node, [{riak_api, pb},
+                            {riak_api, pb_ip},
+                            {riak_kv, pb_ip}]) of
+        [{NewIP, NewPort}|_] ->
+            [{NewIP, NewPort}];
+        PB_IP ->
+            {ok, PB_Port} = rpc_get_env(Node, [{riak_api, pb_port},
+                                               {riak_kv, pb_port}]),
+            [{PB_IP, PB_Port}]
+    end.
 
 %% @doc Deploy a set of freshly installed Riak nodes, returning a list of the
 %%      nodes deployed.
