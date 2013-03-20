@@ -438,6 +438,9 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     fin.
 
 pb_write_during_shutdown(Target, BSecond, TestBucket) ->
+    ConnInfo = proplists:get_value(Target, rt:connection_info([Target])),
+    {IP, Port} = proplists:get_value(pb, ConnInfo),
+    lager:info("Connecting to pb socket ~p:~p on ~p", [IP, Port, Target]),
     PBSock = rt:pbc(Target),
 
     %% do the stop in the background while we're writing keys
@@ -491,11 +494,10 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
     end.
 
 http_write_during_shutdown(Target, BSecond, TestBucket) ->
-    {ok, [{_IP, Port}|_]} = rpc:call(Target, application, get_env, [riak_core, http]),
-
-    lager:info("Connecting to http socket ~p:~p on ~p", ["127.0.0.1", Port,
-            Target]),
-    C = rhc:create("127.0.0.1", Port, "riak", []),
+    ConnInfo = proplists:get_value(Target, rt:connection_info([Target])),
+    {IP, Port} = proplists:get_value(http, ConnInfo),
+    lager:info("Connecting to http socket ~p:~p on ~p", [IP, Port, Target]),
+    C = rt:httpc(Target),
 
     %% do the stop in the background while we're writing keys
     spawn(fun() ->
