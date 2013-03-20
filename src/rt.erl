@@ -687,7 +687,7 @@ wait_until_unpingable(Node) ->
                          fail
         end,
     %% Hard coding a 6 minute timeout on this wait only. This function is called to see that
-    %% riak has stopped. Riak stop should only take about 5 minutes before its timeouts kill 
+    %% riak has stopped. Riak stop should only take about 5 minutes before its timeouts kill
     %% the process. This wait should at least wait that long.
     Delay = rt:config(rt_retry_delay),
     Retry = 360000 div Delay,
