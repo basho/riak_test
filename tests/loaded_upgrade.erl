@@ -67,7 +67,7 @@ confirm() ->
         exit(Sup, normal),
         lager:info("Upgrading ~p", [Node]),
         rt:upgrade(Node, current),
-        NewSup = rt_worker_sup:start_link([
+        {ok, NewSup} = rt_worker_sup:start_link([
             {concurrent, Concurrent},
             {node, Node},
             {backend, Backend},
@@ -111,7 +111,7 @@ upgrade_recv_loop(EndTime) ->
             {search, Node, bad_result} ->
                 ?assertEqual(true, {search, Node, bad_result});
             Msg ->
-                lager:info("Received Mesg ~p", [Msg]),
+                %%lager:info("Received Mesg ~p", [Msg]),
                 upgrade_recv_loop(EndTime)
         after timer:now_diff(EndTime, Now) div 1000 ->
             lager:info("Done waiting 'cause ~p is up", [?TIME_BETWEEN_UPGRADES])
