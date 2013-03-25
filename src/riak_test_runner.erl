@@ -43,17 +43,19 @@ metadata(Pid) ->
 confirm(TestModule, Outdir, TestMetaData) ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, []),
-
-    check_prereqs(TestModule),
-
-    lager:notice("Running Test ~s", [TestModule]),
     Backend = rt:set_backend(proplists:get_value(backend, TestMetaData)),
-    {Status, Reason} = execute(TestModule, TestMetaData),
-
+    
+    {Status, Reason} = case check_prereqs(TestModule) of
+        true ->
+            lager:notice("Running Test ~s", [TestModule]),
+            execute(TestModule, TestMetaData);
+        _ ->
+            {fail, all_prereqs_not_present}
+    end,
+    
     lager:notice("~s Test Run Complete", [TestModule]),
     {ok, Log} = stop_lager_backend(),
     Logs = iolist_to_binary(lists:foldr(fun(L, Acc) -> [L ++ "\n" | Acc] end, [], Log)),
-
 
     RetList = [{test, TestModule}, {status, Status}, {log, Logs}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
     case Status of
@@ -118,5 +120,4 @@ check_prereqs(Module) ->
     P2 = [ {Prereq, rt:which(Prereq)} || Prereq <- Prereqs],
     lager:info("~s prereqs: ~p", [Module, P2]),
     [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
-    GoodToGo = lists:all(fun({_, Present}) -> Present end, P2),
-    ?assertEqual({all_prereqs_present, true}, {all_prereqs_present, GoodToGo}).
+    lists:all(fun({_, Present}) -> Present end, P2).
