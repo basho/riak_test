@@ -49,6 +49,8 @@ confirm(TestModule, Outdir, TestMetaData) ->
         true ->
             lager:notice("Running Test ~s", [TestModule]),
             execute(TestModule, TestMetaData);
+        not_present ->
+            {fail, test_does_not_exist};
         _ ->
             {fail, all_prereqs_not_present}
     end,
@@ -116,8 +118,14 @@ rec_loop(Pid, TestModule, TestMetaData) ->
     end.
 
 check_prereqs(Module) ->
-    Prereqs = proplists:get_all_values(prereq, Module:module_info(attributes)),
-    P2 = [ {Prereq, rt:which(Prereq)} || Prereq <- Prereqs],
-    lager:info("~s prereqs: ~p", [Module, P2]),
-    [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
-    lists:all(fun({_, Present}) -> Present end, P2).
+    try Module:module_info(attributes) of
+        Attrs ->       
+            Prereqs = proplists:get_all_values(prereq, Attrs),
+            P2 = [ {Prereq, rt:which(Prereq)} || Prereq <- Prereqs],
+            lager:info("~s prereqs: ~p", [Module, P2]),
+            [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
+            lists:all(fun({_, Present}) -> Present end, P2)
+    catch 
+        _DontCare:_Really ->
+            not_present
+    end.
