@@ -110,8 +110,9 @@ upgrade_recv_loop(EndTime) ->
                 ?assertEqual(true, {listkeys, Node, not_equal});
             {search, Node, bad_result} ->
                 ?assertEqual(true, {search, Node, bad_result});
-            Msg ->
-                %%lager:info("Received Mesg ~p", [Msg]),
+            _Msg ->
+                %% TODO: Uncomment when lager:debug means something
+                %%lager:debug("Received Mesg ~p", [Msg]),
                 upgrade_recv_loop(EndTime)
         after timer:now_diff(EndTime, Now) div 1000 ->
             lager:info("Done waiting 'cause ~p is up", [?TIME_BETWEEN_UPGRADES])
