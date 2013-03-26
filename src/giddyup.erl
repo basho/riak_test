@@ -66,7 +66,12 @@ post_result(TestResult) ->
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
     check_ibrowse(),
-    try ibrowse:send_req(URL, [{"Content-Type", "application/json"}], post, mochijson2:encode(TestResult), [ {content_type, "application/json"}, basic_auth()]) of
+    try ibrowse:send_req(URL, 
+            [{"Content-Type", "application/json"}], 
+            post, 
+            mochijson2:encode(TestResult), 
+            [ {content_type, "application/json"}, basic_auth()],
+            300000) of  %% 5 minute timeout
 
         {ok, RC=[$2|_], Headers, _Body} ->
             {_, Location} = lists:keyfind("Location", 1, Headers),
@@ -85,7 +90,7 @@ post_result(TestResult) ->
     catch
         Throws ->
             lager:error("Error reporting to giddyup. ~p", [Throws]),
-            lager:error("Payload: ~p", [mochijson2:encode(TestResult)])
+            lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
     end.
 
 basic_auth() ->
