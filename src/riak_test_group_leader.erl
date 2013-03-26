@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(riak_test_group_leader).
 
--export([new_group_leader/1, group_leader_loop/1]).
+-export([new_group_leader/1, group_leader_loop/1, tidy_up/1]).
 
 % @doc spawns the new group leader
 new_group_leader(Runner) ->
@@ -34,10 +34,18 @@ group_leader_loop(Runner) ->
         io_request(From, ReplyAs, Req),
         process_flag(priority, P),
         group_leader_loop(Runner);
+    stab ->
+        kthxbye;
     _ ->
         %% discard any other messages
         group_leader_loop(Runner)
     end.
+
+% @doc closes group leader down
+tidy_up(FormerGroupLeader) ->
+    GroupLeaderToMurder = group_leader(),
+    group_leader(FormerGroupLeader, self()),
+    GroupLeaderToMurder ! stab.
 
 %% Processes an io_request and sends a reply
 io_request(From, ReplyAs, Req) ->
