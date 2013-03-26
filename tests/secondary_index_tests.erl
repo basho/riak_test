@@ -54,6 +54,15 @@ confirm() ->
     %% Verify the $key index, and riak_kv#367 regression
     assertRangeQuery(Pid, [<<"obj6">>], <<"$key">>, <<"obj6">>, <<"obj6">>),
     assertRangeQuery(Pid, [<<"obj6">>, <<"obj7">>], <<"$key">>, <<"obj6">>, <<"obj7">>),
+
+    %% Verify bignum sort order in sext -- eleveldb only (riak_kv#499)
+    TestIdxVal = 1362400142028,
+    put_an_object(Pid, TestIdxVal),
+    assertRangeQuery(Pid,
+                     [<<"obj1362400142028">>],
+                     <<"field2_int">>,
+                     1000000000000,
+                     TestIdxVal),
     pass.
 
 put_an_object(Pid, N) ->
