@@ -249,7 +249,7 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
             %% The point is, this is here in case we need to turn this back on
             %% before artifacts are ready. And to remind jd that this is the place
             %% to write the artifact client
-            
+
             %% {log, TestLog} = lists:keyfind(log, 1, SingleTestResult),
             %% NodeLogs = cat_node_logs(),
             %% EncodedNodeLogs = unicode:characters_to_binary(iolist_to_binary(NodeLogs),
@@ -335,12 +335,12 @@ so_kill_riak_maybe() ->
             rt:whats_up()
     end.
 
-cat_node_logs() ->
-    Files = rt:get_node_logs(),
-    Output = io_lib:format("================ Printing node logs and crash dumps ================~n~n", []),
-    cat_node_logs(Files, [Output]).
-
-cat_node_logs([], Output) -> Output;
-cat_node_logs([{Filename, Content}|Rest], Output) ->
-    Log = io_lib:format("================ Log: ~s =====================~n~s~n~n", [Filename, Content]),
-    cat_node_logs(Rest, [Output, Log]).
+%% cat_node_logs() ->
+%%     Files = rt:get_node_logs(),
+%%     Output = io_lib:format("================ Printing node logs and crash dumps ================~n~n", []),
+%%     cat_node_logs(Files, [Output]).
+%% 
+%% cat_node_logs([], Output) -> Output;
+%% cat_node_logs([{Filename, Content}|Rest], Output) ->
+%%     Log = io_lib:format("================ Log: ~s =====================~n~s~n~n", [Filename, Content]),
+%%     cat_node_logs(Rest, [Output, Log]).
