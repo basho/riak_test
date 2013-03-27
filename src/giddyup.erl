@@ -53,6 +53,8 @@ get_schema(Platform) ->
     Version = rt:get_version(),
     URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
+
+    check_ibrowse(),
     case ibrowse:send_req(URL, [], get, [], []) of
         {ok, "200", _Headers, JSON} -> mochijson2:decode(JSON);
         _ -> []
@@ -63,7 +65,13 @@ post_result(TestResult) ->
     Host = rt:config(giddyup_host),
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
-    case ibrowse:send_req(URL, [{"Content-Type", "application/json"}], post, mochijson2:encode(TestResult), [ {content_type, "application/json"}, basic_auth()]) of
+    check_ibrowse(),
+    try ibrowse:send_req(URL, 
+            [{"Content-Type", "application/json"}], 
+            post, 
+            mochijson2:encode(TestResult), 
+            [ {content_type, "application/json"}, basic_auth()],
+            300000) of  %% 5 minute timeout
 
         {ok, RC=[$2|_], Headers, _Body} ->
             {_, Location} = lists:keyfind("Location", 1, Headers),
@@ -79,7 +87,22 @@ post_result(TestResult) ->
         X -> 
             lager:warning("Some error POSTing test result: ~p", [X]),
             error
+    catch
+        Throws ->
+            lager:error("Error reporting to giddyup. ~p", [Throws]),
+            lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
     end.
 
 basic_auth() ->
     {basic_auth, {rt:config(giddyup_user), rt:config(giddyup_password)}}.
+
+check_ibrowse() ->
+    try sys:get_status(ibrowse) of
+        {status, _Pid, {module, gen_server} ,_} -> ok
+    catch
+        Throws ->
+            lager:error("ibrowse error ~p", [Throws]),
+            lager:error("Restarting ibrowse"),
+            application:stop(ibrowse),
+            application:start(ibrowse)
+    end.
