@@ -111,6 +111,7 @@ upgrade(Node, NewVersion) ->
     Version = node_version(N),
     lager:info("Upgrading ~p : ~p -> ~p", [Node, Version, NewVersion]),
     stop(Node),
+    rt:wait_until_unpingable(Node),
     OldPath = relpath(Version),
     NewPath = relpath(NewVersion),
 
