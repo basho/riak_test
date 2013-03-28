@@ -82,7 +82,7 @@ stop_lager_backend() ->
 %% does some group_leader swapping, in the style of EUnit.
 execute(TestModule, TestMetaData) ->
     process_flag(trap_exit, true),
-    GroupLeader = group_leader(),
+    OldGroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
 
@@ -92,7 +92,7 @@ execute(TestModule, TestMetaData) ->
     Pid = spawn_link(TestModule, confirm, []),
 
     {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
-    group_leader(GroupLeader, self()),
+    riak_test_group_leader:tidy_up(OldGroupLeader),
     case Status of
         fail ->
             ErrorHeader = "================ " ++ atom_to_list(TestModule) ++ " failure stack trace =====================",
