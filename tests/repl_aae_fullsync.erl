@@ -141,10 +141,12 @@ aae_fs_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %%---------------------------------------------------------
 
     %% run AAE fullsync from A -> B
-    {ok, {IP, _Port}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
+    {ok, {IP, Port2}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
     Partition = 0,
-    IndexN = 0,
-    {ok, _SyncSource} = riak_repl2_fssource:start_link({Partition,IndexN}, IP),
+    IndexN = {0,3},
+    log_to_nodes(AllNodes, "Starting AAE fullsync source connection from ~p to ~p:~p", [AFirst,IP,Port2]),
+    lager:info("Starting AAE fullsync source, connection from ~p to ~p:~p", [AFirst,IP,Port2]),
+    {ok, _SyncSource} = rpc:call(AFirst, riak_repl2_fssource, start_link, [{Partition,IndexN}, {IP,Port2}]),
     
     %% wait for fullsync worker to complete
     %% TODO: how?
