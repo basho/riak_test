@@ -66,7 +66,7 @@ confirm() ->
     pass.
 
 put_an_object(Pid, N) ->
-    lager:debug("Putting object ~p", [N]),
+    lager:info("Putting object ~p", [N]),
     Indexes = [{"field1_bin", list_to_binary(io_lib:format("val~p", [N]))}, 
                {"field2_int", N}],
     MetaData = dict:from_list([{<<"index">>, Indexes}]),
@@ -77,17 +77,17 @@ put_an_object(Pid, N) ->
 
 
 assertExactQuery(Pid, Expected, Index, Value) -> 
-    lager:debug("Searching Index ~p for ~p", [Index, Value]),
+    lager:info("Searching Index ~p for ~p", [Index, Value]),
     {ok, Results} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, Value),
     ActualKeys = lists:sort(Results),
-    lager:debug("Expected: ~p", [Expected]),
-    lager:debug("Actual  : ~p", [ActualKeys]),
+    lager:info("Expected: ~p", [Expected]),
+    lager:info("Actual  : ~p", [ActualKeys]),
     ?assertEqual(Expected, ActualKeys). 
 
 assertRangeQuery(Pid, Expected, Index, StartValue, EndValue) ->
-    lager:debug("Searching Index ~p for ~p-~p", [Index, StartValue, EndValue]),
+    lager:info("Searching Index ~p for ~p-~p", [Index, StartValue, EndValue]),
     {ok, Results} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, StartValue, EndValue),
     ActualKeys = lists:sort(Results),
-    lager:debug("Expected: ~p", [Expected]),
-    lager:debug("Actual  : ~p", [ActualKeys]),
+    lager:info("Expected: ~p", [Expected]),
+    lager:info("Actual  : ~p", [ActualKeys]),
     ?assertEqual(Expected, ActualKeys).
