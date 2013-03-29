@@ -69,11 +69,13 @@ start_lager_backend(TestModule, Outdir) ->
     case Outdir of
         undefined -> ok;
         _ ->
-            gen_event:add_handler(lager_event, lager_file_backend, {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output", debug, 10485760, "$D0", 1}),
-            lager:set_loglevel(lager_file_backend, debug)
+            gen_event:add_handler(lager_event, lager_file_backend, 
+                {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output", 
+                 rt:config(lager_level, info), 10485760, "$D0", 1}),
+            lager:set_loglevel(lager_file_backend, rt:config(lager_level, info))
     end,
-    gen_event:add_handler(lager_event, riak_test_lager_backend, [debug, false]),
-    lager:set_loglevel(riak_test_lager_backend, debug).
+    gen_event:add_handler(lager_event, riak_test_lager_backend, [rt:config(lager_level, info), false]),
+    lager:set_loglevel(riak_test_lager_backend, rt:config(lager_level, info)).
 
 stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
