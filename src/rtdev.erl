@@ -48,7 +48,7 @@ riak_admin_cmd(Path, N, Args) ->
     io_lib:format("~s/dev/dev~b/bin/riak-admin ~s", [Path, N, ArgStr]).
 
 run_git(Path, Cmd) ->
-    lager:debug("Running: ~s", [gitcmd(Path, Cmd)]),
+    lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
     os:cmd(gitcmd(Path, Cmd)).
 
 run_riak(N, Path, Cmd) ->
@@ -278,10 +278,10 @@ stop_all(DevPath) ->
                     "ok" -> "ok";
                     _ -> "wasn't running"
                 end,
-                lager:debug("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
+                lager:info("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
             end,
             [Stop(D) || D <- Devs];
-        _ -> lager:debug("~s is not a directory.", [DevPath])
+        _ -> lager:info("~s is not a directory.", [DevPath])
     end,
     ok.
 
@@ -310,7 +310,7 @@ interactive(Node, Command, Exp) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Cmd = riakcmd(Path, N, Command),
-    lager:debug("Opening a port for riak ~s.", [Command]),
+    lager:info("Opening a port for riak ~s.", [Command]),
     P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))},
                   [stream, use_stdio, exit_status, binary, stderr_to_stdout]),
     interactive_loop(P, Exp).
@@ -384,16 +384,16 @@ admin(Node, Args) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Cmd = riak_admin_cmd(Path, N, Args),
-    lager:debug("Running: ~s", [Cmd]),
+    lager:info("Running: ~s", [Cmd]),
     Result = os:cmd(Cmd),
-    lager:debug("~s", [Result]),
+    lager:info("~s", [Result]),
     {ok, Result}.
 
 riak(Node, Args) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Result = run_riak(N, Path, Args),
-    lager:debug("~s", [Result]),
+    lager:info("~s", [Result]),
     {ok, Result}.
 
 node_id(Node) ->

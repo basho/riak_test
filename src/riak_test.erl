@@ -89,7 +89,7 @@ main(Args) ->
     %% Fileoutput
     Outdir = proplists:get_value(outdir, ParsedArgs),
     ConsoleLagerLevel = case Outdir of
-        undefined -> rt:config(rt_lager_level, debug);
+        undefined -> rt:config(lager_level, info);
         _ ->
             filelib:ensure_dir(Outdir),
             notice

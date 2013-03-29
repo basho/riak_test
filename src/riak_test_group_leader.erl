@@ -107,4 +107,4 @@ io_requests(_, Result) ->
 
 %% If we get multiple lines, we'll split them up for lager to maximize the prettiness.
 log_chars(Chars) ->
-    [lager:debug("~s", [Line]) || Line <- string:tokens(lists:flatten(Chars), "\n")].
+    [lager:info("~s", [Line]) || Line <- string:tokens(lists:flatten(Chars), "\n")].

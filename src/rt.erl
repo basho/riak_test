@@ -338,7 +338,7 @@ slow_upgrade(Node, NewVersion, Nodes) ->
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
     R = try_join(Node, PNode),
-    lager:debug("[join] ~p to (~p): ~p", [Node, PNode, R]),
+    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
     ?assertEqual(ok, R),
     ok.
 
@@ -355,7 +355,7 @@ try_join(Node, PNode) ->
 %% @doc Have the `Node' leave the cluster
 leave(Node) ->
     R = try_leave(Node),
-    lager:debug("[leave] ~p: ~p", [Node, R]),
+    lager:info("[leave] ~p: ~p", [Node, R]),
     ?assertEqual(ok, R),
     ok.
 
@@ -1173,10 +1173,10 @@ config_or_os_env(Config) ->
             MSG = io_lib:format("Neither riak_test.~p nor ENV['~p'] are defined", [Config, OSEnvVar]),
             erlang:error(binary_to_list(iolist_to_binary(MSG)));
         {undefined, V} ->
-            lager:debug("Found riak_test.~s: ~s", [Config, V]),
+            lager:info("Found riak_test.~s: ~s", [Config, V]),
             V;
         {V, _} ->
-            lager:debug("Found ENV[~s]: ~s", [OSEnvVar, V]),
+            lager:info("Found ENV[~s]: ~s", [OSEnvVar, V]),
             rt:set_config(Config, V),
             V
     end.
@@ -1187,10 +1187,10 @@ config_or_os_env(Config, Default) ->
     case {get_os_env(OSEnvVar, undefined), config(Config, undefined)} of
         {undefined, undefined} -> Default;
         {undefined, V} ->
-            lager:debug("Found riak_test.~s: ~s", [Config, V]),
+            lager:info("Found riak_test.~s: ~s", [Config, V]),
             V;
         {V, _} ->
-            lager:debug("Found ENV[~s]: ~s", [OSEnvVar, V]),
+            lager:info("Found ENV[~s]: ~s", [OSEnvVar, V]),
             rt:set_config(Config, V),
             V
     end.
