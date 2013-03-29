@@ -45,7 +45,7 @@ confirm() ->
 
     [?assertEqual(8, get_counter(HP, Key)) || HP <- Hosts],
 
-    lager:debug("Partition cluster in two."),
+    lager:info("Partition cluster in two."),
 
     PartInfo = rt:partition([N1, N2], [N3, N4]),
 
@@ -64,7 +64,7 @@ confirm() ->
     [?assertEqual(6, get_counter(HP, Key)) || HP <- [HP3, HP4]],
 
     %% heal
-    lager:debug("Heal and check merged values"),
+    lager:info("Heal and check merged values"),
     ok = rt:heal(PartInfo),
     ok = rt:wait_for_cluster_service(Nodes, riak_dt),
 
