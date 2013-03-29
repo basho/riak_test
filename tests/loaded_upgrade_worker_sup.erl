@@ -142,6 +142,9 @@ mapred_tester(Node, Count, Pid, Vsn) ->
     end,
     mapred_tester(Node, Count + 1, PBC, Vsn).
 
+twoi_tester(Node, 0, undefined, legacy) ->
+    lager:warning("Legacy nodes do not have 2i load applied"),
+    twoi_tester(Node, 1, undefined, legacy);
 twoi_tester(Node, Count, Pid, legacy) ->
     twoi_tester(Node, Count + 1, Pid, legacy);
 twoi_tester(Node, Count, Pid, Vsn) ->
