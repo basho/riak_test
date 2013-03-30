@@ -22,7 +22,9 @@ confirm() ->
             {riak_kv,
                 [
                  %% TODO: confirm AAE options with Joe
-                 {anti_entropy, {on, []}}
+                 {anti_entropy, {on, []}},
+                 {anti_entropy_build_limit, {100, 1000}},
+                 {anti_entropy_concurrency, 100}
                 ]
             },
             {riak_repl,
