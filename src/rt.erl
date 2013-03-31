@@ -129,6 +129,7 @@
          wait_until_nodes_ready/1,
          wait_until_pingable/1,
          wait_until_ready/1,
+         wait_until_registered/2,
          wait_until_ring_converged/1,
          wait_until_status_ready/1,
          wait_until_transfers_complete/1,
@@ -691,6 +692,25 @@ wait_until_unpingable(Node) ->
     %% Hard coding a 6 minute timeout on this wait only. This function is called to see that
     %% riak has stopped. Riak stop should only take about 5 minutes before its timeouts kill
     %% the process. This wait should at least wait that long.
+    Delay = rt:config(rt_retry_delay),
+    Retry = 360000 div Delay,
+    ?assertEqual(ok, wait_until(Node, F, Retry, Delay, TimeoutFun)),
+    ok.
+
+
+% Waits untill a certain regiestered name pops up on the remote node.
+wait_until_registered(Node, Name) ->
+    lager:info("Wait until the ring manager is up on ~p", [Node]),
+
+    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    F = fun(N) ->
+                Registered = rpc:call(Node, erlang, registered, []),
+                lists:member(riak_core_ring_manager, Registered)
+        end,
+    TimeoutFun = fun(N) ->
+                lager:info("The server with the namee ~p on ~p is not coming up.", [Name, Node]),
+                fail
+        end,
     Delay = rt:config(rt_retry_delay),
     Retry = 360000 div Delay,
     ?assertEqual(ok, wait_until(Node, F, Retry, Delay, TimeoutFun)),
