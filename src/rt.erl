@@ -702,12 +702,11 @@ wait_until_unpingable(Node) ->
 wait_until_registered(Node, Name) ->
     lager:info("Wait until the ring manager is up on ~p", [Node]),
 
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    F = fun(N) ->
+    F = fun(_) ->
                 Registered = rpc:call(Node, erlang, registered, []),
                 lists:member(riak_core_ring_manager, Registered)
         end,
-    TimeoutFun = fun(N) ->
+    TimeoutFun = fun(_) ->
                 lager:info("The server with the namee ~p on ~p is not coming up.", [Name, Node]),
                 fail
         end,
