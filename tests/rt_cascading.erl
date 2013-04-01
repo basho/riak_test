@@ -4,6 +4,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(bucket, <<"objects">>).
+
 -export([confirm/0]).
 
 % cluster_mgr port = 10006 + 10n where n is devN
@@ -407,12 +409,98 @@ circle_and_spurs_test_() ->
 
     ] end}}.
 
+new_to_old_test_() ->
+    %      +------+
+    %      | New1 |
+    %      +------+
+    %      ^       \
+    %     /         V
+    % +------+    +------+
+    % | New3 | <- | Old2 |
+    % +------+    +------+
+    %
+    {timeout, 60000, {setup, fun() ->
+        Conf = conf(),
+        DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
+        [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
+        [repl_util:make_cluster([N]) || N <- Nodes],
+        Names = ["new1", "old2", "new3"],
+        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+        [repl_util:wait_until_is_leader(N) || N <- Nodes],
+        connect_rt(New1, 10026, "old2"),
+        connect_rt(Old2, 10036, "new3"),
+        connect_rt(New3, 10016, "new1"),
+        Nodes
+    end,
+    fun(Nodes) ->
+        rt:clean_cluster(Nodes)
+    end,
+    fun([New1, Old2, New3]) -> [
+
+        {"From new1 to old2", timeout, 30000, fun() ->
+            Client = rt:pbc(New1),
+            Bin = <<"new1 to old2">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w, 1}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual(Bin, maybe_eventually_exists(Old2, ?bucket, Bin)),
+            ?assertEqual({error, notfound}, maybe_eventually_exists(New3, ?bucket, Bin))
+        end},
+
+        {"old2 does not cascade at all", timeout, 30000, fun() ->
+            Client = rt:pbc(New1),
+            Bin = <<"old2 no cascade">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w, 1}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual(Bin, maybe_eventually_exists(Old2, ?bucket, Bin)),
+            ?assertEqual({error, notfound}, maybe_eventually_exists(New3, ?bucket, Bin))
+        end},
+
+        {"from new3 to old2", timeout, 30000, fun() ->
+            Client = rt:pbc(New3),
+            Bin = <<"new3 to old2">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w, 1}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual(Bin, maybe_eventually_exists(New1, ?bucket, Bin)),
+            ?assertEqual(Bin, maybe_eventually_exists(Old2, ?bucket, Bin))
+        end},
+
+        {"from old2 to new1", timeout, 30000, fun() ->
+            Client = rt:pbc(Old2),
+            Bin = <<"old2 to new1">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w,1}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual(Bin, maybe_eventually_exists(New3, ?bucket, Bin)),
+            ?assertEqual(Bin, maybe_eventually_exists(New1, ?bucket, Bin))
+        end}
+
+    ] end}}.
+
 %% =====
 %% utility functions for teh happy
 %% ====
 
 conf() ->
-    [{riak_repl, [
+    [{lager, [
+        {handlers, [
+            {lager_console_backend,info},
+            {lager_file_backend, [
+                {"./log/error.log",error,10485760,"$D0",5},
+                {"./log/console.log",info,10485760,"$D0",5},
+                {"./log/debug.log",debug,10485760,"$D0",5}
+            ]}
+        ]},
+        {crash_log,"./log/crash.log"},
+        {crash_log_msg_size,65536},
+        {crash_log_size,10485760},
+        {crash_log_date,"$D0"},
+        {crash_log_count,5},
+        {error_logger_redirect,true}
+    ]},
+    {riak_repl, [
         {fullsync_on_connect, false},
         {fullsync_interval, disabled},
         {diff_batch_size, 10}
