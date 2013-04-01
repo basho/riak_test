@@ -179,9 +179,19 @@ wait_for_connection(Node, Name) ->
         fun(_) ->
                 {ok, Connections} = rpc:call(Node, riak_core_cluster_mgr,
                     get_connections, []),
-                lists:any(fun({{cluster_by_name, N}, _}) when N == Name -> true;
-                        (_) -> false
-                    end, Connections)
+                Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
+                case Conn of
+                    [] ->
+                        false;
+                    [Pid] ->
+                        Pid ! {self(), status},
+                        receive
+                            {Pid, status, _} ->
+                                true;
+                            {Pid, connecting, _} ->
+                                false
+                        end
+                end
         end).
 
 enable_realtime(Node, Cluster) ->
