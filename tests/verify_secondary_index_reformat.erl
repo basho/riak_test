@@ -21,6 +21,7 @@
 -behaviour(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+-include("rt_riakc.hrl").
 
 confirm() ->
     [Node] = rt:build_cluster([previous]),
@@ -39,8 +40,7 @@ confirm() ->
     Client0 = rt:pbc(Node),
     Obj0 = riakc_obj:new(TestBucket, TestKey, <<"somevalue">>),
     ObjMD0 = riakc_obj:get_update_metadata(Obj0),
-    ObjMD1 = riakc_obj:set_secondary_index(ObjMD0,
-                                           [{TestIndex, [TestIdxValue]}]),
+    ObjMD1 = set_secondary_index_compat(ObjMD0, [{TestIndex, [TestIdxValue]}]),
     Obj1 = riakc_obj:update_metadata(Obj0, ObjMD1),
     ok = riakc_pb_socket:put(Client0, Obj1),
 
