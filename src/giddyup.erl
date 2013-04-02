@@ -48,6 +48,9 @@ get_suite(Platform) ->
     [ { binary_to_atom(kvc:path(name, Test), utf8), TestProps(Test) } || Test <- Tests].
 
 get_schema(Platform) ->
+    get_schema(Platform, 3).
+
+get_schema(Platform, Retries) ->
     Host = rt:config(giddyup_host),
     Project = rt:config(rt_project),
     Version = rt:get_version(),
@@ -55,9 +58,12 @@ get_schema(Platform) ->
     lager:info("giddyup url: ~s", [URL]),
 
     check_ibrowse(),
-    case ibrowse:send_req(URL, [], get, [], []) of
-        {ok, "200", _Headers, JSON} -> mochijson2:decode(JSON);
-        _ -> []
+    case {Retries, ibrowse:send_req(URL, [], get, [], [])} of
+        {_, {ok, "200", _Headers, JSON}} -> mochijson2:decode(JSON);
+        {0, _} -> exit(1);
+        {_, _} ->
+            timer:sleep(60000),
+            get_schema(Platform, Retries - 1)
     end.
 
 -spec post_result([{atom(), term()}]) -> atom().
