@@ -155,12 +155,12 @@ twoi_tester(Node, Count, Pid, Vsn) ->
       riakc_pb_socket:get_index(
                               PBC,
                               loaded_upgrade:bucket(twoi),
-                              {binary_index, "plustwo"},
+                              <<"plustwo_bin">>,
                               loaded_upgrade:int_to_key(Key + 2)),
       riakc_pb_socket:get_index(
                               PBC, 
                               loaded_upgrade:bucket(twoi),
-                              {integer_index, "plusone"},
+                              <<"plusone_int">>,
                               Key + 1)
      } of 
         {{ok, BinKeys}, {ok, IntKeys}} ->
