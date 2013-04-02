@@ -239,6 +239,8 @@ confirm() ->
 
     lager:info("Connectivity tests passed"),
 
+    repl_util:disconnect_cluster(Node1, "B"),
+
     lager:info("Re-deploying 6 nodes"),
 
     Nodes = rt:deploy_nodes(6, BaseConf),
@@ -261,6 +263,8 @@ confirm() ->
 
     lager:info("Build cluster B"),
     repl_util:make_cluster(BNodes),
+
+    repl_util:disconnect_cluster(Node1, "B"),
 
     replication2:replication(ANodes, BNodes, false),
 
