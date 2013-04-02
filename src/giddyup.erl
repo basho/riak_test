@@ -60,8 +60,12 @@ get_schema(Platform, Retries) ->
     check_ibrowse(),
     case {Retries, ibrowse:send_req(URL, [], get, [], [])} of
         {_, {ok, "200", _Headers, JSON}} -> mochijson2:decode(JSON);
-        {0, _} -> exit(1);
-        {_, _} ->
+        {0, Error} ->
+            lager:error("GiddyUp GET failed: ~p", [Error]),
+            exit(1);
+        {_, Error} ->
+            lager:warning("GiddyUp GET failed: ~p", [Error]),
+            lager:warning("GiddyUp trying ~p more times", [Retries]),
             timer:sleep(60000),
             get_schema(Platform, Retries - 1)
     end.
