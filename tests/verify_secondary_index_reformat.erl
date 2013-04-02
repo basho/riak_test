@@ -31,7 +31,7 @@ confirm() ->
 
     TestBucket = <<"test">>,
     TestKey = <<"badindex">>,
-    TestIndex = {integer_index, "foo"},
+    TestIndex = <<"foo_int">>,
     TestIdxValue = 1362400142028,
 
     %% write key with index that old version of sext would encode improperly (not perserving
