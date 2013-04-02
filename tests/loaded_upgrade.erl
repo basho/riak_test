@@ -27,6 +27,8 @@
 
 -define(TIME_BETWEEN_UPGRADES, 300). %% Seconds!
 
+-include("rt_riakc.hrl").
+
 confirm() ->
 
     case whereis(loaded_upgrade) of
@@ -186,7 +188,7 @@ twoi_seed(Node) ->
     ValFun = fun(Key) ->
         Obj = riakc_obj:new(bucket(twoi), iolist_to_binary(io_lib:format("~p", [Key])), kv_valgen(Key)),
         MD1 = riakc_obj:get_update_metadata(Obj),
-        MD2 = riakc_obj:set_secondary_index(MD1, [
+        MD2 = set_secondary_index_compat(MD1, [
             {{integer_index, "plusone"}, [Key + 1, Key + 10000]},
             {{binary_index, "plustwo"}, [int_to_key(Key + 2)]}
         ]),
