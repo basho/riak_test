@@ -37,7 +37,7 @@ confirm() ->
     lager:info("testing invalid timeout value"),
     {error, Tup4} = rhc:get(HC, <<"foo">>, <<"bar">>, [{timeout, asdasdasd}]),
     ?assertMatch({ok, "400", _,
-                  <<"Bad timeout value \"asdasdasd\", using 60000\n">>}, 
+                  <<"Bad timeout value \"asdasdasd\"\n">>}, 
                  Tup4),
 
     lager:info("testing GET still works before long timeout"),
