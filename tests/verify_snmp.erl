@@ -62,6 +62,14 @@ confirm() ->
     rt:systest_write(Node1, 10),
     rt:systest_read(Node1, 10),
 
+    lager:info("Waiting for HTTP Stats to be non-zero"),
+    ?assertEqual(ok, 
+                 rt:wait_until(Node1, fun(N) -> 
+                    Stats = get_stats(N),
+                    proplists:get_value(<<"vnode_gets">>, Stats) =/= 0
+                 end)),
+
+
     verify_eq(OIDPairs, Node1),
     pass.
 
