@@ -62,20 +62,15 @@ confirm() ->
     rt:systest_write(Node1, 10),
     rt:systest_read(Node1, 10),
 
-    lager:info("Fetching HTTP stats"),
-
-    Stats = get_stats(Node1),
-
-    lager:info("Waiting for stats to propagate to SNMP"),
-
-    verify_eq(Stats, OIDPairs, Node1),
+    verify_eq(OIDPairs, Node1),
     pass.
 
-verify_eq(Stats, Keys, Node) ->
+verify_eq(Keys, Node) ->
     {OIDs, HKeys} = lists:unzip(Keys),
     ?assertEqual(ok,
                  rt:wait_until(Node,
                                fun(N) ->
+                                       Stats = get_stats(Node),
                                        SStats = rpc:call(N, snmpa, get, [snmp_master_agent, OIDs]),
                                        SPairs = lists:zip(SStats, HKeys),
                                        lists:all(
