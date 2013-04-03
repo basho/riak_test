@@ -62,6 +62,9 @@ confirm() ->
     rt:systest_write(Node1, 10),
     rt:systest_read(Node1, 10),
 
+    lager:info("Sleeping to wait for writes and reads to make it to stats"),
+    timer:sleep(10000),
+
     lager:info("Fetching HTTP stats"),
 
     Stats = get_stats(Node1),
