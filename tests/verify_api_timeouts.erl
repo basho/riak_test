@@ -22,25 +22,23 @@ confirm() ->
 
     lager:info("testing GET timeout"),
     {error, Tup1} = rhc:get(HC, <<"foo">>, <<"bar">>, [{timeout, 100}]),
-    {ok, "503", _, GET} = Tup1,
-    ?assertEqual(GET, <<"request timed out\n">>),
+    ?assertMatch({ok, "503", _, <<"request timed out\n">>}, Tup1),
     
     lager:info("testing PUT timeout"),
     {error, Tup2} = rhc:put(HC, riakc_obj:new(<<"foo">>, <<"bar">>,
                                               <<"getgetgetgetget\n">>),
                             [{timeout, 100}]),
-    {ok, "503", _, PUT} = Tup2,
-    ?assertEqual(PUT, <<"request timed out\n">>),
+    ?assertMatch({ok, "503", _, <<"request timed out\n">>}, Tup2),
  
     lager:info("testing DELETE timeout"),
     {error, Tup3} = rhc:delete(HC, <<"foo">>, <<"bar">>, [{timeout, 100}]),
-    {ok, "503", _, DEL} = Tup3,
-    ?assertEqual(DEL, <<"request timed out\n">>),
-
+    ?assertMatch({ok, "503", _, <<"request timed out\n">>}, Tup3),
+    
     lager:info("testing invalid timeout value"),
     {error, Tup4} = rhc:get(HC, <<"foo">>, <<"bar">>, [{timeout, asdasdasd}]),
-    {ok, "400", _, INV} = Tup4,
-    ?assertEqual(INV, <<"Bad timeout value \"asdasdasd\", using 60000\n">>),
+    ?assertMatch({ok, "400", _,
+                  <<"Bad timeout value \"asdasdasd\", using 60000\n">>}, 
+                 Tup4),
 
     lager:info("testing GET still works before long timeout"),
     {ok, O} = rhc:get(HC, <<"foo">>, <<"bar">>, [{timeout, 4000}]),
@@ -53,7 +51,8 @@ confirm() ->
         <<"getgetgetgetget\n">> -> 
             lager:info("New Value"),
             ok;
-        _ -> ?assertEqual(true, false)
+        V -> ?assertEqual({object_value, <<"getgetgetgetget\n">>}, 
+                          {object_value, V})
     end,
 
 
@@ -80,16 +79,8 @@ confirm() ->
     ?assertEqual(BOOM, PDEL),
 
     lager:info("testing invalid timeout value"),
-    try
-        _ = riakc_pb_socket:get(PC, <<"foo">>, <<"bar2">>, 
-                                [{timeout, asdasdasd}]),
-        erlang:error("should never get here")
-    catch
-        error:badarg -> 
-            ok;
-        C:E -> 
-            lager:error("~p:~p", [C,E])
-    end,
+    ?assertError(badarg, riakc_pb_socket:get(PC, <<"foo">>, <<"bar2">>, 
+                                             [{timeout, asdasdasd}])),
 
     lager:info("testing GET still works before long timeout"),
     {ok, O2} = riakc_pb_socket:get(PC, <<"foo">>, <<"bar2">>, 
@@ -103,12 +94,7 @@ confirm() ->
         <<"foobarbaz2\n">> -> 
             lager:info("Original Value"),
             ok;
-        _ -> ?assertEqual(true, false)
+        V2 -> ?assertEqual({object_value, <<"get2get2get2get2get\n">>}, 
+                           {object_value, V2})
     end,
-
-
     pass.    
-
-
-
-
