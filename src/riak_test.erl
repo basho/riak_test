@@ -40,7 +40,8 @@ cli_options() ->
  {dir,                $d, "dir",      string,     "run all tests in the specified directory"},
  {verbose,            $v, "verbose",  undefined,  "verbose output"},
  {outdir,             $o, "outdir",   string,     "output directory"},
- {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
+ {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb | multi]"},
+ {multi_config,       $m, "multicfg", atom,       "if using multi-backend use configuration [default | indexmix]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"}
 ].
@@ -152,6 +153,7 @@ parse_command_line_tests(ParsedArgs) ->
         [] -> [undefined];
         Other -> Other
     end,
+    MultiConfig = proplists:get_value(multi_config, ParsedArgs, default),
     Upgrades = case proplists:get_all_values(upgrade_version, ParsedArgs) of
                    [] -> [undefined];
                    UpgradeList -> UpgradeList
@@ -175,7 +177,8 @@ parse_command_line_tests(ParsedArgs) ->
                   {project, list_to_binary(rt:config(rt_project, "undefined"))}
               ] ++
               [ {backend, Backend} || Backend =/= undefined ] ++
-              [ {upgrade_version, Upgrade} || Upgrade =/= undefined ]}
+              [ {upgrade_version, Upgrade} || Upgrade =/= undefined ] ++
+              [ {multi_config, MultiConfig} || Backend =:= multi ]}
              || Backend <- Backends,
                 Upgrade <- Upgrades ] ++ Tests
         end, [], lists:usort(DirTests ++ SpecificTests)).

@@ -43,7 +43,11 @@ metadata(Pid) ->
 confirm(TestModule, Outdir, TestMetaData) ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, []),
-    Backend = rt:set_backend(proplists:get_value(backend, TestMetaData)),
+    BackendExtras = case proplists:get_value(multi_config, TestMetaData) of
+                        undefined -> [];
+                        Value -> [{multi_config, Value}]
+                    end,
+    Backend = rt:set_backend(proplists:get_value(backend, TestMetaData), BackendExtras),
     
     {Status, Reason} = case check_prereqs(TestModule) of
         true ->

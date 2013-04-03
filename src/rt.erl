@@ -89,6 +89,7 @@
          riak/2,
          rpc_get_env/2,
          set_backend/1,
+         set_backend/2,
          set_config/2,
          setup_harness/2,
          slow_upgrade/3,
@@ -1035,18 +1036,40 @@ enable_search_hook(Node, Bucket) when is_binary(Bucket) ->
 %%      Currently, there is no way to request multiple backends, so the
 %%      list return type should be considered an error.
 -spec set_backend(atom()) -> atom()|[atom()].
-set_backend(bitcask) ->
+set_backend(Backend) ->
+    set_backend(Backend, []).
+
+-spec set_backend(atom(), [{atom(), term()}]) -> atom()|[atom()].
+set_backend(bitcask, _) ->
     set_backend(riak_kv_bitcask_backend);
-set_backend(eleveldb) ->
+set_backend(eleveldb, _) ->
     set_backend(riak_kv_eleveldb_backend);
-set_backend(memory) ->
+set_backend(memory, _) ->
     set_backend(riak_kv_memory_backend);
-set_backend(Backend) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
+set_backend(Backend, _) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
     lager:info("rt:set_backend(~p)", [Backend]),
     ?HARNESS:set_backend(Backend);
-set_backend(Other) ->
+set_backend(Backend, Extras) when Backend == multi; Backend == riak_kv_multi_backend ->
+    MultiConfig = proplists:get_value(multi_config, Extras, default),
+    set_multi_backend(MultiConfig);
+set_backend(Other, _) ->
     lager:warning("rt:set_backend doesn't recognize ~p as a legit backend, using the default.", [Other]),
     ?HARNESS:get_backends().
+
+set_multi_backend(default) ->
+    Config = [{multi_backend_default, <<"eleveldb1">>},
+              {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                               {<<"memory1">>, riak_kv_memory_backend, []},
+                               {<<"bitcask1">>, riak_kv_bitcask_backend, []}]}],
+    ?HARNESS:set_backend(riak_kv_multi_backend, Config);
+set_multi_backend(indexmix) ->
+    Config = [{multi_backend_default, <<"eleveldb1">>},
+              {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                               {<<"memory1">>, riak_kv_memory_backend, []}]}],
+    ?HARNESS:set_backend(riak_kv_multi_backend, Config);
+set_multi_backend(Other) ->
+    lager:warning("rt:set_multi_backend doesn't recognize ~p as legit multi-backend config, using default", [Other]),
+    set_multi_backend(default).
 
 %% @doc Gets the current version under test. In the case of an upgrade test
 %%      or something like that, it's the version you're upgrading to.
