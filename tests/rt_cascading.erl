@@ -30,6 +30,9 @@ confirm() ->
 }).
 
 simple_test_() ->
+    % +-----------+    +--------+    +-----+
+    % | beginning | -> | middle | -> | end |
+    % +-----------+    +--------+    +-----+
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
         [BeginNode, MiddleNode, EndNode] = Nodes = rt:deploy_nodes(3, Conf),
@@ -75,6 +78,29 @@ simple_test_() ->
     ] end}}.
 
 big_circle_test_() ->
+    % Initally just 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 1, but then 2 way is 
+    % added later.
+    %     +---+
+    %     | 1 |
+    %     +---+
+    %     ^   ^
+    %    /     \
+    %   V       V
+    % +---+   +---+
+    % | 6 |   | 2 |
+    % +---+   +---+
+    %   ^       ^
+    %   |       |
+    %   V       V
+    % +---+   +---+
+    % | 5 |   | 3 |
+    % +---+   +---+
+    %     ^   ^
+    %      \ /
+    %       V
+    %     +---+
+    %     | 4 |
+    %     +---+
     {timeout, 10000, {setup, fun() ->
         Conf = conf(),
         Nodes = rt:deploy_nodes(6, Conf),
@@ -160,6 +186,14 @@ big_circle_test_() ->
     ] end}}.
 
 circle_test_() ->
+    %      +-----+
+    %      | one |
+    %      +-----+
+    %      ^      \
+    %     /        V
+    % +-------+    +-----+
+    % | three | <- | two |
+    % +-------+    +-----+
     {timeout, 10000, {setup, fun() ->
         Conf = conf(),
         [One, Two, Three] = Nodes = rt:deploy_nodes(3, Conf),
@@ -214,6 +248,20 @@ circle_test_() ->
     ] end}}.
 
 pyramid_test_() ->
+    %        +-----+
+    %        | top |
+    %        +-----+
+    %       /       \
+    %      V         V
+    % +------+   +-------+
+    % | left |   | right |
+    % +------+   +-------+
+    %     |          |
+    %     V          V
+    % +-------+  +--------+
+    % | left2 |  | right2 |
+    % +-------+  +--------+
+
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
         [Top, Left, _Left2, Right, _Right2] = Nodes = rt:deploy_nodes(5, Conf),
