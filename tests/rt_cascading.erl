@@ -457,6 +457,92 @@ circle_and_spurs_test_() ->
 
     ] end}}.
 
+mixed_version_clusters_test_() ->
+    %      +-----+
+    %      | n12 |
+    %      +-----+
+    %      ^      \
+    %     /        V
+    % +-----+    +-----+
+    % | n56 | <- | n34 |
+    % +-----+    +-----+
+    {timeout, 60000, {setup, fun() ->
+        Conf = conf(),
+        DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
+        Nodes = rt:deploy_nodes(DeployConfs),
+        [N1, N2, N3, N4, N5, N6] =  Nodes,
+        N12 = [N1, N2],
+        N34 = [N3, N4],
+        N56 = [N5, N6],
+        repl_util:make_cluster(N12),
+        repl_util:make_cluster(N34),
+        repl_util:make_cluster(N56),
+        repl_util:name_cluster(N1, "n12"),
+        repl_util:name_cluster(N3, "n34"),
+        repl_util:name_cluster(N5, "n56"),
+        [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
+        connect_rt(N1, 10036, "n34"),
+        connect_rt(N3, 10056, "n56"),
+        connect_rt(N5, 10016, "n12"),
+        Nodes
+    end,
+    fun(Nodes) ->
+        rt:clean_cluster(Nodes)
+    end,
+    fun([N1, N2, N3, N4, N5, N6]) -> [
+
+        {"no cascading at first", timeout, 20000, [
+            {timeout, 10000, fun() ->
+                Client = rt:pbc(N1),
+                Bin = <<"no cascade yet">>,
+                Obj = riakc_obj:new(?bucket, Bin, Bin),
+                riakc_pb_socket:put(Client, Obj, [{w, 1}]),
+                riakc_pb_socket:stop(Client),
+                ?assertEqual({error, notfound}, maybe_eventually_exists([N5, N6], ?bucket, Bin)),
+                ?assertEqual(Bin, maybe_eventually_exists([N3, N4], ?bucket, Bin))
+            end},
+
+            {timeout, 10000, fun() ->
+                Client = rt:pbc(N2),
+                Bin = <<"no cascade yet 2">>,
+                Obj = riakc_obj:new(?bucket, Bin, Bin),
+                riakc_pb_socket:put(Client, Obj, [{w, 1}]),
+                riakc_pb_socket:stop(Client),
+                ?assertEqual({error, notfound}, maybe_eventually_exists([N5, N6], ?bucket, Bin)),
+                ?assertEqual(Bin, maybe_eventually_exists([N3, N4], ?bucket, Bin))
+            end}
+        ]},
+
+        {"mixed source can send", timeout, 20000, fun() ->
+            rt:upgrade(N1, current),
+
+            [{timeout, 10000, fun() ->
+                Client = rt:pbc(N1),
+                Bin = <<"rt after upgrade">>,
+                Obj = riakc_obj:new(?bucket, Bin, Bin),
+                riakc_pb_socket:put(Client, Obj, [{w, 1}]),
+                riakc_pb_socket:stop(Client),
+                ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin)),
+                ?assertEqual(Bin, maybe_eventually_exists(N3, ?bucket, Bin))            end},
+
+            {timeout, 10000, fun() ->
+                Client = rt:pbc(N2),
+                Bin = <<"rt after upgrade 2">>,
+                Obj = riakc_obj:new(?bucket, Bin, Bin),
+                riakc_pb_socket:put(Client, Obj, [{w, 1}]),
+                riakc_pb_socket:stop(Client),
+                ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin)),
+                ?assertEqual(Bin, maybe_eventually_exists([N3,N4], ?bucket, Bin))
+            end}]
+        end}%,
+
+%        {"upgrade already upgraded", timeout, 30000, fun() ->
+%            rt:upgrade(N1, current),
+%            ?assert(true)
+%        end}
+
+    ] end}}.
+
 new_to_old_test_() ->
     %      +------+
     %      | New1 |
@@ -515,14 +601,18 @@ new_to_old_test_() ->
             ?assertEqual(Bin, maybe_eventually_exists(Old2, ?bucket, Bin))
         end},
 
-        {"from old2 to new1", timeout, 30000, fun() ->
+        {"from old2 to new3 no cascade", timeout, 30000, fun() ->
+            % in the future, cascading may be able to occur even if it starts
+            % from an older source cluster/node. It is prevented for now by
+            % having no easy/good way to get the name of the source cluster,
+            % thus preventing complete information on the routed clusters.
             Client = rt:pbc(Old2),
-            Bin = <<"old2 to new1">>,
+            Bin = <<"old2 to new3">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
             riakc_pb_socket:put(Client, Obj, [{w,1}]),
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(New3, ?bucket, Bin)),
-            ?assertEqual(Bin, maybe_eventually_exists(New1, ?bucket, Bin))
+            ?assertEqual({error, notfound}, maybe_eventually_exists(New1, ?bucket, Bin))
         end}
 
     ] end}}.
@@ -559,23 +649,38 @@ connect_rt(SourceNode, SinkPort, SinkName) ->
     repl_util:enable_realtime(SourceNode, SinkName),
     repl_util:start_realtime(SourceNode, SinkName).
 
+exists(Nodes, Bucket, Key) ->
+    exists({error, notfound}, Nodes, Bucket, Key).
+
+exists(Got, [], _Bucket, _Key) ->
+    Got;
+exists({error, notfound}, [Node | Tail], Bucket, Key) ->
+    Pid = rt:pbc(Node),
+    Got = riakc_pb_socket:get(Pid, Bucket, Key),
+    riakc_pb_socket:stop(Pid),
+    exists(Got, Tail, Bucket, Key);
+exists(Got, _Nodes, _Bucket, _Key) ->
+    Got.
+
 maybe_eventually_exists(Node, Bucket, Key) ->
     maybe_eventually_exists(Node, Bucket, Key, 10, 1000).
 
-maybe_eventually_exists(Node, Bucket, Key, MaxTries, WaitMs) ->
-    Pid = rt:pbc(Node),
-    Got = riakc_pb_socket:get(Pid, Bucket, Key),
-    maybe_eventually_exists(Got, Pid, Node, Bucket, Key, MaxTries - 1, WaitMs).
+maybe_eventually_exists(Node, Bucket, Key, MaxTries, WaitMs) when is_atom(Node) ->
+    maybe_eventually_exists([Node], Bucket, Key, MaxTries, WaitMs);
 
-maybe_eventually_exists({error, notfound}, Pid, Node, Bucket, Key, MaxTries, WaitMs) when MaxTries > 0 ->
+maybe_eventually_exists(Nodes, Bucket, Key, MaxTries, WaitMs) ->
+    Got = exists(Nodes, Bucket, Key),
+    maybe_eventually_exists(Got, Nodes, Bucket, Key, MaxTries - 1, WaitMs).
+
+maybe_eventually_exists({error, notfound}, Nodes, Bucket, Key, MaxTries, WaitMs) when MaxTries > 0 ->
     timer:sleep(WaitMs),
-    Got = riakc_pb_socket:get(Pid, Bucket, Key),
-    maybe_eventually_exists(Got, Pid, Node, Bucket, Key, MaxTries - 1, WaitMs);
+    Got = exists(Nodes, Bucket, Key),
+    maybe_eventually_exists(Got, Nodes, Bucket, Key, MaxTries - 1, WaitMs);
 
-maybe_eventually_exists({ok, RiakObj}, _Pid, _Node, _Bucket, _Key, _MaxTries, _WaitMs) ->
+maybe_eventually_exists({ok, RiakObj}, _Nodes, _Bucket, _Key, _MaxTries, _WaitMs) ->
     riakc_obj:get_value(RiakObj);
 
-maybe_eventually_exists(Got, _Pid, _Node, _Bucket, _Key, _MaxTries, _WaitMs) ->
+maybe_eventually_exists(Got, _Nodes, _Bucket, _Key, _MaxTries, _WaitMs) ->
     Got.
 
 wait_for_rt_started(Node, ToName) ->
