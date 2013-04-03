@@ -78,7 +78,13 @@ verify_eq(Stats, Keys, Node) ->
                                fun(N) ->
                                        SStats = rpc:call(N, snmpa, get, [snmp_master_agent, OIDs]),
                                        SPairs = lists:zip(SStats, HKeys),
-                                       lists:all(fun({A,B}) -> A == proplists:get_value(B, Stats) end, SPairs)
+                                       lists:all(
+                                            fun({A,B}) -> 
+                                                Stat = proplists:get_value(B, Stats),
+                                                lager:info("Comparing ~p | Stats ~p ~~ SNMP ~p", [B, Stat, A]),
+                                                A == Stat 
+                                            end, 
+                                            SPairs)
                                end)).
 
 get_stats(Node) ->
