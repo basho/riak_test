@@ -10,11 +10,15 @@ confirm() ->
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     BaseConf = [
-            {riak_repl,
-             [
+        {riak_core,
+            [
+                {ssl_enabled, false}
+            ]},
+        {riak_repl,
+            [
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled}
-             ]}
+            ]}
     ],
 
     %% XXX for some reason, codew:priv_dir returns riak_test/riak_test/priv,
@@ -206,6 +210,16 @@ confirm() ->
     rt:log_to_nodes([Node1, Node2], "Testing identical cert is disallowed"),
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
+
+    lager:info("===testing you can't connect when peer doesn't support SSL"),
+    rt:log_to_nodes([Node1, Node2], "Testing missing ssl on peer fails"),
+    ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
+            {Node2, BaseConf})),
+
+    lager:info("===testing you can't connect when local doesn't support SSL"),
+    rt:log_to_nodes([Node1, Node2], "Testing missing ssl locally fails"),
+    ?assertEqual(fail, test_connection({Node1, BaseConf},
+            {Node2, merge_config(SSLConfig2, BaseConf)})),
 
     lager:info("===testing simple SSL connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic SSL test"),
