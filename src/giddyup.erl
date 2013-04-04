@@ -43,6 +43,10 @@ get_suite(Platform) ->
             case kvc:path(tags.upgrade_version, Test) of
                 [] -> [];
                 UpgradeVsn -> [{upgrade_version, binary_to_atom(UpgradeVsn, utf8)}]
+            end ++
+            case kvc:path(tags.multi_config, Test) of
+                [] -> [];
+                MultiConfig -> [{multi_config, binary_to_atom(MultiConfig, utf8)}]
             end
         end,
     [ { binary_to_atom(kvc:path(name, Test), utf8), TestProps(Test) } || Test <- Tests].
