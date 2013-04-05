@@ -21,7 +21,7 @@ confirm() ->
     Conf = [
             {riak_kv,
                 [
-                 %% TODO: confirm AAE options with Joe
+                 %% Specify fast building of AAE trees
                  {anti_entropy, {on, []}},
                  {anti_entropy_build_limit, {100, 1000}},
                  {anti_entropy_concurrency, 100}
@@ -105,20 +105,20 @@ aae_fs_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     %%---------------------------------------------------
     %% TEST: write data, NOT replicated by RT or fullsync
-    %% keys: 1-100
+    %% keys: 1-1000
     %%---------------------------------------------------
-    lager:info("Writing 100 keys to ~p", [AFirst]),
-    ?assertEqual([], repl_util:do_write(AFirst, 1, 100, TestBucket, 2)),
+    lager:info("Writing 1000 keys to ~p", [AFirst]),
+    ?assertEqual([], repl_util:do_write(AFirst, 1, 1000, TestBucket, 2)),
 
     %% check that the keys we wrote initially aren't replicated yet, because
     %% we've disabled fullsync_on_connect
     lager:info("Check keys written before repl was connected are not present"),
-    Res2 = rt:systest_read(BFirst, 1, 100, TestBucket, 2),
-    ?assertEqual(100, length(Res2)),
+    Res2 = rt:systest_read(BFirst, 1, 1000, TestBucket, 2),
+    ?assertEqual(1000, length(Res2)),
 
     %%-----------------------------------
     %% TEST: write data, replicated by RT
-    %% keys: 101-200
+    %% keys: 1001-2000
     %%-----------------------------------
 
     %% Enable and start Real-time replication
@@ -130,17 +130,21 @@ aae_fs_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     log_to_nodes(AllNodes, "Write data to A, verify replication to B via realtime"),
     %% write some data on A
     %io:format("~p~n", [rpc:call(LeaderA, riak_repl_console, status, [quiet])]),
-    lager:info("Writing 100 more keys to ~p", [LeaderA]),
-    ?assertEqual([], repl_util:do_write(LeaderA, 101, 200, TestBucket, 2)),
+    lager:info("Writing 1000 more keys to ~p", [LeaderA]),
+    ?assertEqual([], repl_util:do_write(LeaderA, 1001, 2000, TestBucket, 2)),
 
     %% verify data is replicated to B
-    lager:info("Reading 100 keys written to ~p from ~p", [LeaderA, BFirst]),
-    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 101, 200, TestBucket, 2)),
+    lager:info("Reading 1000 keys written to ~p from ~p", [LeaderA, BFirst]),
+    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1001, 2000, TestBucket, 2)),
 
     %%---------------------------------------------------------
     %% TEST: fullsync, check that non-RT'd keys get repl'd to B
-    %% keys: 1-100
+    %% keys: 1-1000
     %%---------------------------------------------------------
+
+    %% TODO: wait for the AAE trees to be built so that we don't get a not_built error
+    lager:info("Wait for AAE trees to be built"),
+    timer:sleep(10000),
 
     %% run AAE fullsync from A -> B
     {ok, {IP, Port2}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
@@ -152,11 +156,12 @@ aae_fs_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     
     %% wait for fullsync worker to complete
     %% TODO: how?
+    lager:info("Wait for AAE fullsync to complete"),
     timer:sleep(10000),
         
     %% verify data is replicated to B
-    lager:info("Reading 100 keys written to ~p from ~p", [LeaderA, BFirst]),
-    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, 100, TestBucket, 2)),
+    lager:info("Reading 1000 keys written to ~p from ~p", [LeaderA, BFirst]),
+    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, 1000, TestBucket, 2)),
 
     ok.
 
