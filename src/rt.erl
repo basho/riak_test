@@ -32,6 +32,7 @@
          assert_which/1,
          async_start/1,
          attach/2,
+         attach_direct/2,
          build_cluster/1,
          build_cluster/2,
          build_cluster/3,
@@ -1025,6 +1026,11 @@ search_cmd(Node, Args) ->
 %%
 attach(Node, Expected) ->
     ?HARNESS:attach(Node, Expected).
+
+%% @doc Runs 'riak attach-direct' on a specific node
+%% @see rt:attach/2
+attach_direct(Node, Expected) ->
+    ?HARNESS:attach_direct(Node, Expected).
 
 %% @doc Runs `riak console' on a specific node
 %% @see rt:attach/2

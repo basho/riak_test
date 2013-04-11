@@ -33,6 +33,7 @@ confirm() ->
     %% Verify node-up behavior
     ping_up_test(Node),
     attach_up_test(Node),
+    attach_direct_up_test(Node),
     status_up_test(Node),
     console_up_test(Node),
     start_up_test(Node),
@@ -42,6 +43,7 @@ confirm() ->
     stop_test(Node),
     ping_down_test(Node),
     attach_down_test(Node),
+    attach_direct_down_test(Node),
     status_down_test(Node),
     console_test(Node),
     start_test(Node),
@@ -115,16 +117,45 @@ ping_down_test(Node) ->
 attach_up_test(Node) ->
     lager:info("Testing riak attach"),
 
-    rt:attach(Node, [{expect, "\(^D to exit\)"},
+    % Be sure the ring is ready before we test against it
+    rt:wait_until_ring_converged([Node]),
+
+    % Attach to node, confirm header and basic functionality
+    rt:attach(Node, [{expect, "\(abort with ^G\)"},
                      {send, "riak_core_ring_manager:get_my_ring()."},
                      {expect, "dict,"},
-                     {send, [4]}]), %% 4 = Ctrl + D
+                     {send, [7]}, %% 7 = Ctrl + G
+                     {send, "q"}]),
+
+    %% confirm sending ctrl-c doesn't kill (need to send twice)
+    %% then ping to ensure the node is still up
+    lager:info("Testing that CTRL-C does not kill the node"),
+    rt:attach(Node, [{expect, "\(abort with ^G\)"},
+                     {send, [3]}, %% 3 = Ctrl + C
+                     {expect, "BREAK"},
+                     {send, [3]}]), %% 3 = Ctrl + C
+    ?assert(rt:is_pingable(Node)),
 
     ok.
 
 attach_down_test(Node) ->
     lager:info("Testing riak attach while down"),
     {ok, AttachOut} = rt:riak(Node, ["attach"]),
+    ?assert(rt:str(AttachOut, "Node is not running!")),
+    ok.
+
+attach_direct_up_test(Node) ->
+    lager:info("Testing riak attach-direct"),
+
+    rt:attach_direct(Node, [{expect, "\(^D to exit\)"},
+                            {send, "riak_core_ring_manager:get_my_ring()."},
+                            {expect, "dict,"},
+                            {send, [4]}]), %% 4 = Ctrl + D
+    ok.
+
+attach_direct_down_test(Node) ->
+    lager:info("Testing riak attach-direct while down"),
+    {ok, AttachOut} = rt:riak(Node, ["attach-direct"]),
     ?assert(rt:str(AttachOut, "Node is not running!")),
     ok.
 

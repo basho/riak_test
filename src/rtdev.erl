@@ -306,6 +306,9 @@ start(Node) ->
 attach(Node, Expected) ->
     interactive(Node, "attach", Expected).
 
+attach_direct(Node, Expected) ->
+    interactive(Node, "attach-direct", Expected).
+
 console(Node, Expected) ->
     interactive(Node, "console", Expected).
 
@@ -314,6 +317,7 @@ interactive(Node, Command, Exp) ->
     Path = relpath(node_version(N)),
     Cmd = riakcmd(Path, N, Command),
     lager:info("Opening a port for riak ~s.", [Command]),
+    lager:debug("Calling open_port with cmd ~s", [binary_to_list(iolist_to_binary(Cmd))]),
     P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))},
                   [stream, use_stdio, exit_status, binary, stderr_to_stdout]),
     interactive_loop(P, Exp).
