@@ -26,6 +26,8 @@
 -module(rt).
 -include_lib("eunit/include/eunit.hrl").
 
+-compile(export_all).
+
 -export([
          admin/2,
          assert_nodes_agree_about_ownership/1,
@@ -816,6 +818,25 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     %% Ensure each node owns a portion of the ring
     wait_until_nodes_agree_about_ownership(Nodes),
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
+    rpc:call(hd(Nodes), riak_core_console, member_status, [[]]),
+
+    lager:info("Cluster built: ~p", [Nodes]),
+    Nodes.
+
+build_cluster2(Nodes) ->
+    %% Ensure each node owns 100% of it's own ring
+    [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
+
+    %% Join nodes
+    [Node1|OtherNodes] = Nodes,
+    [join(Node, Node1) || Node <- OtherNodes],
+
+    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
+
+    %% Ensure each node owns a portion of the ring
+    wait_until_nodes_agree_about_ownership(Nodes),
+    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
+    rpc:call(hd(Nodes), riak_core_console, member_status, [[]]),
 
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
