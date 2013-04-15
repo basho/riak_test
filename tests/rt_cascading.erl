@@ -1,3 +1,8 @@
+%% These tests were written using the following riak versions:
+%% current: 1.4
+%% previous: 1.3.1
+%% legacy: 1.2.1
+
 -module(rt_cascading).
 -compile(export_all).
 -behavior(riak_test).
