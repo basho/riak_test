@@ -78,6 +78,29 @@ simple_test_() ->
             riakc_pb_socket:stop(BeginningClient),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, <<"objects">>, Bin)),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.ending, <<"objects">>, Bin))
+        end},
+
+        {"disable cascading on middle", timeout, 30000, fun() ->
+            rpc:call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["never"]]),
+            Bin = <<"disabled cascading">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            Client = rt:pbc(State#simple_state.beginning),
+            riakc_pb_socket:put(Client, Obj, [{w,1}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
+            ?assertEqual({error, notfound}, maybe_eventually_exists(State#simple_state.ending, ?bucket, Bin))
+            
+        end},
+
+        {"re-enable cascading", timeout, 30000, fun() ->
+            rpc:call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["always"]]),
+            Bin = <<"cascading re-enabled">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            Client = rt:pbc(State#simple_state.beginning),
+            riakc_pb_socket:put(Client, Obj, [{w,1}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
+            ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.ending, ?bucket, Bin))
         end}
 
     ] end}}.
@@ -750,3 +773,4 @@ wait_for_rt_started(Node, ToName) ->
         lists:member(ToName, Started)
     end,
     rt:wait_until(Node, Fun).
+
