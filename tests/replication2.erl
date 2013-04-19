@@ -18,7 +18,10 @@ confirm() ->
     Conf = [
             {riak_kv,
                 [
-                    {anti_entropy, {off, []}}
+                 %% Specify fast building of AAE trees
+                 {anti_entropy, {on, []}},
+                 {anti_entropy_build_limit, {100, 1000}},
+                 {anti_entropy_concurrency, 100}
                 ]
             },
             {riak_repl,
@@ -147,8 +150,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:wait_until_ring_converged(ANodes),
 
 
-    lager:info("write 2000 keys"),
-    ?assertEqual([], repl_util:do_write(LeaderA, 50000, 52000,
+    lager:info("write 1000000 keys"),
+    ?assertEqual([], repl_util:do_write(LeaderA, 50000, 150000,
             TestBucket, 2)),
 
     lager:info("reconnect the 2 clusters"),
@@ -162,6 +165,9 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     repl_util:start_realtime(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
     ?assertEqual(ok, repl_util:wait_until_connection(LeaderA)),
+
+    lager:info("Ready for manual testing."),
+    timer:sleep(1000000),
 
     repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 
@@ -442,6 +448,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     http_write_during_shutdown(Target, BSecond, TestBucket),
 
     lager:info("Test passed"),
+    timer:sleep(10000000),
     fin.
 
 pb_write_during_shutdown(Target, BSecond, TestBucket) ->
