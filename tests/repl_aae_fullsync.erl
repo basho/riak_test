@@ -29,6 +29,7 @@ confirm() ->
             },
             {riak_repl,
              [
+              {fullsync_strategy, aae},
               {fullsync_on_connect, false},
               {fullsync_interval, disabled}
              ]}
