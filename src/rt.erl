@@ -337,6 +337,22 @@ slow_upgrade(Node, NewVersion, Nodes) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
     ok.
 
+stage_join(Node, OtherNode) ->
+    %% rt:admin(Node, ["cluster", "join", atom_to_list(OtherNode)]).
+    rpc:call(Node, riak_core, staged_join, [OtherNode]).
+
+stage_leave(Node, OtherNode) ->
+    %% rt:admin(Node, ["cluster", "leave", atom_to_list(OtherNode)]).
+    rpc:call(Node, riak_core_claimant, leave_member, [OtherNode]).
+
+stage_plan(Node) ->
+    %% rt:admin(Node, ["cluster", "plan"]).
+    rpc:call(Node, riak_core_claimant, plan, []).
+
+stage_commit(Node) ->
+    %% rt:admin(Node, ["cluster", "commit"]).
+    rpc:call(Node, riak_core_claimant, commit, []).
+
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
     R = try_join(Node, PNode),
@@ -464,6 +480,7 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
     after rt:config(rt_max_wait_time) ->
             {-1, Buffer}
     end.
+
 %%%===================================================================
 %%% Remote code management
 %%%===================================================================
@@ -811,25 +828,11 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
-    [join(Node, Node1) || Node <- OtherNodes],
-
-    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
-
-    %% Ensure each node owns a portion of the ring
-    wait_until_nodes_agree_about_ownership(Nodes),
-    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
-    rpc:call(hd(Nodes), riak_core_console, member_status, [[]]),
-
-    lager:info("Cluster built: ~p", [Nodes]),
-    Nodes.
-
-build_cluster2(Nodes) ->
-    %% Ensure each node owns 100% of it's own ring
-    [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
-
-    %% Join nodes
-    [Node1|OtherNodes] = Nodes,
-    [join(Node, Node1) || Node <- OtherNodes],
+    %% [join(Node, Node1) || Node <- OtherNodes],
+    [stage_join(Node, Node1) || Node <- OtherNodes],
+    ?assertEqual(ok, wait_until_all_members(Nodes)),
+    stage_plan(Node1),
+    stage_commit(Node1),
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
 
