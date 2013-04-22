@@ -55,6 +55,13 @@ run_help(ParsedArgs) ->
     lists:member(help, ParsedArgs).
 
 main(Args) ->
+    case filelib:is_dir("./ebin") of
+        true ->
+            code:add_patha("./ebin");
+        _ ->
+            meh
+    end,
+
     register(riak_test, self()),
     {ParsedArgs, HarnessArgs} = case getopt:parse(cli_options(), Args) of
         {ok, {P, H}} -> {P, H};
