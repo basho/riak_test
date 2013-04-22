@@ -21,9 +21,13 @@
 %% @private
 -module(riak_test).
 -export([main/1]).
+-export([behaviour_info/1]).
 
 %% Define the riak_test behavior
--callback confirm() -> pass | fail.
+behaviour_info(callbacks) ->
+    [{confirm,0}];
+behaviour_info(_Other) ->
+    undefined.
 
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
