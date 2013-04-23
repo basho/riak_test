@@ -51,8 +51,8 @@ get_schema(Platform) ->
     get_schema(Platform, 3).
 
 get_schema(Platform, Retries) ->
-    Host = rt:config(giddyup_host),
-    Project = rt:config(rt_project),
+    Host = rt_config:get(giddyup_host),
+    Project = rt_config:get(rt_project),
     Version = rt:get_version(),
     URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
@@ -72,7 +72,7 @@ get_schema(Platform, Retries) ->
 
 -spec post_result([{atom(), term()}]) -> atom().
 post_result(TestResult) ->
-    Host = rt:config(giddyup_host),
+    Host = rt_config:get(giddyup_host),
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
     check_ibrowse(),
@@ -104,7 +104,7 @@ post_result(TestResult) ->
     end.
 
 basic_auth() ->
-    {basic_auth, {rt:config(giddyup_user), rt:config(giddyup_password)}}.
+    {basic_auth, {rt_config:get(giddyup_user), rt_config:get(giddyup_password)}}.
 
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
