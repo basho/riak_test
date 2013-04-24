@@ -75,6 +75,7 @@
          pbc_put_dir/3,
          pbc_put_file/4,
          pmap/2,
+         priv_dir/0,
          remove/2,
          riak/2,
          rpc_get_env/2,
