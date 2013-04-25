@@ -7,16 +7,16 @@ files_to_mods(Files) ->
     [list_to_atom(filename:basename(F, ".erl")) || F <- Files].
 
 intercept_files() ->
-    filelib:wildcard(filename:join([rt:home_dir(), "intercepts", "*.erl"])).
+    filelib:wildcard(filename:join([rt_local:home_dir(), "intercepts", "*.erl"])).
 
 %% @doc Load the intercepts on the nodes under test.
 -spec load_intercepts([node()]) -> ok.
 load_intercepts(Nodes) ->
-    case rt:config(load_intercepts, true) of
+    case rt_config:get(load_intercepts, true) of
         false ->
             ok;
         true ->
-            Intercepts = rt:config(intercepts, []),
+            Intercepts = rt_config:get(intercepts, []),
             rt:pmap(fun(N) -> load_code(N) end, Nodes),
             rt:pmap(fun(N) -> add(N, Intercepts) end, Nodes),
             ok
@@ -51,7 +51,7 @@ wait_until_loaded(Node, 5) ->
     {failed_to_load_intercepts, Node};
 
 wait_until_loaded(Node, Tries) ->
-    case rt:config(load_intercepts, true) of
+    case rt_config:get(load_intercepts, true) of
         false ->
             ok;
         true ->
