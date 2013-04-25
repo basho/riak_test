@@ -59,7 +59,6 @@ assertEqual(Http, PB, Expected, Query) ->
     PBKeys = proplists:get_value(keys, PBRes, []),
     HTTPRes = http_query(Http, Query),
     StreamHTTPRes = http_stream(Http, Query, []),
-    lager:info("Got ~p.", [StreamHTTPRes]),
     HTTPKeys = proplists:get_value(<<"keys">>, HTTPRes, []),
     StreamHttpKeys = proplists:get_value(<<"keys">>, StreamHTTPRes, []),
     ?assertEqual(Expected, PBKeys),

@@ -71,7 +71,7 @@ confirm() ->
 
 assertExactQuery(Pid, Expected, Index, Value) -> 
     lager:info("Searching Index ~p for ~p", [Index, Value]),
-    {ok, Results} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, Value),
+    {ok, {keys, Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, Value),
     ActualKeys = lists:sort(Results),
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [ActualKeys]),
@@ -79,7 +79,7 @@ assertExactQuery(Pid, Expected, Index, Value) ->
 
 assertRangeQuery(Pid, Expected, Index, StartValue, EndValue) ->
     lager:info("Searching Index ~p for ~p-~p", [Index, StartValue, EndValue]),
-    {ok, Results} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, StartValue, EndValue),
+    {ok, {keys, Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, StartValue, EndValue),
     ActualKeys = lists:sort(Results),
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [ActualKeys]),
