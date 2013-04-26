@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -21,9 +21,6 @@
 %% @private
 -module(riak_test_escript).
 -export([main/1]).
-
-%% Define the riak_test behavior
--callback confirm() -> pass | fail.
 
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
@@ -84,10 +81,10 @@ main(Args) ->
     application:load(riak_test),
 
     %% Loads from ~/.riak_test.config
-    rt:load_config(Config),
+    rt_config:load(Config),
 
     %% Ensure existance of scratch_dir
-    case file:make_dir(rt:config(rt_scratch_dir)) of
+    case file:make_dir(rt_config:get(rt_scratch_dir)) of
         ok -> great;
         {eexist, _} -> great;
         {ErrorType, ErrorReason} -> lager:error("Could not create scratch dir, {~p, ~p}", [ErrorType, ErrorReason])
@@ -96,7 +93,7 @@ main(Args) ->
     %% Fileoutput
     Outdir = proplists:get_value(outdir, ParsedArgs),
     ConsoleLagerLevel = case Outdir of
-        undefined -> rt:config(lager_level, info);
+        undefined -> rt_config:get(lager_level, info);
         _ ->
             filelib:ensure_dir(Outdir),
             notice
@@ -108,7 +105,7 @@ main(Args) ->
     %% Report
     Report = case proplists:get_value(report, ParsedArgs, undefined) of
         undefined -> undefined;
-        "config" -> rt:config(platform, undefined);
+        "config" -> rt_config:get(platform, undefined);
         R -> R
     end,
 
@@ -135,9 +132,9 @@ main(Args) ->
     add_deps(rt:get_deps()),
     add_deps("deps"),
 
-    [add_deps(Dep) || Dep <- rt:config(rt_deps, [])],
-    ENode = rt:config(rt_nodename, 'riak_test@127.0.0.1'),
-    Cookie = rt:config(rt_cookie, riak),
+    [add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
+    ENode = rt_config:get(rt_nodename, 'riak_test@127.0.0.1'),
+    Cookie = rt_config:get(rt_cookie, riak),
     [] = os:cmd("epmd -daemon"),
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
@@ -179,7 +176,7 @@ parse_command_line_tests(ParsedArgs) ->
                   {id, -1},
                   {platform, <<"local">>},
                   {version, rt:get_version()},
-                  {project, list_to_binary(rt:config(rt_project, "undefined"))}
+                  {project, list_to_binary(rt_config:get(rt_project, "undefined"))}
               ] ++
               [ {backend, Backend} || Backend =/= undefined ] ++
               [ {upgrade_version, Upgrade} || Upgrade =/= undefined ]}
