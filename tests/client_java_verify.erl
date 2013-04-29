@@ -11,8 +11,6 @@
 -prereq("curl").
 
 confirm() ->
-    
-    lager:info("+P ~p", [erlang:system_info(process_limit)]),
     prereqs(),
     Nodes = rt:deploy_nodes(1),
     [Node1] = Nodes,
