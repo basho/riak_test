@@ -47,6 +47,14 @@ setup_repl_clusters(Conf) ->
     rt:wait_until_ring_converged(BNodes),
     rt:wait_until_ring_converged(CNodes),
 
+    %% set the fullsync limits higher, so fullsyncs don't take forever
+    [begin
+                rpc:call(N, riak_repl_console, max_fssource_cluster,
+                    [["10"]]),
+                rpc:call(N, riak_repl_console, max_fssource_node, [["5"]]),
+                rpc:call(N, riak_repl_console, max_fssink_node, [["5"]])
+        end || N <- [AFirst, BFirst, CFirst]],
+
     %% get the leader for the first cluster
     repl_util:wait_until_leader(AFirst),
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
@@ -200,15 +208,19 @@ test_mixed_12_13() ->
     Res = rpc:call(BFirst, riak_repl_console, add_site, [SiteArgs]),
 
     lager:info("Waiting until scheduled fullsync occurs. Go grab a beer, this may take awhile."),
-    wait_until_12_fs_complete(LeaderA),
 
     wait_until_n_bnw_fullsyncs(LeaderA, "B", 3),
     wait_until_n_bnw_fullsyncs(LeaderA, "C", 3),
+    %% 1.3 fullsyncs increment the 1.2 fullsync counter, backwards
+    %% compatability is a terrible thing
+    wait_until_12_fs_complete(LeaderA, 9),
 
     Status0 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
-    Count = proplists:get_value(server_fullsyncs, Status0),
+    Count0 = proplists:get_value(server_fullsyncs, Status0),
     FS_B = get_cluster_fullsyncs(AFirst, "B"),
     FS_C = get_cluster_fullsyncs(AFirst, "C"),
+    %% count the actual 1.2 fullsyncs
+    Count = Count0 - (FS_B + FS_C),
 
     lager:info("1.2 Count = ~p", [Count]),
     lager:info("1.3 B Count = ~p", [FS_B]),
@@ -227,14 +239,12 @@ confirm() ->
         false -> sadtrombone
     end.
 
-wait_until_12_fs_complete(Node) ->
-    Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
-    Count = proplists:get_value(server_fullsyncs, Status0) + 1,
+wait_until_12_fs_complete(Node, N) ->
     rt:wait_until(Node,
                   fun(_) ->
                           Status = rpc:call(Node, riak_repl_console, status, [quiet]),
                           case proplists:get_value(server_fullsyncs, Status) of
-                              C when C >= Count ->
+                              C when C >= N ->
                                   true;
                               _ ->
                                   false
@@ -253,7 +263,7 @@ get_cluster_fullsyncs(Node, ClusterName) ->
     proplists:get_value(fullsyncs_completed, ClusterData).
 
 wait_until_n_bnw_fullsyncs(Node, DestCluster, N) ->
-    lager:info("Waiting for fullsync count to be ~p", [N]),
+    lager:info("Waiting for fullsync count for ~p to be ~p", [DestCluster, N]),
     Res = rt:wait_until(Node,
         fun(_) ->
                 Fullsyncs = get_cluster_fullsyncs(Node, DestCluster),
@@ -263,6 +273,9 @@ wait_until_n_bnw_fullsyncs(Node, DestCluster, N) ->
                     _Other ->
                         %% keep this in for tracing
                         %%lager:info("Total fullsyncs = ~p", [Other]),
+                        %% sleep a while so the default 3 minute time out
+                        %% doesn't screw us
+                        timer:sleep(20000),
                         false
                 end
         end),
