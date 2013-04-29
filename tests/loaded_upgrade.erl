@@ -52,7 +52,7 @@ confirm() ->
     %% Let's spawn workers against it.
     timer:sleep(10000),
 
-    Concurrent = rt:config(load_workers, 10),
+    Concurrent = rt_config:get(load_workers, 10),
 
     Sups = [
         {rt_worker_sup:start_link([
@@ -155,7 +155,7 @@ bucket(search) -> <<"scotts_spam">>.
 
 seed_search(Node) ->
     Pid = rt:pbc(Node),
-    SpamDir = rt:config(spam_dir),
+    SpamDir = rt_config:get(spam_dir),
     Files = case SpamDir of
             undefined -> undefined;
             _ -> filelib:wildcard(SpamDir ++ "/*")
