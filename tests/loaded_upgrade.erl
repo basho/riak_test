@@ -50,7 +50,7 @@ confirm() ->
     %% Let's spawn workers against it.
     timer:sleep(10000),
 
-    Concurrent = rt:config(load_workers, 10),
+    Concurrent = rt_config:get(load_workers, 10),
 
     Sups = [
         {rt_worker_sup:start_link([
@@ -110,9 +110,8 @@ upgrade_recv_loop(EndTime) ->
                 ?assertEqual(true, {listkeys, Node, not_equal});
             {search, Node, bad_result} ->
                 ?assertEqual(true, {search, Node, bad_result});
-            _Msg ->
-                %% TODO: Uncomment when lager:debug means something
-                %%lager:debug("Received Mesg ~p", [Msg]),
+            Msg ->
+                lager:debug("Received Mesg ~p", [Msg]),
                 upgrade_recv_loop(EndTime)
         after timer:now_diff(EndTime, Now) div 1000 ->
             lager:info("Done waiting 'cause ~p is up", [?TIME_BETWEEN_UPGRADES])
@@ -154,7 +153,7 @@ bucket(search) -> <<"scotts_spam">>.
 
 seed_search(Node) ->
     Pid = rt:pbc(Node),
-    SpamDir = rt:config(spam_dir),
+    SpamDir = rt_config:get(spam_dir),
     Files = case SpamDir of
             undefined -> undefined;
             _ -> filelib:wildcard(SpamDir ++ "/*")

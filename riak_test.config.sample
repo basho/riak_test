@@ -60,7 +60,12 @@
     %% `loaded_upgrade' test. If unspecified, this will default to
     %% `10'. For older/slower machines, use a lower number to avoid
     %% unexpected node crashes.
-    {load_workers, 10}
+    {load_workers, 10},
+
+    %% lager_level defaults to info, which is should mean 
+    %% "relevant test output". debug level output is for helping
+    %% test writers.
+    {lager_level, info}
 ]}.
 
 %% ===============================================================

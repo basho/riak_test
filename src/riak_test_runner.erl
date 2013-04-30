@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -69,11 +69,13 @@ start_lager_backend(TestModule, Outdir) ->
     case Outdir of
         undefined -> ok;
         _ ->
-            gen_event:add_handler(lager_event, lager_file_backend, {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output", debug, 10485760, "$D0", 1}),
-            lager:set_loglevel(lager_file_backend, debug)
+            gen_event:add_handler(lager_event, lager_file_backend, 
+                {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output", 
+                 rt_config:get(lager_level, info), 10485760, "$D0", 1}),
+            lager:set_loglevel(lager_file_backend, rt_config:get(lager_level, info))
     end,
-    gen_event:add_handler(lager_event, riak_test_lager_backend, [debug, false]),
-    lager:set_loglevel(riak_test_lager_backend, debug).
+    gen_event:add_handler(lager_event, riak_test_lager_backend, [rt_config:get(lager_level, info), false]),
+    lager:set_loglevel(riak_test_lager_backend, rt_config:get(lager_level, info)).
 
 stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
@@ -82,7 +84,7 @@ stop_lager_backend() ->
 %% does some group_leader swapping, in the style of EUnit.
 execute(TestModule, TestMetaData) ->
     process_flag(trap_exit, true),
-    GroupLeader = group_leader(),
+    OldGroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
 
@@ -92,7 +94,7 @@ execute(TestModule, TestMetaData) ->
     Pid = spawn_link(TestModule, confirm, []),
 
     {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
-    group_leader(GroupLeader, self()),
+    riak_test_group_leader:tidy_up(OldGroupLeader),
     case Status of
         fail ->
             ErrorHeader = "================ " ++ atom_to_list(TestModule) ++ " failure stack trace =====================",
@@ -121,7 +123,7 @@ check_prereqs(Module) ->
     try Module:module_info(attributes) of
         Attrs ->       
             Prereqs = proplists:get_all_values(prereq, Attrs),
-            P2 = [ {Prereq, rt:which(Prereq)} || Prereq <- Prereqs],
+            P2 = [ {Prereq, rt_local:which(Prereq)} || Prereq <- Prereqs],
             lager:info("~s prereqs: ~p", [Module, P2]),
             [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
             lists:all(fun({_, Present}) -> Present end, P2)
