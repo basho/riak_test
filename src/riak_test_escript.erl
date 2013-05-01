@@ -262,7 +262,12 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
             %% ResultWithNodeLogs = lists:keyreplace(log, 1, SingleTestResult,
             %%                                       {log, NewLogs}),
             %% giddyup:post_result(ResultWithNodeLogs)
-            giddyup:post_result(SingleTestResult)
+            case giddyup:post_result(SingleTestResult) of
+                error -> woops;
+                {ok, Base} ->
+                    %% Now push up the artifacts
+                    [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ]
+            end                    
     end,
     SingleTestResult.
 
@@ -338,13 +343,3 @@ so_kill_riak_maybe() ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
     end.
-
-%% cat_node_logs() ->
-%%     Files = rt:get_node_logs(),
-%%     Output = io_lib:format("================ Printing node logs and crash dumps ================~n~n", []),
-%%     cat_node_logs(Files, [Output]).
-%% 
-%% cat_node_logs([], Output) -> Output;
-%% cat_node_logs([{Filename, Content}|Rest], Output) ->
-%%     Log = io_lib:format("================ Log: ~s =====================~n~s~n~n", [Filename, Content]),
-%%     cat_node_logs(Rest, [Output, Log]).
