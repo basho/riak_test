@@ -234,8 +234,9 @@ filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
 
 %% Check for api compatibility
 is_runnable_test({TestModule, _}) ->
-    code:ensure_loaded(TestModule),
-   erlang:function_exported(TestModule, confirm, 0).
+    {Mod, Fun} = riak_test_runner:function_name(TestModule),
+    code:ensure_loaded(Mod),
+    erlang:function_exported(Mod, Fun, 0).
 
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),

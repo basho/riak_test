@@ -1,5 +1,6 @@
 -module(replication2_pg).
 -export([confirm/0]).
+-compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
@@ -359,8 +360,7 @@ test_bidirectional_pg() ->
     lager:info("Trying second get"),        
     wait_until_pg(LeaderA, PidA, Bucket, KeyB, CidB),
     lager:info("Second get worked"),
-
-    rt:clean_cluster(AllNodes),
+    
     pass.
 
 %% Test multiple sinks against a single source
