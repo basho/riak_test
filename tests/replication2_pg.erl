@@ -1,5 +1,6 @@
 -module(replication2_pg).
 -export([confirm/0]).
+-compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
@@ -455,7 +456,6 @@ test_mixed_pg() ->
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
 
     {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
-
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
@@ -513,6 +513,18 @@ wait_until_12_connection(Node) ->
                         end
                 end
         end). %% 40 seconds is enough for repl
+
+test_basic_pg_mode_repl13() ->
+    test_basic_pg(mode_repl13).
+
+test_basic_pg_mode_mixed() ->
+    test_basic_pg(mixed).
+
+test_12_pg_mode_repl12() ->
+    test_12_pg(mode_repl12).
+
+test_12_pg_mode_repl_mixed() ->
+         test_12_pg(mixed).
 
 confirm() ->
     AllTests =
