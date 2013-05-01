@@ -76,6 +76,23 @@ make_test_object(Suffix) ->
     Value =  erlang:list_to_binary(ValueText),
     {Bucket, Key, Value}.
 
+
+%% these funs allow you to call:
+%% riak_test -t replication2_pg:test_basic_pg_mode_repl13 etc
+test_basic_pg_mode_repl13() ->
+    test_basic_pg(mode_repl13).
+
+test_basic_pg_mode_mixed() ->
+    test_basic_pg(mixed).
+
+test_12_pg_mode_repl12() ->
+    test_12_pg(mode_repl12).
+
+test_12_pg_mode_repl_mixed() ->
+         test_12_pg(mixed).
+
+
+
 test_basic_pg(Mode) ->
     Conf = [
             {riak_repl,
@@ -513,18 +530,6 @@ wait_until_12_connection(Node) ->
                         end
                 end
         end). %% 40 seconds is enough for repl
-
-test_basic_pg_mode_repl13() ->
-    test_basic_pg(mode_repl13).
-
-test_basic_pg_mode_mixed() ->
-    test_basic_pg(mixed).
-
-test_12_pg_mode_repl12() ->
-    test_12_pg(mode_repl12).
-
-test_12_pg_mode_repl_mixed() ->
-         test_12_pg(mixed).
 
 confirm() ->
     AllTests =
