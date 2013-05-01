@@ -148,7 +148,7 @@ test_basic_pg(Mode) ->
     pass.
 
 %% test 1.2 replication (aka "Default" repl)
-%% Mode is either mode_repl12 or mixed. 
+%% Mode is either mode_repl12 or mixed.
 %% "mixed" is the default in 1.3: mode_repl12, mode_repl13
 test_12_pg(Mode) ->
     Conf = [
@@ -224,7 +224,7 @@ test_pg_proxy() ->
               {fullsync_on_connect, false}
              ]}
            ],
-    {LeaderA, ANodes, _BNodes, _CNodes, AllNodes} =
+    {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
         setup_repl_clusters(Conf),
     rt:log_to_nodes(AllNodes, "Testing pg proxy"),
     rt:wait_until_ring_converged(ANodes),
@@ -263,18 +263,22 @@ test_pg_proxy() ->
 
     lager:info("Stopping leader on requester cluster"),
     PGLeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
-    rt:log_to_nodes(AllNodes, "Killing leader on requester cluster"),
+    rt:log_to_nodes(AllNodes, "Killing leader (~p) on requester cluster",
+                    [PGLeaderB]),
     rt:stop(PGLeaderB),
-    [RunningBNode | _ ] = ANodes -- [PGLeaderB],
+    [RunningBNode | _ ] = BNodes -- [PGLeaderB],
     repl_util:wait_until_leader(RunningBNode),
     lager:info("Now trying proxy_get"),
     wait_until_pg(RunningBNode, PidB, Bucket, KeyC, CidA),
     lager:info("If you got here, proxy_get worked after the pg block requesting leader was killed"),
 
     lager:info("Stopping leader on provider cluster"),
+    lager:info("NAMES1 = ~p",[erl_epmd:names()]),
     PGLeaderA = rpc:call(FirstA, riak_core_cluster_mgr, get_leader, []),
-    rt:stop(PGLeaderA),
-    rt:log_to_nodes(AllNodes, "Killing leader on provider cluster"),
+    rt:log_to_nodes(AllNodes, "Killing leader on provider cluster ~p:",
+                    [PGLeaderA]),
+    lager:info("NAMES2 = ~p",[erl_epmd:names()]),
+    catch(rt:stop(PGLeaderA)),
     [RunningANode | _ ] = ANodes -- [PGLeaderA],
     repl_util:wait_until_leader(RunningANode),
     wait_until_pg(RunningBNode, PidB, Bucket, KeyD, CidA),
@@ -352,15 +356,15 @@ test_bidirectional_pg() ->
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
-    lager:info("Trying first get"),        
+    lager:info("Trying first get"),
     wait_until_pg(LeaderB, PidB, Bucket, KeyA, CidA),
-    lager:info("First get worked"),        
+    lager:info("First get worked"),
 
-    lager:info("Trying second get"),        
+    lager:info("Trying second get"),
     wait_until_pg(LeaderA, PidA, Bucket, KeyB, CidB),
     lager:info("Second get worked"),
 
-    rt:clean_cluster(AllNodes),
+    %rt:clean_cluster(AllNodes),
     pass.
 
 %% Test multiple sinks against a single source
@@ -451,7 +455,7 @@ test_mixed_pg() ->
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
 
     {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
-     
+
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
@@ -487,7 +491,6 @@ test_mixed_pg() ->
 
     rt:clean_cluster(AllNodes),
     pass.
-    
 
 wait_until_12_connection(Node) ->
     rt:wait_until(Node,
@@ -512,16 +515,16 @@ wait_until_12_connection(Node) ->
         end). %% 40 seconds is enough for repl
 
 confirm() ->
-    AllTests = 
+    AllTests =
         [
          test_basic_pg(mode_repl13),
-         test_basic_pg(mixed),         
+         test_basic_pg(mixed),
          test_12_pg(mode_repl12),
          test_12_pg(mixed),
          test_mixed_pg(),
-         test_multiple_sink_pg(), 
-         test_bidirectional_pg(), 
-         test_pg_proxy() 
+         test_multiple_sink_pg(),
+         test_bidirectional_pg(),
+         test_pg_proxy()
         ],
     case lists:all(fun (Result) -> Result == pass end, AllTests) of
         true ->  pass;
