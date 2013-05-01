@@ -203,7 +203,7 @@ clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
     lists:foreach(fun rm_dir/1, DataDirs).
 
 rm_dir(Dir) ->
-    lager:info("Removing directory ~s", [Dir]), 
+    lager:info("Removing directory ~s", [Dir]),
     ?assertCmd("rm -rf " ++ Dir),
     ?assertEqual(false, filelib:is_dir(Dir)).
 
@@ -483,8 +483,9 @@ versions() ->
     proplists:get_keys(rt_config:get(rtdev_path)) -- [root].
 
 get_node_logs() ->
-    Root = proplists:get_value(root, ?PATH),
+    Root = filename:absname(proplists:get_value(root, ?PATH)),
+    RootLen = length(Root) + 1, %% Remove the leading slash
     [ begin
-          {ok, Data} = file:read_file(Filename),
-          {Filename, Data}
+          {ok, Port} = file:open(Filename, [read, binary]),
+          {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
