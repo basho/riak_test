@@ -20,7 +20,7 @@
 
 %% @doc riak_test_runner runs a riak_test module's run/0 function.
 -module(riak_test_runner).
--export([confirm/3, metadata/0, metadata/1]).
+-export([confirm/3, metadata/0, metadata/1, function_name/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
@@ -44,11 +44,11 @@ confirm(TestModule, Outdir, TestMetaData) ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, []),
     Backend = rt:set_backend(proplists:get_value(backend, TestMetaData)),
-    
-    {Status, Reason} = case check_prereqs(TestModule) of
+    {Mod, Fun} = function_name(TestModule),
+    {Status, Reason} = case check_prereqs(Mod) of
         true ->
             lager:notice("Running Test ~s", [TestModule]),
-            execute(TestModule, TestMetaData);
+            execute(TestModule, {Mod, Fun}, TestMetaData);
         not_present ->
             {fail, test_does_not_exist};
         _ ->
@@ -82,7 +82,7 @@ stop_lager_backend() ->
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
 %% does some group_leader swapping, in the style of EUnit.
-execute(TestModule, TestMetaData) ->
+execute(TestModule, {Mod, Fun}, TestMetaData) ->
     process_flag(trap_exit, true),
     OldGroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
@@ -91,7 +91,7 @@ execute(TestModule, TestMetaData) ->
     {0, UName} = rt:cmd("uname -a"),
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
-    Pid = spawn_link(TestModule, confirm, []),
+    Pid = spawn_link(Mod, Fun, []),
 
     {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
     riak_test_group_leader:tidy_up(OldGroupLeader),
@@ -104,6 +104,16 @@ execute(TestModule, TestMetaData) ->
         _ -> meh
     end,
     {Status, Reason}.
+
+function_name(TestModule) ->
+    TMString = atom_to_list(TestModule),
+    Tokz = string:tokens(TMString, ":"),
+    case length(Tokz) of
+        1 -> {TestModule, confirm};
+        2 ->  
+            [Module, Function] = Tokz,
+            {list_to_atom(Module), list_to_atom(Function)}
+    end.
 
 rec_loop(Pid, TestModule, TestMetaData) ->
     receive
