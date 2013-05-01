@@ -26,6 +26,9 @@
 
 %% You should have curl installed locally to do this.
 confirm() ->
+
+    test_supervision(),
+
     JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
     Nodes = rt:deploy_nodes(1, Config),
@@ -101,6 +104,19 @@ confirm() ->
                             {<<"read_repairs">>, 1}]),
     pass.
 
+test_supervision() ->
+    JMXPort = 80,
+    Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
+    [Node|[]] = rt:deploy_nodes(1, Config),
+    timer:sleep(20000),
+    case net_adm:ping(Node) of
+        pang ->
+            lager:error("riak_jmx crash able to crash riak node"),
+            ?assertEqual("riak_jmx crash able to crash riak node", true);
+        _ ->
+            rt:stop(Node)
+    end.
+ 
 verify_inc(Prev, Props, Keys) ->
     [begin
          Old = proplists:get_value(Key, Prev, 0),
