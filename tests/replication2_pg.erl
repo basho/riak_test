@@ -494,7 +494,6 @@ test_mixed_pg() ->
     rt:clean_cluster(AllNodes),
     pass.
 
-
 wait_until_12_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
@@ -554,7 +553,6 @@ banner(T) ->
     lager:info("~s",[T]),
     lager:info("----------------------------------------------"),
     lager:info("----------------------------------------------").
-
 
 get_firsts(Nodes) ->
     {[AFirst|_] = _ANodes, Rest} = lists:split(2, Nodes),
