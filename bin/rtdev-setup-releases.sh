@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# bail out if things go south
+set -e
+
 # Creates a mixed-version directory structure for running riak_test
 # using rtdev-mixed.config settings. Should be run inside a directory
 # that contains devrels for prior Riak releases. Easy way to create this

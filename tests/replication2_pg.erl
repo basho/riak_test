@@ -1,5 +1,6 @@
 -module(replication2_pg).
 -export([confirm/0]).
+-compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
@@ -76,6 +77,7 @@ make_test_object(Suffix) ->
     {Bucket, Key, Value}.
 
 test_basic_pg(Mode) ->
+    banner(io_lib:format("test_basic_pg with ~p mode", [Mode])),
     Conf = [
             {riak_repl,
              [
@@ -151,6 +153,7 @@ test_basic_pg(Mode) ->
 %% Mode is either mode_repl12 or mixed. 
 %% "mixed" is the default in 1.3: mode_repl12, mode_repl13
 test_12_pg(Mode) ->
+    banner(io_lib:format("test_12_pg with ~p mode", [Mode])),
     Conf = [
             {riak_repl,
              [
@@ -217,6 +220,7 @@ test_12_pg(Mode) ->
 
 %% test shutting down nodes in source + sink clusters
 test_pg_proxy() ->
+    banner("test_pg_proxy"),
     Conf = [
             {riak_repl,
              [
@@ -289,6 +293,7 @@ test_pg_proxy() ->
 
 %% connect source + sink clusters, pg bidirectionally
 test_bidirectional_pg() ->
+    banner("test_bidirectional_pg"),
     Conf = [
             {riak_repl,
              [
@@ -365,6 +370,7 @@ test_bidirectional_pg() ->
 
 %% Test multiple sinks against a single source
 test_multiple_sink_pg() ->
+    banner("test_multiple_sink_pg"),
     Conf = [
             {riak_repl,
              [
@@ -418,6 +424,7 @@ test_multiple_sink_pg() ->
 
 %% test 1.2 + 1.3 repl being used at the same time
 test_mixed_pg() ->
+    banner("test_mixed_pg"),
     Conf = [
             {riak_repl,
              [
@@ -451,7 +458,6 @@ test_mixed_pg() ->
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
 
     {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
-
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
@@ -487,7 +493,7 @@ test_mixed_pg() ->
 
     rt:clean_cluster(AllNodes),
     pass.
-    
+
 
 wait_until_12_connection(Node) ->
     rt:wait_until(Node,
@@ -515,12 +521,12 @@ confirm() ->
     AllTests = 
         [
          test_basic_pg(mode_repl13),
-         test_basic_pg(mixed),         
+         test_basic_pg(mixed),
          test_12_pg(mode_repl12),
          test_12_pg(mixed),
          test_mixed_pg(),
-         test_multiple_sink_pg(), 
-         test_bidirectional_pg(), 
+         test_multiple_sink_pg(),
+         test_bidirectional_pg(),
          test_pg_proxy() 
         ],
     case lists:all(fun (Result) -> Result == pass end, AllTests) of
@@ -528,13 +534,12 @@ confirm() ->
         false -> sadtrombone
     end.
 
-
-%banner(T) ->
-%    lager:info("----------------------------------------------"),
-%    lager:info("----------------------------------------------"),
-%    lager:info("~s",[T]),
-%    lager:info("----------------------------------------------"),
-%    lager:info("----------------------------------------------").
+banner(T) ->
+    lager:info("----------------------------------------------"),
+    lager:info("----------------------------------------------"),
+    lager:info("~s",[T]),
+    lager:info("----------------------------------------------"),
+    lager:info("----------------------------------------------").
 
 
 get_firsts(Nodes) ->

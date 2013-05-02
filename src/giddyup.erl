@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -48,21 +48,31 @@ get_suite(Platform) ->
     [ { binary_to_atom(kvc:path(name, Test), utf8), TestProps(Test) } || Test <- Tests].
 
 get_schema(Platform) ->
-    Host = rt:config(giddyup_host),
-    Project = rt:config(rt_project),
+    get_schema(Platform, 3).
+
+get_schema(Platform, Retries) ->
+    Host = rt_config:get(giddyup_host),
+    Project = rt_config:get(rt_project),
     Version = rt:get_version(),
     URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
 
     check_ibrowse(),
-    case ibrowse:send_req(URL, [], get, [], []) of
-        {ok, "200", _Headers, JSON} -> mochijson2:decode(JSON);
-        _ -> []
+    case {Retries, ibrowse:send_req(URL, [], get, [], [])} of
+        {_, {ok, "200", _Headers, JSON}} -> mochijson2:decode(JSON);
+        {0, Error} ->
+            lager:error("GiddyUp GET failed: ~p", [Error]),
+            exit(1);
+        {_, Error} ->
+            lager:warning("GiddyUp GET failed: ~p", [Error]),
+            lager:warning("GiddyUp trying ~p more times", [Retries]),
+            timer:sleep(60000),
+            get_schema(Platform, Retries - 1)
     end.
 
 -spec post_result([{atom(), term()}]) -> atom().
 post_result(TestResult) ->
-    Host = rt:config(giddyup_host),
+    Host = rt_config:get(giddyup_host),
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
     check_ibrowse(),
@@ -94,7 +104,7 @@ post_result(TestResult) ->
     end.
 
 basic_auth() ->
-    {basic_auth, {rt:config(giddyup_user), rt:config(giddyup_password)}}.
+    {basic_auth, {rt_config:get(giddyup_user), rt_config:get(giddyup_password)}}.
 
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
