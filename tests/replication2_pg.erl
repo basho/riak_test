@@ -531,22 +531,22 @@ test_12_pg_mode_repl12() ->
 test_12_pg_mode_repl_mixed() ->
          test_12_pg(mixed).
 
+
 confirm() ->
     AllTests =
         [
-         test_basic_pg(mode_repl13),
-         test_basic_pg(mixed),
-         test_12_pg(mode_repl12),
-         test_12_pg(mixed),
-         test_mixed_pg(),
-         test_multiple_sink_pg(),
-         test_bidirectional_pg(),
-         test_pg_proxy()
+            test_basic_pg_mode_repl13,
+            test_basic_pg_mode_mixed,
+            test_12_pg_mode_repl12,
+            test_12_pg_mode_repl_mixed,
+            test_mixed_pg,
+            test_multiple_sink_pg,
+            test_bidirectional_pg,
+            test_pg_proxy
         ],
-    case lists:all(fun (Result) -> Result == pass end, AllTests) of
-        true ->  pass;
-        false -> sadtrombone
-    end.
+    lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
+    lager:error("The runnable tests in this module are: ~p", [AllTests]),
+    ?assert(false).
 
 banner(T) ->
     lager:info("----------------------------------------------"),
