@@ -517,8 +517,22 @@ wait_until_12_connection(Node) ->
                 end
         end). %% 40 seconds is enough for repl
 
+%% these funs allow you to call:
+%% riak_test -t replication2_pg:test_basic_pg_mode_repl13 etc
+test_basic_pg_mode_repl13() ->
+    test_basic_pg(mode_repl13).
+
+test_basic_pg_mode_mixed() ->
+    test_basic_pg(mixed).
+
+test_12_pg_mode_repl12() ->
+    test_12_pg(mode_repl12).
+
+test_12_pg_mode_repl_mixed() ->
+         test_12_pg(mixed).
+
 confirm() ->
-    AllTests = 
+    AllTests =
         [
          test_basic_pg(mode_repl13),
          test_basic_pg(mixed),
@@ -527,7 +541,7 @@ confirm() ->
          test_mixed_pg(),
          test_multiple_sink_pg(),
          test_bidirectional_pg(),
-         test_pg_proxy() 
+         test_pg_proxy()
         ],
     case lists:all(fun (Result) -> Result == pass end, AllTests) of
         true ->  pass;
