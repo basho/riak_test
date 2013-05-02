@@ -528,6 +528,15 @@ confirm() ->
         false -> sadtrombone
     end.
 
+
+%banner(T) ->
+%    lager:info("----------------------------------------------"),
+%    lager:info("----------------------------------------------"),
+%    lager:info("~s",[T]),
+%    lager:info("----------------------------------------------"),
+%    lager:info("----------------------------------------------").
+
+
 get_firsts(Nodes) ->
     {[AFirst|_] = _ANodes, Rest} = lists:split(2, Nodes),
     {[BFirst|_] = _BNodes, [CFirst|_] = _CNodes} = lists:split(2, Rest),
