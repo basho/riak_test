@@ -224,7 +224,7 @@ test_pg_proxy() ->
               {fullsync_on_connect, false}
              ]}
            ],
-    {LeaderA, ANodes, _BNodes, _CNodes, AllNodes} =
+    {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
         setup_repl_clusters(Conf),
     rt:log_to_nodes(AllNodes, "Testing pg proxy"),
     rt:wait_until_ring_converged(ANodes),
@@ -265,7 +265,7 @@ test_pg_proxy() ->
     PGLeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
     rt:log_to_nodes(AllNodes, "Killing leader on requester cluster"),
     rt:stop(PGLeaderB),
-    [RunningBNode | _ ] = ANodes -- [PGLeaderB],
+    [RunningBNode | _ ] = BNodes -- [PGLeaderB],
     repl_util:wait_until_leader(RunningBNode),
     lager:info("Now trying proxy_get"),
     wait_until_pg(RunningBNode, PidB, Bucket, KeyC, CidA),
@@ -352,11 +352,11 @@ test_bidirectional_pg() ->
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
-    lager:info("Trying first get"),        
+    lager:info("Trying first get"),
     wait_until_pg(LeaderB, PidB, Bucket, KeyA, CidA),
-    lager:info("First get worked"),        
+    lager:info("First get worked"),
 
-    lager:info("Trying second get"),        
+    lager:info("Trying second get"),
     wait_until_pg(LeaderA, PidA, Bucket, KeyB, CidB),
     lager:info("Second get worked"),
 
@@ -451,7 +451,7 @@ test_mixed_pg() ->
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
 
     {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
-     
+
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
