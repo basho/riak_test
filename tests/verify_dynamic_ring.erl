@@ -31,9 +31,7 @@
 
 confirm() ->
     rt:update_app_config(all, [{riak_core,
-                                [{ring_creation_size, ?START_SIZE}]},
-                               {riak_kv,
-                                [{anti_entropy, {off, []}}]}]),
+                                [{ring_creation_size, ?START_SIZE}]}]),
     [ANode, AnotherNode, YetAnother, ReplacingNode] = AllNodes = rt:deploy_nodes(4),
     Nodes = [ANode, AnotherNode, YetAnother],
     NewNodes = [ANode, YetAnother, ReplacingNode],
