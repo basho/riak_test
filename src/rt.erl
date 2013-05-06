@@ -135,7 +135,8 @@ priv_dir() ->
     PrivDir = case {filelib:is_dir(LocalPrivDir), filelib:is_dir(DepPrivDir)} of
         {true, _} ->
             lager:debug("Local ./priv detected, using that..."),
-            LocalPrivDir;
+            %% we want an absolute path!
+            filename:absname(LocalPrivDir);
         {false, true} ->
             lager:debug("riak_test dependency priv_dir detected, using that..."),
             DepPrivDir;

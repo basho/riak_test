@@ -187,12 +187,7 @@ confirm() ->
     rt:wait_for_service(Node1, riak_repl),
     rt:wait_for_service(Node2, riak_repl),
 
-    {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
-        [riak_core, cluster_mgr]),
 
-    lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
-    repl_util:connect_cluster(Node1, "127.0.0.1", Port),
-    ?assertEqual(ok, repl_util:wait_for_connection(Node1, "B")),
 
     lager:info("===testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
@@ -280,11 +275,16 @@ merge_config(Mixin, Base) ->
     lists:ukeymerge(1, lists:keysort(1, Mixin), lists:keysort(1, Base)).
 
 test_connection({Node1, Config1}, {Node2, Config2}) ->
-    rt:update_app_config(Node1, Config1),
-    rt:wait_until_pingable(Node1),
+    repl_util:disconnect_cluster(Node1, "B"),
     rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
+    rt:update_app_config(Node1, Config1),
+    rt:wait_until_pingable(Node1),
     timer:sleep(5000),
+    {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
+        [riak_core, cluster_mgr]),
+    lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
+    repl_util:connect_cluster(Node1, "127.0.0.1", Port),
     repl_util:wait_for_connection(Node1, "B").
 
 
