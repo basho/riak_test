@@ -61,6 +61,13 @@ try_encoding(TestNode, Encoding, NTestItems) ->
     rt:wait_for_service(TestNode, riak_kv),
     force_encoding(TestNode, Encoding),
 
+    %% Check to see if we can round-trip with the selected encoding:
+    lager:info("Testing round-trip for encoding ~p...", [Encoding]),
+    Input   = <<"delicious ham">>,
+    Encoded = riak_object:encode_vclock(Input),
+    Decoded = riak_object:decode_vclock(Encoded),
+    Input = Decoded,
+
     %% Try to find some data that does not exist:
     lager:info("Testing find-missing..."),
     Results0 = our_pbc_read(TestNode, NTestItems, <<"saba">>),
