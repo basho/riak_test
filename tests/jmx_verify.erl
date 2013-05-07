@@ -19,14 +19,13 @@
 %% -------------------------------------------------------------------
 -module(jmx_verify).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, test_supervision/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 -prereq("java").
 
 %% You should have curl installed locally to do this.
 confirm() ->
-
     test_supervision(),
 
     JMXPort = 41111,
@@ -143,36 +142,4 @@ jmx_dump(Cmd) ->
     timer:sleep(40000), %% JMX only updates every 30seconds
     Output = string:strip(os:cmd(Cmd), both, $\n),
     JSONOutput = mochijson2:decode(Output),
-    [ {process_key(Key), Value} || {struct, [{Key, Value}]} <- JSONOutput].
-
-process_key(<<"CPUNProcs">>) -> <<"cpu_nprocs">>;
-process_key(<<"MemAllocated">>) -> <<"mem_allocated">>;
-process_key(<<"MemTotal">>) -> <<"mem_total">>;
-process_key(<<"NodeGets">>) -> <<"node_gets">>;
-process_key(<<"NodeGetsTotal">>) -> <<"node_gets_total">>;
-process_key(<<"NodePuts">>) -> <<"node_puts">>;
-process_key(<<"NodePutsTotal">>) -> <<"node_puts_total">>;
-process_key(<<"VnodeGets">>) -> <<"vnode_gets">>;
-process_key(<<"VnodeGetsTotal">>) -> <<"vnode_gets_total">>;
-process_key(<<"VnodePuts">>) -> <<"vnode_puts">>;
-process_key(<<"VnodePutsTotal">>) -> <<"vnode_puts_total">>;
-process_key(<<"PbcActive">>) -> <<"pbc_active">>;
-process_key(<<"PbcConnects">>) -> <<"pbc_connects">>;
-process_key(<<"PbcConnectsTotal">>) -> <<"pbc_connects_total">>;
-process_key(<<"NodeName">>) -> <<"nodename">>;
-process_key(<<"RingCreationSize">>) -> <<"ring_creation_size">>;
-process_key(<<"CpuAvg1">>) -> <<"cpu_avg1">>;
-process_key(<<"CpuAvg5">>) -> <<"cpu_avg5">>;
-process_key(<<"CpuAvg15">>) -> <<"cpu_avg15">>;
-process_key(<<"NodeGetFsmTime95">>) -> <<"node_get_fsm_time_95">>;
-process_key(<<"NodeGetFsmTime99">>) -> <<"node_get_fsm_time_99">>;
-process_key(<<"NodeGetFsmTimeMax">>) -> <<"node_get_fsm_time_100">>;
-process_key(<<"NodeGetFsmTimeMean">>) -> <<"node_get_fsm_time_mean">>;
-process_key(<<"NodeGetFsmTimeMedian">>) -> <<"node_get_fsm_time_median">>;
-process_key(<<"NodePutFsmTime95">>) -> <<"node_put_fsm_time_95">>;
-process_key(<<"NodePutFsmTime99">>) -> <<"node_put_fsm_time_99">>;
-process_key(<<"NodePutFsmTimeMax">>) -> <<"node_put_fsm_time_100">>;
-process_key(<<"NodePutFsmTimeMean">>) -> <<"node_put_fsm_time_mean">>;
-process_key(<<"NodePutFsmTimeMedian">>) -> <<"node_put_fsm_time_median">>;
-process_key(<<"ReadRepairs">>) -> <<"read_repairs">>;
-process_key(<<"ReadRepairsTotal">>) -> <<"read_repairs_total">>.
+    [ {Key, Value} || {struct, [{Key, Value}]} <- JSONOutput].
