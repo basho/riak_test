@@ -146,7 +146,21 @@ test_basic_pg(Mode) ->
     FailedResult = riak_repl_pb_api:get(PidB,Bucket,KeyB,CidA),
     ?assertEqual({error, notfound}, FailedResult),
 
-    rt:clean_cluster(AllNodes),
+    PGEnableResult2 = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
+    lager:info("Enabled pg: ~p", [PGEnableResult2]),
+    Status3 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, Status3) of
+        undefined -> fail;
+        EnabledFor2 -> lager:info("PG enabled for cluster ~p",[EnabledFor2])
+    end,
+
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+
+    {ok, PGResult2} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
+    ?assertEqual(ValueA, riakc_obj:get_value(PGResult2)),
+
     pass.
 
 %% test 1.2 replication (aka "Default" repl)
@@ -189,7 +203,8 @@ test_12_pg(Mode) ->
     LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
     rt:log_to_nodes([LeaderB], "Trying to use PG while it's disabled"),
     PidB = rt:pbc(LeaderB),
-    {error, notfound} = riak_repl_pb_api:get(PidB, Bucket, KeyA, CidA),
+    ?assertEqual({error, notfound},
+                  riak_repl_pb_api:get(PidB, Bucket, KeyA, CidA)),
 
     rt:log_to_nodes([LeaderA], "Adding a listener"),
     ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
@@ -215,7 +230,6 @@ test_12_pg(Mode) ->
     lager:info("PGResult: ~p", [PGResult]),
     ?assertEqual(ValueB, riakc_obj:get_value(PGResult)),
 
-    rt:clean_cluster(AllNodes),
     pass.
 
 %% test shutting down nodes in source + sink clusters
@@ -285,10 +299,6 @@ test_pg_proxy() ->
     lager:info("If you got here, proxy_get worked after the pg block providing leader was killed"),
     lager:info("pg_proxy test complete. Time to obtain celebratory cheese sticks."),
 
-    %% clean up so riak_test doesn't panic
-    rt:start(PGLeaderA),
-    rt:start(PGLeaderB),
-    rt:clean_cluster(AllNodes),
     pass.
 
 %% connect source + sink clusters, pg bidirectionally
@@ -418,7 +428,6 @@ test_multiple_sink_pg() ->
     {ok, PGResultC} = riak_repl_pb_api:get(PidC,Bucket,KeyB,CidA),
     ?assertEqual(ValueB, riakc_obj:get_value(PGResultC)),
 
-    rt:clean_cluster(AllNodes),
     pass.
 
 %% test 1.2 + 1.3 repl being used at the same time
@@ -490,7 +499,6 @@ test_mixed_pg() ->
     lager:info("PGResultC: ~p", [PGResultC]),
     ?assertEqual(ValueC, riakc_obj:get_value(PGResultC)),
 
-    rt:clean_cluster(AllNodes),
     pass.
 
 
