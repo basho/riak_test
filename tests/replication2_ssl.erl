@@ -5,8 +5,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    NumNodes = rt:config(num_nodes, 6),
-    ClusterASize = rt:config(cluster_a_size, 3),
+    NumNodes = rt_config:get(num_nodes, 6),
+    ClusterASize = rt_config:get(cluster_a_size, 3),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     BaseConf = [
@@ -21,16 +21,8 @@ confirm() ->
             ]}
     ],
 
-    %% XXX for some reason, codew:priv_dir returns riak_test/riak_test/priv,
-    %% which is wrong, so fix it.
-    PrivDir = re:replace(code:priv_dir(riak_test), "riak_test(/riak_test)*",
-        "riak_test", [{return, list}]),
-
-    ?assert(filelib:is_dir(PrivDir)),
-
-
-    lager:info("priv dir: ~p -> ~p", [code:priv_dir(riak_test), PrivDir]),
-
+    PrivDir = rt:priv_dir(),
+    
     SSLConfig1 = [
         {riak_repl,
             [
@@ -195,12 +187,7 @@ confirm() ->
     rt:wait_for_service(Node1, riak_repl),
     rt:wait_for_service(Node2, riak_repl),
 
-    {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
-        [riak_core, cluster_mgr]),
 
-    lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
-    repl_util:connect_cluster(Node1, "127.0.0.1", Port),
-    ?assertEqual(ok, repl_util:wait_for_connection(Node1, "B")),
 
     lager:info("===testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
@@ -288,11 +275,16 @@ merge_config(Mixin, Base) ->
     lists:ukeymerge(1, lists:keysort(1, Mixin), lists:keysort(1, Base)).
 
 test_connection({Node1, Config1}, {Node2, Config2}) ->
-    rt:update_app_config(Node1, Config1),
-    rt:wait_until_pingable(Node1),
+    repl_util:disconnect_cluster(Node1, "B"),
     rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
+    rt:update_app_config(Node1, Config1),
+    rt:wait_until_pingable(Node1),
     timer:sleep(5000),
+    {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
+        [riak_core, cluster_mgr]),
+    lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
+    repl_util:connect_cluster(Node1, "127.0.0.1", Port),
     repl_util:wait_for_connection(Node1, "B").
 
 

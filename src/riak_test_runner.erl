@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -71,11 +71,11 @@ start_lager_backend(TestModule, Outdir) ->
         _ ->
             gen_event:add_handler(lager_event, lager_file_backend, 
                 {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output", 
-                 rt:config(lager_level, info), 10485760, "$D0", 1}),
-            lager:set_loglevel(lager_file_backend, rt:config(lager_level, info))
+                 rt_config:get(lager_level, info), 10485760, "$D0", 1}),
+            lager:set_loglevel(lager_file_backend, rt_config:get(lager_level, info))
     end,
-    gen_event:add_handler(lager_event, riak_test_lager_backend, [rt:config(lager_level, info), false]),
-    lager:set_loglevel(riak_test_lager_backend, rt:config(lager_level, info)).
+    gen_event:add_handler(lager_event, riak_test_lager_backend, [rt_config:get(lager_level, info), false]),
+    lager:set_loglevel(riak_test_lager_backend, rt_config:get(lager_level, info)).
 
 stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
@@ -123,7 +123,7 @@ check_prereqs(Module) ->
     try Module:module_info(attributes) of
         Attrs ->       
             Prereqs = proplists:get_all_values(prereq, Attrs),
-            P2 = [ {Prereq, rt:which(Prereq)} || Prereq <- Prereqs],
+            P2 = [ {Prereq, rt_local:which(Prereq)} || Prereq <- Prereqs],
             lager:info("~s prereqs: ~p", [Module, P2]),
             [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
             lists:all(fun({_, Present}) -> Present end, P2)
