@@ -28,6 +28,8 @@
 confirm() ->
     test_supervision(),
 
+    test_application_stop(),
+
     JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
     Nodes = rt:deploy_nodes(1, Config),
@@ -115,7 +117,35 @@ test_supervision() ->
         _ ->
             rt:stop(Node)
     end.
- 
+
+test_application_stop() ->
+    lager:info("Testing application:stop()"),
+    JMXPort = 41111,
+    Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
+    Nodes = rt:deploy_nodes(1, Config),
+    [Node] = Nodes,
+    ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
+
+    %% Let's make sure the java process is alive!
+    lager:info("checking for riak_jmx.jar running."),
+    ?assertNotEqual(nomatch, re:run(os:cmd("ps -Af"), "riak_jmx.jar", [])),
+
+    rpc:call(Node, riak_jmx, stop, ["Stopping riak_jmx"]),
+    timer:sleep(20000),
+    case net_adm:ping(Node) of
+        pang ->
+            lager:error("riak_jmx stop takes down riak node"),
+            ?assertEqual("riak_jmx stop takes down riak node", true);
+        _ ->
+            yay
+    end,
+
+    %% Let's make sure the java process is dead!
+    lager:info("checking for riak_jmx.jar not running."),
+    ?assertEqual(nomatch, re:run(os:cmd("ps -Af"), "riak_jmx.jar", [])),
+
+    rt:stop(Node).
+
 verify_inc(Prev, Props, Keys) ->
     [begin
          Old = proplists:get_value(Key, Prev, 0),
