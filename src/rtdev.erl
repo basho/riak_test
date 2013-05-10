@@ -279,7 +279,8 @@ stop_all(DevPath) ->
                 end,
                 lager:debug("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
             end,
-            [Stop(D) || D <- Devs];
+            %% [Stop(D) || D <- Devs];
+            rt:pmap(Stop, Devs);
         _ -> lager:debug("~s is not a directory.", [DevPath])
     end,
     ok.
