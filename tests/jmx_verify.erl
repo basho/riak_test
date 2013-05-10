@@ -116,7 +116,8 @@ test_supervision() ->
             ?assertEqual("riak_jmx crash able to crash riak node", true);
         _ ->
             rt:stop(Node)
-    end.
+    end,
+    ok.
 
 test_application_stop() ->
     lager:info("Testing application:stop()"),
@@ -128,7 +129,7 @@ test_application_stop() ->
 
     %% Let's make sure the java process is alive!
     lager:info("checking for riak_jmx.jar running."),
-    ?assertNotEqual(nomatch, re:run(os:cmd("ps -Af"), "riak_jmx.jar", [])),
+    ?assertNotEqual(nomatch, re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
 
     rpc:call(Node, riak_jmx, stop, ["Stopping riak_jmx"]),
     timer:sleep(20000),
@@ -142,7 +143,7 @@ test_application_stop() ->
 
     %% Let's make sure the java process is dead!
     lager:info("checking for riak_jmx.jar not running."),
-    ?assertEqual(nomatch, re:run(os:cmd("ps -Af"), "riak_jmx.jar", [])),
+    ?assertEqual(nomatch, re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
 
     rt:stop(Node).
 
