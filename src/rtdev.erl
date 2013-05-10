@@ -165,7 +165,7 @@ get_riak_conf(Node) ->
 
 append_to_conf_file(File, NameValuePairs) ->
     Settings = lists:flatten(
-        [io_lib:format("~n~s = ~s~n", [Name, Value]) || {Name, Value} <- NameValuePairs]), 
+        [io_lib:format("~n~s = ~s~n", [Name, Value]) || {Name, Value} <- NameValuePairs]),
     file:write_file(File, Settings, [append]).
 
 all_the_files(DevPath, File) ->
@@ -176,7 +176,7 @@ all_the_files(DevPath, File) ->
         _ ->
             lager:debug("~s is not a directory.", [DevPath]),
             []
-    end.    
+    end.
 
 all_the_app_configs(DevPath) ->
     AppConfigs = all_the_files(DevPath, "etc/app.config"),
@@ -201,23 +201,23 @@ update_app_config(Node, Config) when is_atom(Node) ->
     %% If there's an app.config, do it old style
     %% if not, use cuttlefish's adavnced.config
     case filelib:is_file(AppConfigFile) of
-        true -> 
+        true ->
             update_app_config_file(AppConfigFile, Config);
         _ ->
             update_app_config_file(AdvConfigFile, Config)
-    end; 
+    end;
 update_app_config(DevPath, Config) ->
     [update_app_config_file(AppConfig, Config) || AppConfig <- all_the_app_configs(DevPath)].
 
 update_app_config_file(ConfigFile, Config) ->
     lager:info("rtdev:update_app_config_file(~s, ~p)", [ConfigFile, Config]),
-    
+
     BaseConfig = case file:consult(ConfigFile) of
         {ok, [ValidConfig]} ->
             ValidConfig;
         {error, enoent} ->
             []
-    end, 
+    end,
     MergeA = orddict:from_list(Config),
     MergeB = orddict:from_list(BaseConfig),
     NewConfig =
@@ -263,7 +263,7 @@ get_backend(AppConfig) ->
 
             %% ConfigFileOutputLine looks like this:
             %% -config /path/to/app.config -args_file /path/to/vm.args -vm_args /path/to/vm.args
-            Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"), 
+            Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"),
                                  ".config" == filename:extension(Filename) ],
 
             case Files of
@@ -283,7 +283,7 @@ get_backend(AppConfig) ->
     end,
 
     case file:consult(ConfigFile) of
-        {ok, [Config]} ->  
+        {ok, [Config]} ->
             kvc:path('riak_kv.storage_backend', Config);
         E ->
             lager:error("Error reading ~s, ~p", [ConfigFile, E]),

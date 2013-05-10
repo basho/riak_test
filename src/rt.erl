@@ -1362,7 +1362,7 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                         case lists:keyfind(GuiResource, 2,
                                            Routes) of
                             false ->
-                                lager:info("Control routes not found yet: ~p ~p.", 
+                                lager:info("Control routes not found yet: ~p ~p.",
                                            [Vsn, Routes]),
                                 false;
                             _ ->
