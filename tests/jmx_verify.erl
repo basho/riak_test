@@ -115,9 +115,36 @@ test_supervision() ->
             lager:error("riak_jmx crash able to crash riak node"),
             ?assertEqual("riak_jmx crash able to crash riak node", true);
         _ ->
-            rt:stop(Node)
+            yay
     end,
-    ok.
+
+    %% Let's make sure the thing's restarting as planned
+    lager:info("calling riak_jmx:stop() to reset retry counters"),
+    rpc:call(Node, riak_jmx, stop, ["stopping for test purposes"]),
+
+    lager:info("loading lager backend on node"),
+    rt:load_modules_on_nodes([riak_test_lager_backend], [Node]),
+    ok = rpc:call(Node, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
+    ok = rpc:call(Node, lager, set_loglevel, [riak_test_lager_backend, info]),
+  
+    lager:info("Now we're capturing logs on the node, let's start jmx"),
+    lager:info("calling riak_jmx:start() to get these retries started"),
+    rpc:call(Node, riak_jmx, start, []),
+
+    timer:sleep(40000), %% wait 2000 millis per restart + fudge factor
+    Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+
+    lager:info("It can fail, it can fail 10 times"),
+    RetryCount = lists:foldl(
+        fun(Log, Sum) -> case re:run(element(7,element(2,Log)), "JMX server monitor .* exited with code .*\. Retry #.*", []) of
+                {match, _} -> 1 + Sum;
+                _ -> Sum
+            end
+        end, 
+        0, Logs),
+    ?assertEqual({retry_count, RetryCount}, {retry_count, 10}),
+    rt:stop(Node),
+    ok_ok.
 
 test_application_stop() ->
     lager:info("Testing application:stop()"),
