@@ -20,7 +20,7 @@
 
 %% @doc riak_test_runner runs a riak_test module's run/0 function.
 -module(riak_test_runner).
--export([confirm/3, metadata/0, metadata/1]).
+-export([confirm/4, metadata/0, metadata/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
@@ -37,12 +37,12 @@ metadata(Pid) ->
         {metadata, TestMeta} -> TestMeta 
     end.
 
--spec(confirm(integer(), atom(), [{atom(), term()}]) -> [tuple()]).
+-spec(confirm(integer(), atom(), [{atom(), term()}], list()) -> [tuple()]).
 %% @doc Runs a module's run/0 function after setting up a log capturing backend for lager.
 %%      It then cleans up that backend and returns the logs as part of the return proplist.
-confirm(TestModule, Outdir, TestMetaData) ->
+confirm(TestModule, Outdir, TestMetaData, HarnessArgs) ->
     start_lager_backend(TestModule, Outdir),
-    rt:setup_harness(TestModule, []),
+    rt:setup_harness(TestModule, HarnessArgs),
     Backend = rt:set_backend(proplists:get_value(backend, TestMetaData)),
     
     {Status, Reason} = case check_prereqs(TestModule) of

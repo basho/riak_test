@@ -1,6 +1,9 @@
 -module(rtssh).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("kernel/include/file.hrl").
+
+-define(DEFAULT_BIN_SIZE, 4096).
 
 get_version() ->
     unknown.
@@ -8,25 +11,110 @@ get_version() ->
 get_deps() ->
     "deps".
 
-setup_harness(_Test, _Args) ->
-    Path = relpath(root),
+harness_opts() ->
+    %% Option Name, Short Code, Long Code, Argument Spec, Help Message
+    [
+     {test_name, undefined, "name", {string, "ad-hoc"}, 
+      "name for this test"},
+     {bin_size, undefined, "bin-size", {integer, 4096}, 
+      "size of fixed binaries (median for non-fixed)"},
+     {bin_type, undefined, "bin-type", {atom, fixed}, 
+      "fixed | exponential"},
+     {load_type, undefined, "load-type", {atom, write_heavy}, 
+      "read_heavy | write_heavy"},
+     {version, undefined, "version", {string, "master"}, 
+      "version to test"},
+     {prepop, undefined, "prepop", {integer, 0},
+      "number of values to prepop (approximate)"},
+     {test_type, undefined, "type",  {atom, uniform}, 
+      "uniform | pareto"},
+     {stop, undefined, "stop", {boolean, false}, 
+      "stop running riak cluster and start new"},
+     {dataset, undefined, "dataset", {string, ""}, 
+      "use pre-existing dataset and ring (count must match)"}
+    ].
+
+
+setup_harness(_Test, Args) ->
+    lager:info("Harness setup with args: ~p", [Args]),
+    Version =
+        case getopt:parse(harness_opts(), Args) of
+            {ok, {Parsed, []}} ->
+                V = proplists:get_value(version, Parsed),
+                rt:set_config(perf_version, V),
+                B = proplists:get_value(bin_size, Parsed),
+                rt:set_config(perf_binsize, B),
+                BT = proplists:get_value(bin_type, Parsed),
+                rt:set_config(perf_bin_type, BT),
+                LT = proplists:get_value(load_type, Parsed),
+                rt:set_config(perf_load_type, LT),
+                T = proplists:get_value(test_type, Parsed),
+                rt:set_config(perf_test_type, T),
+                N = proplists:get_value(test_name, Parsed),
+                rt:set_config(perf_test_name, N),
+                D = proplists:get_value(dataset, Parsed),
+                rt:set_config(perf_dataset, D),
+                PC = proplists:get_value(prepop, Parsed),
+
+                P = case PC of 
+                        0 -> false;
+                        Count when Count > 0 -> 
+                            case D of
+                                "" -> 
+                                    true;
+                                _ -> 
+                                    lager:error("Dataset and prepop are "
+                                                "mutually exclusive"),
+                                    halt(1)
+                            end
+                    end,
+                rt:set_config(perf_prepop, P),
+                rt:set_config(perf_prepop_size, PC),
+                rt:set_config(perf_restart, 
+                              proplists:get_value(stop, Parsed)),
+                V;
+            _Huh ->
+                %% lager:info("huh: ~p", [Huh]),
+                getopt:usage(harness_opts(),
+                             escript:script_name()),
+                halt(0)
+        end,
+
     Hosts = load_hosts(),
     rt:set_config(rt_hostnames, Hosts),
-    %% [io:format("R: ~p~n", [wildcard(Host, "/tmp/*")]) || Host <- Hosts],
 
-    %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    stop_all(Hosts),
+    case Version of 
+        meh -> 
+            Path = relpath(root),
 
-    %% Reset nodes to base state
-    lager:info("Resetting nodes to fresh state"),
-    rt:pmap(fun(Host) ->
-                    run_git(Host, Path, "reset HEAD --hard"),
-                    run_git(Host, Path, "clean -fd")
-            end, Hosts),
+            %% [io:format("R: ~p~n", [wildcard(Host, "/tmp/*")]) || Host <- Hosts],
+
+            %% Stop all discoverable nodes, not just nodes we'll be using for this test.
+            stop_all(Hosts),
+
+            %% Reset nodes to base state
+            lager:info("Resetting nodes to fresh state"),
+            rt:pmap(fun(Host) ->
+                            run_git(Host, Path, "reset HEAD --hard"),
+                            run_git(Host, Path, "clean -fd")
+                    end, Hosts);
+        _ ->
+            %% consider separating out the perf stuff as an overlay on the ssh harness
+
+            maybe_stop_all(Hosts)
+    end,
+
     ok.
 
+
+set_backend(Backend) ->
+    %%lager:info("setting backend to ~p", [Backend]),
+    rt:set_config(rt_backend, Backend).
+
 get_backends() ->
-    [].
+    [riak_kv_bitcask_backend,
+     riak_kv_eleveldb_backend,
+     riak_kv_memory_backend].
 
 cmd(Cmd) ->
     cmd(Cmd, []).
@@ -50,10 +138,8 @@ deploy_nodes(NodeConfig) ->
 deploy_nodes(NodeConfig, Hosts) ->
     Path = relpath(root),
     lager:info("Riak path: ~p", [Path]),
-    %% NumNodes = length(NodeConfig),
-    %% NodesN = lists:seq(1, NumNodes),
-    %% Nodes = [?DEV(N) || N <- NodesN],
-    Nodes = [list_to_atom("dev1@" ++ Host) || Host <- Hosts],
+
+    Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
     HostMap = lists:zip(Nodes, Hosts),
 
     %% NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
@@ -64,17 +150,19 @@ deploy_nodes(NodeConfig, Hosts) ->
     rt:set_config(rt_hosts, HostMap),
     rt:set_config(rt_versions, VersionMap),
 
-    %% io:format("~p~n", [Nodes]),
-
     rt:pmap(fun({_, default}) ->
                     ok;
-               ({Node, Config}) ->
+               ({Node, Config}) -> 
+                    %%lager:info("update ~p", [self()]),
                     update_app_config(Node, Config)
             end,
             lists:zip(Nodes, Configs)),
 
+    timer:sleep(500),
+
     rt:pmap(fun(Node) ->
                     Host = get_host(Node),
+                    %%lager:info("ports ~p", [self()]),
                     Config = [{riak_api, [{pb, fun([{_, Port}]) ->
                                                        [{Host, Port}]
                                                end},
@@ -87,9 +175,13 @@ deploy_nodes(NodeConfig, Hosts) ->
                     update_app_config(Node, Config)
             end, Nodes),
 
+    timer:sleep(500),
+
     rt:pmap(fun(Node) ->
                     update_vm_args(Node, [{"-name", Node}])
             end, Nodes),
+
+    timer:sleep(500),
 
     rt:pmap(fun start/1, Nodes),
 
@@ -220,28 +312,36 @@ format(Msg, Args) ->
 update_vm_args(_Node, []) ->
     ok;
 update_vm_args(Node, Props) ->
-    %% TODO: Make non-matched options be appended to file
     VMArgs = node_path(Node) ++ "/etc/vm.args",
     Bin = remote_read_file(Node, VMArgs),
     Output =
         lists:foldl(fun({Config, Value}, Acc) ->
                             CBin = to_binary(Config),
                             VBin = to_binary(Value),
-                            re:replace(Acc,
-                                       <<"((^|\\n)", CBin/binary, ").+\\n">>,
-                                       <<"\\1 ", VBin/binary, $\n>>)
+                            case re:replace(Acc,
+                                            <<"((^|\\n)", CBin/binary, ").+\\n">>,
+                                            <<"\\1 ", VBin/binary, $\n>>) of 
+                                CBin -> <<CBin/binary, VBin/binary, $\n>>;
+                                Mod -> Mod
+                            end
                     end, Bin, Props),
     %% io:format("~p~n", [iolist_to_binary(Output)]),
     remote_write_file(Node, VMArgs, Output),
     ok.
 
-update_app_config(Node, Config) ->
-    ConfigFile = node_path(Node) ++ "/etc/app.config",
+
+host_from_node(Node) ->
+    NodeName = atom_to_list(Node),
+    lists:nth(2, string:tokens(NodeName, "@")).
+
+update_app_config(Node0, Config) ->
+    ConfigFile = node_path(Node0) ++ "/etc/app.config",
+    Node = host_from_node(Node0),
     update_app_config_file(Node, ConfigFile, Config).
 
 update_app_config_file(Node, ConfigFile, Config) ->
-    lager:info("rtssh:update_app_config_file(~p, ~s, ~p)",
-               [Node, ConfigFile, Config]),
+    %% lager:info("rtssh:update_app_config_file(~p, ~s, ~p)",
+    %%            [Node, ConfigFile, Config]),
     Bin = remote_read_file(Node, ConfigFile),
     BaseConfig =
         try
@@ -277,6 +377,52 @@ consult_string(Str) ->
     {ok, Tokens, _} = erl_scan:string(Str),
     erl_parse:parse_term(Tokens).
 
+
+ensure_remote_build(Hosts, Version) ->
+    lager:info("Ensuring remote build: ~p", [Version]),
+    %%lager:info("~p ~n ~p", [Version, Hosts]),
+    Base = rt:config(perf_builds),
+    Dir = Base++"/"++Version++"/",
+    lager:info("Using build at ~p", [Dir]),
+    {ok, Info} = file:read_file_info(Dir),
+    ?assertEqual(directory, Info#file_info.type),
+    Sum =
+        case os:cmd("dir_sum.sh "++Dir) of
+            [] ->
+                throw("error runing dir validator");
+            S -> S
+        end,
+
+    F = fun(Host) ->
+                case ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir) of 
+                    {0, Sum} -> ok;
+                    {2, []} -> 
+                        {0, _} = deploy_build(Host, Dir),
+                        {0, Sum} = ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir);
+                    {0, OtherSum} -> 
+                        error("Bad build on host "++Host++" with sum "++OtherSum)
+                end,
+                lager:info("Build OK on host: ~p", [Host]),
+                {0, _} = ssh_cmd(Host, "rm -rf "++Dir++"/data/"),
+                {0, _} = ssh_cmd(Host, "rm -rf "++Dir++"/log/"),
+                lager:info("Cleaned up host ~p", [Host])
+        end,
+    rt:pmap(F, Hosts),
+    %% if we get here, we need to reset rtdev path, because we're not 
+    %% using it as defined.
+    rt:set_config(rtdev_path, [{root, Base}, {Version, Dir}]),
+    ok.
+            
+deploy_build(Host, Dir) ->
+    ssh_cmd(Host, "mkdir -p "++Dir),
+    Base0 = filename:split(Dir),
+    Base1 = lists:delete(lists:last(Base0), Base0),
+    Base = filename:join(Base1),
+    SCP = format("scp -qr -o 'StrictHostKeyChecking no' ~s ~s:~s", 
+                 [Dir, Host, Base]),
+    %%lager:info("SCP ~p", [SCP]),
+    wait_for_cmd(spawn_cmd(SCP)).
+
 %%%===================================================================
 %%% Riak devrel path utilities
 %%%===================================================================
@@ -292,6 +438,9 @@ dev_bin_path(Path, N) ->
 dev_etc_path(Path, N) ->
     dev_path(Path, N) ++ "/etc".
 
+dev_data_path(Path, N) ->
+    dev_path(Path, N) ++ "/data".
+
 relpath(Vsn) ->
     Path = ?PATH,
     relpath(Vsn, Path).
@@ -302,13 +451,14 @@ relpath(current, Path) ->
     Path;
 relpath(root, Path) ->
     Path;
-relpath(_, _) ->
-    throw("Version requested but only one path provided").
+relpath(What, _) ->
+    throw(What).
+%%    throw("Version requested but only one path provided").
 
 node_path(Node) ->
-    N = node_id(Node),
-    Path = relpath(node_version(Node)),
-    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
+    %%N = node_id(Node),
+    relpath(node_version(Node)).
+    %%lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
 
 node_id(_Node) ->
     %% NodeMap = rt:config(rt_nodes),
@@ -363,6 +513,31 @@ get_cmd_result(Port, Acc) ->
 devpaths() ->
     Paths = proplists:delete(root, rt:config(rtdev_path)),
     lists:usort([DevPath || {_Name, DevPath} <- Paths]).
+
+%% in the perf case, we don't always (or even usually) want to stop
+maybe_stop_all(Hosts) ->
+    case rt:config(perf_restart, meh) of
+        true ->
+            F = fun(Host) ->
+                        lager:info("Checking host ~p for running riaks", 
+                                   [Host]),
+                        Cmd = "ps aux | grep beam.sm[p] | awk \"{ print \\$11 }\"",
+                        {0, Dirs} = ssh_cmd(Host, Cmd),
+                        %% lager:info("Dirs ~p", [Dirs]),
+                        DirList = string:tokens(Dirs, "\n"),
+                        lists:foreach(
+                              fun(Dir) ->
+                                      Path = lists:nth(1, string:tokens(Dir, ".")),
+                                      lager:info("Detected running riak at: ~p", 
+                                                 [Path]),
+                                      %% not really safe, but fast and effective.
+                                      _ = ssh_cmd(Host, "killall beam.smp")
+                              end, DirList)
+                end,
+            rt:pmap(F, Hosts);
+        _ -> ok
+    end.
+                                
 
 stop_all(Hosts) ->
     %% [stop_all(Host, DevPath ++ "/dev") || Host <- Hosts,

@@ -139,15 +139,26 @@ main(Args) ->
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
 
-    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
+    TestResults = lists:filter(fun results_filter/1, 
+                               [ run_test(Test, 
+                                          Outdir, 
+                                          TestMetaData, 
+                                          Report, 
+                                          HarnessArgs, 
+                                          length(Tests)) 
+                                 || {Test, TestMetaData} <- Tests]),
     print_summary(TestResults, Verbose),
-
-    case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
-        {1, fail} ->
-            so_kill_riak_maybe();
-        _ ->
-            lager:info("Multiple tests run or no failure"),
-            rt:teardown()
+    %% perf restart isn't directly applicable here, it just gets set regardless 
+    case rt:config(perf_restart, undefined) of 
+        undefined ->
+            case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
+                {1, fail} ->
+                    so_kill_riak_maybe();
+                _ ->
+                    lager:info("Multiple tests run or no failure"),
+                    rt:teardown()
+            end;
+        _ -> ok
     end,
     ok.
 
@@ -237,8 +248,8 @@ is_runnable_test({TestModule, _}) ->
     code:ensure_loaded(TestModule),
    erlang:function_exported(TestModule, confirm, 0).
 
-run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
-    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
+run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
+    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData, HarnessArgs),
     case NumTests of
         1 -> keep_them_up;
         _ -> rt:teardown()

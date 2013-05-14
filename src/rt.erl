@@ -78,6 +78,7 @@
          log_to_nodes/2,
          log_to_nodes/3,
          members_according_to/1,
+         nearest_ringsize/1,
          owners_according_to/1,
          partition/2,
          pbc/1,
@@ -288,11 +289,12 @@ deploy_nodes(Versions, Services) ->
     NodeConfig = [ version_to_config(Version) || Version <- Versions ],
     Nodes = ?HARNESS:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
-    [ ok = wait_for_service(Node, Service) || Node <- Nodes, Service <- Services ],
+    [ ok = wait_for_service(Node, Service) || Node <- Nodes, 
+                                              Service <- Services ],
     Nodes.
 
-version_to_config({_, _}=Config) -> Config;
-version_to_config(Version) -> {Version, default}.
+version_to_config(Config) when is_tuple(Config)-> Config;
+version_to_config(Version) when is_list(Version) -> {Version, default}.
 
 %% @doc Start the specified Riak node
 start(Node) ->
@@ -783,6 +785,18 @@ members_according_to(Node) ->
     Members = riak_core_ring:all_members(Ring),
     Members.
 
+%% @doc Return an appropriate ringsize for the node count passed in
+nearest_ringsize(Count) ->
+    nearest_ringsize(Count * 10, 2).
+
+nearest_ringsize(Count, Power) ->
+    case Count < trunc(Power * 1.5) of
+        true ->
+            Power;
+        false ->
+            nearest_ringsize(Count, Power * 2)
+    end.
+
 %% @doc Return the cluster status of `Member' according to the ring
 %%      retrieved from `Node'.
 status_of_according_to(Member, Node) ->
@@ -822,6 +836,8 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
             _ ->
                 deploy_nodes(Versions)
         end,
+
+    lager:info("Nodes ~p", [Nodes]),
 
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
