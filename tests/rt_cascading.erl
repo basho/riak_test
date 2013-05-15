@@ -565,13 +565,13 @@ mixed_version_clusters_test_() ->
             end,
             fun(_) -> [
 
-                {"node1 put", timeout, 10000, fun() ->
+                {"node1 put", timeout, 15000, fun() ->
                     Client = rt:pbc(N1),
                     Bin = <<"rt after upgrade">>,
                     Obj = riakc_obj:new(?bucket, Bin, Bin),
                     riakc_pb_socket:put(Client, Obj, [{w, 2}]),
                     riakc_pb_socket:stop(Client),
-                    ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin)),
+                    ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin, 100, 1000)),
                     ?assertEqual(Bin, maybe_eventually_exists(N3, ?bucket, Bin))
                 end},
 
