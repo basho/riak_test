@@ -59,13 +59,15 @@ simple_test_() ->
     fun(State) -> [
 
         {"connecting Beginning to Middle", fun() ->
-            repl_util:connect_cluster(State#simple_state.beginning, "127.0.0.1", 10026),
+            Port = get_cluster_mgr_port(State#simple_state.middle),
+            repl_util:connect_cluster(State#simple_state.beginning, "127.0.0.1", Port),
             repl_util:enable_realtime(State#simple_state.beginning, "middle"),
             repl_util:start_realtime(State#simple_state.beginning, "middle")
         end},
 
         {"connection Middle to End", fun() ->
-            repl_util:connect_cluster(State#simple_state.middle, "127.0.0.1", 10036),
+            Port = get_cluster_mgr_port(State#simple_state.ending),
+            repl_util:connect_cluster(State#simple_state.middle, "127.0.0.1", Port),
             repl_util:enable_realtime(State#simple_state.middle, "end"),
             repl_util:start_realtime(State#simple_state.middle, "end")
         end},
@@ -138,8 +140,12 @@ big_circle_test_() ->
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
         [NameHd | NameTail] = Names,
         ConnectTo = NameTail ++ [NameHd],
+        NamePortMap = lists:map(fun({Node, Name}) ->
+            Port = get_cluster_mgr_port(Node),
+            {Name, Port}
+        end, lists:zip(Nodes, Names)),
         Connect = fun({Node, ConnectToName}) ->
-            Port = list_to_integer("100" ++ ConnectToName ++ "6"),
+            Port = proplists:get_value(ConnectToName, NamePortMap),
             connect_rt(Node, Port, ConnectToName)
         end,
         Res = lists:map(Connect, lists:zip(Nodes, ConnectTo)),
@@ -168,7 +174,9 @@ big_circle_test_() ->
         {"2 way repl, and circle it", timeout, 10000, fun() ->
             ConnectTo = ["6", "1", "2", "3", "4", "5"],
             Connect = fun({Node, ConnectToName}) ->
-                Port = list_to_integer("100" ++ ConnectToName ++ "6"),
+                Nth = list_to_integer(ConnectToName),
+                ConnectNode = lists:nth(Nth, Nodes),
+                Port = get_cluster_mgr_port(ConnectNode),
                 connect_rt(Node, Port, ConnectToName)
             end,
             lists:map(Connect, lists:zip(Nodes, ConnectTo)),
@@ -231,11 +239,12 @@ circle_test_() ->
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
 
         Connections = [
-            {One, 10026, "two"},
-            {Two, 10036, "three"},
-            {Three, 10016, "one"}
+            {One, Two, "two"},
+            {Two, Three, "three"},
+            {Three, One, "one"}
         ],
-        lists:map(fun({Node, Port, Name}) ->
+        lists:map(fun({Node, ConnectNode, Name}) ->
+            Port = get_cluster_mgr_port(ConnectNode),
             connect_rt(Node, Port, Name)
         end, Connections),
         Nodes
@@ -292,15 +301,19 @@ pyramid_test_() ->
 
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
-        [Top, Left, _Left2, Right, _Right2] = Nodes = rt:deploy_nodes(5, Conf),
+        [Top, Left, Left2, Right, Right2] = Nodes = rt:deploy_nodes(5, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["top", "left", "left2", "right", "right2"],
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        connect_rt(Top, 10026, "left"),
-        connect_rt(Left, 10036, "left2"),
-        connect_rt(Top, 10046, "right"),
-        connect_rt(Right, 10056, "right2"),
+        Ports = lists:map(fun(Node) ->
+            Port = get_cluster_mgr_port(Node),
+            {Node, Port}
+        end, Nodes),
+        connect_rt(Top, proplists:get_value(Left, Ports), "left"),
+        connect_rt(Left, proplists:get_value(Left2, Ports), "left2"),
+        connect_rt(Top, proplists:get_value(Right, Ports), "right"),
+        connect_rt(Right, proplists:get_value(Right2, Ports), "right2"),
         Nodes
     end,
     fun(Nodes) ->
@@ -340,15 +353,19 @@ diamond_test_() ->
     %                     +--------+
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
-        [Top, MidLeft, MidRight, _Bottom] = Nodes = rt:deploy_nodes(4, Conf),
+        [Top, MidLeft, MidRight, Bottom] = Nodes = rt:deploy_nodes(4, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         Names = ["top", "midleft", "midright", "bottom"],
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        connect_rt(Top, 10026, "midleft"),
-        connect_rt(MidLeft, 10046, "bottom"),
-        connect_rt(MidRight, 10046, "bottom"),
-        connect_rt(Top, 10036, "midright"),
+        PortMap = lists:map(fun(Node) ->
+            Port = get_cluster_mgr_port(Node),
+            {Node, Port}
+        end, Nodes),
+        connect_rt(Top, proplists:get_value(MidLeft, PortMap), "midleft"),
+        connect_rt(MidLeft, proplists:get_value(Bottom, PortMap), "bottom"),
+        connect_rt(MidRight, proplists:get_value(Bottom, PortMap), "bottom"),
+        connect_rt(Top, proplists:get_value(MidRight, PortMap), "midright"),
         Nodes
     end,
     fun(Nodes) ->
@@ -374,7 +391,8 @@ diamond_test_() ->
 
         {"connect bottom to top", fun() ->
             [Top, _MidLeft, _MidRight, Bottom] = Nodes,
-            connect_rt(Bottom, 10016, "top"),
+            Port = get_cluster_mgr_port(Top),
+            connect_rt(Bottom, Port, "top"),
             WaitFun = fun(N) ->
                 Status = rpc:call(N, riak_repl2_rt, status, []),
                 Sinks = proplists:get_value(sinks, Status, []),
@@ -426,17 +444,17 @@ circle_and_spurs_test_() ->
     % +-----------+    +------+           +------+    +-----------+
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
-        [North, East, West, _NorthSpur, _EastSpur, _WestSpur] = Nodes = rt:deploy_nodes(6, Conf),
+        [North, East, West, NorthSpur, EastSpur, WestSpur] = Nodes = rt:deploy_nodes(6, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         Names = ["north", "east", "west", "north_spur", "east_spur", "west_spur"],
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        connect_rt(North, 10026, "east"),
-        connect_rt(East, 10036, "west"),
-        connect_rt(West, 10016, "north"),
-        connect_rt(North, 10046, "north_spur"),
-        connect_rt(East, 10056, "east_spur"),
-        connect_rt(West, 10066, "west_spur"),
+        connect_rt(North, get_cluster_mgr_port(East), "east"),
+        connect_rt(East, get_cluster_mgr_port(West), "west"),
+        connect_rt(West, get_cluster_mgr_port(North), "north"),
+        connect_rt(North, get_cluster_mgr_port(NorthSpur), "north_spur"),
+        connect_rt(East, get_cluster_mgr_port(EastSpur), "east_spur"),
+        connect_rt(West, get_cluster_mgr_port(WestSpur), "west_spur"),
         Nodes
     end,
     fun(Nodes) ->
@@ -509,9 +527,9 @@ mixed_version_clusters_test_() ->
         repl_util:name_cluster(N3, "n34"),
         repl_util:name_cluster(N5, "n56"),
         [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
-        connect_rt(N1, 10036, "n34"),
-        connect_rt(N3, 10056, "n56"),
-        connect_rt(N5, 10016, "n12"),
+        connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
+        connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
+        connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
         Nodes
     end,
     fun(Nodes) ->
@@ -576,9 +594,9 @@ mixed_version_clusters_test_() ->
                 repl_util:wait_until_leader_converge([N1, N2]),
                 repl_util:wait_until_leader_converge([N3, N4]),
                 repl_util:wait_until_leader_converge([N5, N6]),
-                maybe_reconnect_rt(N1, 10036, "n34"),
-                maybe_reconnect_rt(N3, 10056, "n56"),
-                maybe_reconnect_rt(N5, 10016, "n12"),
+                maybe_reconnect_rt(N1, get_cluster_mgr_port(N3), "n34"),
+                maybe_reconnect_rt(N3, get_cluster_mgr_port(N5), "n56"),
+                maybe_reconnect_rt(N5, get_cluster_mgr_port(N1), "n12"),
                 ok
             end,
             fun(_) ->
@@ -717,6 +735,10 @@ conf() ->
         {fullsync_interval, disabled},
         {diff_batch_size, 10}
     ]}].
+
+get_cluster_mgr_port(Node) ->
+    {ok, {_Ip, Port}} = rpc:call(Node, application, get_env, [riak_core, cluster_mgr]),
+    Port.
 
 maybe_reconnect_rt(SourceNode, SinkPort, SinkName) ->
     case repl_util:wait_for_connection(SourceNode, SinkName) of
