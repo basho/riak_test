@@ -150,8 +150,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:wait_until_ring_converged(ANodes),
 
 
-    lager:info("write 1000000 keys"),
-    ?assertEqual([], repl_util:do_write(LeaderA, 50000, 150000,
+    lager:info("write 2000 keys"),
+    ?assertEqual([], repl_util:do_write(LeaderA, 50000, 52000,
             TestBucket, 2)),
 
     lager:info("reconnect the 2 clusters"),
@@ -165,9 +165,6 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     repl_util:start_realtime(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
     ?assertEqual(ok, repl_util:wait_until_connection(LeaderA)),
-
-    lager:info("Ready for manual testing."),
-    timer:sleep(1000000),
 
     repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 

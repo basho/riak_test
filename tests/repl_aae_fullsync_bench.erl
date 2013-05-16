@@ -29,6 +29,7 @@ confirm() ->
             },
             {riak_repl,
              [
+%%              {fullsync_strategy, keylist},
               {fullsync_strategy, aae},
               {fullsync_on_connect, false},
               {fullsync_interval, disabled}
@@ -108,7 +109,7 @@ aae_fs_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %% TEST: write data, NOT replicated by RT or fullsync
     %% keys: 1..NumKeysAOnly
     %%---------------------------------------------------
-    NumKeysAOnly = 100000,
+    NumKeysAOnly = 1000000,
     lager:info("Writing ~p keys to A(~p)", [NumKeysAOnly, AFirst]),
     ?assertEqual([], repl_util:do_write(AFirst, 1, NumKeysAOnly, TestBucket, 2)),
 
@@ -122,7 +123,7 @@ aae_fs_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %% TEST: write data, replicated by RT
     %% keys: NumKeysAOnly+1..NumKeysAOnly+NumKeysBoth
     %%-----------------------------------------------
-    NumKeysBoth = 1000000,
+    NumKeysBoth = 0,
 
     %% Enable and start Real-time replication
     repl_util:enable_realtime(LeaderA, "B"),
@@ -166,11 +167,11 @@ aae_fs_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
 
     %% verify data is replicated to B
-    %% log_to_nodes(AllNodes, "Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
-    %%              [NumKeysAOnly, LeaderA, BFirst]),
-    %% lager:info("Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
-    %%            [NumKeysAOnly, LeaderA, BFirst]),
-    %% ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, NumKeysAOnly, TestBucket, 2)),
+    NumKeysToVerify = min(1000, NumKeysAOnly),
+    log_to_nodes(AllNodes, "Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
+                 [NumKeysToVerify, LeaderA, BFirst]),
+    lager:info("Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
+               [NumKeysToVerify, LeaderA, BFirst]),
+    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, NumKeysToVerify, TestBucket, 2)),
 
     ok.
-
