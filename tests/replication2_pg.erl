@@ -230,6 +230,28 @@ test_12_pg(Mode) ->
     lager:info("PGResult: ~p", [PGResult]),
     ?assertEqual(ValueB, riakc_obj:get_value(PGResult)),
 
+    lager:info("Disable repl and wait for clusters to disconnect"),
+
+    rt:log_to_nodes([LeaderA], "Delete listener"),
+    DelListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
+    DelListenerRes = rpc:call(LeaderA, riak_repl_console, del_listener, DelListenerArgs),
+    ?assertEqual(ok, DelListenerRes),
+
+    [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
+
+    rt:log_to_nodes([FirstB], "Delete site"),
+    DelSiteArgs = ["127.0.0.1", "5666", "rtmixed"],
+    DelSiteRes = rpc:call(FirstB, riak_repl_console, add_site, [DelSiteArgs]),
+    lager:info("Res = ~p", [DelSiteRes]),
+
+    rt:log_to_nodes(AllNodes, "Waiting until disconnected"),
+    wait_until_12_no_connection(LeaderA),
+
+    [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
+
+    rt:log_to_nodes(AllNodes, "Trying proxy_get without a connection"),
+    ?assertEqual({error, notfound},
+                  riak_repl_pb_api:get(PidB, Bucket, KeyA, CidA)),
     pass.
 
 %% test shutting down nodes in source + sink clusters
@@ -270,7 +292,6 @@ test_pg_proxy() ->
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
     rt:pbc_write(PidA, Bucket, KeyD, ValueD),
-
     %% sanity check. You know, like the 10000 tests that autoconf runs 
     %% before it actually does any work.
     {FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
@@ -286,7 +307,8 @@ test_pg_proxy() ->
     [RunningBNode | _ ] = BNodes -- [PGLeaderB],
     repl_util:wait_until_leader(RunningBNode),
     lager:info("Now trying proxy_get"),
-    wait_until_pg(RunningBNode, PidB, Bucket, KeyC, CidA),
+    WaitUntilPGResult = wait_until_pg(RunningBNode, PidB, Bucket, KeyC, CidA),
+    lager:info("Wait until PG Result:", [WaitUntilPGResult]),
     lager:info("If you got here, proxy_get worked after the pg block requesting leader was killed"),
 
     lager:info("Stopping leader on provider cluster"),
@@ -523,6 +545,32 @@ wait_until_12_connection(Node) ->
                         end
                 end
         end). %% 40 seconds is enough for repl
+
+wait_until_12_no_connection(Node) ->
+    rt:wait_until(Node,
+        fun(_) ->
+                case rpc:call(Node, riak_repl_console, status, [quiet]) of
+                    {badrpc, _} ->
+                        false;
+                    Status ->
+                        case proplists:get_value(server_stats, Status) of
+                            undefined ->
+                                true;
+                            [] ->
+                                true;
+                            [{_, _, too_busy}] ->
+                                false;
+                            [_C] ->
+                                false;
+                            Conns ->
+                                lager:warning("multiple connections detected: ~p",
+                                    [Conns]),
+                                false
+                        end
+                end
+        end). %% 40 seconds is enough for repl
+
+
 
 %% these funs allow you to call:
 %% riak_test -t replication2_pg:test_basic_pg_mode_repl13 etc
