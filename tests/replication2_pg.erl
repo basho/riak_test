@@ -384,9 +384,6 @@ test_bidirectional_pg() ->
     %% write some data to cluster B
     rt:pbc_write(PidB, Bucket, KeyB, ValueB),
 
-    rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
-
     lager:info("Trying first get"),
     wait_until_pg(LeaderB, PidB, Bucket, KeyA, CidA),
     lager:info("First get worked"),
@@ -394,7 +391,6 @@ test_bidirectional_pg() ->
     lager:info("Trying second get"),
     wait_until_pg(LeaderA, PidA, Bucket, KeyB, CidB),
     lager:info("Second get worked"),
-    
     pass.
 
 %% Test multiple sinks against a single source
