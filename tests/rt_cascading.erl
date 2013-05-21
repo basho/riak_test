@@ -34,7 +34,7 @@ confirm() ->
     ending = [] :: [node()]
 }).
 
-simple_test_() ->
+simple_test_d() ->
     % +-----------+    +--------+    +-----+
     % | beginning | -> | middle | -> | end |
     % +-----------+    +--------+    +-----+
@@ -107,7 +107,7 @@ simple_test_() ->
 
     ] end}}.
 
-big_circle_test_() ->
+big_circle_test_d() ->
     % Initally just 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 1, but then 2 way is 
     % added later.
     %     +---+
@@ -221,7 +221,7 @@ big_circle_test_() ->
 
     ] end}}.
 
-circle_test_() ->
+circle_test_d() ->
     %      +-----+
     %      | one |
     %      +-----+
@@ -284,7 +284,7 @@ circle_test_() ->
 
     ] end}}.
 
-pyramid_test_() ->
+pyramid_test_d() ->
     %        +-----+
     %        | top |
     %        +-----+
@@ -336,7 +336,7 @@ pyramid_test_() ->
 
     ] end}}.
 
-diamond_test_() ->
+diamond_test_d() ->
     % A pretty cluster of clusters:
     %                      +-----+
     %     +--------------->| top |
@@ -429,7 +429,7 @@ diamond_test_() ->
 
     ] end}}.
 
-circle_and_spurs_test_() ->
+circle_and_spurs_test_d() ->
     %                        +------------+
     %                        | north_spur |
     %                        +------------+
@@ -572,7 +572,23 @@ mixed_version_clusters_test_() ->
                     riakc_pb_socket:put(Client, Obj, [{w, 2}]),
                     riakc_pb_socket:stop(Client),
                     ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin, 100, 1000)),
-                    ?assertEqual(Bin, maybe_eventually_exists(N3, ?bucket, Bin))
+                    Running = fun(Node) ->
+                        RTStatus = rpc:call(Node, riak_repl2_rt, status, []),
+                        if
+                            is_list(RTStatus) ->
+                                SourcesList = proplists:get_value(sources, RTStatus, []),
+                                Sources = [S || S <- SourcesList,
+                                    is_list(S),
+                                    proplists:get_value(connected, S, false),
+                                    proplists:get_value(source, S) =:= "n34"
+                                ],
+                                length(Sources) >= 1;
+                            true ->
+                                false
+                        end
+                    end,
+                    ?assertEqual(ok, rt:wait_until(N1, Running)),
+                    ?assertEqual(Bin, maybe_eventually_exists(N3, ?bucket, Bin, 100, 1000))
                 end},
 
                 {"node2 put", timeout, 10000, fun() ->
@@ -635,7 +651,7 @@ Reses)]),
 
     ] end}}.
 
-new_to_old_test_() ->
+new_to_old_test_d() ->
     %      +------+
     %      | New1 |
     %      +------+
