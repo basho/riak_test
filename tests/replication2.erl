@@ -445,7 +445,6 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     http_write_during_shutdown(Target, BSecond, TestBucket),
 
     lager:info("Test passed"),
-    timer:sleep(10000000),
     fin.
 
 pb_write_during_shutdown(Target, BSecond, TestBucket) ->
