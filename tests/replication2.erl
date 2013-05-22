@@ -18,7 +18,10 @@ confirm() ->
     Conf = [
             {riak_kv,
                 [
-                    {anti_entropy, {off, []}}
+                 %% Specify fast building of AAE trees
+                 {anti_entropy, {on, []}},
+                 {anti_entropy_build_limit, {100, 1000}},
+                 {anti_entropy_concurrency, 100}
                 ]
             },
             {riak_repl,
