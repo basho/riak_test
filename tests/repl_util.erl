@@ -12,6 +12,7 @@
          wait_until_leader_converge/1,
          wait_until_connection/1,
          wait_until_no_connection/1,
+         wait_until_aae_trees_built/1,
          wait_for_reads/5,
          start_and_wait_until_fullsync_complete/1,
          connect_cluster/3,
@@ -242,3 +243,25 @@ nodes_with_version(Nodes, Version) ->
 
 nodes_all_have_version(Nodes, Version) ->
     Nodes == nodes_with_version(Nodes, Version).
+
+%% AAE support
+wait_until_aae_trees_built([AnyNode|_]=Nodes) ->
+    lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
+    %% Wait until all nodes report no undefined trees
+    rt:wait_until(AnyNode,
+                  fun(_) ->
+                          Busy = lists:foldl(
+                                   fun(Node,Busy1) ->
+                                           %% will be false when all trees are built on Node
+                                           lists:keymember(undefined,
+                                                           2,
+                                                           rpc:call(Node,
+                                                                    riak_kv_entropy_info,
+                                                                    compute_tree_info,
+                                                                    []))
+                                               or Busy1
+                                   end,
+                                   false,
+                                   Nodes),
+                          not Busy
+                  end).
