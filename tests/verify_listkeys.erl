@@ -53,6 +53,9 @@ confirm() ->
             Ns
         end, [Node1], [Node2, Node3, Node4]),
 
+    lager:info("Checking basic HTTP"),
+    check_it_all(Nodes, http),
+
     lager:info("Stopping Node1"),
     rt:stop(Node1),
     rt:wait_until_unpingable(Node1),
@@ -73,7 +76,7 @@ confirm() ->
             check_it_all(UpNodes),
             Node
         end, Node1, [Node2, Node3, Node4]),
-    
+
     lager:info("Stopping Node2"),
     rt:stop(Node2),
     rt:wait_until_unpingable(Node2),
@@ -84,7 +87,7 @@ confirm() ->
     
     lager:info("Only Node1 is up, so test should fail!"),
     
-    check_it_all([Node1], false),
+    check_it_all([Node1], pbc, false),
     pass.
     
 put_keys(Node, Bucket, Num) ->
@@ -94,37 +97,64 @@ put_keys(Node, Bucket, Num) ->
     [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)],
     riakc_pb_socket:stop(Pid).
 
-list_keys(Node, Bucket, Attempt, Num, ShouldPass) ->
-    Pid = rt:pbc(Node),
-    lager:info("Listing keys on ~p. Attempt #~p", [Node, Attempt]),
-    
+list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
+    case Interface of
+        pbc ->
+            Pid = rt:pbc(Node),
+            Mod = riakc_pb_socket;
+        http ->
+            Pid = rt:httpc(Node),
+            Mod = rhc
+    end,            
+    lager:info("Listing keys on ~p using ~p. Attempt #~p", 
+               [Node, Interface, Attempt]),
     case ShouldPass of
         true ->
-            {ok, Keys} = riakc_pb_socket:list_keys(Pid, Bucket),
+            {ok, Keys} = Mod:list_keys(Pid, Bucket),
             ActualKeys = lists:usort(Keys),
-            ExpectedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)]),
+            ExpectedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)])
+                                        || Ki <- lists:seq(0, Num - 1)]),
             assert_equal(ExpectedKeys, ActualKeys);
         _ ->
-            {Status, Message} = riakc_pb_socket:list_keys(Pid, Bucket),
+            {Status, Message} = Mod:list_keys(Pid, Bucket),
             ?assertEqual(error, Status),
             ?assertEqual(<<"insufficient_vnodes_available">>, Message)
     end,
-    riakc_pb_socket:stop(Pid).
+    case Interface of
+        pbc -> riakc_pb_socket:stop(Pid);
+        _ -> ok
+    end.
     
-put_buckets(Node, Num) ->
+put_buckets(Node, Num) -> 
     Pid = rt:pbc(Node),
-    Buckets = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
+    Buckets = [list_to_binary(["", integer_to_list(Ki)])
+               || Ki <- lists:seq(0, Num - 1)],
     {Key, Val} = {<<"test_key">>, <<"test_value">>},
-    [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || Bucket <- Buckets],
+    [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val))
+     || Bucket <- Buckets],
     riakc_pb_socket:stop(Pid).
 
-list_buckets(Node, Attempt, Num, ShouldPass) ->
-    Pid = rt:pbc(Node),
-    lager:info("Listing buckets on ~p. Attempt #~p", [Node, Attempt]),
+list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
+    case Interface of
+        pbc ->
+            Pid = rt:pbc(Node),
+            Mod = riakc_pb_socket;
+        http ->
+            Pid = rt:httpc(Node),
+            Mod = rhc
+    end,            
+    lager:info("Listing buckets on ~p using ~p. Attempt #~p", 
+               [Node, Interface, Attempt]),
     
-    {Status, Buckets} = riakc_pb_socket:list_buckets(Pid),
+    {Status, Buckets} = Mod:list_buckets(Pid),
+    case Status of
+        error -> lager:info("list buckets error ~p", [Buckets]);
+        _ -> ok
+    end,
     ?assertEqual(ok, Status),
-    ExpectedBuckets= lists:usort([?BUCKET | [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)]]),
+    ExpectedBuckets= lists:usort([?BUCKET | 
+                                  [list_to_binary(["", integer_to_list(Ki)]) 
+                                   || Ki <- lists:seq(0, Num - 1)]]),
     ActualBuckets = lists:usort(Buckets),
     case ShouldPass of
         true ->
@@ -133,7 +163,10 @@ list_buckets(Node, Attempt, Num, ShouldPass) ->
             ?assert(length(ActualBuckets) < length(ExpectedBuckets)),
             lager:info("This case expects inconsistent bucket lists")
     end,
-    riakc_pb_socket:stop(Pid).
+    case Interface of
+        pbc -> riakc_pb_socket:stop(Pid);
+        _ -> ok
+    end.
 
 
 assert_equal(Expected, Actual) ->
@@ -145,10 +178,16 @@ assert_equal(Expected, Actual) ->
     ?assertEqual(Actual, Expected).
 
 check_it_all(Nodes) ->
-    check_it_all(Nodes, true).
-check_it_all(Nodes, ShouldPass) ->
-    [check_a_node(N, ShouldPass) || N <- Nodes].
+    check_it_all(Nodes, pbc).
+
+check_it_all(Nodes, Interface) ->
+    check_it_all(Nodes, Interface, true).
+
+check_it_all(Nodes, Interface, ShouldPass) ->
+    [check_a_node(N, Interface, ShouldPass) || N <- Nodes].
     
-check_a_node(Node, ShouldPass) ->
-    [list_keys(Node, ?BUCKET, Attempt, ?NUM_KEYS, ShouldPass) || Attempt <- [1,2,3] ],
-    [list_buckets(Node, Attempt, ?NUM_BUCKETS, ShouldPass) || Attempt <- [1,2,3] ].    
+check_a_node(Node, Interface, ShouldPass) ->
+    [list_keys(Node, Interface, ?BUCKET, Attempt, ?NUM_KEYS, ShouldPass)
+     || Attempt <- [1,2,3] ],
+    [list_buckets(Node, Interface, Attempt, ?NUM_BUCKETS, ShouldPass)
+     || Attempt <- [1,2,3] ].    
