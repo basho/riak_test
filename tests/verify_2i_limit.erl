@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -import(secondary_index_tests, [put_an_object/2, int_to_key/1,
-                                stream_pb/3, http_query/3]).
+                                stream_pb/3, http_query/3, pb_query/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
 -define(MAX_RESULTS, 50).
@@ -58,6 +58,24 @@ confirm() ->
 
     HttpRes2 = http_query(RiakHttp, Q, [{continuation, HttpContinuation}]),
     ?assertEqual(Rest, proplists:get_value(<<"keys">>, HttpRes2, [])),
+
+    %% Multiple indexes for single key
+    O1 = riakc_obj:new(?BUCKET, <<"bob">>, <<"1">>),
+    Md = riakc_obj:get_metadata(O1),
+    Md2 = riakc_obj:set_secondary_index(Md, {{integer_index, "i1"}, [300, 301, 302]}),
+    O2 = riakc_obj:update_metadata(O1, Md2),
+    riakc_pb_socket:put(PBPid, O2),
+
+    MQ = {"i1_int", 300, 302},
+    {ok, Res} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms]),
+
+    ?assertEqual([{<<"300">>, <<"bob">>},
+                  {<<"301">>, <<"bob">>}], proplists:get_value(results, Res)),
+
+    {ok, Res2} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms,
+                                      {continuation, proplists:get_value(continuation, Res)}]),
+
+    ?assertEqual({results,[{<<"302">>,<<"bob">>}]}, Res2),
 
     riakc_pb_socket:stop(PBPid),
     pass.
