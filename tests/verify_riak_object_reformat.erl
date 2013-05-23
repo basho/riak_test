@@ -29,6 +29,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+    rt:update_app_config(all, [{riak_kv, [{object_format, v1}]}]),
     N = 3,
     TestMetaData = riak_test_runner:metadata(),
     DowngradeVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
