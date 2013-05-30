@@ -39,6 +39,7 @@ confirm() ->
     rt:join(YetAnother, ANode),
     rt:wait_until_nodes_agree_about_ownership(Nodes),
     rt:wait_until_ring_converged(Nodes),
+    rt:wait_until_no_pending_changes(Nodes),
 
     test_resize(?START_SIZE, ?EXPANDED_SIZE, ANode, Nodes),
 
