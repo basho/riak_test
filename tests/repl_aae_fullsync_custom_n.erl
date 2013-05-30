@@ -3,7 +3,7 @@
 %% It sets up two clusters, runs a fullsync over all partitions, and verifies the missing keys
 %% were replicated to the sink cluster.
 
--module(repl_aae_fullsync_bench).
+-module(repl_aae_fullsync_custom_n).
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
@@ -11,8 +11,8 @@
 confirm() ->
     NumNodesWanted = 6,         %% total number of nodes needed
     ClusterASize = 3,           %% how many to allocate to cluster A
-    NumKeysAOnly = 100000,      %% how many keys on A that are missing on B
-    NumKeysBoth = 900000,       %% number of common keys on both A and B
+    NumKeysAOnly = 10000,       %% how many keys on A that are missing on B
+    NumKeysBoth = 10000,        %% number of common keys on both A and B
     Conf = [                    %% riak configuration
             {riak_kv,
                 [
@@ -38,16 +38,28 @@ confirm() ->
     pass.
 
 aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
-    %% populate them with data
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
-                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
-    TestBucket = <<TestHash/binary, "-systest_a">>,
-    repl_aae_fullsync_util:prepare_cluster_data(TestBucket, NumKeysAOnly, NumKeysBoth, ANodes, BNodes),
-
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
     AllNodes = ANodes ++ BNodes,
+
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-systest_a">>,
+
+    %% Set a different bucket N value on the remote cluster
+    NewProps = [{n_val, 2}],
+    DefaultProps = get_current_bucket_props(BNodes, TestBucket),
+    lager:info("Default props: ~p", [DefaultProps]),
+    update_props(DefaultProps, NewProps, AFirst, ANodes, TestBucket),
+
+    %% populate them with data
+    repl_aae_fullsync_util:prepare_cluster_data(TestBucket, NumKeysAOnly, NumKeysBoth, ANodes, BNodes),
+
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+
+    %% wait for the AAE trees to be built (again) on B.
+    %% since we changed bucket N-value, they need rebuilding.
+    repl_util:wait_until_aae_trees_built(BNodes),
 
     %%---------------------------------------------------------
     %% TEST: fullsync, check that non-RT'd keys get repl'd to B
@@ -62,12 +74,30 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
     lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
 
     %% verify data is replicated to B
-    NumKeysToVerify = min(1000, NumKeysAOnly),
     rt:log_to_nodes(AllNodes, "Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
-                    [NumKeysToVerify, LeaderA, BFirst]),
+                 [NumKeysAOnly, LeaderA, BFirst]),
     lager:info("Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
-               [NumKeysToVerify, LeaderA, BFirst]),
-    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, NumKeysToVerify, TestBucket, 2)),
+               [NumKeysAOnly, LeaderA, BFirst]),
+    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, NumKeysAOnly, TestBucket, 2)),
 
     ok.
 
+update_props(DefaultProps, NewProps, Node, Nodes, Bucket) ->
+    lager:info("Setting bucket properties ~p for bucket ~p on node ~p", 
+               [NewProps, Bucket, Node]),
+    rpc:call(Node, riak_core_bucket, set_bucket, [Bucket, NewProps]),    
+    rt:wait_until_ring_converged(Nodes),
+
+    UpdatedProps = get_current_bucket_props(Nodes, Bucket),
+    ?assertNotEqual(DefaultProps, UpdatedProps).
+
+%% fetch bucket properties via rpc 
+%% from a node or a list of nodes (one node is chosen at random)
+get_current_bucket_props(Nodes, Bucket) when is_list(Nodes) ->    
+    Node = lists:nth(length(Nodes), Nodes),
+    get_current_bucket_props(Node, Bucket);
+get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
+    rpc:call(Node, 
+             riak_core_bucket,
+             get_bucket,
+             [Bucket]).
