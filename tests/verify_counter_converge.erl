@@ -26,6 +26,7 @@
 -module(verify_counter_converge).
 -behavior(riak_test).
 -export([confirm/0]).
+-export([set_allow_mult_true/1, get_host_ports/1, update_counter/3, get_counter/2]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"test-counters">>).
@@ -37,12 +38,7 @@ confirm() ->
     [N1, N2, N3, N4]=Nodes = rt:build_cluster(4),
     [HP1, HP2, HP3, HP4]=Hosts =  get_host_ports(Nodes),
 
-    %% Counters REQUIRE allow_mult=true
-    AllowMult = [{allow_mult, true}],
-    lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
-               [?BUCKET, AllowMult, N1]),
-    rpc:call(N1, riak_core_bucket, set_bucket, [?BUCKET, AllowMult]),
-    rt:wait_until_ring_converged(Nodes),
+    set_allow_mult_true(Nodes),
 
     increment_counter(HP1, Key),
     increment_counter(HP2, Key, 10),
@@ -83,6 +79,14 @@ confirm() ->
                                         end)) ||  HP <- Hosts],
 
     pass.
+
+set_allow_mult_true(Nodes) ->
+    %% Counters REQUIRE allow_mult=true
+    N1 = hd(Nodes),
+    AllowMult = [{allow_mult, true}],
+    lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
+               [?BUCKET, AllowMult, N1]),
+    rpc:call(N1, riak_core_bucket, set_bucket, [?BUCKET, AllowMult]).
 
 get_host_ports(Nodes) ->
     {ResL, []} = rpc:multicall(Nodes, application, get_env, [riak_core, http]),
