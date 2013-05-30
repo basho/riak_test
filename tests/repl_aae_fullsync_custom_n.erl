@@ -2,6 +2,11 @@
 %% This module implements a riak_test to exercise the Active Anti-Entropy Fullsync replication.
 %% It sets up two clusters, runs a fullsync over all partitions, and verifies the missing keys
 %% were replicated to the sink cluster.
+%%
+%% Specically, this test sets a custom N-value on the test bucket on the source cluster, which
+%% is going to break the fullsync. We don't yet handle AAE fullsync when bucket N values differ
+%% between the two clusters. This test would like to pass someday, but not until we handle
+%% the "not_responsible" reply during the hashtree compare.
 
 -module(repl_aae_fullsync_custom_n).
 -behavior(riak_test).
@@ -46,31 +51,31 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
                 <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-systest_a">>,
 
-    %% Set a different bucket N value on the remote cluster
+    %% Set a different bucket N value between the two clusters
     NewProps = [{n_val, 2}],
     DefaultProps = get_current_bucket_props(BNodes, TestBucket),
-    lager:info("Default props: ~p", [DefaultProps]),
+    lager:info("Setting custom bucket n_val = ~p on node ~p", [2, AFirst]),
     update_props(DefaultProps, NewProps, AFirst, ANodes, TestBucket),
 
     %% populate them with data
     repl_aae_fullsync_util:prepare_cluster_data(TestBucket, NumKeysAOnly, NumKeysBoth, ANodes, BNodes),
-
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
-
-    %% wait for the AAE trees to be built (again) on B.
-    %% since we changed bucket N-value, they need rebuilding.
-    repl_util:wait_until_aae_trees_built(BNodes),
 
     %%---------------------------------------------------------
     %% TEST: fullsync, check that non-RT'd keys get repl'd to B
     %% keys: 1..NumKeysAOnly
     %%---------------------------------------------------------
 
+    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+
     rt:log_to_nodes(AllNodes, "Test fullsync from cluster A leader ~p to cluster B", [LeaderA]),
     lager:info("Test fullsync from cluster A leader ~p to cluster B", [LeaderA]),
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
+
+    %% This is not expected to complete until we fix the issue with handling "not_responsible"
+    %% in the AAE exchange protocol.
     {Time,_} = timer:tc(repl_util,start_and_wait_until_fullsync_complete,[LeaderA]),
+
     lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
 
     %% verify data is replicated to B
