@@ -85,8 +85,9 @@ set_allow_mult_true(Nodes) ->
     N1 = hd(Nodes),
     AllowMult = [{allow_mult, true}],
     lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
-               [?BUCKET, AllowMult, N1]),
-    rpc:call(N1, riak_core_bucket, set_bucket, [?BUCKET, AllowMult]).
+               [AllowMult, ?BUCKET, N1]),
+    rpc:call(N1, riak_core_bucket, set_bucket, [?BUCKET, AllowMult]),
+    rt:wait_until_ring_converged(Nodes).
 
 get_host_ports(Nodes) ->
     {ResL, []} = rpc:multicall(Nodes, application, get_env, [riak_core, http]),
