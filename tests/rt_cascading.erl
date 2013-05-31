@@ -34,7 +34,7 @@ confirm() ->
     ending = [] :: [node()]
 }).
 
-simple_test_d() ->
+simple_test_() ->
     % +-----------+    +--------+    +-----+
     % | beginning | -> | middle | -> | end |
     % +-----------+    +--------+    +-----+
@@ -107,7 +107,7 @@ simple_test_d() ->
 
     ] end}}.
 
-big_circle_test_d() ->
+big_circle_test_() ->
     % Initally just 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 1, but then 2 way is 
     % added later.
     %     +---+
@@ -221,7 +221,7 @@ big_circle_test_d() ->
 
     ] end}}.
 
-circle_test_d() ->
+circle_test_() ->
     %      +-----+
     %      | one |
     %      +-----+
@@ -284,7 +284,7 @@ circle_test_d() ->
 
     ] end}}.
 
-pyramid_test_d() ->
+pyramid_test_() ->
     %        +-----+
     %        | top |
     %        +-----+
@@ -336,7 +336,7 @@ pyramid_test_d() ->
 
     ] end}}.
 
-diamond_test_d() ->
+diamond_test_() ->
     % A pretty cluster of clusters:
     %                      +-----+
     %     +--------------->| top |
@@ -429,7 +429,7 @@ diamond_test_d() ->
 
     ] end}}.
 
-circle_and_spurs_test_d() ->
+circle_and_spurs_test_() ->
     %                        +------------+
     %                        | north_spur |
     %                        +------------+
@@ -651,7 +651,7 @@ Reses)]),
 
     ] end}}.
 
-new_to_old_test_d() ->
+new_to_old_test_() ->
     %      +------+
     %      | New1 |
     %      +------+
