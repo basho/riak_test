@@ -4,9 +4,9 @@
 %% were replicated to the sink cluster.
 %%
 %% Specically, this test sets a custom N-value on the test bucket on the source cluster, which
-%% is going to break the fullsync. We don't yet handle AAE fullsync when bucket N values differ
-%% between the two clusters. This test would like to pass someday, but not until we handle
-%% the "not_responsible" reply during the hashtree compare.
+%% is going to break the AAE fullsync. We don't yet handle AAE fullsync when bucket N values differ
+%% between the two clusters. "not_responsible" is returned reply during the hashtree compare and
+%% the fullsync source module should restart the connection using the keylist strategy.
 
 -module(repl_aae_fullsync_custom_n).
 -behavior(riak_test).
@@ -72,10 +72,8 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
 
-    %% This is not expected to complete until we fix the issue with handling "not_responsible"
-    %% in the AAE exchange protocol.
+    %% Start fullsync and wait for it to finish.
     {Time,_} = timer:tc(repl_util,start_and_wait_until_fullsync_complete,[LeaderA]),
-
     lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
 
     %% verify data is replicated to B
