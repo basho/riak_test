@@ -242,23 +242,12 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
     case Report of
         undefined -> ok;
         _ ->
-            %% Old Code for concatinating log files for upload to giddyup
-            %% They're too big now, causing problems which will be solved by
-            %% GiddyUp's new Artifact feature, comming soon from a Cribbs near you.
-
-            %% The point is, this is here in case we need to turn this back on
-            %% before artifacts are ready. And to remind jd that this is the place
-            %% to write the artifact client
-
-            %% {log, TestLog} = lists:keyfind(log, 1, SingleTestResult),
-            %% NodeLogs = cat_node_logs(),
-            %% EncodedNodeLogs = unicode:characters_to_binary(iolist_to_binary(NodeLogs),
-            %%                                                latin1, utf8),
-            %% NewLogs = iolist_to_binary([TestLog, EncodedNodeLogs]),
-            %% ResultWithNodeLogs = lists:keyreplace(log, 1, SingleTestResult,
-            %%                                       {log, NewLogs}),
-            %% giddyup:post_result(ResultWithNodeLogs)
-            giddyup:post_result(SingleTestResult)
+            case giddyup:post_result(SingleTestResult) of
+                error -> woops;
+                {ok, Base} ->
+                    %% Now push up the artifacts
+                    [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ]
+            end
     end,
     SingleTestResult.
 
@@ -334,13 +323,3 @@ so_kill_riak_maybe() ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
     end.
-
-%% cat_node_logs() ->
-%%     Files = rt:get_node_logs(),
-%%     Output = io_lib:format("================ Printing node logs and crash dumps ================~n~n", []),
-%%     cat_node_logs(Files, [Output]).
-%% 
-%% cat_node_logs([], Output) -> Output;
-%% cat_node_logs([{Filename, Content}|Rest], Output) ->
-%%     Log = io_lib:format("================ Log: ~s =====================~n~s~n~n", [Filename, Content]),
-%%     cat_node_logs(Rest, [Output, Log]).
