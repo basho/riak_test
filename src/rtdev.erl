@@ -480,8 +480,9 @@ versions() ->
     proplists:get_keys(rt:config(rtdev_path)) -- [root].
 
 get_node_logs() ->
-    Root = proplists:get_value(root, ?PATH),
+    Root = filename:absname(proplists:get_value(root, ?PATH)),
+    RootLen = length(Root) + 1, %% Remove the leading slash
     [ begin
-          {ok, Data} = file:read_file(Filename),
-          {Filename, Data}
+          {ok, Port} = file:open(Filename, [read, binary]),
+          {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
