@@ -177,20 +177,24 @@ disconnect_cluster(Node, Name) ->
 wait_for_connection(Node, Name) ->
     rt:wait_until(Node,
         fun(_) ->
-                {ok, Connections} = rpc:call(Node, riak_core_cluster_mgr,
-                    get_connections, []),
-                Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
-                case Conn of
-                    [] ->
-                        false;
-                    [Pid] ->
-                        Pid ! {self(), status},
-                        receive
-                            {Pid, status, _} ->
-                                true;
-                            {Pid, connecting, _} ->
-                                false
-                        end
+                case rpc:call(Node, riak_core_cluster_mgr,
+                        get_connections, []) of
+                    {ok, Connections} ->
+                        Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
+                        case Conn of
+                            [] ->
+                                false;
+                            [Pid] ->
+                                Pid ! {self(), status},
+                                receive
+                                    {Pid, status, _} ->
+                                        true;
+                                    {Pid, connecting, _} ->
+                                        false
+                                end
+                        end;
+                    _ ->
+                        false
                 end
         end).
 
