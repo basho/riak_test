@@ -32,7 +32,7 @@ confirm() ->
     %% of riak_test.
     RiakRootDir = rtdev:node_path(Node1),
 
-    Cmd = "bin/rspec --profile --tag integration --tag \~nodegen --no-color -fd",
+    Cmd = "bin/rspec --profile --tag integration --tag \~nodegen --no-color -fp",
 
     lager:info("Cmd: ~s", [Cmd]),
 
@@ -52,7 +52,7 @@ prereqs() ->
     RubyVersion = os:cmd("ruby -v"),
     ?assert(rt:str(RubyVersion, "1.9.") orelse rt:str(RubyVersion, "1.8.7")),
 
-    rt:install_on_absence("bundle", "gem install bundler --no-rdoc --no-ri"),
+    rt_local:install_on_absence("bundle", "gem install bundler --no-rdoc --no-ri"),
     ok.
 
 
