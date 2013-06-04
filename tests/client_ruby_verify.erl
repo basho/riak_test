@@ -32,7 +32,7 @@ confirm() ->
     %% of riak_test.
     RiakRootDir = rtdev:node_path(Node1),
 
-    Cmd = "bin/rspec --profile --tag integration --tag \~nodegen --no-color -fp",
+    Cmd = "bin/rspec --profile --tag integration --tag \~nodegen --no-color",
 
     lager:info("Cmd: ~s", [Cmd]),
 
