@@ -280,10 +280,12 @@ test_connection({Node1, Config1}, {Node2, Config2}) ->
     rt:wait_until_pingable(Node2),
     rt:update_app_config(Node1, Config1),
     rt:wait_until_pingable(Node1),
-    timer:sleep(5000),
+    rt:wait_for_service(Node1, riak_repl),
+    rt:wait_for_service(Node2, riak_repl),
     {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
         [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
+    rt:log_to_nodes([Node1, Node2], "connect A to B"),
     repl_util:connect_cluster(Node1, "127.0.0.1", Port),
     repl_util:wait_for_connection(Node1, "B").
 
