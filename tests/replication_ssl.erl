@@ -12,6 +12,7 @@ confirm() ->
     BaseConf = [
             {riak_repl,
              [
+                {ssl_enabled, false},
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled}
              ]}
@@ -164,34 +165,52 @@ confirm() ->
 
     replication:verify_site_ips(Node2, "site1", Listeners),
 
-    lager:info("testing basic connectivity"),
+    lager:info("===testing basic connectivity"),
+    rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
     ?assertEqual(ok, test_connection({Node1, BaseConf}, {Node2, BaseConf})),
 
-    lager:info("testing you can't connect to a server with a cert with the same common name"),
+    lager:info("===testing you can't connect to a server with a cert with the same common name"),
+    rt:log_to_nodes([Node1, Node2], "Testing identical cert is disallowed"),
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
-    lager:info("testing simple SSL connectivity"),
+    lager:info("===testing you can't connect when peer doesn't support SSL"),
+    rt:log_to_nodes([Node1, Node2], "Testing missing ssl on peer fails"),
+    ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
+            {Node2, BaseConf})),
+
+    lager:info("===testing you can't connect when local doesn't support SSL"),
+    rt:log_to_nodes([Node1, Node2], "Testing missing ssl locally fails"),
+    ?assertEqual(fail, test_connection({Node1, BaseConf},
+            {Node2, merge_config(SSLConfig2, BaseConf)})),
+
+    lager:info("===testing simple SSL connectivity"),
+    rt:log_to_nodes([Node1, Node2], "Basic SSL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig2, BaseConf)})),
 
-    lager:info("testing SSL connectivity with an intermediate CA"),
+    lager:info("===testing SSL connectivity with an intermediate CA"),
+    rt:log_to_nodes([Node1, Node2], "Intermediate CA test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig3, BaseConf)})),
 
-    lager:info("testing disallowing intermediate CAs works"),
+    lager:info("===testing disallowing intermediate CAs works"),
+    rt:log_to_nodes([Node1, Node2], "Disallowing intermediate CA test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig4, BaseConf)})),
 
-    lager:info("testing disallowing intermediate CAs disallows connections"),
+    lager:info("===testing disallowing intermediate CAs disallows connections"),
+    rt:log_to_nodes([Node1, Node2], "Disallowing intermediate CA test 2"),
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
-    lager:info("testing wildcard and strict ACLs with cacert.org certs"),
+    lager:info("===testing wildcard and strict ACLs with cacert.org certs"),
+    rt:log_to_nodes([Node1, Node2], "wildcard and strict ACL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),
 
-    lager:info("testing expired certificates fail"),
+    lager:info("===testing expired certificates fail"),
+    rt:log_to_nodes([Node1, Node2], "expired certificates test"),
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig7, BaseConf)})),
 
