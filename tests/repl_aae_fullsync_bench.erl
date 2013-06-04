@@ -11,8 +11,8 @@
 confirm() ->
     NumNodesWanted = 6,         %% total number of nodes needed
     ClusterASize = 3,           %% how many to allocate to cluster A
-    NumKeysAOnly = 100000,      %% how many keys on A that are missing on B
-    NumKeysBoth = 900000,       %% number of common keys on both A and B
+    NumKeysAOnly = 5000,        %% how many keys on A that are missing on B
+    NumKeysBoth = 45000,        %% number of common keys on both A and B
     Conf = [                    %% riak configuration
             {riak_kv,
                 [
