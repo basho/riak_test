@@ -44,8 +44,8 @@ wait_until_is_leader(Node) ->
 
 is_leader(Node) ->
     case rpc:call(Node, riak_core_cluster_mgr, get_leader, []) of
-        {badrpc, _} ->
-            lager:info("Badrpc"),
+        {badrpc, Wut} ->
+            lager:info("Badrpc during is_leader for ~p. Error: ~p", [Node, Wut]),
             false;
         Leader ->
             lager:info("Checking: ~p =:= ~p", [Leader, Node]),
@@ -59,8 +59,8 @@ wait_until_is_not_leader(Node) ->
 
 is_not_leader(Node) ->
     case rpc:call(Node, riak_core_cluster_mgr, get_leader, []) of
-        {badrpc, _} ->
-            lager:info("Badrpc"),
+        {badrpc, Wut} ->
+            lager:info("Badrpc during is_not leader for ~p. Error: ~p", [Node, Wut]),
             false;
         Leader ->
             lager:info("Checking: ~p =/= ~p", [Leader, Node]),
