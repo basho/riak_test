@@ -91,7 +91,7 @@ simple_test_() ->
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
             ?assertEqual({error, notfound}, maybe_eventually_exists(State#simple_state.ending, ?bucket, Bin))
-            
+
         end},
 
         {"re-enable cascading", timeout, 30000, fun() ->
@@ -108,7 +108,7 @@ simple_test_() ->
     ] end}}.
 
 big_circle_test_() ->
-    % Initally just 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 1, but then 2 way is 
+    % Initally just 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 1, but then 2 way is
     % added later.
     %     +---+
     %     | 1 |
@@ -561,7 +561,8 @@ mixed_version_clusters_test_() ->
 
         {"mixed source can send", timeout, 20000, {setup,
             fun() ->
-                rt:upgrade(N1, current)
+                rt:upgrade(N1, current),
+                repl_util:wait_until_leader_converge([N1, N2])
             end,
             fun(_) -> [
 
@@ -572,6 +573,7 @@ mixed_version_clusters_test_() ->
                     riakc_pb_socket:put(Client, Obj, [{w, 2}]),
                     riakc_pb_socket:stop(Client),
                     ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin, 100, 1000)),
+                    ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin, 100000)),
                     Running = fun(Node) ->
                         RTStatus = rpc:call(Node, riak_repl2_rt, status, []),
                         if
