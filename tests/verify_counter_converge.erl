@@ -115,7 +115,7 @@ update_counter(HostPort, Key, Amt) ->
 %% HTTP API
 url({Host, Port}, Key) ->
     Path = path([buckets, binary_to_atom(?BUCKET, utf8), counters, Key]),
-    lists:flatten(io_lib:format("http://~s:~p~s", [Host, Port, Path])).
+    lists:flatten(io_lib:format("http://~s:~p~s?notfound_ok=false&r=1", [Host, Port, Path])).
 
 path(Elements) ->
     [lists:concat(['/', E]) || E <- Elements].
