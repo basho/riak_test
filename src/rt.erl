@@ -75,6 +75,7 @@
          pbc_write/4,
          pbc_put_dir/3,
          pbc_put_file/4,
+         pbc_wait_until_really_deleted/5,
          pmap/2,
          priv_dir/0,
          remove/2,
@@ -868,6 +869,41 @@ pbc_put_dir(Pid, Bucket, Dir) ->
     {ok, Files} = file:list_dir(Dir),
     [pbc_put_file(Pid, Bucket, list_to_binary(F), filename:join([Dir, F]))
      || F <- Files].
+
+%% @doc Wait until the given keys have been really, really deleted.
+%% Useful when you care about the keys not being there. Delete simply writes
+%% tombstones under the given keys, so those are still seen by key folding
+%% operations.
+pbc_wait_until_really_deleted(_Pid, _Bucket, [], _Delay, _Retries) ->
+    ok;
+pbc_wait_until_really_deleted(_Pid, _Bucket, _Keys, _Delay, Retries) when Retries < 1 ->
+   {error, timeout};
+pbc_wait_until_really_deleted(Pid, Bucket, Keys, Delay, Retries)
+        when is_integer(Retries), Retries > 0, is_list(Keys) ->
+    StillThere =
+    fun(K) ->
+            Res = riakc_pb_socket:get(Pid, Bucket, K,
+                                      [{r, 1},
+                                      {notfound_ok, false},
+                                      {basic_quorum, false},
+                                      deletedvclock]),
+            case Res of
+                {error, notfound} ->
+                    false;
+                _ ->
+                    %% Tombstone still around
+                    true
+            end
+    end,
+    case lists:filter(StillThere, Keys) of
+        [] ->
+            ok;
+        NewKeys ->
+            timer:sleep(Delay),
+            pbc_wait_until_really_deleted(Pid, Bucket, NewKeys, Delay, Retries-1)
+    end.
+
+
 
 %% @doc Returns HTTP URL information for a list of Nodes
 http_url(Nodes) when is_list(Nodes) ->
