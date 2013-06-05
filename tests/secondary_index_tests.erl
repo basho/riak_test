@@ -42,11 +42,10 @@ confirm() ->
     assertRangeQuery(Pid, [<<"obj10">>, <<"obj11">>, <<"obj12">>], <<"$key">>, <<"obj10">>, <<"obj12">>),
 
     lager:info("Delete an object, verify deletion..."),
-    riakc_pb_socket:delete(Pid, ?BUCKET, <<"obj5">>),
-    riakc_pb_socket:delete(Pid, ?BUCKET, <<"obj11">>),
-    
-    lager:info("Sleeping for 5 seconds. Make sure the tombstone is reaped..."),
-    timer:sleep(5000),
+    ToDel = [<<"obj5">>, <<"obj11">>],
+    [?assertMatch(ok, riakc_pb_socket:delete(Pid, ?BUCKET, K)) || K <- ToDel],
+    lager:info("Make sure the tombstone is reaped..."),
+    ?assertMatch(ok, rt:pbc_wait_until_really_deleted(Pid, ?BUCKET, ToDel, 1000, 20)),
     
     assertExactQuery(Pid, [], <<"field1_bin">>, <<"val5">>),
     assertExactQuery(Pid, [], <<"field2_int">>, <<"5">>),
@@ -67,7 +66,6 @@ confirm() ->
                      1000000000000,
                      TestIdxVal),
     pass.
-
 
 assertExactQuery(Pid, Expected, Index, Value) -> 
     lager:info("Searching Index ~p for ~p", [Index, Value]),
