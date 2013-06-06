@@ -614,6 +614,15 @@ mixed_version_clusters_test_() ->
                 repl_util:wait_until_leader_converge([N1, N2]),
                 repl_util:wait_until_leader_converge([N3, N4]),
                 repl_util:wait_until_leader_converge([N5, N6]),
+                ClusterMgrUp = fun(Node) ->
+                    case rpc:call(Node, erlang, whereis, [riak_core_cluster_manager]) of
+                        P when is_pid(P) ->
+                            true;
+                        _ ->
+                            fail
+                    end
+                end,
+                [rt:wait_until(N, ClusterMgrUp) || N <- Nodes],
                 maybe_reconnect_rt(N1, get_cluster_mgr_port(N3), "n34"),
                 maybe_reconnect_rt(N3, get_cluster_mgr_port(N5), "n56"),
                 maybe_reconnect_rt(N5, get_cluster_mgr_port(N1), "n12"),
