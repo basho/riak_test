@@ -79,9 +79,15 @@ setup_repl_clusters(Conf, SSL) ->
 
     case SSL of
         true ->
-            [rt:update_app_config(N, merge_config(SSLConfig1, Conf)) || N <- ANodes],
-            [rt:update_app_config(N, merge_config(SSLConfig2, Conf)) || N <- BNodes],
-            [rt:update_app_config(N, merge_config(SSLConfig3, Conf)) || N <- CNodes]
+            lager:info("Enabling SSL for this test"),
+            [rt:update_app_config(N, merge_config(SSLConfig1, Conf)) ||
+                N <- ANodes],
+            [rt:update_app_config(N, merge_config(SSLConfig2, Conf)) ||
+                N <- BNodes],
+            [rt:update_app_config(N, merge_config(SSLConfig3, Conf)) ||
+                N <- CNodes];
+        _ ->
+            lager:info("SSL not enabled for this test")
     end,
 
     rt:log_to_nodes(Nodes, "Building and connecting clusters"),
