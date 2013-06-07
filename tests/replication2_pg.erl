@@ -14,8 +14,55 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 setup_repl_clusters(Conf) ->
+    setup_repl_clusters(Conf, false).
+
+setup_repl_clusters(Conf, SSL) ->
     NumNodes = 6,
     lager:info("Deploy ~p nodes", [NumNodes]),
+
+
+    PrivDir = rt:priv_dir(),
+
+    SSLConfig1 = [
+            {riak_core,
+             [
+                    {ssl_enabled, true},
+                    {certfile, filename:join([PrivDir,
+                                              "certs/selfsigned/site1-cert.pem"])},
+                    {keyfile, filename:join([PrivDir,
+                                             "certs/selfsigned/site1-key.pem"])},
+                    {cacertdir, filename:join([PrivDir,
+                                               "certs/selfsigned/ca"])}
+                    ]}
+            ],
+
+    SSLConfig2 = [
+            {riak_core,
+             [
+                    {ssl_enabled, true},
+                    {certfile, filename:join([PrivDir,
+                                              "certs/selfsigned/site2-cert.pem"])},
+                    {keyfile, filename:join([PrivDir,
+                                             "certs/selfsigned/site2-key.pem"])},
+                    {cacertdir, filename:join([PrivDir,
+                                               "certs/selfsigned/ca"])}
+                    ]}
+            ],
+
+    SSLConfig3 = [
+            {riak_core,
+             [
+                    {ssl_enabled, true},
+                    {certfile, filename:join([PrivDir,
+                                              "certs/selfsigned/site3-cert.pem"])},
+                    {keyfile, filename:join([PrivDir,
+                                             "certs/selfsigned/site3-key.pem"])},
+                    {cacertdir, filename:join([PrivDir,
+                                               "certs/selfsigned/ca"])}
+                    ]}
+            ],
+
+
 
     Nodes = deploy_nodes(NumNodes, Conf),
 
@@ -29,6 +76,13 @@ setup_repl_clusters(Conf) ->
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
     lager:info("CNodes: ~p", [CNodes]),
+
+    case SSL of
+        true ->
+            [rt:update_app_config(N, merge_config(SSLConfig1, Conf)) || N <- ANodes],
+            [rt:update_app_config(N, merge_config(SSLConfig2, Conf)) || N <- BNodes],
+            [rt:update_app_config(N, merge_config(SSLConfig3, Conf)) || N <- CNodes]
+    end,
 
     rt:log_to_nodes(Nodes, "Building and connecting clusters"),
 
@@ -76,8 +130,12 @@ make_test_object(Suffix) ->
     Value =  erlang:list_to_binary(ValueText),
     {Bucket, Key, Value}.
 
+
 test_basic_pg(Mode) ->
-    banner(io_lib:format("test_basic_pg with ~p mode", [Mode])),
+    test_basic_pg(Mode, false).
+
+test_basic_pg(Mode, SSL) ->
+    banner(io_lib:format("test_basic_pg with ~p mode", [Mode]), SSL),
     Conf = [
             {riak_repl,
              [
@@ -86,7 +144,7 @@ test_basic_pg(Mode) ->
              ]}
            ],
     {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, SSL),
     rt:log_to_nodes(AllNodes, "Testing basic pg"),
 
     case Mode of
@@ -167,7 +225,10 @@ test_basic_pg(Mode) ->
 %% Mode is either mode_repl12 or mixed. 
 %% "mixed" is the default in 1.3: mode_repl12, mode_repl13
 test_12_pg(Mode) ->
-    banner(io_lib:format("test_12_pg with ~p mode", [Mode])),
+    test_12_pg(Mode, false).
+
+test_12_pg(Mode, SSL) ->
+    banner(io_lib:format("test_12_pg with ~p mode", [Mode]), SSL),
     Conf = [
             {riak_repl,
              [
@@ -176,7 +237,7 @@ test_12_pg(Mode) ->
              ]}
            ],
     {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, SSL),
 
     {Bucket, KeyA, ValueA} = make_test_object("a"),
     {Bucket, KeyB, ValueB} = make_test_object("b"),
@@ -256,7 +317,10 @@ test_12_pg(Mode) ->
 
 %% test shutting down nodes in source + sink clusters
 test_pg_proxy() ->
-    banner("test_pg_proxy"),
+    test_pg_proxy(false).
+
+test_pg_proxy(SSL) ->
+    banner("test_pg_proxy", SSL),
     Conf = [
             {riak_repl,
              [
@@ -265,7 +329,7 @@ test_pg_proxy() ->
              ]}
            ],
     {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, SSL),
     rt:log_to_nodes(AllNodes, "Testing pg proxy"),
     rt:wait_until_ring_converged(ANodes),
 
@@ -323,7 +387,10 @@ test_pg_proxy() ->
 
 %% connect source + sink clusters, pg bidirectionally
 test_bidirectional_pg() ->
-    banner("test_bidirectional_pg"),
+    test_bidirectional_pg().
+
+test_bidirectional_pg(SSL) ->
+    banner("test_bidirectional_pg", SSL),
     Conf = [
             {riak_repl,
              [
@@ -332,7 +399,7 @@ test_bidirectional_pg() ->
              ]}
            ],
     {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, SSL),
     rt:log_to_nodes(AllNodes, "Testing bidirectional proxy-get"),
 
     rt:wait_until_ring_converged(ANodes),
@@ -395,7 +462,10 @@ test_bidirectional_pg() ->
 
 %% Test multiple sinks against a single source
 test_multiple_sink_pg() ->
-    banner("test_multiple_sink_pg"),
+    test_multiple_sink_pg(false).
+
+test_multiple_sink_pg(SSL) ->
+    banner("test_multiple_sink_pg", SSL),
     Conf = [
             {riak_repl,
              [
@@ -404,7 +474,7 @@ test_multiple_sink_pg() ->
              ]}
            ],
     {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, SSL),
     rt:log_to_nodes(AllNodes, "Testing basic pg"),
 
     rt:wait_until_ring_converged(ANodes),
@@ -448,7 +518,10 @@ test_multiple_sink_pg() ->
 
 %% test 1.2 + 1.3 repl being used at the same time
 test_mixed_pg() ->
-    banner("test_mixed_pg"),
+    test_mixed_pg(false).
+
+test_mixed_pg(SSL) ->
+    banner("test_mixed_pg", SSL),
     Conf = [
             {riak_repl,
              [
@@ -457,7 +530,7 @@ test_mixed_pg() ->
              ]}
            ],
     {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, SSL),
     rt:log_to_nodes(AllNodes, "Testing basic pg"),
 
     rt:wait_until_ring_converged(ANodes),
@@ -581,6 +654,32 @@ test_12_pg_mode_repl_mixed() ->
          test_12_pg(mixed).
 
 
+test_basic_pg_mode_repl13_ssl() ->
+    test_basic_pg(mode_repl13, true).
+
+test_basic_pg_mode_mixed_ssl() ->
+    test_basic_pg(mixed, true).
+
+test_12_pg_mode_repl12_ssl() ->
+    test_12_pg(mode_repl12, true).
+
+test_12_pg_mode_repl_mixed_ssl() ->
+    test_12_pg(mixed, true).
+
+
+test_mixed_pg_ssl() ->
+    test_mixed_pg(true).
+
+test_multiple_sink_pg_ssl() ->
+    test_multiple_sink_pg(true).
+
+test_bidirectional_pg_ssl() ->
+    test_bidirectional_pg(true).
+
+test_pg_proxy_ssl() ->
+    test_pg_proxy(true).
+
+
 confirm() ->
     AllTests =
         [
@@ -591,16 +690,28 @@ confirm() ->
             test_mixed_pg,
             test_multiple_sink_pg,
             test_bidirectional_pg,
-            test_pg_proxy
+            test_pg_proxy,
+            test_basic_pg_mode_repl13_ssl,
+            test_basic_pg_mode_mixed_ssl,
+            test_12_pg_mode_repl12_ssl,
+            test_12_pg_mode_repl_mixed_ssl,
+            test_mixed_pg_ssl,
+            test_multiple_sink_pg_ssl,
+            test_bidirectional_pg_ssl,
+            test_pg_proxy_ssl
         ],
     lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
     lager:error("The runnable tests in this module are: ~p", [AllTests]),
     ?assert(false).
 
+
 banner(T) ->
+    banner(T, false).
+
+banner(T, SSL) ->
     lager:info("----------------------------------------------"),
     lager:info("----------------------------------------------"),
-    lager:info("~s",[T]),
+    lager:info("~s, SSL ~s",[T, SSL]),
     lager:info("----------------------------------------------"),
     lager:info("----------------------------------------------").
 
@@ -621,3 +732,7 @@ wait_until_pg(Node, Pid, Bucket, Key, Cid) ->
                     _ -> false
                 end
         end).
+
+merge_config(Mixin, Base) ->
+    lists:ukeymerge(1, lists:keysort(1, Mixin), lists:keysort(1, Base)).
+
