@@ -565,7 +565,33 @@ mixed_version_clusters_test_() ->
         {"mixed source can send", timeout, timeout(235), {setup,
             fun() ->
                 rt:upgrade(N1, current),
-                repl_util:wait_until_leader_converge([N1, N2])
+                repl_util:wait_until_leader_converge([N1, N2]),
+                Running = fun(Node) ->
+                    RTStatus = rpc:call(Node, riak_repl2_rt, status, []),
+                    if
+                        is_list(RTStatus) ->
+                            SourcesList = proplists:get_value(sources, RTStatus, []),
+                            Sources = [S || S <- SourcesList,
+                                is_list(S),
+                                proplists:get_value(connected, S, false),
+                                proplists:get_value(source, S) =:= "n34"
+                            ],
+                            length(Sources) >= 1;
+                        true ->
+                            false
+                    end
+                end,
+                ?assertEqual(ok, rt:wait_until(N1, Running)),
+                % give the node further time to settle
+                StatsNotEmpty = fun(Node) ->
+                    case rpc:call(Node, riak_repl_stats, get_stats, []) of
+                        [] ->
+                            false;
+                        Stats ->
+                            is_list(Stats)
+                    end
+                end,
+                ?assertEqual(ok, rt:wait_until(N1, StatsNotEmpty))
             end,
             fun(_) -> [
 
@@ -575,24 +601,8 @@ mixed_version_clusters_test_() ->
                     Obj = riakc_obj:new(?bucket, Bin, Bin),
                     riakc_pb_socket:put(Client, Obj, [{w, 2}]),
                     riakc_pb_socket:stop(Client),
-                    ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin, 100000)),
-                    Running = fun(Node) ->
-                        RTStatus = rpc:call(Node, riak_repl2_rt, status, []),
-                        if
-                            is_list(RTStatus) ->
-                                SourcesList = proplists:get_value(sources, RTStatus, []),
-                                Sources = [S || S <- SourcesList,
-                                    is_list(S),
-                                    proplists:get_value(connected, S, false),
-                                    proplists:get_value(source, S) =:= "n34"
-                                ],
-                                length(Sources) >= 1;
-                            true ->
-                                false
-                        end
-                    end,
-                    ?assertEqual(ok, rt:wait_until(N1, Running)),
-                    ?assertEqual(Bin, maybe_eventually_exists(N3, ?bucket, Bin, timeout(100)))
+                    ?assertEqual(Bin, maybe_eventually_exists(N3, ?bucket, Bin, timeout(100))),
+                    ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin, 100000))
                 end},
 
                 {"node2 put", timeout, timeout(25), fun() ->
