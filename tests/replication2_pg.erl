@@ -393,7 +393,7 @@ test_pg_proxy(SSL) ->
 
 %% connect source + sink clusters, pg bidirectionally
 test_bidirectional_pg() ->
-    test_bidirectional_pg().
+    test_bidirectional_pg(false).
 
 test_bidirectional_pg(SSL) ->
     banner("test_bidirectional_pg", SSL),
