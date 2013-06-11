@@ -624,10 +624,11 @@ wait_until_registered(Node, Name) ->
 
 % when you just can't wait
 brutal_kill(Node) ->
-   lager:info("Killing node ~p", [Node]),
-   OSPidToKill = rpc:call(Node, os, getpid, []),
-   rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
-   ok.
+    rt_cover:maybe_stop_on_node(Node),
+    lager:info("Killing node ~p", [Node]),
+    OSPidToKill = rpc:call(Node, os, getpid, []),
+    rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+    ok.
 
 capability(Node, all) ->
     rpc:call(Node, riak_core_capability, all, []);

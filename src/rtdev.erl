@@ -56,12 +56,18 @@ run_riak(N, Path, Cmd) ->
     R = os:cmd(riakcmd(Path, N, Cmd)),
     case Cmd of
         "start" ->
+            rt_cover:maybe_start_on_node(?DEV(N), node_version(N)),
+            %% Intercepts may load code on top of the cover compiled
+            %% modules. We'll just get no coverage info then.
             case rt_intercept:are_intercepts_loaded(?DEV(N)) of
                 false ->
                     ok = rt_intercept:load_intercepts([?DEV(N)]);
                 true ->
                     ok
             end,
+            R;
+        "stop" ->
+            rt_cover:maybe_stop_on_node(?DEV(N)),
             R;
         _ ->
             R
@@ -275,13 +281,22 @@ stop_all(DevPath) ->
             Devs = filelib:wildcard(DevPath ++ "/dev*"),
             %% Works, but I'd like it to brag a little more about it.
             Stop = fun(C) ->
+                %% If getpid available, kill -9 with it, we're serious here
+                [MaybePid | _] = string:tokens(os:cmd(C ++ "/bin/riak getpid"),
+                                               "\n"),
+                try
+                    _ = list_to_integer(MaybePid),
+                    os:cmd("kill -9 "++MaybePid)
+                catch
+                    _:_ -> ok
+                end,
                 Cmd = C ++ "/bin/riak stop",
                 [Output | _Tail] = string:tokens(os:cmd(Cmd), "\n"),
                 Status = case Output of
                     "ok" -> "ok";
                     _ -> "wasn't running"
                 end,
-                lager:info("Stopping Node... ~s ~~ ~s.", [Cmd, Status])
+                lager:info("Stopped Node... ~s ~~ ~s.", [Cmd, Status])
             end,
             [Stop(D) || D <- Devs];
         _ -> lager:info("~s is not a directory.", [DevPath])
@@ -291,6 +306,7 @@ stop_all(DevPath) ->
 stop(Node) ->
     RiakPid = rpc:call(Node, os, getpid, []),
     N = node_id(Node),
+    rt_cover:maybe_stop_on_node(Node),
     run_riak(N, relpath(node_version(N)), "stop"),
     F = fun(_N) ->
             os:cmd("kill -0 " ++ RiakPid) =/= []
@@ -471,6 +487,7 @@ get_version() ->
     end.
 
 teardown() ->
+    rt_cover:maybe_stop_on_nodes(),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
     [stop_all(X ++ "/dev") || X <- devpaths()].
 
