@@ -178,7 +178,9 @@ deploy_nodes(NodeConfig, Hosts) ->
     timer:sleep(500),
 
     rt:pmap(fun(Node) ->
-                    update_vm_args(Node, [{"-name", Node}])
+                    update_vm_args(Node, [{"-name", Node},
+                                          {"-zddbl", "32768"},
+                                          {"-P", "256000"}])
             end, Nodes),
 
     timer:sleep(500),
