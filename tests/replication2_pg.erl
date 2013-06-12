@@ -182,7 +182,7 @@ test_basic_pg(Mode, SSL) ->
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
 
-    {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
+    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
     PidB = rt:pbc(FirstB),
     lager:info("Connected to cluster B"),
     {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
@@ -224,6 +224,24 @@ test_basic_pg(Mode, SSL) ->
 
     {ok, PGResult2} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
     ?assertEqual(ValueA, riakc_obj:get_value(PGResult2)),
+
+    %% Test with optional n_val and sloppy_quorum Options.
+    %% KeyB is not on C yet. Try via proxy get with above options.
+
+    PGEnableResult3 = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","C"]]),
+    lager:info("Enabled pg: ~p", [PGEnableResult3]),
+    Status4 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, Status4) of
+        undefined -> fail;
+        EnabledFor3 -> lager:info("PG enabled for cluster ~p",[EnabledFor3])
+    end,
+
+    PidC = rt:pbc(FirstC),
+    Options = [{n_val, 1}, {sloppy_quorum, false}],
+    lager:info("Test proxy get from C using options: ~p", [Options]),
+    {ok, PGResult3} = riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA,Options),
+    ?assertEqual(ValueA, riakc_obj:get_value(PGResult3)),
 
     pass.
 
