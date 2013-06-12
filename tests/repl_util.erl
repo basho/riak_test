@@ -28,8 +28,9 @@
 
 make_cluster(Nodes) ->
     [First|Rest] = Nodes,
-    [rt:join(Node, First) || Node <- Rest],
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    [rt:wait_for_service(N, riak_repl) || N <- Nodes],
+    [rt:join(Node, First) || Node <- Rest],
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)).
 
 name_cluster(Node, Name) ->
