@@ -168,7 +168,7 @@ test_basic_pg(Mode, SSL) ->
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
     end,
 
@@ -215,7 +215,7 @@ test_basic_pg(Mode, SSL) ->
     Status3 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status3) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor2 -> lager:info("PG enabled for cluster ~p",[EnabledFor2])
     end,
 
@@ -233,7 +233,7 @@ test_basic_pg(Mode, SSL) ->
     Status4 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status4) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor3 -> lager:info("PG enabled for cluster ~p",[EnabledFor3])
     end,
 
@@ -362,7 +362,7 @@ test_pg_proxy(SSL) ->
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
     end,
 
@@ -447,14 +447,14 @@ test_bidirectional_pg(SSL) ->
     StatusA = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, StatusA) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledForA -> lager:info("PG enabled for cluster ~p",[EnabledForA])
     end,
 
     StatusB = rpc:call(LeaderB, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, StatusB) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledForB -> lager:info("PG enabled for cluster ~p",[EnabledForB])
     end,
 
@@ -513,7 +513,7 @@ test_multiple_sink_pg(SSL) ->
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledForC -> lager:info("PG enabled for cluster ~p",[EnabledForC])
     end,
 
@@ -564,7 +564,7 @@ test_mixed_pg(SSL) ->
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
     end,
 
@@ -726,7 +726,7 @@ confirm() ->
         ],
     lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
     lager:error("The runnable tests in this module are: ~p", [AllTests]),
-    ?assert(false).
+    fail.
 
 
 banner(T) ->
