@@ -37,6 +37,7 @@
          build_cluster/2,
          build_cluster/3,
          capability/2,
+         capability/3,
          check_singleton_node/1,
          claimant_according_to/1,
          clean_cluster/1,
@@ -110,6 +111,7 @@
          wait_until_all_members/1,
          wait_until_all_members/2,
          wait_until_capability/3,
+         wait_until_capability/4,
          wait_until_connected/1,
          wait_until_legacy_ringready/1,
          wait_until_owners_according_to/2,
@@ -631,10 +633,20 @@ capability(Node, all) ->
 capability(Node, Capability) ->
     rpc:call(Node, riak_core_capability, get, [Capability]).
 
+capability(Node, Capability, Default) ->
+    rpc:call(Node, riak_core_capability, get, [Capability, Default]).
+
 wait_until_capability(Node, Capability, Value) ->
     rt:wait_until(Node,
                   fun(_) ->
                           Value == capability(Node, Capability)
+                  end).
+
+wait_until_capability(Node, Capability, Value, Default) ->
+    rt:wait_until(Node,
+                  fun(_) ->
+                          Cap = capability(Node, Capability, Default),
+                          Value == Cap
                   end).
 
 wait_until_owners_according_to(Node, Nodes) ->
