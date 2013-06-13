@@ -76,14 +76,18 @@ confirm() ->
     end,
 
     Logs = rpc:call(Node1, riak_test_lager_backend, get_logs, []),
-    Success = case re:run(Logs, "monitor busy_dist_port .*#Port", []) of
+    Success = try re:run(Logs, "monitor busy_dist_port .*#Port", []) of
                   {match, _} ->
                       lager:info("found busy_dist_port message in log", []),
                       true;
                   nomatch -> 
                       lager:error("busy_dist_port message not found in log", []),
                       false
-              end,                                    
+              catch
+                  Err:Reason ->
+                      lager:error("busy_dist_port re:run failed w/ ~p: ~p", [Err, Reason]),
+                      false
+              end,
 
     lager:info("continuing node 2 (~p) pid ~s", [Node2, OsPid]),
     %% NOTE: this call must be executed on the OS running Node2 in order to unpause it
