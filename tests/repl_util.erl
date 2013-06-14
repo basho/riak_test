@@ -23,7 +23,9 @@
          enable_fullsync/2,
          start_realtime/2,
          stop_realtime/2,
-         do_write/5
+         do_write/5,
+         get_fs_coord_status_item/3,
+         num_partitions/1
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -139,6 +141,12 @@ wait_for_reads(Node, Start, End, Bucket, R) ->
     Reads = rt:systest_read(Node, Start, End, Bucket, R),
     lager:info("Reads: ~p", [Reads]),
     length(Reads).
+
+get_fs_coord_status_item(Node, SinkName, ItemName) ->
+    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    FS_CoordProps = proplists:get_value(fullsync_coordinator, Status),
+    ClusterProps = proplists:get_value(SinkName, FS_CoordProps),
+    proplists:get_value(ItemName, ClusterProps).
 
 start_and_wait_until_fullsync_complete(Node) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
@@ -270,3 +278,9 @@ wait_until_aae_trees_built([AnyNode|_]=Nodes) ->
                                    Nodes),
                           not Busy
                   end).
+
+%% Return the number of partitions in the cluster where Node is a member.
+num_partitions(Node) ->
+    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    N = riak_core_ring:num_partitions(Ring),
+    N.
