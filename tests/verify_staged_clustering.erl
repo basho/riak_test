@@ -137,7 +137,14 @@ stage_force_replace(Node, Node1, Node2) ->
 
 print_staged(Node) ->
     %% rpc:call(Node, riak_core_console, print_staged, [[]]).
-    rt:admin(Node, ["cluster", "plan"]).
+    F = fun(_) ->
+                {ok, StdOut} = rt:admin(Node, ["cluster", "plan"]),
+                case StdOut of
+                    "Cannot" ++ _X -> false;
+                    _ -> true
+                end
+        end,
+    rt:wait_until(Node, F).
 
 commit_staged(Node) ->
     %% rpc:call(Node, riak_core_console, commit_staged, [[]]).
