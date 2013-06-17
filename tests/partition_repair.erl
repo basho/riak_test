@@ -29,14 +29,14 @@
 %% @doc This test verifies that partition repair successfully repairs
 %% all data after it has wiped out by a simulated disk crash.
 confirm() ->
-    SpamDir = rt:config_or_os_env(spam_dir),
-    RingSize = list_to_integer(rt:config_or_os_env(ring_size, "16")),
-    NVal = rt:config_or_os_env(n_val, undefined),
+    SpamDir = rt_config:config_or_os_env(spam_dir),
+    RingSize = list_to_integer(rt_config:config_or_os_env(ring_size, "16")),
+    NVal = rt_config:config_or_os_env(n_val, undefined),
     TestMetaData = riak_test_runner:metadata(),
     KVBackend = proplists:get_value(backend, TestMetaData),
 
-    NumNodes = list_to_integer(rt:config_or_os_env(num_nodes, "4")),
-    HOConcurrency = list_to_integer(rt:config_or_os_env(ho_concurrency, "2")),
+    NumNodes = list_to_integer(rt_config:config_or_os_env(num_nodes, "4")),
+    HOConcurrency = list_to_integer(rt_config:config_or_os_env(ho_concurrency, "2")),
     {_KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
     Bucket = <<"scotts_spam">>,
 
@@ -167,6 +167,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
         [] -> ok;
         _ ->
             NF = StashPath ++ ".nofound",
+            lager:info("Some data not found, writing that to ~s", [NF]),
             ?assertEqual(ok, file:write_file(NF, io_lib:format("~p.", [NotFound])))
     end,
     %% NOTE: If the following assert fails then check the .notfound
