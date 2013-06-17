@@ -37,7 +37,7 @@
 
 confirm() ->
     lager:info("Building cluster of ~p nodes", [?NUM_NODES]),
-    SpamDir = rt:config_or_os_env(spam_dir),
+    SpamDir = rt_config:config_or_os_env(spam_dir),
     Config = [{riak_search, [{enabled, true}]}],
     [Node0 | _RestNodes] = Nodes = rt:build_cluster(?NUM_NODES, Config),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
