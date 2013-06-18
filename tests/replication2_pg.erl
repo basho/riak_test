@@ -168,7 +168,7 @@ test_basic_pg(Mode, SSL) ->
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
     end,
 
@@ -182,7 +182,7 @@ test_basic_pg(Mode, SSL) ->
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
 
-    {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
+    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
     PidB = rt:pbc(FirstB),
     lager:info("Connected to cluster B"),
     {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
@@ -215,7 +215,7 @@ test_basic_pg(Mode, SSL) ->
     Status3 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status3) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor2 -> lager:info("PG enabled for cluster ~p",[EnabledFor2])
     end,
 
@@ -224,6 +224,24 @@ test_basic_pg(Mode, SSL) ->
 
     {ok, PGResult2} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
     ?assertEqual(ValueA, riakc_obj:get_value(PGResult2)),
+
+    %% Test with optional n_val and sloppy_quorum Options.
+    %% KeyB is not on C yet. Try via proxy get with above options.
+
+    PGEnableResult3 = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","C"]]),
+    lager:info("Enabled pg: ~p", [PGEnableResult3]),
+    Status4 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, Status4) of
+        undefined -> ?assert(false);
+        EnabledFor3 -> lager:info("PG enabled for cluster ~p",[EnabledFor3])
+    end,
+
+    PidC = rt:pbc(FirstC),
+    Options = [{n_val, 1}, {sloppy_quorum, false}],
+    lager:info("Test proxy get from C using options: ~p", [Options]),
+    {ok, PGResult3} = riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA,Options),
+    ?assertEqual(ValueA, riakc_obj:get_value(PGResult3)),
 
     pass.
 
@@ -344,7 +362,7 @@ test_pg_proxy(SSL) ->
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
     end,
 
@@ -429,14 +447,14 @@ test_bidirectional_pg(SSL) ->
     StatusA = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, StatusA) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledForA -> lager:info("PG enabled for cluster ~p",[EnabledForA])
     end,
 
     StatusB = rpc:call(LeaderB, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, StatusB) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledForB -> lager:info("PG enabled for cluster ~p",[EnabledForB])
     end,
 
@@ -495,7 +513,7 @@ test_multiple_sink_pg(SSL) ->
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledForC -> lager:info("PG enabled for cluster ~p",[EnabledForC])
     end,
 
@@ -546,7 +564,7 @@ test_mixed_pg(SSL) ->
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
-        undefined -> fail;
+        undefined -> ?assert(false);
         EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
     end,
 
