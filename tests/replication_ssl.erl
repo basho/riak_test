@@ -245,6 +245,8 @@ test_connection({Node1, Config1}, {Node2, Config2}) ->
     rt:wait_until_pingable(Node1),
     rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
+    rt:wait_for_service(Node1, riak_kv),
+    rt:wait_for_service(Node2, riak_kv),
     timer:sleep(5000),
     replication:wait_until_connection(Node1).
 
