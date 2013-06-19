@@ -850,7 +850,7 @@ wait_for_rt_started(Node, ToName) ->
 timeout(MultiplyBy) ->
     case rt_config:get(default_timeout, 1000) of
         infinity ->
-            infintiy;
+            infinity;
         N ->
             N * MultiplyBy
     end.
