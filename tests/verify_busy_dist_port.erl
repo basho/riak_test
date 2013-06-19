@@ -70,8 +70,8 @@ confirm() ->
         go ->
             lager:info("busy_dist_port event fired on node 1 (~p), checking logs", [Node1])
     after
-        60000 ->
-            lager:error("no busy_dist_port event fired on node 1 in 60s. test is borked",
+        rt_config:get(rt_max_wait_time) ->
+            lager:error("no busy_dist_port event fired on node 1. test is borked",
                         [])
     end,
 
