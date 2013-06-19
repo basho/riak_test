@@ -599,7 +599,7 @@ wait_until_unpingable(Node) ->
     %% riak has stopped. Riak stop should only take about 5 minutes before its timeouts kill
     %% the process. This wait should at least wait that long.
     Delay = rt_config:get(rt_retry_delay),
-    Retry = 360000 div Delay,
+    Retry = lists:max([360000, rt_config:get(rt_max_wait_time)]) div Delay,
     ?assertEqual(ok, wait_until(Node, F, Retry, Delay, TimeoutFun)),
     ok.
 
