@@ -45,7 +45,7 @@ confirm() ->
     ToDel = [<<"obj5">>, <<"obj11">>],
     [?assertMatch(ok, riakc_pb_socket:delete(Pid, ?BUCKET, K)) || K <- ToDel],
     lager:info("Make sure the tombstone is reaped..."),
-    ?assertMatch(ok, rt:pbc_wait_until_really_deleted(Pid, ?BUCKET, ToDel, 1000, 20)),
+    ?assertMatch(ok, rt:wait_until(fun() -> rt:pbc_really_deleted(Pid, ?BUCKET, ToDel) end)),
     
     assertExactQuery(Pid, [], <<"field1_bin">>, <<"val5">>),
     assertExactQuery(Pid, [], <<"field2_int">>, <<"5">>),
