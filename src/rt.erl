@@ -76,7 +76,7 @@
          pbc_write/4,
          pbc_put_dir/3,
          pbc_put_file/4,
-         pbc_wait_until_really_deleted/5,
+         pbc_really_deleted/3,
          pmap/2,
          priv_dir/0,
          remove/2,
@@ -108,6 +108,7 @@
          wait_for_cmd/1,
          wait_for_service/2,
          wait_until/2,
+         wait_until/1,
          wait_until_all_members/1,
          wait_until_all_members/2,
          wait_until_capability/3,
@@ -425,26 +426,30 @@ is_ring_ready(Node) ->
 %%      number of retries is reached. The retry limit is based on the
 %%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
-wait_until(Node, Fun) ->
-    wait_until(Node, Fun, fun(_N) -> fail end).
-
-wait_until(Node, Fun, TimeoutFun) ->
+wait_until(Fun) when is_function(Fun) ->
     MaxTime = rt_config:get(rt_max_wait_time),
     Delay = rt_config:get(rt_retry_delay),
     Retry = MaxTime div Delay,
-    wait_until(Node, Fun, Retry, Delay, TimeoutFun).
+    wait_until(Fun, Retry, Delay).
 
-%% @deprecated Use {@link wait_until/2} instead.
-wait_until(Node, Fun, Retry, Delay, TimeoutFun) ->
-    Pass = Fun(Node),
-    case {Retry, Pass} of
-        {_, true} ->
+%% @doc Convenience wrapper for wait_until for the myriad functions that
+%% take a node as single argument.
+wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
+    wait_until(fun() -> Fun(Node) end).
+
+%% @doc Retry `Fun' until it returns `Retry' times, waiting `Delay'
+%% milliseconds between retries. This is our eventual consistency bread
+%% and butter
+wait_until(_, 0, _) ->
+    fail;
+wait_until(Fun, Retry, Delay) when Retry > 0 ->
+    Pass = Fun(),
+    case Pass of
+        true ->
             ok;
-        {0, _} ->
-            TimeoutFun(Node);
         _ ->
             timer:sleep(Delay),
-            wait_until(Node, Fun, Retry-1, Delay, TimeoutFun)
+            wait_until(Fun, Retry-1, Delay)
     end.
 
 %% @doc Wait until the specified node is considered ready by `riak_core'.
@@ -472,15 +477,15 @@ wait_until_status_ready(Node) ->
 %% @doc Given a list of nodes, wait until all nodes believe there are no
 %% on-going or pending ownership transfers.
 -spec wait_until_no_pending_changes([node()]) -> ok | fail.
-wait_until_no_pending_changes(Nodes0) ->
-    lager:info("Wait until no pending changes on ~p", [Nodes0]),
-    F = fun(Nodes) ->
+wait_until_no_pending_changes(Nodes) ->
+    lager:info("Wait until no pending changes on ~p", [Nodes]),
+    F = fun() ->
                 rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
                 {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
                 Changes = [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
                 BadNodes =:= [] andalso length(Changes) =:= length(Nodes) andalso lists:all(fun(T) -> T end, Changes)
         end,
-    ?assertEqual(ok, wait_until(Nodes0, F)),
+    ?assertEqual(ok, wait_until(F)),
     ok.
 
 %% @doc Waits until no transfers are in-flight or pending, checked by
@@ -586,40 +591,36 @@ wait_until_pingable(Node) ->
 wait_until_unpingable(Node) ->
     lager:info("Wait until ~p is not pingable", [Node]),
     _OSPidToKill = rpc:call(Node, os, getpid, []),
-    F = fun(N) ->
-                net_adm:ping(N) =:= pang
-        end,
-    TimeoutFun = fun(N) ->
-                         lager:info("We tried it the easy way, but ~s wouldn't listen, so now it's 'kill -9' time", [N]),
-                         lager:info("Not actually killing anything... long live `riak stop`"),
-                         %%rpc:cast(N, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
-                         fail
-        end,
-    %% Hard coding a 6 minute timeout on this wait only. This function is called to see that
-    %% riak has stopped. Riak stop should only take about 5 minutes before its timeouts kill
-    %% the process. This wait should at least wait that long.
+    F = fun() -> net_adm:ping(Node) =:= pang end,
+    %% riak stop will kill -9 after 5 mins, so we try to wait at least that
+    %% amount of time.
     Delay = rt_config:get(rt_retry_delay),
     Retry = lists:max([360000, rt_config:get(rt_max_wait_time)]) div Delay,
-    ?assertEqual(ok, wait_until(Node, F, Retry, Delay, TimeoutFun)),
-    ok.
+    case wait_until(F, Retry, Delay) of
+        ok -> ok;
+        _ ->
+            lager:error("Timed out waiting for node ~p to shutdown", [Node]),
+            ?assert(node_shutdown_timed_out)
+    end.
 
 
-% Waits untill a certain regiestered name pops up on the remote node.
+% Waits until a certain registered name pops up on the remote node.
 wait_until_registered(Node, Name) ->
-    lager:info("Wait until the ring manager is up on ~p", [Node]),
+    lager:info("Wait until ~p is up on ~p", [Name, Node]),
 
-    F = fun(_) ->
+    F = fun() ->
                 Registered = rpc:call(Node, erlang, registered, []),
-                lists:member(riak_core_ring_manager, Registered)
+                lists:member(Name, Registered)
         end,
-    TimeoutFun = fun(_) ->
-                lager:info("The server with the namee ~p on ~p is not coming up.", [Name, Node]),
-                fail
-        end,
-    Delay = rt_config:get(rt_retry_delay),
-    Retry = 360000 div Delay,
-    ?assertEqual(ok, wait_until(Node, F, Retry, Delay, TimeoutFun)),
-    ok.
+    case wait_until(F) of
+        ok ->
+            ok;
+        _ ->
+            lager:info("The server with the name ~p on ~p is not coming up.",
+                       [Name, Node]),
+            ?assert(registered_name_timed_out)
+    end.
+
 
 % when you just can't wait
 brutal_kill(Node) ->
@@ -882,16 +883,11 @@ pbc_put_dir(Pid, Bucket, Dir) ->
     [pbc_put_file(Pid, Bucket, list_to_binary(F), filename:join([Dir, F]))
      || F <- Files].
 
-%% @doc Wait until the given keys have been really, really deleted.
+%% @doc True if the given keys have been really, really deleted.
 %% Useful when you care about the keys not being there. Delete simply writes
 %% tombstones under the given keys, so those are still seen by key folding
 %% operations.
-pbc_wait_until_really_deleted(_Pid, _Bucket, [], _Delay, _Retries) ->
-    ok;
-pbc_wait_until_really_deleted(_Pid, _Bucket, _Keys, _Delay, Retries) when Retries < 1 ->
-   {error, timeout};
-pbc_wait_until_really_deleted(Pid, Bucket, Keys, Delay, Retries)
-        when is_integer(Retries), Retries > 0, is_list(Keys) ->
+pbc_really_deleted(Pid, Bucket, Keys) ->
     StillThere =
     fun(K) ->
             Res = riakc_pb_socket:get(Pid, Bucket, K,
@@ -907,14 +903,7 @@ pbc_wait_until_really_deleted(Pid, Bucket, Keys, Delay, Retries)
                     true
             end
     end,
-    case lists:filter(StillThere, Keys) of
-        [] ->
-            ok;
-        NewKeys ->
-            timer:sleep(Delay),
-            pbc_wait_until_really_deleted(Pid, Bucket, NewKeys, Delay, Retries-1)
-    end.
-
+    [] == lists:filter(StillThere, Keys).
 
 
 %% @doc Returns HTTP URL information for a list of Nodes
