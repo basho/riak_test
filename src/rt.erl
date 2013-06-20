@@ -606,11 +606,11 @@ wait_until_unpingable(Node) ->
 
 % Waits until a certain registered name pops up on the remote node.
 wait_until_registered(Node, Name) ->
-    lager:info("Wait until the ring manager is up on ~p", [Node]),
+    lager:info("Wait until ~p is up on ~p", [Name, Node]),
 
     F = fun() ->
                 Registered = rpc:call(Node, erlang, registered, []),
-                lists:member(riak_core_ring_manager, Registered)
+                lists:member(Name, Registered)
         end,
     case wait_until(F) of
         ok ->
