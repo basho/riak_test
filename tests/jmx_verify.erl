@@ -135,10 +135,17 @@ test_supervision() ->
     Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
 
     lager:info("It can fail, it can fail 10 times"),
+
     RetryCount = lists:foldl(
-        fun(Log, Sum) -> case re:run(element(7,element(2,Log)), "JMX server monitor .* exited with code .*\. Retry #.*", []) of
-                {match, _} -> 1 + Sum;
-                _ -> Sum
+        fun(Log, Sum) -> 
+            try case re:run(Log, "JMX server monitor .* exited with code .*\. Retry #.*", []) of
+                    {match, _} -> 1 + Sum;
+                    _ -> Sum
+                end
+            catch
+            Err:Reason ->
+                lager:error("jmx supervision re:run failed w/ ~p: ~p", [Err, Reason]),
+                Sum
             end
         end, 
         0, Logs),
@@ -156,8 +163,18 @@ test_application_stop() ->
 
     %% Let's make sure the java process is alive!
     lager:info("checking for riak_jmx.jar running."),
-    ?assertNotEqual(nomatch, re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
-
+    rt:wait_until(Node, fun(_N) ->
+        try case re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", []) of
+            nomatch -> false;
+            _ -> true
+            end
+        catch
+        Err:Reason ->
+            lager:error("jmx stop re:run failed w/ ~p: ~p", [Err, Reason]),
+            false
+        end
+    end),
+    
     rpc:call(Node, riak_jmx, stop, ["Stopping riak_jmx"]),
     timer:sleep(20000),
     case net_adm:ping(Node) of
@@ -170,6 +187,7 @@ test_application_stop() ->
 
     %% Let's make sure the java process is dead!
     lager:info("checking for riak_jmx.jar not running."),
+
     ?assertEqual(nomatch, re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
 
     rt:stop(Node).
