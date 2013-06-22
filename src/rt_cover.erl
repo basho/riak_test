@@ -39,6 +39,10 @@
 
 -define(COVER_SERVER, cover_server).
 
+-record(cover_info, {module :: atom(),
+                     coverage :: undefined | {integer(), integer()},
+                     output_file :: undefined | string()}).
+
 if_coverage(Fun) ->
     case rt_config:get(cover_enabled, true) of
         false ->
@@ -124,17 +128,15 @@ find_app_modules(CoverApps) ->
     AppPattern = case CoverApps of
         all   -> "*";
         []    -> "SILLY_PATTERN_THAT_WILL_NOT_MATCH_ANYTHING";
-        [_|_] -> "{" ++ string:join(to_strs(CoverApps),",") ++ "}-*"
+        [_|_] -> "{" ++ string:join(to_strs(CoverApps),",") ++ "}*"
     end,
     Pattern = filename:join([Deps, AppPattern, "ebin", "*.beam"]),
     lager:debug("Looking for beams to cover in ~s", [Pattern]),
     File2Mod = fun(F) ->
             list_to_atom(filename:rootname(filename:basename(F)))
     end,
-    Excluded = [riak_core_pb],
     ModApps = [{File2Mod(File), app_name(File)}
-                || File <- filelib:wildcard(Pattern),
-                   not lists:member(File2Mod(File), Excluded)],
+                || File <- filelib:wildcard(Pattern)],
     rt_config:set(cover_mod_apps, dict:from_list(ModApps)),
     [Mod || {Mod, _} <- ModApps].
 
@@ -215,19 +217,26 @@ perc_str(CovPerc) ->
     io_lib:format("~.1f%", [CovPerc]).
 
 %% @doc Sort first by coverage, # of lines, module name
-cov_order({Mod1, {C1, NC1}}, {Mod2, {C2, NC2}}) ->
+cov_order(#cover_info{module=Mod1, coverage={C1, NC1}},
+          #cover_info{module=Mod2, coverage={C2, NC2}}) ->
     {perc({C1,NC1}), C1+NC1, Mod1} >
     {perc({C2,NC2}), C2+NC2, Mod2}.
 
 sort_cov(CovList) ->
     lists:sort(fun cov_order/2, CovList).
 
-acc_cov(CovList) ->
-    AddCov = fun({_M, {Y, N}}, {TY, TN}) -> {TY+Y, TN+N} end,
+-spec acc_cov([#cover_info{}]) -> {number(), number()}.
+acc_cov(CovList) when is_list(CovList) ->
+    lager:info("acc_cov CovList = ~p", [CovList]),
+    AddCov = fun(#cover_info{coverage={Y, N}}, {TY, TN}) -> {TY+Y, TN+N};
+        (#cover_info{coverage=undefined}, {TY, TN}) -> {TY, TN}
+    end,
     lists:foldl(AddCov, {0, 0}, CovList).
 
+-spec group_by_app(ModCovList:: [#cover_info{}], Mod2App :: dict()) ->
+    [{string(), number(), [#cover_info{}]}].
 group_by_app(ModCovList, Mod2App) ->
-    D1 = lists:foldl(fun(ModCov = {Mod, _}, Acc) ->
+    D1 = lists:foldl(fun(ModCov = #cover_info{module=Mod}, Acc) ->
                     case dict:find(Mod, Mod2App) of
                         {ok, App} ->
                             dict:append(App, ModCov, Acc);
@@ -239,20 +248,39 @@ group_by_app(ModCovList, Mod2App) ->
     [{App, perc(acc_cov(AppModCovList)), sort_cov(AppModCovList)}
      || {App, AppModCovList} <- L1].
 
+%% Predicate to filter out modules with no executable lines
+%% (usually all test code ifdef'ed out).
+-spec not_empty_file(#cover_info{}) -> boolean().
+not_empty_file(#cover_info{coverage = {C, NC}})
+        when C > 0; NC > 0 ->
+    true;
+not_empty_file(_) ->
+    false.
+
+-spec process_module(Mod :: atom(), OutDir :: string()) -> #cover_info{}.
+process_module(Mod, OutDir) ->
+    OutFile = case write_module_coverage(Mod, OutDir) of
+        {ok, OutFile0} -> OutFile0;
+        _              -> undefined
+    end,
+    Coverage = case cover:analyse(Mod, coverage, module) of
+        {ok, {Mod, Coverage0}} ->
+            Coverage0;
+        {error, Err} ->
+            lager:error("Could not cover analyze module ~p : ~p", [Mod, Err]),
+            undefined
+    end,
+    #cover_info{module=Mod, output_file=OutFile, coverage=Coverage}.
+
 write_coverage(all, Dir) ->
     write_coverage(rt_config:get(cover_modules, []), Dir);
 write_coverage(CoverModules, CoverDir) ->
     % First write a file per module
     prepare_output_dir(CoverDir),
-    ModCovList0 = rt:pmap(fun(Mod) ->
-                    write_module_coverage(Mod, CoverDir),
-                    {ok, ModCov} = cover:analyse(Mod, coverage, module),
-                    ModCov
-            end, CoverModules),
-
+    ModCovList0 = rt:pmap(fun(Mod) -> process_module(Mod, CoverDir) end,
+                          CoverModules),
     % Create data struct with total, per app and per module coverage
-    NotEmpty = fun({_, {C, NC}}) -> C > 0 orelse NC > 0 end,
-    ModCovList = lists:filter(NotEmpty, ModCovList0),
+    ModCovList = lists:filter(fun not_empty_file/1, ModCovList0),
     Mod2App = rt_config:get(cover_mod_apps, dict:new()),
     AppCovList = group_by_app(ModCovList, Mod2App),
     TotalPerc = perc(acc_cov(ModCovList)),
@@ -284,11 +312,17 @@ write_index_file({TotalPerc, AppCovList}, File) ->
                     "</h3><ul>",
                     [begin
                             Name = atom_to_list(Mod),
+                            FileLink = case OutFile of
+                                undefined -> Name;
+                                _ -> ["<a href='", Name, ".COVER.html'>", Name, "</a>"]
+                            end,
                             ["<li>",
                              "<span class='perc'> ", perc_str(Cov), " </span>",
-                             "<a href='", Name, ".COVER.html'>", Name, "</a>",
+                             FileLink,
                              "</li>"]
-                        end || {Mod, Cov} <- ModCov],
+                        end || #cover_info{module=Mod,
+                                    coverage=Cov,
+                                    output_file=OutFile} <- ModCov],
                     "</ul>"]
                 || {App, AppCov, ModCov} <- AppCovList],
             "</body></html>"
@@ -307,14 +341,27 @@ write_module_coverage(CoverMod, CoverDir) ->
                           [CoverMod]),
             {error, no_source};
         {ok, Src} ->
-            % Cover only finds source if alongside beam or in ../src from beam
-            % so had to temporarily copy source next to each beam.
-            {file, BeamFile} = cover:is_compiled(CoverMod),
-            TmpSrc = filename:rootname(BeamFile) ++ ".erl",
-            file:copy(Src, TmpSrc),
-            {ok, _Mod} = cover:analyse_to_file(CoverMod, CoverFile, [html]),
-            file:delete(TmpSrc),
-            ok
+            case filelib:is_regular(Src) andalso filename:extension(Src) == ".erl" of
+                true ->
+                    % Cover only finds source if alongside beam or in ../src from beam
+                    % so had to temporarily copy source next to each beam.
+                    {file, BeamFile} = cover:is_compiled(CoverMod),
+                    TmpSrc = filename:rootname(BeamFile) ++ ".erl",
+                    file:copy(Src, TmpSrc),
+                    case cover:analyse_to_file(CoverMod, CoverFile, [html]) of
+                        {ok, _Mod} -> ok;
+                        {error, Err} ->
+                            lager:warning("Failed to write coverage analysis" ++
+                                          " for module ~p (source ~s): ~p",
+                                          [CoverMod, Src, Err])
+                    end,
+                    file:delete(TmpSrc),
+                    {ok, CoverFile};
+                false ->
+                    lager:warning("Source for module ~p is not an erl file : ~s",
+                                 [CoverMod, Src]),
+                    {error, no_source}
+            end
     end.
 
 stop() ->
