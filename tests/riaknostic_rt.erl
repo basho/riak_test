@@ -40,7 +40,6 @@ confirm() ->
     check_riaknostic_usage(Node1),
     check_riaknostic_command_list(Node1),
     check_riaknostic_log_levels(Node1),
-    check_riaknostic_conn_failure(Node1),
 
     %% Done!
     lager:info("Test riaknostic: PASS"),
@@ -107,11 +106,3 @@ check_riaknostic_log_levels(Node) ->
     ?assert(rt:str(RiaknosticOut, "[debug]")),
     ok.
 
-%% Check that a connection failure message is output if node is stopped
-check_riaknostic_conn_failure(Node) ->
-    %% Check node conn failure when stopped
-    lager:info("**  Riaknostic warns of node connection failure when stopped"),
-    rt:stop_and_wait(Node),
-    {ok, RiaknosticOut} = rt:admin(Node, ["diag"]),
-    ?assert(rt:str(RiaknosticOut, "[warning] Could not connect")),
-    ok.
