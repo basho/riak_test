@@ -460,8 +460,12 @@ check_node({_N, Version}) ->
     end.
 
 set_backend(Backend) ->
-    lager:info("rtdev:set_backend(~p)", [Backend]),
-    update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
+    set_backend(Backend, []).
+
+set_backend(Backend, OtherOpts) ->
+    lager:info("rtdev:set_backend(~p, ~p)", [Backend, OtherOpts]),
+    Opts = [{storage_backend, Backend} | OtherOpts],
+    update_app_config(all, [{riak_kv, Opts}]),
     get_backends().
 
 get_version() ->
