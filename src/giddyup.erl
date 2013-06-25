@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -19,7 +19,8 @@
 %% -------------------------------------------------------------------
 -module(giddyup).
 
--export([get_suite/1, post_result/1]).
+-export([get_suite/1, post_result/1, post_artifact/2]).
+-define(STREAM_CHUNK_SIZE, 8192).
 
 -spec get_suite(string()) -> [{atom(), term()}].
 get_suite(Platform) ->
@@ -55,8 +56,8 @@ get_schema(Platform) ->
     get_schema(Platform, 3).
 
 get_schema(Platform, Retries) ->
-    Host = rt:config(giddyup_host),
-    Project = rt:config(rt_project),
+    Host = rt_config:get(giddyup_host),
+    Project = rt_config:get(rt_project),
     Version = rt:get_version(),
     URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
@@ -74,23 +75,23 @@ get_schema(Platform, Retries) ->
             get_schema(Platform, Retries - 1)
     end.
 
--spec post_result([{atom(), term()}]) -> atom().
+-spec post_result([{atom(), term()}]) -> {ok, string()} | error.
 post_result(TestResult) ->
-    Host = rt:config(giddyup_host),
+    Host = rt_config:get(giddyup_host),
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
     check_ibrowse(),
-    try ibrowse:send_req(URL, 
-            [{"Content-Type", "application/json"}], 
-            post, 
-            mochijson2:encode(TestResult), 
+    try ibrowse:send_req(URL,
+            [{"Content-Type", "application/json"}],
+            post,
+            mochijson2:encode(TestResult),
             [ {content_type, "application/json"}, basic_auth()],
             300000) of  %% 5 minute timeout
 
         {ok, RC=[$2|_], Headers, _Body} ->
             {_, Location} = lists:keyfind("Location", 1, Headers),
             lager:info("Test Result successfully POSTed to GiddyUp! ResponseCode: ~s, URL: ~s", [RC, Location]),
-            ok;
+            {ok, Location};
         {ok, ResponseCode, Headers, Body} ->
             lager:info("Test Result did not generate the expected 2XX HTTP response code."),
             lager:debug("Post"),
@@ -98,7 +99,7 @@ post_result(TestResult) ->
             lager:debug("Headers: ~p", [Headers]),
             lager:debug("Body: ~p", [Body]),
             error;
-        X -> 
+        X ->
             lager:warning("Some error POSTing test result: ~p", [X]),
             error
     catch
@@ -107,8 +108,40 @@ post_result(TestResult) ->
             lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
     end.
 
+post_artifact(TRURL, {FName, Body}) ->
+    %% First compute the path of where to post the artifact
+    URL = artifact_url(TRURL, FName),
+    ReqBody = make_req_body(Body),
+    CType = guess_ctype(FName),
+    %% Send request
+    try ibrowse:send_req(URL, [{"Content-Type", CType}],
+                         post,
+                         ReqBody,
+                         [{content_type, CType}, basic_auth()],
+                         300000) of
+        {ok, [$2|_], Headers, _Body} ->
+            {_, Location} = lists:keyfind("Location", 1, Headers),
+            lager:info("Successfully uploaded test artifact ~s to GiddyUp! URL: ~s", [FName, Location]),
+            ok;
+        {ok, RC, Headers, Body} ->
+            lager:info("Test artifact ~s failed to upload!", [FName]),
+            lager:debug("Status: ~p~nHeaders: ~p~nBody: ~s~n", [RC, Headers, Body]),
+            error;
+        X ->
+            lager:error("Error uploading ~s to giddyup. ~p~n"
+                        "URL: ~p~nRequest Body: ~p~nContent Type: ~p~n",
+                        [FName, X, URL, ReqBody, CType]),
+            error
+    catch
+        Throws ->
+            lager:error("Error uploading ~s to giddyup. ~p~n"
+                        "URL: ~p~nRequest Body: ~p~nContent Type: ~p~n",
+                        [FName, Throws, URL, ReqBody, CType])
+    end.
+
+
 basic_auth() ->
-    {basic_auth, {rt:config(giddyup_user), rt:config(giddyup_password)}}.
+    {basic_auth, {rt_config:get(giddyup_user), rt_config:get(giddyup_password)}}.
 
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
@@ -119,4 +152,59 @@ check_ibrowse() ->
             lager:error("Restarting ibrowse"),
             application:stop(ibrowse),
             application:start(ibrowse)
+    end.
+
+%% Given a URI parsed by http_uri, reconstitute it.
+generate({_Scheme, _UserInfo, _Host, _Port, _Path, _Query}=URI) ->
+    generate(URI, http_uri:scheme_defaults()).
+
+generate({Scheme, UserInfo, Host, Port, Path, Query}, SchemeDefaults) ->
+    {Scheme, DefaultPort} = lists:keyfind(Scheme, 1, SchemeDefaults),
+    lists:flatten([
+                   [ atom_to_list(Scheme), "://" ],
+                   [ [UserInfo, "@"] || UserInfo /= [] ],
+                   Host,
+                   [ [$:, integer_to_list(Port)] || Port /= DefaultPort ],
+                   Path, Query
+                  ]).
+
+%% Given the test result URL, constructs the appropriate URL for the artifact.
+artifact_url(TRURL, FName) ->
+    {ok, {Scheme, UserInfo, Host, Port, Path, Query}} = http_uri:parse(TRURL),
+    ArtifactPath = filename:join([Path, "artifacts", FName]),
+    generate({Scheme, UserInfo, Host, Port, ArtifactPath, Query}).
+
+%% ibrowse support streaming request bodies, so in the case where we
+%% have a Port/File to read from, we should stream it.
+make_req_body(Body) when is_port(Body); is_pid(Body) ->
+    read_fully(Body);
+make_req_body(Body) when is_list(Body);
+                         is_binary(Body) ->
+    Body.
+
+%% Read the file/port fully until eof. This is a workaround for the
+%% fact that ibrowse doesn't seem to send file streams correctly, or
+%% giddyup dislikes them. (shrug)
+read_fully(File) ->
+    read_fully(File, <<>>).
+
+read_fully(File, Data0) ->
+    case file:read(File, ?STREAM_CHUNK_SIZE) of
+        {ok, Data} ->
+            read_fully(File, <<Data0/binary, Data/binary>>);
+        eof ->
+            Data0
+    end.
+
+%% Guesses the MIME type of the file being uploaded.
+guess_ctype(FName) ->
+    case filename:extension(FName) of
+        ".log" -> "text/plain"; %% A log file
+        ".dump" -> "text/plain"; %% An erl_crash.dump file
+        ".1" -> "text/plain"; %% e.g. erlang.log.1
+        Else ->
+            case mochiweb_mime:from_extension(Else) of
+                undefined -> "binary/octet-stream";
+                CTG -> CTG
+            end
     end.

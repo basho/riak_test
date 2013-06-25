@@ -37,7 +37,7 @@
 
 confirm() ->
     lager:info("Building cluster of ~p nodes", [?NUM_NODES]),
-    SpamDir = rt:config_or_os_env(spam_dir),
+    SpamDir = rt_config:config_or_os_env(spam_dir),
     Config = [{riak_search, [{enabled, true}]}],
     [Node0 | _RestNodes] = Nodes = rt:build_cluster(?NUM_NODES, Config),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
@@ -72,7 +72,7 @@ confirm() ->
     verify_searches(PbcPid, Searches, 1),
     [?assertEqual([], read_some(Node, [{last, ?NUM_KEYS}])) || Node <- Nodes],
 
-    BackupFile = filename:join([rt:config(rt_scratch_dir), "TestBackup.bak"]),
+    BackupFile = filename:join([rt_config:get(rt_scratch_dir), "TestBackup.bak"]),
     case filelib:is_regular(BackupFile) of
         true ->
             lager:info("Deleting current backup file at ~p", [BackupFile]),
@@ -93,11 +93,14 @@ confirm() ->
     write_some(Node0, [{last, ?NUM_MOD},
                        {vfun, ModF}]),
     lager:info("Deleting ~p keys", [?NUM_DEL+1]),
-    ?assertEqual([], delete_some(Node0, [{first, ?NUM_MOD+1}, 
-                                         {last, ?NUM_MOD+?NUM_DEL}])),
+    delete_some(PbcPid, [{first, ?NUM_MOD+1},
+                         {last, ?NUM_MOD+?NUM_DEL}]),
     lager:info("Deleting extra search doc"),
     riakc_pb_socket:delete(PbcPid, ?SEARCH_BUCKET, ExtraKey),
-    rt:wait_until_no_pending_changes(Nodes),
+    rt:wait_until(fun() -> rt:pbc_really_deleted(PbcPid,
+                                                 ?SEARCH_BUCKET,
+                                                 [ExtraKey])
+        end),
 
     lager:info("Verifying data has changed"),
     [?assertEqual([], read_some(Node, [{last, ?NUM_MOD},
@@ -235,22 +238,23 @@ read_some(Node, Props) ->
     lists:foldl(F, [], lists:seq(Start, End)).
 
 % @todo Maybe replace systest_read
-delete_some(Node, Props) ->
+delete_some(PBC, Props) ->
     Bucket = proplists:get_value(bucket, Props, <<"test_bucket">>),
     Start = proplists:get_value(first, Props, 0),
     End = proplists:get_value(last, Props, 1000),
     KFun = proplists:get_value(kfun, Props, fun default_kfun/1),
 
-    {ok, C} = riak:client_connect(Node),
+    Keys = [KFun(N) || N <- lists:seq(Start, End)],
     F =
-        fun(N, Acc) ->
-            K = KFun(N),
-            case C:delete(Bucket, K) of
+        fun(K, Acc) ->
+            case riakc_pb_socket:delete(PBC, Bucket, K) of
                 ok -> Acc;
-                _ -> [{N, {could_not_delete}} | Acc]
+                _ -> [{error, {could_not_delete, K}} | Acc]
             end
         end,
-    lists:foldl(F, [], lists:seq(Start, End)).
+    lists:foldl(F, [], Keys),
+    rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, Keys) end),
+    ok.
 
 verify_search_count(Pid, SearchQuery, Count) ->
     {ok, #search_results{num_found=NumFound}} = riakc_pb_socket:search(Pid, ?SEARCH_BUCKET, SearchQuery),

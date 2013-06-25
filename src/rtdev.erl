@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -25,7 +25,7 @@
 
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
--define(PATH, (rt:config(rtdev_path))).
+-define(PATH, (rt_config:get(rtdev_path))).
 
 get_deps() ->
     lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
@@ -127,8 +127,8 @@ upgrade(Node, NewVersion) ->
         lager:info("Running: ~s", [Cmd]),
         os:cmd(Cmd)
     end || Cmd <- Commands],
-    VersionMap = orddict:store(N, NewVersion, rt:config(rt_versions)),
-    rt:set_config(rt_versions, VersionMap),
+    VersionMap = orddict:store(N, NewVersion, rt_config:get(rt_versions)),
+    rt_config:set(rt_versions, VersionMap),
     start(Node),
     rt:wait_until_pingable(Node),
     ok.
@@ -203,12 +203,12 @@ clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
     lists:foreach(fun rm_dir/1, DataDirs).
 
 rm_dir(Dir) ->
-    lager:info("Removing directory ~s", [Dir]), 
+    lager:info("Removing directory ~s", [Dir]),
     ?assertCmd("rm -rf " ++ Dir),
     ?assertEqual(false, filelib:is_dir(Dir)).
 
 add_default_node_config(Nodes) ->
-    case rt:config(rt_default_config, undefined) of
+    case rt_config:get(rt_default_config, undefined) of
         undefined -> ok;
         Defaults when is_list(Defaults) ->
             rt:pmap(fun(Node) ->
@@ -232,8 +232,8 @@ deploy_nodes(NodeConfig) ->
 
     %% Check that you have the right versions available
     [ check_node(Version) || Version <- VersionMap ],
-    rt:set_config(rt_nodes, NodeMap),
-    rt:set_config(rt_versions, VersionMap),
+    rt_config:set(rt_nodes, NodeMap),
+    rt_config:set(rt_versions, VersionMap),
 
     create_dirs(Nodes),
 
@@ -258,6 +258,9 @@ deploy_nodes(NodeConfig) ->
 
     %% %% Enable debug logging
     %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+
+    %% We have to make sure that riak_core_ring_manager is running before we can go on.
+    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
 
     %% Ensure nodes are singleton clusters
     [ok = rt:check_singleton_node(?DEV(N)) || {N, Version} <- VersionMap,
@@ -303,6 +306,9 @@ start(Node) ->
 attach(Node, Expected) ->
     interactive(Node, "attach", Expected).
 
+attach_direct(Node, Expected) ->
+    interactive(Node, "attach-direct", Expected).
+
 console(Node, Expected) ->
     interactive(Node, "console", Expected).
 
@@ -311,6 +317,7 @@ interactive(Node, Command, Exp) ->
     Path = relpath(node_version(N)),
     Cmd = riakcmd(Path, N, Command),
     lager:info("Opening a port for riak ~s.", [Command]),
+    lager:debug("Calling open_port with cmd ~s", [binary_to_list(iolist_to_binary(Cmd))]),
     P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))},
                   [stream, use_stdio, exit_status, binary, stderr_to_stdout]),
     interactive_loop(P, Exp).
@@ -373,7 +380,7 @@ interactive_loop(Port, Expected) ->
             %% We've met every expectation. Yay! If not, it means we've exited before
             %% something expected happened.
             ?assertEqual([], Expected)
-        after rt:config(rt_max_wait_time) ->
+        after rt_config:get(rt_max_wait_time) ->
             %% interactive_loop is going to wait until it matches expected behavior
             %% If it doesn't, the test should fail; however, without a timeout it
             %% will just hang forever in search of expected behavior. See also: Parenting
@@ -397,11 +404,11 @@ riak(Node, Args) ->
     {ok, Result}.
 
 node_id(Node) ->
-    NodeMap = rt:config(rt_nodes),
+    NodeMap = rt_config:get(rt_nodes),
     orddict:fetch(Node, NodeMap).
 
 node_version(N) ->
-    VersionMap = rt:config(rt_versions),
+    VersionMap = rt_config:get(rt_versions),
     orddict:fetch(N, VersionMap).
 
 spawn_cmd(Cmd) ->
@@ -445,7 +452,7 @@ get_cmd_result(Port, Acc) ->
     end.
 
 check_node({_N, Version}) ->
-    case proplists:is_defined(Version, rt:config(rtdev_path)) of
+    case proplists:is_defined(Version, rt_config:get(rtdev_path)) of
         true -> ok;
         _ ->
             lager:error("You don't have Riak ~s installed or configured", [Version]),
@@ -478,14 +485,15 @@ whats_up() ->
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
 
 devpaths() ->
-    lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt:config(rtdev_path))]).
+    lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt_config:get(rtdev_path))]).
 
 versions() ->
-    proplists:get_keys(rt:config(rtdev_path)) -- [root].
+    proplists:get_keys(rt_config:get(rtdev_path)) -- [root].
 
 get_node_logs() ->
-    Root = proplists:get_value(root, ?PATH),
+    Root = filename:absname(proplists:get_value(root, ?PATH)),
+    RootLen = length(Root) + 1, %% Remove the leading slash
     [ begin
-          {ok, Data} = file:read_file(Filename),
-          {Filename, Data}
+          {ok, Port} = file:open(Filename, [read, binary]),
+          {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].

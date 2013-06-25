@@ -12,6 +12,7 @@
          wait_until_leader_converge/1,
          wait_until_connection/1,
          wait_until_no_connection/1,
+         wait_until_aae_trees_built/1,
          wait_for_reads/5,
          start_and_wait_until_fullsync_complete/1,
          connect_cluster/3,
@@ -22,14 +23,17 @@
          enable_fullsync/2,
          start_realtime/2,
          stop_realtime/2,
-         do_write/5
+         do_write/5,
+         get_fs_coord_status_item/3,
+         num_partitions/1
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
 make_cluster(Nodes) ->
     [First|Rest] = Nodes,
-    [rt:join(Node, First) || Node <- Rest],
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    [rt:wait_for_service(N, riak_kv) || N <- Nodes],
+    [rt:join(Node, First) || Node <- Rest],
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)).
 
 name_cluster(Node, Name) ->
@@ -43,8 +47,8 @@ wait_until_is_leader(Node) ->
 
 is_leader(Node) ->
     case rpc:call(Node, riak_core_cluster_mgr, get_leader, []) of
-        {badrpc, _} ->
-            lager:info("Badrpc"),
+        {badrpc, Wut} ->
+            lager:info("Badrpc during is_leader for ~p. Error: ~p", [Node, Wut]),
             false;
         Leader ->
             lager:info("Checking: ~p =:= ~p", [Leader, Node]),
@@ -58,8 +62,8 @@ wait_until_is_not_leader(Node) ->
 
 is_not_leader(Node) ->
     case rpc:call(Node, riak_core_cluster_mgr, get_leader, []) of
-        {badrpc, _} ->
-            lager:info("Badrpc"),
+        {badrpc, Wut} ->
+            lager:info("Badrpc during is_not leader for ~p. Error: ~p", [Node, Wut]),
             false;
         Leader ->
             lager:info("Checking: ~p =/= ~p", [Leader, Node]),
@@ -138,6 +142,12 @@ wait_for_reads(Node, Start, End, Bucket, R) ->
     lager:info("Reads: ~p", [Reads]),
     length(Reads).
 
+get_fs_coord_status_item(Node, SinkName, ItemName) ->
+    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    FS_CoordProps = proplists:get_value(fullsync_coordinator, Status),
+    ClusterProps = proplists:get_value(SinkName, FS_CoordProps),
+    proplists:get_value(ItemName, ClusterProps).
+
 start_and_wait_until_fullsync_complete(Node) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
     Count = proplists:get_value(server_fullsyncs, Status0) + 1,
@@ -177,11 +187,25 @@ disconnect_cluster(Node, Name) ->
 wait_for_connection(Node, Name) ->
     rt:wait_until(Node,
         fun(_) ->
-                {ok, Connections} = rpc:call(Node, riak_core_cluster_mgr,
-                    get_connections, []),
-                lists:any(fun({{cluster_by_name, N}, _}) when N == Name -> true;
-                        (_) -> false
-                    end, Connections)
+                case rpc:call(Node, riak_core_cluster_mgr,
+                        get_connections, []) of
+                    {ok, Connections} ->
+                        Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
+                        case Conn of
+                            [] ->
+                                false;
+                            [Pid] ->
+                                Pid ! {self(), status},
+                                receive
+                                    {Pid, status, _} ->
+                                        true;
+                                    {Pid, connecting, _} ->
+                                        false
+                                end
+                        end;
+                    _ ->
+                        false
+                end
         end).
 
 enable_realtime(Node, Cluster) ->
@@ -232,3 +256,31 @@ nodes_with_version(Nodes, Version) ->
 
 nodes_all_have_version(Nodes, Version) ->
     Nodes == nodes_with_version(Nodes, Version).
+
+%% AAE support
+wait_until_aae_trees_built([AnyNode|_]=Nodes) ->
+    lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
+    %% Wait until all nodes report no undefined trees
+    rt:wait_until(AnyNode,
+                  fun(_) ->
+                          Busy = lists:foldl(
+                                   fun(Node,Busy1) ->
+                                           %% will be false when all trees are built on Node
+                                           lists:keymember(undefined,
+                                                           2,
+                                                           rpc:call(Node,
+                                                                    riak_kv_entropy_info,
+                                                                    compute_tree_info,
+                                                                    []))
+                                               or Busy1
+                                   end,
+                                   false,
+                                   Nodes),
+                          not Busy
+                  end).
+
+%% Return the number of partitions in the cluster where Node is a member.
+num_partitions(Node) ->
+    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    N = riak_core_ring:num_partitions(Ring),
+    N.

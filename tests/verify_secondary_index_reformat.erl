@@ -99,7 +99,21 @@ check_fixed_index_statuses(Node, ExpectedStatuses) ->
     BadIndexes = [{Idx, proplists:get_value(fixed_indexes, Status)} ||
                      {Idx, [{backend_status,_,Status}]} <- Statuses,
                      not fixed_index_status_ok(Status, ExpectedStatuses)],
-    ?assertEqual([], BadIndexes).
+    ?assertEqual([], BadIndexes),
+    %% if we are checking for undefined then we are on old version that doesn't
+    %% have riak_kv_status:fixed_index_status/0
+    case lists:member(undefined, ExpectedStatuses) of
+        false ->
+            IncompleteIndexes = [Idx || {Idx, [{backend_status,_,Status}]} <- Statuses,
+                                        fixed_index_status_ok(Status, [false])],
+            RPCStatus = rpc:call(Node, riak_kv_status, fixed_index_status, []),
+            case IncompleteIndexes of
+                [] -> ?assert(RPCStatus);
+                _ -> ?assertNot(RPCStatus)
+            end;
+        true ->
+            ok
+    end.
 
 fixed_index_status_ok(Status, Expected) ->
     Found = proplists:get_value(fixed_indexes, Status),

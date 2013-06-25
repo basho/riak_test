@@ -17,6 +17,14 @@ slow_handle_command(Req, Sender, State) ->
     timer:sleep(500),
     ?M:handle_command_orig(Req, Sender, State).
 
+%% @doc Make all KV vnode coverage commands take abnormally long.
+slow_handle_coverage(Req, Filter, Sender, State) ->
+    random:seed(erlang:now()),
+    Rand = random:uniform(5000),
+    error_logger:info_msg("coverage sleeping ~p", [Rand]),
+    timer:sleep(Rand),
+    ?M:handle_coverage_orig(Req, Filter, Sender, State).
+
 %% @doc Simulate dropped gets/network partitions byresponding with
 %%      noreply during get requests.
 drop_do_get(Sender, BKey, ReqId, State) ->

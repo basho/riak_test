@@ -5,25 +5,20 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    NumNodes = rt:config(num_nodes, 6),
-    ClusterASize = rt:config(cluster_a_size, 3),
+    NumNodes = rt_config:get(num_nodes, 6),
+    ClusterASize = rt_config:get(cluster_a_size, 3),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     BaseConf = [
             {riak_repl,
              [
+                {ssl_enabled, false},
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled}
              ]}
     ],
 
-    %% XXX for some reason, codew:priv_dir returns riak_test/riak_test/priv,
-    %% which is wrong, so fix it.
-    PrivDir = re:replace(code:priv_dir(riak_test), "riak_test(/riak_test)*",
-        "riak_test", [{return, list}]),
-
-    ?assert(filelib:is_dir(PrivDir)),
-
+    PrivDir = rt:priv_dir(),
 
     lager:info("priv dir: ~p -> ~p", [code:priv_dir(riak_test), PrivDir]),
 
@@ -164,34 +159,52 @@ confirm() ->
 
     replication:verify_site_ips(Node2, "site1", Listeners),
 
-    lager:info("testing basic connectivity"),
+    lager:info("===testing basic connectivity"),
+    rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
     ?assertEqual(ok, test_connection({Node1, BaseConf}, {Node2, BaseConf})),
 
-    lager:info("testing you can't connect to a server with a cert with the same common name"),
+    lager:info("===testing you can't connect to a server with a cert with the same common name"),
+    rt:log_to_nodes([Node1, Node2], "Testing identical cert is disallowed"),
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
-    lager:info("testing simple SSL connectivity"),
+    lager:info("===testing you can't connect when peer doesn't support SSL"),
+    rt:log_to_nodes([Node1, Node2], "Testing missing ssl on peer fails"),
+    ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
+            {Node2, BaseConf})),
+
+    lager:info("===testing you can't connect when local doesn't support SSL"),
+    rt:log_to_nodes([Node1, Node2], "Testing missing ssl locally fails"),
+    ?assertEqual(fail, test_connection({Node1, BaseConf},
+            {Node2, merge_config(SSLConfig2, BaseConf)})),
+
+    lager:info("===testing simple SSL connectivity"),
+    rt:log_to_nodes([Node1, Node2], "Basic SSL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig2, BaseConf)})),
 
-    lager:info("testing SSL connectivity with an intermediate CA"),
+    lager:info("===testing SSL connectivity with an intermediate CA"),
+    rt:log_to_nodes([Node1, Node2], "Intermediate CA test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig3, BaseConf)})),
 
-    lager:info("testing disallowing intermediate CAs works"),
+    lager:info("===testing disallowing intermediate CAs works"),
+    rt:log_to_nodes([Node1, Node2], "Disallowing intermediate CA test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig4, BaseConf)})),
 
-    lager:info("testing disallowing intermediate CAs disallows connections"),
+    lager:info("===testing disallowing intermediate CAs disallows connections"),
+    rt:log_to_nodes([Node1, Node2], "Disallowing intermediate CA test 2"),
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
-    lager:info("testing wildcard and strict ACLs with cacert.org certs"),
+    lager:info("===testing wildcard and strict ACLs with cacert.org certs"),
+    rt:log_to_nodes([Node1, Node2], "wildcard and strict ACL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),
 
-    lager:info("testing expired certificates fail"),
+    lager:info("===testing expired certificates fail"),
+    rt:log_to_nodes([Node1, Node2], "expired certificates test"),
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig7, BaseConf)})),
 
@@ -232,6 +245,8 @@ test_connection({Node1, Config1}, {Node2, Config2}) ->
     rt:wait_until_pingable(Node1),
     rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
+    rt:wait_for_service(Node1, riak_kv),
+    rt:wait_for_service(Node2, riak_kv),
     timer:sleep(5000),
     replication:wait_until_connection(Node1).
 

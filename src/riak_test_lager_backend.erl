@@ -95,14 +95,15 @@ handle_event({log, Level, {Date, Time}, [LevelStr, Location, Message]}, %% lager
             [Time, " ", LevelStr, Message]
         end,
     {ok, State#state{log=[Log|Logs]}};
-handle_event({log, {lager_msg, Dest, _Meta, Level, Timestamp, Message}}, State) -> %% lager master
+handle_event({log, {lager_msg, Dest, _Meta, Level, DateTime, _Timestamp, Message}},
+             State) -> %% lager 2.0.0
     case lager_util:level_to_num(Level) of
         L when L =< State#state.level ->
-            handle_event({log, L, Timestamp, 
-                          [["[",atom_to_list(Level),"] "], " ", Message]}, 
+            handle_event({log, L, DateTime,
+                          [["[",atom_to_list(Level),"] "], " ", Message]},
                          State);
         L -> 
-            handle_event({log, Dest, L, Timestamp, 
+            handle_event({log, Dest, L, DateTime,
                           [["[",atom_to_list(Level),"] "], " ", Message]}, 
                          State)
     end;

@@ -29,14 +29,14 @@
 %% @doc This test verifies that partition repair successfully repairs
 %% all data after it has wiped out by a simulated disk crash.
 confirm() ->
-    SpamDir = rt:config_or_os_env(spam_dir),
-    RingSize = list_to_integer(rt:config_or_os_env(ring_size, "16")),
-    NVal = rt:config_or_os_env(n_val, undefined),
+    SpamDir = rt_config:config_or_os_env(spam_dir),
+    RingSize = list_to_integer(rt_config:config_or_os_env(ring_size, "16")),
+    NVal = rt_config:config_or_os_env(n_val, undefined),
     TestMetaData = riak_test_runner:metadata(),
     KVBackend = proplists:get_value(backend, TestMetaData),
 
-    NumNodes = list_to_integer(rt:config_or_os_env(num_nodes, "4")),
-    HOConcurrency = list_to_integer(rt:config_or_os_env(ho_concurrency, "2")),
+    NumNodes = list_to_integer(rt_config:config_or_os_env(num_nodes, "4")),
+    HOConcurrency = list_to_integer(rt_config:config_or_os_env(ho_concurrency, "2")),
     {_KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
     Bucket = <<"scotts_spam">>,
 
@@ -167,6 +167,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
         [] -> ok;
         _ ->
             NF = StashPath ++ ".nofound",
+            lager:info("Some data not found, writing that to ~s", [NF]),
             ?assertEqual(ok, file:write_file(NF, io_lib:format("~p.", [NotFound])))
     end,
     %% NOTE: If the following assert fails then check the .notfound
@@ -273,7 +274,7 @@ stash_search({_I,{_F,_T}}=K, _Postings=V, Stash) ->
     dict:append_list(K, V, Stash).
 
 base_stash_path() ->
-    rt:config(rt_scratch_dir) ++ "/dev/data_stash/".
+    rt_config:get(rt_scratch_dir) ++ "/dev/data_stash/".
 
 stash_path(Service, Partition) ->
     base_stash_path() ++ atom_to_list(Service) ++ "/" ++ integer_to_list(Partition) ++ ".stash".
@@ -300,7 +301,7 @@ wait_for_repair(Service, {Partition, Node}, Tries) ->
 
 data_path(Node, Suffix, Partition) ->
     [Name, _] = string:tokens(atom_to_list(Node), "@"),
-    Base = rt:config(rtdev_path.current) ++ "/dev/" ++ Name ++ "/data",
+    Base = rt_config:get(rtdev_path.current) ++ "/dev/" ++ Name ++ "/data",
     Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
 
 backend_mod_dir(undefined) ->
@@ -322,7 +323,7 @@ set_search_schema_nval(Bucket, NVal) ->
     %% than allowing the internal format to be modified and set you
     %% must send the update in the external format.
     BucketStr = binary_to_list(Bucket),
-    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt:config(rtdev_path.current)]),
+    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt_config:get(rtdev_path.current)]),
     GetSchema = ?FMT("~s show-schema ~s > current-schema",
                      [SearchCmd, BucketStr]),
     ModifyNVal = ?FMT("sed -E 's/n_val, [0-9]+/n_val, ~s/' "

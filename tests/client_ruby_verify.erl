@@ -32,11 +32,11 @@ confirm() ->
     %% of riak_test.
     RiakRootDir = rtdev:node_path(Node1),
 
-    Cmd = "bin/rspec --profile --tag integration --tag \~nodegen --no-color -fd",
+    Cmd = "bin/rspec --profile --tag integration --tag \~nodegen --no-color",
 
     lager:info("Cmd: ~s", [Cmd]),
 
-    {Code, RubyLog} = rt:stream_cmd(Cmd, [{cd, GemDir}, {env, [
+    {Code, RubyLog} = rt_local:stream_cmd(Cmd, [{cd, GemDir}, {env, [
             {"RIAK_NODE_NAME", atom_to_list(Node1)},
             {"RIAK_ROOT_DIR", RiakRootDir},
             {"HTTP_PORT", integer_to_list(HTTP_Port)},
@@ -52,24 +52,24 @@ prereqs() ->
     RubyVersion = os:cmd("ruby -v"),
     ?assert(rt:str(RubyVersion, "1.9.") orelse rt:str(RubyVersion, "1.8.7")),
 
-    rt:install_on_absence("bundle", "gem install bundler --no-rdoc --no-ri"),
+    rt_local:install_on_absence("bundle", "gem install bundler --no-rdoc --no-ri"),
     ok.
 
 
 % Download the ruby-client gem, unpack it and build it locally
 dat_gem() ->
     lager:info("Fetching riak-client gem"),
-    GemInstalled = os:cmd("cd " ++ rt:config(rt_scratch_dir) ++ " ; gem fetch riak-client"),
+    GemInstalled = os:cmd("cd " ++ rt_config:get(rt_scratch_dir) ++ " ; gem fetch riak-client"),
     GemFile = string:substr(GemInstalled, 12, length(GemInstalled) - 12),
     %GemFile = "riak-client",
     lager:info("Downloaded gem: ~s", [GemFile]),
 
-    rt:stream_cmd(io_lib:format("gem unpack ~s.gem", [GemFile]), [{cd, rt:config(rt_scratch_dir)}]),
+    rt_local:stream_cmd(io_lib:format("gem unpack ~s.gem", [GemFile]), [{cd, rt_config:get(rt_scratch_dir)}]),
 
     Cmd = "bundle install --without=guard --binstubs --no-color --path=vendor/bundle",
     lager:info(Cmd),
 
-    GemDir = filename:join([rt:config(rt_scratch_dir), GemFile]),
+    GemDir = filename:join([rt_config:get(rt_scratch_dir), GemFile]),
 
-    {_Exit, _Log} = rt:stream_cmd(Cmd, [{cd, GemDir}, {env, [{"BUNDLE_PATH", "vendor/bundle"}]}]),
+    {_Exit, _Log} = rt_local:stream_cmd(Cmd, [{cd, GemDir}, {env, [{"BUNDLE_PATH", "vendor/bundle"}]}]),
     GemDir.

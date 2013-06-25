@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# bail out if things go south
+set -e
+
 : ${RT_DEST_DIR:="$HOME/rt/riak"}
 
 echo "Making $(pwd) the current release:"
