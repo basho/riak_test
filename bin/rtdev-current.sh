@@ -24,6 +24,14 @@ mkdir $RT_DEST_DIR/current
 cd $cwd
 echo " - Copying devrel to $RT_DEST_DIR/current"
 cp -p -P -R dev $RT_DEST_DIR/current
+cd $RT_DEST_DIR/current
+for f in dev/dev?
+do
+    if [ -d $f ]; then
+        echo " - Cleaning dir $RT_DEST_DIR/current/$f/data"
+        rm -rf $f/data && mkdir -p $f/data/ring
+    fi
+done
 echo " - Writing $RT_DEST_DIR/current/VERSION"
 echo -n $VERSION > $RT_DEST_DIR/current/VERSION
 cd $RT_DEST_DIR
