@@ -538,25 +538,39 @@ mixed_version_clusters_test_dep() ->
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
         Nodes = rt:deploy_nodes(DeployConfs),
         [N1, N2, N3, N4, N5, N6] =  Nodes,
-        N12 = [N1, N2],
-        N34 = [N3, N4],
-        N56 = [N5, N6],
-        repl_util:make_cluster(N12),
-        repl_util:make_cluster(N34),
-        repl_util:make_cluster(N56),
-        repl_util:name_cluster(N1, "n12"),
-        repl_util:name_cluster(N3, "n34"),
-        repl_util:name_cluster(N5, "n56"),
-        [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
-        connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
-        connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
-        connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
-        Nodes
+        case rpc:call(N1, application, get_key, [riak_core, vsn]) of
+            % this is meant to test upgrading from early BNW aka
+            % Brave New World aka Advanced Repl aka version 3 repl to
+            % a cascading realtime repl. Other tests handle going from pre
+            % repl 3 to repl 3.
+            {ok, Vsn} when Vsn < "1.3.0" ->
+                {too_old, Nodes};
+            _ ->
+                N12 = [N1, N2],
+                N34 = [N3, N4],
+                N56 = [N5, N6],
+                repl_util:make_cluster(N12),
+                repl_util:make_cluster(N34),
+                repl_util:make_cluster(N56),
+                repl_util:name_cluster(N1, "n12"),
+                repl_util:name_cluster(N3, "n34"),
+                repl_util:name_cluster(N5, "n56"),
+                [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
+                connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
+                connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
+                connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
+                Nodes
+        end
     end,
-    fun(Nodes) ->
+    fun(MaybeNodes) ->
+        Nodes = case MaybeNodes of
+            {too_old, Ns} -> Ns;
+            _ -> MaybeNodes
+        end,
         rt:clean_cluster(Nodes)
     end,
-    fun([N1, N2, N3, N4, N5, N6] = Nodes) -> [
+    fun({too_old, _Nodes}) -> [];
+       ([N1, N2, N3, N4, N5, N6] = Nodes) -> [
 
         {"no cascading at first", timeout, timeout(35), [
             {timeout, timeout(15), fun() ->
@@ -720,19 +734,33 @@ new_to_old_test_dep() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
         [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        Names = ["new1", "old2", "new3"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        connect_rt(New1, 10026, "old2"),
-        connect_rt(Old2, 10036, "new3"),
-        connect_rt(New3, 10016, "new1"),
-        Nodes
+        case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
+            % this is meant to test upgrading from early BNW aka
+            % Brave New World aka Advanced Repl aka version 3 repl to
+            % a cascading realtime repl. Other tests handle going from pre
+            % repl 3 to repl 3.
+            {ok, Vsn} when Vsn < "1.3.0" ->
+                {too_old, Nodes};
+            _ ->
+                [repl_util:make_cluster([N]) || N <- Nodes],
+                Names = ["new1", "old2", "new3"],
+                [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+                [repl_util:wait_until_is_leader(N) || N <- Nodes],
+                connect_rt(New1, 10026, "old2"),
+                connect_rt(Old2, 10036, "new3"),
+                connect_rt(New3, 10016, "new1"),
+                Nodes
+        end
     end,
-    fun(Nodes) ->
+    fun(MaybeNodes) ->
+        Nodes = case MaybeNodes of
+            {too_old, Ns} -> Ns;
+            _ -> MaybeNodes
+        end,
         rt:clean_cluster(Nodes)
     end,
-    fun([New1, Old2, New3]) -> [
+    fun({too_old, _}) -> [];
+       ([New1, Old2, New3]) -> [
 
         {"From new1 to old2", timeout, timeout(25), fun() ->
             Client = rt:pbc(New1),
