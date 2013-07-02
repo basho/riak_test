@@ -238,11 +238,24 @@ test_basic_pg(Mode, SSL) ->
     end,
 
     PidC = rt:pbc(FirstC),
+
     Options = [{n_val, 1}, {sloppy_quorum, false}],
     lager:info("Test proxy get from C using options: ~p", [Options]),
-    {ok, PGResult3} = riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA,Options),
-    ?assertEqual(ValueA, riakc_obj:get_value(PGResult3)),
-
+    PGResult3 = riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA,Options),
+    % it's ok if the first request fails due to the options,
+    % try it again without options to see if it passes
+    case PGResult3 of
+        {ok, PGResult3Value} ->
+            ?assertEqual(ValueA, riakc_obj:get_value(PGResult3Value));
+        {error, notfound} ->
+            {ok, PGResult4Value} = riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA),
+             ?assertEqual(ValueA, riakc_obj:get_value(PGResult4Value));
+        UnknownResult ->
+             %% welp, we might have been expecting a notfound, but we got
+             %% something else.
+             lager:error("Unexpected result: %p", [UnknownResult]),
+             ?assertEqual(fish, chips)
+    end,
     pass.
 
 %% test 1.2 replication (aka "Default" repl)
