@@ -249,8 +249,10 @@ test_basic_pg(Mode, SSL) ->
             riakc_obj:get_value(PGResult3Value);
         {error, notfound} ->
             RetryOptions = [{n_val, 1}],
-            {ok, PGResult4Value} = riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA,RetryOptions),
-            riakc_obj:get_value(PGResult4Value);
+            case riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA,RetryOptions) of
+                {ok, PGResult4Value} -> riakc_obj:get_value(PGResult4Value);
+                UnknownResult -> UnknownResult
+            end;
         UnknownResult ->
             %% welp, we might have been expecting a notfound, but we got
             %% something else.
