@@ -248,7 +248,8 @@ test_basic_pg(Mode, SSL) ->
         {ok, PGResult3Value} ->
             ?assertEqual(ValueA, riakc_obj:get_value(PGResult3Value));
         {error, notfound} ->
-            {ok, PGResult4Value} = riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA),
+            RetryOptions = [{n_val, 1}],
+            {ok, PGResult4Value} = riak_repl_pb_api:get(PidC,Bucket,KeyA,CidA,RetryOptions),
              ?assertEqual(ValueA, riakc_obj:get_value(PGResult4Value));
         UnknownResult ->
              %% welp, we might have been expecting a notfound, but we got
