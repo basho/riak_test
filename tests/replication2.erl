@@ -135,10 +135,15 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             log_to_nodes(AllNodes, "Test fullsync with leader ~p", [LeaderA]),
             repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 
-            %% check that the number of successful FS source exists matches the number of partitions
-            NumExits = repl_util:get_fs_coord_status_item(LeaderA, "B", successful_exits),
-            NumPartitions = repl_util:num_partitions(LeaderA),
-            ?assertEqual(NumPartitions, NumExits),
+            case rpc:call(LeaderA, init, script_id, []) of
+                {"riak", Vsn} when Vsn > "1.4" ->
+                    %% check that the number of successful FS source exists matches the number of partitions
+                    NumExits = repl_util:get_fs_coord_status_item(LeaderA, "B", successful_exits),
+                    NumPartitions = repl_util:num_partitions(LeaderA),
+                    ?assertEqual(NumPartitions, NumExits);
+                _ ->
+                    ok
+            end,
 
             lager:info("Check keys written before repl was connected are present"),
             ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, 200, TestBucket, 2));
