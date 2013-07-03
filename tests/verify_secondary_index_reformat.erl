@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    [Node] = rt:build_cluster([previous]),
+    [Node] = rt:build_cluster([legacy]),
     rt:wait_until_nodes_ready([Node]),
 
     check_fixed_index_statuses(Node, undefined),
@@ -63,7 +63,7 @@ confirm() ->
                                               1000000000000,
                                               TestIdxValue),
     lager:info("found keys: ~p", [Results]),
-    ?assertEqual([TestKey], Results),
+    ?assertEqual({keys, [TestKey]}, Results),
 
     check_fixed_index_statuses(Node, true),
 
