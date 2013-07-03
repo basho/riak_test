@@ -111,9 +111,7 @@ build()
     echo " - $SRCDIR built."
 }
 
-build "riak-1.1.4" $R14B04 http://s3.amazonaws.com/downloads.basho.com/riak/1.1/1.1.4/riak-1.1.4.tar.gz
-echo
 build "riak-1.2.1" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.2/1.2.1/riak-1.2.1.tar.gz
 echo
-build "riak-1.3.0" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.3/1.3.0/riak-1.3.0.tar.gz
+build "riak-1.3.2" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.3/1.3.2/riak-1.3.2.tar.gz
 echo
