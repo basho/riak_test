@@ -14,7 +14,7 @@ contents of `$HOME/rt/riak` might look something like this:
 
 ```
 $ ls $HOME/rt/riak
-current riak-1.1.4 riak-1.2.1 riak-1.3.1
+current riak-1.1.4 riak-1.2.1 riak-1.3.2
 ```
 
 Inside each of these directories is a `dev` folder, typically
@@ -73,7 +73,7 @@ The first one that we want to look at is `rtdev-build-releases.sh`. If
 left unchanged, this script is going to do the following:
 
 1. Download the source for the past three major Riak versions (e.g.
-   1.1.4, 1.2.1 and 1.3.1)
+   1.1.4, 1.2.1 and 1.3.2)
 1. Build the proper version of Erlang that release was built with,
    using kerl (which it will also download)
 1. Build those releases of Riak.
@@ -85,7 +85,7 @@ installation:
 
 ```bash
 R14B04=${R14B04:-$HOME/erlang-R14B04}
-R15B01=${R15B03:-$HOME/erlang-R15B01}
+R15B01=${R15B01:-$HOME/erlang-R15B01}
 R15B03=${R15B03:-$HOME/erlang-R15B03}
 ```
 
@@ -141,7 +141,7 @@ to tell riak_test about them. The method of choice is to create a
     {rt_project, "riak"},
     {rtdev_path, [{root,     "/home/you/rt/riak"},
                   {current,  "/home/you/rt/riak/current"},
-                  {previous, "/home/you/rt/riak/riak-1.3.1"},
+                  {previous, "/home/you/rt/riak/riak-1.3.2"},
                   {legacy,   "/home/you/rt/riak/riak-1.2.1"}
                  ]}
 ]}.

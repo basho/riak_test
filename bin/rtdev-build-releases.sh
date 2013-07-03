@@ -113,5 +113,5 @@ build()
 
 build "riak-1.2.1" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.2/1.2.1/riak-1.2.1.tar.gz
 echo
-build "riak-1.3.1" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.3/1.3.1/riak-1.3.1.tar.gz
+build "riak-1.3.2" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.3/1.3.2/riak-1.3.2.tar.gz
 echo
