@@ -74,9 +74,10 @@ confirm() ->
     ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree
-    [?assertEqual(ok, rt:wait_until(HP, fun(N) ->
-                                                11 == get_counter(N, Key)
-                                        end)) ||  HP <- Hosts],
+    [?assertEqual(ok, rt:wait_until(Node, fun(N) ->
+                                                  {ok, [HP]} = rpc:call(N, application, get_env, [riak_core, http]),
+                                                  11 == get_counter(HP, Key)
+                                        end)) ||  Node <- Nodes],
 
     pass.
 
