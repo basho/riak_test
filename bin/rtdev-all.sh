@@ -34,15 +34,6 @@ echo
 
 source $SCRIPT_DIR/rtdev-build-releases.sh
 
-if [[ `uname -s` =~ ^Darwin ]]; then
-  if [[ `sw_vers|grep ProductVersion|awk '{print $2}'` > "10.7" ]]; then
-    echo
-    echo "= Patching OSX > 10.7 ======================================"
-    echo
-    source $SCRIPT_DIR/rtdev-lion-fix.sh
-  fi
-fi
-
 echo "= Installing Riak Releases ======================================"
 echo
 source $SCRIPT_DIR/rtdev-setup-releases.sh

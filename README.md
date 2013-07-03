@@ -14,7 +14,7 @@ contents of `$HOME/rt/riak` might look something like this:
 
 ```
 $ ls $HOME/rt/riak
-current riak-1.0.3 riak-1.1.4 riak-1.2.0
+current riak-1.1.4 riak-1.2.1 riak-1.3.2
 ```
 
 Inside each of these directories is a `dev` folder, typically
@@ -73,7 +73,7 @@ The first one that we want to look at is `rtdev-build-releases.sh`. If
 left unchanged, this script is going to do the following:
 
 1. Download the source for the past three major Riak versions (e.g.
-   1.0.3, 1.1.4, and 1.2.1)
+   1.1.4, 1.2.1 and 1.3.2)
 1. Build the proper version of Erlang that release was built with,
    using kerl (which it will also download)
 1. Build those releases of Riak.
@@ -85,6 +85,7 @@ installation:
 
 ```bash
 R14B04=${R14B04:-$HOME/erlang-R14B04}
+R15B01=${R15B01:-$HOME/erlang-R15B01}
 R15B03=${R15B03:-$HOME/erlang-R15B03}
 ```
 
@@ -100,13 +101,6 @@ is missing, it will prompt you to install kerl, even if you already
 have kerl. If you say no, the script quits. If you say yes, or all of
 your erlang paths check out, then go get a cup of coffee, you'll be
 building for a little while.
-
-**Warning**: If you are running OS X 10.7+ and trying to build Riak
-1.0.3, then the erlang_js dependency won't compile for you, but it
-fails silently. Fortunately, the precomipled OS X build includes this
-dependency in it's working form. Just run `rtdev-lion-fix.sh` after
-`rtdev-build-releases.sh` to patch it. **Please run this patch before
-proceeding on to the next script**
 
 ### rtdev-setup-releases.sh
 
@@ -147,8 +141,8 @@ to tell riak_test about them. The method of choice is to create a
     {rt_project, "riak"},
     {rtdev_path, [{root,     "/home/you/rt/riak"},
                   {current,  "/home/you/rt/riak/current"},
-                  {previous, "/home/you/rt/riak/riak-1.2.1"},
-                  {legacy,   "/home/you/rt/riak/riak-1.1.4"}
+                  {previous, "/home/you/rt/riak/riak-1.3.2"},
+                  {legacy,   "/home/you/rt/riak/riak-1.2.1"}
                  ]}
 ]}.
 ```
