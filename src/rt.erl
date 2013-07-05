@@ -53,6 +53,7 @@
          enable_search_hook/2,
          get_deps/0,
          get_node_logs/0,
+         get_node_log_filenames/0,
          get_ring/1,
          get_version/0,
          heal/1,
@@ -1086,3 +1087,6 @@ setup_harness(Test, Args) ->
 %%   nodes.
 get_node_logs() ->
     ?HARNESS:get_node_logs().
+
+get_node_log_filenames() ->
+    ?HARNESS:get_node_log_filenames().

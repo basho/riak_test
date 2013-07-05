@@ -145,6 +145,9 @@ main(Args) ->
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
         {1, fail} ->
             so_kill_riak_maybe();
+        {_, fail} ->
+            rt:teardown(),
+            exit(1);
         _ ->
             lager:info("Multiple tests run or no failure"),
             rt:teardown()

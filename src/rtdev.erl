@@ -497,3 +497,7 @@ get_node_logs() ->
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+
+get_node_log_filenames() ->
+    Root = filename:absname(proplists:get_value(root, ?PATH)),
+    filelib:wildcard(Root ++ "/*/dev/dev*/log/*").

@@ -52,7 +52,7 @@ confirm(TestModule, Outdir, TestMetaData) ->
     {Status, Reason} = case check_prereqs(Mod) of
         true ->
             lager:notice("Running Test ~s", [TestModule]),
-            execute(TestModule, {Mod, Fun}, TestMetaData);
+            execute(TestModule, {Mod, Fun}, TestMetaData, Outdir);
         not_present ->
             {fail, test_does_not_exist};
         _ ->
@@ -73,8 +73,11 @@ start_lager_backend(TestModule, Outdir) ->
     case Outdir of
         undefined -> ok;
         _ ->
+            {{Y,M,D}, {H,Min,S}} = calendar:local_time(),
             gen_event:add_handler(lager_event, lager_file_backend, 
-                {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output", 
+                {Outdir ++ "/" ++ atom_to_list(TestModule) ++ 
+                    io_lib:format("~p~p~p-~p.~p.~p", [Y, M, D, H, Min, S]) ++ 
+                    ".dat_test_output", 
                  rt_config:get(lager_level, info), 10485760, "$D0", 1}),
             lager:set_loglevel(lager_file_backend, rt_config:get(lager_level, info))
     end,
@@ -86,7 +89,7 @@ stop_lager_backend() ->
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
 %% does some group_leader swapping, in the style of EUnit.
-execute(TestModule, {Mod, Fun}, TestMetaData) ->
+execute(TestModule, {Mod, Fun}, TestMetaData, Outdir) ->
     process_flag(trap_exit, true),
     OldGroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
@@ -101,6 +104,17 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     riak_test_group_leader:tidy_up(OldGroupLeader),
     case Status of
         fail ->
+            case Outdir of
+                undefined -> ok;
+                O ->
+                    {{Y,M,D}, {H,Min,S}} = calendar:local_time(),
+                    Filename = O ++ "/" ++ atom_to_list(TestModule) ++ 
+                                io_lib:format("~p~p~p-~p.~p.~p", [Y, M, D, H, Min, S]) ++ 
+                                ".tar", 
+                    Filenames = rt:get_node_log_filenames(),
+                    TarCmd = io_lib:format("tar -c -f ~s ", [Filename]) ++ string:join(Filenames, [$\s]),
+                    rt:cmd(lists:flatten(TarCmd))
+            end,
             ErrorHeader = "================ " ++ atom_to_list(TestModule) ++ " failure stack trace =====================",
             ErrorFooter = [ $= || _X <- lists:seq(1,length(ErrorHeader))],
             Error = io_lib:format("~n~s~n~p~n~s~n", [ErrorHeader, Reason, ErrorFooter]),
