@@ -24,6 +24,7 @@
         stream_pb/2, stream_pb/3, pb_query/3, http_query/2,
          http_query/3, http_stream/3, int_to_field1_bin/1]).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("riakc/include/riakc.hrl").
 
 -define(BUCKET, <<"2ibucket">>).
 
@@ -69,7 +70,7 @@ confirm() ->
 
 assertExactQuery(Pid, Expected, Index, Value) -> 
     lager:info("Searching Index ~p for ~p", [Index, Value]),
-    {ok, {keys, Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, Value),
+    {ok, #index_results{keys=Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, Value),
     ActualKeys = lists:sort(Results),
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [ActualKeys]),
@@ -77,7 +78,7 @@ assertExactQuery(Pid, Expected, Index, Value) ->
 
 assertRangeQuery(Pid, Expected, Index, StartValue, EndValue) ->
     lager:info("Searching Index ~p for ~p-~p", [Index, StartValue, EndValue]),
-    {ok, {keys, Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, StartValue, EndValue),
+    {ok, #index_results{keys=Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, StartValue, EndValue),
     ActualKeys = lists:sort(Results),
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [ActualKeys]),
@@ -117,23 +118,20 @@ stream_loop() ->
     stream_loop(orddict:new()).
 
 stream_loop(Acc) ->
-    receive {_Ref, done} ->
-                {ok, orddict:to_list(Acc)};
-            {_Ref, {keys, Keys}} ->
-                Acc2 = orddict:update(keys, fun(Existing) -> Existing++Keys end, Keys, Acc),
-                stream_loop(Acc2);
-            {_Ref, {results, Results}} ->
-                Acc2 = orddict:update(results, fun(Existing) -> Existing++Results end, Results, Acc),
-                stream_loop(Acc2);
-            {_Ref, Res} when is_list(Res) ->
-                Keys = proplists:get_value(keys, Res, []),
-                Continuation = proplists:get_value(continuation, Res),
-                Acc2 = orddict:update(keys, fun(Existing) -> Existing++Keys end, [], Acc),
-                Acc3 = orddict:store(continuation, Continuation, Acc2),
-                stream_loop(Acc3);
-            {_Ref, Wat} ->
-                lager:info("got a wat ~p", [Wat]),
-                stream_loop(Acc)
+    receive
+        {_Ref, {done, undefined}} ->
+            {ok, orddict:to_list(Acc)};
+        {_Ref, {done, Continuation}} ->
+            {ok, orddict:store(continuation, Continuation, Acc)};
+        {_Ref, #index_stream_result{terms=undefined, keys=Keys}} ->
+            Acc2 = orddict:update(keys, fun(Existing) -> Existing++Keys end, Keys, Acc),
+            stream_loop(Acc2);
+        {_Ref, #index_stream_result{terms=Results}} ->
+            Acc2 = orddict:update(results, fun(Existing) -> Existing++Results end, Results, Acc),
+            stream_loop(Acc2);
+        {_Ref, Wat} ->
+            lager:info("got a wat ~p", [Wat]),
+            stream_loop(Acc)
     end.
 
 pb_query(Pid, {Field, Val}, Opts) ->
