@@ -21,6 +21,7 @@
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("riakc/include/riakc.hrl").
 -import(secondary_index_tests, [put_an_object/2, int_to_key/1,
                                 stream_pb/3, http_query/3, pb_query/3]).
 -define(BUCKET, <<"2ibucket">>).
@@ -67,15 +68,15 @@ confirm() ->
     riakc_pb_socket:put(PBPid, O2),
 
     MQ = {"i1_int", 300, 302},
-    {ok, Res} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms]),
+    {ok, ?INDEX_RESULTS{terms=Terms, continuation=RTContinuation}} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms]),
 
     ?assertEqual([{<<"300">>, <<"bob">>},
-                  {<<"301">>, <<"bob">>}], proplists:get_value(results, Res)),
+                  {<<"301">>, <<"bob">>}], Terms),
 
-    {ok, Res2} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms,
-                                      {continuation, proplists:get_value(continuation, Res)}]),
+    {ok, ?INDEX_RESULTS{terms=Terms2}} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms,
+                                      {continuation, RTContinuation}]),
 
-    ?assertEqual({results,[{<<"302">>,<<"bob">>}]}, Res2),
+    ?assertEqual([{<<"302">>,<<"bob">>}], Terms2),
 
     riakc_pb_socket:stop(PBPid),
     pass.
