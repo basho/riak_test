@@ -163,7 +163,7 @@ twoi_tester(Node, Count, Pid, Vsn) ->
                               {integer_index, "plusone"},
                               Key + 1)
      } of 
-        {{ok, BinKeys}, {ok, IntKeys}} ->
+        {{ok, {keys, BinKeys}}, {ok, {keys, IntKeys}}} ->
             case {assert_equal(ExpectedKeys, BinKeys), assert_equal(ExpectedKeys, IntKeys)} of
                 {true, true} -> cool;
                 {false, false} ->
