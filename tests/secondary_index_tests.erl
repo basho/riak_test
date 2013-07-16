@@ -70,7 +70,7 @@ confirm() ->
 
 assertExactQuery(Pid, Expected, Index, Value) -> 
     lager:info("Searching Index ~p for ~p", [Index, Value]),
-    {ok, #index_results{keys=Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, Value),
+    {ok, ?INDEX_RESULTS{keys=Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, Value),
     ActualKeys = lists:sort(Results),
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [ActualKeys]),
@@ -78,7 +78,7 @@ assertExactQuery(Pid, Expected, Index, Value) ->
 
 assertRangeQuery(Pid, Expected, Index, StartValue, EndValue) ->
     lager:info("Searching Index ~p for ~p-~p", [Index, StartValue, EndValue]),
-    {ok, #index_results{keys=Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, StartValue, EndValue),
+    {ok, ?INDEX_RESULTS{keys=Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, StartValue, EndValue),
     ActualKeys = lists:sort(Results),
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [ActualKeys]),
@@ -123,10 +123,10 @@ stream_loop(Acc) ->
             {ok, orddict:to_list(Acc)};
         {_Ref, {done, Continuation}} ->
             {ok, orddict:store(continuation, Continuation, Acc)};
-        {_Ref, #index_stream_result{terms=undefined, keys=Keys}} ->
+        {_Ref, ?INDEX_STREAM_RESULT{terms=undefined, keys=Keys}} ->
             Acc2 = orddict:update(keys, fun(Existing) -> Existing++Keys end, Keys, Acc),
             stream_loop(Acc2);
-        {_Ref, #index_stream_result{terms=Results}} ->
+        {_Ref, ?INDEX_STREAM_RESULT{terms=Results}} ->
             Acc2 = orddict:update(results, fun(Existing) -> Existing++Results end, Results, Acc),
             stream_loop(Acc2);
         {_Ref, Wat} ->

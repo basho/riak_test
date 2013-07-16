@@ -68,12 +68,12 @@ confirm() ->
     riakc_pb_socket:put(PBPid, O2),
 
     MQ = {"i1_int", 300, 302},
-    {ok, #index_results{terms=Terms, continuation=RTContinuation}} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms]),
+    {ok, ?INDEX_RESULTS{terms=Terms, continuation=RTContinuation}} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms]),
 
     ?assertEqual([{<<"300">>, <<"bob">>},
                   {<<"301">>, <<"bob">>}], Terms),
 
-    {ok, #index_results{terms=Terms2}} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms,
+    {ok, ?INDEX_RESULTS{terms=Terms2}} = pb_query(PBPid, MQ, [{max_results, 2}, return_terms,
                                       {continuation, RTContinuation}]),
 
     ?assertEqual([{<<"302">>,<<"bob">>}], Terms2),
