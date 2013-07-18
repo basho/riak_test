@@ -462,7 +462,9 @@ whats_up() ->
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
 
 devpaths() ->
-    lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt_config:get(build_paths))]).
+    lists:usort([ DevPath || {Name, DevPath} <- rt_config:get(build_paths),
+                             not lists:member(Name, [root, ee_root, cs_root, stanchion_root])
+                ]).
 
 versions() ->
     proplists:get_keys(rt_config:get(build_paths)) -- [root].
