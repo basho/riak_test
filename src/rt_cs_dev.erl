@@ -446,7 +446,7 @@ set_backend(Backend) ->
     get_backends().
 
 get_version() ->
-    case file:read_file(relpath(current) ++ "/VERSION") of
+    case file:read_file(relpath(cs_current) ++ "/VERSION") of
         {error, enoent} -> unknown;
         {ok, Version} -> Version
     end.
