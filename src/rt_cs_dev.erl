@@ -468,7 +468,10 @@ versions() ->
     proplists:get_keys(rt_config:get(build_paths)) -- [root].
 
 get_node_logs() ->
-    Root = filename:absname(proplists:get_value(root, ?BUILD_PATHS)),
+    lists:flatmap(fun get_node_logs/1, [root, ee_root, cs_root, stanchion_root]).
+
+get_node_logs(Base) ->
+    Root = filename:absname(proplists:get_value(Base, ?BUILD_PATHS)),
     RootLen = length(Root) + 1, %% Remove the leading slash
     [ begin
           {ok, Port} = file:open(Filename, [read, binary]),
