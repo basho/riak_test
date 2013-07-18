@@ -474,7 +474,9 @@ get_node_logs() ->
 
 get_node_logs(Base) ->
     Root = filename:absname(proplists:get_value(Base, ?BUILD_PATHS)),
-    RootLen = length(Root) + 1, %% Remove the leading slash
+    %% Unlike Riak, Riak CS has multiple things in the root and so we need
+    %% to distinguish between them.
+    RootLen = length(filename:dirname(Root)) + 1, %% Remove the leading slash
     [ begin
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
