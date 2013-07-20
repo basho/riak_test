@@ -301,7 +301,7 @@ wait_for_repair(Service, {Partition, Node}, Tries) ->
 
 data_path(Node, Suffix, Partition) ->
     [Name, _] = string:tokens(atom_to_list(Node), "@"),
-    Base = rt_config:get(rtdev_path.current) ++ "/dev/" ++ Name ++ "/data",
+    Base = rt_config:get('rtdev_path.current') ++ "/dev/" ++ Name ++ "/data",
     Base ++ "/" ++ Suffix ++ "/" ++ integer_to_list(Partition).
 
 backend_mod_dir(undefined) ->
@@ -323,7 +323,7 @@ set_search_schema_nval(Bucket, NVal) ->
     %% than allowing the internal format to be modified and set you
     %% must send the update in the external format.
     BucketStr = binary_to_list(Bucket),
-    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt_config:get(rtdev_path.current)]),
+    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt_config:get('rtdev_path.current')]),
     GetSchema = ?FMT("~s show-schema ~s > current-schema",
                      [SearchCmd, BucketStr]),
     ModifyNVal = ?FMT("sed -E 's/n_val, [0-9]+/n_val, ~s/' "
