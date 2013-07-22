@@ -25,15 +25,15 @@
 -spec get_suite(string()) -> [{atom(), term()}].
 get_suite(Platform) ->
     Schema = get_schema(Platform),
-    Name = kvc:path(project.name, Schema),
+    Name = kvc:path('project.name', Schema),
     lager:info("Retrieved Project: ~s", [Name]),
-    Tests = kvc:path(project.tests, Schema),
+    Tests = kvc:path('project.tests', Schema),
     TestProps  =
         fun(Test) ->
             [
                 {id, kvc:path(id, Test)},
                 {backend,
-                 case kvc:path(tags.backend, Test) of
+                 case kvc:path('tags.backend', Test) of
                      [] -> undefined;
                      X -> binary_to_atom(X, utf8)
                  end},
@@ -41,11 +41,11 @@ get_suite(Platform) ->
                 {version, rt:get_version()},
                 {project, Name}
             ] ++
-            case kvc:path(tags.upgrade_version, Test) of
+            case kvc:path('tags.upgrade_version', Test) of
                 [] -> [];
                 UpgradeVsn -> [{upgrade_version, binary_to_atom(UpgradeVsn, utf8)}]
             end ++
-            case kvc:path(tags.multi_config, Test) of
+            case kvc:path('tags.multi_config', Test) of
                 [] -> [];
                 MultiConfig -> [{multi_config, binary_to_atom(MultiConfig, utf8)}]
             end
