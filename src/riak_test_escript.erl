@@ -83,6 +83,10 @@ main(Args) ->
     %% Loads from ~/.riak_test.config
     rt_config:load(Config),
 
+    %% Sets up extra paths earlier so that tests can be loadable
+    %% without needing the -d flag.
+    code:add_paths(rt_config:get(test_paths, [])),
+
     %% Ensure existance of scratch_dir
     case file:make_dir(rt_config:get(rt_scratch_dir)) of
         ok -> great;
