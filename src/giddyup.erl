@@ -198,13 +198,13 @@ read_fully(File, Data0) ->
 
 %% Guesses the MIME type of the file being uploaded.
 guess_ctype(FName) ->
-    case filename:extension(FName) of
-        ".log" -> "text/plain"; %% A log file
-        ".dump" -> "text/plain"; %% An erl_crash.dump file
-        ".1" -> "text/plain"; %% e.g. erlang.log.1
-        Else ->
+    case string:tokens(filename:basename(FName), ".") of
+        [_, "log"|_] -> "text/plain"; %% console.log, erlang.log.5, etc
+        ["erl_crash", "dump"] -> "text/plain"; %% An erl_crash.dump file
+        [_, Else] ->
             case mochiweb_mime:from_extension(Else) of
                 undefined -> "binary/octet-stream";
                 CTG -> CTG
-            end
+            end;
+        _ -> "binary/octet-stream"
     end.
