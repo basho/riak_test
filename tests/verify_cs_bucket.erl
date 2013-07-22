@@ -73,15 +73,12 @@ stream_loop() ->
     stream_loop(orddict:new()).
 
 stream_loop(Acc) ->
-    receive {_Ref, done} ->
+    receive
+        {_Ref, {done, undefined}} ->
             {ok, orddict:to_list(Acc)};
-            {_Ref, {objects, Objects}} ->
+        {_Ref, {done, Continuation}} ->
+            {ok, orddict:store(continuation, Continuation, Acc)};
+        {_Ref, {ok, Objects}} ->
             Acc2 = orddict:update(objects, fun(Existing) -> Existing++Objects end, Objects, Acc),
-            stream_loop(Acc2);
-            {_Ref, Res} when is_list(Res) ->
-            Objects = proplists:get_value(objects, Res, []),
-            Continuation = proplists:get_value(continuation, Res),
-            Acc2 = orddict:update(objects, fun(Existing) -> Existing++Objects end, Objects, Acc),
-            Acc3 = orddict:store(continuation, Continuation, Acc2),
-            stream_loop(Acc3)
+            stream_loop(Acc2)
     end.
