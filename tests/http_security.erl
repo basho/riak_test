@@ -72,7 +72,73 @@ confirm() ->
     C5 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
                                                                 "user",
                                                                  "password"}]),
+
     ?assertEqual(ok, rhc:ping(C5)),
+
+    %% verifying the peer certificate reject mismatch with server cert
+    C6 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true},
+                                                {credentials, "user", "password"},
+                                                {ssl_options, [
+                        {cacertfile, filename:join([PrivDir,
+                                                    "certs/cacert.org/ca/root.crt"])},
+                        {verify, verify_peer},
+                        {reuse_sessions, false}
+                        ]}
+                                               ]),
+
+    ?assertEqual({error,{conn_failed,{error,"unknown ca"}}}, rhc:ping(C6)),
+
+    %% verifying the peer certificate should work if the cert is valid
+    C7 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true},
+                                                {credentials, "user", "password"},
+                                                {ssl_options, [
+                        {cacertfile, filename:join([PrivDir,
+                                                    "certs/selfsigned/ca/rootcert.pem"])},
+                        {verify, verify_peer},
+                        {reuse_sessions, false}
+                        ]}
+                                               ]),
+
+    ?assertEqual(ok, rhc:ping(C7)),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:get(C7, <<"hello">>,
+                                                     <<"world">>)),
+
+    Object = riakc_obj:new(<<"hello">>, <<"world">>, <<"howareyou">>,
+                           <<"text/plain">>),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.get", "ON",
+                                                    "hello", "TO", "user"]]),
+
+    %% key is not present
+    ?assertMatch({error, notfound}, rhc:get(C7, <<"hello">>,
+                                                     <<"world">>)),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put", "ON",
+                                                    "hello", "TO", "user"]]),
+
+    %% NOW we can put
+    Res99 = rhc:put(C7, Object),
+    lager:info("Res is ~p", [Res99]),
+    ?assertMatch(ok, Res99),
+
+    {ok, O} = rhc:get(C7, <<"hello">>, <<"world">>),
+    ?assertEqual(<<"hello">>, riakc_obj:bucket(O)),
+    ?assertEqual(<<"world">>, riakc_obj:key(O)),
+    ?assertEqual(<<"howareyou">>, riakc_obj:get_value(O)),
+
+    %% slam the door in the user's face
+    ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.put,riak_kv.get", "ON",
+                                                    "hello", "FROM", "user"]]),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:get(C7, <<"hello">>,
+                                                     <<"world">>)),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
 
     ok.
 
