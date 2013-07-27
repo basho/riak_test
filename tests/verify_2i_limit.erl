@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
--import(secondary_index_tests, [put_an_object/2, int_to_key/1,
+-import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
                                 stream_pb/3, http_query/3, pb_query/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
@@ -77,6 +77,27 @@ confirm() ->
                                       {continuation, RTContinuation}]),
 
     ?assertEqual([{<<"302">>,<<"bob">>}], Terms2),
+
+    %% gh611 - equals query pagination
+
+    [put_an_object(PBPid, int_to_key(N), N, <<"myval">>) || N <- lists:seq(0, 100)],
+
+    EqualsQuery = {"field1_bin", <<"myval">>},
+    HTTPEqs = http_query(RiakHttp, EqualsQuery, [{max_results, ?MAX_RESULTS}]),
+    ?assertEqual(FirstHalf, proplists:get_value(<<"keys">>, HTTPEqs, [])),
+    EqualsHttpContinuation = proplists:get_value(<<"continuation">>, HTTPEqs),
+
+    HTTPEqs2 = http_query(RiakHttp, EqualsQuery, [{continuation, EqualsHttpContinuation}]),
+    ?assertEqual(Rest, proplists:get_value(<<"keys">>, HTTPEqs2, [])),
+
+    %% And PB
+
+    {ok, EqPBRes} = stream_pb(PBPid, EqualsQuery, [{max_results, ?MAX_RESULTS}]),
+    ?assertEqual(FirstHalf, proplists:get_value(keys, EqPBRes, [])),
+    EqPBContinuation = proplists:get_value(continuation, EqPBRes),
+
+    {ok, EqPBKeys2} = stream_pb(PBPid, Q, [{continuation, EqPBContinuation}]),
+    ?assertEqual(Rest, proplists:get_value(keys, EqPBKeys2, [])),
 
     riakc_pb_socket:stop(PBPid),
     pass.
