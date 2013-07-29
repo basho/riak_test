@@ -129,6 +129,8 @@ stream_loop(Acc) ->
         {_Ref, ?INDEX_STREAM_RESULT{terms=Results}} ->
             Acc2 = orddict:update(results, fun(Existing) -> Existing++Results end, Results, Acc),
             stream_loop(Acc2);
+        {_Ref, {error, <<"{error,timeout}">>}} ->
+            {error, timeout};
         {_Ref, Wat} ->
             lager:info("got a wat ~p", [Wat]),
             stream_loop(Acc)
