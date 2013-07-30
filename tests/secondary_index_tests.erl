@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -export([put_an_object/2, put_an_object/4, int_to_key/1,
         stream_pb/2, stream_pb/3, pb_query/3, http_query/2,
-         http_query/3, http_stream/3, int_to_field1_bin/1]).
+         http_query/3, http_stream/3, int_to_field1_bin/1, url/2]).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 

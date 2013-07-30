@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
-                               stream_pb/3]).
+                               stream_pb/3, url/2, http_query/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
 
@@ -33,6 +33,7 @@ confirm() ->
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
     PBPid = rt:pbc(hd(Nodes)),
+    Http = rt:http_url(hd(Nodes)),
 
     [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],
     [put_an_object(PBPid, int_to_key(N), N, ?FOO) || N <- lists:seq(101, 200)],
@@ -45,6 +46,14 @@ confirm() ->
     %% Override app.config
     {ok, Res} =  stream_pb(PBPid, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, proplists:get_value(keys, Res, [])),
+
+    {ok, {{_, 500, _}, _, Body}} = httpc:request(url("~s/buckets/~s/index/~s/~s~s",
+                                                     [Http, ?BUCKET, <<"$bucket">>, ?BUCKET, []])),
+    ?assertMatch({match, _}, re:run(Body, "{error,timeout}")), %% shows the app.config timeout
+
+    {ok, HttpRes} = http_query(Http, Query, [{timeout, 5000}]),
+    ?assertEqual(ExpectedKeys, proplists:get_value(keys, HttpRes, [])),
+
     riakc_pb_socket:stop(PBPid),
     pass.
 
