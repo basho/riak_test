@@ -28,7 +28,7 @@
 
 confirm() ->
     inets:start(),
-    Config = [{riak_kv, [{secondary_index_timeout, 5}]}], %% ludicrously short, should fail always
+    Config = [{riak_kv, [{secondary_index_timeout, 1}]}], %% ludicrously short, should fail always
     Nodes = rt:build_cluster([{current, Config}, {current, Config}, {current, Config}]),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
@@ -51,8 +51,8 @@ confirm() ->
                                                      [Http, ?BUCKET, <<"$bucket">>, ?BUCKET, []])),
     ?assertMatch({match, _}, re:run(Body, "{error,timeout}")), %% shows the app.config timeout
 
-    {ok, HttpRes} = http_query(Http, Query, [{timeout, 5000}]),
-    ?assertEqual(ExpectedKeys, proplists:get_value(keys, HttpRes, [])),
+    HttpRes = http_query(Http, Query, [{timeout, 5000}]),
+    ?assertEqual(ExpectedKeys, proplists:get_value(<<"keys">>, HttpRes, [])),
 
     riakc_pb_socket:stop(PBPid),
     pass.
