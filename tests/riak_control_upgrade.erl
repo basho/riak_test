@@ -20,13 +20,14 @@
          }
         ]).
 
-%% TODO: verify everything is asserted
-
 %% NOTE: Assumes config contains both `legacy' and `previous' settings.
 confirm() ->
     verify_upgrade(legacy, host_rc_on_old),
+    rt:setup_harness(ignored, ignored),
     verify_upgrade(legacy, host_rc_on_new),
+    rt:setup_harness(ignored, ignored),
     verify_upgrade(previous, host_rc_on_old),
+    rt:setup_harness(ignored, ignored),
     verify_upgrade(previous, host_rc_on_new),
     pass.
 
@@ -39,8 +40,7 @@ verify_upgrade(FromVsn, HostRCOn) ->
     Nodes = rt:build_cluster([{legacy, ?RC_ENABLE_CFG}|lists:duplicate(2, legacy)]),
     verify_alive(Nodes),
     UpgradeSeq = upgrade_seq(Nodes, HostRCOn),
-    [upgrade_and_verify_alive(Nodes, ToUpgrade) || ToUpgrade <- UpgradeSeq],
-    rt:setup_harness(ignored, ignored).
+    [upgrade_and_verify_alive(Nodes, ToUpgrade) || ToUpgrade <- UpgradeSeq].
 
 verify_alive(Nodes) ->
     lager:info("Verify nodes ~p are alive", [Nodes]),
@@ -48,6 +48,9 @@ verify_alive(Nodes) ->
 
 upgrade_and_verify_alive(Nodes, ToUpgrade) ->
     upgrade(ToUpgrade, current),
+    %% Yes, sleeps suck, but I just want to give Riak Control a chance
+    %% to crash the node (i.e. hit max restart frequency).
+    timer:sleep(5000),
     verify_alive(Nodes).
 
 %% Determine the upgrade sequence for `Nodes' based on `HostRCOn'.
