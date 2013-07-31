@@ -150,11 +150,13 @@ http_query(NodePath, Query, Opts) ->
 
 http_query(NodePath, {Field, Value}, Opts, Pid) ->
     QString = opts_to_qstring(Opts, []),
-    Url = url("~s/buckets/~s/index/~s/~s~s", [NodePath, ?BUCKET, Field, Value, QString]),
+    Flag = case is_integer(Value) of true -> "w"; false -> "s" end,
+    Url = url("~s/buckets/~s/index/~s/~"++Flag++"~s", [NodePath, ?BUCKET, Field, Value, QString]),
     http_get(Url, Pid);
 http_query(NodePath, {Field, Start, End}, Opts, Pid) ->
     QString = opts_to_qstring(Opts, []),
-    Url = url("~s/buckets/~s/index/~s/~s/~s~s", [NodePath, ?BUCKET, Field, Start, End, QString]),
+    Flag = case is_integer(Start) of true -> "w"; false -> "s" end,
+    Url = url("~s/buckets/~s/index/~s/~"++Flag++"/~"++Flag++"~s", [NodePath, ?BUCKET, Field, Start, End, QString]),
     http_get(Url, Pid).
 
 url(Format, Elements) ->

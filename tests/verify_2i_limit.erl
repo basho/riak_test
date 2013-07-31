@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
--import(secondary_index_tests, [put_an_object/2, int_to_key/1,
+-import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
                                 stream_pb/3, http_query/3, pb_query/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
@@ -78,5 +78,41 @@ confirm() ->
 
     ?assertEqual([{<<"302">>,<<"bob">>}], Terms2),
 
+    %% gh611 - equals query pagination
+    riakc_pb_socket:delete(PBPid, ?BUCKET, <<"bob">>),
+    rt:wait_until(fun() -> rt:pbc_really_deleted(PBPid, ?BUCKET, [<<"bob">>]) end),
+
+    [put_an_object(PBPid, int_to_key(N), 1000, <<"myval">>) || N <- lists:seq(0, 100)],
+
+    [ verify_eq_pag(PBPid, RiakHttp, EqualsQuery, FirstHalf, Rest) ||
+        EqualsQuery <- [{"field1_bin", <<"myval">>},
+                        {"field2_int", 1000},
+                        {"$bucket", ?BUCKET}]],
+
     riakc_pb_socket:stop(PBPid),
     pass.
+
+verify_eq_pag(PBPid, RiakHttp, EqualsQuery, FirstHalf, Rest) ->
+    HTTPEqs = http_query(RiakHttp, EqualsQuery, [{max_results, ?MAX_RESULTS}]),
+    ?assertEqual({EqualsQuery, FirstHalf},
+                 {EqualsQuery, proplists:get_value(<<"keys">>, HTTPEqs, [])}),
+    EqualsHttpContinuation = proplists:get_value(<<"continuation">>, HTTPEqs),
+
+    HTTPEqs2 = http_query(RiakHttp, EqualsQuery,
+                          [{continuation, EqualsHttpContinuation}]),
+    ?assertEqual({EqualsQuery, Rest},
+                 {EqualsQuery, proplists:get_value(<<"keys">>, HTTPEqs2, [])}),
+
+    %% And PB
+
+    {ok, EqPBRes} = stream_pb(PBPid, EqualsQuery,
+                              [{max_results, ?MAX_RESULTS}]),
+    ?assertEqual({EqualsQuery, FirstHalf},
+                 {EqualsQuery, proplists:get_value(keys, EqPBRes, [])}),
+    EqPBContinuation = proplists:get_value(continuation, EqPBRes),
+
+    {ok, EqPBKeys2} = stream_pb(PBPid, EqualsQuery,
+                                [{continuation, EqPBContinuation}]),
+    ?assertEqual({EqualsQuery, Rest},
+                 {EqualsQuery, proplists:get_value(keys, EqPBKeys2, [])}).
+ 
