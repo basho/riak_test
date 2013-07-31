@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -export([put_an_object/2, put_an_object/4, int_to_key/1,
         stream_pb/2, stream_pb/3, pb_query/3, http_query/2,
-         http_query/3, http_stream/3, int_to_field1_bin/1]).
+         http_query/3, http_stream/3, int_to_field1_bin/1, url/2]).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
@@ -129,6 +129,8 @@ stream_loop(Acc) ->
         {_Ref, ?INDEX_STREAM_RESULT{terms=Results}} ->
             Acc2 = orddict:update(results, fun(Existing) -> Existing++Results end, Results, Acc),
             stream_loop(Acc2);
+        {_Ref, {error, <<"{error,timeout}">>}} ->
+            {error, timeout};
         {_Ref, Wat} ->
             lager:info("got a wat ~p", [Wat]),
             stream_loop(Acc)
