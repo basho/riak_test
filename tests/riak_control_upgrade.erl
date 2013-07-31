@@ -20,8 +20,6 @@
          }
         ]).
 
-%% TODO: verify everything is asserted
-
 %% NOTE: Assumes config contains both `legacy' and `previous' settings.
 confirm() ->
     verify_upgrade(legacy, host_rc_on_old),
@@ -48,6 +46,9 @@ verify_alive(Nodes) ->
 
 upgrade_and_verify_alive(Nodes, ToUpgrade) ->
     upgrade(ToUpgrade, current),
+    %% Yes, sleeps suck, but I just want to give Riak Control a chance
+    %% to crash the node (i.e. hit max restart frequency).
+    timer:sleep(5000),
     verify_alive(Nodes).
 
 %% Determine the upgrade sequence for `Nodes' based on `HostRCOn'.
