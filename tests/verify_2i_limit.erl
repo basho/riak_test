@@ -79,25 +79,40 @@ confirm() ->
     ?assertEqual([{<<"302">>,<<"bob">>}], Terms2),
 
     %% gh611 - equals query pagination
+    riakc_pb_socket:delete(PBPid, ?BUCKET, <<"bob">>),
+    rt:wait_until(fun() -> rt:pbc_really_deleted(PBPid, ?BUCKET, [<<"bob">>]) end),
 
-    [put_an_object(PBPid, int_to_key(N), N, <<"myval">>) || N <- lists:seq(0, 100)],
+    [put_an_object(PBPid, int_to_key(N), 1000, <<"myval">>) || N <- lists:seq(0, 100)],
 
-    EqualsQuery = {"field1_bin", <<"myval">>},
-    HTTPEqs = http_query(RiakHttp, EqualsQuery, [{max_results, ?MAX_RESULTS}]),
-    ?assertEqual(FirstHalf, proplists:get_value(<<"keys">>, HTTPEqs, [])),
-    EqualsHttpContinuation = proplists:get_value(<<"continuation">>, HTTPEqs),
-
-    HTTPEqs2 = http_query(RiakHttp, EqualsQuery, [{continuation, EqualsHttpContinuation}]),
-    ?assertEqual(Rest, proplists:get_value(<<"keys">>, HTTPEqs2, [])),
-
-    %% And PB
-
-    {ok, EqPBRes} = stream_pb(PBPid, EqualsQuery, [{max_results, ?MAX_RESULTS}]),
-    ?assertEqual(FirstHalf, proplists:get_value(keys, EqPBRes, [])),
-    EqPBContinuation = proplists:get_value(continuation, EqPBRes),
-
-    {ok, EqPBKeys2} = stream_pb(PBPid, Q, [{continuation, EqPBContinuation}]),
-    ?assertEqual(Rest, proplists:get_value(keys, EqPBKeys2, [])),
+    [ verify_eq_pag(PBPid, RiakHttp, EqualsQuery, FirstHalf, Rest) ||
+        EqualsQuery <- [{"field1_bin", <<"myval">>},
+                        {"field2_int", 1000},
+                        {"$bucket", ?BUCKET}]],
 
     riakc_pb_socket:stop(PBPid),
     pass.
+
+verify_eq_pag(PBPid, RiakHttp, EqualsQuery, FirstHalf, Rest) ->
+    HTTPEqs = http_query(RiakHttp, EqualsQuery, [{max_results, ?MAX_RESULTS}]),
+    ?assertEqual({EqualsQuery, FirstHalf},
+                 {EqualsQuery, proplists:get_value(<<"keys">>, HTTPEqs, [])}),
+    EqualsHttpContinuation = proplists:get_value(<<"continuation">>, HTTPEqs),
+
+    HTTPEqs2 = http_query(RiakHttp, EqualsQuery,
+                          [{continuation, EqualsHttpContinuation}]),
+    ?assertEqual({EqualsQuery, Rest},
+                 {EqualsQuery, proplists:get_value(<<"keys">>, HTTPEqs2, [])}),
+
+    %% And PB
+
+    {ok, EqPBRes} = stream_pb(PBPid, EqualsQuery,
+                              [{max_results, ?MAX_RESULTS}]),
+    ?assertEqual({EqualsQuery, FirstHalf},
+                 {EqualsQuery, proplists:get_value(keys, EqPBRes, [])}),
+    EqPBContinuation = proplists:get_value(continuation, EqPBRes),
+
+    {ok, EqPBKeys2} = stream_pb(PBPid, EqualsQuery,
+                                [{continuation, EqPBContinuation}]),
+    ?assertEqual({EqualsQuery, Rest},
+                 {EqualsQuery, proplists:get_value(keys, EqPBKeys2, [])}).
+ 
