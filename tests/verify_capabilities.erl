@@ -76,10 +76,11 @@ confirm() ->
 
     case Legacy of
         legacy ->
+            %% Assumes legacy is Riak 1.2.1
             LCapabilities = rt:capability(CNode, all),
             assert_capability(CNode, {riak_kv, legacy_keylisting}, false),
             assert_capability(CNode, {riak_kv, listkeys_backpressure}, true),
-            assert_capability(CNode, {riak_core, staged_joins}, false),
+            assert_capability(CNode, {riak_core, staged_joins}, true),
             assert_capability(CNode, {riak_kv, index_backpressure}, false),
             assert_capability(CNode, {riak_pipe, trace_format}, sets),
             assert_capability(CNode, {riak_kv, mapred_2i_pipe}, true),
@@ -102,21 +103,15 @@ confirm() ->
             lager:info("Crash riak_core_capability server"),
             restart_capability_server(CNode),
 
-            lager:info("Verify staged_joins == false after crash"),
-            ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, false)),
-
             lager:info("Adding previous node to cluster"),
             rt:join(PNode, LNode),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
             ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
-            lager:info("Verify staged_joins == false after crash"),
-            ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, false)),
-            
             PCapabilities = rt:capability(CNode, all),
             assert_capability(CNode, {riak_kv, legacy_keylisting}, false),
             assert_capability(CNode, {riak_kv, listkeys_backpressure}, true),
-            assert_capability(CNode, {riak_core, staged_joins}, false),
+            assert_capability(CNode, {riak_core, staged_joins}, true),
             assert_capability(CNode, {riak_kv, index_backpressure}, false),
             assert_capability(CNode, {riak_pipe, trace_format}, sets),
             assert_capability(CNode, {riak_kv, mapred_2i_pipe}, true),
@@ -140,7 +135,6 @@ confirm() ->
             rt:upgrade(LNode, current),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
             ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
-            lager:info("Verify staged_joins == true after upgrade of legacy -> current"),
 
             %% We have upgraded the legacy node, but we should see zlib selected (previous node still not upgraded):
             assert_using(CNode, {riak_kv, handoff_data_encoding}, encode_zlib);
@@ -150,11 +144,8 @@ confirm() ->
             lager:info("Adding previous node to cluster"),
             rt:join(PNode, LNode),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
-            ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
-            lager:info("Verify staged_joins == true after adding previous")
+            ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode))
     end,
-
-    ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
     PCap2 = rt:capability(CNode, all),
     assert_capability(CNode, {riak_kv, legacy_keylisting}, false),
