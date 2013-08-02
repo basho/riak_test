@@ -187,9 +187,14 @@ opts_to_qstring([Opt|Rest], QString) ->
 opt_to_string(Sep, {Name, Value}) when is_integer(Value) ->
         io_lib:format(Sep++"~s=~p", [Name, Value]);
 opt_to_string(Sep, {Name, Value})->
-    io_lib:format(Sep++"~s=~s", [Name, Value]);
+    io_lib:format(Sep++"~s=~s", [Name, url_encode(Value)]);
 opt_to_string(Sep, Name) ->
     io_lib:format(Sep++"~s=~s", [Name, true]).
+
+url_encode(Val) when is_binary(Val) ->
+    url_encode(binary_to_list(Val));
+url_encode(Val) ->
+    ibrowse_lib:url_encode(Val).
 
 http_stream_loop(Ref, Acc) ->
     receive {http, {Ref, stream_end, _Headers}} ->
