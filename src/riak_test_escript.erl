@@ -139,19 +139,23 @@ main(Args) ->
     [add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
     ENode = rt_config:get(rt_nodename, 'riak_test@127.0.0.1'),
     Cookie = rt_config:get(rt_cookie, riak),
+    CoverDir = rt_config:get(cover_output, "coverage"),
     [] = os:cmd("epmd -daemon"),
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
+    rt_cover:maybe_start(),
 
     TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
-    print_summary(TestResults, Verbose),
+    Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
         {1, fail} ->
+            print_summary(TestResults, Coverage, Verbose),
             so_kill_riak_maybe();
         _ ->
             lager:info("Multiple tests run or no failure"),
-            rt:teardown()
+            rt:teardown(),
+            print_summary(TestResults, Coverage, Verbose)
     end,
     ok.
 
@@ -276,7 +280,7 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
     end,
     SingleTestResult.
 
-print_summary(TestResults, Verbose) ->
+print_summary(TestResults, CoverResult, Verbose) ->
     io:format("~nTest Results:~n"),
 
     Results = [
@@ -305,6 +309,15 @@ print_summary(TestResults, Verbose) ->
         false -> (PassCount / (PassCount + FailCount)) * 100
     end,
     io:format("That's ~w% for those keeping score~n", [Percentage]),
+
+    case CoverResult of
+        cover_disabled ->
+            ok;
+        {Coverage, AppCov} ->
+            io:format("Coverage : ~.1f%~n", [Coverage]),
+            [io:format("    ~s : ~.1f%~n", [App, Cov])
+             || {App, Cov, _} <- AppCov]
+    end,
     ok.
 
 test_name_width(Results) ->
