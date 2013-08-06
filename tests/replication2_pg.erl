@@ -425,6 +425,94 @@ test_pg_proxy(SSL) ->
 
     pass.
 
+%% test mapping of cluster from a retired cluster to an active one, repl issue 306
+test_cluster_mapping() ->
+    test_cluster_mapping(false).
+
+test_cluster_mapping(SSL) ->
+    banner("test_cluster_mapping", SSL),
+    Conf = [
+            {riak_repl,
+             [
+              {proxy_get, enabled},
+              {fullsync_on_connect, false}
+             ]}
+           ],
+    {LeaderA, ANodes, _BNodes, _CNodes, AllNodes} =
+        setup_repl_clusters(Conf, SSL),
+    rt:log_to_nodes(AllNodes, "Testing pg cluster mapping"),
+    rt:wait_until_ring_converged(ANodes),
+
+
+    PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","A"]]),
+    lager:info("Enabled pg: ~p", [PGEnableResult]),
+    Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+
+    case proplists:get_value(proxy_get_enabled, Status) of
+        undefined -> ?assert(false);
+        EnabledFor -> lager:info("PG enabled for cluster ~p",[EnabledFor])
+    end,
+
+    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
+
+    LeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
+    LeaderC = rpc:call(FirstC, riak_core_cluster_mgr, get_leader, []),
+
+    PidA = rt:pbc(LeaderA),
+    {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
+    lager:info("Cluster ID for A = ~p", [CidA]),
+
+    PidB = rt:pbc(LeaderB),
+    {ok,CidB}=riak_repl_pb_api:get_clusterid(PidB),
+    lager:info("Cluster ID for B = ~p", [CidB]),
+
+    PidC = rt:pbc(LeaderC),
+    {ok,CidC}=riak_repl_pb_api:get_clusterid(PidC),
+    lager:info("Cluster ID for C = ~p", [CidC]),
+
+    %% Write a new k/v for every PG test, otherwise you'll get a locally written response
+    {Bucket, KeyA, ValueA} = make_test_object("a"),
+    {Bucket, KeyB, ValueB} = make_test_object("b"),
+    {Bucket, KeyC, ValueC} = make_test_object("c"),
+    {Bucket, KeyD, ValueD} = make_test_object("d"),
+
+    rt:pbc_write(PidA, Bucket, KeyA, ValueA),
+    rt:pbc_write(PidA, Bucket, KeyB, ValueB),
+    rt:pbc_write(PidA, Bucket, KeyC, ValueC),
+    rt:pbc_write(PidA, Bucket, KeyD, ValueD),
+    
+
+    %{ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyB,CidB),
+    %?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
+
+    % Configure cluster_mapping on C to map cluster_id A -> C
+    lager:info("Configuring cluster A to map its cluster_id to C's cluster_id"),
+    {ok, Ring} = rpc:call(LeaderC, riak_core_ring_manager, get_my_ring, []),
+    {new_ring, Ring1} = rpc:call(LeaderC, riak_repl_ring, add_cluster_mapping, [Ring, {CidA, CidC}]),
+    lager:info("add_cluster_mapping"),
+
+    case rpc:call(LeaderC, riak_repl_ring, get_cluster_mapping, [Ring1, CidA]) of
+        {ok, Mapping} ->
+            lager:info("Cluster ~s mapped to cluster ~s", [CidA, Mapping]);
+        _ ->
+            lager:info("Cluster ~s mapped to []")
+    end,
+ 
+    %?assertEqual(CidC, ClusterMappedToId),
+    
+    % shut down cluster A
+    lager:info("Shutting down cluster A"),
+    [ rt:stop(Node)  || Node <- ANodes ],
+    [ rt:wait_until_unpingable(Node)  || Node <- ANodes ],
+
+    % proxy-get from cluster C, using A's clusterID
+    %PidC = rt:pbc(FirstC),
+    %lager:info("Connected to cluster C"),
+    {ok, PGResult} = riak_repl_pb_api:get(PidA,Bucket,KeyA,CidA),
+    ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
+
+    pass.
+
 %% connect source + sink clusters, pg bidirectionally
 test_bidirectional_pg() ->
     test_bidirectional_pg(false).
@@ -719,7 +807,6 @@ test_bidirectional_pg_ssl() ->
 test_pg_proxy_ssl() ->
     test_pg_proxy(true).
 
-
 confirm() ->
     AllTests =
         [
@@ -730,6 +817,7 @@ confirm() ->
             test_mixed_pg,
             test_multiple_sink_pg,
             test_bidirectional_pg,
+            test_cluster_mapping,
             test_pg_proxy,
             test_basic_pg_mode_repl13_ssl,
             test_basic_pg_mode_mixed_ssl,
@@ -739,6 +827,7 @@ confirm() ->
             test_multiple_sink_pg_ssl,
             test_bidirectional_pg_ssl,
             test_pg_proxy_ssl
+
         ],
     lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
     lager:error("The runnable tests in this module are: ~p", [AllTests]),
