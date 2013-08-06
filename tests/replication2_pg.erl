@@ -425,6 +425,112 @@ test_pg_proxy(SSL) ->
 
     pass.
 
+%% test mapping of cluster from a retired cluster to an active one, repl issue 306
+test_cluster_mapping() ->
+    test_cluster_mapping(false).
+
+test_cluster_mapping(SSL) ->
+    banner("test_cluster_mapping", SSL),
+    Conf = [
+            {riak_repl,
+             [
+              {proxy_get, enabled},
+              {fullsync_on_connect, false}
+             ]}
+           ],
+    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
+        setup_repl_clusters(Conf, SSL),
+
+    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
+    LeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
+    LeaderC = rpc:call(FirstC, riak_core_cluster_mgr, get_leader, []),
+    
+    % Cluser C-> connection must be set up for the proxy gets to work
+    % with the cluster ID mapping
+    {ok, {_IP, CPort}} = rpc:call(FirstC, application, get_env,
+                                  [riak_core, cluster_mgr]),
+    repl_util:connect_cluster(LeaderB, "127.0.0.1", CPort),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderB, "C")),
+
+    % enable A to serve blocks to C
+    PGEnableResultA = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","C"]]),
+    % enable B to serve blocks to C
+    PGEnableResultB = rpc:call(LeaderB, riak_repl_console, proxy_get, [["enable","C"]]),
+
+    lager:info("Enabled pg to A:~p", [PGEnableResultA]),
+    lager:info("Enabled pg to B:~p", [PGEnableResultB]),
+
+    StatusA = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
+    case proplists:get_value(proxy_get_enabled, StatusA) of
+        undefined -> ?assert(false);
+        EnabledForA -> lager:info("PG enabled for cluster ~p",[EnabledForA])
+    end,
+    StatusB = rpc:call(LeaderB, riak_repl_console, status, [quiet]),
+    case proplists:get_value(proxy_get_enabled, StatusB) of
+        undefined -> ?assert(false);
+        EnabledForB -> lager:info("PG enabled for cluster ~p",[EnabledForB])
+    end,
+
+    [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
+
+    PidA = rt:pbc(LeaderA),
+    {ok,CidA}=riak_repl_pb_api:get_clusterid(PidA),
+    lager:info("Cluster ID for A = ~p", [CidA]),
+
+    PidB = rt:pbc(LeaderB),
+    {ok,CidB}=riak_repl_pb_api:get_clusterid(PidB),
+    lager:info("Cluster ID for B = ~p", [CidB]),
+
+    PidC = rt:pbc(LeaderC),
+    {ok,CidC}=riak_repl_pb_api:get_clusterid(PidC),
+    lager:info("Cluster ID for C = ~p", [CidC]),
+
+    %% Write a new k/v for every PG test, otherwise you'll get a locally written response
+    {Bucket, KeyA, ValueA} = make_test_object("a"),
+    {Bucket, KeyB, ValueB} = make_test_object("b"),
+    {Bucket, KeyC, ValueC} = make_test_object("c"),
+    {Bucket, KeyD, ValueD} = make_test_object("d"),
+
+    rt:pbc_write(PidA, Bucket, KeyA, ValueA),
+    rt:pbc_write(PidA, Bucket, KeyB, ValueB),
+    rt:pbc_write(PidA, Bucket, KeyC, ValueC),
+    rt:pbc_write(PidA, Bucket, KeyD, ValueD),
+    
+
+    {ok, PGResult} = riak_repl_pb_api:get(PidA,Bucket,KeyA,CidA),
+    ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
+
+    % Configure cluster_mapping on C to map cluster_id A -> C
+    lager:info("Configuring cluster C to map its cluster_id to B's cluster_id"),
+    %rpc:call(LeaderC, riak_core_metadata, put, [{<<"replication">>, <<"cluster-mapping">>}, CidA, CidB]),
+    rpc:call(LeaderC, riak_repl_console, block_provider_redirect, [[CidA, CidB]]),
+    Res = rpc:call(LeaderC, riak_core_metadata, get, [{<<"replication">>, <<"cluster-mapping">>}, CidA]),
+    lager:info("result: ~p", [Res]),
+
+    % full sync from CS Block Provider A to CS Block Provider B
+    repl_util:enable_fullsync(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),   
+
+    {Time,_} = timer:tc(repl_util,start_and_wait_until_fullsync_complete,[LeaderA]),
+    lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
+
+    % shut down cluster A
+    lager:info("Shutting down cluster A"),
+    [ rt:stop(Node)  || Node <- ANodes ],
+    [ rt:wait_until_unpingable(Node)  || Node <- ANodes ],
+
+    rt:wait_until_ring_converged(BNodes),
+    rt:wait_until_ring_converged(CNodes),
+
+    % proxy-get from cluster C, using A's clusterID
+    % Should redirect requester C from Cid A, to Cid B, and still
+    % return the correct value for the Key
+    {ok, PGResultC} = riak_repl_pb_api:get(PidC, Bucket, KeyC, CidA),
+    lager:info("PGResultC: ~p", [PGResultC]),
+    ?assertEqual(ValueC, riakc_obj:get_value(PGResultC)),
+
+    pass.
+
 %% connect source + sink clusters, pg bidirectionally
 test_bidirectional_pg() ->
     test_bidirectional_pg(false).
@@ -706,7 +812,6 @@ test_12_pg_mode_repl12_ssl() ->
 test_12_pg_mode_repl_mixed_ssl() ->
     test_12_pg(mixed, true).
 
-
 test_mixed_pg_ssl() ->
     test_mixed_pg(true).
 
@@ -719,7 +824,6 @@ test_bidirectional_pg_ssl() ->
 test_pg_proxy_ssl() ->
     test_pg_proxy(true).
 
-
 confirm() ->
     AllTests =
         [
@@ -730,6 +834,7 @@ confirm() ->
             test_mixed_pg,
             test_multiple_sink_pg,
             test_bidirectional_pg,
+            test_cluster_mapping,
             test_pg_proxy,
             test_basic_pg_mode_repl13_ssl,
             test_basic_pg_mode_mixed_ssl,
@@ -739,6 +844,7 @@ confirm() ->
             test_multiple_sink_pg_ssl,
             test_bidirectional_pg_ssl,
             test_pg_proxy_ssl
+
         ],
     lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
     lager:error("The runnable tests in this module are: ~p", [AllTests]),
