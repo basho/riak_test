@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 -import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
-                                stream_pb/3, http_query/3, pb_query/3]).
+                                stream_pb/3, http_query/3, pb_query/3, http_stream/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
 -define(MAX_RESULTS, 50).
@@ -52,7 +52,7 @@ confirm() ->
     ?assertEqual(Rest, proplists:get_value(keys, PBKeys2, [])),
 
     %% HTTP
-    HttpRes = http_query(RiakHttp, Q, [{max_results, ?MAX_RESULTS}]),
+    HttpRes = http_stream(RiakHttp, Q, [{max_results, ?MAX_RESULTS}]),
     ?assertEqual(FirstHalf, proplists:get_value(<<"keys">>, HttpRes, [])),
     HttpContinuation = proplists:get_value(<<"continuation">>, HttpRes),
     ?assertEqual(PBContinuation, HttpContinuation),
@@ -115,4 +115,3 @@ verify_eq_pag(PBPid, RiakHttp, EqualsQuery, FirstHalf, Rest) ->
                                 [{continuation, EqPBContinuation}]),
     ?assertEqual({EqualsQuery, Rest},
                  {EqualsQuery, proplists:get_value(keys, EqPBKeys2, [])}).
- 

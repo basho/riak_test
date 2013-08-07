@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
-                               stream_pb/3, url/2, http_query/3]).
+                               stream_pb/3, url/2, http_query/3, http_stream/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
 
@@ -54,7 +54,14 @@ confirm() ->
     HttpRes = http_query(Http, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, proplists:get_value(<<"keys">>, HttpRes, [])),
 
+    stream_http(Http, Query, ExpectedKeys),
+
     riakc_pb_socket:stop(PBPid),
     pass.
 
+stream_http(Http, Query, ExpectedKeys) ->
+     Res = http_stream(Http, Query, []),
+     ?assert(lists:member({<<"error">>,<<"timeout">>}, Res)),
+     Res2 = http_stream(Http, Query, [{timeout, 5000}]),
+     ?assertEqual(ExpectedKeys, proplists:get_value(<<"keys">>, Res2, [])).
 
