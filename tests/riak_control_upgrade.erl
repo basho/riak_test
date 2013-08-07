@@ -37,7 +37,7 @@ confirm() ->
 %% on the old or new version.
 verify_upgrade(FromVsn, HostRCOn) ->
     lager:info("Verify upgrade ~p ~p", [FromVsn, HostRCOn]),
-    Nodes = rt:build_cluster([{legacy, ?RC_ENABLE_CFG}|lists:duplicate(2, legacy)]),
+    Nodes = rt:build_cluster([{FromVsn, ?RC_ENABLE_CFG}|lists:duplicate(2, FromVsn)]),
     verify_alive(Nodes),
     UpgradeSeq = upgrade_seq(Nodes, HostRCOn),
     [upgrade_and_verify_alive(Nodes, ToUpgrade) || ToUpgrade <- UpgradeSeq].
