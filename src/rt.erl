@@ -24,6 +24,7 @@
 %% Please extend this module with new functions that prove useful between
 %% multiple independent tests.
 -module(rt).
+-include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([
@@ -39,6 +40,7 @@
          capability/2,
          capability/3,
          check_singleton_node/1,
+         check_ibrowse/0,
          claimant_according_to/1,
          clean_cluster/1,
          clean_data_dir/1,
@@ -78,6 +80,7 @@
          pbc_put_file/4,
          pbc_really_deleted/3,
          pmap/2,
+         post_result/2,
          priv_dir/0,
          remove/2,
          riak/2,
@@ -1087,3 +1090,43 @@ setup_harness(Test, Args) ->
 %%   nodes.
 get_node_logs() ->
     ?HARNESS:get_node_logs().
+
+check_ibrowse() ->
+    try sys:get_status(ibrowse) of
+        {status, _Pid, {module, gen_server} ,_} -> ok
+    catch
+        Throws ->
+            lager:error("ibrowse error ~p", [Throws]),
+            lager:error("Restarting ibrowse"),
+            application:stop(ibrowse),
+            application:start(ibrowse)
+    end.
+
+post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
+    lager:info("Posting result to ~s ~s", [Name, URL]),
+    try ibrowse:send_req(URL,
+            [{"Content-Type", "application/json"}],
+            post,
+            mochijson2:encode(TestResult),
+            [{content_type, "application/json"}] ++ HookHeaders,
+            300000) of  %% 5 minute timeout
+
+        {ok, RC=[$2|_], Headers, _Body} ->
+            {ok, RC, Headers};
+        {ok, ResponseCode, Headers, Body} ->
+            lager:info("Test Result did not generate the expected 2XX HTTP response code."),
+            lager:debug("Post"),
+            lager:debug("Response Code: ~p", [ResponseCode]),
+            lager:debug("Headers: ~p", [Headers]),
+            lager:debug("Body: ~p", [Body]),
+            error;
+        X ->
+            lager:warning("Some error POSTing test result: ~p", [X]),
+            error
+    catch
+        Throws ->
+            lager:error("Error reporting to ~s. ~p", [Name, Throws]),
+            lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
+    end.
+
+

@@ -20,6 +20,7 @@
 
 %% @private
 -module(riak_test_escript).
+-include("rt.hrl").
 -export([main/1]).
 
 add_deps(Path) ->
@@ -255,30 +256,34 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
     case Report of
         undefined -> ok;
         _ ->
-            %% Old Code for concatinating log files for upload to giddyup
-            %% They're too big now, causing problems which will be solved by
-            %% GiddyUp's new Artifact feature, comming soon from a Cribbs near you.
-
-            %% The point is, this is here in case we need to turn this back on
-            %% before artifacts are ready. And to remind jd that this is the place
-            %% to write the artifact client
-
-            %% {log, TestLog} = lists:keyfind(log, 1, SingleTestResult),
-            %% NodeLogs = cat_node_logs(),
-            %% EncodedNodeLogs = unicode:characters_to_binary(iolist_to_binary(NodeLogs),
-            %%                                                latin1, utf8),
-            %% NewLogs = iolist_to_binary([TestLog, EncodedNodeLogs]),
-            %% ResultWithNodeLogs = lists:keyreplace(log, 1, SingleTestResult,
-            %%                                       {log, NewLogs}),
-            %% giddyup:post_result(ResultWithNodeLogs)
-            case giddyup:post_result(SingleTestResult) of
+           case giddyup:post_result(SingleTestResult) of
                 error -> woops;
                 {ok, Base} ->
                     %% Now push up the artifacts
-                    [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ]
-            end                    
+                    [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ],
+                    ResultPlusGiddyUp = SingleTestResult ++ [{giddyup_url, list_to_binary(Base)}],
+                    [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ]
+            end
     end,
     SingleTestResult.
+
+get_webhooks() ->
+    Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
+                        [],
+                        rt_config:get(webhooks, [])),
+    lists:filter(fun(E) -> E =/= undefined end, Hooks).
+
+parse_webhook(Props) ->
+    Url = proplists:get_value(url, Props),
+    case is_list(Url) of
+        true ->
+            #rt_webhook{url= Url,
+                        name=proplists:get_value(name, Props, "Webhook"),
+                        headers=proplists:get_value(headers, Props, [])};
+        false ->
+            lager:error("Invalid configuration for webhook : ~p", Props),
+            undefined
+    end.
 
 print_summary(TestResults, CoverResult, Verbose) ->
     io:format("~nTest Results:~n"),

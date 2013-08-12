@@ -21,6 +21,7 @@
 
 -export([get_suite/1, post_result/1, post_artifact/2]).
 -define(STREAM_CHUNK_SIZE, 8192).
+-include("rt.hrl").
 
 -spec get_suite(string()) -> [{atom(), term()}].
 get_suite(Platform) ->
@@ -62,7 +63,7 @@ get_schema(Platform, Retries) ->
     URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
 
-    check_ibrowse(),
+    rt:check_ibrowse(),
     case {Retries, ibrowse:send_req(URL, [], get, [], [])} of
         {_, {ok, "200", _Headers, JSON}} -> mochijson2:decode(JSON);
         {0, Error} ->
@@ -80,33 +81,11 @@ post_result(TestResult) ->
     Host = rt_config:get(giddyup_host),
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
-    check_ibrowse(),
-    try ibrowse:send_req(URL,
-            [{"Content-Type", "application/json"}],
-            post,
-            mochijson2:encode(TestResult),
-            [ {content_type, "application/json"}, basic_auth()],
-            300000) of  %% 5 minute timeout
-
-        {ok, RC=[$2|_], Headers, _Body} ->
-            {_, Location} = lists:keyfind("Location", 1, Headers),
-            lager:info("Test Result successfully POSTed to GiddyUp! ResponseCode: ~s, URL: ~s", [RC, Location]),
-            {ok, Location};
-        {ok, ResponseCode, Headers, Body} ->
-            lager:info("Test Result did not generate the expected 2XX HTTP response code."),
-            lager:debug("Post"),
-            lager:debug("Response Code: ~p", [ResponseCode]),
-            lager:debug("Headers: ~p", [Headers]),
-            lager:debug("Body: ~p", [Body]),
-            error;
-        X ->
-            lager:warning("Some error POSTing test result: ~p", [X]),
-            error
-    catch
-        Throws ->
-            lager:error("Error reporting to giddyup. ~p", [Throws]),
-            lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
-    end.
+    rt:check_ibrowse(),
+    {ok, RC, Headers} = rt:post_result(TestResult, #rt_webhook{name="GiddyUp", url=URL, headers=[basic_auth()]}),
+    {_, Location} = lists:keyfind("Location", 1, Headers),
+    lager:info("Test Result successfully POSTed to GiddyUp! ResponseCode: ~s, URL: ~s", [RC, Location]),
+    {ok, Location}.
 
 post_artifact(TRURL, {FName, Body}) ->
     %% First compute the path of where to post the artifact
@@ -142,17 +121,6 @@ post_artifact(TRURL, {FName, Body}) ->
 
 basic_auth() ->
     {basic_auth, {rt_config:get(giddyup_user), rt_config:get(giddyup_password)}}.
-
-check_ibrowse() ->
-    try sys:get_status(ibrowse) of
-        {status, _Pid, {module, gen_server} ,_} -> ok
-    catch
-        Throws ->
-            lager:error("ibrowse error ~p", [Throws]),
-            lager:error("Restarting ibrowse"),
-            application:stop(ibrowse),
-            application:start(ibrowse)
-    end.
 
 %% Given a URI parsed by http_uri, reconstitute it.
 generate({_Scheme, _UserInfo, _Host, _Port, _Path, _Query}=URI) ->
