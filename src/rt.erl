@@ -107,6 +107,7 @@
          teardown/0,
          update_app_config/2,
          upgrade/2,
+         upgrade/3,
          versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
@@ -268,9 +269,14 @@ stop_and_wait(Node) ->
     stop(Node),
     ?assertEqual(ok, wait_until_unpingable(Node)).
 
-%% @doc Upgrade a Riak `Node' to a specific version
+%% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
 upgrade(Node, NewVersion) ->
     ?HARNESS:upgrade(Node, NewVersion).
+
+%% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
+%% the config based on entries in `Config'.
+upgrade(Node, NewVersion, Config) ->
+    ?HARNESS:upgrade(Node, NewVersion, Config).
 
 %% @doc Upgrade a Riak node to a specific version using the alternate
 %%      leave/upgrade/rejoin approach
