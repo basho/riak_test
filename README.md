@@ -165,7 +165,46 @@ override these.
         [ {riak_core, [ {ring_creation_size, 16} ]} ] }
 ]}
 ```
+#### Coverage
+You can generate a coverage report for a test run through [Erlang Cover](http://www.erlang.org/doc/apps/tools/cover_chapter.html).
+Coverage information for all **current** code run on any Riak node started by any of the tests in the run will be output as HTML in the coverage directory.
+That is, legacy and previous nodes used in the test will not be included, as the tool can only work on one version of the code at a time.
+Also, cover starts running in the Riak nodes after the node is up, so it will not report coverage of application initialization or other early code paths. 
+You can specify a list of modules for which you want coverage generated like this:
+```erlang
+    {cover_modules, [riak_kv_bitcask_backend, riak_core_ring]}
+```
+Or entire applications by using:
+```erlang
+    {cover_apps, [riak_kv, riak_core]}
+```
 
+#### Web hooks
+When reporting is enabled, each test result is posted to [Giddy Up](http://giddyup.basho.com). You can specify
+any number of webhooks that will also receive a POST request with JSON formatted test information, plus the URL
+of the Giddy Up resource page.  
+
+```erlang
+    {webhooks, [
+                [{name, "Bishop"},
+                 {url, "http://basho-engbot.herokuapp.com/"}]
+                ]}
+```
+
+This is an example test result JSON message posted to a webhook:
+```json
+{ "test": "verify_build_cluster",
+  "status": "fail",
+  "log": "Some really long lines of log output",
+  "backend": "bitcask",
+  "id": "144",
+  "platform": "osx-64",
+  "version": "riak-1.4.0-9-g740a58d-master",
+  "project": "riak",
+  "reason": "{{assertion_failed, and_probably_a_massive_stacktrace_and stuff}}",
+  "giddyup_url": "http://giddyup.basho.com/test_results/53" }
+```
+Notice that the giddyup URL is not the page for the test result, but a resource from which you can GET information about the test in JSON.
 ### Running riak_test for the first time
 
 Run a test! `./riak_test -c rtdev -t verify_build_cluster`
