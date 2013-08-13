@@ -218,7 +218,9 @@ http_stream_loop(Ref, Acc, {Boundary, BLen}=B) ->
                                Result),
             http_stream_loop(Ref, Acc2, B);
         {http, {Ref, stream, <<"\r\n--", Boundary:BLen/bytes, "--\r\n">>}} ->
-            http_stream_loop(Ref, Acc, B)
+            http_stream_loop(Ref, Acc, B);
+        Other -> lager:error("Unexpected message ~p", [Other]),
+                 {error, unknown_message}
     after 60000 ->
             {error, timeout_local}
     end.
