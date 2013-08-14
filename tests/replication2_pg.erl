@@ -486,9 +486,9 @@ test_cluster_mapping(SSL) ->
     %?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
 
     % Configure cluster_mapping on C to map cluster_id A -> C
-    lager:info("Configuring cluster A to map its cluster_id to C's cluster_id"),
+    lager:info("Configuring cluster C to map its cluster_id to B's cluster_id"),
     {ok, Ring} = rpc:call(LeaderC, riak_core_ring_manager, get_my_ring, []),
-    {new_ring, Ring1} = rpc:call(LeaderC, riak_repl_ring, add_cluster_mapping, [Ring, {CidA, CidC}]),
+    {new_ring, Ring1} = rpc:call(LeaderC, riak_repl_ring, add_cluster_mapping, [Ring, {CidC, CidB}]),
     lager:info("add_cluster_mapping"),
 
     case rpc:call(LeaderC, riak_repl_ring, get_cluster_mapping, [Ring1, CidA]) of
