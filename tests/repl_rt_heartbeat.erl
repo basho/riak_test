@@ -129,8 +129,9 @@ connect_clusters(LeaderA, LeaderB) ->
 %% @doc Create two clusters of 3 nodes each and connect them for replication:
 %%      Cluster "A" -> cluster "B"
 make_connected_clusters() ->
-    NumNodes = rt_config:get(num_nodes, 6),
-    ClusterASize = rt_config:get(cluster_a_size, 3),
+    %% For riak_test version 1.3, we can't use rt_config:get
+    NumNodes = 6,
+    ClusterASize = 3,
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
