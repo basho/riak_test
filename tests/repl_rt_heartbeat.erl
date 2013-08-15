@@ -48,12 +48,14 @@ confirm() ->
     
     %% Enable RT replication from cluster "A" to cluster "B"
     enable_rt(LeaderA, ANodes),
+    timer:sleep(?HB_TIMEOUT + 2000),
 
     %% Verify that heartbeats are being acknowledged by the sink (B) back to source (A)
     ?assertEqual(verify_heartbeat_messages(LeaderA), true),
 
     %% Verify RT repl of objects
     verify_rt(LeaderA, LeaderB),
+    timer:sleep(?HB_TIMEOUT + 2000),
 
     %% Cause heartbeat messages to not be delivered, but remember the current
     %% Pid of the RT connection. It should change after we stop heartbeats
@@ -69,19 +71,17 @@ confirm() ->
     %% Verify that RT connection has restarted by noting that it's Pid has changed
     RTConnPid2 = get_rt_conn_pid(LeaderA),
     ?assertNotEqual(RTConnPid1, RTConnPid2),
+    timer:sleep(?HB_TIMEOUT + 2000),
 
     %% Verify that heart beats are not being ack'd
-    rt:log_to_nodes([LeaderA], "Verify suspended HB"),
     ?assertEqual(verify_heartbeat_messages(LeaderA), false),
 
     %% Resume heartbeat messages from source and allow some time to ack back.
     %% Wait one second longer than the timeout
-    rt:log_to_nodes([LeaderA], "Resuming HB"),
     resume_heartbeat_messages(LeaderA),
     timer:sleep(?HB_TIMEOUT + 1000),
 
     %% Verify that heartbeats are being acknowledged by the sink (B) back to source (A)
-    rt:log_to_nodes([LeaderA], "Verify resumed HB"),
     ?assertEqual(verify_heartbeat_messages(LeaderA), true),
 
     %% Verify RT repl of objects
