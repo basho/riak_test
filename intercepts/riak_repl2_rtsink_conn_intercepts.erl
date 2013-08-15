@@ -1,5 +1,5 @@
 %% Intercepts functions for the riak_test in ../tests/repl_rt_heartbeat.erl
--module(riak_repl2_rtsink_intercepts).
+-module(riak_repl2_rtsink_conn_intercepts).
 -compile(export_all).
 -include("intercept.hrl").
 
