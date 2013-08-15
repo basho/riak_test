@@ -9,7 +9,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(RPC_TIMEOUT, 5000).
--define(HB_TIMEOUT,  2000).
+-define(HB_TIMEOUT,  4000).
 
 %% Replication Realtime Heartbeat test
 %% Valid for EE version 1.3.2 and up
@@ -37,14 +37,22 @@
 %% Write some objects to the source cluster (A),
 %% Verify they got to the sink cluster (B),
 %% Have a cold beverage.
+%%
+%% NOTE: Test was updated to send heartbeats 4 times faster than the timtout. But
+%%       since we don't actually send them out the door, we'll have the hb_sent_q
+%%       will have multiple HB's in it when we finally do get a HB back.
 
 %% @doc riak_test entry point
 confirm() ->
     %% Start up two >1.3.2 clusters and connect them,
-    {LeaderA, LeaderB, ANodes, _BNodes} = make_connected_clusters(),
+    {LeaderA, LeaderB, ANodes, BNodes} = make_connected_clusters(),
+    AllNodes = ANodes ++ BNodes,
+
+    rpc:multicall(AllNodes, lager, trace_file, ["./log/console.log", [{module, riak_repl2_rtsource_conn}], debug]),
 
     %% load intercepts. See ../intercepts/riak_repl_rt_intercepts.erl
-    load_intercepts(LeaderA),
+    load_intercepts(LeaderA), %% for the source
+    load_intercepts(LeaderB), %% for the sink
     
     %% Enable RT replication from cluster "A" to cluster "B"
     enable_rt(LeaderA, ANodes),
@@ -86,6 +94,28 @@ confirm() ->
 
     %% Verify RT repl of objects
     verify_rt(LeaderA, LeaderB),
+
+    %% HB Queue Test...
+    %% Now, do it all again, but this time we want to send some HB's back before the
+    %% timeout expires AND have a queue of hb-sent that haven't been ack'd yet. That
+    %% way, we exercise the code that handles the case where we've sent out a bunch
+    %% of HBs and get slow replies that still fall within the timeout period.
+
+    rt:log_to_nodes(AllNodes, "Starting HB Sent Q phase"),
+    %% get the current RT source connection Pid. It should survice this test...
+    RTConnPid3 = get_rt_conn_pid(LeaderA),
+    rt:log_to_nodes(AllNodes, "Slowing HB responses"),
+    slow_heartbeat_responses(LeaderB),
+    %% let the "sent" HB's build up in the sent queue, but not beyond the timeout.
+    timer:sleep(?HB_TIMEOUT div 2), %% drop half the HBs
+    rt:log_to_nodes(AllNodes, "Resuming normal HB responses"),
+    resume_heartbeat_responses(LeaderB),
+    %% Verify that heartbeats are being acknowledged by the sink (B) back to source (A)
+    ?assertEqual(verify_heartbeat_messages(LeaderA), true),
+    %% Verify that the connection didn't get killed since we tries this last test
+    timer:sleep(1000),
+    RTConnPid4 = get_rt_conn_pid(LeaderA),
+    ?assertEqual(RTConnPid3, RTConnPid4),
 
     pass.
 
@@ -142,7 +172,10 @@ make_connected_clusters() ->
               {fullsync_interval, disabled},
               %% override defaults for RT heartbeat so that we
               %% can see faults sooner and have a quicker test.
-              {rt_heartbeat_interval, ?HB_TIMEOUT},
+              %% Send HB's at 8 times the rate of timeout so that
+              %% we can put lots of them in the sent queue. See
+              %% riak_repl2_rtsource_conn#state.hb_sent_q
+              {rt_heartbeat_interval, (?HB_TIMEOUT div 8)},
               {rt_heartbeat_timeout, ?HB_TIMEOUT}
              ]}
     ],
@@ -188,16 +221,30 @@ load_intercepts(Node) ->
 %% @doc Suspend heartbeats from the source node
 suspend_heartbeat_messages(Node) ->
     %% disable forwarding of the heartbeat function call
-    lager:info("Suspend sending of heartbeats from node ~p", [Node]),
+    lager:info("Suspend sending of heartbeats from source node ~p", [Node]),
     rt_intercept:add(Node, {riak_repl2_rtsource_helper,
                             [{{send_heartbeat, 1}, drop_send_heartbeat}]}).
 
 %% @doc Resume heartbeats from the source node
 resume_heartbeat_messages(Node) ->
     %% enable forwarding of the heartbeat function call
-    lager:info("Resume sending of heartbeats from node ~p", [Node]),
+    lager:info("Resume sending of heartbeats from source node ~p", [Node]),
     rt_intercept:add(Node, {riak_repl2_rtsource_helper,
                             [{{send_heartbeat, 1}, forward_send_heartbeat}]}).
+
+%% @doc Slow down HB's from the sink
+slow_heartbeat_responses(Node) ->
+    %% slow down the reply of the heartbeat from the sink
+    lager:info("Slowing heartbeat acks from sink node ~p", [Node]),
+    rt_intercept:add(Node, {riak_repl2_rtsink_conn,
+                            [{{send_heartbeat, 2}, slow_send_heartbeat}]}).
+
+%% @doc Resume normal HB's from the sink
+resume_heartbeat_responses(Node) ->
+    %% resume normal response time of heartbeats from the sink
+    lager:info("Resume normal heartbeats from sink node ~p", [Node]),
+    rt_intercept:add(Node, {riak_repl2_rtsink_conn,
+                            [{{send_heartbeat, 2}, normal_send_heartbeat}]}).
 
 %% @doc Get the Pid of the first RT source connection on Node
 get_rt_conn_pid(Node) ->
