@@ -7,7 +7,7 @@
 
 %% @doc Drop the heartbeat messages from the rt source.
 slow_trim_q(State) ->
-    %% ?I_INFO("slow_"),
-    timer:sleep(5000),
+    %% ?I_INFO("slow_trim_q"),
+    timer:sleep(1),
     ?M:trim_q(State),
     ok.

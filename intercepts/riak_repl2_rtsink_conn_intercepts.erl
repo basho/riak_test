@@ -8,6 +8,6 @@
 %% @doc Drop the heartbeat messages from the rt source.
 slow_handle_info({Proto, S, TcpBin}, State) ->
     %% ?I_INFO("slow_handle_info"),
-    timer:sleep(2000),
+    timer:sleep(1),
     ?M:handle_info({Proto, S, TcpBin}, State),
     ok.

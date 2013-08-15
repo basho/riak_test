@@ -5,10 +5,9 @@
 %% -------------------------------------------------------------------
 -module(repl_rt_overload).
 -behaviour(riak_test).
--export([confirm/0, check_size/1]).
+-export([confirm/0, check_size/1, slow_write_calls/1, slow_trim_q/1]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(RPC_TIMEOUT, 5000).
 -define(RTSINK_MAX_WORKERS, 1).
 -define(RTSINK_MAX_PENDING, 1).
 
@@ -24,27 +23,28 @@ confirm() ->
     load_intercepts(LeaderB),
     
     %% Enable RT replication from cluster "A" to cluster "B"
+    lager:info("Enabling realtime between ~p and ~p", [LeaderA, LeaderB]),
     enable_rt(LeaderA, ANodes),
 
     %% Verify that heartbeats are being acknowledged by the sink (B) back to source (A)
     %% ?assertEqual(verify_heartbeat_messages(LeaderA), true),
 
+    %%rpc:call(LeaderA, lager, trace_file, ["./log/console.log", [{module, riak_repl2_rtq}], debug]),
+
     %% Verify RT repl of objects
     verify_rt(LeaderA, LeaderB),
 
-    lager:info("Slowing do_write calls on leader B"),
-    slow_write_calls(LeaderB),
+    %%lager:info("Slowing do_write calls on leader B"),
+    %%slow_write_calls(LeaderB),
 
     lager:info("Slowing trim_q calls on leader A"),
     slow_trim_q(LeaderA),
 
     check_rtq_msg_q(LeaderA),
 
-    load_rt(LeaderA, LeaderB),
+    verify_overload_writes(LeaderA, LeaderB),
 
-    {message_queue_len, Len} = erlang:process_info(self(), message_queue_len),
-
-    ?debugVal(Len),
+%%    load_rt(LeaderA, LeaderB),
 
     pass.
 
@@ -77,18 +77,36 @@ verify_rt(LeaderA, LeaderB) ->
     lager:info("Reading ~p keys written from ~p", [Last-First+1, LeaderB]),
     ?assertEqual(0, repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2)).
 
-%% @doc put some load on RealTime replication 
-load_rt(LeaderA, LeaderB) ->
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+verify_overload_writes(LeaderA, LeaderB) ->
+   TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
                 <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
-    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+    TestBucket = <<TestHash/binary, "-rt_test_overload">>,
     First = 101,
-    Last = 2000100,
+    Last = 20000,
 
     %% Write some objects to the source cluster (A),
-    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
-               [Last-First+1, LeaderA, LeaderB]),
-    ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)).
+    lager:info("Writing ~p keys to ~p, to ~p",
+               [Last-First+1, LeaderA, LeaderB]), 
+    ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)),
+
+    lager:info("Reading ~p keys from ~p", [Last-First+1, LeaderB]),
+    NumReads = repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2),
+
+    lager:info("Received ~p reads, so there were ~p drops", [NumReads, ((Last-First) - NumReads)]).
+
+
+%% @doc put some load on RealTime replication 
+%load_rt(LeaderA, LeaderB) ->
+%    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+%                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+%    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+%    First = 101,
+%    Last = 2000100,%
+%
+%    %% Write some objects to the source cluster (A),
+%    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
+%               [Last-First+1, LeaderA, LeaderB]),
+%    ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)).
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
@@ -108,6 +126,9 @@ make_connected_clusters() ->
     Conf = [
             {riak_repl,
              [
+              %% turn off fullsync
+              {fullsync_on_connect, false},
+              {fullsync_interval, disabled},
               {rtq_max_bytes, 1048576},
               {rtsink_max_workers, ?RTSINK_MAX_WORKERS},
               {rt_heartbeat_timeout, ?RTSINK_MAX_PENDING}
@@ -115,7 +136,6 @@ make_connected_clusters() ->
     ],
 
     Nodes = rt:deploy_nodes(NumNodes, Conf),
-
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
@@ -173,5 +193,8 @@ check_size(Node) ->
     Pid = rpc:call(Node, erlang, whereis, [riak_repl2_rtq]),
     Len = rpc:call(Node, erlang, process_info, [Pid, message_queue_len]),
     io:format("mailbox size of riak_repl2_rtq: ~p", [Len]),
+
+    %%Status = rpc:call(Node, riak_repl2_rtq, status, []),
+    %%io:format("status: ~p", [Status]),
     timer:sleep(5000),
     check_size(Node).
