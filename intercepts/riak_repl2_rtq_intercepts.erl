@@ -3,11 +3,23 @@
 -compile(export_all).
 -include("intercept.hrl").
 
--define(M, riak_repl2_rtq).
+-define(M, riak_repl2_rtq_orig).
 
 %% @doc Drop the heartbeat messages from the rt source.
 slow_trim_q(State) ->
     %% ?I_INFO("slow_trim_q"),
-    timer:sleep(1),
-    ?M:trim_q(State),
-    ok.
+    %% This hideousness is neccesary in order to have this intercept sleep only 
+    %% on the first iteraction. With hope, it causes the message queue of the
+    %% RTQ to spike enough to initiate overload handling, then subsequently
+    %% allow the queue to drain, overload flipped off, and the writes to complete.
+    case get(hosed) of 
+    	undefined ->
+    	    put(hosed, true);
+    	true ->
+            timer:sleep(5000),
+            put(hosed, false);
+        false ->
+            put(hosed, false)
+    end,
+
+    ?M:trim_q_orig(State).
