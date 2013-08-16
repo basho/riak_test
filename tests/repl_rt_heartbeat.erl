@@ -109,8 +109,11 @@ confirm() ->
 
     %% SO, to test...
     %% slow the responses from the sink
-    %% kill the RT connection so it will restart
-    %% 
+    %% kill the RT connection so it will restart (and send it's first heartbeat)
+    %% send some data to cause acks to be returned (ahead of heartbeat responses)
+    %% resume normal heartbeat resonses
+    %% send more data
+    %% verify goodness
 
     rt:log_to_nodes(AllNodes, "Starting HB Sent Q phase"),
     rt:log_to_nodes(AllNodes, "Slowing HB responses"),
@@ -121,11 +124,15 @@ confirm() ->
     timer:sleep(1000),
     RTConnPid4 = get_rt_conn_pid(LeaderA),
     %% send some data
+    rt:log_to_nodes(AllNodes, "Sending RT objects A -> B"),
     verify_rt(LeaderA, LeaderB),
     rt:log_to_nodes(AllNodes, "Resuming normal HB responses"),
     [resume_heartbeat_responses(Node) || Node <- BNodes],
+    timer:sleep(?HB_TIMEOUT + 1000),
     %% Verify that heartbeats are being acknowledged by the sink (B) back to source (A)
     ?assertEqual(verify_heartbeat_messages(LeaderA), true),
+    rt:log_to_nodes(AllNodes, "Sending RT objects A -> B"),
+    verify_rt(LeaderA, LeaderB),
     %% Verify that the connection didn't get killed since we tries this last test
     RTConnPid5 = get_rt_conn_pid(LeaderA),
     ?assertEqual(RTConnPid4, RTConnPid5),
