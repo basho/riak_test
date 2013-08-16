@@ -13,6 +13,15 @@
 
 %% Replication Realtime Overload test
 %%
+%% This attempts to push rtq to the point of overload, so that
+%% the overload control will flip on (when the rtq mailbox gets over 2k)
+%% then off again. This should cause some overload_drops, though
+%% traffic should recover once this clears.
+%%
+%% This test makes use of the riak_repl2_rtq_intecept.erl in order to slow
+%% the trim_q call on the first iteration (causing the mailbox blacklog),
+%% then clear that condition and allow traffic to recover.
+%% 
 
 %% @doc riak_test entry point
 confirm() ->
@@ -74,8 +83,8 @@ verify_overload_writes(LeaderA, LeaderB) ->
     TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
                 <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-rt_test_overload">>,
-    First = 101,
-    Last = 20000,
+    First = 1,
+    Last = 10000,
 
     %% Write some objects to the source cluster (A),
     lager:info("Writing ~p keys to ~p, to ~p",
@@ -84,15 +93,15 @@ verify_overload_writes(LeaderA, LeaderB) ->
 
     lager:info("Reading ~p keys from ~p", [Last-First+1, LeaderB]),
     NumReads = rt:systest_read(LeaderB, First, Last, TestBucket, 2),
-    %%NumReads = repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2),
 
-    lager:info("Received ~p drops", [length(NumReads)]),
+    lager:info("systest_read saw ~p errors", [length(NumReads)]),
 
     Status = rpc:call(LeaderA, riak_repl2_rtq, status, []),
     {_, OverloadDrops} = lists:keyfind(overload_drops, 1, Status),
 
-    lager:info("OverloadDrops: ~p", [OverloadDrops]),
+    lager:info("overload_drops: ~p", [OverloadDrops]),
 
+    % If there are overload_drops, overload has done its job
     ?assert(OverloadDrops > 0).
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
@@ -103,7 +112,7 @@ connect_clusters(LeaderA, LeaderB) ->
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")).
 
-%% @doc Create two clusters of 3 nodes each and connect them for replication:
+%% @doc Create two clusters of 1 node each and connect them for replication:
 %%      Cluster "A" -> cluster "B"
 make_connected_clusters() ->
     NumNodes = rt_config:get(num_nodes, 2),
@@ -155,8 +164,7 @@ make_connected_clusters() ->
 
     {AFirst, BFirst, ANodes, BNodes}.
 
-%% @doc Load intercepts file from ../intercepts/riak_repl2_rtsink_conn_intercepts.erl
-%%       and ../intercepts/riak_repl2_rtq_intercepts.erl
+%% @doc Load intercepts file from ../intercepts/riak_repl2_rtq_intercepts.erl
 load_intercepts(Node) ->
     rt_intercept:load_code(Node).
 
