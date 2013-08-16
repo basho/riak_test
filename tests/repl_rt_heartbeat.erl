@@ -96,26 +96,39 @@ confirm() ->
     verify_rt(LeaderA, LeaderB),
 
     %% HB Queue Test...
-    %% Now, do it all again, but this time we want to send some HB's back before the
-    %% timeout expires AND have a queue of hb-sent that haven't been ack'd yet. That
-    %% way, we exercise the code that handles the case where we've sent out a bunch
-    %% of HBs and get slow replies that still fall within the timeout period.
+
+    %% A plausible scenario that needs testing...
+    %% Our config is such that the HB timeout >> HB interval
+    %% We = RT Source Conn process
+    %% We send one HB when we first connect to the sink (that's one item on the hb_send_q)
+    %% We send some data to the sink.
+    %% We receive an ack from our data, we don't remove an item from our hb_send_q, and we schedule another HB
+    %% Our mailbox gets jammed with messages (from what?) that take longer than HB interval to process
+    %% Thus, we don't recv a heartbeat echo from the sink (and thus don't dequeue an item from hb_send_q)
+    %% We send the HB that we scheduled from the ack (that's two on the hb_send_q)
+
+    %% SO, to test...
+    %% slow the responses from the sink
+    %% kill the RT connection so it will restart
+    %% 
 
     rt:log_to_nodes(AllNodes, "Starting HB Sent Q phase"),
-    %% get the current RT source connection Pid. It should survice this test...
-    RTConnPid3 = get_rt_conn_pid(LeaderA),
     rt:log_to_nodes(AllNodes, "Slowing HB responses"),
-    slow_heartbeat_responses(LeaderB),
-    %% let the "sent" HB's build up in the sent queue, but not beyond the timeout.
-    timer:sleep(?HB_TIMEOUT div 2), %% drop half the HBs
+    [slow_heartbeat_responses(Node) || Node <- BNodes],
+    %% Kill the RT connection to restart it
+    RTConnPid3 = get_rt_conn_pid(LeaderA),
+    exit(RTConnPid3, kill),
+    timer:sleep(1000),
+    RTConnPid4 = get_rt_conn_pid(LeaderA),
+    %% send some data
+    verify_rt(LeaderA, LeaderB),
     rt:log_to_nodes(AllNodes, "Resuming normal HB responses"),
-    resume_heartbeat_responses(LeaderB),
+    [resume_heartbeat_responses(Node) || Node <- BNodes],
     %% Verify that heartbeats are being acknowledged by the sink (B) back to source (A)
     ?assertEqual(verify_heartbeat_messages(LeaderA), true),
     %% Verify that the connection didn't get killed since we tries this last test
-    timer:sleep(1000),
-    RTConnPid4 = get_rt_conn_pid(LeaderA),
-    ?assertEqual(RTConnPid3, RTConnPid4),
+    RTConnPid5 = get_rt_conn_pid(LeaderA),
+    ?assertEqual(RTConnPid4, RTConnPid5),
 
     pass.
 

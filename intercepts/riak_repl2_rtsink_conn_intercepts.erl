@@ -12,7 +12,7 @@ normal_send_heartbeat(T,S) ->
 slow_send_heartbeat(T,S) ->
     %% ?I_INFO("drop_heartbeat"),
     F = fun() ->
-                timer:sleep(1000),
+                timer:sleep(2000),
                 riak_repl2_rtsink_conn_orig:send_heartbeat_orig(T,S)
         end,
     spawn(F),
