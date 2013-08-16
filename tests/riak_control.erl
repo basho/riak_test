@@ -105,7 +105,7 @@ verify_control({Vsn, Node}, VersionedNodes) ->
     %% Verify partitions resource.
     {struct,
      [{<<"partitions">>, Partitions}]} = verify_resource(Node, "/admin/partitions"),
-    validate_partitions(Node, Partitions, VersionedNodes),
+    validate_partitions({Vsn, Node}, Partitions, VersionedNodes),
 
     ok.
 verify_control(VersionedNodes) ->
@@ -160,7 +160,13 @@ mixed_cluster(VersionedNodes) ->
             lists:map(fun({Vsn, _}) -> Vsn end, VersionedNodes))) =/= 1.
 
 %% @doc Validate partitions response.
-validate_partitions(ControlNode, ResponsePartitions, VersionedNodes) ->
+validate_partitions({current, _}, _ResponsePartitions, _VersionedNodes) ->
+    %% The newest version of the partitions display can derive the
+    %% partition state without relying on data from rpc calls -- it can
+    %% use just the ring to do this.  Don't test anything specific here
+    %% yet.
+    ok;
+validate_partitions({ControlVsn, _}, ResponsePartitions, VersionedNodes) ->
     MixedCluster = mixed_cluster(VersionedNodes),
     lager:info("Mixed cluster: ~p.", [MixedCluster]),
 
@@ -175,7 +181,6 @@ validate_partitions(ControlNode, ResponsePartitions, VersionedNodes) ->
                 %% vsn of the node running Riak Control that we've
                 %% queried.
                 {NodeVsn, _} = lists:keyfind(Name, 2, VersionedNodes),
-                {ControlVsn, _} = lists:keyfind(ControlNode, 2, VersionedNodes),
 
                 %% Validate response.
                 ?assertEqual(true,
