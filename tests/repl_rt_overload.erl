@@ -38,9 +38,6 @@ confirm() ->
     %% Verify RT repl of objects
     verify_rt(LeaderA, LeaderB),
 
-    %%lager:info("Slowing do_write calls on leader B"),
-    %%slow_write_calls(LeaderB),
-
     lager:info("Slowing trim_q calls on leader A"),
     slow_trim_q(LeaderA),
 
@@ -189,7 +186,5 @@ check_size(Node) ->
     Len = rpc:call(Node, erlang, process_info, [Pid, message_queue_len]),
     io:format("mailbox size of riak_repl2_rtq: ~p", [Len]),
 
-    %%Status = rpc:call(Node, riak_repl2_rtq, status, []),
-    %%io:format("status: ~p", [Status]),
     timer:sleep(2000),
     check_size(Node).
