@@ -46,7 +46,7 @@ confirm() ->
    
     lager:info("Cluster loaded"),
 
-    case rt:config(rt_backend, undefined) of 
+    case rt_config:get(rt_backend, undefined) of 
         riak_kv_eleveldb_backend ->
             load_level_intercepts(Nodes);
         _ ->
