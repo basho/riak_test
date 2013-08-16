@@ -8,8 +8,9 @@
 %% @doc Drop the heartbeat messages from the rt source.
 slow_trim_q(State) ->
     %% ?I_INFO("slow_trim_q"),
-    %% This hideousness is neccesary in order to have this intercept sleep only 
-    %% on the first iteraction. With hope, it causes the message queue of the
+
+    %% This hideousness is necessary in order to have this intercept sleep only 
+    %% on the first iteration. With hope, it causes the message queue of the
     %% RTQ to spike enough to initiate overload handling, then subsequently
     %% allow the queue to drain, overload flipped off, and the writes to complete.
     case get(hosed) of 

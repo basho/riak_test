@@ -26,11 +26,6 @@ confirm() ->
     lager:info("Enabling realtime between ~p and ~p", [LeaderA, LeaderB]),
     enable_rt(LeaderA, ANodes),
 
-    %% Verify that heartbeats are being acknowledged by the sink (B) back to source (A)
-    %% ?assertEqual(verify_heartbeat_messages(LeaderA), true),
-
-    %%rpc:call(LeaderA, lager, trace_file, ["./log/console.log", [{module, riak_repl2_rtq}], debug]),
-
     %% Verify RT repl of objects
     verify_rt(LeaderA, LeaderB),
 
@@ -43,8 +38,6 @@ confirm() ->
     check_rtq_msg_q(LeaderA),
 
     verify_overload_writes(LeaderA, LeaderB),
-
-%%    load_rt(LeaderA, LeaderB),
 
     pass.
 
@@ -78,7 +71,7 @@ verify_rt(LeaderA, LeaderB) ->
     ?assertEqual(0, repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2)).
 
 verify_overload_writes(LeaderA, LeaderB) ->
-   TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
                 <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-rt_test_overload">>,
     First = 101,
@@ -90,23 +83,17 @@ verify_overload_writes(LeaderA, LeaderB) ->
     ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)),
 
     lager:info("Reading ~p keys from ~p", [Last-First+1, LeaderB]),
-    NumReads = repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2),
+    NumReads = rt:systest_read(LeaderB, First, Last, TestBucket, 2),
+    %%NumReads = repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2),
 
-    lager:info("Received ~p reads, so there were ~p drops", [NumReads, ((Last-First) - NumReads)]).
+    lager:info("Received ~p drops", [length(NumReads)]),
 
+    Status = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+    {_, OverloadDrops} = lists:keyfind(overload_drops, 1, Status),
 
-%% @doc put some load on RealTime replication 
-%load_rt(LeaderA, LeaderB) ->
-%    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
-%                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
-%    TestBucket = <<TestHash/binary, "-rt_test_a">>,
-%    First = 101,
-%    Last = 2000100,%
-%
-%    %% Write some objects to the source cluster (A),
-%    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
-%               [Last-First+1, LeaderA, LeaderB]),
-%    ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)).
+    lager:info("OverloadDrops: ~p", [OverloadDrops]),
+
+    ?assert(OverloadDrops > 0).
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
@@ -196,5 +183,5 @@ check_size(Node) ->
 
     %%Status = rpc:call(Node, riak_repl2_rtq, status, []),
     %%io:format("status: ~p", [Status]),
-    timer:sleep(5000),
+    timer:sleep(2000),
     check_size(Node).
