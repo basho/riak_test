@@ -85,3 +85,15 @@ error_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
                     ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State)
             end
     end.
+
+corrupting_handle_handoff_data(BinObj0, State) ->
+    BinObj =
+        case random:uniform(20) of
+            10 ->
+                corrupt_binary(BinObj0);
+            _ -> BinObj0
+        end,
+    ?M:handle_handoff_data_orig(BinObj, State).
+
+corrupt_binary(O) ->
+    crypto:rand_bytes(byte_size(O)).
