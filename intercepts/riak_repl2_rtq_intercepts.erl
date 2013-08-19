@@ -12,7 +12,7 @@ slow_trim_q(State) ->
     %% This hideousness is necessary in order to have this intercept sleep only 
     %% on the first iteration. With hope, it causes the message queue of the
     %% RTQ to spike enough to initiate overload handling, then subsequently
-    %% allow the queue to drain, overload flipped off, and the writes to complete.
+    %% allows the queue to drain, overload to flip off, and the writes to complete.
     case get(hosed) of 
     	undefined ->
     	    put(hosed, true);
