@@ -5,7 +5,7 @@
 %% -------------------------------------------------------------------
 -module(repl_rt_overload).
 -behaviour(riak_test).
--export([confirm/0, check_size/1, slow_write_calls/1, slow_trim_q/1]).
+-export([confirm/0, check_size/1, slow_trim_q/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(RTSINK_MAX_WORKERS, 1).
@@ -166,11 +166,11 @@ load_intercepts(Node) ->
     rt_intercept:load_code(Node).
 
 %% @doc Slow down handle_info (write calls)
-slow_write_calls(Node) ->
-    %% disable forwarding of the heartbeat function call
-    lager:info("Slowing down sink do_write calls on ~p", [Node]),
-    rt_intercept:add(Node, {riak_repl2_rtsink_conn,
-                            [{{handle_info, 2}, slow_handle_info}]}).
+% slow_write_calls(Node) ->
+%     %% disable forwarding of the heartbeat function call
+%   lager:info("Slowing down sink do_write calls on ~p", [Node]),
+%    rt_intercept:add(Node, {riak_repl2_rtsink_conn,
+%                            [{{handle_info, 2}, slow_handle_info}]}).
 
 slow_trim_q(Node) ->
     lager:info("Slowing down trim_q calls on ~p", [Node]),
