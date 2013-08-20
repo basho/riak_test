@@ -139,9 +139,11 @@ upgrade(Node, NewVersion) ->
     rt:wait_until_pingable(Node),
     ok.
 
+-spec set_conf(atom() | string(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
     lager:info("rtdev:set_conf(all, ~p)", [NameValuePairs]),
-    [ set_conf(DevPath, NameValuePairs) || DevPath <- devpaths()];
+    [ set_conf(DevPath, NameValuePairs) || DevPath <- devpaths()],
+    ok;
 set_conf(Node, NameValuePairs) when is_atom(Node) ->
     append_to_conf_file(get_riak_conf(Node), NameValuePairs),
     ok;
