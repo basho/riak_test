@@ -289,38 +289,40 @@ slow_upgrade(Node, NewVersion, Nodes) ->
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
-    R = try_join(Node, PNode),
+    R = rpc:call(Node, riak_core, join, [PNode]),
     lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
     ?assertEqual(ok, R),
     ok.
 
-%% @doc try_join tries different rpc:calls to join a node, because the module changed
-%%      in riak 1.2.0
-try_join(Node, PNode) ->
-    case rpc:call(Node, riak_core, join, [PNode]) of
-        {badrpc, _} ->
-            rpc:call(Node, riak, join, [PNode]);
-        Result ->
-            Result
+%% @doc Have `Node' send a join request to `PNode'
+staged_join(Node, PNode) ->
+    R = rpc:call(Node, riak_core, staged_join, [PNode]),
+    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
+    ?assertEqual(ok, R),
+    ok.
+
+plan_and_commit(Node) ->
+    timer:sleep(500),
+    lager:info("planning and commiting cluster join"),
+    case rpc:call(Node, riak_core_claimant, plan, []) of
+        {error, ring_not_ready} ->
+            lager:info("ring not ready"),
+            timer:sleep(100),
+            plan_and_commit(Node);
+        {error, plan_changed} ->
+            lager:info("plan changed"),
+            timer:sleep(100),
+            plan_and_commit(Node);
+        {ok, _, _} ->
+            ok = rpc:call(Node, riak_core_claimant, commit, [])
     end.
 
 %% @doc Have the `Node' leave the cluster
 leave(Node) ->
-    R = try_leave(Node),
+    R = rpc:call(Node, riak_core, leave, []),
     lager:info("[leave] ~p: ~p", [Node, R]),
     ?assertEqual(ok, R),
     ok.
-
-%% @doc try_leave tries different rpc:calls to leave a `Node', because the module changed
-%%      in riak 1.2.0
-try_leave(Node) ->
-    case rpc:call(Node, riak_core, leave, []) of
-        {badrpc, _} ->
-            rpc:call(Node, riak_kv_console, leave, [[]]),
-            ok;
-        Result ->
-            Result
-    end.
 
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
@@ -750,7 +752,9 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
-    [join(Node, Node1) || Node <- OtherNodes],
+    [staged_join(Node, Node1) || Node <- OtherNodes],
+
+    plan_and_commit(Node1),
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
 
