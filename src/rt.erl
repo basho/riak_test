@@ -171,6 +171,7 @@ str(String, Substr) ->
         _ -> true
     end.
 
+-spec set_conf(atom(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
     ?HARNESS:set_conf(all, NameValuePairs);
 set_conf(Node, NameValuePairs) ->
