@@ -282,7 +282,6 @@ slow_upgrade(Node, NewVersion, Nodes) ->
     upgrade(Node, NewVersion),
     lager:info("Rejoin ~p", [Node]),
     join(Node, hd(Nodes -- [Node])),
-    plan_and_commit(Node),
     lager:info("Wait until all nodes are ready and there are no pending changes"),
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
@@ -290,6 +289,13 @@ slow_upgrade(Node, NewVersion, Nodes) ->
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
+    R = rpc:call(Node, riak_core, join, [PNode]),
+    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
+    ?assertEqual(ok, R),
+    ok.
+
+%% @doc Have `Node' send a join request to `PNode'
+staged_join(Node, PNode) ->
     R = rpc:call(Node, riak_core, staged_join, [PNode]),
     lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
     ?assertEqual(ok, R),
@@ -746,7 +752,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
-    [join(Node, Node1) || Node <- OtherNodes],
+    [staged_join(Node, Node1) || Node <- OtherNodes],
 
     plan_and_commit(Node1),
 
