@@ -198,7 +198,8 @@ update_app_config(Node, Config) when is_atom(Node) ->
 
     AppConfigFile = io_lib:format(FileFormatString, [Path, N, "app"]),
     AdvConfigFile = io_lib:format(FileFormatString, [Path, N, "advanced"]),
-
+    %% If there's an app.config, do it old style
+    %% if not, use cuttlefish's adavnced.config
     case filelib:is_file(AppConfigFile) of
         true -> 
             update_app_config_file(AppConfigFile, Config);
@@ -253,6 +254,8 @@ get_backend(AppConfig) ->
         ["advanced.config" | T] ->
             ["etc", [$d, $e, $v | N], "dev" | RPath] = T,
             Path = filename:join(lists:reverse(RPath)),
+            %% Why chkconfig? It generates an app.config from cuttlefish
+            %% without starting riak.
             run_riak(list_to_integer(N), Path, "chkconfig"),
             filename:join(lists:reverse(["app.config", "generated" | T]))
     end,
