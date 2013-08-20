@@ -8,8 +8,11 @@
 confirm() ->
     application:start(inets),
     lager:info("Deploy some nodes"),
-    Nodes = rt:build_cluster(4, [], [{riak_core, [{default_bucket_props,
-                                                   [{n_val, 2}]}]}]),
+    Nodes = rt:build_cluster(4, [], [
+                                     {riak_core, [{default_bucket_props,
+                                                   [{n_val, 2}]}]},
+                                     {riak_kv, [{storage_backend,
+                                                 riak_kv_memory_backend}]}]),
     Node = hd(Nodes),
 
     {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
@@ -191,6 +194,45 @@ confirm() ->
 
     ?assertEqual(3, proplists:get_value(n_val, BProps11)),
 
+    %% 2i tests
 
+    Obj01 = riakc_obj:new(<<"test">>, <<"JRD">>, <<"John Robert Doe, 25">>),
+    Obj02 = riakc_obj:new({<<"mytype">>, <<"test">>}, <<"JRD">>, <<"Jane Rachel Doe, 21">>),
+
+    Obj1 = riakc_obj:update_metadata(Obj01,
+                                    riakc_obj:set_secondary_index(
+                                      riakc_obj:get_update_metadata(Obj01),
+                                      [{{integer_index, "age"},
+                                        [25]},{{binary_index, "name"},
+                                               [<<"John">>, <<"Robert">>
+                                                ,<<"Doe">>]}])),
+
+    Obj2 = riakc_obj:update_metadata(Obj02,
+                                    riakc_obj:set_secondary_index(
+                                      riakc_obj:get_update_metadata(Obj02),
+                                      [{{integer_index, "age"},
+                                        [21]},{{binary_index, "name"},
+                                               [<<"Jane">>, <<"Rachel">>
+                                                ,<<"Doe">>]}])),
+
+    riakc_pb_socket:put(PB, Obj1),
+    riakc_pb_socket:put(PB, Obj2),
+
+    ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, riakc_pb_socket:get_index(PB, <<"test">>,
+                                                            {binary_index,
+                                                             "name"},
+                                                            <<"John">>)),
+
+    ?assertMatch({ok, {index_results_v1, [], _, _}}, riakc_pb_socket:get_index(PB, <<"test">>,
+                                                            {binary_index,
+                                                             "name"},
+                                                            <<"Jane">>)),
+
+    ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, riakc_pb_socket:get_index(PB,
+                                                            {<<"mytype">>,
+                                                             <<"test">>},
+                                                            {binary_index,
+                                                             "name"},
+                                                            <<"Jane">>)),
     ok.
 
