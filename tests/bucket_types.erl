@@ -8,7 +8,8 @@
 confirm() ->
     application:start(inets),
     lager:info("Deploy some nodes"),
-    Nodes = rt:build_cluster(4),
+    Nodes = rt:build_cluster(4, [], [{riak_core, [{default_bucket_props,
+                                                   [{n_val, 2}]}]}]),
     Node = hd(Nodes),
 
     {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
@@ -127,12 +128,13 @@ confirm() ->
     riakc_pb_socket:reset_bucket(PB, {<<"default">>, <<"mybucket">>}),
 
     {ok, BProps1} = riakc_pb_socket:get_bucket(PB, <<"mybucket">>),
-    ?assertEqual(3, proplists:get_value(n_val, BProps1)),
+    ?assertEqual(2, proplists:get_value(n_val, BProps1)),
 
     riakc_pb_socket:set_bucket(PB, {<<"mytype">>, <<"mybucket">>},
                                [{n_val, 5}]),
     {ok, BProps2} = riakc_pb_socket:get_bucket(PB, <<"mybucket">>),
-    ?assertEqual(3, proplists:get_value(n_val, BProps2)),
+    %% the default in the app.config is set to 2...
+    ?assertEqual(2, proplists:get_value(n_val, BProps2)),
 
     {ok, BProps3} = riakc_pb_socket:get_bucket(PB, {<<"mytype">>,
                                                     <<"mybucket">>}),
@@ -157,6 +159,38 @@ confirm() ->
     {ok, BProps6} = riakc_pb_socket:get_bucket(PB, {<<"mytype">>,
                                                     <<"mybucket">>}),
     ?assertEqual(5, proplists:get_value(n_val, BProps6)),
+
+    riakc_pb_socket:reset_bucket_type(PB, <<"mytype">>),
+
+    {ok, BProps7} = riakc_pb_socket:get_bucket_type(PB, <<"mytype">>),
+
+    ?assertEqual(3, proplists:get_value(n_val, BProps7)),
+
+    %% make sure a regular bucket under the default type reflects app.config
+    {ok, BProps8} = riakc_pb_socket:get_bucket(PB, {<<"default">>,
+                                                    <<"mybucket">>}),
+    ?assertEqual(2, proplists:get_value(n_val, BProps8)),
+
+    %% make sure the type we previously created is NOT affected
+    {ok, BProps9} = riakc_pb_socket:get_bucket_type(PB, <<"mytype">>),
+
+    ?assertEqual(3, proplists:get_value(n_val, BProps9)),
+
+    %% make sure a bucket under that type is also not affected
+    {ok, BProps10} = riakc_pb_socket:get_bucket(PB, {<<"mytype">>,
+                                                    <<"mybucket">>}),
+    ?assertEqual(3, proplists:get_value(n_val, BProps10)),
+
+    %% make sure a newly created type is not affected either
+    %% create a new type
+    ok = rpc:call(Node, riak_core_bucket_type, create, [<<"mynewtype">>, []]),
+    %% allow cluster metadata some time to propogate
+    timer:sleep(1000),
+
+    {ok, BProps11} = riakc_pb_socket:get_bucket_type(PB, <<"mynewtype">>),
+
+    ?assertEqual(3, proplists:get_value(n_val, BProps11)),
+
 
     ok.
 
