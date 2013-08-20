@@ -87,6 +87,7 @@
          rpc_get_env/2,
          set_backend/1,
          set_backend/2,
+         set_conf/2,
          setup_harness/2,
          slow_upgrade/3,
          spawn_cmd/1,
@@ -168,6 +169,15 @@ str(String, Substr) ->
         0 -> false;
         _ -> true
     end.
+
+-spec set_conf(atom(), [{string(), string()}]) -> ok.
+set_conf(all, NameValuePairs) ->
+    ?HARNESS:set_conf(all, NameValuePairs);
+set_conf(Node, NameValuePairs) ->
+    stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:set_conf(Node, NameValuePairs),
+    start(Node).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in `Config'.
