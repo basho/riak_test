@@ -499,9 +499,6 @@ wait_for_cmd(Port) ->
     rt:wait_until(node(),
                   fun(_) ->
                           receive
-                              {Port, Msg={data, _}} ->
-                                  self() ! {Port, Msg},
-                                  false;
                               {Port, Msg={exit_status, _}} ->
                                   catch port_close(Port),
                                   self() ! {Port, Msg},
