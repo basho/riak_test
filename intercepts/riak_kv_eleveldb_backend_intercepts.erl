@@ -28,3 +28,43 @@ corrupting_get(Bucket, Key, ModState) ->
             
 corrupt_binary(O) ->
     crypto:rand_bytes(byte_size(O)).
+
+corrupting_from_index_key(B0) ->
+    B = 
+        case random:uniform(10) of 
+            9 -> 
+                ?I_INFO("corrupting an index key on read"),
+                corrupt_binary(B0);
+            _ -> B0
+        end,
+    ?M:from_index_key_orig(B).
+
+corrupting_from_object_key(B0) ->
+    B = 
+        case random:uniform(10) of 
+            9 -> 
+                ?I_INFO("corrupting an object key on read"),
+                corrupt_binary(B0);
+            _ -> B0
+        end,
+    ?M:from_object_key_orig(B).
+
+corrupting_to_object_key(A, B) ->
+    Bin0 = ?M:to_object_key_orig(A, B),
+    case random:uniform(10) of 
+        9 -> 
+            ?I_INFO("corrupting an object key on write"),
+            corrupt_binary(Bin0);
+        _ -> Bin0
+    end.
+
+corrupting_to_index_key(A, B, C, D) ->
+    Bin0 = ?M:to_index_key_orig(A, B, C, D),
+    case random:uniform(10) of 
+        9 -> 
+            ?I_INFO("corrupting an index key on write"),
+            corrupt_binary(Bin0);
+        _ -> Bin0
+    end.
+
+
