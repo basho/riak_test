@@ -10,6 +10,7 @@
 
 -define(RPC_TIMEOUT, 5000).
 -define(HB_TIMEOUT,  2000).
+-define(HB_INTERVAL, 1000).
 
 %% Replication Realtime Heartbeat test
 %% Valid for EE version 1.3.2 and up
@@ -45,7 +46,8 @@ confirm() ->
 
     %% load intercepts. See ../intercepts/riak_repl_rt_intercepts.erl
     load_intercepts(LeaderA),
-    
+    load_intercepts(LeaderB),
+
     %% Enable RT replication from cluster "A" to cluster "B"
     enable_rt(LeaderA, ANodes),
 
@@ -87,6 +89,8 @@ confirm() ->
     %% Verify RT repl of objects
     verify_rt(LeaderA, LeaderB),
 
+    verify_hb_noresponse(LeaderA, LeaderB),
+
     pass.
 
 %% @doc Turn on Realtime replication on the cluster lead by LeaderA.
@@ -116,6 +120,30 @@ verify_rt(LeaderA, LeaderB) ->
 
     %% verify data is replicated to B
     lager:info("Reading ~p keys written from ~p", [Last-First+1, LeaderB]),
+    ?assertEqual(0, repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2)).
+
+verify_hb_noresponse(LeaderA, LeaderB) ->
+
+    lager:info("Testing heartbeats with no responses, should not crash"),
+
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+    First = 101,
+    Last = 20000,
+
+    %% suspend HB responses from the sink, write some data, then stop writing
+    %% data, hb timeout should not crash the node
+    suspend_heartbeat_responses(LeaderB),
+
+    %% Write some objects to the source cluster (A),
+    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
+               [Last-First+1, LeaderA, LeaderB]),
+    ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)),
+
+    %% verify data is replicated to B
+    lager:info("Reading ~p keys written from ~p", [Last-First+1, LeaderB]),
+    timer:sleep(?HB_TIMEOUT + 1000),
     ?assertEqual(0, repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2)).
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
@@ -191,12 +219,18 @@ suspend_heartbeat_messages(Node) ->
     rt_intercept:add(Node, {riak_repl2_rtsource_helper,
                             [{{send_heartbeat, 1}, drop_send_heartbeat}]}).
 
-%% @doc Resume heartbeats from the source node
+%% @doc Resume heartbeats from the sink node
 resume_heartbeat_messages(Node) ->
     %% enable forwarding of the heartbeat function call
     lager:info("Resume sending of heartbeats from node ~p", [Node]),
     rt_intercept:add(Node, {riak_repl2_rtsource_helper,
                             [{{send_heartbeat, 1}, forward_send_heartbeat}]}).
+
+suspend_heartbeat_responses(Node) ->
+
+    lager:info("Susending sending of heartbeat responses from node ~p", [Node]),
+    rt_intercept:add(Node, {riak_repl2_rtsink_conn,
+                            [{{send_heartbeat, 2}, drop_send_heartbeat_resp}]}).
 
 %% @doc Get the Pid of the first RT source connection on Node
 get_rt_conn_pid(Node) ->
