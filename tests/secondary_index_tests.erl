@@ -25,7 +25,7 @@
 -define(BUCKET, <<"2ibucket">>).
 
 confirm() ->
-    Nodes = rt:build_cluster(3),
+    Nodes = rt:build_cluster(1),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     
     Pid = rt:pbc(hd(Nodes)),
@@ -72,17 +72,13 @@ confirm() ->
             Node = hd(Nodes),
             rt_intercept:add(Node, {riak_kv_eleveldb_backend,
                                     [{{from_object_key, 1}, 
-                                      corrupting_from_object_key}]}),
-            rt_intercept:add(Node, {riak_kv_eleveldb_backend,
-                                    [{{from_index_key, 1}, 
-                                      corrupting_from_index_key}]}),
-            rt_intercept:add(Node, {riak_kv_eleveldb_backend,
-                                    [{{to_object_key, 2}, 
-                                      corrupting_to_object_key}]}),
-            rt_intercept:add(Node, {riak_kv_eleveldb_backend,
-                                    [{{to_index_key, 4}, 
+                                      corrupting_from_object_key},
+                                     {{from_index_key, 1}, 
+                                      corrupting_from_index_key},
+                                     {{to_object_key, 2}, 
+                                      corrupting_to_object_key},
+                                     {{to_index_key, 4}, 
                                       corrupting_to_index_key}]}),
-            timer:sleep(2000),
 
             [put_an_object(Pid, N, false) || N <- lists:seq(1000, 2000)],
             

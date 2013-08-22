@@ -6,7 +6,7 @@
 
 corrupting_put(Bucket, Key, IndexSpecs, Val0, ModState) ->
     Val = 
-        case random:uniform(20) of 
+        case crypto:rand_uniform(20) of 
             10 -> 
                 corrupt_binary(Val0);
             _ -> Val0
@@ -17,7 +17,7 @@ corrupting_get(Bucket, Key, ModState) ->
     case ?M:get_orig(Bucket, Key, ModState) of
         {ok, BinVal0, UpdModState} ->
             BinVal =
-                case random:uniform(20) of 
+                case crypto:rand_uniform(20) of 
                     10 ->
                         corrupt_binary(BinVal0);
                     _ -> BinVal0
@@ -30,28 +30,28 @@ corrupt_binary(O) ->
     crypto:rand_bytes(byte_size(O)).
 
 corrupting_from_index_key(B0) ->
-    B = 
-        case random:uniform(10) of 
+    B = case crypto:rand_uniform(1,10) of 
             9 -> 
                 ?I_INFO("corrupting an index key on read"),
                 corrupt_binary(B0);
-            _ -> B0
+            _N -> 
+                B0
         end,
     ?M:from_index_key_orig(B).
 
 corrupting_from_object_key(B0) ->
-    B = 
-        case random:uniform(10) of 
+    B = case crypto:rand_uniform(1,10) of 
             9 -> 
                 ?I_INFO("corrupting an object key on read"),
                 corrupt_binary(B0);
-            _ -> B0
+            _ -> 
+                B0
         end,
     ?M:from_object_key_orig(B).
 
 corrupting_to_object_key(A, B) ->
     Bin0 = ?M:to_object_key_orig(A, B),
-    case random:uniform(10) of 
+    case crypto:rand_uniform(1,10) of 
         9 -> 
             ?I_INFO("corrupting an object key on write"),
             corrupt_binary(Bin0);
@@ -59,8 +59,9 @@ corrupting_to_object_key(A, B) ->
     end.
 
 corrupting_to_index_key(A, B, C, D) ->
+   %% ?I_INFO("maybe corrupting an index key on write"),
     Bin0 = ?M:to_index_key_orig(A, B, C, D),
-    case random:uniform(10) of 
+    case crypto:rand_uniform(1,10) of 
         9 -> 
             ?I_INFO("corrupting an index key on write"),
             corrupt_binary(Bin0);
