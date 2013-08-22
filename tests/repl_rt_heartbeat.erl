@@ -129,7 +129,7 @@ verify_hb_noresponse(LeaderA, LeaderB) ->
     TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
                 <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-rt_test_a">>,
-    First = 101,
+    First = 1,
     Last = 20000,
 
     %% suspend HB responses from the sink, write some data, then stop writing
@@ -228,7 +228,7 @@ resume_heartbeat_messages(Node) ->
 
 suspend_heartbeat_responses(Node) ->
 
-    lager:info("Susending sending of heartbeat responses from node ~p", [Node]),
+    lager:info("Suspending sending of heartbeat responses from node ~p", [Node]),
     rt_intercept:add(Node, {riak_repl2_rtsink_conn,
                             [{{send_heartbeat, 2}, drop_send_heartbeat_resp}]}).
 
