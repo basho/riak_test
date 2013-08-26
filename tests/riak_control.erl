@@ -94,8 +94,8 @@ verify_control({legacy, Node}, _VersionedNodes) ->
     verify_resource(Node, "/admin/ring/partitions"),
 
     ok;
-verify_control({Vsn, Node}, VersionedNodes) ->
-    lager:info("Verifying control on node ~p vsn ~p.", [Node, Vsn]),
+verify_control({previous, Node}, VersionedNodes) ->
+    lager:info("Verifying control on node ~p vsn previous.", [Node]),
 
     %% Verify node resource.
     {struct,
@@ -105,7 +105,22 @@ verify_control({Vsn, Node}, VersionedNodes) ->
     %% Verify partitions resource.
     {struct,
      [{<<"partitions">>, Partitions}]} = verify_resource(Node, "/admin/partitions"),
-    validate_partitions({Vsn, Node}, Partitions, VersionedNodes),
+    validate_partitions({previous, Node}, Partitions, VersionedNodes),
+
+    ok;
+verify_control({current, Node}, VersionedNodes) ->
+    lager:info("Verifying control on node ~p vsn current.", [Node]),
+
+    %% Verify node resource.
+    {struct,
+     [{<<"nodes">>, Nodes}]} = verify_resource(Node, "/admin/nodes"),
+    validate_nodes(Node, Nodes, VersionedNodes, any),
+
+    %% Verify partitions resource.
+    {struct,
+     [{<<"partitions">>, Partitions},
+      {<<"default_n_val">>, _}]} = verify_resource(Node, "/admin/partitions"),
+    validate_partitions({current, Node}, Partitions, VersionedNodes),
 
     ok.
 verify_control(VersionedNodes) ->
@@ -115,7 +130,7 @@ verify_control(VersionedNodes) ->
 verify_resource(Node0, Resource) ->
     Node = rt:http_url(Node0),
     Output = os:cmd(io_lib:format("curl -s -S ~s~p", [Node, Resource])),
-    lager:info("Verifying ~p ~p.", [Node, Resource]),
+    lager:info("Verifying node ~p resource ~p.", [Node, Resource]),
     mochijson2:decode(Output).
 
 %% @doc Verify that riak_kv is still running on all nodes.
