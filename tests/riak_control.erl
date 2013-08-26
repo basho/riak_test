@@ -68,6 +68,12 @@ verify_upgrade_fold({FromVsn, Node}, VersionedNodes0) ->
     rt:upgrade(Node, current),
     rt:wait_for_service(Node, riak_kv),
 
+    %% Wait for Riak Control to start.
+    wait_for_control(VersionedNodes0),
+
+    %% Wait for Riak Control polling cycle.
+    wait_for_control_cycle(Node),
+
     lager:info("Versioned nodes is: ~p.", [VersionedNodes0]),
     VersionedNodes = lists:keyreplace(Node, 2, VersionedNodes0, {current, Node}),
     lager:info("Versioned nodes is now: ~p.", [VersionedNodes]),
@@ -174,6 +180,46 @@ mixed_cluster(VersionedNodes) ->
     length(lists:usort(
             lists:map(fun({Vsn, _}) -> Vsn end, VersionedNodes))) =/= 1.
 
+wait_for_control_cycle(Node) when is_atom(Node) ->
+    lager:info("Waiting for riak_control poll on node ~p.", [Node]),
+
+    {ok, CurrentVsn} = rpc:call(Node,
+                                riak_control_session,
+                                get_version,
+                                []),
+    ExpectedVsn = CurrentVsn + 1,
+
+    rt:wait_until(Node, fun(N) ->
+                {ok, Vsn} = rpc:call(N,
+                                     riak_control_session,
+                                     get_version,
+                                     []),
+                Vsn =:= ExpectedVsn
+        end).
+
+%% @doc Wait for Riak Control to start.
+%%
+%% Non-optimal check, because we're blocking for the gen_server to
+%% start to ensure that the routes have been added by the
+%% supervisor.
+wait_for_control(Node) when is_atom(Node) ->
+    lager:info("Waiting for riak_control to start on node ~p.", [Node]),
+
+    rt:wait_until(Node, fun(N) ->
+                case rpc:call(N,
+                              riak_control_session,
+                              get_version,
+                              []) of
+                    {ok, _} ->
+                        true;
+                    Error ->
+                        lager:info("Error was ~p.", [Error]),
+                        false
+                end
+        end);
+wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
+    [wait_for_control(Node) || {_, Node} <- VersionedNodes].
+
 %% @doc Validate partitions response.
 validate_partitions({current, _}, _ResponsePartitions, _VersionedNodes) ->
     %% The newest version of the partitions display can derive the
@@ -213,8 +259,12 @@ valid_status(false, current, current, <<"valid">>) ->
 valid_status(true, _, _, <<"valid">>) ->
     %% Cross-version communication in mixed cluster.
     true;
-valid_status(_, _, _, _) ->
+valid_status(MixedCluster, ControlVsn, NodeVsn, Status) ->
     %% Default failure case.
+    lager:info("Invalid status: ~p ~p ~p ~p", [MixedCluster,
+                                               ControlVsn,
+                                               NodeVsn,
+                                               Status]),
     false.
 
 %% @doc Validate capability has converged.
@@ -229,7 +279,15 @@ validate_capability(VersionedNodes) ->
     lager:info("Verifying capability through ~p.", [Node]),
 
     %% Wait the Riak Control converges.
-    rt:wait_until(Node, fun(N) -> {ok, _, Status} = rpc:call(N, riak_control_session, get_status, []), Status =:= valid end),
+    lager:info("Waiting for riak_control to converge."),
+
+    rt:wait_until(Node, fun(N) ->
+                {ok, _, Status} = rpc:call(N,
+                                           riak_control_session,
+                                           get_status,
+                                           []),
+                Status =:= valid
+        end),
 
     %% Get the current response.
     {struct,
