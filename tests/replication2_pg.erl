@@ -493,9 +493,9 @@ test_cluster_mapping(SSL) ->
 
     case rpc:call(LeaderC, riak_repl_ring, get_cluster_mapping, [Ring1, CidA]) of
         {ok, Mapping} ->
-            lager:info("Cluster ~s mapped to cluster ~s", [CidA, Mapping]);
+            lager:info("Cluster ~p mapped to cluster ~p", [CidA, Mapping]);
         _ ->
-            lager:info("Cluster ~s mapped to []")
+            lager:info("Cluster ~p mapped to []", [CidA])
     end,
  
     %?assertEqual(CidC, ClusterMappedToId),
