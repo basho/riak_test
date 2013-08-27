@@ -1,7 +1,7 @@
 -module(bucket_types).
 
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, mapred_modfun/3, mapred_modfun_type/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -234,5 +234,177 @@ confirm() ->
                                                             {binary_index,
                                                              "name"},
                                                             <<"Jane">>)),
+
+    %% wild stab at the undocumented cs_bucket_fold
+    {ok, ReqID} = riakc_pb_socket:cs_bucket_fold(PB, <<"test">>, []),
+    accumulate(ReqID),
+
+    {ok, ReqID2} = riakc_pb_socket:cs_bucket_fold(PB, {<<"mytype">>,
+                                                       <<"test">>}, []),
+    accumulate(ReqID2),
+
+
+    Store = fun(Bucket, {K,V, BI, II}) ->
+                    O=riakc_obj:new(Bucket, K),
+                    MD=riakc_obj:add_secondary_index(dict:new(),
+                                                     {{binary_index, "b_idx"},
+                                                      [BI]}),
+                    MD2=riakc_obj:add_secondary_index(MD, {{integer_index,
+                                                            "i_idx"}, [II]}),
+                    OTwo=riakc_obj:update_metadata(O,MD2),
+                    lager:info("storing ~p", [OTwo]),
+                    riakc_pb_socket:put(PB,riakc_obj:update_value(OTwo, V, "application/json"))
+            end,
+
+    [Store(<<"MRbucket">>, KV) || KV <- [
+                         {<<"foo">>, <<"2">>, <<"a">>, 4},
+                         {<<"bar">>, <<"3">>, <<"b">>, 7},
+                         {<<"baz">>, <<"4">>, <<"a">>, 4}]],
+
+    ?assertEqual({ok, [{1, [9]}]},
+                 riakc_pb_socket:mapred_bucket(PB, <<"MRbucket">>,
+                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
+                                        {reduce, {jsfun,
+                                                  <<"Riak.reduceSum">>},
+                                         undefined, true}])),
+
+    [Store({<<"mytype">>, <<"MRbucket">>}, KV) || KV <- [
+                         {<<"foo">>, <<"2">>, <<"a">>, 4},
+                         {<<"bar">>, <<"3">>, <<"b">>, 7},
+                         {<<"baz">>, <<"4">>, <<"a">>, 4},
+                         {<<"bam">>, <<"5">>, <<"a">>, 3}]],
+
+    ?assertEqual({ok, [{1, [14]}]},
+                 riakc_pb_socket:mapred_bucket(PB, {<<"mytype">>, <<"MRbucket">>},
+                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
+                                        {reduce, {jsfun,
+                                                  <<"Riak.reduceSum">>},
+                                         undefined, true}])),
+
+    ?assertEqual({ok, [{1, [3]}]},
+                 riakc_pb_socket:mapred(PB,
+                                [{<<"MRbucket">>, <<"foo">>},
+                                 {<<"MRbucket">>, <<"bar">>},
+                                 {<<"MRbucket">>, <<"baz">>}],
+                                [{map, {jsanon, <<"function (v) { return [1]; }">>},
+                                  undefined, false},
+                                 {reduce, {jsanon,
+                                           <<"function(v) {
+                                                             total = v.reduce(
+                                                               function(prev,curr,idx,array) {
+                                                                 return prev+curr;
+                                                               }, 0);
+                                                             return [total];
+                                                           }">>},
+                                  undefined, true}])),
+
+    ?assertEqual({ok, [{1, [4]}]},
+                 riakc_pb_socket:mapred(PB,
+                                [{{{<<"mytype">>, <<"MRbucket">>}, <<"foo">>},
+                                  undefined},
+                                 {{{<<"mytype">>, <<"MRbucket">>}, <<"bar">>},
+                                  undefined},
+                                 {{{<<"mytype">>, <<"MRbucket">>}, <<"baz">>},
+                                  undefined},
+                                 {{{<<"mytype">>, <<"MRbucket">>}, <<"bam">>},
+                                 undefined}],
+                                [{map, {jsanon, <<"function (v) { return [1]; }">>},
+                                  undefined, false},
+                                 {reduce, {jsanon,
+                                           <<"function(v) {
+                                                             total = v.reduce(
+                                                               function(prev,curr,idx,array) {
+                                                                 return prev+curr;
+                                                               }, 0);
+                                                             return [total];
+                                                           }">>},
+                                  undefined, true}])),
+
+    {ok, [{1, Results}]} = riakc_pb_socket:mapred(PB,
+                                          {index,<<"MRbucket">>,{integer_index,
+                                                                 "i_idx"},3,5},
+                                          [{map, {modfun, riak_kv_mapreduce,
+                                                  map_object_value},
+                                            undefined, false},
+                                           {reduce, {modfun, riak_kv_mapreduce,
+                                                     reduce_set_union},
+                                            undefined, true}]),
+    ?assertEqual([<<"2">>, <<"4">>], lists:sort(Results)),
+
+    {ok, [{1, Results1}]} = riakc_pb_socket:mapred(PB,
+                                          {index,{<<"mytype">>,
+                                                  <<"MRbucket">>},{integer_index,
+                                                                   "i_idx"},3,5},
+                                          [{map, {modfun, riak_kv_mapreduce,
+                                                  map_object_value},
+                                            undefined, false},
+                                           {reduce, {modfun, riak_kv_mapreduce,
+                                                     reduce_set_union},
+                                            undefined, true}]),
+    ?assertEqual([<<"2">>, <<"4">>, <<"5">>], lists:sort(Results1)),
+
+    {ok, [{1, Results2}]} = riakc_pb_socket:mapred(PB,
+                                          {index,<<"MRbucket">>,{binary_index,
+                                                                 "b_idx"}, <<"a">>},
+                                          [{map, {modfun, riak_kv_mapreduce,
+                                                  map_object_value},
+                                            undefined, false},
+                                           {reduce, {modfun, riak_kv_mapreduce,
+                                                     reduce_set_union},
+                                            undefined, true}]),
+    ?assertEqual([<<"2">>, <<"4">>], lists:sort(Results2)),
+
+    {ok, [{1, Results3}]} = riakc_pb_socket:mapred(PB,
+                                          {index,{<<"mytype">>,
+                                                  <<"MRbucket">>},{binary_index,
+                                                                   "b_idx"}, <<"a">>},
+                                          [{map, {modfun, riak_kv_mapreduce,
+                                                  map_object_value},
+                                            undefined, false},
+                                           {reduce, {modfun, riak_kv_mapreduce,
+                                                     reduce_set_union},
+                                            undefined, true}]),
+    ?assertEqual([<<"2">>, <<"4">>, <<"5">>], lists:sort(Results3)),
+
+    %% load this module on all the nodes
+    ok = rt:load_modules_on_nodes([?MODULE], Nodes),
+
+    %% do a modfun mapred using the function from this module
+    ?assertEqual({ok, [{1, [2]}]},
+                 riakc_pb_socket:mapred_bucket(PB, {modfun, ?MODULE,
+                                                    mapred_modfun, []},
+                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
+                                        {reduce, {jsfun,
+                                                  <<"Riak.reduceSum">>},
+                                         undefined, true}])),
+
+    %% do a modfun mapred using the function from this module
+    ?assertEqual({ok, [{1, [5]}]},
+                 riakc_pb_socket:mapred_bucket(PB, {modfun, ?MODULE,
+                                                    mapred_modfun_type, []},
+                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
+                                        {reduce, {jsfun,
+                                                  <<"Riak.reduceSum">>},
+                                         undefined, true}])),
+
+    riakc_pb_socket:stop(PB),
     ok.
 
+accumulate(ReqID) ->
+    receive
+        {ReqID, {done, _}} ->
+            ok;
+        {ReqID, Msg} ->
+            lager:info("got ~p", [Msg]),
+            accumulate(ReqID)
+    end.
+
+mapred_modfun(Pipe, Args, _Timeout) ->
+    lager:info("Args for mapred modfun are ~p", [Args]),
+    riak_pipe:queue_work(Pipe, {{<<"MRbucket">>, <<"foo">>}, {struct, []}}),
+    riak_pipe:eoi(Pipe).
+
+mapred_modfun_type(Pipe, Args, _Timeout) ->
+    lager:info("Args for mapred modfun are ~p", [Args]),
+    riak_pipe:queue_work(Pipe, {{{<<"mytype">>, <<"MRbucket">>}, <<"bam">>}, {struct, []}}),
+    riak_pipe:eoi(Pipe).
