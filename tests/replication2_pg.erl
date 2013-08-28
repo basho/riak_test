@@ -476,10 +476,10 @@ test_cluster_mapping(SSL) ->
     {Bucket, KeyC, ValueC} = make_test_object("c"),
     {Bucket, KeyD, ValueD} = make_test_object("d"),
 
-    rt:pbc_write(PidA, Bucket, KeyA, ValueA),
-    rt:pbc_write(PidA, Bucket, KeyB, ValueB),
-    rt:pbc_write(PidA, Bucket, KeyC, ValueC),
-    rt:pbc_write(PidA, Bucket, KeyD, ValueD),
+    rt:pbc_write(PidB, Bucket, KeyA, ValueA),
+    rt:pbc_write(PidB, Bucket, KeyB, ValueB),
+    rt:pbc_write(PidB, Bucket, KeyC, ValueC),
+    rt:pbc_write(PidB, Bucket, KeyD, ValueD),
     
 
     %{ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyB,CidB),
@@ -487,16 +487,21 @@ test_cluster_mapping(SSL) ->
 
     % Configure cluster_mapping on C to map cluster_id A -> C
     lager:info("Configuring cluster C to map its cluster_id to B's cluster_id"),
-    {ok, Ring} = rpc:call(LeaderC, riak_core_ring_manager, get_my_ring, []),
-    {new_ring, Ring1} = rpc:call(LeaderC, riak_repl_ring, add_cluster_mapping, [Ring, {CidC, CidB}]),
-    lager:info("add_cluster_mapping"),
+    {ok, _Ring} = rpc:call(LeaderC, riak_core_ring_manager, get_my_ring, []),
+ 
+%    {new_ring, Ring1} = rpc:call(LeaderC, riak_repl_ring, write_cluster_mapping_to_ring, 
+ %       [CidA, CidB]),
 
-    case rpc:call(LeaderC, riak_repl_ring, get_cluster_mapping, [Ring1, CidA]) of
-        {ok, Mapping} ->
-            lager:info("Cluster ~p mapped to cluster ~p", [CidA, Mapping]);
-        _ ->
-            lager:info("Cluster ~p mapped to []", [CidA])
-    end,
+    rpc:call(LeaderC, riak_repl_ring, write_cluster_mapping_to_ring, 
+        [CidA, CidB]),
+
+
+    %case rpc:call(LeaderC, riak_repl_ring, get_cluster_mapping, [Ring1, CidA]) of
+    %    {ok, Mapping} ->
+    %        lager:info("Cluster ~p mapped to cluster ~p", [CidA, Mapping]);
+    %    _ ->
+     %       lager:info("Cluster ~p mapped to []", [CidA])
+    %end,
  
     %?assertEqual(CidC, ClusterMappedToId),
     
@@ -508,8 +513,10 @@ test_cluster_mapping(SSL) ->
     % proxy-get from cluster C, using A's clusterID
     %PidC = rt:pbc(FirstC),
     %lager:info("Connected to cluster C"),
-    {ok, PGResult} = riak_repl_pb_api:get(PidA,Bucket,KeyA,CidA),
-    ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
+    {ok, PGResultC} = riak_repl_pb_api:get(PidC, Bucket, KeyC, CidA),
+    lager:info("PGResultC: ~p", [PGResultC]),
+    ?assertEqual(ValueC, riakc_obj:get_value(PGResultC)),
+
 
     pass.
 
