@@ -202,7 +202,11 @@ start_http_stream(Ref) ->
     receive
         {http, {Ref, stream_start, Headers}} ->
             Boundary = get_boundary(proplists:get_value("content-type", Headers)),
-            http_stream_loop(Ref, orddict:new(), Boundary)
+            http_stream_loop(Ref, orddict:new(), Boundary);
+        Other -> lager:error("Unexpected message ~p", [Other]),
+                 {error, unknown_message}
+    after 60000 ->
+            {error, timeout_local} 
     end.
 
 http_stream_loop(Ref, Acc, {Boundary, BLen}=B) ->
