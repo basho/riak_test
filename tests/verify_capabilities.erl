@@ -152,7 +152,7 @@ confirm() ->
     assert_capability(CNode, {riak_kv, listkeys_backpressure}, true),
     assert_capability(CNode, {riak_core, staged_joins}, true),
     assert_capability(CNode, {riak_kv, index_backpressure}, false),
-    assert_capability(CNode, {riak_pipe, trace_format}, sets),
+    assert_capability(CNode, {riak_pipe, trace_format}, ordsets),
     assert_capability(CNode, {riak_kv, mapred_2i_pipe}, true),
     assert_capability(CNode, {riak_kv, mapred_system}, pipe),
     assert_capability(CNode, {riak_kv, vnode_vclocks}, true),
