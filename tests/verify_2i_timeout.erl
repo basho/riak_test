@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
-                               stream_pb/3, url/2, http_query/3]).
+                               stream_pb/3, url/2, http_query/3, http_stream/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
 
@@ -47,14 +47,23 @@ confirm() ->
     {ok, Res} =  stream_pb(PBPid, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, proplists:get_value(keys, Res, [])),
 
-    {ok, {{_, 500, _}, _, Body}} = httpc:request(url("~s/buckets/~s/index/~s/~s~s",
+    {ok, {{_, ErrCode, _}, _, Body}} = httpc:request(url("~s/buckets/~s/index/~s/~s~s",
                                                      [Http, ?BUCKET, <<"$bucket">>, ?BUCKET, []])),
-    ?assertMatch({match, _}, re:run(Body, "{error,timeout}")), %% shows the app.config timeout
+
+    ?assertEqual(true, ErrCode >= 500),
+    ?assertMatch({match, _}, re:run(Body, "request timed out|{error,timeout}")), %% shows the app.config timeout
 
     HttpRes = http_query(Http, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, proplists:get_value(<<"keys">>, HttpRes, [])),
 
+    stream_http(Http, Query, ExpectedKeys),
+
     riakc_pb_socket:stop(PBPid),
     pass.
 
+stream_http(Http, Query, ExpectedKeys) ->
+     Res = http_stream(Http, Query, []),
+     ?assert(lists:member({<<"error">>,<<"timeout">>}, Res)),
+     Res2 = http_stream(Http, Query, [{timeout, 5000}]),
+     ?assertEqual(ExpectedKeys, proplists:get_value(<<"keys">>, Res2, [])).
 

@@ -142,7 +142,7 @@ pb_query(Pid, {Field, Start, End}, Opts) ->
     riakc_pb_socket:get_index_range(Pid, ?BUCKET, Field, Start, End, Opts).
 
 http_stream(NodePath, Query, Opts) ->
-    http_query(NodePath, Query, Opts, stream).
+    http_query(NodePath, Query, [{stream, true} | Opts], stream).
 
 http_query(NodePath, Q) ->
     http_query(NodePath, Q, []).
@@ -173,7 +173,7 @@ http_get(Url, undefined) ->
 http_get(Url, stream) ->
     lager:info("streaming ~p", [Url]),
     {ok, Ref} = httpc:request(get, {Url, []}, [], [{stream, self}, {sync, false}]),
-    http_stream_loop(Ref, []).
+    start_http_stream(Ref).
 
 opts_to_qstring([], QString) ->
     QString;
@@ -193,15 +193,57 @@ opt_to_string(Sep, Name) ->
 
 url_encode(Val) when is_binary(Val) ->
     url_encode(binary_to_list(Val));
+url_encode(Val) when is_atom(Val) ->
+    url_encode(atom_to_list(Val));
 url_encode(Val) ->
     ibrowse_lib:url_encode(Val).
 
-http_stream_loop(Ref, Acc) ->
-    receive {http, {Ref, stream_end, _Headers}} ->
-                {struct, Result} = mochijson2:decode(lists:flatten(lists:reverse(Acc))),
-                Result;
-            {http, {Ref, stream_start, _Headers}} ->
-                http_stream_loop(Ref, Acc);
-            {http, {Ref, stream, Body}} ->
-                http_stream_loop(Ref, [binary_to_list(Body) | Acc])
+start_http_stream(Ref) ->
+    receive
+        {http, {Ref, stream_start, Headers}} ->
+            Boundary = get_boundary(proplists:get_value("content-type", Headers)),
+            http_stream_loop(Ref, orddict:new(), Boundary);
+        Other -> lager:error("Unexpected message ~p", [Other]),
+                 {error, unknown_message}
+    after 60000 ->
+            {error, timeout_local} 
     end.
+
+http_stream_loop(Ref, Acc, {Boundary, BLen}=B) ->
+    receive
+        {http, {Ref, stream_end, _Headers}} ->
+            orddict:to_list(Acc);
+        {http, {Ref, stream, <<"\r\n--", Boundary:BLen/bytes, "\r\nContent-Type: application/json\r\n\r\n", Body/binary>>}} ->
+            ReverseBoundary = reverse_bin(<<"\r\n--", Boundary:BLen/binary, "--\r\n">>),
+            Message = get_message(ReverseBoundary, reverse_bin(Body)),
+            {struct, Result} = mochijson2:decode(Message),
+            Acc2 = lists:foldl(fun({K, V}, A) -> orddict:update(K, fun(Existing) -> Existing++V end, V, A) end,
+                               Acc,
+                               Result),
+            http_stream_loop(Ref, Acc2, B);
+        {http, {Ref, stream, <<"\r\n--", Boundary:BLen/bytes, "--\r\n">>}} ->
+            http_stream_loop(Ref, Acc, B);
+        Other -> lager:error("Unexpected message ~p", [Other]),
+                 {error, unknown_message}
+    after 60000 ->
+            {error, timeout_local}
+    end.
+
+get_boundary("multipart/mixed;boundary=" ++ Boundary) ->
+    B = list_to_binary(Boundary),
+    {B, byte_size(B)};
+get_boundary(_) ->
+    undefined.
+
+reverse_bin(Bin) ->
+    list_to_binary(lists:reverse(binary_to_list(Bin))).
+
+get_message(Boundary, Body) ->
+    BLen = byte_size(Boundary),
+    case Body of
+        <<Boundary:BLen/binary, Message/binary>> ->
+            reverse_bin(Message);
+        _ -> reverse_bin(Body)
+    end.
+
+
