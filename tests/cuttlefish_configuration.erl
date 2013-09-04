@@ -6,7 +6,19 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    [Node] = rt:deploy_nodes(1, {cuttlefish, [{"ring_size", "8"}]}),
+
+    CuttlefishConf = [
+        {"ring_size", "8"},
+        {"leveldb.sync", true}
+    ],
+
+    [Node] = rt:deploy_nodes(1, {cuttlefish, CuttlefishConf}),
     {ok, RingSize} = rt:rpc_get_env(Node, [{riak_core, ring_creation_size}]),  
     ?assertEqual(8, RingSize),
+
+    %% test leveldb sync typo
+    {ok, LevelDBSync} = rt:rpc_get_env(Node, [{eleveldb, sync}]),  
+    ?assertEqual(true, LevelDBSync),
+
+
     pass.
