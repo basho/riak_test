@@ -249,10 +249,10 @@ get_backend(AppConfig) ->
             Path = filename:join(lists:reverse(RPath)),
             %% Why chkconfig? It generates an app.config from cuttlefish
             %% without starting riak.
-            Output = lists:reverse(string:tokens(
+            Output = hd(lists:reverse(string:tokens(
                 run_riak(list_to_integer(N), Path, "chkconfig"),
                 "\n"
-            )),
+            ))),
 
             Files = lists:filter(
                 fun(PotentialFileName) ->
@@ -262,7 +262,7 @@ get_backend(AppConfig) ->
                             false
                     end  
                 end, 
-                Output),             
+                string:tokens(Output, "\s")),             
 
             hd(Files)
     end,
