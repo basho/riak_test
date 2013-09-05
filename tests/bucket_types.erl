@@ -10,10 +10,15 @@ confirm() ->
     lager:info("Deploy some nodes"),
     Nodes = rt:build_cluster(4, [], [
                                      {riak_core, [{default_bucket_props,
-                                                   [{n_val, 2}]}]},
-                                     {riak_kv, [{storage_backend,
-                                                 riak_kv_memory_backend}]}]),
+                                                   [{n_val, 2}]}]}]),
     Node = hd(Nodes),
+
+    RMD = riak_test_runner:metadata(),
+    HaveIndexes = case proplists:get_value(backend, RMD) of
+                      undefined -> false; %% default is da 'cask
+                      bitcask -> false;
+                      _ -> true
+                  end,
 
     {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
                                            [riak_api, pb]),
@@ -195,53 +200,58 @@ confirm() ->
     ?assertEqual(3, proplists:get_value(n_val, BProps11)),
 
     %% 2i tests
+    
+    case HaveIndexes of
+        false -> ok;
+        true ->
+            Obj01 = riakc_obj:new(<<"test">>, <<"JRD">>, <<"John Robert Doe, 25">>),
+            Obj02 = riakc_obj:new({<<"mytype">>, <<"test">>}, <<"JRD">>, <<"Jane Rachel Doe, 21">>),
 
-    Obj01 = riakc_obj:new(<<"test">>, <<"JRD">>, <<"John Robert Doe, 25">>),
-    Obj02 = riakc_obj:new({<<"mytype">>, <<"test">>}, <<"JRD">>, <<"Jane Rachel Doe, 21">>),
+            Obj1 = riakc_obj:update_metadata(Obj01,
+                                             riakc_obj:set_secondary_index(
+                                               riakc_obj:get_update_metadata(Obj01),
+                                               [{{integer_index, "age"},
+                                                 [25]},{{binary_index, "name"},
+                                                        [<<"John">>, <<"Robert">>
+                                                         ,<<"Doe">>]}])),
 
-    Obj1 = riakc_obj:update_metadata(Obj01,
-                                    riakc_obj:set_secondary_index(
-                                      riakc_obj:get_update_metadata(Obj01),
-                                      [{{integer_index, "age"},
-                                        [25]},{{binary_index, "name"},
-                                               [<<"John">>, <<"Robert">>
-                                                ,<<"Doe">>]}])),
+            Obj2 = riakc_obj:update_metadata(Obj02,
+                                             riakc_obj:set_secondary_index(
+                                               riakc_obj:get_update_metadata(Obj02),
+                                               [{{integer_index, "age"},
+                                                 [21]},{{binary_index, "name"},
+                                                        [<<"Jane">>, <<"Rachel">>
+                                                         ,<<"Doe">>]}])),
 
-    Obj2 = riakc_obj:update_metadata(Obj02,
-                                    riakc_obj:set_secondary_index(
-                                      riakc_obj:get_update_metadata(Obj02),
-                                      [{{integer_index, "age"},
-                                        [21]},{{binary_index, "name"},
-                                               [<<"Jane">>, <<"Rachel">>
-                                                ,<<"Doe">>]}])),
+            riakc_pb_socket:put(PB, Obj1),
+            riakc_pb_socket:put(PB, Obj2),
 
-    riakc_pb_socket:put(PB, Obj1),
-    riakc_pb_socket:put(PB, Obj2),
+            ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, riakc_pb_socket:get_index(PB, <<"test">>,
+                                                                                                {binary_index,
+                                                                                                 "name"},
+                                                                                                <<"John">>)),
 
-    ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, riakc_pb_socket:get_index(PB, <<"test">>,
-                                                            {binary_index,
-                                                             "name"},
-                                                            <<"John">>)),
+            ?assertMatch({ok, {index_results_v1, [], _, _}}, riakc_pb_socket:get_index(PB, <<"test">>,
+                                                                                       {binary_index,
+                                                                                        "name"},
+                                                                                       <<"Jane">>)),
 
-    ?assertMatch({ok, {index_results_v1, [], _, _}}, riakc_pb_socket:get_index(PB, <<"test">>,
-                                                            {binary_index,
-                                                             "name"},
-                                                            <<"Jane">>)),
+            ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, riakc_pb_socket:get_index(PB,
+                                                                                                {<<"mytype">>,
+                                                                                                 <<"test">>},
+                                                                                                {binary_index,
+                                                                                                 "name"},
+                                                                                                <<"Jane">>)),
 
-    ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, riakc_pb_socket:get_index(PB,
-                                                            {<<"mytype">>,
-                                                             <<"test">>},
-                                                            {binary_index,
-                                                             "name"},
-                                                            <<"Jane">>)),
+            %% wild stab at the undocumented cs_bucket_fold
+            {ok, ReqID} = riakc_pb_socket:cs_bucket_fold(PB, <<"test">>, []),
+            accumulate(ReqID),
 
-    %% wild stab at the undocumented cs_bucket_fold
-    {ok, ReqID} = riakc_pb_socket:cs_bucket_fold(PB, <<"test">>, []),
-    accumulate(ReqID),
-
-    {ok, ReqID2} = riakc_pb_socket:cs_bucket_fold(PB, {<<"mytype">>,
-                                                       <<"test">>}, []),
-    accumulate(ReqID2),
+            {ok, ReqID2} = riakc_pb_socket:cs_bucket_fold(PB, {<<"mytype">>,
+                                                               <<"test">>}, []),
+            accumulate(ReqID2),
+            ok
+    end,
 
 
     Store = fun(Bucket, {K,V, BI, II}) ->
@@ -320,51 +330,56 @@ confirm() ->
                                                            }">>},
                                   undefined, true}])),
 
-    {ok, [{1, Results}]} = riakc_pb_socket:mapred(PB,
-                                          {index,<<"MRbucket">>,{integer_index,
-                                                                 "i_idx"},3,5},
-                                          [{map, {modfun, riak_kv_mapreduce,
-                                                  map_object_value},
-                                            undefined, false},
-                                           {reduce, {modfun, riak_kv_mapreduce,
-                                                     reduce_set_union},
-                                            undefined, true}]),
-    ?assertEqual([<<"2">>, <<"4">>], lists:sort(Results)),
+    case HaveIndexes of
+        false -> ok;
+        true ->
+            {ok, [{1, Results}]} = riakc_pb_socket:mapred(PB,
+                                                {index,<<"MRbucket">>,{integer_index,
+                                                                        "i_idx"},3,5},
+                                                [{map, {modfun, riak_kv_mapreduce,
+                                                        map_object_value},
+                                                    undefined, false},
+                                                {reduce, {modfun, riak_kv_mapreduce,
+                                                            reduce_set_union},
+                                                    undefined, true}]),
+            ?assertEqual([<<"2">>, <<"4">>], lists:sort(Results)),
 
-    {ok, [{1, Results1}]} = riakc_pb_socket:mapred(PB,
-                                          {index,{<<"mytype">>,
-                                                  <<"MRbucket">>},{integer_index,
-                                                                   "i_idx"},3,5},
-                                          [{map, {modfun, riak_kv_mapreduce,
-                                                  map_object_value},
-                                            undefined, false},
-                                           {reduce, {modfun, riak_kv_mapreduce,
-                                                     reduce_set_union},
-                                            undefined, true}]),
-    ?assertEqual([<<"2">>, <<"4">>, <<"5">>], lists:sort(Results1)),
+            {ok, [{1, Results1}]} = riakc_pb_socket:mapred(PB,
+                                                {index,{<<"mytype">>,
+                                                        <<"MRbucket">>},{integer_index,
+                                                                        "i_idx"},3,5},
+                                                [{map, {modfun, riak_kv_mapreduce,
+                                                        map_object_value},
+                                                    undefined, false},
+                                                {reduce, {modfun, riak_kv_mapreduce,
+                                                            reduce_set_union},
+                                                    undefined, true}]),
+            ?assertEqual([<<"2">>, <<"4">>, <<"5">>], lists:sort(Results1)),
 
-    {ok, [{1, Results2}]} = riakc_pb_socket:mapred(PB,
-                                          {index,<<"MRbucket">>,{binary_index,
-                                                                 "b_idx"}, <<"a">>},
-                                          [{map, {modfun, riak_kv_mapreduce,
-                                                  map_object_value},
-                                            undefined, false},
-                                           {reduce, {modfun, riak_kv_mapreduce,
-                                                     reduce_set_union},
-                                            undefined, true}]),
-    ?assertEqual([<<"2">>, <<"4">>], lists:sort(Results2)),
+            {ok, [{1, Results2}]} = riakc_pb_socket:mapred(PB,
+                                                {index,<<"MRbucket">>,{binary_index,
+                                                                        "b_idx"}, <<"a">>},
+                                                [{map, {modfun, riak_kv_mapreduce,
+                                                        map_object_value},
+                                                    undefined, false},
+                                                {reduce, {modfun, riak_kv_mapreduce,
+                                                            reduce_set_union},
+                                                    undefined, true}]),
+            ?assertEqual([<<"2">>, <<"4">>], lists:sort(Results2)),
 
-    {ok, [{1, Results3}]} = riakc_pb_socket:mapred(PB,
-                                          {index,{<<"mytype">>,
-                                                  <<"MRbucket">>},{binary_index,
-                                                                   "b_idx"}, <<"a">>},
-                                          [{map, {modfun, riak_kv_mapreduce,
-                                                  map_object_value},
-                                            undefined, false},
-                                           {reduce, {modfun, riak_kv_mapreduce,
-                                                     reduce_set_union},
-                                            undefined, true}]),
-    ?assertEqual([<<"2">>, <<"4">>, <<"5">>], lists:sort(Results3)),
+            {ok, [{1, Results3}]} = riakc_pb_socket:mapred(PB,
+                                                {index,{<<"mytype">>,
+                                                        <<"MRbucket">>},{binary_index,
+                                                                        "b_idx"}, <<"a">>},
+                                                [{map, {modfun, riak_kv_mapreduce,
+                                                        map_object_value},
+                                                    undefined, false},
+                                                {reduce, {modfun, riak_kv_mapreduce,
+                                                            reduce_set_union},
+                                                    undefined, true}]),
+            ?assertEqual([<<"2">>, <<"4">>, <<"5">>], lists:sort(Results3)),
+            ok
+    end,
 
     %% load this module on all the nodes
     ok = rt:load_modules_on_nodes([?MODULE], Nodes),
