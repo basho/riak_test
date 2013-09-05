@@ -113,6 +113,9 @@ relpath(_, _) ->
     throw("Version requested but only one path provided").
 
 upgrade(Node, NewVersion) ->
+    upgrade(Node, NewVersion, same).
+
+upgrade(Node, NewVersion, Config) ->
     N = node_id(Node),
     Version = node_version(N),
     lager:info("Upgrading ~p : ~p -> ~p", [Node, Version, NewVersion]),
@@ -135,6 +138,10 @@ upgrade(Node, NewVersion) ->
     end || Cmd <- Commands],
     VersionMap = orddict:store(N, NewVersion, rt_config:get(rt_versions)),
     rt_config:set(rt_versions, VersionMap),
+    case Config of
+	same -> ok;
+	_ -> update_app_config(Node, Config)
+    end,
     start(Node),
     rt:wait_until_pingable(Node),
     ok.
