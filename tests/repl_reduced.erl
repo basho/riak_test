@@ -28,10 +28,10 @@ toggle_enabled_test_() ->
         {"check default setting", fun() ->
             [Head | _] = Nodes,
             Got = rpc:call(Head, riak_repl_console, full_objects, [[]]),
-            ?assertEqual(never, Got)
+            ?assertEqual(always, Got)
         end},
 
-        {"set to always reduce", fun() ->
+        {"set to always have full objects", fun() ->
             [Head | _] = Nodes,
             Got = rpc:call(Head, riak_repl_console, full_objects, [["always"]]),
             ?assertEqual(always, Got),
@@ -39,7 +39,7 @@ toggle_enabled_test_() ->
             ?assertEqual(always, Got2)
         end},
 
-        {"set to never reduce", fun() ->
+        {"set to never have full objects", fun() ->
             [Head | _] = Nodes,
             Got = rpc:call(Head, riak_repl_console, full_objects, [["never"]]),
             ?assertEqual(never, Got),
@@ -81,7 +81,46 @@ data_push_test_() ->
     end,
     fun(State) -> [
 
-        {"common case: 1 real with 2 reduced", fun() ->
+        {"repl works", fun() ->
+            #data_push_test{c123 = [N1 | _]} = State,
+            Client123 = rt:pbc(N1),
+            Bin = <<"data data data">>,
+            Key = <<"derkey">>,
+            Bucket = <<"kicked">>,
+            Obj = riakc_obj:new(Bucket, Key, Bin),
+            riakc_pb_socket:put(Client123, Obj, [{w,3}]),
+            riakc_pb_socket:stop(Client123),
+            Got = [maybe_eventually_exists(Node, Bucket, Key) || Node <- State#data_push_test.c456],
+            ?assertMatch([{ok, _Obj}, {ok, _Obj}, {ok, _Obj}], Got)
+        end},
+
+        {"repl reduced has valid meta data", fun() ->
+            #data_push_test{c123 = [N1 | _]} = State,
+            Client123 = rt:pbc(N1),
+            Bin = <<"reduced has valid meta data">>,
+            Key = <<"rrhvmd">>,
+            Bucket = <<"bucket">>,
+            Obj = riakc_obj:new(Bucket, Key, Bin),
+            riakc_pb_socket:put(Client123, Obj, [{w,3}]),
+            riakc_pb_socket:stop(Client123),
+            [maybe_eventually_exists(Node, Bucket, Key) || Node <- State#data_push_test.c123],
+            lists:map(fun(Node) ->
+                ?debugFmt("Test for node ~p", [Node]),
+                Client = rt:pbc(Node),
+                case riakc_pb_socket:get(Client, Bucket, Key, [{pr,1}]) of
+                    {error, Wut} ->
+                        ?assert(Wut);
+                    {ok, RObj} ->
+                        ?debugFmt("Got an object:~n"
+                            "    Node: ~p~n"
+                            "    Object: ~p", [Node, RObj]),
+                        Meta = riakc_obj:get_metadata(RObj),
+                        ?assertEqual({ok, "c123"}, dict:find(cluster_of_record, Meta))
+                end
+            end, State#data_push_test.c123)
+        end},
+
+        {"common case: 1 real with 2 reduced", timeout, rt_cascading:timeout(1000), fun() ->
             #data_push_test{c123 = [N1 | _], c456 = [N4 | _]} = State,
             lager:info("setting full objects to 1"),
             rpc:call(N4, riak_repl_console, full_objects, [["1"]]),
@@ -105,10 +144,17 @@ data_push_test_() ->
             riakc_pb_socket:stop(Client123),
             lager:info("Checking object on sink cluster"),
             Got = lists:map(fun(Node) ->
-                lager:info("maybe eventuall exists on ~p", [Node]),
-                rt_cascading:maybe_eventually_exists(Node, Bucket, Key)
+                lager:info("maybe eventualliy exists on ~p", [Node]),
+                maybe_eventually_exists(Node, Bucket, Key)
             end, State#data_push_test.c456),
-            ?assertEqual([Bin, Bin, Bin], Got)
+            ?assertMatch([{ok, _}, {ok, _}, {ok, _}], Got),
+            lists:map(fun({ok, GotObj}) ->
+                Value = riakc_obj:get_value(GotObj),
+                Meta = riakc_obj:get_metadata(GotObj),
+                ?assertEqual(Bin, Value),
+                ClusterOfRecord = dict:find(cluster_of_record, Meta),
+                ?assertEqual({ok, "c123"}, ClusterOfRecord)
+            end, Got)
         end}
 
     ] end}}.
@@ -135,3 +181,50 @@ conf() ->
         {fullsync_interval, disabled},
         {diff_batch_size, 10}
     ]}].
+
+exists(Nodes, Bucket, Key) ->
+    exists({error, notfound}, Nodes, Bucket, Key).
+
+exists(Got, [], _Bucket, _Key) ->
+    Got;
+exists({error, notfound}, [Node | Tail], Bucket, Key) ->
+    Pid = rt:pbc(Node),
+    Got = riakc_pb_socket:get(Pid, Bucket, Key, [{pr, 1}]),
+    riakc_pb_socket:stop(Pid),
+    exists(Got, Tail, Bucket, Key);
+exists(Got, _Nodes, _Bucket, _Key) ->
+    Got.
+
+maybe_eventually_exists(Node, Bucket, Key) ->
+    Timeout = rt_cascading:timeout(10),
+    WaitTime = rt_config:get(default_wait_time, 1000),
+    maybe_eventually_exists(Node, Bucket, Key, Timeout, WaitTime).
+
+%maybe_eventually_exists(Node, Bucket, Key, Timeout) ->
+%    WaitTime = rt_config:get(default_wait_time, 1000),
+%    maybe_eventually_exists(Node, Bucket, Key, Timeout, WaitTime).
+
+maybe_eventually_exists(Node, Bucket, Key, Timeout, WaitMs) when is_atom(Node) ->
+    maybe_eventually_exists([Node], Bucket, Key, Timeout, WaitMs);
+
+maybe_eventually_exists(Nodes, Bucket, Key, Timeout, WaitMs) ->
+    Got = exists(Nodes, Bucket, Key),
+    maybe_eventually_exists(Got, Nodes, Bucket, Key, Timeout, WaitMs).
+
+maybe_eventually_exists({error, notfound}, Nodes, Bucket, Key, Timeout, WaitMs) when Timeout > 0 ->
+    ?debugMsg("not found, waiting again"),
+    timer:sleep(WaitMs),
+    Got = exists(Nodes, Bucket, Key),
+    Timeout2 = case Timeout of
+        infinity ->
+            infinity;
+        _ ->
+            Timeout - WaitMs
+    end,
+    maybe_eventually_exists(Got, Nodes, Bucket, Key, Timeout2, WaitMs);
+
+maybe_eventually_exists({ok, _RiakObj} = Out, _Nodes, _Bucket, _Key, _Timeout, _WaitMs) ->
+    Out;
+
+maybe_eventually_exists(Got, _Nodes, _Bucket, _Key, _Timeout, _WaitMs) ->
+    Got.
