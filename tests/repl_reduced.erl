@@ -129,6 +129,32 @@ data_push_test_() ->
                 Value = riakc_obj:get_value(GotObj),
                 ?assertEqual(Bin, Value)
             end, Got)
+        end},
+
+        {"only carry reduced objects", timeout, rt_cascading:timeout(1000), fun() ->
+            #data_push_test{c123 = [N1 | _], c456 = [N4 | _]} = State,
+            lager:info("setting full objects to never"),
+            rpc:call(N4, riak_repl_console, full_objects, [["never"]]),
+            WaitFun = fun(Node) ->
+                Got = rpc:call(Node, riak_repl_console, full_objects, [[]]),
+                Got =:= never
+            end,
+            [rt:wait_until(Node, WaitFun) || Node <- State#data_push_test.c456],
+            Client123 = rt:pbc(N1),
+            Bin = <<"only carry reduced objects">>,
+            Key = <<"ocro">>,
+            Bucket = <<"objects">>,
+            Obj = riakc_obj:new(Bucket, Key, Bin),
+            riakc_pb_socket:put(Client123, Obj, [{w,3}]),
+            riakc_pb_socket:stop(Client123),
+            Got = lists:map(fun(Node) ->
+                maybe_eventually_exists(Node, Bucket, Key)
+            end, State#data_push_test.c456),
+            ?assertMatch([{ok, _}, {ok, _}, {ok, _}], Got),
+            lists:map(fun({ok, GotObj}) ->
+                Value = riakc_obj:get_value(GotObj),
+                ?assertEqual(Bin, Value)
+            end, Got)
         end}
 
     ] end}}.
