@@ -123,14 +123,32 @@ main(Args) ->
     end,
 
     CommandLineTests = parse_command_line_tests(ParsedArgs),
-    Tests = which_tests_to_run(Report, CommandLineTests),
+    Tests0 = which_tests_to_run(Report, CommandLineTests),
 
-    case Tests of
+    case Tests0 of
         [] ->
             lager:warning("No tests are scheduled to run"),
             init:stop(1);
         _ -> keep_on_keepin_on
     end,
+
+    Tests = case {rt_config:get(offset, undefined), rt_config:get(workers, undefined)} of
+                {undefined, undefined} ->
+                    Tests0;
+                {undefined, _} ->
+                    Tests0;
+                {_, undefined} ->
+                    Tests0;
+                {Offset, Workers} ->
+                    TestCount = length(Tests0),
+                    ActualOffset = ((TestCount div (Workers rem TestCount+1))
+                                    * Offset) rem TestCount+1,
+                    {TestA, TestB} = lists:split(ActualOffset, Tests0),
+                    lager:info("Offsetting ~b tests by ~b (~b workers, ~b"
+                               " offset)", [TestCount, ActualOffset, Workers,
+                                            Offset]),
+                    TestB ++ TestA
+            end,
 
     io:format("Tests to run: ~p~n", [Tests]),
     %% Two hard-coded deps...
