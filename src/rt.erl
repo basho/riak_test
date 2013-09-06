@@ -768,9 +768,16 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
-    [staged_join(Node, Node1) || Node <- OtherNodes],
-
-    plan_and_commit(Node1),
+    case OtherNodes of
+        [] ->
+            %% no other nodes, nothing to join/plan/commit
+            ok;
+        _ ->
+            %% ok do a staged join and then commit it, this eliminates the
+            %% large amount of redundant handoff done in a sequential join
+            [staged_join(Node, Node1) || Node <- OtherNodes],
+            plan_and_commit(Node1)
+    end,
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
 
