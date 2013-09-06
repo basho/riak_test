@@ -94,32 +94,6 @@ data_push_test_() ->
             ?assertMatch([{ok, _Obj}, {ok, _Obj}, {ok, _Obj}], Got)
         end},
 
-        {"repl reduced has valid meta data", fun() ->
-            #data_push_test{c123 = [N1 | _]} = State,
-            Client123 = rt:pbc(N1),
-            Bin = <<"reduced has valid meta data">>,
-            Key = <<"rrhvmd">>,
-            Bucket = <<"bucket">>,
-            Obj = riakc_obj:new(Bucket, Key, Bin),
-            riakc_pb_socket:put(Client123, Obj, [{w,3}]),
-            riakc_pb_socket:stop(Client123),
-            [maybe_eventually_exists(Node, Bucket, Key) || Node <- State#data_push_test.c123],
-            lists:map(fun(Node) ->
-                ?debugFmt("Test for node ~p", [Node]),
-                Client = rt:pbc(Node),
-                case riakc_pb_socket:get(Client, Bucket, Key, [{pr,1}]) of
-                    {error, Wut} ->
-                        ?assert(Wut);
-                    {ok, RObj} ->
-                        ?debugFmt("Got an object:~n"
-                            "    Node: ~p~n"
-                            "    Object: ~p", [Node, RObj]),
-                        Meta = riakc_obj:get_metadata(RObj),
-                        ?assertEqual({ok, "c123"}, dict:find(cluster_of_record, Meta))
-                end
-            end, State#data_push_test.c123)
-        end},
-
         {"common case: 1 real with 2 reduced", timeout, rt_cascading:timeout(1000), fun() ->
             #data_push_test{c123 = [N1 | _], c456 = [N4 | _]} = State,
             lager:info("setting full objects to 1"),
