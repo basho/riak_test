@@ -40,8 +40,8 @@ confirm() ->
     ?assertEqual(riakc_obj:get_value(O1), riakc_obj:get_value(O2)),
     ?assertEqual(riakc_obj:only_bucket(O1), riakc_obj:only_bucket(O2)),
     ?assertEqual(riakc_obj:vclock(O1), riakc_obj:vclock(O2)),
-    ?assertEqual(undefined, riakc_obj:type(O1)),
-    ?assertEqual(<<"default">>, riakc_obj:type(O2)),
+    ?assertEqual(undefined, riakc_obj:bucket_type(O1)),
+    ?assertEqual(<<"default">>, riakc_obj:bucket_type(O2)),
 
     %% write implicitly to the default bucket
     riakc_pb_socket:put(PB, riakc_obj:new(<<"bucket">>,
