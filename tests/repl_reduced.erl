@@ -1,6 +1,9 @@
 -module(repl_reduced).
 
 -behavior(riak_test).
+
+-compile([export_all]).
+
 -export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -81,7 +84,7 @@ data_push_test_() ->
     end,
     fun(State) -> [
 
-        {"repl works", fun() ->
+        {"repl works", timeout, rt_cascading:timeout(1000), fun() ->
             #data_push_test{c123 = [N1 | _]} = State,
             Client123 = rt:pbc(N1),
             Bin = <<"data data data">>,
@@ -124,10 +127,7 @@ data_push_test_() ->
             ?assertMatch([{ok, _}, {ok, _}, {ok, _}], Got),
             lists:map(fun({ok, GotObj}) ->
                 Value = riakc_obj:get_value(GotObj),
-                Meta = riakc_obj:get_metadata(GotObj),
-                ?assertEqual(Bin, Value),
-                ClusterOfRecord = dict:find(cluster_of_record, Meta),
-                ?assertEqual({ok, "c123"}, ClusterOfRecord)
+                ?assertEqual(Bin, Value)
             end, Got)
         end}
 
