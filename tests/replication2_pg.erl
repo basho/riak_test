@@ -445,7 +445,8 @@ test_cluster_mapping(SSL) ->
     LeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
     LeaderC = rpc:call(FirstC, riak_core_cluster_mgr, get_leader, []),
     
-
+    % Cluser C-> connection must be set up for the proxy gets to work
+    % with the cluster ID mapping
     {ok, {_IP, CPort}} = rpc:call(FirstC, application, get_env,
                                   [riak_core, cluster_mgr]),
     repl_util:connect_cluster(LeaderB, "127.0.0.1", CPort),
@@ -499,9 +500,10 @@ test_cluster_mapping(SSL) ->
     ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
 
     % Configure cluster_mapping on C to map cluster_id A -> C
-    lager:info("Configuring cluster C to map its cluster_id to B's cluster_id"), 
-    rpc:call(LeaderC, riak_repl_ring, write_cluster_mapping_to_ring, 
-        [CidA, CidB]),
+    lager:info("Configuring cluster C to map its cluster_id to B's cluster_id"),
+    rpc:call(LeaderC, riak_core_metadata, put, [{<<"replication">>, <<"cluster-mapping">>}, CidA, CidB]),
+    Res = rpc:call(LeaderC, riak_core_metadata, get, [{<<"replication">>, <<"cluster-mapping">>}, CidA]),
+    lager:info("result: ~p", [Res]),
 
     % full sync from CS Block Provider A to CS Block Provider B
     repl_util:enable_fullsync(LeaderA, "B"),
@@ -524,7 +526,6 @@ test_cluster_mapping(SSL) ->
     {ok, PGResultC} = riak_repl_pb_api:get(PidC, Bucket, KeyC, CidA),
     lager:info("PGResultC: ~p", [PGResultC]),
     ?assertEqual(ValueC, riakc_obj:get_value(PGResultC)),
-
 
     pass.
 
