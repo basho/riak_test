@@ -131,10 +131,34 @@ data_push_test_() ->
             end, Got)
         end},
 
-        {"only carry reduced objects", timeout, rt_cascading:timeout(1000), fun() ->
+        {"only carry reduced objects, no proxy provider though", timeout, rt_cascading:timeout(1000), fun() ->
             #data_push_test{c123 = [N1 | _], c456 = [N4 | _]} = State,
             lager:info("setting full objects to never"),
             rpc:call(N4, riak_repl_console, full_objects, [["never"]]),
+            WaitFun = fun(Node) ->
+                Got = rpc:call(Node, riak_repl_console, full_objects, [[]]),
+                Got =:= never
+            end,
+            [rt:wait_until(Node, WaitFun) || Node <- State#data_push_test.c456],
+            Client123 = rt:pbc(N1),
+            Bin = <<"only carry reduced objects">>,
+            Key = <<"ocro">>,
+            Bucket = <<"objects">>,
+            Obj = riakc_obj:new(Bucket, Key, Bin),
+            riakc_pb_socket:put(Client123, Obj, [{w,3}]),
+            riakc_pb_socket:stop(Client123),
+            Got = lists:map(fun(Node) ->
+                maybe_eventually_exists(Node, Bucket, Key)
+            end, State#data_push_test.c456),
+            ?assertMatch([{error, notfound}, {error, notfound}, {error, notfound}], Got)
+        end},
+
+        {"only carry reduced objects, has a proxy provider", timeout, rt_cascading:timeout(1000), fun() ->
+            #data_push_test{c123 = [N1 | _], c456 = [N4 | _]} = State,
+            lager:info("setting full objects to never"),
+            rpc:call(N4, riak_repl_console, full_objects, [["never"]]),
+            lager:info("setting proxy provider at c123 for c456"),
+            rpc:call(N1, riak_repl_console, proxy_get, [["enable", "c456"]]),
             WaitFun = fun(Node) ->
                 Got = rpc:call(Node, riak_repl_console, full_objects, [[]]),
                 Got =:= never
@@ -156,6 +180,8 @@ data_push_test_() ->
                 ?assertEqual(Bin, Value)
             end, Got)
         end}
+
+
 
     ] end}}.
 
