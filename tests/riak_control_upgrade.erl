@@ -7,6 +7,7 @@
          {riak_api, [{https, [{"127.0.0.1", 8069}]}]},
          {riak_core,
           [
+           {https, [{"127.0.0.1", 8069}]},
            {ssl,
             [{certfile, "./etc/cert.pem"},
              {keyfile, "./etc/key.pem"}
