@@ -83,6 +83,11 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
 
     lager:info("Populating root node."),
     rt:systest_write(RootNode, NTestItems),
+    %% write one object with a bucket type
+    ok = rpc:call(RootNode, riak_core_bucket_type, create, [<<"type">>, []]),
+    %% allow cluster metadata some time to propogate
+    timer:sleep(1000),
+    rt:systest_write(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
 
     %% Test handoff on each node:
     lager:info("Testing handoff for cluster."),
@@ -112,6 +117,8 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     lager:info("Validating data after handoff:"),
     Results = rt:systest_read(NewNode, NTestItems), 
     ?assertEqual(0, length(Results)), 
+    Results2 = rt:systest_read(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
+    ?assertEqual(0, length(Results2)),
     lager:info("Data looks ok.").  
 
 assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName) ->
