@@ -54,23 +54,23 @@ confirm() ->
 
     lager:info("Verifying link walk queries"),
 
-    verify_query(Config, "a", "1", "_,next,1", 
+    verify_query(Config, "a", "1", "_,next,1",
                  ["v2"]),
     verify_query(Config, "a", "1", "_,_,1",
                  ["v2"]),
-    verify_query(Config, "a", "1", "b,next,1", 
+    verify_query(Config, "a", "1", "b,next,1",
                  []),
-    verify_query(Config, "a", "1", "a,next,1", 
+    verify_query(Config, "a", "1", "a,next,1",
                  ["v2"]),
-    verify_query(Config, "a", "1", "_,next,1/_,next,1", 
+    verify_query(Config, "a", "1", "_,next,1/_,next,1",
                  ["v2", "v3"]),
-    verify_query(Config, "a", "1", "_,next,1/b,next,1/_,next,1/_,next,1/_,next,1", 
+    verify_query(Config, "a", "1", "_,next,1/b,next,1/_,next,1/_,next,1/_,next,1",
                  ["v2"]),
-    verify_query(Config, "a", "1", "_,next,1/_,next,1/_,next,1/_,next,1/_,next,1", 
+    verify_query(Config, "a", "1", "_,next,1/_,next,1/_,next,1/_,next,1/_,next,1",
                  ["v1", "v2", "v3", "v4", "v4b", "v5", "v5b"]),
-    verify_query(Config, "a", "1", "_,next,0/_,next,1/a,next,0/a,next,1", 
+    verify_query(Config, "a", "1", "_,next,0/_,next,1/a,next,0/a,next,1",
                  ["v3", "v5"]),
-    verify_query(Config, "a", "1", "_,next,0/_,next,0/_,prev,1/_,next,0/_,next,1", 
+    verify_query(Config, "a", "1", "_,next,0/_,next,0/_,prev,1/_,next,0/_,next,1",
                  ["v2", "v4", "v4b"]),
 
     verify_query(Config, "a", "3", "_,_,1",
@@ -82,13 +82,13 @@ confirm() ->
     verify_query(Config, "a", "3", "_,_,0/_,next,1",
                  ["v3", "v5", "v5b"]),
 
-    verify_query(Config, "a", "5", "_,prev,1", 
+    verify_query(Config, "a", "5", "_,prev,1",
                  ["v4"]),
-    verify_query(Config, "a", "5", "_,prev,1/_,prev,1/_,prev,1/_,prev,1", 
+    verify_query(Config, "a", "5", "_,prev,1/_,prev,1/_,prev,1/_,prev,1",
                  ["v1", "v2", "v3", "v4"]),
-    verify_query(Config, "a", "5", "_,prev,1/_,prev,1/_,next,1/_,next,1", 
+    verify_query(Config, "a", "5", "_,prev,1/_,prev,1/_,next,1/_,next,1",
                  ["v3", "v4", "v4", "v4b", "v5", "v5b"]),
-    verify_query(Config, "a", "5", "b,next,1", 
+    verify_query(Config, "a", "5", "b,next,1",
                  []),
     verify_query(Config, "a", "5", "_,_,1",
                  ["v1", "v4"]),
@@ -103,37 +103,35 @@ verify_query(Cfg, Bucket, Key, Query, Expected) ->
 
 
 get_config(Node0) ->
-    {ok, [{IP, Port}|_]} = 
-        rpc:call(Node0, application, get_env, [riak_core, http]),
-    Prefix = 
+    [{http, {IP, Port}}|_] = rt:connection_info(Node0),
+    Prefix =
         rpc:call(Node0, app_helper, get_env, [riak_kv, raw_name, "riak"]),
     #config{ip = IP, port = Port, prefix = Prefix}.
 
 
 link_query(#config{ip=IP, port=Port, prefix=Prefix}, B, K, LinkStr) ->
-    Url = lists:flatten(io_lib:format("http://~s:~p/~s/~s/~s/~s", 
+    Url = lists:flatten(io_lib:format("http://~s:~p/~s/~s/~s/~s",
                                       [IP, Port, Prefix, B, K, LinkStr])),
     {ok, "200", _Headers, Body} = ibrowse:send_req(Url, [], get),
     get_return_values(Body).
 
 %% @doc Extracts values from multipart body in a hacky way copied from
-%% scripts in the fast track tutorial: simply filter out headers and 
+%% scripts in the fast track tutorial: simply filter out headers and
 %% multipart markers and the rest is our value lines.
 get_return_values(Body) ->
     Lines = re:split(Body, "\r\n", [multiline, {return, list}]),
-    Vs = [Line || Line <- Lines, 
-                  length(Line) > 0, 
-                  string:str(Line, ":") =:= 0, 
+    Vs = [Line || Line <- Lines,
+                  length(Line) > 0,
+                  string:str(Line, ":") =:= 0,
                   string:str(Line, "--") =:= 0],
     lists:sort(Vs).
 
-put_obj(Pbc, Bucket, Key, Value, Links) when is_list(Bucket), is_list(Key), 
+put_obj(Pbc, Bucket, Key, Value, Links) when is_list(Bucket), is_list(Key),
                                              is_list(Value), is_list(Links) ->
-    Obj = riakc_obj:new(list_to_binary(Bucket), 
-                        list_to_binary(Key), 
+    Obj = riakc_obj:new(list_to_binary(Bucket),
+                        list_to_binary(Key),
                         list_to_binary(Value)),
     Lns = [{{B, K}, T} || {B, K, T} <- Links],
     Md = dict:store(<<"Links">>, Lns, dict:new()),
     ObjWLinks = riakc_obj:update_metadata(Obj, Md),
     riakc_pb_socket:put(Pbc, ObjWLinks).
-
