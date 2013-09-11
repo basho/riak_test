@@ -154,7 +154,7 @@ priv_dir() ->
         _ ->
             ?assertEqual({true, bad_priv_dir}, {false, bad_priv_dir})
     end,
-    
+
     lager:info("priv dir: ~p -> ~p", [code:priv_dir(riak_test), PrivDir]),
     ?assert(filelib:is_dir(PrivDir)),
     PrivDir.
