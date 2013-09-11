@@ -529,6 +529,15 @@ test_cluster_mapping(SSL) ->
     lager:info("PGResultC: ~p", [PGResultC]),
     ?assertEqual(ValueC, riakc_obj:get_value(PGResultC)),
 
+    % now delete the redirect and make sure it's gone
+    rpc:call(LeaderC, riak_repl_console, delete_block_provider_redirect, [[CidA]]),
+    case rpc:call(LeaderC, riak_core_metadata, get, [{<<"replication">>, <<"cluster-mapping">>}, CidA]) of
+        undefined -> 
+            lager:info("cluster mapping no longer found in meta data, which is expected");
+        Match ->
+            lager:info("cluster mapping ~p still in meta data after delete; problem!", [Match]),
+            ?assert(false)    
+    end,
     pass.
 
 %% connect source + sink clusters, pg bidirectionally
