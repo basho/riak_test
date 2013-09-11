@@ -36,7 +36,7 @@ confirm() ->
     [Node1] = Nodes,
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
-    {ok, [{IP, _Port}|_]} = rpc:call(Node1, application, get_env, [riak_core, http]),
+    [{http, {IP, _Port}}|_] = rt:connection_info(Node1),
 
     JMXDumpCmd = jmx_dump_cmd(IP, JMXPort),
 

@@ -154,7 +154,7 @@ priv_dir() ->
         _ ->
             ?assertEqual({true, bad_priv_dir}, {false, bad_priv_dir})
     end,
-    
+
     lager:info("priv dir: ~p -> ~p", [code:priv_dir(riak_test), PrivDir]),
     ?assert(filelib:is_dir(PrivDir)),
     PrivDir.
@@ -207,14 +207,13 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 -type interfaces() :: [interface()].
 -type conn_info() :: [{node(), interfaces()}].
 
--spec connection_info([node()]) -> conn_info().
-connection_info(Nodes) ->
-    [begin
-         {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
-         {ok, [{HTTP_IP, HTTP_Port}]} =
-             rpc:call(Node, application, get_env, [riak_core, http]),
-         {Node, [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}]}
-     end || Node <- Nodes].
+-spec connection_info(node() | [node()]) -> interfaces() | conn_info().
+connection_info(Node) when is_atom(Node) ->
+    {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
+    {ok, [{HTTP_IP, HTTP_Port}]} = get_http_conn_info(Node),
+    [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}];
+connection_info(Nodes) when is_list(Nodes) ->
+    [ {Node, connection_info(Node)} || Node <- Nodes].
 
 -spec get_pb_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
 get_pb_conn_info(Node) ->
@@ -227,6 +226,16 @@ get_pb_conn_info(Node) ->
             {ok, PB_Port} = rpc_get_env(Node, [{riak_api, pb_port},
                                                {riak_kv, pb_port}]),
             {ok, [{PB_IP, PB_Port}]};
+        _ ->
+            undefined
+    end.
+
+-spec get_http_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
+get_http_conn_info(Node) ->
+    case rpc_get_env(Node, [{riak_api, http},
+                            {riak_core, http}]) of
+        {ok, [{IP, Port}|_]} ->
+            {ok, [{IP, Port}]};
         _ ->
             undefined
     end.
@@ -951,7 +960,7 @@ http_url(Node) ->
 -spec httpc(node()) -> term().
 httpc(Node) ->
     rt:wait_for_service(Node, riak_kv),
-    {ok, [{IP, Port}|_]} = rpc:call(Node, application, get_env, [riak_core, http]),
+    {ok, [{IP, Port}]} = get_http_conn_info(Node),
     rhc:create(IP, Port, "riak", []).
 
 %% @doc does a read via the http erlang client.
@@ -1155,5 +1164,3 @@ post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
             lager:error("Error reporting to ~s. ~p", [Name, Throws]),
             lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
     end.
-
-
