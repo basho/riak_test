@@ -450,6 +450,7 @@ test_cluster_mapping(SSL) ->
     {ok, {_IP, CPort}} = rpc:call(FirstC, application, get_env,
                                   [riak_core, cluster_mgr]),
     repl_util:connect_cluster(LeaderB, "127.0.0.1", CPort),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderB, "C")),
 
     % enable A to serve blocks to C
     PGEnableResultA = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","C"]]),
@@ -501,7 +502,8 @@ test_cluster_mapping(SSL) ->
 
     % Configure cluster_mapping on C to map cluster_id A -> C
     lager:info("Configuring cluster C to map its cluster_id to B's cluster_id"),
-    rpc:call(LeaderC, riak_core_metadata, put, [{<<"replication">>, <<"cluster-mapping">>}, CidA, CidB]),
+    %rpc:call(LeaderC, riak_core_metadata, put, [{<<"replication">>, <<"cluster-mapping">>}, CidA, CidB]),
+    rpc:call(LeaderC, riak_repl_console, block_provider_redirect, [[CidA, CidB]]),
     Res = rpc:call(LeaderC, riak_core_metadata, get, [{<<"replication">>, <<"cluster-mapping">>}, CidA]),
     lager:info("result: ~p", [Res]),
 
