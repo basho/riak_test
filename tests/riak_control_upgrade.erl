@@ -3,9 +3,10 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -define(RC_ENABLE_CFG,
-        [{riak_core,
+        [
+         {riak_api, [{https, [{"127.0.0.1", 8069}]}]},
+         {riak_core,
           [
-           {https, [{"127.0.0.1", 8069}]},
            {ssl,
             [{certfile, "./etc/cert.pem"},
              {keyfile, "./etc/key.pem"}

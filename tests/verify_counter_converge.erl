@@ -74,10 +74,9 @@ confirm() ->
     ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree
-    [?assertEqual(ok, rt:wait_until(Node, fun(N) ->
-                                                  {ok, [HP]} = rpc:call(N, application, get_env, [riak_core, http]),
-                                                  11 == get_counter(HP, Key)
-                                        end)) ||  Node <- Nodes],
+    [?assertEqual(ok, rt:wait_until(fun() ->
+                                            11 == get_counter(HP, Key)
+                                    end)) ||  HP <- Hosts ],
 
     pass.
 
@@ -91,8 +90,8 @@ set_allow_mult_true(Nodes) ->
     rt:wait_until_ring_converged(Nodes).
 
 get_host_ports(Nodes) ->
-    {ResL, []} = rpc:multicall(Nodes, application, get_env, [riak_core, http]),
-    [{Host, Port} || {ok, [{Host, Port}]} <- ResL].
+    ResL = rt:connection_info(Nodes),
+    [{Host, Port} || {_Node, [{http, [{Host, Port}|_]}|_]} <- ResL].
 
 %% Counter API
 get_counter(HostPort, Key) ->

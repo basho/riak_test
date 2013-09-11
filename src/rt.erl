@@ -207,13 +207,13 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 -type interfaces() :: [interface()].
 -type conn_info() :: [{node(), interfaces()}].
 
--spec connection_info([node()]) -> conn_info().
-connection_info(Nodes) ->
-    [begin
-         {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
-         {ok, [{HTTP_IP, HTTP_Port}]} = get_http_conn_info(Node),
-         {Node, [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}]}
-     end || Node <- Nodes].
+-spec connection_info(node() | [node()]) -> interfaces() | conn_info().
+connection_info(Node) when is_atom(Node) ->
+    {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
+    {ok, [{HTTP_IP, HTTP_Port}]} = get_http_conn_info(Node),
+    [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}];
+connection_info(Nodes) when is_list(Nodes) ->
+    [ {Node, connection_info(Node)} || Node <- Nodes].
 
 -spec get_pb_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
 get_pb_conn_info(Node) ->
@@ -1164,5 +1164,3 @@ post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
             lager:error("Error reporting to ~s. ~p", [Name, Throws]),
             lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
     end.
-
-
