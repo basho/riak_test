@@ -503,7 +503,7 @@ test_cluster_mapping(SSL) ->
     % Configure cluster_mapping on C to map cluster_id A -> C
     lager:info("Configuring cluster C to map its cluster_id to B's cluster_id"),
     %rpc:call(LeaderC, riak_core_metadata, put, [{<<"replication">>, <<"cluster-mapping">>}, CidA, CidB]),
-    rpc:call(LeaderC, riak_repl_console, block_provider_redirect, [[CidA, CidB]]),
+    rpc:call(LeaderC, riak_repl_console, add_block_provider_redirect, [[CidA, CidB]]),
     Res = rpc:call(LeaderC, riak_core_metadata, get, [{<<"replication">>, <<"cluster-mapping">>}, CidA]),
     lager:info("result: ~p", [Res]),
 
@@ -533,7 +533,7 @@ test_cluster_mapping(SSL) ->
     rpc:call(LeaderC, riak_repl_console, delete_block_provider_redirect, [[CidA]]),
     case rpc:call(LeaderC, riak_core_metadata, get, [{<<"replication">>, <<"cluster-mapping">>}, CidA]) of
         undefined -> 
-            lager:info("cluster mapping no longer found in meta data, which is expected");
+            lager:info("cluster-mapping no longer found in meta data, after delete, which is expected");
         Match ->
             lager:info("cluster mapping ~p still in meta data after delete; problem!", [Match]),
             ?assert(false)    
