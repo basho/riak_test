@@ -12,40 +12,21 @@
 -define(HB_TIMEOUT,  2000).
 
 %% Replication Realtime Ack test
-%% Valid for EE version 1.3.2 and up
 %%
-%% If both sides of an RT replication connection support it, a heartbeat
-%% message is sent from the RT Source to the RT Sink every
-%% {riak_repl, rt_heartbeat_interval} which default to 15s.  If
-%% a response is not received in {riak_repl, rt_heartbeat_timeout}, also
-%% default to 15s then the source connection exits and will be re-established
-%% by the supervisor.
-%%
-%% RT Heartbeat messages are supported between EE releases 1.3.2 and up.
 %%
 %% Test:
 %% -----
-%% Change the heartbeat_interval and heartbeat_timeout to 2 seconds,
 %% Start up two >1.3.2 clusters and connect them,
 %% Enable RT replication,
-%% Write some objects to the source cluster (A),
+%% Write one objects to the source cluster (A),
 %% Verify they got to the sink cluster (B),
-%% Verify that heartbeats are being acknowledged by the sink (B) back to source (A),
-%% Interupt the connection so that packets can not flow from A -> B,
-%% Verify that the connection is restarted after the heartbeat_timeout period,
-%% Verify that heartbeats are being acknowledged by the sink (B) back to source (A),
-%% Write some objects to the source cluster (A),
-%% Verify they got to the sink cluster (B),
-%% Have a cold beverage.
+%% Verify that the unack stat is not incremented
 
 %% @doc riak_test entry point
 confirm() ->
     %% Start up two >1.3.2 clusters and connect them,
     {LeaderA, LeaderB, ANodes, _BNodes} = make_connected_clusters(),
 
-    %% load intercepts. See ../intercepts/riak_repl_rt_intercepts.erl
-    load_intercepts(LeaderA),
-    
     %% Enable RT replication from cluster "A" to cluster "B"
     enable_rt(LeaderA, ANodes),
 
@@ -56,7 +37,7 @@ confirm() ->
     verify_rt(LeaderA, LeaderB, 1),
 
     RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
-%    QBS = proplists:get_value(bytes, RTQStatus),
+
     Consumers = proplists:get_value(consumers, RTQStatus),
     case proplists:get_value("B", Consumers) of
                  undefined ->
@@ -159,43 +140,4 @@ make_connected_clusters() ->
     connect_clusters(AFirst, BFirst),
 
     {AFirst, BFirst, ANodes, BNodes}.
-
-%% @doc Load intercepts file from ../intercepts/riak_repl2_rtsource_helper_intercepts.erl
-load_intercepts(Node) ->
-    rt_intercept:load_code(Node).
-
-%% @doc Suspend heartbeats from the source node
-%suspend_heartbeat_messages(Node) ->
-    %% disable forwarding of the heartbeat function call
-%    lager:info("Suspend sending of heartbeats from node ~p", [Node]),
-%    rt_intercept:add(Node, {riak_repl2_rtsource_helper,
-%                            [{{send_heartbeat, 1}, drop_send_heartbeat}]}).
-
-%% @doc Resume heartbeats from the source node
-%resume_heartbeat_messages(Node) ->
-%    %% enable forwarding of the heartbeat function call
-%    lager:info("Resume sending of heartbeats from node ~p", [Node]),
-%    rt_intercept:add(Node, {riak_repl2_rtsource_helper,
-%                            [{{send_heartbeat, 1}, forward_send_heartbeat}]}).
-
-%% @doc Get the Pid of the first RT source connection on Node
-%get_rt_conn_pid(Node) ->
-%%    [{_Remote, Pid}|Rest] = rpc:call(Node, riak_repl2_rtsource_conn_sup, enabled, []),
-%    case Rest of
-%        [] -> ok;
-%        RR -> lager:info("Other connections: ~p", [RR])
-%    end,
-%    Pid.
-
-%% @doc Verify that heartbeat messages are being ack'd from the RT sink back to source Node
-%verify_heartbeat_messages(Node) ->
-%%    lager:info("Verify heartbeats"),
-%    Pid = get_rt_conn_pid(Node),
-%    Status = rpc:call(Node, riak_repl2_rtsource_conn, status, [Pid], ?RPC_TIMEOUT),
-%    HBRTT = proplists:get_value(hb_rtt, Status),
-%    case HBRTT of
-%        undefined ->
-%            false;
-%        RTT ->
-%            is_integer(RTT)
-%    end.
+% end
