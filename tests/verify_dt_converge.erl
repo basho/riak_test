@@ -87,16 +87,7 @@ confirm() ->
     ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree
-    [ ?assertEqual(ok, rt:wait_until(fun() ->
-                                             try
-                                                 check_4(Type, Client),
-                                                 true
-                                             catch
-                                                 _:Error ->
-                                                     lager:info("DIDN'T MATCH ~p", [Error]),
-                                                     false
-                                             end
-                                     end))
+    [ ?assertEqual(ok, check_4(Type, Client))
       || Type <- ?TYPES, Client <- Clients ],
 
     pass.
@@ -260,8 +251,18 @@ check_4({BType, map}, Client) ->
 
 
 check_value(Client, Bucket, Key, Mod, Expected) ->
-    Result = riakc_pb_socket:fetch_type(Client, Bucket, Key, [{r, 2}, {notfound_ok, true}]),
-    ?assertMatch({ok, _}, Result),
-    {ok, C} = Result,
-    ?assertEqual(true, Mod:is_type(C)),
-    ?assertEqual(Expected, Mod:value(C)).
+    rt:wait_until(fun() ->
+                          try
+                              Result = riakc_pb_socket:fetch_type(Client, Bucket, Key, [{r, 2}, {notfound_ok, true},
+                                                                                        {timeout, 5000}]),
+                              ?assertMatch({ok, _}, Result),
+                              {ok, C} = Result,
+                              ?assertEqual(true, Mod:is_type(C)),
+                              ?assertEqual(Expected, Mod:value(C)),
+                              true
+                          catch
+                              Type:Error ->
+                                  lager:debug("check_value(~p,~p,~p,~p,~p) failed: ~p:~p", [Client, Bucket, Key, Mod, Expected, Type, Error]),
+                                  false
+                          end
+                  end).
