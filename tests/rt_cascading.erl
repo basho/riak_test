@@ -748,6 +748,43 @@ new_to_old_test_() ->
 
     ] end}}.
 
+
+ensure_ack_test_() ->
+    {timeout, timeout(130), {setup, fun() ->
+        lager:info("GOT HERE"),
+        %% Start up two >1.3.2 clusters and connect them,
+        {LeaderA, LeaderB, ANodes, _BNodes} = make_connected_clusters(),
+
+        %% Enable RT replication from cluster "A" to cluster "B"
+        enable_rt(LeaderA, ANodes),
+        [LeaderA, LeaderB]
+%        Nodes
+    end,
+    fun(Nodes) ->
+        rt:clean_cluster(Nodes)
+    end,
+%    fun(LeaderA, LeaderB) -> [
+    fun([LeaderA, LeaderB] = _Nodes) -> [
+        {"ensure acks", timeout, timeout(65), fun() ->
+            lager:info("Nodes:~p, ~p", [LeaderA, LeaderB]),
+            send_obj_rt(LeaderA, LeaderB, 1),
+
+            RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+
+            Consumers = proplists:get_value(consumers, RTQStatus),
+            case proplists:get_value("B", Consumers) of
+                 undefined ->
+                    [];
+                 Consumer ->
+                    Unacked = proplists:get_value(unacked, Consumer, 0),
+                    lager:info("unacked: ~p", [Unacked]),
+                    ?assertEqual(0, Unacked)
+            end
+
+        end}
+    ]
+end}}.
+
 %% =====
 %% utility functions for teh happy
 %% ====
@@ -855,3 +892,88 @@ timeout(MultiplyBy) ->
             N * MultiplyBy
     end.
 
+send_obj_rt(LeaderA, LeaderB, NumMessages) ->
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+    First = 1,
+    Last = NumMessages,
+
+    %% Write some objects to the source cluster (A),
+    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
+               [Last-First+1, LeaderA, LeaderB]),
+    ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)),
+
+    %% verify data is replicated to B
+    lager:info("Reading ~p keys written from ~p", [Last-First+1, LeaderB]),
+    ?assertEqual(0, repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2)).
+
+%% @doc Connect two clusters for replication using their respective leader nodes.
+connect_clusters(LeaderA, LeaderB) ->
+    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+                                 [riak_core, cluster_mgr]),
+    lager:info("connect cluster A:~p to B on port ~p", [LeaderA, Port]),
+    repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")).
+
+%% @doc Create two clusters of 3 nodes each and connect them for replication:
+%%      Cluster "A" -> cluster "B"
+make_connected_clusters() ->
+    NumNodes = rt_config:get(num_nodes, 4),
+    ClusterASize = rt_config:get(cluster_a_size, 2),
+
+    lager:info("Deploy ~p nodes", [NumNodes]),
+    Conf = [
+            {riak_repl,
+             [
+              %% turn off fullsync
+              {fullsync_on_connect, false},
+              {fullsync_interval, disabled}
+             ]},
+            {yokozuna, 
+            [{enabled, false}
+            ]}
+    ],
+
+    Nodes = rt:deploy_nodes(NumNodes, Conf),
+
+    {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
+    lager:info("ANodes: ~p", [ANodes]),
+    lager:info("BNodes: ~p", [BNodes]),
+
+    lager:info("Build cluster A"),
+    repl_util:make_cluster(ANodes),
+
+    lager:info("Build cluster B"),
+    repl_util:make_cluster(BNodes),
+
+    %% get the leader for the first cluster
+    lager:info("waiting for leader to converge on cluster A"),
+    ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
+    AFirst = hd(ANodes),
+
+    %% get the leader for the second cluster
+    lager:info("waiting for leader to converge on cluster B"),
+    ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
+    BFirst = hd(BNodes),
+
+    %% Name the clusters
+    repl_util:name_cluster(AFirst, "A"),
+    rt:wait_until_ring_converged(ANodes),
+
+    repl_util:name_cluster(BFirst, "B"),
+    rt:wait_until_ring_converged(BNodes),
+
+    %% Connect for replication
+    connect_clusters(AFirst, BFirst),
+
+    {AFirst, BFirst, ANodes, BNodes}.
+%% @doc Turn on Realtime replication on the cluster lead by LeaderA.
+%%      The clusters must already have been named and connected.
+enable_rt(LeaderA, ANodes) ->
+    repl_util:enable_realtime(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+
+    repl_util:start_realtime(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes).
+% end
