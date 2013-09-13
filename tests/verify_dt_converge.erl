@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%%% @copyright (C) 2012, Basho Technologies
+%%% @copyright (C) 2013, Basho Technologies
 %%% @doc
 %%% riak_test for riak_dt CRDT convergence
 %%% @end
