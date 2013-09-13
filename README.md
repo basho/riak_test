@@ -81,12 +81,11 @@ left unchanged, this script is going to do the following:
 You'll want to run this script from an empty directory. Also, you
 might be thinking that you already have all the required versions of
 erlang. Great! You can crack open the script and set the paths to your
-installation:
+installation or set them from the command-line:
 
 ```bash
 R14B04=${R14B04:-$HOME/erlang-R14B04}
 R15B01=${R15B01:-$HOME/erlang-R15B01}
-R15B03=${R15B03:-$HOME/erlang-R15B03}
 ```
 
 **Kerlveat**: If you want kerl to build erlangs with serious 64-bit
@@ -105,17 +104,19 @@ building for a little while.
 ### rtdev-setup-releases.sh
 
 The `rtdev-setup-releases.sh` will get the releases you just built
-into a local git repository. Currently, running this script from the
+into a local git repository. Run this script from the
 same directory that you just built all of your releases into.
-Currently this script initializes this repository into `$HOME/rt/riak` but
-it's probably worth making that configurable in the near term.
+By default this script initializes the repository into `$HOME/rt/riak` but
+you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-setup-releases.sh#L11).
 
 ### rtdev-current.sh
 
 `rtdev-current.sh` is where it gets interesting. You need to run that
 from the Riak source folder you're wanting to test as the current
 version of Riak. Also, make sure that you've already run `make devrel`
-or `make stagedevrel` before you run `rtdev-current.sh`.
+or `make stagedevrel` before you run `rtdev-current.sh`. Like setting up
+releases you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-current.sh#L6)
+so all your riak builds are in one place.
 
 ### Config file.
 
