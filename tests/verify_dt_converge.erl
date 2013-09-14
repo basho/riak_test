@@ -157,14 +157,14 @@ update_2a({BType, counter}, Client) ->
                                 fun(C) ->
                                         riakc_counter:decrement(10, C)
                                 end,
-                                {BType, ?BUCKET}, ?KEY, []);
+                                {BType, ?BUCKET}, ?KEY, [create]);
 update_2a({BType, set}, Client) ->
     riakc_pb_socket:modify_type(Client,
                                 fun(S) ->
                                         riakc_set:add_element(<<"Voldemort">>,
                                                               riakc_set:add_element(<<"Cassandra">>, S))
                                 end,
-                                {BType, ?BUCKET}, ?KEY, []);
+                                {BType, ?BUCKET}, ?KEY, [create]);
 update_2a({BType, map}, Client) ->
     riakc_pb_socket:modify_type(Client,
                                 fun(M) ->
@@ -174,7 +174,7 @@ update_2a({BType, map}, Client) ->
                                                               end, M),
                                         riakc_map:add({<<"verified">>, flag}, M1)
                                 end,
-                                {BType, ?BUCKET}, ?KEY, []).
+                                {BType, ?BUCKET}, ?KEY, [create]).
 
 check_2b({BType, counter}, Client) ->
     lager:info("check_2b: Checking counter value is unchanged"),
@@ -193,13 +193,13 @@ update_3b({BType, counter}, Client) ->
                                 fun(C) ->
                                         riakc_counter:increment(2, C)
                                 end,
-                                {BType, ?BUCKET}, ?KEY, []);
+                                {BType, ?BUCKET}, ?KEY, [create]);
 update_3b({BType, set}, Client) ->
     riakc_pb_socket:modify_type(Client,
                                 fun(S) ->
                                         riakc_set:add_element(<<"Couchbase">>, S)
                                 end,
-                                {BType, ?BUCKET}, ?KEY, []);
+                                {BType, ?BUCKET}, ?KEY, [create]);
 update_3b({BType, map}, Client) ->
     riakc_pb_socket:modify_type(Client,
                                 fun(M) ->
@@ -213,7 +213,7 @@ update_3b({BType, map}, Client) ->
                                                          end,
                                                          M1)
                                 end,
-                                {BType, ?BUCKET}, ?KEY, []).
+                                {BType, ?BUCKET}, ?KEY, [create]).
 
 check_3a({BType, counter}, Client) ->
     lager:info("check_3a: Checking counter value is unchanged"),
