@@ -6,14 +6,19 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    ok = application:start(crypto),
-    ok = application:start(asn1),
-    ok = application:start(public_key),
-    ok = application:start(ssl),
+    application:start(crypto),
+    application:start(asn1),
+    application:start(public_key),
+    application:start(ssl),
+    application:start(ibrowse),
+    io:format("turning on tracing"),
+    ibrowse:trace_on(),
+
     lager:info("Deploy some nodes"),
     PrivDir = rt:priv_dir(),
     Conf = [
             {riak_core, [
+                         {default_bucket_props, [{allow_mult, true}]},
                     {ssl, [
                             {certfile, filename:join([PrivDir,
                                                       "certs/selfsigned/site3-cert.pem"])},
@@ -25,11 +30,19 @@ confirm() ->
     ],
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
-    [enable_ssl(N) || N <- Nodes],
+    enable_ssl(Node),
+    %[enable_ssl(N) || N <- Nodes],
     {ok, [{"127.0.0.1", Port0}]} = rpc:call(Node, application, get_env,
                                  [riak_core, http]),
     {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
                                  [riak_core, https]),
+
+    MD = riak_test_runner:metadata(),
+    _HaveIndexes = case proplists:get_value(backend, MD) of
+                      undefined -> false; %% default is da 'cask
+                      bitcask -> false;
+                      _ -> true
+                  end,
 
     %% connections over regular HTTP get told to go elsewhere
     C0 = rhc:create("127.0.0.1", Port0, "riak", []),
@@ -110,7 +123,7 @@ confirm() ->
     ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
 
     ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.get", "ON",
-                                                    "hello", "TO", "user"]]),
+                                                    "default", "hello", "TO", "user"]]),
 
     %% key is not present
     ?assertMatch({error, notfound}, rhc:get(C7, <<"hello">>,
@@ -119,27 +132,160 @@ confirm() ->
     ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
 
     ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put", "ON",
-                                                    "hello", "TO", "user"]]),
+                                                    "default", "hello", "TO", "user"]]),
 
     %% NOW we can put
-    Res99 = rhc:put(C7, Object),
-    lager:info("Res is ~p", [Res99]),
-    ?assertMatch(ok, Res99),
+    ?assertEqual(ok, rhc:put(C7, Object)),
 
     {ok, O} = rhc:get(C7, <<"hello">>, <<"world">>),
     ?assertEqual(<<"hello">>, riakc_obj:bucket(O)),
     ?assertEqual(<<"world">>, riakc_obj:key(O)),
     ?assertEqual(<<"howareyou">>, riakc_obj:get_value(O)),
 
+    %% delete
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:delete(C7, <<"hello">>,
+                                                        <<"world">>)),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.delete", "ON",
+                                                    "default", "hello", "TO", "user"]]),
+    ?assertEqual(ok, rhc:delete(C7, <<"hello">>,
+                                <<"world">>)),
+
+    %% key is deleted
+    ?assertMatch({error, notfound}, rhc:get(C7, <<"hello">>,
+                                                     <<"world">>)),
+
     %% slam the door in the user's face
-    ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.put,riak_kv.get", "ON",
-                                                    "hello", "FROM", "user"]]),
+    ok = rpc:call(Node, riak_core_console, revoke,
+                  [["riak_kv.put,riak_kv.get,riak_kv.delete", "ON",
+                    "default", "hello", "FROM", "user"]]),
 
     ?assertMatch({error, {ok, "403", _, _}}, rhc:get(C7, <<"hello">>,
                                                      <<"world">>)),
 
     ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
 
+    %% list buckets
+    lager:info("listing buckets"),
+    ?assertMatch({error, {"403", _}}, rhc:list_buckets(C7)),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_buckets", "ON",
+                                                    "default", "TO", "user"]]),
+    ?assertMatch({ok, [<<"hello">>]}, rhc:list_buckets(C7)),
+
+    %% list keys
+    ?assertMatch({error, {"403", _}}, rhc:list_keys(C7, <<"hello">>)),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_keys", "ON",
+                                                    "default", "TO", "user"]]),
+
+    ?assertMatch({ok, [<<"world">>]}, rhc:list_keys(C7, <<"hello">>)),
+
+    ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "ON",
+                                                    "default", "FROM", "user"]]),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:get_bucket(C7, <<"hello">>)),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_core.get_bucket", "ON",
+                                                    "default", "hello", "TO", "user"]]),
+
+    ?assertEqual(3, proplists:get_value(n_val, element(2, rhc:get_bucket(C7,
+                                                                         <<"hello">>)))),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:set_bucket(C7, <<"hello">>,
+                                                            [{n_val, 5}])),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_core.set_bucket", "ON",
+                                                    "default", "hello", "TO", "user"]]),
+
+    ?assertEqual(ok, rhc:set_bucket(C7, <<"hello">>,
+                                    [{n_val, 5}])),
+
+    ?assertEqual(5, proplists:get_value(n_val, element(2, rhc:get_bucket(C7,
+                                                                         <<"hello">>)))),
+
+    %% counters
+
+    %% grant get/put again
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.get,riak_kv.put", "ON",
+                                                    "default", "hello", "TO", "user"]]),
+
+
+    ?assertMatch({error, {ok, "404", _, _}}, rhc:counter_val(C7, <<"hello">>,
+                                                    <<"numberofpies">>)),
+
+    ok = rhc:counter_incr(C7, <<"hello">>,
+                          <<"numberofpies">>, 5),
+
+    ?assertEqual({ok, 5}, rhc:counter_val(C7, <<"hello">>,
+                                          <<"numberofpies">>)),
+
+    %% revoke get
+    ok = rpc:call(Node, riak_core_console, revoke,
+                  [["riak_kv.get", "ON", "default", "hello", "FROM", "user"]]),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:counter_val(C7, <<"hello">>,
+                                          <<"numberofpies">>)),
+    ok = rhc:counter_incr(C7, <<"hello">>,
+                          <<"numberofpies">>, 5),
+
+    %% revoke put
+    ok = rpc:call(Node, riak_core_console, revoke,
+                  [["riak_kv.put", "ON", "default", "hello", "FROM", "user"]]),
+
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:counter_incr(C7, <<"hello">>,
+                          <<"numberofpies">>, 5)),
+
+    %% mapred tests
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put", "ON",
+                                                    "default", "MR", "TO", "user"]]),
+
+
+    ok = rhc:put(C7, riakc_obj:new(<<"MR">>, <<"lobster_roll">>, <<"16">>,
+                           <<"text/plain">>)),
+
+    ok = rhc:put(C7, riakc_obj:new(<<"MR">>, <<"pickle_plate">>, <<"9">>,
+                           <<"text/plain">>)),
+
+    ok = rhc:put(C7, riakc_obj:new(<<"MR">>, <<"pimms_cup">>, <<"8">>,
+                           <<"text/plain">>)),
+
+    ?assertMatch({error, {"403", _}},
+                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {jsfun,
+                                                     <<"Riak.mapValuesJson">>}, undefined, false},
+                                              {reduce, {jsfun,
+                                                        <<"Riak.reduceSum">>}, undefined,
+                                               true}])),
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_keys", "ON",
+                                                    "default", "MR", "TO", "user"]]),
+
+    ?assertMatch({error, {"403", _}},
+                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {jsfun,
+                                                     <<"Riak.mapValuesJson">>}, undefined, false},
+                                              {reduce, {jsfun,
+                                                        <<"Riak.reduceSum">>}, undefined,
+                                               true}])),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.mapreduce", "ON",
+                                                    "default", "MR", "TO", "user"]]),
+
+    ?assertEqual({ok, [{1, [33]}]},
+                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {jsfun,
+                                                     <<"Riak.mapValuesJson">>}, undefined, false},
+                                              {reduce, {jsfun,
+                                                        <<"Riak.reduceSum">>}, undefined,
+                                               true}])),
+
+    ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "ON",
+                                                    "default", "MR", "FROM", "user"]]),
+
+    ?assertMatch({error, {"403", _}},
+                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {jsfun,
+                                                     <<"Riak.mapValuesJson">>}, undefined, false},
+                                              {reduce, {jsfun,
+                                                        <<"Riak.reduceSum">>}, undefined,
+                                               true}])),
     ok.
 
 enable_ssl(Node) ->
