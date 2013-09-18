@@ -515,6 +515,21 @@ mixed_version_clusters_test_() ->
     % +-----+    +-----+
     % | n56 | <- | n34 |
     % +-----+    +-----+
+    % 
+    % This test is configurable for 1.3 versions of Riak, but off by default.
+    % place the following config in ~/.riak_test_config to run:
+    % 
+    % {run_rt_cascading_1_3_tests, true}
+    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
+        false -> 
+            lager:info("mixed_version_clusters_test_ not configured to run!"),
+            [];
+        true ->
+            lager:info("new_to_old_test_ configured to run for 1.3"),
+            mixed_version_clusters_test_dep()
+    end.
+
+mixed_version_clusters_test_dep() ->
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
@@ -684,6 +699,20 @@ new_to_old_test_() ->
     % | New3 | <- | Old2 |
     % +------+    +------+
     %
+    % This test is configurable for 1.3 versions of Riak, but off by default.
+    % place the following config in ~/.riak_test_config to run:
+    % 
+    % {run_rt_cascading_1_3_tests, true}
+    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
+        false -> 
+            lager:info("new_to_old_test_ not configured to run!"),
+            [];
+        true ->
+            lager:info("new_to_old_test_ configured to run for 1.3"),
+            new_to_old_test_dep()
+    end.
+
+new_to_old_test_dep() ->
     {timeout, timeout(105), {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
