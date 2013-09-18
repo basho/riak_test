@@ -524,7 +524,7 @@ mixed_version_clusters_test_() ->
         false -> 
             lager:info("mixed_version_clusters_test_ not configured to run!"),
             [];
-        true ->
+        _ ->
             lager:info("new_to_old_test_ configured to run for 1.3"),
             mixed_version_clusters_test_dep()
     end.
@@ -707,7 +707,7 @@ new_to_old_test_() ->
         false -> 
             lager:info("new_to_old_test_ not configured to run!"),
             [];
-        true ->
+        _ ->
             lager:info("new_to_old_test_ configured to run for 1.3"),
             new_to_old_test_dep()
     end.
