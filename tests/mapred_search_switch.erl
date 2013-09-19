@@ -44,9 +44,13 @@
           rs_bucket, % bucket configured for riak_search
           rs_keyuqs, % keys and their unique data for riak_search
           rs_common, % common data for all keys for riak_search
-          yz_bucket, % \
-          yz_keyuqs, % +- ditto, yokozuna
-          yz_common, % /
+          yz1_bucket, % \
+          yz1_keyuqs, % +- ditto, yokozuna bucket 1
+          yz1_common, % /
+          yz2_bucket, % \
+          yz2_keyuqs, % +- ditto, yokozuna bucket 2
+          yz2_common, % /
+          yz_common, % common for both yz buckets
           yz_index   % YZ index separate from bucket name
          }).
 
@@ -76,9 +80,24 @@ setup_test_env() ->
     setup_rs_bucket(Nodes, RSBucket),
     load_test_data(Nodes, RSBucket, RSKeyAndUniques, RSCommon),
 
-    {YZBucket, YZKeyAndUniques, YZCommon} = generate_test_data(<<"yz">>),
-    YZIndex = setup_yz_bucket(Nodes, YZBucket),
-    load_test_data(Nodes, YZBucket, YZKeyAndUniques, YZCommon),
+    {YZ1Bucket, YZ1KeyAndUniques, YZ1Common} = generate_test_data(<<"yz1">>),
+    {YZ2Bucket, YZ2KeyAndUniques, YZ2Common} = generate_test_data(<<"yz2">>),
+    YZCommon = generate_string(),
+    lager:info("yz common: ~s", [YZCommon]),
+    YZIndex = generate_string(),
+    lager:info("yz index: ~s", [YZIndex]),
+
+    setup_yz_index(Nodes, YZIndex),
+    setup_yz_bucket(Nodes, YZ1Bucket, YZIndex),
+    setup_yz_bucket(Nodes, YZ2Bucket, YZIndex),
+
+    %% intentionally loading data from two buckets into one index,
+    %% with a common term, so we can check filtering when bucket is
+    %% specified for yokozuna search
+    load_test_data(Nodes, YZ1Bucket, YZ1KeyAndUniques,
+                   [YZCommon, " ", YZ1Common]),
+    load_test_data(Nodes, YZ2Bucket, YZ2KeyAndUniques,
+                   [YZCommon, " ", YZ2Common]),
 
     %% give yokozuna time to auto-commit
     YZSleep_ms = 1000,
@@ -89,10 +108,14 @@ setup_test_env() ->
           rs_bucket=RSBucket,
           rs_keyuqs=RSKeyAndUniques,
           rs_common=RSCommon,
-          yz_bucket=YZBucket,
           yz_index=YZIndex,
-          yz_keyuqs=YZKeyAndUniques,
-          yz_common=YZCommon }.
+          yz_common=YZCommon,
+          yz1_bucket=YZ1Bucket,
+          yz1_keyuqs=YZ1KeyAndUniques,
+          yz1_common=YZ1Common,
+          yz2_bucket=YZ2Bucket,
+          yz2_keyuqs=YZ2KeyAndUniques,
+          yz2_common=YZ2Common }.
 
 set_config(#env{nodes=Nodes}, Config) ->
     [ [ set_config(Nodes, App, K, V)
@@ -113,41 +136,45 @@ confirm_config(#env{nodes=Nodes,
                     rs_bucket=RSBucket,
                     rs_keyuqs=RSKeyAndUniques,
                     rs_common=RSCommon,
-                    yz_bucket=YZBucket,
+                    yz1_bucket=YZ1Bucket,
+                    yz1_keyuqs=YZ1KeyAndUniques,
+                    yz2_bucket=YZ2Bucket,
+                    yz2_keyuqs=YZ2KeyAndUniques,
                     yz_index=YZIndex,
-                    yz_keyuqs=YZKeyAndUniques,
                     yz_common=YZCommon}=Env,
                     Config) ->
     lager:info("Running Config: ~p", [Config]),
     set_config(Env, Config),
 
-    RSBResults = run_bucket_mr(Nodes, RSBucket, RSKeyAndUniques, RSCommon),
-    RSIResults = run_index_mr(Nodes, RSBucket, RSKeyAndUniques, RSCommon),
-    YZBResults = run_bucket_mr(Nodes, YZBucket, YZKeyAndUniques, YZCommon),
-    YZIResults = run_index_mr(Nodes, YZIndex, YZKeyAndUniques, YZCommon),
+    RSBResults = run_bucket_mr(Nodes, RSBucket, RSCommon),
+    RSIResults = run_index_mr(Nodes, RSBucket, RSCommon),
+    %% intentionally using YZCommon to hit YZ results from both
+    %% buckets that are stored in this index
+    YZ1BResults = run_bucket_mr(Nodes, YZ1Bucket, YZCommon),
+    YZIResults = run_index_mr(Nodes, YZIndex, YZCommon),
 
     lager:info("RS Bucket Results: ~p", [RSBResults]),
     lager:info("RS Index Results: ~p", [RSIResults]),
-    lager:info("YZ Bucket Results: ~p", [YZBResults]),
+    lager:info("YZ Bucket Results: ~p", [YZ1BResults]),
     lager:info("YZ Index Results: ~p", [YZIResults]),
     
     ?assertEqual(expected_riak_search(Config),
                  got_riak_search(RSBResults, RSBucket,
-                                 RSKeyAndUniques, RSCommon)),
+                                 RSKeyAndUniques)),
     ?assertEqual(expected_riak_search(Config),
                  got_riak_search(RSIResults, RSBucket,
-                                 RSKeyAndUniques, RSCommon)),
+                                 RSKeyAndUniques)),
     ?assertEqual(expected_yokozuna(Config),
-                 got_yokozuna(YZBResults, YZBucket,
-                              YZKeyAndUniques, YZCommon)),
+                 got_yokozuna(YZ1BResults, [YZ1Bucket],
+                              YZ1KeyAndUniques)),
     ?assertEqual(expected_yokozuna(Config),
-                 got_yokozuna(YZIResults, YZBucket,
-                              YZKeyAndUniques, YZCommon)),
+                 got_yokozuna(YZIResults, [YZ1Bucket, YZ2Bucket],
+                              YZ1KeyAndUniques++YZ2KeyAndUniques)),
     %% asking YZ to MR a bucket it hasn't indexed results in error
     ?assertEqual(expected_yokozuna(Config) or expected_error(Config),
                  got_error(RSBResults)),
     ?assertEqual(expected_error(Config),
-                 got_error(YZBResults)),
+                 got_error(YZ1BResults)),
     ?assertEqual(expected_error(Config),
                  got_error(YZIResults)).
 
@@ -175,22 +202,19 @@ setup_rs_bucket([Node|_], Bucket) ->
     ok = rhc:set_bucket(C, Bucket, [{search, true}]).
 
 %% setup yokozuna hook/index - bucket name == index name
-setup_yz_bucket([Node|_]=Cluster, Bucket) ->
-    Index = generate_string(),
-    lager:info("Setting up yokozuna index ~s", [Index]),
-
-    %% create index
-    IUrl = iburl(Node, index_path(Index)),
-    {ok, "204", _, _} = ibrowse:send_req(IUrl, [], put),
-    wait_for_index(Cluster, Index),
-
+setup_yz_bucket([Node|_], Bucket, Index) ->
     %% attach bucket to index
     %% TODO: teach rhc_bucket:httpify_prop/2 `yz_index'
     BUrl = iburl(Node, ["/buckets/",Bucket,"/props"]),
     BHeaders = [{"content-type", "application/json"}],
     BProps = mochijson2:encode([{props, {struct, [{yz_index, Index}]}}]),
-    {ok, "204", _, _} = ibrowse:send_req(BUrl, BHeaders, put, BProps),
-    Index.
+    {ok, "204", _, _} = ibrowse:send_req(BUrl, BHeaders, put, BProps).
+
+setup_yz_index([Node|_]=Cluster, Index) ->
+    %% create index
+    IUrl = iburl(Node, index_path(Index)),
+    {ok, "204", _, _} = ibrowse:send_req(IUrl, [], put),
+    wait_for_index(Cluster, Index).
 
 index_path(Index) ->
     ["/yz/index/",Index].
@@ -259,7 +283,7 @@ provider(Config) ->
 %% we did get are expected, and of the RS format. We don't check that
 %% all known keys are present in the result because we're not
 %% interested in whether RS is working with full correctness.
-got_riak_search(Results, Bucket, KeyAndUniques, _Common) ->
+got_riak_search(Results, Bucket, KeyAndUniques) ->
     case Results of
         {ok, [{0, Matches}]} when Matches /= [] ->
             IsRS = fun({{B, K},{struct,Props}}) when B == Bucket ->
@@ -277,11 +301,12 @@ got_riak_search(Results, Bucket, KeyAndUniques, _Common) ->
 %% similar to got_riak_search - just check that we got at least one
 %% result, and that all results are in the expected YZ format - this
 %% test doesn't care if YZ is fulfilling its harvest/yield promises
-got_yokozuna(Results, Bucket, KeyAndUniques, _Common) ->
+got_yokozuna(Results, Buckets, KeyAndUniques) ->
     case Results of
         {ok, [{0, Matches}]} when Matches /= [] ->
-            IsYZ = fun({{B, K}, {struct, []}}) when B == Bucket ->
-                           lists:keymember(K, 1, KeyAndUniques);
+            IsYZ = fun({{B, K}, {struct, []}}) ->
+                           lists:member(B, Buckets) andalso
+                               lists:keymember(K, 1, KeyAndUniques);
                       (_) ->
                            false
                    end,
@@ -297,7 +322,7 @@ got_error({error, _}) ->
 got_error(_) ->
     false.
 
-run_bucket_mr([Node|_], Bucket, _KeyAndUniques, Common) ->
+run_bucket_mr([Node|_], Bucket, Common) ->
     C = rt:pbc(Node),
     riakc_pb_socket:mapred(
       C,
@@ -306,7 +331,7 @@ run_bucket_mr([Node|_], Bucket, _KeyAndUniques, Common) ->
       {search, Bucket, Common},
       []).
 
-run_index_mr([Node|_], Index, _KeyAndUniques, Common) ->
+run_index_mr([Node|_], Index, Common) ->
     C = rt:pbc(Node),
     riakc_pb_socket:mapred(
       C,
