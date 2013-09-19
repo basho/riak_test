@@ -515,6 +515,21 @@ mixed_version_clusters_test_() ->
     % +-----+    +-----+
     % | n56 | <- | n34 |
     % +-----+    +-----+
+    % 
+    % This test is configurable for 1.3 versions of Riak, but off by default.
+    % place the following config in ~/.riak_test_config to run:
+    % 
+    % {run_rt_cascading_1_3_tests, true}
+    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
+        false -> 
+            lager:info("mixed_version_clusters_test_ not configured to run!"),
+            [];
+        _ ->
+            lager:info("new_to_old_test_ configured to run for 1.3"),
+            mixed_version_clusters_test_dep()
+    end.
+
+mixed_version_clusters_test_dep() ->
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
@@ -684,6 +699,20 @@ new_to_old_test_() ->
     % | New3 | <- | Old2 |
     % +------+    +------+
     %
+    % This test is configurable for 1.3 versions of Riak, but off by default.
+    % place the following config in ~/.riak_test_config to run:
+    % 
+    % {run_rt_cascading_1_3_tests, true}
+    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
+        false -> 
+            lager:info("new_to_old_test_ not configured to run!"),
+            [];
+        _ ->
+            lager:info("new_to_old_test_ configured to run for 1.3"),
+            new_to_old_test_dep()
+    end.
+
+new_to_old_test_dep() ->
     {timeout, timeout(105), {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
@@ -748,6 +777,59 @@ new_to_old_test_() ->
 
     ] end}}.
 
+ensure_ack_test_() ->
+    {timeout, timeout(130), {setup, fun() ->
+        Conf = conf(),
+        [LeaderA, LeaderB] = Nodes = rt:deploy_nodes(2, Conf),
+        [repl_util:make_cluster([N]) || N <- Nodes],
+        [repl_util:wait_until_is_leader(N) || N <- Nodes],
+        Names = ["A", "B"],
+        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+        %repl_util:name_cluster(LeaderA, "A"),
+        %repl_util:name_cluster(LeaderB, "B"), 
+        lager:info("made it past naming"), 
+        Port = get_cluster_mgr_port(LeaderB),
+        lager:info("made it past port"), 
+        connect_rt(LeaderA, Port, "B"),
+        lager:info("made it past connect"), 
+        [LeaderA, LeaderB]
+    end,
+    fun(Nodes) ->
+        rt:clean_cluster(Nodes)
+    end,
+
+    fun([LeaderA, LeaderB] = _Nodes) -> [
+        {"ensure acks", timeout, timeout(65), fun() ->
+            lager:info("Nodes:~p, ~p", [LeaderA, LeaderB]),
+            TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+            TestBucket = <<TestHash/binary, "-rt_test_a">>,
+
+            %% Write some objects to the source cluster (A),
+            lager:info("Writing 1 key to ~p, which should RT repl to ~p",
+            [LeaderA, LeaderB]),
+            ?assertEqual([], repl_util:do_write(LeaderA, 1, 1, TestBucket, 2)),
+
+            %% verify data is replicated to B
+            lager:info("Reading 1 key written from ~p", [LeaderB]),
+            ?assertEqual(0, repl_util:wait_for_reads(LeaderB, 1, 1, TestBucket, 2)),
+
+            RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+
+            Consumers = proplists:get_value(consumers, RTQStatus),
+            case proplists:get_value("B", Consumers) of
+                 undefined ->
+                    [];
+                 Consumer ->
+                    Unacked = proplists:get_value(unacked, Consumer, 0),
+                    lager:info("unacked: ~p", [Unacked]),
+                    ?assertEqual(0, Unacked)
+            end
+
+        end}
+    ]
+    end}}.
+    
 %% =====
 %% utility functions for teh happy
 %% ====
