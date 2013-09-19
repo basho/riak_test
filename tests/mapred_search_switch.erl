@@ -114,29 +114,42 @@ confirm_config(#env{nodes=Nodes,
                     rs_keyuqs=RSKeyAndUniques,
                     rs_common=RSCommon,
                     yz_bucket=YZBucket,
+                    yz_index=YZIndex,
                     yz_keyuqs=YZKeyAndUniques,
                     yz_common=YZCommon}=Env,
                     Config) ->
     lager:info("Running Config: ~p", [Config]),
     set_config(Env, Config),
 
-    RSBResults = run_mr(Nodes, RSBucket, RSKeyAndUniques, RSCommon),
-    YZBResults = run_mr(Nodes, YZBucket, YZKeyAndUniques, YZCommon),
+    RSBResults = run_bucket_mr(Nodes, RSBucket, RSKeyAndUniques, RSCommon),
+    RSIResults = run_index_mr(Nodes, RSBucket, RSKeyAndUniques, RSCommon),
+    YZBResults = run_bucket_mr(Nodes, YZBucket, YZKeyAndUniques, YZCommon),
+    YZIResults = run_index_mr(Nodes, YZIndex, YZKeyAndUniques, YZCommon),
 
-    lager:info("RS Results: ~p", [RSBResults]),
-    lager:info("YZ Results: ~p", [YZBResults]),
+    lager:info("RS Bucket Results: ~p", [RSBResults]),
+    lager:info("RS Index Results: ~p", [RSIResults]),
+    lager:info("YZ Bucket Results: ~p", [YZBResults]),
+    lager:info("YZ Index Results: ~p", [YZIResults]),
     
     ?assertEqual(expected_riak_search(Config),
                  got_riak_search(RSBResults, RSBucket,
                                  RSKeyAndUniques, RSCommon)),
+    ?assertEqual(expected_riak_search(Config),
+                 got_riak_search(RSIResults, RSBucket,
+                                 RSKeyAndUniques, RSCommon)),
     ?assertEqual(expected_yokozuna(Config),
                  got_yokozuna(YZBResults, YZBucket,
+                              YZKeyAndUniques, YZCommon)),
+    ?assertEqual(expected_yokozuna(Config),
+                 got_yokozuna(YZIResults, YZBucket,
                               YZKeyAndUniques, YZCommon)),
     %% asking YZ to MR a bucket it hasn't indexed results in error
     ?assertEqual(expected_yokozuna(Config) or expected_error(Config),
                  got_error(RSBResults)),
     ?assertEqual(expected_error(Config),
-                 got_error(YZBResults)).
+                 got_error(YZBResults)),
+    ?assertEqual(expected_error(Config),
+                 got_error(YZIResults)).
 
 %% make up random test data, to fight against accidental re-runs, and
 %% put it in the test log so we know where to poke when things fail
@@ -284,13 +297,20 @@ got_error({error, _}) ->
 got_error(_) ->
     false.
 
-run_mr([Node|_], Bucket, _KeyAndUniques, Common) ->
+run_bucket_mr([Node|_], Bucket, _KeyAndUniques, Common) ->
     C = rt:pbc(Node),
     riakc_pb_socket:mapred(
       C,
       %% TODO: check {search, Bucket, Common, Filter}
       %% independently
       {search, Bucket, Common},
+      []).
+
+run_index_mr([Node|_], Index, _KeyAndUniques, Common) ->
+    C = rt:pbc(Node),
+    riakc_pb_socket:mapred(
+      C,
+      {search, {index, Index}, Common},
       []).
 
 %% Prefix is included to make it easy to tell what was set up for
