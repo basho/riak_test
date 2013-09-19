@@ -46,7 +46,8 @@
           rs_common, % common data for all keys for riak_search
           yz_bucket, % \
           yz_keyuqs, % +- ditto, yokozuna
-          yz_common  % /
+          yz_common, % /
+          yz_index   % YZ index separate from bucket name
          }).
 
 confirm() ->
@@ -76,7 +77,7 @@ setup_test_env() ->
     load_test_data(Nodes, RSBucket, RSKeyAndUniques, RSCommon),
 
     {YZBucket, YZKeyAndUniques, YZCommon} = generate_test_data(<<"yz">>),
-    setup_yz_bucket(Nodes, YZBucket),
+    YZIndex = setup_yz_bucket(Nodes, YZBucket),
     load_test_data(Nodes, YZBucket, YZKeyAndUniques, YZCommon),
 
     %% give yokozuna time to auto-commit
@@ -89,6 +90,7 @@ setup_test_env() ->
           rs_keyuqs=RSKeyAndUniques,
           rs_common=RSCommon,
           yz_bucket=YZBucket,
+          yz_index=YZIndex,
           yz_keyuqs=YZKeyAndUniques,
           yz_common=YZCommon }.
 
@@ -160,19 +162,39 @@ setup_rs_bucket([Node|_], Bucket) ->
     ok = rhc:set_bucket(C, Bucket, [{search, true}]).
 
 %% setup yokozuna hook/index - bucket name == index name
-setup_yz_bucket([Node|_], Bucket) ->
-    lager:info("Setting up yokozuna index"),
+setup_yz_bucket([Node|_]=Cluster, Bucket) ->
+    Index = generate_string(),
+    lager:info("Setting up yokozuna index ~s", [Index]),
 
     %% create index
-    IUrl = iburl(Node, ["/yz/index/",Bucket]),
+    IUrl = iburl(Node, index_path(Index)),
     {ok, "204", _, _} = ibrowse:send_req(IUrl, [], put),
+    wait_for_index(Cluster, Index),
 
     %% attach bucket to index
     %% TODO: teach rhc_bucket:httpify_prop/2 `yz_index'
     BUrl = iburl(Node, ["/buckets/",Bucket,"/props"]),
     BHeaders = [{"content-type", "application/json"}],
-    BProps = mochijson2:encode([{props, {struct, [{yz_index, Bucket}]}}]),
-    {ok, "204", _, _} = ibrowse:send_req(BUrl, BHeaders, put, BProps).
+    BProps = mochijson2:encode([{props, {struct, [{yz_index, Index}]}}]),
+    {ok, "204", _, _} = ibrowse:send_req(BUrl, BHeaders, put, BProps),
+    Index.
+
+index_path(Index) ->
+    ["/yz/index/",Index].
+
+%% if we start writing data too soon, it won't be indexed, so wait
+%% until solr has created the index
+wait_for_index(Cluster, Index) ->
+    IsIndexUp =
+        fun(Node) ->
+                lager:info("Waiting for index ~s on node ~p", [Index, Node]),
+                IUrl = iburl(Node, index_path(Index)),
+                case ibrowse:send_req(IUrl, [], get) of
+                    {ok, "200", _, _} -> true;
+                    _ -> false
+                end
+        end,
+    [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster].
 
 %% ibrowse really wants a list of characters, not a binary, not an iolist
 iburl(Node, Path) ->
