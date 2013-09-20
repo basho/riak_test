@@ -870,6 +870,26 @@ ensure_unacked_and_queue_test_() ->
             ?assertNotEqual([], N456Data),
             Unacked = proplists:get_value(unacked, N456Data),
             ?assertEqual(0, Unacked)
+        end},
+
+        {"after acks, queues are empty", fun() ->
+            Nodes = N123 ++ N456,
+            Got = lists:map(fun(Node) ->
+                rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+            end, Nodes),
+            Expected = [true || _ <- lists:seq(1, length(Nodes))],
+            ?assertEqual(Expected, Got)
+        end},
+
+        {"after acks, queues truly are empty. Truly", fun() ->
+            Nodes = N123 ++ N456,
+            Gots = lists:map(fun(Node) ->
+                {Node, rpc:call(Node, riak_repl2_rtq, dumpq, [])}
+            end, Nodes),
+            lists:map(fun({Node, Got}) ->
+                ?debugFmt("Checking data from ~p", [Node]),
+                ?assertEqual([], Got)
+            end, Gots)
         end}
 
     ] end}}.
