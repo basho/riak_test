@@ -366,6 +366,7 @@ partition(P1, P2) ->
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
     [true = rpc:call(N, erlang, set_cookie, [N, NewCookie]) || N <- P1],
     [[true = rpc:call(N, erlang, disconnect_node, [P2N]) || N <- P1] || P2N <- P2],
+    wait_until_partitioned(P1, P2),
     {NewCookie, OldCookie, P1, P2}.
 
 %% @doc heal the partition created by call to `partition/2'
@@ -652,6 +653,22 @@ wait_until_registered(Node, Name) ->
             ?assert(registered_name_timed_out)
     end.
 
+
+%% Waits until the cluster actually detects that it is partitioned.
+wait_until_partitioned(P1, P2) ->
+    lager:info("Waiting until partition acknowledged: ~p ~p", [P1, P2]),
+    [ begin
+          lager:info("Waiting for ~p to be partitioned from ~p", [Node, P2]),
+          wait_until(fun() -> is_partitioned(Node, P2) end)
+      end || Node <- P1 ],
+    [ begin
+          lager:info("Waiting for ~p to be partitioned from ~p", [Node, P1]),
+          wait_until(fun() -> is_partitioned(Node, P1) end)
+      end || Node <- P2 ].
+
+is_partitioned(Node, Peers) ->
+    AvailableNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
+    lists:all(fun(Peer) -> not lists:member(Peer, AvailableNodes) end, Peers).
 
 % when you just can't wait
 brutal_kill(Node) ->
