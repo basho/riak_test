@@ -829,7 +829,51 @@ ensure_ack_test_() ->
         end}
     ]
     end}}.
-    
+
+ensure_unacked_and_queue() ->
+    eunit(ensure_unacked_and_queue_test_()).
+
+ensure_unacked_and_queue_test_() ->
+    {timeout, timeout(130), {setup, fun() ->
+        Nodes = rt:deploy_nodes(6, conf()),
+        {N123, N456} = lists:split(3, Nodes),
+        repl_util:make_cluster(N123),
+        repl_util:make_cluster(N456),
+        repl_util:wait_until_leader_converge(N123),
+        repl_util:wait_until_leader_converge(N456),
+        repl_util:name_cluster(hd(N123), "n123"),
+        repl_util:name_cluster(hd(N456), "n456"),
+        N456Port = get_cluster_mgr_port(hd(N456)),
+        connect_rt(hd(N123), N456Port, "n456"),
+        N123Port = get_cluster_mgr_port(hd(N123)),
+        connect_rt(hd(N456), N123Port, "n123"),
+        {N123, N456}
+    end,
+    fun({N123, N456}) ->
+        rt:clean_cluster(N123),
+        rt:clean_cluster(N456)
+    end,
+    fun({N123, N456}) -> [
+
+        {"unacked does not increase when there are skips", timeout, timeout(100), fun() ->
+            N123Leader = hd(N123),
+            N456Leader = hd(N456),
+
+            write_n_keys(N123Leader, N456Leader, 1, 10000),
+
+            write_n_keys(N456Leader, N123Leader, 10001, 20000),
+
+            RTQStatus = rpc:call(N123Leader, riak_repl2_rtq, status, []),
+
+            Consumers = proplists:get_value(consumers, RTQStatus),
+            N456Data = proplists:get_value("n456", Consumers),
+            ?assertNotEqual([], N456Data),
+            Unacked = proplists:get_value(unacked, N456Data),
+            ?assertEqual(0, Unacked)
+        end}
+
+    ] end}}.
+
 %% =====
 %% utility functions for teh happy
 %% ====
@@ -929,11 +973,36 @@ wait_for_rt_started(Node, ToName) ->
     end,
     rt:wait_until(Node, Fun).
 
+write_n_keys(Source, Destination, M, N) ->
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+    First = M,
+    Last = N,
+
+    %% Write some objects to the source cluster (A),
+    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
+               [Last-First+1, Source, Destination]),
+    ?assertEqual([], repl_util:do_write(Source, First, Last, TestBucket, 2)),
+
+    %% verify data is replicated to B
+    lager:info("Reading ~p keys written from ~p", [Last-First+1, Destination]),
+    ?assertEqual(0, repl_util:wait_for_reads(Destination, First, Last, TestBucket, 2)).
+
 timeout(MultiplyBy) ->
     case rt_config:get(default_timeout, 1000) of
         infinity ->
             infinity;
         N ->
             N * MultiplyBy
+    end.
+
+eunit(TestDef) ->
+    case eunit:test(TestDef, [verbose]) of
+        ok ->
+            pass;
+        error ->
+            exit(error),
+            fail
     end.
 
