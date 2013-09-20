@@ -33,9 +33,9 @@ confirm() ->
     enable_ssl(Node),
     %[enable_ssl(N) || N <- Nodes],
     {ok, [{"127.0.0.1", Port0}]} = rpc:call(Node, application, get_env,
-                                 [riak_core, http]),
+                                 [riak_api, http]),
     {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
-                                 [riak_core, https]),
+                                 [riak_api, https]),
 
     MD = riak_test_runner:metadata(),
     _HaveIndexes = case proplists:get_value(backend, MD) of
@@ -289,9 +289,8 @@ confirm() ->
     ok.
 
 enable_ssl(Node) ->
-    {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
-                                 [riak_core, http]),
-    rt:update_app_config(Node, [{riak_core, [{https, [{"127.0.0.1",
+    [{http, {_IP, Port}}|_] = rt:connection_info(Node),
+    rt:update_app_config(Node, [{riak_api, [{https, [{"127.0.0.1",
                                                      Port+1000}]}]}]),
     rt:wait_until_pingable(Node),
     rt:wait_for_service(Node, riak_kv).
