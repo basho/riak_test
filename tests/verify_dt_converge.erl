@@ -37,7 +37,8 @@
 -define(KEY, <<"test">>).
 
 confirm() ->
-    [N1, N2, N3, N4]=Nodes = rt:build_cluster(4),
+    Config = [ {riak_kv, [{handoff_concurrency, 100}]}, {riak_core, [ {ring_creation_size, 16}, {vnode_management_timer, 1000} ]}],
+    [N1, N2, N3, N4]=Nodes = rt:build_cluster(4, Config),
 
     create_bucket_types(Nodes, ?TYPES),
 
@@ -230,11 +231,11 @@ check_3a({BType, map}, Client) ->
 
 check_4({BType, counter}, Client) ->
     lager:info("check_4: Checking final merged value of counter"),
-    check_value(Client, {BType, ?BUCKET}, ?KEY, riakc_counter, -3);
+    check_value(Client, {BType, ?BUCKET}, ?KEY, riakc_counter, -3, [{pr, 3}, {notfound_ok, false}]);
 check_4({BType, set}, Client) ->
     lager:info("check_4: Checking final merged value of set"),
     check_value(Client, {BType, ?BUCKET}, ?KEY, riakc_set,
-                [<<"Cassandra">>, <<"Couchbase">>, <<"Riak">>, <<"Voldemort">>]);
+                [<<"Cassandra">>, <<"Couchbase">>, <<"Riak">>, <<"Voldemort">>], [{pr, 3}, {notfound_ok, false}]);
 check_4({BType, map}, Client) ->
     lager:info("check_4: Checking final merged value of map"),
     check_value(Client, {BType, ?BUCKET}, ?KEY, riakc_map,
@@ -243,18 +244,16 @@ check_4({BType, map}, Client) ->
                    {{<<"home">>, register}, <<"foo@bar.com">>}
                   ]},
                  {{<<"followers">>, counter}, 10},
-                 %% TODO: add on side A wins over erase side B (non reset-remove)
-                 %% {{<<"friends">>, set}, [<<"Russell">>, <<"Sam">>]},
-                 {{<<"friends">>, set}, [<<"Sam">>]}, %% reset-remove
-                 {{<<"verified">>, flag}, false}]).
-
-
+                 {{<<"friends">>, set}, [<<"Russell">>, <<"Sam">>]},
+                 {{<<"verified">>, flag}, false}], [{pr, 3}, {notfound_ok, false}]).
 
 check_value(Client, Bucket, Key, Mod, Expected) ->
+    check_value(Client, Bucket, Key, Mod, Expected, [{r,2}, {notfound_ok, true}, {timeout, 5000}]).
+
+check_value(Client, Bucket, Key, Mod, Expected, Options) ->
     rt:wait_until(fun() ->
                           try
-                              Result = riakc_pb_socket:fetch_type(Client, Bucket, Key, [{r, 2}, {notfound_ok, true},
-                                                                                        {timeout, 5000}]),
+                              Result = riakc_pb_socket:fetch_type(Client, Bucket, Key, Options),
                               ?assertMatch({ok, _}, Result),
                               {ok, C} = Result,
                               ?assertEqual(true, Mod:is_type(C)),
