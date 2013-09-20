@@ -25,7 +25,10 @@
          stop_realtime/2,
          do_write/5,
          get_fs_coord_status_item/3,
-         num_partitions/1
+         num_partitions/1,
+         get_cluster_mgr_port/1,
+         maybe_reconnect_rt/3,
+         connect_rt/3
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -284,3 +287,21 @@ num_partitions(Node) ->
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
     N = riak_core_ring:num_partitions(Ring),
     N.
+
+get_cluster_mgr_port(Node) ->
+    {ok, {_Ip, Port}} = rpc:call(Node, application, get_env, [riak_core, cluster_mgr]),
+    Port.
+
+maybe_reconnect_rt(SourceNode, SinkPort, SinkName) ->
+    case repl_util:wait_for_connection(SourceNode, SinkName) of
+        fail ->
+            connect_rt(SourceNode, SinkPort, SinkName);
+        Oot ->
+            Oot
+    end.
+
+connect_rt(SourceNode, SinkPort, SinkName) ->
+    repl_util:connect_cluster(SourceNode, "127.0.0.1", SinkPort),
+    repl_util:wait_for_connection(SourceNode, SinkName),
+    repl_util:enable_realtime(SourceNode, SinkName),
+    repl_util:start_realtime(SourceNode, SinkName).
