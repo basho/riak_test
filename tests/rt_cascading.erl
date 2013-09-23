@@ -834,7 +834,7 @@ ensure_unacked_and_queue() ->
     eunit(ensure_unacked_and_queue_test_()).
 
 ensure_unacked_and_queue_test_() ->
-    {timeout, timeout(130), {setup, fun() ->
+    {timeout, timeout(2300), {setup, fun() ->
         Nodes = rt:deploy_nodes(6, conf()),
         {N123, N456} = lists:split(3, Nodes),
         repl_util:make_cluster(N123),
@@ -849,10 +849,10 @@ ensure_unacked_and_queue_test_() ->
         connect_rt(hd(N456), N123Port, "n123"),
         {N123, N456}
     end,
-    fun({N123, N456}) ->
+    maybe_skip_teardown(fun({N123, N456}) ->
         rt:clean_cluster(N123),
         rt:clean_cluster(N456)
-    end,
+    end),
     fun({N123, N456}) -> [
 
         {"unacked does not increase when there are skips", timeout, timeout(100), fun() ->
@@ -890,6 +890,44 @@ ensure_unacked_and_queue_test_() ->
                 ?debugFmt("Checking data from ~p", [Node]),
                 ?assertEqual([], Got)
             end, Gots)
+        end},
+
+        {"dual loads keeps unacked satisfied", timeout, timeout(100), fun() ->
+            N123Leader = hd(N123),
+            N456Leader = hd(N456),
+            LoadN123Pid = spawn(fun() ->
+                {Time, Val} = timer:tc(fun write_n_keys/4, [N123Leader, N456Leader, 20001, 30000]),
+                ?debugFmt("loading 123 to 456 took ~p to get ~p", [Time, Val]),
+                Val
+            end),
+            LoadN456Pid = spawn(fun() ->
+                {Time, Val} = timer:tc(fun write_n_keys/4, [N456Leader, N123Leader, 30001, 40000]),
+                ?debugFmt("loading 456 to 123 took ~p to get ~p", [Time, Val]),
+                Val
+            end),
+            Exits = wait_exit([LoadN123Pid, LoadN456Pid], infinity),
+            ?assert(lists:all(fun(E) -> E == normal end, Exits)),
+
+            StatusDig = fun(SinkName, Node) ->
+                Status = rpc:call(Node, riak_repl2_rtq, status, []),
+                Consumers = proplists:get_value(consumers, Status, []),
+                ConsumerStats = proplists:get_value(SinkName, Consumers, []),
+                proplists:get_value(unacked, ConsumerStats)
+            end,
+
+            N123Unacked = StatusDig("n456", N123Leader),
+            ?assertEqual(0, N123Unacked),
+
+            N456Unacked = StatusDig("n123", N456Leader),
+            case N456Unacked of
+                0 ->
+                    ?assert(true);
+                _ ->
+                    N456Unacked2 = StatusDig("n123", N456Leader),
+                    ?debugFmt("Not 0, are they at least decreasing?~n"
+                        "    ~p, ~p", [N456Unacked2, N456Unacked]),
+                    ?assert(N456Unacked2 < N456Unacked)
+            end
         end}
 
     ] end}}.
@@ -897,6 +935,17 @@ ensure_unacked_and_queue_test_() ->
 %% =====
 %% utility functions for teh happy
 %% ====
+
+wait_exit(Pids, Timeout) ->
+    Mons = [{erlang:monitor(process, Pid), Pid} || Pid <- Pids],
+    lists:map(fun({Mon, Pid}) ->
+        receive
+            {'DOWN', Mon, process, Pid, Cause} ->
+                Cause
+        after Timeout ->
+            timeout
+        end
+    end, Mons).
 
 conf() ->
     [{lager, [
@@ -1024,5 +1073,15 @@ eunit(TestDef) ->
         error ->
             exit(error),
             fail
+    end.
+
+maybe_skip_teardown(TearDownFun) ->
+    fun(Arg) ->
+        case rt_config:config_or_os_env(skip_teardowns, undefined) of
+            undefined ->
+                TearDownFun(Arg);
+            _ ->
+                ok
+        end
     end.
 
