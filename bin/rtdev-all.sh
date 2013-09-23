@@ -4,7 +4,7 @@ ORIGDIR=`pwd`
 pushd `dirname $0` > /dev/null
 SCRIPT_DIR=`pwd`
 popd > /dev/null
-CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
+CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R16B02}
 
 if [ -n "$DEBUG_RTDEV" ]; then
     echo "= Configuration ================================================="
