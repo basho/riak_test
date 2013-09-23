@@ -250,9 +250,9 @@ load_test_data([Node|_], Bucket, KeyAndUniques, Common) ->
 
 expected_riak_search(Config) ->
     is_enabled(Config, riak_search)
-        %% if yokozuna is also enabled, must explicitly pick riak_search
+        %% if yokozuna is also enabled, riak_search is the default
         and ( (not is_enabled(Config, yokozuna))
-              or (riak_search == provider(Config)) ).
+              or (yokozuna =/= provider(Config)) ).
 
 expected_yokozuna(Config) ->
     is_enabled(Config, yokozuna)
@@ -261,14 +261,9 @@ expected_yokozuna(Config) ->
               or (yokozuna == provider(Config)) ).
 
 expected_error(Config) ->
-    %% it is an error to have both enabled, but not explictly pick one
-    ( is_enabled(Config, yokozuna)
-      and is_enabled(Config, riak_search)
-      and (undefined == provider(Config)) )
-
-    %% it is also an error to have neither enabled
-    or not ( is_enabled(Config, yokozuna)
-             or is_enabled(Config, riak_search) ).
+    %% must have at least one system on to get results
+    not ( is_enabled(Config, yokozuna)
+          or is_enabled(Config, riak_search) ).
 
 is_enabled(Config, App) ->
     true == kvc:path([App, enabled], Config).
