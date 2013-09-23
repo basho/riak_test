@@ -330,7 +330,7 @@ run_index_mr([Node|_], Index, Common) ->
     C = rt:pbc(Node),
     riakc_pb_socket:mapred(
       C,
-      {search, {index, Index}, Common},
+      {search, {struct,[{<<"index">>,Index}]}, Common},
       []).
 
 %% Prefix is included to make it easy to tell what was set up for
