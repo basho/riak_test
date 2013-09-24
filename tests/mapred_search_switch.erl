@@ -316,6 +316,6 @@ generate_bucket_name(Prefix) ->
 generate_string() ->
     %% stolen from riak_core_util:unique_id_62/0, but using 36 instead
     %% so as not to have to copy riak_core_util:integer_to_list
-    Rand = crypto:sha(term_to_binary({make_ref(), os:timestamp()})),
+    Rand = crypto:hash(sha, term_to_binary({make_ref(), os:timestamp()})),
     <<I:160/integer>> = Rand,
     list_to_binary(integer_to_list(I, 36)).
