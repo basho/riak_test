@@ -1073,7 +1073,7 @@ pmap(F, L) ->
     Parent = self(),
     lists:foldl(
       fun(X, N) ->
-              spawn(fun() ->
+              spawn_link(fun() ->
                             Parent ! {pmap, N, F(X)}
                     end),
               N+1
