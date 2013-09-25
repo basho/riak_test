@@ -5,17 +5,16 @@
 -compile([export_all]).
 
 -export([confirm/0]).
+% individual tests
+-export([toggle_enabled/0, data_push/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    case eunit:test(?MODULE, [verbose]) of
-        ok ->
-            pass;
-        error ->
-            exit(error),
-            fail
-    end.
+    eunit(?MODULE).
+
+toggle_enabled() ->
+    eunit(toggle_enabled_test_()).
 
 toggle_enabled_test_() ->
     {setup, fun() ->
@@ -67,14 +66,7 @@ toggle_enabled_test_() ->
 }).
 
 data_push() ->
-    Tests = data_push_test_(),
-    case eunit:test(Tests, [verbose]) of
-        ok ->
-            pass;
-        error ->
-            exit(error),
-            fail
-    end.
+    eunit(data_push_test_()).
 
 data_push_test_() ->
     {timeout, rt_cascading:timeout(1000000000000000), {setup, fun() ->
@@ -553,3 +545,11 @@ next_socket(SocketQueue) ->
     NextQueue = queue:in(Socket, ShorterQueue),
     {Socket, NextQueue}.
 
+eunit(TestRep) ->
+    case eunit:test(TestRep, [verbose]) of
+        ok ->
+            pass;
+        error ->
+            exit(error),
+            fail
+    end.
