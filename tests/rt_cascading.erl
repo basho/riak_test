@@ -863,13 +863,16 @@ ensure_unacked_and_queue_test_() ->
 
             write_n_keys(N456Leader, N123Leader, 10001, 20000),
 
-            RTQStatus = rpc:call(N123Leader, riak_repl2_rtq, status, []),
+            Res = rt:wait_until(fun() ->
+                RTQStatus = rpc:call(N123Leader, riak_repl2_rtq, status, []),
 
-            Consumers = proplists:get_value(consumers, RTQStatus),
-            N456Data = proplists:get_value("n456", Consumers),
-            ?assertNotEqual([], N456Data),
-            Unacked = proplists:get_value(unacked, N456Data),
-            ?assertEqual(0, Unacked)
+                Consumers = proplists:get_value(consumers, RTQStatus),
+                Data = proplists:get_value("n456", Consumers),
+                Unacked = proplists:get_value(unacked, Data),
+                ?debugFmt("unacked: ~p", [Unacked]),
+                0 == Unacked
+            end),
+            ?assertEqual(ok, Res)
         end},
 
         {"after acks, queues are empty", fun() ->
@@ -915,8 +918,12 @@ ensure_unacked_and_queue_test_() ->
                 proplists:get_value(unacked, ConsumerStats)
             end,
 
-            N123Unacked = StatusDig("n456", N123Leader),
-            ?assertEqual(0, N123Unacked),
+            N123UnackedRes = rt:wait_until(fun() ->
+                Unacked = StatusDig("n456", N123Leader),
+                ?debugFmt("Unacked: ~p", [Unacked]),
+                0 == Unacked
+            end),
+            ?assertEqual(ok, N123UnackedRes),
 
             N456Unacked = StatusDig("n123", N456Leader),
             case N456Unacked of
@@ -928,6 +935,43 @@ ensure_unacked_and_queue_test_() ->
                         "    ~p, ~p", [N456Unacked2, N456Unacked]),
                     ?assert(N456Unacked2 < N456Unacked)
             end
+        end},
+
+        {"after dual load acks, queues are empty", fun() ->
+            Nodes = N123 ++ N456,
+            Got = lists:map(fun(Node) ->
+                rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+            end, Nodes),
+            Expected = [true || _ <- lists:seq(1, length(Nodes))],
+            ?assertEqual(Expected, Got)
+        end},
+
+        {"after dual load acks, queues truly are empty. Truly", fun() ->
+            Nodes = N123 ++ N456,
+            Gots = lists:map(fun(Node) ->
+                {Node, rpc:call(Node, riak_repl2_rtq, dumpq, [])}
+            end, Nodes),
+            lists:map(fun({Node, Got}) ->
+                ?debugFmt("Checking data from ~p", [Node]),
+                ?assertEqual([], Got)
+            end, Gots)
+        end},
+
+        {"no negative pendings", fun() ->
+            Nodes = N123 ++ N456,
+            GetPending = fun({sink_stats, SinkStats}) ->
+                ConnTo = proplists:get_value(rt_sink_connected_to, SinkStats),
+                proplists:get_value(pending, ConnTo)
+            end,
+            lists:map(fun(Node) ->
+                ?debugFmt("Checking node ~p", [Node]),
+                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                Sinks = proplists:get_value(sinks, Status),
+                lists:map(fun(SStats) ->
+                    Pending = GetPending(SStats),
+                    ?assertEqual(0, Pending)
+                end, Sinks)
+            end, Nodes)
         end}
 
     ] end}}.
@@ -967,7 +1011,8 @@ conf() ->
     {riak_repl, [
         {fullsync_on_connect, false},
         {fullsync_interval, disabled},
-        {diff_batch_size, 10}
+        {diff_batch_size, 10},
+        {rt_heartbeat_interval, undefined}
     ]}].
 
 get_cluster_mgr_port(Node) ->
