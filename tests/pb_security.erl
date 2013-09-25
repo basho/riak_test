@@ -36,8 +36,7 @@ confirm() ->
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
 
-    {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
-                                 [riak_api, pb]),
+    [_, {pb, {"127.0.0.1", Port}}] = rt:connection_info(Node),
 
     %% can connect without credentials, but not do anything
     {ok, PB0} =  riakc_pb_socket:start("127.0.0.1", Port,
