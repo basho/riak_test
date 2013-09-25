@@ -127,32 +127,21 @@ confirm_config(#env{nodes=Nodes,
     set_config(Env, Config),
 
     RSBResults = run_bucket_mr(Nodes, RSBucket, RSCommon),
-    RSIResults = run_index_mr(Nodes, RSBucket, RSCommon),
-    YZBResults = run_bucket_mr(Nodes, YZBucket, YZCommon),
-    YZIResults = run_index_mr(Nodes, YZIndex, YZCommon),
+    YZBResults = run_bucket_mr(Nodes, YZIndex, YZCommon),
 
     lager:info("RS Bucket Results: ~p", [RSBResults]),
-    lager:info("RS Index Results: ~p", [RSIResults]),
     lager:info("YZ Bucket Results: ~p", [YZBResults]),
-    lager:info("YZ Index Results: ~p", [YZIResults]),
-    
+
     ?assertEqual(expected_riak_search(Config),
                  got_riak_search(RSBResults, RSBucket,
                                  RSKeyAndUniques)),
-    ?assertEqual(expected_riak_search(Config),
-                 got_riak_search(RSIResults, RSBucket,
-                                 RSKeyAndUniques)),
     ?assertEqual(expected_yokozuna(Config),
                  got_yokozuna(YZBResults, YZBucket, YZKeyAndUniques)),
-    ?assertEqual(expected_yokozuna(Config),
-                 got_yokozuna(YZIResults, YZBucket, YZKeyAndUniques)),
     %% asking YZ to MR a bucket it hasn't indexed results in error
     ?assertEqual(expected_yokozuna(Config) or expected_error(Config),
                  got_error(RSBResults)),
     ?assertEqual(expected_error(Config),
-                 got_error(YZBResults)),
-    ?assertEqual(expected_error(Config),
-                 got_error(YZIResults)).
+                 got_error(YZBResults)).
 
 %% make up random test data, to fight against accidental re-runs, and
 %% put it in the test log so we know where to poke when things fail
@@ -299,13 +288,6 @@ run_bucket_mr([Node|_], Bucket, Common) ->
       %% TODO: check {search, Bucket, Common, Filter}
       %% independently
       {search, Bucket, Common},
-      []).
-
-run_index_mr([Node|_], Index, Common) ->
-    C = rt:pbc(Node),
-    riakc_pb_socket:mapred(
-      C,
-      {search, {struct,[{<<"index">>,Index}]}, Common},
       []).
 
 %% Prefix is included to make it easy to tell what was set up for
