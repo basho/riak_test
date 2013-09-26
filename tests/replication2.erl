@@ -541,7 +541,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("got ~p write failures to ~p", [length(WriteErrors), Target]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster node, ~p", [BSecond]),
-    {ok, [{_IP, Port2}|_]} = rpc:call(BSecond, application, get_env, [riak_core, http]),
+    [{_IP, Port2},_] = rt:connection_info(BSecond),
     C2 = rhc:create("127.0.0.1", Port2, "riak", []),
     ReadErrors = http_read(C2, 12000, 22000, TestBucket, 2),
     lager:info("got ~p read failures from ~p", [length(ReadErrors), BSecond]),
