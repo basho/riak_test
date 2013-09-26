@@ -6,7 +6,7 @@
 
 -export([confirm/0]).
 % individual tests
--export([toggle_enabled/0, data_push/0]).
+-export([toggle_enabled/0, data_push/0, aae/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -69,7 +69,7 @@ data_push() ->
     eunit(data_push_test_()).
 
 data_push_test_() ->
-    {timeout, rt_cascading:timeout(1000000000000000), {setup, fun() ->
+    {timeout, rt_cascading:timeout(100), {setup, fun() ->
         Nodes = rt:deploy_nodes(6, conf()),
         {[N1 | _] = C123, [N4 | _] = C456} = lists:split(3, Nodes),
         repl_util:make_cluster(C123),
@@ -190,7 +190,79 @@ data_push_test_() ->
             end, Got)
         end}
 
+    ] end}}.
 
+aae() ->
+    eunit(aae_test_()).
+
+aae_test_() ->
+    {timeout, rt_cascading:timeout(100), {setup, fun() ->
+        BaseConf = conf(),
+        KvConf = proplists:get_value(riak_kv, BaseConf, []),
+        % these settings are all really bad ideas on a production system
+        % however, I'd rather not wait several hours for a tree to
+        % finish building
+        AAESettings = [
+            {anti_entropy_concurrency, 5},
+            {anti_entropy_build_limit, {5, 5000}},
+            {anti_entropy_tick, 1000}
+        ],
+        KvAAEConf = lists:foldl(fun({K,_} = Prop,Acc) ->
+            lists:keystore(K, 1, Acc, Prop)
+        end, KvConf, AAESettings),
+        Conf = lists:keystore(riak_kv, 1, BaseConf, {riak_kv, KvAAEConf}),
+        Nodes = rt:deploy_nodes(6, Conf),
+        {[N1 | _] = C123, [N4 | _] = C456} = lists:split(3, Nodes),
+        repl_util:make_cluster(C123),
+        repl_util:name_cluster(N1, "c123"),
+        repl_util:make_cluster(C456),
+        repl_util:name_cluster(N4, "c456"),
+        Port = repl_util:get_cluster_mgr_port(N4),
+        lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
+        repl_util:connect_rt(N1, Port, "c456"),
+        {Nodes, C123, C456}
+    end,
+    fun({Nodes, _C123, _C456}) ->
+        case rt_config:config_or_os_env(skip_teardowns, false) of
+            false ->
+                rt:clean_cluster(Nodes);
+            _ ->
+                ok
+        end
+    end,
+    fun({_Node, C123, C456}) -> [
+
+        {"aae diff tree rebuilt doesn't hose data", timeout, rt_cascading:timeout(50), fun() ->
+            [N4 | _] = C456,
+            [N1 | _] = C123,
+
+            lager:info("setting full objects to 1 on c456"),
+            rpc:call(N4, riak_repl_console, full_objects, [["1"]]),
+            WaitFun = fun(Node) ->
+                case rpc:call(Node, riak_repl_console, full_objects, [[]]) of
+                    1 ->
+                        true;
+                    Uh ->
+                        lager:info("~p got ~p", [Node, Uh]),
+                        false
+                end
+            end,
+            [rt:wait_until(Node, WaitFun) || Node <- C456],
+
+            First = 1, Last = 1000, Bucket = <<"aae_test_bucket">>,
+            lager:info("writing ~p keys to aae_test_bucket on c123", [Last]),
+            WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
+            ?assertEqual([], WriteGot),
+
+            lager:info("waiting for reads on c456"),
+            ReadGot = repl_util:wait_for_reads(N4, First, Last, Bucket, 3),
+            ?assertEqual(0, ReadGot),
+
+            lager:info("waiting for aae to kick"),
+            timer:sleep(3000),
+            ReadGot2 = repl_util:wait_for_reads(N4, First, Last, Bucket, 1),
+            ?assertEqual(0, ReadGot2)
+        end}
 
     ] end}}.
 
@@ -553,3 +625,19 @@ eunit(TestRep) ->
             exit(error),
             fail
     end.
+
+write_n_keys(Source, Destination, M, N) ->
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+    First = M,
+    Last = N,
+
+    %% Write some objects to the source cluster (A),
+    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
+               [Last-First+1, Source, Destination]),
+    ?assertEqual([], repl_util:do_write(Source, First, Last, TestBucket, 2)),
+
+    %% verify data is replicated to B
+    lager:info("Reading ~p keys written from ~p", [Last-First+1, Destination]),
+    ?assertEqual(0, repl_util:wait_for_reads(Destination, First, Last, TestBucket, 2)).
