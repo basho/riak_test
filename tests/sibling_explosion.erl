@@ -1,6 +1,7 @@
 -module(sibling_explosion).
 -include_lib("eunit/include/eunit.hrl").
 -export([confirm/0]).
+-compile(export_all).
 
 -define(B, <<"b">>).
 -define(K, <<"k">>).
@@ -19,11 +20,17 @@ confirm() ->
     _ = explode(PB, {A0, B0}, N),
 
     {ok, SibCheck1} = riakc_pb_socket:get(PB, <<"b">>, <<"k">>),
-    %% there should now be many siblings
-    ?assertEqual(N-1, riakc_obj:value_count(SibCheck1)),
-    %% and there should be a sibling for each list from [0]..[0..N-1]
-    %%    assert_sibling_values(riakc_obj:get_values(SibCheck1)),
+    %% there should now be only two siblings
+    ?assertEqual(2, riakc_obj:value_count(SibCheck1)),
+    %% siblings should merge to include all writes
+    assert_sibling_values(riakc_obj:get_values(SibCheck1), N),
     pass.
+
+assert_sibling_values(Values, N) ->
+    V = resolve(Values, sets:new()),
+    L = lists:sort(sets:to_list(V)),
+    Expected = lists:seq(0, N-2),
+    ?assertEqual(Expected, L).
 
 explode(_PB, {A, B}, 1) ->
     {A, B};
@@ -40,12 +47,10 @@ resolve_mutate_store(PB, N, Obj0) ->
 resolve_update(Obj, N) ->
     case riakc_obj:get_values(Obj) of
         [] -> Obj;
-        [_] ->
-            Obj;
         Values ->
-            lager:info("resolving ~p siblings", [length(Values)]),
             Value0 = resolve(Values, sets:new()),
             Value = sets:add_element(N, Value0),
+            lager:info("Storing ~p", [N]),
             riakc_obj:update_metadata(riakc_obj:update_value(Obj, Value), dict:new())
     end.
 
