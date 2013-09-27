@@ -829,10 +829,167 @@ ensure_ack_test_() ->
         end}
     ]
     end}}.
-    
+
+ensure_unacked_and_queue() ->
+    eunit(ensure_unacked_and_queue_test_()).
+
+ensure_unacked_and_queue_test_() ->
+    {timeout, timeout(2300), {setup, fun() ->
+        Nodes = rt:deploy_nodes(6, conf()),
+        {N123, N456} = lists:split(3, Nodes),
+        repl_util:make_cluster(N123),
+        repl_util:make_cluster(N456),
+        repl_util:wait_until_leader_converge(N123),
+        repl_util:wait_until_leader_converge(N456),
+        repl_util:name_cluster(hd(N123), "n123"),
+        repl_util:name_cluster(hd(N456), "n456"),
+        N456Port = get_cluster_mgr_port(hd(N456)),
+        connect_rt(hd(N123), N456Port, "n456"),
+        N123Port = get_cluster_mgr_port(hd(N123)),
+        connect_rt(hd(N456), N123Port, "n123"),
+        {N123, N456}
+    end,
+    maybe_skip_teardown(fun({N123, N456}) ->
+        rt:clean_cluster(N123),
+        rt:clean_cluster(N456)
+    end),
+    fun({N123, N456}) -> [
+
+        {"unacked does not increase when there are skips", timeout, timeout(100), fun() ->
+            N123Leader = hd(N123),
+            N456Leader = hd(N456),
+
+            write_n_keys(N123Leader, N456Leader, 1, 10000),
+
+            write_n_keys(N456Leader, N123Leader, 10001, 20000),
+
+            Res = rt:wait_until(fun() ->
+                RTQStatus = rpc:call(N123Leader, riak_repl2_rtq, status, []),
+
+                Consumers = proplists:get_value(consumers, RTQStatus),
+                Data = proplists:get_value("n456", Consumers),
+                Unacked = proplists:get_value(unacked, Data),
+                ?debugFmt("unacked: ~p", [Unacked]),
+                0 == Unacked
+            end),
+            ?assertEqual(ok, Res)
+        end},
+
+        {"after acks, queues are empty", fun() ->
+            Nodes = N123 ++ N456,
+            Got = lists:map(fun(Node) ->
+                rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+            end, Nodes),
+            Expected = [true || _ <- lists:seq(1, length(Nodes))],
+            ?assertEqual(Expected, Got)
+        end},
+
+        {"after acks, queues truly are empty. Truly", fun() ->
+            Nodes = N123 ++ N456,
+            Gots = lists:map(fun(Node) ->
+                {Node, rpc:call(Node, riak_repl2_rtq, dumpq, [])}
+            end, Nodes),
+            lists:map(fun({Node, Got}) ->
+                ?debugFmt("Checking data from ~p", [Node]),
+                ?assertEqual([], Got)
+            end, Gots)
+        end},
+
+        {"dual loads keeps unacked satisfied", timeout, timeout(100), fun() ->
+            N123Leader = hd(N123),
+            N456Leader = hd(N456),
+            LoadN123Pid = spawn(fun() ->
+                {Time, Val} = timer:tc(fun write_n_keys/4, [N123Leader, N456Leader, 20001, 30000]),
+                ?debugFmt("loading 123 to 456 took ~p to get ~p", [Time, Val]),
+                Val
+            end),
+            LoadN456Pid = spawn(fun() ->
+                {Time, Val} = timer:tc(fun write_n_keys/4, [N456Leader, N123Leader, 30001, 40000]),
+                ?debugFmt("loading 456 to 123 took ~p to get ~p", [Time, Val]),
+                Val
+            end),
+            Exits = wait_exit([LoadN123Pid, LoadN456Pid], infinity),
+            ?assert(lists:all(fun(E) -> E == normal end, Exits)),
+
+            StatusDig = fun(SinkName, Node) ->
+                Status = rpc:call(Node, riak_repl2_rtq, status, []),
+                Consumers = proplists:get_value(consumers, Status, []),
+                ConsumerStats = proplists:get_value(SinkName, Consumers, []),
+                proplists:get_value(unacked, ConsumerStats)
+            end,
+
+            N123UnackedRes = rt:wait_until(fun() ->
+                Unacked = StatusDig("n456", N123Leader),
+                ?debugFmt("Unacked: ~p", [Unacked]),
+                0 == Unacked
+            end),
+            ?assertEqual(ok, N123UnackedRes),
+
+            N456Unacked = StatusDig("n123", N456Leader),
+            case N456Unacked of
+                0 ->
+                    ?assert(true);
+                _ ->
+                    N456Unacked2 = StatusDig("n123", N456Leader),
+                    ?debugFmt("Not 0, are they at least decreasing?~n"
+                        "    ~p, ~p", [N456Unacked2, N456Unacked]),
+                    ?assert(N456Unacked2 < N456Unacked)
+            end
+        end},
+
+        {"after dual load acks, queues are empty", fun() ->
+            Nodes = N123 ++ N456,
+            Got = lists:map(fun(Node) ->
+                rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+            end, Nodes),
+            Expected = [true || _ <- lists:seq(1, length(Nodes))],
+            ?assertEqual(Expected, Got)
+        end},
+
+        {"after dual load acks, queues truly are empty. Truly", fun() ->
+            Nodes = N123 ++ N456,
+            Gots = lists:map(fun(Node) ->
+                {Node, rpc:call(Node, riak_repl2_rtq, dumpq, [])}
+            end, Nodes),
+            lists:map(fun({Node, Got}) ->
+                ?debugFmt("Checking data from ~p", [Node]),
+                ?assertEqual([], Got)
+            end, Gots)
+        end},
+
+        {"no negative pendings", fun() ->
+            Nodes = N123 ++ N456,
+            GetPending = fun({sink_stats, SinkStats}) ->
+                ConnTo = proplists:get_value(rt_sink_connected_to, SinkStats),
+                proplists:get_value(pending, ConnTo)
+            end,
+            lists:map(fun(Node) ->
+                ?debugFmt("Checking node ~p", [Node]),
+                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                Sinks = proplists:get_value(sinks, Status),
+                lists:map(fun(SStats) ->
+                    Pending = GetPending(SStats),
+                    ?assertEqual(0, Pending)
+                end, Sinks)
+            end, Nodes)
+        end}
+
+    ] end}}.
+
 %% =====
 %% utility functions for teh happy
 %% ====
+
+wait_exit(Pids, Timeout) ->
+    Mons = [{erlang:monitor(process, Pid), Pid} || Pid <- Pids],
+    lists:map(fun({Mon, Pid}) ->
+        receive
+            {'DOWN', Mon, process, Pid, Cause} ->
+                Cause
+        after Timeout ->
+            timeout
+        end
+    end, Mons).
 
 conf() ->
     [{lager, [
@@ -854,7 +1011,8 @@ conf() ->
     {riak_repl, [
         {fullsync_on_connect, false},
         {fullsync_interval, disabled},
-        {diff_batch_size, 10}
+        {diff_batch_size, 10},
+        {rt_heartbeat_interval, undefined}
     ]}].
 
 get_cluster_mgr_port(Node) ->
@@ -929,11 +1087,46 @@ wait_for_rt_started(Node, ToName) ->
     end,
     rt:wait_until(Node, Fun).
 
+write_n_keys(Source, Destination, M, N) ->
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+    First = M,
+    Last = N,
+
+    %% Write some objects to the source cluster (A),
+    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
+               [Last-First+1, Source, Destination]),
+    ?assertEqual([], repl_util:do_write(Source, First, Last, TestBucket, 2)),
+
+    %% verify data is replicated to B
+    lager:info("Reading ~p keys written from ~p", [Last-First+1, Destination]),
+    ?assertEqual(0, repl_util:wait_for_reads(Destination, First, Last, TestBucket, 2)).
+
 timeout(MultiplyBy) ->
     case rt_config:get(default_timeout, 1000) of
         infinity ->
             infinity;
         N ->
             N * MultiplyBy
+    end.
+
+eunit(TestDef) ->
+    case eunit:test(TestDef, [verbose]) of
+        ok ->
+            pass;
+        error ->
+            exit(error),
+            fail
+    end.
+
+maybe_skip_teardown(TearDownFun) ->
+    fun(Arg) ->
+        case rt_config:config_or_os_env(skip_teardowns, undefined) of
+            undefined ->
+                TearDownFun(Arg);
+            _ ->
+                ok
+        end
     end.
 
