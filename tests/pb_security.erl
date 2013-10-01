@@ -4,6 +4,7 @@
 -export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("riakc/include/riakc.hrl").
 
 confirm() ->
     application:start(crypto),
@@ -297,7 +298,7 @@ confirm() ->
                                                             "default", "TO", "user"]]),
 
             %% don't actually have any indexes
-            ?assertMatch({ok, {index_results_v1, [], _, _}},
+            ?assertMatch({ok, ?INDEX_RESULTS{keys=[]}},
                          riakc_pb_socket:get_index(PB, <<"hello">>,
                                                    {binary_index,
                                                     "name"},
