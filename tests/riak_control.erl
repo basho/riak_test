@@ -86,34 +86,6 @@ verify_upgrade_fold({FromVsn, Node}, VersionedNodes0) ->
 
     VersionedNodes.
 
-%% @doc Verify control is operating correctly.
-verify_control({legacy, Node}, _VersionedNodes) ->
-    lager:info("Verifying control on node ~p vsn legacy.", [Node]),
-
-    %% Verify overview resource.
-    verify_resource(Node, "/admin/overview"),
-
-    %% Verify cluster resource.
-    verify_resource(Node, "/admin/cluster/list"),
-
-    %% Verify partitions resource.
-    verify_resource(Node, "/admin/ring/partitions"),
-
-    ok;
-verify_control({previous, Node}, VersionedNodes) ->
-    lager:info("Verifying control on node ~p vsn previous.", [Node]),
-
-    %% Verify node resource.
-    {struct,
-     [{<<"nodes">>, Nodes}]} = verify_resource(Node, "/admin/nodes"),
-    validate_nodes(Node, Nodes, VersionedNodes, any),
-
-    %% Verify partitions resource.
-    {struct,
-     [{<<"partitions">>, Partitions}]} = verify_resource(Node, "/admin/partitions"),
-    validate_partitions({previous, Node}, Partitions, VersionedNodes),
-
-    ok;
 verify_control({current, Node}, VersionedNodes) ->
     lager:info("Verifying control on node ~p vsn current.", [Node]),
 
@@ -127,6 +99,20 @@ verify_control({current, Node}, VersionedNodes) ->
      [{<<"partitions">>, Partitions},
       {<<"default_n_val">>, _}]} = verify_resource(Node, "/admin/partitions"),
     validate_partitions({current, Node}, Partitions, VersionedNodes),
+
+    ok;
+verify_control({Vsn, Node}, VersionedNodes) ->
+    lager:info("Verifying control on node ~p vsn ~p.", [Vsn, Node]),
+
+    %% Verify node resource.
+    {struct,
+     [{<<"nodes">>, Nodes}]} = verify_resource(Node, "/admin/nodes"),
+    validate_nodes(Node, Nodes, VersionedNodes, any),
+
+    %% Verify partitions resource.
+    {struct,
+     [{<<"partitions">>, Partitions}]} = verify_resource(Node, "/admin/partitions"),
+    validate_partitions({previous, Node}, Partitions, VersionedNodes),
 
     ok.
 verify_control(VersionedNodes) ->
