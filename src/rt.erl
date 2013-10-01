@@ -331,18 +331,25 @@ plan_and_commit(Node) ->
     lager:info("planning and commiting cluster join"),
     case rpc:call(Node, riak_core_claimant, plan, []) of
         {error, ring_not_ready} ->
-            lager:info("ring not ready"),
+            lager:info("plan: ring not ready"),
             timer:sleep(100),
             plan_and_commit(Node);
         {ok, _, _} ->
-            case rpc:call(Node, riak_core_claimant, commit, []) of
-                {error, plan_changed} ->
-                    lager:info("plan changed"),
-                    timer:sleep(100),
-                    plan_and_commit(Node);
-                ok ->
-                    ok
-            end
+            do_commit(Node)
+    end.
+
+do_commit(Node) ->
+    case rpc:call(Node, riak_core_claimant, commit, []) of
+        {error, plan_changed} ->
+            lager:info("commit: plan changed"),
+            timer:sleep(100),
+            plan_and_commit(Node);
+        {error, ring_not_ready} ->
+            lager:info("commit: ring not ready"),
+            timer:sleep(100),
+            do_commit(Node);
+        ok ->
+            ok
     end.
 
 %% @doc Have the `Node' leave the cluster
