@@ -151,7 +151,7 @@ confirm() ->
 
     lager:info("Checking auth with non-peer certificate fails"),
     %% authing with non-peer certificate should fail
-    ?assertEqual({error, {tcp, closed}}, riakc_pb_socket:start("127.0.0.1", Port,
+    ?assertEqual({error, {tcp, {tls_alert, "unknown ca"}}}, riakc_pb_socket:start("127.0.0.1", Port,
                                       [{credentials, "site5.basho.com",
                                         "password"},
                                        {cacertfile, filename:join([PrivDir,
