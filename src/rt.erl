@@ -334,12 +334,15 @@ plan_and_commit(Node) ->
             lager:info("ring not ready"),
             timer:sleep(100),
             plan_and_commit(Node);
-        {error, plan_changed} ->
-            lager:info("plan changed"),
-            timer:sleep(100),
-            plan_and_commit(Node);
         {ok, _, _} ->
-            ok = rpc:call(Node, riak_core_claimant, commit, [])
+            case rpc:call(Node, riak_core_claimant, commit, []) of
+                {error, plan_changed} ->
+                    lager:info("plan changed"),
+                    timer:sleep(100),
+                    plan_and_commit(Node);
+                ok ->
+                    ok
+            end
     end.
 
 %% @doc Have the `Node' leave the cluster
