@@ -451,7 +451,7 @@ is_ready(Node) ->
         {ok, Ring} ->
             case lists:member(Node, riak_core_ring:ready_members(Ring)) of
                 true -> true;
-                false -> not_member
+                false -> {not_ready, Node}
             end;
         Other ->
             Other
