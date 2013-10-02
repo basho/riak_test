@@ -449,9 +449,12 @@ is_mixed_cluster(Node) ->
 is_ready(Node) ->
     case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
         {ok, Ring} ->
-            lists:member(Node, riak_core_ring:ready_members(Ring));
-        _ ->
-            false
+            case lists:member(Node, riak_core_ring:ready_members(Ring)) of
+                true -> true;
+                false -> not_member
+            end;
+        Other ->
+            Other
     end.
 
 %% @private
@@ -482,13 +485,13 @@ wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
 %% @doc Retry `Fun' until it returns `Retry' times, waiting `Delay'
 %% milliseconds between retries. This is our eventual consistency bread
 %% and butter
-wait_until(_, 0, _) ->
-    fail;
 wait_until(Fun, Retry, Delay) when Retry > 0 ->
-    Pass = Fun(),
-    case Pass of
+    Res = Fun(),
+    case Res of
         true ->
             ok;
+        _ when Retry == 1 ->
+            {fail, Res};
         _ ->
             timer:sleep(Delay),
             wait_until(Fun, Retry-1, Delay)
@@ -511,8 +514,8 @@ wait_until_status_ready(Node) ->
                                         case rpc:call(Node, riak_kv_console, status, [[]]) of
                                             ok ->
                                                 true;
-                                            _ ->
-                                                false
+                                            Res ->
+                                                Res
                                         end
                                 end)).
 
@@ -545,12 +548,12 @@ wait_until_transfers_complete([Node0|_]) ->
 wait_for_service(Node, Services) when is_list(Services) ->
     F = fun(N) ->
                 case rpc:call(N, riak_core_node_watcher, services, [N]) of
-                    {badrpc, _Error} ->
-                        false;
+                    {badrpc, Error} ->
+                        {badrpc, Error};
                     CurrServices when is_list(CurrServices) ->
                         lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
-                    _ ->
-                        false
+                    Res ->
+                        Res
                 end
         end,
     ?assertEqual(ok, wait_until(Node, F)),
@@ -605,8 +608,8 @@ wait_until_legacy_ringready(Node) ->
                           case rpc:call(Node, riak_kv_status, ringready, []) of
                               {ok, _Nodes} ->
                                   true;
-                              _ ->
-                                  false
+                              Res ->
+                                  Res
                           end
                   end).
 
