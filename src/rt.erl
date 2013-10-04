@@ -818,6 +818,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
             plan_and_commit(Node1)
     end,
 
+    try_nodes_ready(Nodes, 3, 500),
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
 
     %% Ensure each node owns a portion of the ring
@@ -826,6 +827,19 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
+
+try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
+    lager:info("Nodes not ready after initial plan/commit, retrying"),
+    plan_and_commit(Node1);
+try_nodes_ready(Nodes, N, SleepMs) ->
+    ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
+    case ReadyNodes of
+        Nodes ->
+            ok;
+        _ ->
+            timer:sleep(SleepMs),
+            try_nodes_ready(Nodes, N-1, SleepMs)
+    end.
 
 %% @doc Stop nodes and wipe out their data directories
 clean_cluster(Nodes) when is_list(Nodes) ->
