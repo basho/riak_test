@@ -336,10 +336,8 @@ confirm() ->
     %%%%%%%%%%%%
 
     %% create a new type
-    ok = rpc:call(Node, riak_core_bucket_type, create, [<<"mytype">>, [{n_val,
-                                                                        3}]]),
-    %% allow cluster metadata some time to propogate
-    timer:sleep(1000),
+    rt:create_and_activate_bucket_type(Node, <<"mytype">>, [{n_val, 3}]),
+    rt:wait_until_bucket_type_status(<<"mytype">>, active, Nodes),
 
     lager:info("Checking that get on a new bucket type is disallowed"),
     ?assertMatch({error, <<"Permission", _/binary>>}, riakc_pb_socket:get(PB,
@@ -414,10 +412,8 @@ confirm() ->
 
     lager:info("Creating another bucket type"),
     %% create a new type
-    ok = rpc:call(Node, riak_core_bucket_type, create, [<<"mytype2">>,
-                                                        [{allow_mult, true}]]),
-    %% allow cluster metadata some time to propogate
-    timer:sleep(1000),
+    rt:create_and_activate_bucket_type(Node, <<"mytype2">>, [{allow_mult, true}]),
+    rt:wait_until_bucket_type_status(<<"mytype2">>, active, Nodes),
 
     lager:info("Checking that get on the new type is disallowed"),
     ?assertMatch({error, <<"Permission", _/binary>>}, riakc_pb_socket:get(PB,
