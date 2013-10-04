@@ -335,6 +335,7 @@ plan_and_commit(Node) ->
             timer:sleep(100),
             plan_and_commit(Node);
         {ok, _, _} ->
+            timer:sleep(1000),
             do_commit(Node)
     end.
 
