@@ -100,7 +100,8 @@ confirm() ->
 
     lager:info("custom type get/put test"),
     Type = <<"mytype">>,
-    create_and_activate_type(Node, Type, [{n_val, 3}]),
+    rt:create_and_activate_bucket_type(Node, Type, [{n_val, 3}]),
+    rt:wait_until_bucket_type_status(Type, active, Nodes),
 
     lager:info("doing put"),
     riakc_pb_socket:put(PB, riakc_obj:new({Type, <<"bucket">>},
@@ -189,7 +190,8 @@ confirm() ->
     %% make sure a newly created type is not affected either
     %% create a new type
     Type2 = <<"mynewtype">>,
-    create_and_activate_type(Node, Type2, []),
+    rt:create_and_activate_bucket_type(Node, Type2, []),
+    rt:wait_until_bucket_type_status(Type2, active, Nodes),
 
     {ok, BProps11} = riakc_pb_socket:get_bucket_type(PB, Type2),
 
@@ -419,16 +421,3 @@ mapred_modfun_type(Pipe, Args, _Timeout) ->
     lager:info("Args for mapred modfun are ~p", [Args]),
     riak_pipe:queue_work(Pipe, {{{<<"mytype">>, <<"MRbucket">>}, <<"bam">>}, {struct, []}}),
     riak_pipe:eoi(Pipe).
-
-wait_until_type_status(Type, ExpectedStatus, Node) ->
-    F = fun() ->
-                ActualStatus = rpc:call(Node, riak_core_bucket_type, status, [Type]),
-                ExpectedStatus =:= ActualStatus
-        end,
-    rt:wait_until(F).
-
-create_and_activate_type(Node, Type, Props) ->
-    ok = rpc:call(Node, riak_core_bucket_type, create, [Type, Props]),
-    wait_until_type_status(Type, ready, Node),
-    ok = rpc:call(Node, riak_core_bucket_type, activate, [Type]),
-    ?assertEqual(ok, wait_until_type_status(Type, active, Node)).

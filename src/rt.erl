@@ -49,6 +49,7 @@
          cmd/2,
          connection_info/1,
          console/2,
+         create_and_activate_bucket_type/3,
          deploy_nodes/1,
          deploy_nodes/2,
          down/2,
@@ -132,6 +133,7 @@
          wait_until_status_ready/1,
          wait_until_transfers_complete/1,
          wait_until_unpingable/1,
+         wait_until_bucket_type_status/3,
          whats_up/0
         ]).
 
@@ -1194,3 +1196,23 @@ post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
             lager:error("Error reporting to ~s. ~p", [Name, Throws]),
             lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
     end.
+
+%%%===================================================================
+%%% Bucket Types Functions
+%%%===================================================================
+
+%% @doc create and immediately activate a bucket type
+create_and_activate_bucket_type(Node, Type, Props) ->
+    ok = rpc:call(Node, riak_core_bucket_type, create, [Type, Props]),
+    wait_until_bucket_type_status(Type, ready, Node),
+    ok = rpc:call(Node, riak_core_bucket_type, activate, [Type]),
+    wait_until_bucket_type_status(Type, active, Node).
+
+wait_until_bucket_type_status(Type, ExpectedStatus, Nodes) when is_list(Nodes) ->
+    [wait_until_bucket_type_status(Type, ExpectedStatus, Node) || Node <- Nodes];
+wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
+    F = fun() ->
+                ActualStatus = rpc:call(Node, riak_core_bucket_type, status, [Type]),
+                ExpectedStatus =:= ActualStatus
+        end,
+    ?assertEqual(ok, rt:wait_until(F)).
