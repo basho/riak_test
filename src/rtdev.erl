@@ -266,7 +266,7 @@ get_backend(AppConfig) ->
             Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"), 
                                  ".config" == filename:extension(Filename) ],           
 
-            hd(Files)
+                         io_lib:format("~s/dev/dev~s/~s", [Path, N, tl(hd(Files))])
     end,
     {ok, [Config]} = file:consult(ConfigFile),
     kvc:path('riak_kv.storage_backend', Config).
