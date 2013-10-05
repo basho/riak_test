@@ -99,18 +99,16 @@ confirm() ->
 
 
     lager:info("custom type get/put test"),
-    %% create a new type
-    ok = rpc:call(Node, riak_core_bucket_type, create, [<<"mytype">>, [{n_val,
-                                                                        3}]]),
-    %% allow cluster metadata some time to propogate
-    timer:sleep(1000),
+    Type = <<"mytype">>,
+    rt:create_and_activate_bucket_type(Node, Type, [{n_val, 3}]),
+    rt:wait_until_bucket_type_status(Type, active, Nodes),
 
     lager:info("doing put"),
-    riakc_pb_socket:put(PB, riakc_obj:new({<<"mytype">>, <<"bucket">>},
+    riakc_pb_socket:put(PB, riakc_obj:new({Type, <<"bucket">>},
                                              <<"key">>, <<"newestvalue">>)),
 
     lager:info("doing get"),
-    {ok, O5} = riakc_pb_socket:get(PB, {<<"mytype">>, <<"bucket">>}, <<"key">>),
+    {ok, O5} = riakc_pb_socket:get(PB, {Type, <<"bucket">>}, <<"key">>),
 
     ?assertEqual(<<"newestvalue">>, riakc_obj:get_value(O5)),
 
@@ -120,12 +118,12 @@ confirm() ->
 
     lager:info("custom type list_keys test"),
     ?assertEqual({ok, []}, riakc_pb_socket:list_keys(PB, <<"bucket">>)),
-    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB, {<<"mytype">>,
+    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB, {Type,
                                                       <<"bucket">>})),
     lager:info("custom type list_buckets test"),
     %% list buckets
     ?assertEqual({ok, []}, riakc_pb_socket:list_buckets(PB)),
-    ?assertEqual({ok, [<<"bucket">>]}, riakc_pb_socket:list_buckets(PB, <<"mytype">>)),
+    ?assertEqual({ok, [<<"bucket">>]}, riakc_pb_socket:list_buckets(PB, Type)),
 
     lager:info("bucket properties tests"),
     riakc_pb_socket:set_bucket(PB, {<<"default">>, <<"mybucket">>},
@@ -138,39 +136,39 @@ confirm() ->
     {ok, BProps1} = riakc_pb_socket:get_bucket(PB, <<"mybucket">>),
     ?assertEqual(2, proplists:get_value(n_val, BProps1)),
 
-    riakc_pb_socket:set_bucket(PB, {<<"mytype">>, <<"mybucket">>},
+    riakc_pb_socket:set_bucket(PB, {Type, <<"mybucket">>},
                                [{n_val, 5}]),
     {ok, BProps2} = riakc_pb_socket:get_bucket(PB, <<"mybucket">>),
     %% the default in the app.config is set to 2...
     ?assertEqual(2, proplists:get_value(n_val, BProps2)),
 
-    {ok, BProps3} = riakc_pb_socket:get_bucket(PB, {<<"mytype">>,
+    {ok, BProps3} = riakc_pb_socket:get_bucket(PB, {Type,
                                                     <<"mybucket">>}),
     ?assertEqual(5, proplists:get_value(n_val, BProps3)),
 
-    riakc_pb_socket:reset_bucket(PB, {<<"mytype">>, <<"mybucket">>}),
+    riakc_pb_socket:reset_bucket(PB, {Type, <<"mybucket">>}),
 
-    {ok, BProps4} = riakc_pb_socket:get_bucket(PB, {<<"mytype">>,
+    {ok, BProps4} = riakc_pb_socket:get_bucket(PB, {Type,
                                                     <<"mybucket">>}),
     ?assertEqual(3, proplists:get_value(n_val, BProps4)),
 
     lager:info("bucket type properties test"),
 
-    riakc_pb_socket:set_bucket_type(PB, <<"mytype">>,
+    riakc_pb_socket:set_bucket_type(PB, Type,
                                [{n_val, 5}]),
 
-    {ok, BProps5} = riakc_pb_socket:get_bucket_type(PB, <<"mytype">>),
+    {ok, BProps5} = riakc_pb_socket:get_bucket_type(PB, Type),
 
     ?assertEqual(5, proplists:get_value(n_val, BProps5)),
 
     %% check that the bucket inherits from its type
-    {ok, BProps6} = riakc_pb_socket:get_bucket(PB, {<<"mytype">>,
+    {ok, BProps6} = riakc_pb_socket:get_bucket(PB, {Type,
                                                     <<"mybucket">>}),
     ?assertEqual(5, proplists:get_value(n_val, BProps6)),
 
-    riakc_pb_socket:reset_bucket_type(PB, <<"mytype">>),
+    riakc_pb_socket:reset_bucket_type(PB, Type),
 
-    {ok, BProps7} = riakc_pb_socket:get_bucket_type(PB, <<"mytype">>),
+    {ok, BProps7} = riakc_pb_socket:get_bucket_type(PB, Type),
 
     ?assertEqual(3, proplists:get_value(n_val, BProps7)),
 
@@ -180,32 +178,32 @@ confirm() ->
     ?assertEqual(2, proplists:get_value(n_val, BProps8)),
 
     %% make sure the type we previously created is NOT affected
-    {ok, BProps9} = riakc_pb_socket:get_bucket_type(PB, <<"mytype">>),
+    {ok, BProps9} = riakc_pb_socket:get_bucket_type(PB, Type),
 
     ?assertEqual(3, proplists:get_value(n_val, BProps9)),
 
     %% make sure a bucket under that type is also not affected
-    {ok, BProps10} = riakc_pb_socket:get_bucket(PB, {<<"mytype">>,
+    {ok, BProps10} = riakc_pb_socket:get_bucket(PB, {Type,
                                                     <<"mybucket">>}),
     ?assertEqual(3, proplists:get_value(n_val, BProps10)),
 
     %% make sure a newly created type is not affected either
     %% create a new type
-    ok = rpc:call(Node, riak_core_bucket_type, create, [<<"mynewtype">>, []]),
-    %% allow cluster metadata some time to propogate
-    timer:sleep(1000),
+    Type2 = <<"mynewtype">>,
+    rt:create_and_activate_bucket_type(Node, Type2, []),
+    rt:wait_until_bucket_type_status(Type2, active, Nodes),
 
-    {ok, BProps11} = riakc_pb_socket:get_bucket_type(PB, <<"mynewtype">>),
+    {ok, BProps11} = riakc_pb_socket:get_bucket_type(PB, Type2),
 
     ?assertEqual(3, proplists:get_value(n_val, BProps11)),
 
     %% 2i tests
-    
+
     case HaveIndexes of
         false -> ok;
         true ->
             Obj01 = riakc_obj:new(<<"test">>, <<"JRD">>, <<"John Robert Doe, 25">>),
-            Obj02 = riakc_obj:new({<<"mytype">>, <<"test">>}, <<"JRD">>, <<"Jane Rachel Doe, 21">>),
+            Obj02 = riakc_obj:new({Type, <<"test">>}, <<"JRD">>, <<"Jane Rachel Doe, 21">>),
 
             Obj1 = riakc_obj:update_metadata(Obj01,
                                              riakc_obj:set_secondary_index(
@@ -237,7 +235,7 @@ confirm() ->
                                                                                        <<"Jane">>)),
 
             ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, riakc_pb_socket:get_index(PB,
-                                                                                                {<<"mytype">>,
+                                                                                                {Type,
                                                                                                  <<"test">>},
                                                                                                 {binary_index,
                                                                                                  "name"},
@@ -247,7 +245,7 @@ confirm() ->
             {ok, ReqID} = riakc_pb_socket:cs_bucket_fold(PB, <<"test">>, []),
             accumulate(ReqID),
 
-            {ok, ReqID2} = riakc_pb_socket:cs_bucket_fold(PB, {<<"mytype">>,
+            {ok, ReqID2} = riakc_pb_socket:cs_bucket_fold(PB, {Type,
                                                                <<"test">>}, []),
             accumulate(ReqID2),
             ok
@@ -278,14 +276,14 @@ confirm() ->
                                                   <<"Riak.reduceSum">>},
                                          undefined, true}])),
 
-    [Store({<<"mytype">>, <<"MRbucket">>}, KV) || KV <- [
+    [Store({Type, <<"MRbucket">>}, KV) || KV <- [
                          {<<"foo">>, <<"2">>, <<"a">>, 4},
                          {<<"bar">>, <<"3">>, <<"b">>, 7},
                          {<<"baz">>, <<"4">>, <<"a">>, 4},
                          {<<"bam">>, <<"5">>, <<"a">>, 3}]],
 
     ?assertEqual({ok, [{1, [14]}]},
-                 riakc_pb_socket:mapred_bucket(PB, {<<"mytype">>, <<"MRbucket">>},
+                 riakc_pb_socket:mapred_bucket(PB, {Type, <<"MRbucket">>},
                                        [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
                                         {reduce, {jsfun,
                                                   <<"Riak.reduceSum">>},
@@ -310,13 +308,13 @@ confirm() ->
 
     ?assertEqual({ok, [{1, [4]}]},
                  riakc_pb_socket:mapred(PB,
-                                [{{{<<"mytype">>, <<"MRbucket">>}, <<"foo">>},
+                                [{{{Type, <<"MRbucket">>}, <<"foo">>},
                                   undefined},
-                                 {{{<<"mytype">>, <<"MRbucket">>}, <<"bar">>},
+                                 {{{Type, <<"MRbucket">>}, <<"bar">>},
                                   undefined},
-                                 {{{<<"mytype">>, <<"MRbucket">>}, <<"baz">>},
+                                 {{{Type, <<"MRbucket">>}, <<"baz">>},
                                   undefined},
-                                 {{{<<"mytype">>, <<"MRbucket">>}, <<"bam">>},
+                                 {{{Type, <<"MRbucket">>}, <<"bam">>},
                                  undefined}],
                                 [{map, {jsanon, <<"function (v) { return [1]; }">>},
                                   undefined, false},
@@ -345,7 +343,7 @@ confirm() ->
             ?assertEqual([<<"2">>, <<"4">>], lists:sort(Results)),
 
             {ok, [{1, Results1}]} = riakc_pb_socket:mapred(PB,
-                                                {index,{<<"mytype">>,
+                                                {index,{Type,
                                                         <<"MRbucket">>},{integer_index,
                                                                         "i_idx"},3,5},
                                                 [{map, {modfun, riak_kv_mapreduce,
@@ -368,7 +366,7 @@ confirm() ->
             ?assertEqual([<<"2">>, <<"4">>], lists:sort(Results2)),
 
             {ok, [{1, Results3}]} = riakc_pb_socket:mapred(PB,
-                                                {index,{<<"mytype">>,
+                                                {index,{Type,
                                                         <<"MRbucket">>},{binary_index,
                                                                         "b_idx"}, <<"a">>},
                                                 [{map, {modfun, riak_kv_mapreduce,
