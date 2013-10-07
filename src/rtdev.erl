@@ -264,12 +264,23 @@ get_backend(AppConfig) ->
             %% ConfigFileOutputLine looks like this:
             %% -config /path/to/app.config -args_file /path/to/vm.args
             Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"), 
-                                 ".config" == filename:extension(Filename) ],           
+                                 ".config" == filename:extension(Filename) ],
 
-                         io_lib:format("~s/dev/dev~s/~s", [Path, N, tl(hd(Files))])
+            File = hd(Files),
+            case filename:pathtype(Files) of
+                absolute -> File;
+                relative ->
+                    io_lib:format("~s/dev/dev~s/~s", [Path, N, tl(hd(Files))])
+            end
     end,
-    {ok, [Config]} = file:consult(ConfigFile),
-    kvc:path('riak_kv.storage_backend', Config).
+
+    case file:consult(ConfigFile) of
+        {ok, [Config]} ->  
+            kvc:path('riak_kv.storage_backend', Config);
+        E ->
+            lager:error("Error reading ~s, ~p", [ConfigFile, E]),
+            error
+    end.
 
 node_path(Node) ->
     N = node_id(Node),
