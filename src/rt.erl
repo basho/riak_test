@@ -102,9 +102,11 @@
          systest_read/2,
          systest_read/3,
          systest_read/5,
+         systest_read/6,
          systest_write/2,
          systest_write/3,
          systest_write/5,
+         systest_write/6,
          teardown/0,
          update_app_config/2,
          upgrade/2,
@@ -858,6 +860,9 @@ systest_write(Node, Size) ->
 systest_write(Node, Size, W) ->
     systest_write(Node, 1, Size, <<"systest">>, W).
 
+systest_write(Node, Start, End, Bucket, W) ->
+    systest_write(Node, Start, End, Bucket, W, <<>>).
+
 %% @doc Write (End-Start)+1 objects to Node. Objects keys will be
 %% `Start', `Start+1' ... `End', each encoded as a 32-bit binary
 %% (`<<Key:32/integer>>'). Object values are the same as their keys.
@@ -866,11 +871,13 @@ systest_write(Node, Size, W) ->
 %% encountered. If all writes were successful, return value is an
 %% empty list. Each error has the form `{N :: integer(), Error :: term()}',
 %% where N is the unencoded key of the object that failed to store.
-systest_write(Node, Start, End, Bucket, W) ->
+systest_write(Node, Start, End, Bucket, W, CommonValBin)
+  when is_binary(CommonValBin) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
-                Obj = riak_object:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
+                Obj = riak_object:new(Bucket, <<N:32/integer>>,
+                                      <<N:32/integer, CommonValBin/binary>>),
                 try C:put(Obj, W) of
                     ok ->
                         Acc;
@@ -890,13 +897,17 @@ systest_read(Node, Size, R) ->
     systest_read(Node, 1, Size, <<"systest">>, R).
 
 systest_read(Node, Start, End, Bucket, R) ->
+    systest_read(Node, Start, End, Bucket, R, <<>>).
+
+systest_read(Node, Start, End, Bucket, R, CommonValBin)
+  when is_binary(CommonValBin) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
                 case C:get(Bucket, <<N:32/integer>>, R) of
                     {ok, Obj} ->
                         case riak_object:get_value(Obj) of
-                            <<N:32/integer>> ->
+                            <<N:32/integer, CommonValBin/binary>> ->
                                 Acc;
                             WrongVal ->
                                 [{N, {wrong_val, WrongVal}} | Acc]
