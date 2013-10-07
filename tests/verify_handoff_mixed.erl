@@ -27,20 +27,8 @@
 %%  - join an old node to it
 %%  - wait for handoff to finish
 %%
-%% "New" and "old" versions are determined by the `new' and `old'
-%% properties of the `verify_handoff_mixed' configuration
-%% variable. Set them in your .riak_test.config with an entry like so:
-%%
-%% ```
-%% {default, [...
-%%            {verify_handoff_mixed, [
-%%                                    {new, current},
-%%                                    {old, '1.4.2'}
-%%                                   ]}
-%%           ]}
-%% '''
-%%
-%% If unset, defaults of `current' and `1.4.2' are used.
+%% Node versions used are `current' and whatever the test runner has
+%% set the `upgrade_version' metadata to (`previous' by default).
 %%
 %% Handoff uses riak_core_fold_req_v* commands, and riak issue #407
 %% tracked a problem with upgrading that command from 1.4.2 format to
@@ -60,11 +48,13 @@
 -define(PIPE_COUNT, 100).
 
 confirm() ->
-    NewVersion = rt_config:get([?MODULE, new], current),
-    OldVersion = rt_config:get([?MODULE, old], '1.4.2'),
+    %% this `upgrade_version' lookup was copied from loaded_upgrade
+    UpgradeVsn = proplists:get_value(upgrade_version,
+                                     riak_test_runner:metadata(),
+                                     previous),
     SearchEnabled = [{riak_search, [{enabled, true}]}],
-    Versions = [{NewVersion, SearchEnabled},
-                {OldVersion, SearchEnabled}],
+    Versions = [{current, SearchEnabled},
+                {UpgradeVsn, SearchEnabled}],
     Services = [riak_kv, riak_search, riak_pipe],
     [Current, Old] = Nodes = rt:deploy_nodes(Versions, Services),
 
