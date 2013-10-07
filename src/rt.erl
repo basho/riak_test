@@ -818,7 +818,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
             %% large amount of redundant handoff done in a sequential join
             [staged_join(Node, Node1) || Node <- OtherNodes],
             plan_and_commit(Node1),
-            try_nodes_ready(Nodes, 3, 500),
+            try_nodes_ready(Nodes, 3, 500)
     end,
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
