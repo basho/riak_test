@@ -817,10 +817,10 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
             %% ok do a staged join and then commit it, this eliminates the
             %% large amount of redundant handoff done in a sequential join
             [staged_join(Node, Node1) || Node <- OtherNodes],
-            plan_and_commit(Node1)
+            plan_and_commit(Node1),
+            try_nodes_ready(Nodes, 3, 500),
     end,
 
-    try_nodes_ready(Nodes, 3, 500),
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
 
     %% Ensure each node owns a portion of the ring
@@ -830,8 +830,10 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
 
-try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
+try_nodes_ready([Node1 | Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
+    lager:info("re-staging joins"),
+    [staged_join(Node, Node1) || Node <- Nodes],
     plan_and_commit(Node1);
 try_nodes_ready(Nodes, N, SleepMs) ->
     ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
