@@ -141,8 +141,12 @@ main(Args) ->
                     Tests0;
                 {Offset, Workers} ->
                     TestCount = length(Tests0),
-                    ActualOffset = ((TestCount div (Workers rem (TestCount+1)))
-                                    * Offset) rem (TestCount+1),
+                    %% Avoid dividing by zero, computers hate that
+                    Denominator = case Workers rem (TestCount+1) of
+                                      0 -> 1;
+                                      D -> D
+                                  end,
+                    ActualOffset = ((TestCount div Denominator) * Offset) rem (TestCount+1),
                     {TestA, TestB} = lists:split(ActualOffset, Tests0),
                     lager:info("Offsetting ~b tests by ~b (~b workers, ~b"
                                " offset)", [TestCount, ActualOffset, Workers,
