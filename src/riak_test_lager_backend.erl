@@ -95,22 +95,8 @@ handle_event({log, Msg},
   #state{level=Level, verbose=Verbose, log = Logs} = State) -> %% lager 2.0.0
     case lager_util:is_loggable(Msg, Level, ?MODULE) of
         true ->
-            {Date, Time} = lager_msg:datetime(Msg),
-            LevelStr = atom_to_list(lager_msg:severity(Msg)),
-            Message = lager_msg:message(Msg),
-            Log = case Verbose of
-                true ->
-                    Location = lager_default_formatter:format(Msg, [
-                                {pid, ""},
-                                {module, [
-                                        {pid, ["@"], ""},
-                                        module,
-                                        {function, [":", function], ""},
-                                        {line, [":",line], ""}], ""}]),
-                    [Date, " ", Time, " ", LevelStr, Location, Message];
-                _ ->
-                    [Time, " ", LevelStr, Message]
-            end,
+            Format = log_format(Verbose),
+            Log = lager_default_formatter:format(Msg, Format),
             {ok, State#state{log=[Log|Logs]}};
         false ->
             {ok, State}
@@ -162,6 +148,19 @@ parse_level(Level) ->
             %% must be lager < 2.0
             lager_util:level_to_num(Level)
     end.
+
+log_format(true) ->
+    [date, " " , time, " [", severity, "] ",
+     {pid, ""},
+     {module, [
+               module,
+               {function, [":", function], ""},
+               {line, [":", line], ""},
+               " "], ""},
+     message, "\r\n"];
+log_format(false) ->
+    [time, " [", severity, "] ", message, "\r\n"].
+
 
 -ifdef(TEST).
 
