@@ -98,8 +98,15 @@ create_bucket_types([N1|_]=Nodes, Types) ->
     [ rpc:call(N1, riak_core_bucket_type, create,
                [Name, [{datatype, Type}, {allow_mult, true}]]) ||
         {Name, Type} <- Types ],
+    [rt:wait_until(N1, bucket_type_ready_fun(Name)) || {Name, _Type} <- Types],
     [ rt:wait_until(N, bucket_type_matches_fun(Types)) || N <- Nodes].
 
+bucket_type_ready_fun(Name) ->
+    fun(Node) ->
+            Res = rpc:call(Node, riak_core_bucket_type, activate, [Name]),
+            lager:info("is ~p ready ~p?", [Name, Res]),
+            Res == ok
+    end.
 
 bucket_type_matches_fun(Types) ->
     fun(Node) ->
