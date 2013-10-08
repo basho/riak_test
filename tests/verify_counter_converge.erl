@@ -25,7 +25,7 @@
 
 -module(verify_counter_converge).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, set_allow_mult_true/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"test-counters">>).
