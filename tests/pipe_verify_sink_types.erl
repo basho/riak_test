@@ -99,8 +99,8 @@ verify_fsm_timeout([RN|_]) ->
     Opts = [{log, sink},
             {trace, [error]},
             {sink, Sink},
-            %% a very short timeout, to fit eunit
-            {sink_type, {fsm, 0, 10}}],
+            %% a short timeout, to fit eunit
+            {sink_type, {fsm, 0, 1000}}],
     {ok, P} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
     rpc:call(RN, riak_pipe, queue_work, [P, {sync, 1}]),
     rpc:call(RN, riak_pipe, queue_work, [P, {sync, 2}]),
