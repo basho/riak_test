@@ -20,10 +20,10 @@
 %%% @author Russell Brown <russelldb@basho.com>
 %%% @copyright (C) 2013, Basho Technologies
 %%% @doc
-%%% riak_test for counter cabability
+%%% riak_test for crdt cabability
 %%% @end
 
--module(verify_counter_capability).
+-module(verify_crdt_capability).
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
@@ -31,35 +31,20 @@
 -define(BUCKET, <<"test-counters">>).
 -define(KEY, <<"foo">>).
 
-
 confirm() ->
-    %% Create a mixed cluster of legacy and previous
+    %% Create a mixed cluster of current and previous versions
     %% Create a PB client
-    %% GET  / PUT on older and newer cluster
-    %% Upgrade nodes to previous
+    %% GET  / PUT on current and previous cluster
+    %% Upgrade nodes
     %% Get put on all nodes
     Config = [],
-    [Legacy, Previous]=Nodes = rt:build_cluster([{legacy, Config}, {previous, Config}]),
-    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [])),
+    [Previous, Current]=Nodes = rt:build_cluster([{previous, Config}, {current, Config}]),
+    ?assertEqual(ok, rt:wait_until_capability(Current, {riak_kv, crdt}, [pncounter])),
+
     verify_counter_converge:set_allow_mult_true(Nodes),
 
-    {PrevPB, PrevHttp} = get_clients(Legacy),
-    {PB, Http} = get_clients(Previous),
-
-    ?assertMatch({error, {ok, "404", _, _}}, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
-    ?assertMatch({error, {ok, "404", _, _}}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
-
-    ?assertMatch({error, {ok, "503", _, _}}, rhc:counter_incr(Http, ?BUCKET, ?KEY, 1)),
-    ?assertMatch({error, {ok, "503", _, _}}, rhc:counter_val(Http, ?BUCKET, ?KEY)),
-
-    ?assertEqual({error,<<"Unknown message code.">>}, riakc_pb_socket:counter_incr(PrevPB, ?BUCKET, ?KEY, 1)),
-    ?assertEqual({error,<<"Unknown message code.">>}, riakc_pb_socket:counter_val(PrevPB, ?BUCKET, ?KEY)),
-    ?assertEqual({error,<<"\"Counters are not supported\"">>}, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
-    ?assertEqual({error,<<"\"Counters are not supported\"">>}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
-
-    rt:upgrade(Legacy, previous),
-
-    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter])),
+    {PrevPB, PrevHttp} = get_clients(Previous),
+    {PB, Http} = get_clients(Current),
 
     ?assertMatch(ok, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
     ?assertMatch({ok, 1}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
@@ -72,6 +57,22 @@ confirm() ->
     ?assertEqual(ok, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
     ?assertEqual({ok, 4}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
 
+    lager:info("Passed mixed test, upgrade time!"),
+
+    rt:upgrade(Previous, current),
+    lager:info("Upgrayded!!"),
+    ?assertEqual(ok, rt:wait_until_capability(Current, {riak_kv, crdt}, [riak_dt_pncounter, riak_dt_orswot, riak_dt_map, pncounter])),
+
+    ?assertMatch(ok, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
+    ?assertMatch({ok, 5}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
+
+    ?assertMatch(ok, rhc:counter_incr(Http, ?BUCKET, ?KEY, 1)),
+    ?assertMatch({ok, 6}, rhc:counter_val(Http, ?BUCKET, ?KEY)),
+
+    ?assertEqual(ok, riakc_pb_socket:counter_incr(PrevPB, ?BUCKET, ?KEY, 1)),
+    ?assertEqual({ok, 7}, riakc_pb_socket:counter_val(PrevPB, ?BUCKET, ?KEY)),
+    ?assertEqual(ok, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
+    ?assertEqual({ok, 8}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
     pass.
 
 get_clients(Node) ->
