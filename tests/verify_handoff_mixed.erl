@@ -47,6 +47,8 @@
 
 -define(PIPE_COUNT, 100).
 
+-define(FOLD_CAPABILITY, {riak_core,fold_req_version}).
+
 confirm() ->
     %% this `upgrade_version' lookup was copied from loaded_upgrade
     UpgradeVsn = proplists:get_value(upgrade_version,
@@ -60,6 +62,10 @@ confirm() ->
 
     prepare_vnodes(Current),
 
+    %% before joining, learn what fold req the old version used,
+    %% so we can know when the cluster has negotiated to it
+    OldFold = rt:capability(Old, ?FOLD_CAPABILITY, v1),
+
     %% now link the nodes together and wait for handoff to complete
     ok = rt:join(Old, Current),
     ok = rt:wait_until_all_members(Nodes),
@@ -70,8 +76,8 @@ confirm() ->
     %% capability renegotiation if we don't wait here - this is still
     %% technically race-prone, but negotiation usually happens *much*
     %% sooner than handoff at normal timing
-    lager:info("Wait for fold_req_version == v1"),
-    ok = rt:wait_until_capability(Current, {riak_core,fold_req_version}, v1),
+    lager:info("Wait for fold_req_version == ~p", [OldFold]),
+    ok = rt:wait_until_capability(Current, ?FOLD_CAPABILITY, OldFold),
 
     %% this will timeout if wrong fix is in place
     %% (riak_kv_vnode would infinite-loop v1 fold requests)
