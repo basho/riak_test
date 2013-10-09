@@ -39,8 +39,10 @@ confirm() ->
     assertExactQuery(Pid, [<<"obj5">>], <<"field1_bin">>, <<"val5">>),
     assertExactQuery(Pid, [<<"obj5">>], <<"field2_int">>, <<"5">>),
     assertRangeQuery(Pid, [<<"obj10">>, <<"obj11">>, <<"obj12">>], <<"field1_bin">>, <<"val10">>, <<"val12">>),
+    assertRangeQuery(Pid, [<<"obj12">>], <<"field1_bin">>, <<"val10">>, <<"val12">>, <<"v...2">>),
     assertRangeQuery(Pid, [<<"obj10">>, <<"obj11">>, <<"obj12">>], <<"field2_int">>, 10, 12),
     assertRangeQuery(Pid, [<<"obj10">>, <<"obj11">>, <<"obj12">>], <<"$key">>, <<"obj10">>, <<"obj12">>),
+    assertRangeQuery(Pid, [<<"obj12">>], <<"$key">>, <<"obj10">>, <<"obj12">>, <<"ob..2">>),
 
     lager:info("Delete an object, verify deletion..."),
     ToDel = [<<"obj5">>, <<"obj11">>],
@@ -51,8 +53,10 @@ confirm() ->
     assertExactQuery(Pid, [], <<"field1_bin">>, <<"val5">>),
     assertExactQuery(Pid, [], <<"field2_int">>, <<"5">>),
     assertRangeQuery(Pid, [<<"obj10">>, <<"obj12">>], <<"field1_bin">>, <<"val10">>, <<"val12">>),
+    assertRangeQuery(Pid, [<<"obj10">>], <<"field1_bin">>, <<"val10">>, <<"val12">>, <<"10$">>),
     assertRangeQuery(Pid, [<<"obj10">>, <<"obj12">>], <<"field2_int">>, 10, 12),
     assertRangeQuery(Pid, [<<"obj10">>, <<"obj12">>], <<"$key">>, <<"obj10">>, <<"obj12">>),
+    assertRangeQuery(Pid, [<<"obj12">>], <<"$key">>, <<"obj10">>, <<"obj12">>, <<"2">>),
 
     %% Verify the $key index, and riak_kv#367 regression
     assertRangeQuery(Pid, [<<"obj6">>], <<"$key">>, <<"obj6">>, <<"obj6">>),
@@ -77,8 +81,16 @@ assertExactQuery(Pid, Expected, Index, Value) ->
     ?assertEqual(Expected, ActualKeys). 
 
 assertRangeQuery(Pid, Expected, Index, StartValue, EndValue) ->
-    lager:info("Searching Index ~p for ~p-~p", [Index, StartValue, EndValue]),
-    {ok, ?INDEX_RESULTS{keys=Results}} = riakc_pb_socket:get_index(Pid, ?BUCKET, Index, StartValue, EndValue),
+    assertRangeQuery(Pid, Expected, Index, StartValue, EndValue, undefined).
+
+assertRangeQuery(Pid, Expected, Index, StartValue, EndValue, Re) ->
+    lager:info("Searching Index ~p for ~p-~p (re:~s)",
+               [Index, StartValue, EndValue, Re]),
+    Ret = riakc_pb_socket:get_index_range(Pid, ?BUCKET, Index,
+                                          StartValue, EndValue,
+                                          [{term_regex, Re}]),
+    ?assertMatch({ok, ?INDEX_RESULTS{}}, Ret),
+    {ok, ?INDEX_RESULTS{keys=Results}} = Ret,
     ActualKeys = lists:sort(Results),
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [ActualKeys]),
