@@ -60,6 +60,7 @@
          get_version/0,
          heal/1,
          http_url/1,
+         https_url/1,
          httpc/1,
          httpc_read/3,
          httpc_write/4,
@@ -213,7 +214,12 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 connection_info(Node) when is_atom(Node) ->
     {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
     {ok, [{HTTP_IP, HTTP_Port}]} = get_http_conn_info(Node),
-    [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}];
+    case get_https_conn_info(Node) of
+        undefined ->
+            [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}];
+        {ok, [{HTTPS_IP, HTTPS_Port}]} ->
+            [{http, {HTTP_IP, HTTP_Port}}, {https, {HTTPS_IP, HTTPS_Port}}, {pb, {PB_IP, PB_Port}}]
+    end;
 connection_info(Nodes) when is_list(Nodes) ->
     [ {Node, connection_info(Node)} || Node <- Nodes].
 
@@ -236,6 +242,16 @@ get_pb_conn_info(Node) ->
 get_http_conn_info(Node) ->
     case rpc_get_env(Node, [{riak_api, http},
                             {riak_core, http}]) of
+        {ok, [{IP, Port}|_]} ->
+            {ok, [{IP, Port}]};
+        _ ->
+            undefined
+    end.
+
+-spec get_https_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
+get_https_conn_info(Node) ->
+    case rpc_get_env(Node, [{riak_api, https},
+                            {riak_core, https}]) of
         {ok, [{IP, Port}|_]} ->
             {ok, [{IP, Port}]};
         _ ->
@@ -978,6 +994,14 @@ pbc_really_deleted(Pid, Bucket, Keys) ->
     end,
     [] == lists:filter(StillThere, Keys).
 
+%% @doc Returns HTTPS URL information for a list of Nodes
+https_url(Nodes) when is_list(Nodes) ->
+    [begin
+         {Host, Port} = orddict:fetch(https, Connections),
+         lists:flatten(io_lib:format("https://~s:~b", [Host, Port]))
+     end || {_Node, Connections} <- connection_info(Nodes)];
+https_url(Node) ->
+    hd(https_url([Node])).
 
 %% @doc Returns HTTP URL information for a list of Nodes
 http_url(Nodes) when is_list(Nodes) ->
