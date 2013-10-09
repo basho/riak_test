@@ -47,10 +47,11 @@ confirm() ->
     {ok, Res} =  stream_pb(PBPid, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, proplists:get_value(keys, Res, [])),
 
-    {ok, {{_, 503, _}, _, Body}} = httpc:request(url("~s/buckets/~s/index/~s/~s~s",
+    {ok, {{_, ErrCode, _}, _, Body}} = httpc:request(url("~s/buckets/~s/index/~s/~s~s",
                                                      [Http, ?BUCKET, <<"$bucket">>, ?BUCKET, []])),
 
-    ?assertMatch({match, _}, re:run(Body, "request timed out")), %% shows the app.config timeout
+    ?assertEqual(true, ErrCode >= 500),
+    ?assertMatch({match, _}, re:run(Body, "request timed out|{error,timeout}")), %% shows the app.config timeout
 
     HttpRes = http_query(Http, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, proplists:get_value(<<"keys">>, HttpRes, [])),
