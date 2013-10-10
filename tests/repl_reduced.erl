@@ -192,6 +192,67 @@ data_push_test_() ->
 
     ] end}}.
 
+aae_tree_nuke() ->
+    eunit(aae_tree_nuke_test_()).
+
+aae_tree_nuke_test_() ->
+    {timeout, rt_cascading:timeout(100), {setup, fun() ->
+        Conf = conf(),
+        Nodes = rt:deploy_nodes(6, Conf),
+        {[N1 | _] = C123, [N4 | _] = C456} = lists:split(3, Nodes),
+        repl_util:make_cluster(C123),
+        repl_util:make_cluster(C456),
+        repl_util:name_cluster(N1, "c123"),
+        repl_util:name_cluster(N4, "c456"),
+        Port = repl_util:get_cluster_mgr_port(N4),
+        lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
+        repl_util:connect_rt(N1, Port, "c456"),
+        {Nodes, C123, C456}
+    end,
+    fun({Nodes, _, _}) ->
+        case rt_config:config_or_os_env(skip_teardowns, false) of
+            false ->
+                rt:clean_cluster(Nodes);
+            _ ->
+                ok
+        end
+    end,
+    fun({_Nodes, C123, C456}) -> [
+
+        {"loaded sink has trees destroyed, but have reals still", timeout, rt_cascading:timeout(50), fun() ->
+            [N1 | _] = C123,
+            [N4 | _] = C456,
+            rpc:call(N4, riak_repl_console, full_objects, [["1"]]),
+            WaitFun = fun(Node) ->
+                case rpc:call(Node, riak_repl_console, full_objects, [[]]) of
+                    1 ->
+                        true;
+                    Uh ->
+                        lager:info("~p got ~p", [Node, Uh]),
+                        false
+                end
+            end,
+            [rt:wait_until(Node, WaitFun) || Node <- C456],
+
+            First = 1, Last = 300, Bucket = <<"aae_test_bucket">>,
+            lager:info("writing ~p keys to aae_test_bucket on c123", [Last]),
+            WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
+            ?assertEqual([], WriteGot),
+
+            lager:info("waiting for reads on c456"),
+            ReadGot = repl_util:wait_for_reads(N4, First, Last, Bucket, 3),
+            ?assertEqual(0, ReadGot),
+
+            [rt:stop_and_wait(Node) || Node <- C456],
+            rt:clean_data_dir(C456, "anti_entropy"),
+            [rt:start_and_wait(Node) || Node <- C456],
+
+            ReadGot2 = repl_util:wait_for_reads(N4, First, Last, Bucket, 1),
+            ?assertEqual(0, ReadGot2)
+        end}
+
+    ] end}}.
+
 aae() ->
     eunit(aae_test_()).
 
@@ -249,7 +310,7 @@ aae_test_() ->
             end,
             [rt:wait_until(Node, WaitFun) || Node <- C456],
 
-            First = 1, Last = 1000, Bucket = <<"aae_test_bucket">>,
+            First = 1, Last = 300, Bucket = <<"aae_test_bucket">>,
             lager:info("writing ~p keys to aae_test_bucket on c123", [Last]),
             WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
             ?assertEqual([], WriteGot),
