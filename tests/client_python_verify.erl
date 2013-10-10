@@ -13,7 +13,7 @@
 -prereq("virtualenv").
 
 confirm() ->
-    prereqs(),
+    {ok, TestCommand} = prereqs(),
     Config = [{riak_search, [{enabled, true}]}],
     [Node] = rt:deploy_nodes(1, Config),
     rt:wait_for_service(Node, riak_search),
@@ -27,7 +27,7 @@ confirm() ->
     lager:info("Enabling search hook on 'searchbucket'"),
     rt:enable_search_hook(Node, <<"searchbucket">>),
 
-    {ExitCode, PythonLog} = rt_local:stream_cmd("bin/python setup.py develop test",
+    {ExitCode, PythonLog} = rt_local:stream_cmd(TestCommand,
                                           [{cd, ?PYTHON_CHECKOUT},
                                            {env,[{"RIAK_TEST_PB_HOST", PB_Host},
                                                  {"RIAK_TEST_PB_PORT", integer_to_list(PB_Port)},
@@ -68,4 +68,14 @@ prereqs() ->
 
     lager:info("[PREREQ] Installing an isolated environment with virtualenv in ~s", [?PYTHON_CHECKOUT]),
     rt_local:stream_cmd("virtualenv --clear --no-site-packages .", [{cd, ?PYTHON_CHECKOUT}]),
-    ok.
+
+    lager:info("[PREREQ] Installing dependencies"),
+    rt_local:stream_cmd("bin/python setup.py develop", [{cd, ?PYTHON_CHECKOUT}]),
+    case Minor of
+        $6 ->
+            lager:info("[PREREQ] Installing unittest2 for python 2.6"),
+            rt_local:stream_cmd("bin/easy_install unittest2", [{cd, ?PYTHON_CHECKOUT}]),
+            {ok, "bin/unit2 riak.tests.test_all"};
+        _ ->
+            {ok, "bin/python setup.py test"}
+    end.
