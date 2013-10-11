@@ -34,7 +34,8 @@ make_cluster(Nodes) ->
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     [rt:wait_for_service(N, riak_kv) || N <- Nodes],
     [rt:join(Node, First) || Node <- Rest],
-    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)).
+    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
+    ?assertEqual(ok, rt:wait_until_transfers_complete(Nodes)).
 
 name_cluster(Node, Name) ->
     lager:info("Naming cluster ~p",[Name]),
@@ -108,8 +109,9 @@ wait_until_leader_converge([Node|_] = Nodes) ->
 wait_until_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
-                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-                case proplists:get_value(fullsync_coordinator, Status) of
+                {ok, Status} = rpc:call(Node, riak_core_cluster_mgr,
+                                        get_connections, []),
+                case Status of
                     [] ->
                         false;
                     [_C] ->
@@ -233,10 +235,10 @@ do_write(Node, Start, End, Bucket, W) ->
         [] ->
             [];
         Errors ->
-            lager:warning("~p errors while writing: ~p",
-                [length(Errors), Errors]),
+            lager:warning("~p errors while writing to ~p: ~p",
+                [Bucket, length(Errors), Errors]),
             timer:sleep(1000),
-            lists:flatten([rt:systest_write(Node, S, S, Bucket, W) ||
+            lists:flatten([do_write(Node, S, S, Bucket, W) ||
                     {S, _Error} <- Errors])
     end.
 
