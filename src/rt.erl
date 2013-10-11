@@ -830,7 +830,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
 
-try_nodes_ready([Node1 | Nodes], 0, _SleepMs) ->
+try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
     plan_and_commit(Node1);
 try_nodes_ready(Nodes, N, SleepMs) ->
