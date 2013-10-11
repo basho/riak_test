@@ -832,8 +832,6 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
 try_nodes_ready([Node1 | Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
-    lager:info("re-staging joins"),
-    [staged_join(Node, Node1) || Node <- Nodes],
     plan_and_commit(Node1);
 try_nodes_ready(Nodes, N, SleepMs) ->
     ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
