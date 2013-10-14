@@ -15,13 +15,22 @@ confirm() ->
     Count = length(HostList),
     Config = 
     case rt:config(rt_backend, undefined) of 
+        riak_kv_memory_backend ->
+            [{riak_core, 
+              [{ring_creation_size, 64},
+               {handoff_concurrency, 16}]},
+             {riak_kv, [{storage_backend, riak_kv_memory_backend},
+                        {anti_entropy,{off,[]}},
+                        {memory_backend, []}, %%{max_memory, 256}]},
+                        {fsm_limit, 50000}
+                       ]}];
         riak_kv_eleveldb_backend -> 
             [{riak_core, 
               [{ring_creation_size, rt:nearest_ringsize(Count)}]},
              {riak_kv, 
               [{storage_backend, riak_kv_eleveldb_backend},
-               {anti_entropy,{on,[]}},
-               {fsm_limit, 50000}]},
+               {anti_entropy,{off,[]}},
+               {fsm_limit, undefined}]},
              {eleveldb, 
               [{max_open_files, 500}]}
             ];
@@ -100,15 +109,15 @@ start_data_collectors(Hosts) ->
     file:make_dir(PrepDir),
 
     Cmd = "python ./bin/dstat -cdngyimrs --vm --fs --socket --tcp --disk-util "++
-        "--output "++"/tmp/dstat-"++os:getpid()++" "++
-        "--graphite-host r2s11.bos1 --graphite-port 2004",
+        "--output "++"/tmp/dstat-"++os:getpid(), %%++" "++
+        %%"--graphite-host r2s11.bos1 --graphite-port 2004",
 
-    Cmd2 = "python ./bin/graphite-report.py",
+%%    Cmd2 = "python ./bin/graphite-report.py",
     
     file:write(PrepDir++"/START", io_lib:format("~w.~n", [calendar:local_time()])),
 
     [spawn(rtssh, ssh_cmd, [Host, Cmd]) || Host <- Hosts],
-    [spawn(rtssh, ssh_cmd, [Host, Cmd2]) || Host <- Hosts],
+%%    [spawn(rtssh, ssh_cmd, [Host, Cmd2]) || Host <- Hosts],
     [spawn(?MODULE, poll_stats, [Host]) || Host <- Hosts].
 
 poll_stats(Host) ->
@@ -168,7 +177,7 @@ do_prepop(NodeList, BinSize, TestName) ->
     Config = prepop_config(BinSize, NodeList, PrepopCount),
     rt_bench:clear_seq_state_dir(),
     lager:info("Config ~p", [Config]),
-    ok = rt_bench:bench(Config, NodeList, TestName),
+    rt_bench:bench(Config, NodeList, TestName),
     lager:info("Prepop complete").
 
 prepop_config(BinSize, NodeList, BinCount0) ->
@@ -196,8 +205,8 @@ prepop_config(BinSize, NodeList, BinCount0) ->
      {riakc_pb_ips, NodeList},
      {riakc_pb_replies, default},
      {driver, basho_bench_driver_riakc_pb},
-     {code_paths, ["deps/riakc",
-                   "deps/protobuffs"]}].
+     {code_paths, ["evan/basho_bench/deps/riakc",
+                   "evan/basho_bench/deps/protobuffs"]}].
 
 adjust_count(Count, Concurrency) ->
     case Count rem Concurrency of
@@ -207,7 +216,7 @@ adjust_count(Count, Concurrency) ->
 
 do_pareto(NodeList, BinSize, TestName) ->
     Config = pareto_config(BinSize, NodeList),
-    ok = rt_bench:bench(Config, NodeList, TestName).
+    rt_bench:bench(Config, NodeList, TestName).
 
 pareto_config(BinSize, NodeList) ->
     Count = length(NodeList),
@@ -231,18 +240,25 @@ pareto_config(BinSize, NodeList) ->
 
 do_uniform(NodeList, BinSize, TestName) ->
     Config = uniform_config(BinSize, NodeList),
-    ok = rt_bench:bench(Config, NodeList, TestName).
+    rt_bench:bench(Config, NodeList, TestName, 2).
 
 uniform_config(BinSize, NodeList) ->
     Count = length(NodeList),
     {Mode, Duration} = get_md(BinSize),
 
+    Numkeys = 
+	case rt:config(perf_prepop_size) of
+	    Count when is_integer(Count) -> 
+		Count;
+	    _ -> 10000000
+	end,
+
     [Mode,
      {duration, Duration},
-     {concurrent, 30*Count},
+     {concurrent, 40*Count},
 
      {riakc_pb_bucket, <<"b1">>}, 
-     {key_generator, {int_to_str, {uniform_int, 10000000}}},
+     {key_generator, {int_to_str, {uniform_int, Numkeys}}},
      {value_generator, valgen(BinSize)},
      {operations, operations(uniform)},
      
@@ -250,22 +266,22 @@ uniform_config(BinSize, NodeList) ->
      {riakc_pb_ips, NodeList},
      {riakc_pb_replies, default},
      {driver, basho_bench_driver_riakc_pb},
-     {code_paths, ["deps/riakc",
-                   "deps/protobuffs"]}].
+     {code_paths, ["evan/basho_bench/deps/riakc",
+                   "evan/basho_bench/deps/protobuffs"]}].
 
 
 
-get_md(BinSize) ->
+get_md(_BinSize) ->
     case rt:config(rt_backend, undefined) of 
         %% hueristically determined nonsense, need a real model
-        riak_kv_eleveldb_backend ->
-            lager:info("leveldb"),
-            Rate = 
-                case BinSize >= 10000 of
-                    true -> 75;
-                    false -> 150
-                end,
-            {{mode, {rate, Rate}}, 150};
+        %% riak_kv_eleveldb_backend ->
+        %%     lager:info("leveldb"),
+        %%     Rate = 
+        %%         case BinSize >= 10000 of
+        %%             true -> 50;
+        %%             false -> 75
+        %%         end,
+        %%     {{mode, {rate, Rate}}, 150};
         _ ->
             %%fixme yo
             lager:info("unset or bitcask"),

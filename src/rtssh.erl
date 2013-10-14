@@ -275,16 +275,34 @@ wildcard(Node, Path) ->
     end.
 
 spawn_ssh_cmd(Node, Cmd) ->
+    
     spawn_ssh_cmd(Node, Cmd, []).
+
 spawn_ssh_cmd(Node, Cmd, Opts) when is_atom(Node) ->
     Host = get_host(Node),
-    spawn_ssh_cmd(Host, Cmd, Opts);
+    lager:info("node to host translation ~p -> ~p", [Node, Host]),
+    spawn_ssh_cmd(Host, Cmd, Opts, true);
 spawn_ssh_cmd(Host, Cmd, Opts) ->
-    SSHCmd = format("ssh -o 'StrictHostKeyChecking no' ~s '~s'", [Host, Cmd]),
+    spawn_ssh_cmd(Host, Cmd, Opts, true).
+
+spawn_ssh_cmd(Node, Cmd, Opts, Return) when is_atom(Node) ->
+    Host = get_host(Node),
+    spawn_ssh_cmd(Host, Cmd, Opts, Return);
+spawn_ssh_cmd(Host, Cmd, Opts, Return) ->
+    Quiet = 
+	case Return of
+	    true -> "";
+	    false -> " > /dev/null 2>&1"
+	end,
+    SSHCmd = format("ssh -q -o 'StrictHostKeyChecking no' ~s '~s'"++Quiet, 
+		    [Host, Cmd]),
     spawn_cmd(SSHCmd, Opts).
 
 ssh_cmd(Node, Cmd) ->
-    wait_for_cmd(spawn_ssh_cmd(Node, Cmd)).
+    ssh_cmd(Node, Cmd, true).
+
+ssh_cmd(Node, Cmd, Return) ->
+    wait_for_cmd(spawn_ssh_cmd(Node, Cmd, [stderr_to_stdout], Return)).
 
 remote_read_file(Node, File) ->
     case ssh_cmd(Node, "cat " ++ File) of
@@ -405,8 +423,9 @@ ensure_remote_build(Hosts, Version) ->
                         error("Bad build on host "++Host++" with sum "++OtherSum)
                 end,
                 lager:info("Build OK on host: ~p", [Host]),
-                {0, _} = ssh_cmd(Host, "rm -rf "++Dir++"/data/"),
-                {0, _} = ssh_cmd(Host, "rm -rf "++Dir++"/log/"),
+                {0, _} = ssh_cmd(Host, "rm -rf "++Dir++"/data/*"),
+                {0, _} = ssh_cmd(Host, "mkdir -p "++Dir++"/data/snmp/agent/db/"),
+                {0, _} = ssh_cmd(Host, "rm -rf "++Dir++"/log/*"),
                 lager:info("Cleaned up host ~p", [Host])
         end,
     rt:pmap(F, Hosts),
@@ -415,6 +434,14 @@ ensure_remote_build(Hosts, Version) ->
     rt:set_config(rtdev_path, [{root, Base}, {Version, Dir}]),
     ok.
             
+
+scp(Host, Path, RemotePath) ->
+    ssh_cmd(Host, "mkdir -p "++RemotePath),
+    SCP = format("scp -qr -o 'StrictHostKeyChecking no' ~s ~s:~s", 
+                 [Path, Host, RemotePath]),
+    %%lager:info("SCP ~p", [SCP]),
+    wait_for_cmd(spawn_cmd(SCP)).
+
 deploy_build(Host, Dir) ->
     ssh_cmd(Host, "mkdir -p "++Dir),
     Base0 = filename:split(Dir),
@@ -483,16 +510,20 @@ spawn_cmd(Cmd, Opts) ->
 wait_for_cmd(Port) ->
     rt:wait_until(node(),
                   fun(_) ->
+			  %%lager:info("waiting until"),
                           receive
                               {Port, Msg={data, _}} ->
+				  %%lager:info("got data ~p", [Msg]),
                                   self() ! {Port, Msg},
                                   false;
                               {Port, Msg={exit_status, _}} ->
+				  %%lager:info("got exit"),
                                   catch port_close(Port),
                                   self() ! {Port, Msg},
                                   true
-                          after 0 ->
-                                  false
+			  after 0 ->
+				  %%lager:info("timed out"),
+				  false
                           end
                   end),
     get_cmd_result(Port, []).
@@ -500,12 +531,14 @@ wait_for_cmd(Port) ->
 get_cmd_result(Port, Acc) ->
     receive
         {Port, {data, Bytes}} ->
-            get_cmd_result(Port, [Bytes|Acc]);
+	    %%lager:info("got bytes: ~p", [Bytes]),
+	    get_cmd_result(Port, [Bytes|Acc]);
         {Port, {exit_status, Status}} ->
+	    lager:info("got exit status: ~p", [Status]),
             Output = lists:flatten(lists:reverse(Acc)),
             {Status, Output}
-    after 0 ->
-            timeout
+    %% after 0 ->
+    %%         error(timeout)
     end.
 
 %%%===================================================================
