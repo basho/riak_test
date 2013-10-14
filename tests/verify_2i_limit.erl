@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 -import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
-                                stream_pb/3, http_query/3, pb_query/3, http_stream/3]).
+                                stream_pb/3, http_query/3, pb_query/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
 -define(MAX_RESULTS, 50).
@@ -34,7 +34,8 @@ confirm() ->
     Nodes = rt:build_cluster(3),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
-    RiakHttp = rt:http_url(hd(Nodes)),
+    RiakHttp = rt:httpc(hd(Nodes)),
+    HttpUrl = rt:http_url(hd(Nodes)),
     PBPid = rt:pbc(hd(Nodes)),
 
     [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],
@@ -52,13 +53,21 @@ confirm() ->
     ?assertEqual(Rest, proplists:get_value(keys, PBKeys2, [])),
 
     %% HTTP
-    HttpRes = http_stream(RiakHttp, Q, [{max_results, ?MAX_RESULTS}]),
-    ?assertEqual(FirstHalf, proplists:get_value(<<"keys">>, HttpRes, [])),
-    HttpContinuation = proplists:get_value(<<"continuation">>, HttpRes),
+    HttpRes = rhc:get_index(RiakHttp, ?BUCKET, <<"$key">>,
+                            {int_to_key(0), int_to_key(999)},
+                           [{max_results, ?MAX_RESULTS}]),
+    ?assertMatch({ok, ?INDEX_RESULTS{}}, HttpRes),
+    {ok, ?INDEX_RESULTS{keys=HttpResKeys,
+                        continuation=HttpContinuation}} = HttpRes, 
+    ?assertEqual(FirstHalf, HttpResKeys),
     ?assertEqual(PBContinuation, HttpContinuation),
 
-    HttpRes2 = http_query(RiakHttp, Q, [{continuation, HttpContinuation}]),
-    ?assertEqual(Rest, proplists:get_value(<<"keys">>, HttpRes2, [])),
+    HttpRes2 = rhc:get_index(RiakHttp, ?BUCKET, <<"$key">>,
+                             {int_to_key(0), int_to_key(999)},
+                             [{continuation, HttpContinuation}]),
+    ?assertMatch({ok, ?INDEX_RESULTS{}}, HttpRes2),
+    {ok, ?INDEX_RESULTS{keys=HttpRes2Keys}} = HttpRes2,
+    ?assertEqual(Rest, HttpRes2Keys),
 
     %% Multiple indexes for single key
     O1 = riakc_obj:new(?BUCKET, <<"bob">>, <<"1">>),
@@ -84,7 +93,7 @@ confirm() ->
 
     [put_an_object(PBPid, int_to_key(N), 1000, <<"myval">>) || N <- lists:seq(0, 100)],
 
-    [ verify_eq_pag(PBPid, RiakHttp, EqualsQuery, FirstHalf, Rest) ||
+    [ verify_eq_pag(PBPid, HttpUrl, EqualsQuery, FirstHalf, Rest) ||
         EqualsQuery <- [{"field1_bin", <<"myval">>},
                         {"field2_int", 1000},
                         {"$bucket", ?BUCKET}]],
