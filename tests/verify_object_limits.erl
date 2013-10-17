@@ -17,6 +17,10 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
+
+%% @doc Verifies Riak's warnings and caps for number of siblings
+%%  and object size. Warnings end up in the logs, and hard caps can
+%%  make requests fail.
 -module(verify_object_limits).
 -behavior(riak_test).
 -export([confirm/0]).
@@ -38,21 +42,19 @@ confirm() ->
                         {warn_siblings, ?WARN_SIBLINGS}]}]),
     C = rt:pbc(Node1),
 
-    % Set up special logs capturing module
-    rt:load_modules_on_nodes([riak_test_lager_backend], [Node1]),
-    ok = rpc:call(Node1, gen_event, add_handler, [lager_event,
-                                                  riak_test_lager_backend,
-                                                  [info, false]]),
-    ok = rpc:call(Node1, lager, set_loglevel, [riak_test_lager_backend, info]),
+    %% Set up to grep logs to verify messages
+    rt:setup_log_capture(Node1),
 
     % For the sibling test, we need the bucket to allow siblings
+    lager:info("Configuring bucket to allow siblings"),
     ?assertMatch(ok, riakc_pb_socket:set_bucket(C, ?BUCKET,
                                                 [{allow_mult, true}])),
-    verify_size_thresholds(C, Node1),
-    verify_sibling_thresholds(C, Node1),
+    verify_size_limits(C, Node1),
+    verify_sibling_limits(C, Node1),
     pass.
 
-verify_size_thresholds(C, Node1) ->
+verify_size_limits(C, Node1) ->
+    lager:info("Verifying size limits"),
     Puts = [{1, ok},
             {10, ok},
             {50, ok},
@@ -94,29 +96,29 @@ verify_size_thresholds(C, Node1) ->
 verify_size_write_warning(Node, K, N) ->
     lager:info("Looking for write warning for size ~p", [N]),
     Pattern = io_lib:format("warning.*Writ.*~p.*~p",[?BUCKET, K]),
-    Res = verify_log(Node, Pattern),
+    Res = rt:expect_in_log(Node, Pattern),
     ?assertEqual({warning, N, true}, {warning, N, Res}).
 
 verify_size_read_warning(Node, K, N) ->
     lager:info("Looking for read warning for size ~p", [N]),
     Pattern = io_lib:format("warning.*Read.*~p.*~p",[?BUCKET, K]),
-    Res = verify_log(Node, Pattern),
+    Res = rt:expect_in_log(Node, Pattern),
     ?assertEqual({warning, N, true}, {warning, N, Res}).
 
 verify_size_write_error(Node, K, N) ->
     lager:info("Looking for write error for size ~p", [N]),
     Pattern = io_lib:format("error.*~p.*~p",[?BUCKET, K]),
-    Res = verify_log(Node, Pattern),
+    Res = rt:expect_in_log(Node, Pattern),
     ?assertEqual({warning, N, true}, {warning, N, Res}).
 
-verify_sibling_thresholds(C, Node1) ->
+verify_sibling_limits(C, Node1) ->
     K = <<"sibtest">>,
     O = riakc_obj:new(?BUCKET, K, <<"val">>),
     [?assertMatch(ok, riakc_pb_socket:put(C, O)) 
      || _ <- lists:seq(1, ?WARN_SIBLINGS+1)],
     P = io_lib:format("warning.*siblings.*~p.*~p.*(~p)",
                       [?BUCKET, K, ?WARN_SIBLINGS+1]),
-    Found = verify_log(Node1, P),
+    Found = rt:expect_in_log(Node1, P),
     lager:info("Looking for sibling warning: ~p", [Found]),
     ?assertEqual(true, Found),
     % Generate error now
@@ -126,24 +128,3 @@ verify_sibling_thresholds(C, Node1) ->
     lager:info("Result when too many siblings : ~p", [Res]),
     ?assertMatch({error,_},  Res),
     ok.
-
-verify_log(Node, Pattern) ->
-    CheckLogFun = fun() ->
-            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
-            lager:info("Logs ~s", [Logs]),
-            lager:info("looking for pattern ~s", [Pattern]),
-            case re:run(Logs, Pattern, []) of
-                {match, _} ->
-                    lager:info("Found match"),
-                    true;
-                nomatch    ->
-                    lager:info("No match"),
-                    false
-            end
-    end,
-    case rt:wait_until(CheckLogFun) of
-        ok ->
-            true;
-        _ ->
-            false
-    end.
