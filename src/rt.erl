@@ -54,6 +54,7 @@
          deploy_nodes/2,
          down/2,
          enable_search_hook/2,
+         expect_in_log/2,
          get_deps/0,
          get_node_logs/0,
          get_ring/1,
@@ -91,6 +92,7 @@
          set_backend/2,
          set_conf/2,
          setup_harness/2,
+         setup_log_capture/1,
          slow_upgrade/3,
          spawn_cmd/1,
          spawn_cmd/2,
@@ -1254,3 +1256,46 @@ wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
                 ExpectedStatus =:= ActualStatus
         end,
     ?assertEqual(ok, rt:wait_until(F)).
+
+%% @doc Set up in memory log capture to check contents in a test.
+setup_log_capture(Nodes) when is_list(Nodes) ->
+    rt:load_modules_on_nodes([riak_test_lager_backend], Nodes),
+    [?assertEqual({Node, ok},
+                  {Node,
+                   rpc:call(Node,
+                            gen_event,
+                            add_handler,
+                            [lager_event,
+                             riak_test_lager_backend,
+                             [info, false]])}) || Node <- Nodes],
+    [?assertEqual({Node, ok},
+                  {Node,
+                   rpc:call(Node,
+                            lager,
+                            set_loglevel,
+                            [riak_test_lager_backend,
+                             info])}) || Node <- Nodes];
+setup_log_capture(Node) when not is_list(Node) ->
+    setup_log_capture([Node]).
+
+
+expect_in_log(Node, Pattern) ->
+    CheckLogFun = fun() ->
+            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+            lager:info("looking for pattern ~s in logs for ~p",
+                       [Pattern, Node]),
+            case re:run(Logs, Pattern, []) of
+                {match, _} ->
+                    lager:info("Found match"),
+                    true;
+                nomatch    ->
+                    lager:info("No match"),
+                    false
+            end
+    end,
+    case rt:wait_until(CheckLogFun) of
+        ok ->
+            true;
+        _ ->
+            false
+    end.
