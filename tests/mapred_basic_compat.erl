@@ -38,9 +38,15 @@
 
 -define(INTS_BUCKET, <<"foonum">>).
 -define(LINK_BUCKET, <<"link bucket">>).
+-define(BUCKET_TYPE, <<"mytype">>).
 
 confirm() ->
     Nodes = rt:build_cluster(3),
+
+    [Node1|_] = Nodes,
+    %% create a new type
+    rt:create_and_activate_bucket_type(Node1, ?BUCKET_TYPE, [{n_val, 3}]),
+    rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Nodes),
 
     load_test_data(Nodes),
     rt:load_modules_on_nodes([?MODULE], Nodes),
@@ -61,6 +67,7 @@ confirm() ->
                link_not_found,
                keydata,
                key_filters,
+               map_output_with_btype,
                modfun_generator1,
                modfun_generator2] ],
 
@@ -83,6 +90,14 @@ load_test_data([Node|_]) ->
 
     C = rt:pbc(Node),
     ok = riakc_pb_socket:put(C, riakc_obj:update_metadata(Obj, MD)),
+
+    %% Some bucket type entries {mytype,foonum}/bar{1..10}
+    [begin
+            K = list_to_binary("bar"++integer_to_list(N)),
+            V = list_to_binary(integer_to_list(N)),
+            O = riakc_obj:new({?BUCKET_TYPE, ?INTS_BUCKET}, K, V),
+            riakc_pb_socket:put(C, O)
+        end || N <- lists:seq(1,10)],
     riakc_pb_socket:stop(C).
 
 rpcmr(Node, Inputs, Query) ->
@@ -150,7 +165,26 @@ error_not_found_propagation([Node|_]) ->
               {struct,[{<<"sub">>,[<<"0">>]}]}, false},
              {reduce, {modfun, riak_kv_mapreduce, reduce_string_to_integer},
               none,true}],
-    ?assertEqual({ok, [0]}, rpcmr(Node, Inputs, Spec)).
+    ?assertEqual({ok, [0]}, rpcmr(Node, Inputs, Spec)),
+    B = {?BUCKET_TYPE, ?INTS_BUCKET},
+    Inputs2 = [{{B, <<"nokey">>}, undefined}],
+    Spec2 =  [{map, {modfun, riak_kv_mapreduce, map_object_value},
+              {struct,[{<<"sub">>,[<<"0">>]}]}, false},
+             {reduce, {modfun, riak_kv_mapreduce, reduce_string_to_integer},
+              none,true}],
+    ?assertEqual({ok, [0]}, rpcmr(Node, Inputs2, Spec2)).
+
+%% @doc A map phase outputting a 4 tuple can feed objects to another map phase
+map_output_with_btype([Node|_]) ->
+    %% Translates from regular bucket to bucket type one
+    Inputs = ?INTS_BUCKET, 
+    Spec = [{map, {jsanon, <<"function(o){return[[o.bucket,o.key,null,\"mytype\"]];}">>}, undefined, false},
+            {map, {modfun, riak_kv_mapreduce, map_object_value}, undefined, false},
+            {reduce, {modfun, riak_kv_mapreduce, reduce_string_to_integer}, undefined, false},
+            {reduce, {modfun, riak_kv_mapreduce, reduce_sort}, undefined, true}
+           ],
+    ?assertEqual({{ok, lists:seq(1,5)}, {Inputs, Spec}},
+                 {rpcmr(Node, Inputs, Spec), {Inputs, Spec}}).
 
 %% @doc Basic link phase
 basic_link([Node|_]) ->
