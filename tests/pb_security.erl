@@ -537,31 +537,31 @@ confirm() ->
 
     %% counters
 
-    %lager:info("Checking that counters work on resources that have get/put permitted"),
-    %?assertEqual({error, notfound}, riakc_pb_socket:counter_val(PB, {<<"mytype2">>, <<"hello">>},
-                                                                %<<"numberofpies">>)),
-    %ok = riakc_pb_socket:counter_incr(PB, {<<"mytype2">>, <<"hello">>},
-                                 %<<"numberofpies">>, 5),
-    %?assertEqual({ok, 5}, riakc_pb_socket:counter_val(PB, {<<"mytype2">>, <<"hello">>},
-                                                      %<<"numberofpies">>)),
+    lager:info("Checking that counters work on resources that have get/put permitted"),
+    ?assertEqual({error, notfound}, riakc_pb_socket:counter_val(PB, {<<"mytype2">>, <<"hello">>},
+                                                                <<"numberofpies">>)),
+    ok = riakc_pb_socket:counter_incr(PB, {<<"mytype2">>, <<"hello">>},
+                                 <<"numberofpies">>, 5),
+    ?assertEqual({ok, 5}, riakc_pb_socket:counter_val(PB, {<<"mytype2">>, <<"hello">>},
+                                                      <<"numberofpies">>)),
 
-    %lager:info("Revoking get, checking that counter_val fails"),
+    lager:info("Revoking get, checking that counter_val fails"),
     %% revoke get
-    %ok = rpc:call(Node, riak_core_console, revoke,
-                  %[["riak_kv.get", "ON", "mytype2", "FROM", "user"]]),
+    ok = rpc:call(Node, riak_core_console, revoke,
+                  [["riak_kv.get", "ON", "mytype2", "FROM", "user"]]),
 
-    %?assertMatch({error, <<"Permission",  _/binary>>}, riakc_pb_socket:counter_val(PB, {<<"mytype2">>, <<"hello">>},
-                                                                %<<"numberofpies">>)),
-    %ok = riakc_pb_socket:counter_incr(PB, {<<"mytype2">>, <<"hello">>},
-                                      %<<"numberofpies">>, 5),
+    ?assertMatch({error, <<"Permission",  _/binary>>}, riakc_pb_socket:counter_val(PB, {<<"mytype2">>, <<"hello">>},
+                                                                <<"numberofpies">>)),
+    ok = riakc_pb_socket:counter_incr(PB, {<<"mytype2">>, <<"hello">>},
+                                      <<"numberofpies">>, 5),
 
-    %lager:info("Revoking put, checking that counter_incr fails"),
+    lager:info("Revoking put, checking that counter_incr fails"),
     %% revoke put
-    %ok = rpc:call(Node, riak_core_console, revoke,
-                  %[["riak_kv.put", "ON", "mytype2", "FROM", "user"]]),
+    ok = rpc:call(Node, riak_core_console, revoke,
+                  [["riak_kv.put", "ON", "mytype2", "FROM", "user"]]),
 
-    %?assertMatch({error, <<"Permission", _/binary>>}, riakc_pb_socket:counter_incr(PB, {<<"mytype2">>, <<"hello">>},
-                                                                                   %<<"numberofpies">>, 5)),
+    ?assertMatch({error, <<"Permission", _/binary>>}, riakc_pb_socket:counter_incr(PB, {<<"mytype2">>, <<"hello">>},
+                                                                                   <<"numberofpies">>, 5)),
 
     %% get/set bucket type props
 
