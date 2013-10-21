@@ -117,6 +117,8 @@
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
+         wait_for_control/1,
+         wait_for_control/2,
          wait_until/2,
          wait_until/1,
          wait_until_all_members/1,
@@ -1279,3 +1281,58 @@ expect_in_log(Node, Pattern) ->
         _ ->
             false
     end.
+
+%% @doc Wait for Riak Control to start on a single node.
+%%
+%% Non-optimal check, because we're blocking for the gen_server to start
+%% to ensure that the routes have been added by the supervisor.
+%%
+wait_for_control(Vsn, Node) when is_atom(Node) ->
+    lager:info("Waiting for riak_control to start on node ~p.", [Node]),
+
+    %% Wait for the gen_server.
+    rt:wait_until(Node, fun(N) ->
+                case rpc:call(N,
+                              riak_control_session,
+                              get_version,
+                              []) of
+                    {ok, _} ->
+                        true;
+                    Error ->
+                        lager:info("Error was ~p.", [Error]),
+                        false
+                end
+        end),
+
+    GuiResource = case Vsn of
+        legacy ->
+            admin_gui;
+        _ ->
+            riak_control_wm_gui
+    end,
+
+    %% Wait for routes to be added by supervisor.
+    rt:wait_until(Node, fun(N) ->
+                case rpc:call(N,
+                              webmachine_router,
+                              get_routes,
+                              []) of
+                    {badrpc, Error} ->
+                        lager:info("Error was ~p.", [Error]),
+                        false;
+                    Routes ->
+                        case lists:keyfind(GuiResource, 2,
+                                           Routes) of
+                            false ->
+                                lager:info("Control routes not found yet: ~p ~p.", 
+                                           [Vsn, Routes]),
+                                false;
+                            _ ->
+                                true
+                        end
+                end
+        end).
+
+%% @doc Wait for Riak Control to start on a series of nodes.
+wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
+    [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].

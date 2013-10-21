@@ -69,7 +69,7 @@ verify_upgrade_fold({FromVsn, Node}, VersionedNodes0) ->
     rt:wait_for_service(Node, riak_kv),
 
     %% Wait for Riak Control to start.
-    wait_for_control(VersionedNodes0),
+    rt:wait_for_control(VersionedNodes0),
 
     %% Wait for Riak Control polling cycle.
     wait_for_control_cycle(Node),
@@ -182,29 +182,6 @@ wait_for_control_cycle(Node) when is_atom(Node) ->
                                      []),
                 Vsn =:= ExpectedVsn
         end).
-
-%% @doc Wait for Riak Control to start.
-%%
-%% Non-optimal check, because we're blocking for the gen_server to
-%% start to ensure that the routes have been added by the
-%% supervisor.
-wait_for_control(Node) when is_atom(Node) ->
-    lager:info("Waiting for riak_control to start on node ~p.", [Node]),
-
-    rt:wait_until(Node, fun(N) ->
-                case rpc:call(N,
-                              riak_control_session,
-                              get_version,
-                              []) of
-                    {ok, _} ->
-                        true;
-                    Error ->
-                        lager:info("Error was ~p.", [Error]),
-                        false
-                end
-        end);
-wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
-    [wait_for_control(Node) || {_, Node} <- VersionedNodes].
 
 %% @doc Validate partitions response.
 validate_partitions({current, _}, _ResponsePartitions, _VersionedNodes) ->
