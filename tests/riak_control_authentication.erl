@@ -106,7 +106,6 @@ verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG) ->
     lager:info("Verifying auth 'none', ~p.", [Vsn]),
     Nodes =   build_singleton_cluster(Vsn, ?RC_AUTH_NONE_CONFIG),
     Node =    lists:nth(1, Nodes),
-    restart(Node),
 
     %% Assert that we can load the main page.
     lager:info("Verifying Control loads."),
@@ -121,7 +120,6 @@ verify_authentication(current, ?RC_AUTH_NONE_CONFIG_FORCE_SSL) ->
     Nodes =   build_singleton_cluster(current, 
                                       ?RC_AUTH_NONE_CONFIG_FORCE_SSL),
     Node =    lists:nth(1, Nodes),
-    restart(Node),
 
     %% Assert that we get redirected if we hit the HTTP port.
     lager:info("Verifying redirect to SSL."),
@@ -142,7 +140,6 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG) ->
     lager:info("Verifying auth 'userlist', ~p.", [Vsn]),
     Nodes =   build_singleton_cluster(Vsn, ?RC_AUTH_USERLIST_CONFIG),
     Node =    lists:nth(1, Nodes),
-    restart(Node),
 
     %% Assert that we get redirected if we hit the HTTP port.
     lager:info("Verifying redirect to SSL."),
@@ -168,7 +165,6 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL) ->
     lager:info("Verifying auth 'userlist', 'force_ssl' 'true', current."),
     Nodes =   build_singleton_cluster(current, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL),
     Node =    lists:nth(1, Nodes),
-    restart(Node),
 
     %% Assert that we get redirected if we hit the HTTP port.
     lager:info("Verifying redirect to SSL."),
@@ -196,7 +192,6 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
     lager:info("Verifying auth 'userlist', 'force_ssl' 'false', current."),
     Nodes =   build_singleton_cluster(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL),
     Node =    lists:nth(1, Nodes),
-    restart(Node),
 
     %% Assert that we can access resource over the SSL port.
     lager:info("Verifying Control loads over SSL."),
@@ -215,14 +210,20 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
 %% @doc Build a one node cluster.
 build_singleton_cluster(Vsn, Config) ->
     Nodes = rt:build_cluster([{Vsn, Config}]),
-    lager:info("Build ~p, nodes: ~p.", [Vsn, Nodes]),
-    Nodes.
 
-%% @doc Restart node.
-%%      Since many of the Riak Control configuration options change how
-%%      the supervisor starts, we need to restart to ensure settings
-%%      take effect.
-restart(Node) ->
+    %% Start and stop, wait for riak_kv.
+    %%
+    %% Since many of the Riak Control configuration options change how
+    %% the supervisor starts, we need to restart to ensure settings
+    %% take effect.
+    Node = lists:nth(1, Nodes),
     rt:stop_and_wait(Node),
     rt:start_and_wait(Node),
-    rt:wait_for_service(Node, riak_kv).
+    rt:wait_for_service(Node, riak_kv),
+
+    %% Wait for control to start.
+    VersionedNodes = [{Vsn, N} || N <- Nodes],
+    rt:wait_for_control(VersionedNodes),
+
+    lager:info("Build ~p, nodes: ~p.", [Vsn, Nodes]),
+    Nodes.
