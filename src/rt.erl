@@ -54,12 +54,14 @@
          deploy_nodes/2,
          down/2,
          enable_search_hook/2,
+         expect_in_log/2,
          get_deps/0,
          get_node_logs/0,
          get_ring/1,
          get_version/0,
          heal/1,
          http_url/1,
+         https_url/1,
          httpc/1,
          httpc_read/3,
          httpc_write/4,
@@ -90,6 +92,7 @@
          set_backend/2,
          set_conf/2,
          setup_harness/2,
+         setup_log_capture/1,
          slow_upgrade/3,
          spawn_cmd/1,
          spawn_cmd/2,
@@ -213,7 +216,12 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 connection_info(Node) when is_atom(Node) ->
     {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
     {ok, [{HTTP_IP, HTTP_Port}]} = get_http_conn_info(Node),
-    [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}];
+    case get_https_conn_info(Node) of
+        undefined ->
+            [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}];
+        {ok, [{HTTPS_IP, HTTPS_Port}]} ->
+            [{http, {HTTP_IP, HTTP_Port}}, {https, {HTTPS_IP, HTTPS_Port}}, {pb, {PB_IP, PB_Port}}]
+    end;
 connection_info(Nodes) when is_list(Nodes) ->
     [ {Node, connection_info(Node)} || Node <- Nodes].
 
@@ -236,6 +244,16 @@ get_pb_conn_info(Node) ->
 get_http_conn_info(Node) ->
     case rpc_get_env(Node, [{riak_api, http},
                             {riak_core, http}]) of
+        {ok, [{IP, Port}|_]} ->
+            {ok, [{IP, Port}]};
+        _ ->
+            undefined
+    end.
+
+-spec get_https_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
+get_https_conn_info(Node) ->
+    case rpc_get_env(Node, [{riak_api, https},
+                            {riak_core, https}]) of
         {ok, [{IP, Port}|_]} ->
             {ok, [{IP, Port}]};
         _ ->
@@ -817,7 +835,8 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
             %% ok do a staged join and then commit it, this eliminates the
             %% large amount of redundant handoff done in a sequential join
             [staged_join(Node, Node1) || Node <- OtherNodes],
-            plan_and_commit(Node1)
+            plan_and_commit(Node1),
+            try_nodes_ready(Nodes, 3, 500)
     end,
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
@@ -828,6 +847,19 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
+
+try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
+    lager:info("Nodes not ready after initial plan/commit, retrying"),
+    plan_and_commit(Node1);
+try_nodes_ready(Nodes, N, SleepMs) ->
+    ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
+    case ReadyNodes of
+        Nodes ->
+            ok;
+        _ ->
+            timer:sleep(SleepMs),
+            try_nodes_ready(Nodes, N-1, SleepMs)
+    end.
 
 %% @doc Stop nodes and wipe out their data directories
 clean_cluster(Nodes) when is_list(Nodes) ->
@@ -978,6 +1010,14 @@ pbc_really_deleted(Pid, Bucket, Keys) ->
     end,
     [] == lists:filter(StillThere, Keys).
 
+%% @doc Returns HTTPS URL information for a list of Nodes
+https_url(Nodes) when is_list(Nodes) ->
+    [begin
+         {Host, Port} = orddict:fetch(https, Connections),
+         lists:flatten(io_lib:format("https://~s:~b", [Host, Port]))
+     end || {_Node, Connections} <- connection_info(Nodes)];
+https_url(Node) ->
+    hd(https_url([Node])).
 
 %% @doc Returns HTTP URL information for a list of Nodes
 http_url(Nodes) when is_list(Nodes) ->
@@ -1216,3 +1256,46 @@ wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
                 ExpectedStatus =:= ActualStatus
         end,
     ?assertEqual(ok, rt:wait_until(F)).
+
+%% @doc Set up in memory log capture to check contents in a test.
+setup_log_capture(Nodes) when is_list(Nodes) ->
+    rt:load_modules_on_nodes([riak_test_lager_backend], Nodes),
+    [?assertEqual({Node, ok},
+                  {Node,
+                   rpc:call(Node,
+                            gen_event,
+                            add_handler,
+                            [lager_event,
+                             riak_test_lager_backend,
+                             [info, false]])}) || Node <- Nodes],
+    [?assertEqual({Node, ok},
+                  {Node,
+                   rpc:call(Node,
+                            lager,
+                            set_loglevel,
+                            [riak_test_lager_backend,
+                             info])}) || Node <- Nodes];
+setup_log_capture(Node) when not is_list(Node) ->
+    setup_log_capture([Node]).
+
+
+expect_in_log(Node, Pattern) ->
+    CheckLogFun = fun() ->
+            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+            lager:info("looking for pattern ~s in logs for ~p",
+                       [Pattern, Node]),
+            case re:run(Logs, Pattern, []) of
+                {match, _} ->
+                    lager:info("Found match"),
+                    true;
+                nomatch    ->
+                    lager:info("No match"),
+                    false
+            end
+    end,
+    case rt:wait_until(CheckLogFun) of
+        ok ->
+            true;
+        _ ->
+            false
+    end.
