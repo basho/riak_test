@@ -44,8 +44,7 @@ confirm() ->
     ?assertEqual(<<"default">>, riakc_obj:bucket_type(O2)),
 
     %% write implicitly to the default bucket
-    riakc_pb_socket:put(PB, riakc_obj:new(<<"bucket">>,
-                                             <<"key">>, <<"newvalue">>)),
+    riakc_pb_socket:put(PB, riakc_obj:update_value(O1, <<"newvalue">>)),
  
     %% read from the default bucket explicitly
     {ok, O3} = riakc_pb_socket:get(PB, {<<"default">>, <<"bucket">>}, <<"key">>),

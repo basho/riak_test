@@ -24,7 +24,7 @@ confirm() ->
     RHC = rt:httpc(Node),
     lager:info("default type get/put test"),
     %% write explicitly to the default type
-    rhc:put(RHC, riakc_obj:new({<<"default">>, <<"bucket">>},
+    ok = rhc:put(RHC, riakc_obj:new({<<"default">>, <<"bucket">>},
                                <<"key">>, <<"value">>)),
 
     %% read from the default bucket implicitly
@@ -41,8 +41,7 @@ confirm() ->
     ?assertEqual(<<"default">>, riakc_obj:bucket_type(O2)),
 
     %% write implicitly to the default bucket
-    rhc:put(RHC, riakc_obj:new(<<"bucket">>,
-                               <<"key">>, <<"newvalue">>)),
+    ok = rhc:put(RHC, riakc_obj:update_value(O1, <<"newvalue">>)),
 
     %% read from the default bucket explicitly
     {ok, O3} = rhc:get(RHC, {<<"default">>, <<"bucket">>}, <<"key">>),
@@ -59,20 +58,24 @@ confirm() ->
     ?assertEqual({ok, [<<"bucket">>]}, rhc:list_buckets(RHC)),
     ?assertEqual({ok, [<<"bucket">>]}, rhc:list_buckets(RHC, <<"default">>)),
 
+    timer:sleep(5000),
     lager:info("default type delete test"),
     %% delete explicitly via the default bucket
-    ok = rhc:delete(RHC, {<<"default">>, <<"bucket">>}, <<"key">>),
+    ok = rhc:delete_obj(RHC, O3),
 
     %% read from the default bucket implicitly
-    {error, notfound} = rhc:get(RHC, <<"bucket">>, <<"key">>),
+    {error, {notfound, VC}} = rhc:get(RHC, <<"bucket">>, <<"key">>, [deletedvclock]),
     %% read from the default bucket explicitly
-    {error, notfound} = rhc:get(RHC, {<<"default">>, <<"bucket">>}, <<"key">>),
+    {error, {notfound, VC}} = rhc:get(RHC, {<<"default">>, <<"bucket">>}, <<"key">>,
+                               [deletedvclock]),
 
-    %% write it again
-    rhc:put(RHC, riakc_obj:new({<<"default">>, <<"bucket">>},
-                               <<"key">>, <<"newestvalue">>)),
+    %% write it again, being nice to siblings
+    O3a = riakc_obj:new({<<"default">>, <<"bucket">>},
+                        <<"key">>, <<"newestvalue">>),
+    ok = rhc:put(RHC, riakc_obj:set_vclock(O3a, VC)),
 
-    {ok, O4} = rhc:get(RHC, {<<"default">>, <<"bucket">>}, <<"key">>),
+    {ok, O4} = rhc:get(RHC, {<<"default">>, <<"bucket">>}, <<"key">>,
+                       [deletedvclock]),
 
     %% delete explicitly via the default bucket
     ok = rhc:delete_obj(RHC, O4),
@@ -103,7 +106,7 @@ confirm() ->
     timer:sleep(1000),
 
     lager:info("doing put"),
-    rhc:put(RHC, riakc_obj:new({<<"mytype">>, <<"bucket">>},
+    ok = rhc:put(RHC, riakc_obj:new({<<"mytype">>, <<"bucket">>},
                                <<"key">>, <<"newestvalue">>)),
 
     lager:info("doing get"),
@@ -220,8 +223,8 @@ confirm() ->
                                                         [<<"Jane">>, <<"Rachel">>
                                                         ,<<"Doe">>]}])),
 
-            rhc:put(RHC, Obj1),
-            rhc:put(RHC, Obj2),
+            ok = rhc:put(RHC, Obj1),
+            ok = rhc:put(RHC, Obj2),
 
             ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, rhc:get_index(RHC, <<"test">>,
                                                                                     {binary_index,
@@ -250,7 +253,7 @@ confirm() ->
                     MD2=riakc_obj:add_secondary_index(MD, {{integer_index,
                                                             "i_idx"}, [II]}),
                     OTwo=riakc_obj:update_metadata(O,MD2),
-                    rhc:put(RHC,riakc_obj:update_value(OTwo, V, "application/json"))
+                    ok = rhc:put(RHC,riakc_obj:update_value(OTwo, V, "application/json"))
             end,
 
     [Store(<<"MRbucket">>, KV) || KV <- [
