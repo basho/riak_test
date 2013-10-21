@@ -227,7 +227,6 @@ sort_cov(CovList) ->
 
 -spec acc_cov([#cover_info{}]) -> {number(), number()}.
 acc_cov(CovList) when is_list(CovList) ->
-    lager:info("acc_cov CovList = ~p", [CovList]),
     AddCov = fun(#cover_info{coverage={Y, N}}, {TY, TN}) -> {TY+Y, TN+N};
         (#cover_info{coverage=undefined}, {TY, TN}) -> {TY, TN}
     end,
