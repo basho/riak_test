@@ -216,19 +216,19 @@ confirm() ->
     [rt:update_app_config(Node, Override(legacy, proxy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == legacy"),
-    ?assertEqual(legacy, rt:capability(CNode, {riak_core, vnode_routing})),
+    assert_capability(CNode, {riak_core, vnode_routing}, legacy),
 
     lager:info("Override: (use: proxy), (prefer: legacy)"),
     [rt:update_app_config(Node, Override(proxy, legacy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == proxy"),
-    ?assertEqual(proxy, rt:capability(CNode, {riak_core, vnode_routing})),
+    assert_capability(CNode, {riak_core, vnode_routing}, proxy),
 
     lager:info("Override: (prefer: legacy)"),
     [rt:update_app_config(Node, Override(undefined, legacy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == legacy"),
-    ?assertEqual(legacy, rt:capability(CNode, {riak_core, vnode_routing})),
+    assert_capability(CNode, {riak_core, vnode_routing}, legacy),
 
     [rt:stop(Node) || Node <- Nodes],
     pass.
