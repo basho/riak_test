@@ -38,7 +38,6 @@ confirm() ->
     lager:info("Verify staged_joins == true"),
     ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
-    %% This test is written with the intent that 1.4 is 'current'
     CCapabilities = rt:capability(CNode, all),
     assert_capability(CNode, {riak_kv, legacy_keylisting}, false),
     assert_capability(CNode, {riak_kv, listkeys_backpressure}, true),
@@ -76,13 +75,12 @@ confirm() ->
 
     case Legacy of
         legacy ->
-            %% Assumes legacy is Riak 1.2.1
             LCapabilities = rt:capability(CNode, all),
             assert_capability(CNode, {riak_kv, legacy_keylisting}, false),
             assert_capability(CNode, {riak_kv, listkeys_backpressure}, true),
             assert_capability(CNode, {riak_core, staged_joins}, true),
-            assert_capability(CNode, {riak_kv, index_backpressure}, false),
-            assert_capability(CNode, {riak_pipe, trace_format}, sets),
+            assert_capability(CNode, {riak_kv, index_backpressure}, true),
+            assert_capability(CNode, {riak_pipe, trace_format}, ordsets),
             assert_capability(CNode, {riak_kv, mapred_2i_pipe}, true),
             assert_capability(CNode, {riak_kv, mapred_system}, pipe),
             assert_capability(CNode, {riak_kv, vnode_vclocks}, true),
@@ -112,8 +110,8 @@ confirm() ->
             assert_capability(CNode, {riak_kv, legacy_keylisting}, false),
             assert_capability(CNode, {riak_kv, listkeys_backpressure}, true),
             assert_capability(CNode, {riak_core, staged_joins}, true),
-            assert_capability(CNode, {riak_kv, index_backpressure}, false),
-            assert_capability(CNode, {riak_pipe, trace_format}, sets),
+            assert_capability(CNode, {riak_kv, index_backpressure}, true),
+            assert_capability(CNode, {riak_pipe, trace_format}, ordsets),
             assert_capability(CNode, {riak_kv, mapred_2i_pipe}, true),
             assert_capability(CNode, {riak_kv, mapred_system}, pipe),
             assert_capability(CNode, {riak_kv, vnode_vclocks}, true),
@@ -138,7 +136,6 @@ confirm() ->
 
             %% We have upgraded the legacy node, but we should see zlib selected (previous node still not upgraded):
             assert_using(CNode, {riak_kv, handoff_data_encoding}, encode_zlib);
-
         _ ->
             lager:info("Legacy Riak not available, skipping legacy tests"),
             lager:info("Adding previous node to cluster"),
@@ -151,8 +148,8 @@ confirm() ->
     assert_capability(CNode, {riak_kv, legacy_keylisting}, false),
     assert_capability(CNode, {riak_kv, listkeys_backpressure}, true),
     assert_capability(CNode, {riak_core, staged_joins}, true),
-    assert_capability(CNode, {riak_kv, index_backpressure}, false),
-    assert_capability(CNode, {riak_pipe, trace_format}, sets),
+    assert_capability(CNode, {riak_kv, index_backpressure}, true),
+    assert_capability(CNode, {riak_pipe, trace_format}, ordsets),
     assert_capability(CNode, {riak_kv, mapred_2i_pipe}, true),
     assert_capability(CNode, {riak_kv, mapred_system}, pipe),
     assert_capability(CNode, {riak_kv, vnode_vclocks}, true),
@@ -219,19 +216,19 @@ confirm() ->
     [rt:update_app_config(Node, Override(legacy, proxy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == legacy"),
-    ?assertEqual(legacy, rt:capability(CNode, {riak_core, vnode_routing})),
+    assert_capability(CNode, {riak_core, vnode_routing}, legacy),
 
     lager:info("Override: (use: proxy), (prefer: legacy)"),
     [rt:update_app_config(Node, Override(proxy, legacy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == proxy"),
-    ?assertEqual(proxy, rt:capability(CNode, {riak_core, vnode_routing})),
+    assert_capability(CNode, {riak_core, vnode_routing}, proxy),
 
     lager:info("Override: (prefer: legacy)"),
     [rt:update_app_config(Node, Override(undefined, legacy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == legacy"),
-    ?assertEqual(legacy, rt:capability(CNode, {riak_core, vnode_routing})),
+    assert_capability(CNode, {riak_core, vnode_routing}, legacy),
 
     [rt:stop(Node) || Node <- Nodes],
     pass.
