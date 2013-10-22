@@ -72,6 +72,8 @@ confirm() ->
     ?assertEqual(ok, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
     ?assertEqual({ok, 4}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
 
+    [riakc_pb_socket:stop(C) || C <- [PB, PrevPB]],
+
     pass.
 
 get_clients(Node) ->

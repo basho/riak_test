@@ -79,6 +79,9 @@ confirm() ->
     ?assertEqual({ok, {counter, 8, 0}}, riakc_pb_socket:fetch_type(PrevPB, {<<"default">>, ?BUCKET}, ?KEY)),
     ?assertEqual(ok, riakc_pb_socket:update_type(PrevPB, {<<"default">>, ?BUCKET}, ?KEY, gen_counter_op())),
     ?assertEqual({ok, 9}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
+
+    [riakc_pb_socket:stop(C) || C <- [PB, PrevPB]],
+
     pass.
 
 gen_counter_op() ->
