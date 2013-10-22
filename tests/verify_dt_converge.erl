@@ -91,6 +91,8 @@ confirm() ->
     [ ?assertEqual(ok, check_4(Type, Client))
       || Type <- ?TYPES, Client <- Clients ],
 
+    [riakc_pb_socket:stop(C) || C <- Clients],
+
     pass.
 
 create_bucket_types([N1|_]=Nodes, Types) ->
