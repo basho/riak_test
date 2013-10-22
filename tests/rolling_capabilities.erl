@@ -34,26 +34,26 @@ confirm() ->
                        {riak_kv, mapred_2i_pipe, true},
                        {riak_kv, mapred_system, pipe},
                        {riak_kv, vnode_vclocks, true},
-                       {riak_kv, anti_entropy, enabled_v1}],
+                       {riak_kv, anti_entropy, enabled_v1},
+                       {riak_kv, mutators, true}],
 
-    %% Assuming default 1.1.4 app.config settings, the only difference
-    %% between rolling and upgraded should be 'staged_joins'. Explicitly
-    %% test rolling values to ensure we don't fallback to default settings.
     ExpectedOld = case OldVsn of
         legacy ->   [{riak_core, vnode_routing, proxy},
-                     {riak_core, staged_joins, false},
+                     {riak_core, staged_joins, true},
                      {riak_kv, legacy_keylisting, false},
                      {riak_kv, listkeys_backpressure, true},
                      {riak_kv, mapred_2i_pipe, true},
                      {riak_kv, mapred_system, pipe},
-                     {riak_kv, vnode_vclocks, true}];
+                     {riak_kv, vnode_vclocks, true},
+                     {riak_kv, mutators, false}];
         previous -> [{riak_core, vnode_routing, proxy},
                      {riak_core, staged_joins, true},
                      {riak_kv, legacy_keylisting, false},
                      {riak_kv, listkeys_backpressure, true},
                      {riak_kv, mapred_2i_pipe, true},
                      {riak_kv, mapred_system, pipe},
-                     {riak_kv, vnode_vclocks, true}];
+                     {riak_kv, vnode_vclocks, true},
+                     {riak_kv, mutators, false}];
         _ -> []
     end,
     
@@ -76,10 +76,14 @@ check_capabilities(Nodes, Expected) ->
 
     CapCheck = fun(Node) ->
         Caps = rt:capability(Node, all),
-        Results = [ proplists:get_value({ExpProj, ExpCap}, Caps) =:= ExpVal || {ExpProj, ExpCap, ExpVal} <- Expected ],
+        Results = [ verify_capability({ExpProj, ExpCap}, ExpVal, Caps) || {ExpProj, ExpCap, ExpVal} <- Expected ],
         lists:all(fun(X) -> X =:= true end, Results)
     end,
 
     [?assertEqual(ok, rt:wait_until(N, CapCheck)) || N <- Nodes],
     ok.
 
+verify_capability({ExpProj, ExpCap}, ExpVal, Caps) ->
+    CurVal = proplists:get_value({ExpProj, ExpCap}, Caps),
+    lager:info("Verifying: ~p ~p ~p ~p", [ExpProj, ExpCap, ExpVal, CurVal]),
+    CurVal =:=  ExpVal.
