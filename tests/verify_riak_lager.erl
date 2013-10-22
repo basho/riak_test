@@ -40,7 +40,8 @@ confirm() ->
     
     {ok, LagerHandlers} = rt:rpc_get_env(Node, [{lager, handlers}]),
     
-    Files = [element(1, Backend) || Backend <- proplists:get_value(lager_file_backend, LagerHandlers)],
+    Files = [proplists:get_value(file, Config) || {Backend, Config} <- LagerHandlers,
+                                    Backend == lager_file_backend ],
     
     lager:info("Checking for files: ~p", [Files]),
     [?assert(rpc:call(Node, filelib, is_file, [File])) || File <- Files],
