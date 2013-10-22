@@ -30,6 +30,8 @@
 -define(SHRUNK_SIZE, 8).
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
     rt:update_app_config(all, [{riak_core,
                                 [{ring_creation_size, ?START_SIZE}]}]),
     [ANode, AnotherNode, YetAnother, ReplacingNode] = AllNodes = rt:deploy_nodes(4),
