@@ -8,6 +8,8 @@
 -define(NUM_KEYS, 1000).
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),    
     [Node] = rt:build_cluster(1),
     rt:wait_until_pingable(Node),
     
