@@ -109,7 +109,7 @@ confirm() ->
                         ]}
                                                ]),
 
-    ?assertEqual({error,{conn_failed,{error,{tls_alert,"unknown ca"}}}}, rhc:ping(C6)),
+    ?assertMatch({error,{conn_failed,{error,_}}}, rhc:ping(C6)),
 
     lager:info("verifying the peer certificate should work if the cert is valid"),
     %% verifying the peer certificate should work if the cert is valid
