@@ -85,7 +85,7 @@ do_append_files([F|Fs], RF) ->
 rootCA(Root, Name) ->
     create_ca_dir(Root, Name, ca_cnf(Name)),
     DN = #dn{commonName = Name},
-    create_self_signed_ecc_cert(Root, Name, req_cnf(DN)),
+    create_self_signed_cert(Root, Name, req_cnf(DN)),
     file:copy(filename:join([Root, Name, "cert.pem"]), filename:join([Root, Name, "cacerts.pem"])),
     gencrl(Root, Name).
 
@@ -120,7 +120,7 @@ enduser(Root, CA, User) ->
     file:write_file(CnfFile, req_cnf(DN)),
     KeyFile = filename:join([UsrRoot, "key.pem"]), 
     ReqFile =  filename:join([UsrRoot, "req.pem"]), 
-    create_ecc_req(Root, CnfFile, KeyFile, ReqFile),
+    create_req(Root, CnfFile, KeyFile, ReqFile),
     %create_req(Root, CnfFile, KeyFile, ReqFile),
     CertFileAllUsage =  filename:join([UsrRoot, "cert.pem"]),
     sign_req(Root, CA, "user_cert", ReqFile, CertFileAllUsage),
