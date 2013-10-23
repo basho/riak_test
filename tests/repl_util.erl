@@ -115,6 +115,7 @@ wait_until_connection(Node) ->
                     [] ->
                         false;
                     [_C] ->
+                        lager:info("Status = ~p~n", [Status]),
                         true;
                     Conns ->
                         lager:warning("multiple connections detected: ~p",

@@ -7,7 +7,6 @@
 confirm() ->
     TestMetaData = riak_test_runner:metadata(),
     FromVersion = proplists:get_value(upgrade_version, TestMetaData, previous),
-
     lager:info("Doing rolling replication upgrade test from ~p to ~p",
         [FromVersion, "current"]),
 
@@ -17,26 +16,45 @@ confirm() ->
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
+            %{
+            %    lager,
+%
+%                [
+%                    {handlers, [
+%                            {lager_console_backend, debug},
+%                            {lager_file_backend, [
+%                                    {"./log/error.log", debug, 10485760, "$D0", 5},
+%                                    {"./log/console.log", info, 10485760, "$D0", 5}
+%                                    ]}
+%                            ]}
+%                    ]
+%                },
             {riak_kv,
-                [
+             [
                     {anti_entropy, {off, []}}
-                ]
+                    ]
             },
             {riak_repl,
              [
-                {fullsync_on_connect, false},
-                {fullsync_interval, disabled},
-                {diff_batch_size, 10}
-             ]}
-    ],
+                    {fullsync_on_connect, false},
+                    {fullsync_interval, disabled},
+                    {diff_batch_size, 10},
+                    {rt_heartbeat_interval, undefined},
+                    {anya_fs_compat, true}
+                    ]}
+            ],
 
     NodeConfig = [{FromVersion, Conf} || _ <- lists:seq(1, NumNodes)],
 
     Nodes = rt:deploy_nodes(NodeConfig),
-
+    [NA, NB, NC, ND, NE, NF] = Nodes,
     NodeUpgrades = case UpgradeOrder of
+        "fsforwards" ->
+            [NA, NB, NC];
+        "fsbackwards" ->
+            [ND, NE, NF];
         "forwards" ->
-            Nodes;
+           Nodes;
         "backwards" ->
             lists:reverse(Nodes);
         "alternate" ->
@@ -80,4 +98,9 @@ confirm() ->
                           lager:info("Replication with upgraded node: ~p", [Node]),
                           rt:log_to_nodes(Nodes, "Replication with upgraded node: ~p", [Node]),
                           replication2:replication(ANodes, BNodes, true)
-                  end, NodeUpgrades).
+                  end, NodeUpgrades),
+    lager:info("STARTING FULLSYNC", []),
+    repl_util:enable_fullsync(NA,"B"),
+    timer:sleep(5000),
+    repl_util:start_and_wait_until_fullsync_complete(NA).
+    

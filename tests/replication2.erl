@@ -229,11 +229,12 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     lager:info("Writing 100 more keys to ~p now that the old leader is down",
         [ASecond]),
-
+    log_to_nodes(AllNodes, "Writing for failing test case", []),
     ?assertEqual([], repl_util:do_write(ASecond, 301, 400, TestBucket, 2)),
 
     %% verify data is replicated to B
     lager:info("Reading 101 keys written to ~p from ~p", [ASecond, BSecond]),
+    log_to_nodes(AllNodes, "Reading for failing test case", []),
     ?assertEqual(0, repl_util:wait_for_reads(BSecond, 301, 400, TestBucket, 2)),
 
     %% Testing fullsync with downed nodes
