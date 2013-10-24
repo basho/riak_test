@@ -41,8 +41,11 @@ confirm() ->
     Config = [{riak_search, [{enabled, true}]}],
     [Node0 | _RestNodes] = Nodes = rt:build_cluster(?NUM_NODES, Config),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
-    rt:wait_until_ring_converged(Nodes),
     PbcPid = rt:pbc(Node0),
+    ?assertEqual(ok, riakc_pb_socket:set_bucket(PbcPid, <<"_rsid_search_bucket">>,
+                                                [{allow_mult, false}])),
+    rt:wait_until_ring_converged(Nodes),
+
     Searches =
         [
           {<<"ZiaSun">>, 1},
@@ -65,7 +68,7 @@ confirm() ->
                                       AllTerms)),
 
     lager:info("Writing some data to the cluster"),
-    write_some(Node0, [{last, ?NUM_KEYS}]),
+    write_some(PbcPid, [{last, ?NUM_KEYS}]),
 
     lager:info("Verifying data made it in"),
     rt:wait_until_no_pending_changes(Nodes),
@@ -90,7 +93,7 @@ confirm() ->
            end,
     lager:info("Modifying another ~p keys (mods will persist after backup)",
                [?NUM_MOD]),
-    write_some(Node0, [{last, ?NUM_MOD},
+    write_some(PbcPid, [{last, ?NUM_MOD},
                        {vfun, ModF}]),
     lager:info("Deleting ~p keys", [?NUM_DEL+1]),
     delete_some(PbcPid, [{first, ?NUM_MOD+1},
@@ -133,9 +136,13 @@ confirm() ->
     lager:info("Rebuilding the cluster"),
     rt:build_cluster(?NUM_NODES, Config),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
+    PbcPid2 = rt:pbc(Node0),
+    ?assertEqual(ok, riakc_pb_socket:set_bucket(PbcPid2,
+                                                <<"_rsid_search_bucket">>,
+                                                [{allow_mult, false}])),
+
     rt:wait_until_ring_converged(Nodes),
     rt:wait_until_no_pending_changes(Nodes),
-    PbcPid2 = rt:pbc(Node0),
 
     lager:info("Verify no data in cluster"),
     [?assertEqual([], read_some(Node, [{last, ?NUM_KEYS},
@@ -171,7 +178,7 @@ default_vfun(N) when is_integer(N) ->
     <<"V_",(i2b(N))/binary>>.
 
 % @todo Maybe replace systest_write
-write_some(Node, Props) ->
+write_some(PBC, Props) ->
     Bucket = proplists:get_value(bucket, Props, <<"test_bucket">>),
     W = proplists:get_value(w, Props, 2),
     Start = proplists:get_value(first, Props, 0),
@@ -180,15 +187,25 @@ write_some(Node, Props) ->
     KFun = proplists:get_value(kfun, Props, fun default_kfun/1),
     VFun = proplists:get_value(vfun, Props, fun default_vfun/1),
 
-    {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
                 {K, V} = {KFun(N), VFun(N)},
                 case Del of 
-                    true -> C:delete(Bucket, K);
+                    true ->
+                        case riakc_pb_socket:get(PBC, Bucket, K) of
+                            {ok, DObj} ->
+                                riakc_pb_socket:delete_obj(PBC, DObj);
+                            _ ->
+                                riakc_pb_socket:delete(PBC, Bucket, K)
+                        end;
                     _ -> ok
                 end,
-                Obj = riak_object:new(Bucket, K, V),
-                case C:put(Obj, W) of
+                Obj = case riakc_pb_socket:get(PBC, Bucket, K) of
+                    {ok, O1} ->
+                        riakc_obj:update_value(O1, V);
+                    _ ->
+                        riakc_obj:new(Bucket, K, V)
+                end,
+                case riakc_pb_socket:put(PBC, Obj, [{w, W}]) of
                     ok ->
                         Acc;
                     Other ->
