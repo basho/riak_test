@@ -11,6 +11,7 @@
              wait_until_no_pending_changes/1]).
 
 confirm() ->
+    %rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
     NumNodes = rt_config:get(num_nodes, 6),
     ClusterASize = rt_config:get(cluster_a_size, 3),
 
@@ -48,7 +49,7 @@ confirm() ->
     pass.
 
 replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
-
+    riak_kv_mutator:unregister(riak_repl_mutator),
     AllNodes = ANodes ++ BNodes,
     log_to_nodes(AllNodes, "Starting replication2 test"),
 
@@ -541,7 +542,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("got ~p write failures to ~p", [length(WriteErrors), Target]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster node, ~p", [BSecond]),
-    [{_IP, Port2},_] = rt:connection_info(BSecond),
+    [{_, {IP, Port2}},_] = rt:connection_info(BSecond),
     C2 = rhc:create("127.0.0.1", Port2, "riak", []),
     ReadErrors = http_read(C2, 12000, 22000, TestBucket, 2),
     lager:info("got ~p read failures from ~p", [length(ReadErrors), BSecond]),
