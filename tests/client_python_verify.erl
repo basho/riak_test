@@ -13,6 +13,8 @@
 -prereq("virtualenv").
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),    
     {ok, TestCommand} = prereqs(),
     Config = [{riak_search, [{enabled, true}]}],
     [Node] = rt:deploy_nodes(1, Config),
@@ -63,7 +65,7 @@ prereqs() ->
     rt_local:stream_cmd(Cmd),
 
     lager:info("[PREREQ] Resetting python client to tag '~s'", [?PYTHON_CLIENT_TAG]),
-    TagCmd = io_lib:format("git reset --hard ~s", [?PYTHON_CLIENT_TAG]),
+    TagCmd = io_lib:format("git checkout ~s", [?PYTHON_CLIENT_TAG]),
     rt_local:stream_cmd(TagCmd, [{cd, ?PYTHON_CHECKOUT}]),
 
     lager:info("[PREREQ] Installing an isolated environment with virtualenv in ~s", [?PYTHON_CHECKOUT]),
