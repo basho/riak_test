@@ -54,9 +54,6 @@ confirm() ->
                     {keyfile, filename:join([CertDir, "site3.basho.com/key.pem"])},
                     {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
                     ]},
-            {riak_core, [
-                         {security, true}
-                        ]},
             {riak_search, [
                            {enabled, true}
                           ]}
@@ -71,6 +68,8 @@ confirm() ->
 
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
+    %% enable security on the cluster
+    ok = rpc:call(Node, riak_core_console, security_enable, [[]]),
 
     [_, {pb, {"127.0.0.1", Port}}] = rt:connection_info(Node),
 
