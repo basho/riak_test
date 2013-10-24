@@ -3,8 +3,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-%% @todo set this to 1.5.2 or greater, once that's released
--define(PYTHON_CLIENT_TAG, "1.5-stable").
+-define(PYTHON_CLIENT_TAG, "1.5.2").
 -define(PYTHON_CHECKOUT, filename:join([rt_config:get(rt_scratch_dir), "riak-python-client"])).
 -define(PYTHON_GIT_URL, "git://github.com/basho/riak-python-client.git").
 
@@ -14,6 +13,8 @@
 -prereq("virtualenv").
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),    
     {ok, TestCommand} = prereqs(),
     Config = [{riak_search, [{enabled, true}]}],
     [Node] = rt:deploy_nodes(1, Config),
@@ -64,10 +65,7 @@ prereqs() ->
     rt_local:stream_cmd(Cmd),
 
     lager:info("[PREREQ] Resetting python client to tag '~s'", [?PYTHON_CLIENT_TAG]),
-    %% @todo below is how to reset to a tag, use that when 1.5.2 is available
-    %%TagCmd = io_lib:format("git reset --hard ~s", [?PYTHON_CLIENT_TAG]),
-    rt_local:stream_cmd("git reset --hard", [{cd, ?PYTHON_CHECKOUT}]),
-    TagCmd = io_lib:format("git checkout -b ~s", [?PYTHON_CLIENT_TAG]),
+    TagCmd = io_lib:format("git checkout ~s", [?PYTHON_CLIENT_TAG]),
     rt_local:stream_cmd(TagCmd, [{cd, ?PYTHON_CHECKOUT}]),
 
     lager:info("[PREREQ] Installing an isolated environment with virtualenv in ~s", [?PYTHON_CHECKOUT]),
