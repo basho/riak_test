@@ -257,7 +257,7 @@ get_data(Service, {Partition, Node}) ->
     Data = riak_core_vnode_master:sync_command({Partition, Node},
                                                Req,
                                                VMaster,
-                                               infinity),
+                                               rt_config:get(rt_max_wait_time)),
     Data.
 
 stash_data(Service, {Partition, Node}) ->
