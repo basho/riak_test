@@ -28,7 +28,8 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(KEY, 'counter-key').
+-define(BUCKET, <<"counter-bucket">>).
+-define(KEY, <<"counter-key">>).
 
 confirm() ->
     inets:start(),
@@ -72,18 +73,19 @@ make_cluster(Nodes, Name) ->
     verify_counter_converge:set_allow_mult_true(Nodes),
     repl_util:name_cluster(hd(Nodes), Name),
     repl_util:wait_until_leader_converge(Nodes),
-    Hosts = verify_counter_converge:get_host_ports(Nodes),
-    lists:zip(Hosts, Nodes).
+    Clients = [ rt:httpc(Node) || Node <- Nodes ],
+    lists:zip(Clients, Nodes).
 
 increment_cluster_counter(Cluster) ->
-    [increment_counter(HostPort, rand_amt()) || {HostPort, _Node} <- Cluster].
+    [increment_counter(Client, rand_amt()) || {Client, _Node} <- Cluster].
 
-increment_counter(HostPort, Amt) ->
-    ok = verify_counter_converge:update_counter(HostPort, ?KEY, Amt),
+increment_counter(Client, Amt) ->
+    rhc:counter_incr(Client, ?BUCKET, ?KEY, Amt),
     Amt.
 
-get_counter({HostPort, _Node}) ->
-    verify_counter_converge:get_counter(HostPort, ?KEY).
+get_counter({Client, _Node}) ->
+    {ok, Val} = rhc:counter_val(Client, ?BUCKET, ?KEY),
+    Val.
 
 rand_amt() ->
     crypto:rand_uniform(-100, 100).
