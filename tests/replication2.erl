@@ -49,7 +49,6 @@ confirm() ->
     pass.
 
 replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
-    riak_kv_mutator:unregister(riak_repl_mutator),
     AllNodes = ANodes ++ BNodes,
     log_to_nodes(AllNodes, "Starting replication2 test"),
 
@@ -60,6 +59,9 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     RealtimeOnly = <<TestHash/binary, "-realtime_only">>,
     NoRepl = <<TestHash/binary, "-no_repl">>,
 
+    log_to_nodes(AllNodes, "Unregister repl mutators"),
+    riak_kv_mutator:unregister(riak_repl_mutator),
+    log_to_nodes(AllNodes, "Repl mutator unregistered"),
     case Connected of
         false ->
             %% clusters are not connected, connect them
