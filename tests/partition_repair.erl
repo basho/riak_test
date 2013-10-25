@@ -35,7 +35,7 @@ confirm() ->
     TestMetaData = riak_test_runner:metadata(),
     KVBackend = proplists:get_value(backend, TestMetaData),
 
-    NumNodes = list_to_integer(rt_config:config_or_os_env(num_nodes, "4")),
+    NumNodes = rt_config:config_or_os_env(num_nodes, 4),
     HOConcurrency = list_to_integer(rt_config:config_or_os_env(ho_concurrency, "2")),
     {_KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
     Bucket = <<"scotts_spam">>,
