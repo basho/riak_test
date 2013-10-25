@@ -82,9 +82,7 @@ data_push_test_() ->
         #data_push_test{nodes = Nodes, c123 = C123, c456 = C456}
     end,
     fun(State) ->
-        case rt_config:config_or_os_env(skip_teardown, false) of
-            "false" ->
-                rt:clean_cluster(State#data_push_test.nodes);
+        case rt_config:config_or_os_env(skip_teardowns, false) of
             false ->
                 rt:clean_cluster(State#data_push_test.nodes);
             _ ->
