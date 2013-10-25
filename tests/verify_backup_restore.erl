@@ -264,7 +264,13 @@ delete_some(PBC, Props) ->
     Keys = [KFun(N) || N <- lists:seq(Start, End)],
     F =
         fun(K, Acc) ->
-            case riakc_pb_socket:delete(PBC, Bucket, K) of
+            DRes = case riakc_pb_socket:get(PBC, Bucket, K) of
+                {ok, DObj} ->
+                    riakc_pb_socket:delete_obj(PBC, DObj);
+                _ ->
+                    riakc_pb_socket:delete(PBC, Bucket, K)
+            end,
+            case DRes of
                 ok -> Acc;
                 _ -> [{error, {could_not_delete, K}} | Acc]
             end
