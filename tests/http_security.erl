@@ -171,6 +171,9 @@ confirm() ->
     ?assertMatch({error, notfound}, rhc:get(C7, <<"hello">>,
                                                      <<"world">>)),
 
+    %% write it back for list_buckets later
+    ?assertEqual(ok, rhc:put(C7, Object)),
+
     %% slam the door in the user's face
     lager:info("Revoking get/put/delete, checking that get/put/delete are disallowed"),
     ok = rpc:call(Node, riak_core_console, revoke,
