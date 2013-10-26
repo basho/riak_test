@@ -724,15 +724,20 @@ capability(Node, Capability, Default) ->
 wait_until_capability(Node, Capability, Value) ->
     rt:wait_until(Node,
                   fun(_) ->
-                          Value == capability(Node, Capability)
+                          cap_equal(Value, capability(Node, Capability))
                   end).
 
 wait_until_capability(Node, Capability, Value, Default) ->
     rt:wait_until(Node,
                   fun(_) ->
                           Cap = capability(Node, Capability, Default),
-                          Value == Cap
+                          cap_equal(Value, Cap)
                   end).
+
+cap_equal(Val, Cap) when is_list(Cap) ->
+    lists:sort(Cap) == lists:sort(Val);
+cap_equal(Val, Cap) ->
+    Val == Cap.
 
 wait_until_owners_according_to(Node, Nodes) ->
     SortedNodes = lists:usort(Nodes),
