@@ -188,7 +188,7 @@ of the Giddy Up resource page.
 ```erlang
     {webhooks, [
                 [{name, "Bishop"},
-                 {url, "http://basho-engbot.herokuapp.com/"}]
+                 {url, "http://basho-engbot.herokuapp.com/riak_test"}]
                 ]}
 ```
 
