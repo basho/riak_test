@@ -65,7 +65,7 @@ confirm() ->
                                       AllTerms)),
 
     lager:info("Writing some data to the cluster"),
-    write_some(Node0, [{last, ?NUM_KEYS}]),
+    write_some(PbcPid, [{last, ?NUM_KEYS}]),
 
     lager:info("Verifying data made it in"),
     rt:wait_until_no_pending_changes(Nodes),
@@ -90,8 +90,9 @@ confirm() ->
            end,
     lager:info("Modifying another ~p keys (mods will persist after backup)",
                [?NUM_MOD]),
-    write_some(Node0, [{last, ?NUM_MOD},
-                       {vfun, ModF}]),
+    write_some(PbcPid, [{delete, true},
+                        {last, ?NUM_MOD},
+                        {vfun, ModF}]),
     lager:info("Deleting ~p keys", [?NUM_DEL+1]),
     delete_some(PbcPid, [{first, ?NUM_MOD+1},
                          {last, ?NUM_MOD+?NUM_DEL}]),
@@ -116,11 +117,16 @@ confirm() ->
     rt:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
     rt:wait_until_no_pending_changes(Nodes),
 
+    %% When allow_mult=false, the mods overwrite the restored data.  When
+    %% allow_mult=true, the a sibling is generated with the original
+    %% data, and a divergent vclock.  Verify that both objects exist.
     lager:info("Verifying that deleted data is back, mods are still in"),
-    [?assertEqual([], read_some(Node, [{last, ?NUM_MOD},
+    [?assertEqual([], read_some(Node, [{siblings, true},
+                                       {last, ?NUM_MOD},
                                        {vfun, ModF}]))
      || Node <- Nodes],
-    [?assertEqual([], read_some(Node, [{first, ?NUM_MOD+1},
+    [?assertEqual([], read_some(Node, [{siblings, true},
+                                       {first, ?NUM_MOD+1},
                                        {last, ?NUM_KEYS}]))
      || Node <- Nodes],
 
@@ -171,31 +177,42 @@ default_vfun(N) when is_integer(N) ->
     <<"V_",(i2b(N))/binary>>.
 
 % @todo Maybe replace systest_write
-write_some(Node, Props) ->
+write_some(PBC, Props) ->
     Bucket = proplists:get_value(bucket, Props, <<"test_bucket">>),
-    W = proplists:get_value(w, Props, 2),
     Start = proplists:get_value(first, Props, 0),
     End = proplists:get_value(last, Props, 1000),
     Del = proplists:get_value(delete, Props, false),
     KFun = proplists:get_value(kfun, Props, fun default_kfun/1),
     VFun = proplists:get_value(vfun, Props, fun default_vfun/1),
 
-    {ok, C} = riak:client_connect(Node),
-    F = fun(N, Acc) ->
-                {K, V} = {KFun(N), VFun(N)},
-                case Del of 
-                    true -> C:delete(Bucket, K);
-                    _ -> ok
+    Keys = [{KFun(N), VFun(N), N} || N <- lists:seq(Start, End)],
+    Keys1 = [Key || {Key, _, _} <- Keys],
+
+    case Del of
+        true ->
+            DelFun =
+                fun({K, _, _}, Acc) ->
+                    case riakc_pb_socket:delete(PBC, Bucket, K) of
+                        ok -> Acc;
+                        _ -> [{error, {could_not_delete, K}} | Acc]
+                    end
                 end,
-                Obj = riak_object:new(Bucket, K, V),
-                case C:put(Obj, W) of
-                    ok ->
-                        Acc;
-                    Other ->
-                        [{N, Other} | Acc]
-                end
+            ?assertEqual([], lists:foldl(DelFun, [], Keys)),
+            rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, Keys1) end);
+        _ ->
+            ok
+    end,
+
+    PutFun = fun({K, V, N}, Acc) ->
+            Obj = riakc_obj:new(Bucket, K, V),
+            case riakc_pb_socket:put(PBC, Obj) of
+                ok ->
+                    Acc;
+                Other ->
+                    [{N, Other} | Acc]
+            end
         end,
-    lists:foldl(F, [], lists:seq(Start, End)).
+    ?assertEqual([], lists:foldl(PutFun, [], Keys)).
 
 % @todo Maybe replace systest_read
 read_some(Node, Props) ->
@@ -206,6 +223,7 @@ read_some(Node, Props) ->
     Expect = proplists:get_value(expect, Props, exists),
     KFun = proplists:get_value(kfun, Props, fun default_kfun/1),
     VFun = proplists:get_value(vfun, Props, fun default_vfun/1),
+    Siblings = proplists:get_value(siblings, Props, false),
 
     {ok, C} = riak:client_connect(Node),
     F =
@@ -216,12 +234,24 @@ read_some(Node, Props) ->
                     case C:get(Bucket, K, R) of
                         {ok, Obj} ->
                             Val = VFun(N),
-                            case riak_object:get_value(Obj) of
-                                Val ->
-                                    Acc;
-                                WrongVal ->
-                                    [{N, {wrong_val, WrongVal, expected, Val}}
-                                    | Acc]
+                            case Siblings of
+                                true ->
+                                    Values = riak_object:get_values(Obj),
+                                    case lists:member(Val, Values) of
+                                        true ->
+                                            Acc;
+                                        false ->
+                                            [{N, {val_not_member, Values, expected, Val}}
+                                            | Acc]
+                                    end;
+                                false ->
+                                    case riak_object:get_value(Obj) of
+                                        Val ->
+                                            Acc;
+                                        WrongVal ->
+                                            [{N, {wrong_val, WrongVal, expected, Val}}
+                                            | Acc]
+                                    end
                             end;
                         Other ->
                             [{N, Other} | Acc]
