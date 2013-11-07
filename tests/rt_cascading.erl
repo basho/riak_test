@@ -20,6 +20,9 @@
 % cluster_mgr port = 10006 + 10n where n is devN
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
+
     case eunit:test(?MODULE, [verbose]) of
         ok ->
             pass;
