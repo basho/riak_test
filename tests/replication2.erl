@@ -1,6 +1,6 @@
 -module(replication2).
 -behavior(riak_test).
--export([confirm/0, replication/3]).
+-export([confirm/0, replication/3, set_allow_mult_false/2]).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [deploy_nodes/2,
@@ -33,6 +33,7 @@ confirm() ->
     ],
 
     Nodes = deploy_nodes(NumNodes, Conf),
+ 
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
@@ -58,6 +59,8 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     FullsyncOnly = <<TestHash/binary, "-fullsync_only">>,
     RealtimeOnly = <<TestHash/binary, "-realtime_only">>,
     NoRepl = <<TestHash/binary, "-no_repl">>,
+
+    set_allow_mult_false(AllNodes, TestBucket),
 
     case Connected of
         false ->
@@ -653,3 +656,11 @@ collect_results(Workers, Acc) ->
         {'DOWN', _, _, Pid, _Reason} ->
             collect_results(lists:keydelete(Pid, 1, Workers), Acc)
     end.
+
+set_allow_mult_false(Nodes, Bucket) ->
+    N1 = hd(Nodes),
+    AllowMult = [{allow_mult, false}],
+    lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
+               [AllowMult, Bucket, N1]),
+    rpc:call(N1, riak_core_bucket, set_bucket, [Bucket, AllowMult]),
+    rt:wait_until_ring_converged(Nodes).
