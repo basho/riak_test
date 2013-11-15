@@ -11,6 +11,10 @@
              wait_until_no_pending_changes/1]).
 
 confirm() ->
+
+    %% test requires allow_mult=false
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]), 
+
     NumNodes = rt_config:get(num_nodes, 6),
     ClusterASize = rt_config:get(cluster_a_size, 3),
 
@@ -33,6 +37,7 @@ confirm() ->
     ],
 
     Nodes = deploy_nodes(NumNodes, Conf),
+ 
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
@@ -541,7 +546,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("got ~p write failures to ~p", [length(WriteErrors), Target]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster node, ~p", [BSecond]),
-    [{_IP, Port2},_] = rt:connection_info(BSecond),
+    [{_, {IP, Port2}},_] = rt:connection_info(BSecond),
     C2 = rhc:create("127.0.0.1", Port2, "riak", []),
     ReadErrors = http_read(C2, 12000, 22000, TestBucket, 2),
     lager:info("got ~p read failures from ~p", [length(ReadErrors), BSecond]),
@@ -653,3 +658,4 @@ collect_results(Workers, Acc) ->
         {'DOWN', _, _, Pid, _Reason} ->
             collect_results(lists:keydelete(Pid, 1, Workers), Acc)
     end.
+
