@@ -61,7 +61,8 @@ confirm() ->
     {ok, ROBj4} = riakc_pb_socket:get(C, ?BUCKET, ?KEY, [{pr, 3}]),
     VClock2 = riakc_obj:vclock(ROBj4),
 
-    lager:info("Vclock ~p", [binary_to_term(zlib:unzip(VClock2))]),
+    lager:info("Vclock 2 ~p", [binary_to_term(zlib:unzip(VClock2))]),
+    lager:info("Values ~p", [riakc_obj:get_values(ROBj4)]),
 
     Coordinator = get_coordinator(VClock2, Nodes),
 
@@ -81,7 +82,7 @@ confirm() ->
     VClock3 = riakc_obj:vclock(ROBj6),
 
     lager:info("Vclock ~p", [binary_to_term(zlib:unzip(VClock3))]),
-    lager:info("Value ~p", [riakc_obj:get_value(ROBj6)]),
+    lager:info("Value ~p", [riakc_obj:get_values(ROBj6)]),
 
     %% What do we expect? Well, since this last write was without a
     %% vclock and allow_mult is true, I expect 2 values, <<"2">> and
@@ -98,7 +99,7 @@ get_preflist(N) ->
 
 get_coordinator(VClock, Nodes) ->
     [{NodeId0, _}] = binary_to_term(zlib:unzip(VClock)),
-    <<_Epoch:32/integer, DiEdon/binary>> =  binary:list_to_bin(
+    <<_Epoch:32/integer, _IDEPoch:32/integer, DiEdon/binary>> =  binary:list_to_bin(
                                               lists:reverse(
                                                 binary:bin_to_list(NodeId0))),
     NodeId =  binary:list_to_bin(
