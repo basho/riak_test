@@ -77,6 +77,8 @@ confirm() ->
     BucketTyped = {Type, <<"typekicked">>},
     KeyTyped = <<"keytyped">>,
     ObjTyped = riakc_obj:new(BucketTyped, KeyTyped, Bin),
+    lager:info("bucket type of object:~p", [riakc_obj:bucket_type(ObjTyped)]),
+    %%lager:info("bucket type meta:~p", [riakc_object:get_metadatas(ObjTyped)]),
     riakc_pb_socket:put(PBA, ObjTyped, [{w,3}]),
 
     lager:info("waiting for typed pb get on B"),
