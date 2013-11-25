@@ -53,17 +53,17 @@ confirm() ->
     [H1, H2, H3, H4] = HTTPClients = create_http_clients(Nodes),
 
     %% Do some updates to each type
-    [update_1(Type,?PB_BUCKET,Client,riakc_pb_socket) ||
+    [update_1(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
         {Type, Client} <- lists:zip(?TYPES, [P1, P2, P3])],
 
-    [update_1(Type,?HTTP_BUCKET,Client,rhc) ||
+    [update_1(Type, ?HTTP_BUCKET, Client, rhc) ||
         {Type, Client} <- lists:zip(?TYPES, [H1, H2, H3])],
 
     %% Check that the updates are stored
-    [check_1(Type,?PB_BUCKET,Client,riakc_pb_socket) ||
+    [check_1(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
         {Type, Client} <- lists:zip(?TYPES, [P4, P3, P2])],
 
-    [check_1(Type,?HTTP_BUCKET,Client,rhc) ||
+    [check_1(Type, ?HTTP_BUCKET, Client, rhc) ||
         {Type, Client} <- lists:zip(?TYPES, [H4, H3, H2])],
 
     lager:info("Partition cluster in two."),
@@ -72,34 +72,34 @@ confirm() ->
 
     lager:info("Modify data on side 1"),
     %% Modify one side
-    [update_2a(Type,?PB_BUCKET,Client,riakc_pb_socket) ||
+    [update_2a(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
         {Type, Client} <- lists:zip(?TYPES, [P1, P2, P1])],
 
-    [update_2a(Type,?HTTP_BUCKET,Client,rhc) ||
+    [update_2a(Type, ?HTTP_BUCKET, Client, rhc) ||
         {Type, Client} <- lists:zip(?TYPES, [H1, H2, H1])],
 
     lager:info("Check data is unmodified on side 2"),
     %% check value on one side is different from other
-    [check_2b(Type,?PB_BUCKET,Client,riakc_pb_socket) ||
+    [check_2b(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
         {Type, Client} <- lists:zip(?TYPES, [P4, P3, P4])],
 
-    [check_2b(Type,?HTTP_BUCKET,Client,rhc) ||
+    [check_2b(Type, ?HTTP_BUCKET, Client, rhc) ||
         {Type, Client} <- lists:zip(?TYPES, [H4, H3, H4])],
 
     lager:info("Modify data on side 2"),
     %% Modify other side
-    [update_3b(Type,?PB_BUCKET,Client,riakc_pb_socket) ||
+    [update_3b(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
         {Type, Client} <- lists:zip(?TYPES, [P3, P4, P3])],
 
-    [update_3b(Type,?HTTP_BUCKET,Client,rhc) ||
+    [update_3b(Type, ?HTTP_BUCKET, Client, rhc) ||
         {Type, Client} <- lists:zip(?TYPES, [H3, H4, H3])],
 
     lager:info("Check data is unmodified on side 1"),
     %% verify values differ
-    [check_3a(Type,?PB_BUCKET,Client,riakc_pb_socket) ||
+    [check_3a(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
         {Type, Client} <- lists:zip(?TYPES, [P2, P2, P1])],
 
-    [check_3a(Type,?HTTP_BUCKET,Client,rhc) ||
+    [check_3a(Type, ?HTTP_BUCKET, Client, rhc) ||
         {Type, Client} <- lists:zip(?TYPES, [H2, H2, H1])],
 
     %% heal
@@ -108,10 +108,10 @@ confirm() ->
     ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree
-    [?assertEqual(ok, (check_4(Type,?PB_BUCKET,Client,riakc_pb_socket)))
+    [?assertEqual(ok, check_4(Type, ?PB_BUCKET, Client, riakc_pb_socket))
      || Type <- ?TYPES, Client <- PBClients],
 
-    [?assertEqual(ok, (check_4(Type,?HTTP_BUCKET,Client,rhc)))
+    [?assertEqual(ok, check_4(Type, ?HTTP_BUCKET, Client, rhc))
      || Type <- ?TYPES, Client <- HTTPClients],
 
     [riakc_pb_socket:stop(C) || C <- PBClients],
@@ -156,21 +156,21 @@ bucket_type_matches_fun(Types) ->
     end.
 
 
-update_1({BType, counter},Bucket,Client,CMod) ->
+update_1({BType, counter}, Bucket, Client, CMod) ->
     lager:info("update_1: Updating counter"),
     CMod:modify_type(Client,
                      fun(C) ->
                              riakc_counter:increment(5, C)
                      end,
                      {BType, Bucket}, ?KEY, [create]);
-update_1({BType, set},Bucket,Client,CMod) ->
+update_1({BType, set}, Bucket, Client, CMod) ->
     lager:info("update_1: Updating set"),
     CMod:modify_type(Client,
                      fun(S) ->
                              riakc_set:add_element(<<"Riak">>, S)
                      end,
                      {BType, Bucket}, ?KEY, [create]);
-update_1({BType, map},Bucket,Client,CMod) ->
+update_1({BType, map}, Bucket, Client, CMod) ->
     lager:info("update_1: Updating map"),
     CMod:modify_type(Client,
                      fun(M) ->
@@ -188,25 +188,25 @@ update_1({BType, map},Bucket,Client,CMod) ->
                      end,
                      {BType, Bucket}, ?KEY, [create]).
 
-check_1({BType, counter},Bucket,Client,CMod) ->
+check_1({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_1: Checking counter value is correct"),
     check_value(Client,CMod,{BType, Bucket},?KEY,riakc_counter,5);
-check_1({BType, set},Bucket,Client,CMod) ->
+check_1({BType, set}, Bucket, Client, CMod) ->
     lager:info("check_1: Checking set value is correct"),
     check_value(Client,CMod,{BType, Bucket},?KEY,riakc_set,[<<"Riak">>]);
-check_1({BType, map},Bucket,Client,CMod) ->
+check_1({BType, map}, Bucket, Client, CMod) ->
     lager:info("check_1: Checking map value is correct"),
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Russell">>]}]).
 
-update_2a({BType, counter},Bucket,Client,CMod) ->
+update_2a({BType, counter}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(C) ->
                              riakc_counter:decrement(10, C)
                      end,
                      {BType, Bucket}, ?KEY, [create]);
-update_2a({BType, set},Bucket,Client,CMod) ->
+update_2a({BType, set}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(S) ->
                              riakc_set:add_element(
@@ -214,7 +214,7 @@ update_2a({BType, set},Bucket,Client,CMod) ->
                                riakc_set:add_element(<<"Cassandra">>, S))
                      end,
                      {BType, Bucket}, ?KEY, [create]);
-update_2a({BType, map},Bucket,Client,CMod) ->
+update_2a({BType, map}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(M) ->
                              M1 = riakc_map:update(
@@ -226,25 +226,25 @@ update_2a({BType, map},Bucket,Client,CMod) ->
                      end,
                      {BType, Bucket}, ?KEY, [create]).
 
-check_2b({BType, counter},Bucket,Client,CMod) ->
+check_2b({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_2b: Checking counter value is unchanged"),
-    check_value(Client,CMod,{BType, Bucket},?KEY,riakc_counter,5);
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_counter, 5);
 check_2b({BType, set},Bucket,Client,CMod) ->
     lager:info("check_2b: Checking set value is unchanged"),
-    check_value(Client,CMod,{BType, Bucket},?KEY,riakc_set,[<<"Riak">>]);
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_set, [<<"Riak">>]);
 check_2b({BType, map},Bucket,Client,CMod) ->
     lager:info("check_2b: Checking map value is unchanged"),
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Russell">>]}]).
 
-update_3b({BType, counter},Bucket,Client,CMod) ->
+update_3b({BType, counter}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(C) ->
                              riakc_counter:increment(2, C)
                      end,
                      {BType, Bucket}, ?KEY, [create]);
-update_3b({BType, set},Bucket,Client,CMod) ->
+update_3b({BType, set}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(S) ->
                              riakc_set:add_element(<<"Couchbase">>, S)
@@ -268,25 +268,25 @@ update_3b({BType, map},Bucket,Client,CMod) ->
                      end,
                      {BType, Bucket}, ?KEY, [create]).
 
-check_3a({BType, counter},Bucket,Client,CMod) ->
+check_3a({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_3a: Checking counter value is unchanged"),
     check_value(Client,CMod,{BType, Bucket},?KEY,riakc_counter,-5);
-check_3a({BType, set},Bucket,Client,CMod) ->
+check_3a({BType, set}, Bucket, Client, CMod) ->
     lager:info("check_3a: Checking set value is unchanged"),
     check_value(Client,CMod,{BType, Bucket},?KEY,riakc_set,
                 [<<"Cassandra">>, <<"Riak">>, <<"Voldemort">>]);
-check_3a({BType, map},Bucket,Client,CMod) ->
+check_3a({BType, map}, Bucket, Client, CMod) ->
     lager:info("check_3a: Checking map value is unchanged"),
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Russell">>, <<"Sam">>]},
                  {{<<"verified">>, flag}, false}]).
 
-check_4({BType, counter},Bucket,Client,CMod) ->
+check_4({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_4: Checking final merged value of counter"),
     check_value(Client,CMod,{BType, Bucket},?KEY,riakc_counter,-3,
                 [{pr, 3}, {notfound_ok, false}]);
-check_4({BType, set},Bucket,Client,CMod) ->
+check_4({BType, set}, Bucket, Client, CMod) ->
     lager:info("check_4: Checking final merged value of set"),
     check_value(Client,
                 CMod, {BType, Bucket},
@@ -294,7 +294,7 @@ check_4({BType, set},Bucket,Client,CMod) ->
                 riakc_set,
                 [<<"Cassandra">>, <<"Couchbase">>, <<"Riak">>, <<"Voldemort">>],
                 [{pr, 3}, {notfound_ok, false}]);
-check_4({BType, map},Bucket,Client,CMod) ->
+check_4({BType, map}, Bucket, Client, CMod) ->
     lager:info("check_4: Checking final merged value of map"),
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"emails">>, map},
@@ -306,19 +306,19 @@ check_4({BType, map},Bucket,Client,CMod) ->
                  {{<<"verified">>, flag}, false}],
                 [{pr, 3}, {notfound_ok, false}]).
 
-check_value(Client,CMod,Bucket,Key,DTMod,Expected) ->
+check_value(Client, CMod, Bucket, Key, DTMod, Expected) ->
     check_value(Client,CMod,Bucket,Key,DTMod,Expected,
                 [{r,2}, {notfound_ok, true}, {timeout, 5000}]).
 
-check_value(Client,CMod,Bucket,Key,DTMod,Expected,Options) ->
+check_value(Client, CMod, Bucket, Key, DTMod, Expected, Options) ->
     rt:wait_until(fun() ->
                           try
                               Result = CMod:fetch_type(Client, Bucket, Key,
                                                        Options),
                               ?assertMatch({ok, _}, Result),
                               {ok, C} = Result,
-                              ?assertEqual(true, (DTMod:is_type(C))),
-                              ?assertEqual(Expected, (DTMod:value(C))),
+                              ?assertEqual(true, DTMod:is_type(C)),
+                              ?assertEqual(Expected, DTMod:value(C)),
                               true
                           catch
                               Type:Error ->
