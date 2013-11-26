@@ -169,10 +169,10 @@ setup_rs_bucket([Node|_], Bucket) ->
 %% setup yokozuna hook/index - bucket name == index name
 setup_yz_bucket([Node|_], Bucket, Index) ->
     %% attach bucket to index
-    %% TODO: teach rhc_bucket:httpify_prop/2 `yz_index'
+    %% TODO: teach rhc_bucket:httpify_prop/2 `search_index'
     BUrl = iburl(Node, ["/buckets/",Bucket,"/props"]),
     BHeaders = [{"content-type", "application/json"}],
-    BProps = mochijson2:encode([{props, {struct, [{yz_index, Index}]}}]),
+    BProps = mochijson2:encode([{props, {struct, [{search_index, Index}]}}]),
     {ok, "204", _, _} = ibrowse:send_req(BUrl, BHeaders, put, BProps).
 
 setup_yz_index([Node|_]=Cluster, Index) ->
