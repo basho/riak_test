@@ -876,19 +876,22 @@ timeout(MultiplyBy) ->
 
 wait_until_pending_count_zero(Nodes) ->
     WaitFun = fun() ->
-        {Status, _} =  rpc:multicall(Nodes, riak_repl2_rtq, status, []),
-        %% ?debugFmt("Got status:~p", [Status]),
-        case proplists:get_value(consumers, Status) of
-            undefined ->
-                true;
-            [] ->
-                true;
-            Cs ->
-                %% ?debugFmt("Got Cs:~p", [Cs]),
-                Pendings = lists:sum([proplists:get_value(pending, C) || {_, C} <- Cs]),
-                ?debugFmt("Pending on all test nodes:~p", [Pendings]),
-                Pendings == 0
-        end
+        {Statuses, _} =  rpc:multicall(Nodes, riak_repl2_rtq, status, []),
+        Out = [check_status(S) || S <- Statuses],
+        not lists:member(false, Out)	      
     end,
     ?assertEqual(ok, rt:wait_until(WaitFun)),
     ok.
+
+check_status(Status) ->            
+    case proplists:get_all_values(consumers, Status) of
+        undefined ->
+	    true;
+	[] ->
+	    true;
+	Cs ->
+	    PendingList = [proplists:lookup_all(pending, C) || {_, C} <- lists:flatten(Cs)],
+            PendingCount = lists:sum(proplists:get_all_values(pending, lists:flatten(PendingList))),
+	    ?debugFmt("RTQ status pending on test node:~p", [PendingCount]),
+	    PendingCount == 0
+    end.
