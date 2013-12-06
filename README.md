@@ -374,3 +374,9 @@ the config survive restarts and are essentially always in play.  A
 user can also manually add an intercept by making an `rpc` call from
 the test code to the remote node.  This method is ephemeral and the
 intercept will not survive restarts.
+
+
+#### Shell Completion
+
+To have bash shell complete test names, source the `utils/riak_test` file.
+
