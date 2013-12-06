@@ -378,5 +378,11 @@ intercept will not survive restarts.
 
 #### Shell Completion
 
-To have bash shell complete test names, source the `utils/riak_test` file.
+##### Bash
+
+To have bash shell complete test names, source the `utils/riak_test.bash` file.
+
+##### Zsh
+
+put `utils/riak_test.zsh` somewhere on `$fpath`.
 
