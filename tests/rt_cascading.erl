@@ -1151,3 +1151,22 @@ check_status(Status) ->
 	    ?debugFmt("RTQ status pending on test node:~p", [PendingCount]),
 	    PendingCount == 0
     end.
+
+eunit(TestDef) ->
+        case eunit:test(TestDef, [verbose]) of
+                ok ->
+                        pass;
+                error ->
+                        exit(error),
+                        fail
+                end.
+
+maybe_skip_teardown(TearDownFun) ->
+        fun(Arg) ->
+                    case rt_config:config_or_os_env(skip_teardowns, undefined) of
+                            undefined ->
+                                    TearDownFun(Arg);
+                            _ ->
+                                    ok
+                            end
+                end.
