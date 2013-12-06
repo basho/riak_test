@@ -193,9 +193,7 @@ test_basic_pg(Mode, SSL) ->
     lager:info("Disable pg ~p", [PGDisableResult]),
     Status2 = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
-    case proplists:get_value(proxy_get_enabled, Status2) of
-        [] -> ok
-    end,
+    ?assertEqual([], proplists:get_value(proxy_get_enabled, Status2)),
 
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
@@ -259,10 +257,13 @@ test_basic_pg(Mode, SSL) ->
             UnknownResult
     end,
     ?assertEqual(ValueA, RetriableGet),
+
+    verify_topology_change(ANodes, BNodes),
+
     pass.
 
 %% test 1.2 replication (aka "Default" repl)
-%% Mode is either mode_repl12 or mixed. 
+%% Mode is either mode_repl12 or mixed.
 %% "mixed" is the default in 1.3: mode_repl12, mode_repl13
 test_12_pg(Mode) ->
     test_12_pg(Mode, false).
@@ -613,6 +614,9 @@ test_bidirectional_pg(SSL) ->
     lager:info("Trying second get"),
     wait_until_pg(LeaderA, PidA, Bucket, KeyB, CidB),
     lager:info("Second get worked"),
+
+    verify_topology_change(ANodes, BNodes),
+
     pass.
 
 %% Test multiple sinks against a single source
@@ -891,3 +895,100 @@ wait_until_pg(Node, Pid, Bucket, Key, Cid) ->
 merge_config(Mixin, Base) ->
     lists:ukeymerge(1, lists:keysort(1, Mixin), lists:keysort(1, Base)).
 
+verify_topology_change(SourceNodes, SinkNodes) ->
+    lager:info("Verify topology changes doesn't break the proxy get."),
+
+    %% Get connections
+    [SourceNode1, _SourceNode2] = SourceNodes,
+    SourceNode1Pid = rt:pbc(SourceNode1),
+    [SinkNode1, SinkNode2] = SinkNodes,
+    SinkNode1Pid = rt:pbc(SinkNode1),
+    {ok, SourceCid} = riak_repl_pb_api:get_clusterid(SourceNode1Pid),
+
+    %% Write new object to source.
+    lager:info("Writing key 'before' to the source."),
+    {Bucket, KeyBefore, ValueBefore} = make_test_object("before"),
+    rt:pbc_write(SourceNode1Pid, Bucket, KeyBefore, ValueBefore),
+
+    %% Verify proxy_get through the sink works.
+    lager:info("Verifying key 'before' can be read through the sink."),
+    {ok, PGResult1} = riak_repl_pb_api:get(SinkNode1Pid,
+                                           Bucket, KeyBefore, SourceCid),
+    ?assertEqual(ValueBefore, riakc_obj:get_value(PGResult1)),
+
+    %% Remove leader from the sink cluster.
+    SinkLeader = rpc:call(SinkNode1,
+                          riak_repl2_leader, leader_node, []),
+    lager:info("Removing current leader from the cluster: ~p.",
+               [SinkLeader]),
+    rt:leave(SinkLeader),
+    ?assertEqual(ok, rt:wait_until_unpingable(SinkLeader)),
+
+    %% Wait for everything to restart, and rings to converge.
+    lager:info("Starting leader node back up and waiting for repl."),
+    rt:start(SinkLeader),
+    rt:wait_for_service(SinkLeader, riak_repl),
+    rt:wait_until_ring_converged(SinkNodes),
+
+    %% Assert nodes have different leaders, which are themselves.
+    lager:info("Ensure that each node is its own leader."),
+    SinkNode1Leader = rpc:call(SinkNode1,
+                               riak_repl2_leader, leader_node, []),
+    SinkNode2Leader = rpc:call(SinkNode2,
+                               riak_repl2_leader, leader_node, []),
+    ?assertEqual(SinkNode1, SinkNode1Leader),
+    ?assertEqual(SinkNode2, SinkNode2Leader),
+    ?assertNotEqual(SinkNode1Leader, SinkNode2Leader),
+
+    %% Before we join the nodes, install an intercept on all nodes for
+    %% the leader election callback.
+    lager:info("Installing set_leader_node intercept."),
+    Intercept = case SinkLeader of
+        SinkNode1 ->
+            {riak_repl2_leader, [{{set_leader,3}, set_leader_node3}]};
+        SinkNode2 ->
+            {riak_repl2_leader, [{{set_leader,3}, set_leader_node4}]}
+    end,
+    ok = rt_intercept:add(SinkNode1, Intercept),
+    ok = rt_intercept:add(SinkNode2, Intercept),
+
+    %% Restart former leader and rejoin to the cluster.
+    lager:info("Rejoining former leader."),
+    case SinkLeader of
+        SinkNode1 ->
+            rt:join(SinkNode1, SinkNode2);
+        SinkNode2 ->
+            rt:join(SinkNode2, SinkNode1)
+    end,
+    rt:wait_until_ring_converged(SinkNodes),
+
+    %% Assert that all nodes have the same leader.
+    lager:info("Assert that all nodes have the same leader."),
+    SinkNode1LeaderRejoin = rpc:call(SinkNode1,
+                                     riak_repl2_leader, leader_node, []),
+    SinkNode2LeaderRejoin = rpc:call(SinkNode2,
+                                     riak_repl2_leader, leader_node, []),
+    ?assertEqual(SinkNode1LeaderRejoin, SinkNode2LeaderRejoin),
+
+    %% Assert that the leader is the former leader.
+    lager:info("Assert that new leader is the former leader."),
+    ?assertEqual(SinkLeader, SinkNode1LeaderRejoin),
+
+    %% Write new object to source.
+    lager:info("Writing key 'after' to the source."),
+    {ok, SourceCid} = riak_repl_pb_api:get_clusterid(SourceNode1Pid),
+    {Bucket, KeyPost, ValuePost} = make_test_object("after"),
+    rt:pbc_write(SourceNode1Pid, Bucket, KeyPost, ValuePost),
+
+    %% Verify we can retrieve from source.
+    lager:info("Verifying key 'after' can be read through the source."),
+    {ok, PGResult2} = riak_repl_pb_api:get(SourceNode1Pid,
+                                           Bucket, KeyPost, SourceCid),
+    ?assertEqual(ValuePost, riakc_obj:get_value(PGResult2)),
+
+    %% Verify proxy_get through the sink works.
+    lager:info("Verifying key 'after' can be read through the sink."),
+    wait_until_pg(SinkNode1, SinkNode1Pid, Bucket, KeyPost, SourceCid),
+
+    %% We're good!
+    pass.
