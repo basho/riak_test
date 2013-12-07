@@ -67,7 +67,7 @@ confirm() ->
     set_skip_index_specs(Node1, false),
     lager:info("Run 2i AAE repair"),
     ?assertMatch({ok, _}, rt:admin(Node1, ["repair-2i"])),
-    RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae_repair]),
+    RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae]),
     lager:info("Wait for repair process to finish"),
     Mon = monitor(process, RepairPid),
     MaxWaitTime = rt_config:get(rt_max_wait_time),
