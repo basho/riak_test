@@ -6,6 +6,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
+-define(assertDenied(Op), ?assertMatch({error, <<"Permission",_/binary>>}, Op)).
+
 confirm() ->
     application:start(crypto),
     application:start(asn1),
@@ -254,8 +256,7 @@ confirm() ->
                                                                           <<"world">>)),
 
     lager:info("Granting riak_kv.get, checking get works but put doesn't"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.get", "ON",
-                                                   "default",  "hello", "TO", "user"]]),
+    grant(Node, ["riak_kv.get", "ON", "default",  "hello", "TO", "user"]),
 
     ?assertMatch({error, notfound}, riakc_pb_socket:get(PB, <<"hello">>,
                                                          <<"world">>)),
@@ -266,8 +267,7 @@ confirm() ->
                                                    <<"howareyou">>))),
 
     lager:info("Granting riak_kv.put, checking put works and roundtrips with get"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put", "ON",
-                                                    "default", "hello", "TO", "user"]]),
+    grant(Node, ["riak_kv.put", "ON", "default", "hello", "TO", "user"]),
 
     ?assertEqual(ok,
                  riakc_pb_socket:put(PB,
@@ -279,8 +279,9 @@ confirm() ->
 
     %% 1.4 counters
     %%
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put,riak_kv.get", "ON",
-                                                    "default", "counters", "TO", "user"]]),
+    grant(Node, ["riak_kv.put,riak_kv.get", "ON", "default", "counters", "TO", "user"]),
+    %% ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put,riak_kv.get", "ON",
+    %%                                                 "default", "counters", "TO", "user"]]),
 
 
     lager:info("Checking that counters work on resources that have get/put permitted"),
@@ -328,8 +329,7 @@ confirm() ->
 
     %% try the 'any' grant
     lager:info("Granting get on ANY, checking user can fetch any bucket/key"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.get", "ON",
-                                                    "ANY", "TO", "user"]]),
+    grant(Node, ["riak_kv.get", "ON", "ANY", "TO", "user"]),
 
     ?assertMatch({ok, _Obj}, riakc_pb_socket:get(PB, <<"hello">>,
                                                          <<"world">>)),
@@ -605,6 +605,8 @@ confirm() ->
 
     riakc_pb_socket:set_bucket_type(PB, <<"mytype2">>, [{n_val, 3}]),
 
+    crdt_tests(Nodes, PB),
+
     riakc_pb_socket:stop(PB),
 
     group_test(Node, Port, CertDir).
@@ -624,10 +626,10 @@ group_test(Node, Port, CertDir) ->
 
 
     lager:info("Granting get/put/delete on a bucket type to the group, checking those requests work"),
+
     %% do a wildcard grant
-    ok = rpc:call(Node, riak_core_console, grant,
-                  [["riak_kv.get,riak_kv.put,riak_kv.delete", "ON",
-                                                    "mytype2", "TO", "group"]]),
+    grant(Node,["riak_kv.get,riak_kv.put,riak_kv.delete", "ON", "mytype2",
+                "TO", "group"]),
 
     %% trust 'myuser' on localhost
     ok = rpc:call(Node, riak_core_console, add_source, [["myuser", "127.0.0.1/32",
@@ -638,23 +640,64 @@ group_test(Node, Port, CertDir) ->
                                        {cacertfile,
                                         filename:join([CertDir, "rootCA/cert.pem"])}]),
 
-    ?assertMatch({error, notfound}, riakc_pb_socket:get(PB, {<<"mytype2">>,
-                                                             <<"hello">>},
-                                                         <<"world">>)),
+    ?assertMatch({error, notfound}, (riakc_pb_socket:get(PB, {<<"mytype2">>,
+                                                              <<"hello">>},
+                                                          <<"world">>))),
     ?assertEqual(ok,
-                 riakc_pb_socket:put(PB,
-                                     riakc_obj:new({<<"mytype2">>, <<"hello">>}, <<"world">>,
-                                                   <<"howareyou">>))),
+                 (riakc_pb_socket:put(PB,
+                                      riakc_obj:new({<<"mytype2">>, <<"hello">>}, <<"world">>,
+                                                    <<"howareyou">>)))),
 
     {ok, Obj} = riakc_pb_socket:get(PB, {<<"mytype2">>,
                                                       <<"hello">>},
                                                          <<"world">>),
     riakc_pb_socket:delete_obj(PB, Obj),
 
-    ?assertMatch({error, notfound}, riakc_pb_socket:get(PB, {<<"mytype2">>,
-                                                             <<"hello">>},
-                                                         <<"world">>)),
+    ?assertMatch({error, notfound}, (riakc_pb_socket:get(PB, {<<"mytype2">>,
+                                                              <<"hello">>},
+                                                          <<"world">>))),
 
     riakc_pb_socket:stop(PB),
     ok.
 
+grant(Node, Args) ->
+    ok = rpc:call(Node, riak_core_console, grant, [Args]).
+
+crdt_tests([Node|_]=Nodes, PB) ->
+    %% rt:create_and_activate
+    lager:info("Creating bucket types for CRDTs"),
+    Types = [{<<"counters">>, counter, riakc_counter:to_op(riakc_counter:increment(5, riakc_counter:new()))},
+             {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))},
+             {<<"maps">>, map, riakc_map:to_op(riakc_map:add({<<"bar">>, counter}, riakc_map:new()))}],
+    [ begin
+          rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
+          rt:wait_until_bucket_type_status(BType, active, Nodes)
+      end || {BType, DType, _Op} <- Types ],
+
+    lager:info("Checking that CRDT fetch is denied"),
+
+    [ ?assertDenied(riakc_pb_socket:fetch_type(PB, {BType, <<"bucket">>}, <<"key">>))
+      ||  {BType, _, _} <- Types ],
+
+    lager:info("Granting CRDT riak_kv.get, checking that fetches succeed"),
+
+    [ grant(Node, ["riak_kv.get", "ON", binary_to_list(Type), "TO", "user"]) || {Type, _, _} <- Types ],
+
+    [ ?assertEqual({error, {notfound, DType}}, 
+                   riakc_pb_socket:fetch_type(PB, {BType, <<"bucket">>}, <<"key">>)) ||
+        {BType, DType, _} <- Types ],
+
+    lager:info("Checking that CRDT update is denied"),
+
+    [ ?assertDenied(riakc_pb_socket:update_type(PB, {BType, <<"bucket">>}, <<"key">>, Op))
+      ||  {BType, _, Op} <- Types ],
+    
+
+    lager:info("Granting CRDT riak_kv.put, checking that updates succeed"),
+
+    [ grant(Node, ["riak_kv.put", "ON", binary_to_list(Type), "TO", "user"]) || {Type, _, _} <- Types ],
+
+    [ ?assertEqual(ok, riakc_pb_socket:update_type(PB, {BType, <<"bucket">>}, <<"key">>, Op))
+      ||  {BType, _, Op} <- Types ],
+    
+    ok.
