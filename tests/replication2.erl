@@ -44,6 +44,7 @@ confirm() ->
     lager:info("Build cluster B"),
     repl_util:make_cluster(BNodes),
 
+    timer:sleep(1000000),
     replication(ANodes, BNodes, false),
     pass.
 

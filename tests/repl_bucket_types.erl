@@ -22,6 +22,7 @@ confirm() ->
     {LeaderA, LeaderB, ANodes, BNodes} = make_clusters(),
 
     %%rpc:multicall([LeaderA, LeaderB], lager, set_loglevel, [lager_console_backend, debug]),
+    rpc:multicall([LeaderA, LeaderB], app_helper, set_env, [riak_repl, true]),
 
     lager:info("creating typed bucket on ~p", [LeaderA]),
 
@@ -36,11 +37,15 @@ confirm() ->
     {ok, PBB} = riakc_pb_socket:start_link("127.0.0.1", PortB, []),
 
     Type = <<"firsttype">>,
-    rt:create_and_activate_bucket_type(LeaderA, Type, [{n_val, 1}]),
+    rt:create_and_activate_bucket_type(LeaderA, Type, [{n_val, 3}]),
     rt:wait_until_bucket_type_status(Type, active, ANodes),
 
-    rt:create_and_activate_bucket_type(LeaderB, Type, [{n_val, 1}]),
+    rt:create_and_activate_bucket_type(LeaderB, Type, [{n_val, 3}]),
     rt:wait_until_bucket_type_status(Type, active, BNodes),
+
+    UndefType = <<"undefinedtype">>,
+    rt:create_and_activate_bucket_type(LeaderA, UndefType, [{n_val, 3}]),
+    rt:wait_until_bucket_type_status(UndefType, active, ANodes),
 
     connect_clusters(LeaderA, LeaderB),
 
@@ -56,37 +61,36 @@ confirm() ->
     Bucket = <<"kicked">>,
     Obj = riakc_obj:new(Bucket, Key, Bin),
     riakc_pb_socket:put(PBA, Obj, [{w,3}]),
-
+    
     lager:info("waiting for untyped pb get on B"),
 
     F = fun() ->
        case riakc_pb_socket:get(PBB, <<"kicked">>, <<"key">>) of
         {ok, O6} ->
             lager:info("Got result from untyped get on B"),          
-            ?assertEqual(<<"data data data">>, riakc_obj:get_value(O6)),
-            true;
-        _ ->
-            lager:info("No result from untyped get on B, trying again..."),          
-            false
-        end
+          ?assertEqual(<<"data data data">>, riakc_obj:get_value(O6)),
+           true;
+       _ ->
+           lager:info("No result from untyped get on B, trying again..."),          
+           false
+       end
     end,
 
     rt:wait_until(F),
 
     lager:info("doing typed put on A"),
+    Type = <<"firsttype">>,
     BucketTyped = {Type, <<"typekicked">>},
     KeyTyped = <<"keytyped">>,
     ObjTyped = riakc_obj:new(BucketTyped, KeyTyped, Bin),
     lager:info("bucket type of object:~p", [riakc_obj:bucket_type(ObjTyped)]),
-    %%lager:info("bucket type meta:~p", [riakc_object:get_metadatas(ObjTyped)]),
     riakc_pb_socket:put(PBA, ObjTyped, [{w,3}]),
-
     lager:info("waiting for typed pb get on B"),
 
     FType = fun() ->
        case riakc_pb_socket:get(PBB, {Type, <<"typekicked">>}, <<"keytyped">>) of
         {ok, O6} ->
-            lager:info("Got result from get on B"),          
+            lager:info("Got result from typed get on B"),          
             ?assertEqual(<<"data data data">>, riakc_obj:get_value(O6)),
             true;
         _ ->
@@ -96,6 +100,31 @@ confirm() ->
     end,
 
     rt:wait_until(FType),
+
+    lager:info("doing typed put on A where type has not been defined"),
+    UndefBucketTyped = {UndefType, <<"badtype">>},
+    UndefKeyTyped = <<"badkeytyped">>,
+    UndefObjTyped = riakc_obj:new(UndefBucketTyped, UndefKeyTyped, Bin),
+    lager:info("bucket type of object:~p", [riakc_obj:bucket_type(UndefObjTyped)]),
+    riakc_pb_socket:put(PBA, UndefObjTyped, [{w,3}]),
+
+    lager:info("waiting for undefined type pb get on B, there should be no response"),
+
+    FUndefType = fun() ->
+       case riakc_pb_socket:get(PBB, UndefBucketTyped, UndefKeyTyped) of
+        {ok, Res} ->
+            lager:info("Got result from get on B"),          
+            ?assertEqual(<<"data data data">>, riakc_obj:get_value(Res)),
+            false;
+        _ ->
+            lager:info("No result from untyped get on B, trying again..."),          
+            true
+        end
+    end,
+
+    rt:wait_until(FUndefType),
+
+    lager:info("Undefined type object not replicated, correct response."),
 
     pass.
 
