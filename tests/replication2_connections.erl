@@ -84,21 +84,20 @@ confirm() ->
     repl_util:start_realtime(BFirst, "A"),
 
     lager:info("Verifying connectivity between clusters."),
-    [verify_connectivity(Node) || Node <- Nodes],
+    [verify_connectivity(Node, "B") || Node <- ANodes],
+    [verify_connectivity(Node, "A") || Node <- BNodes],
 
     pass.
 
 %% @doc Verify connectivity between sources and sink.
-verify_connectivity(Node) ->
-    {ok, Connections0} = rpc:call(Node,
-                                  riak_core_cluster_mgr,
-                                  get_connections,
-                                  []),
-    lager:info("Connections before restart on ~p: ~p.",
-               [Node, Connections0]),
-
+verify_connectivity(Node, Cluster) ->
+    wait_for_connections(Node, Cluster),
     restart_process(Node, riak_core_connection_manager),
+    wait_for_connections(Node, Cluster).
 
+%% @doc Wait for connections to be established from this node to the
+%%      named cluster.
+wait_for_connections(Node, Cluster) ->
     rt:wait_until(Node, fun(_) ->
                 lager:info("Attempting to verify connections on ~p.",
                            [Node]),
@@ -109,7 +108,12 @@ verify_connectivity(Node) ->
                                                  []),
                     lager:info("Waiting for sink connections on ~p: ~p.",
                                [Node, Connections]),
-                    Connections =/= []
+                    case Connections of
+                        [{{cluster_by_name, Cluster}, _}] ->
+                            true;
+                        _ ->
+                            false
+                    end
                 catch
                     _:Error ->
                         lager:info("Caught error: ~p.", [Error]),
