@@ -5,6 +5,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(assertDenied(Op), ?assertMatch({error, {forbidden, _}}, Op)).
+
 confirm() ->
     application:start(crypto),
     application:start(asn1),
@@ -321,6 +323,8 @@ confirm() ->
                                               {reduce, {jsfun,
                                                         <<"Riak.reduceSum">>}, undefined,
                                                true}])),
+
+    crdt_tests(Nodes, C7),
     ok.
 
 enable_ssl(Node) ->
@@ -332,3 +336,43 @@ enable_ssl(Node) ->
 
 
 
+crdt_tests([Node|_]=Nodes, RHC) ->
+    lager:info("Creating bucket types for CRDTs"),
+    Types = [{<<"counters">>, counter, riakc_counter:to_op(riakc_counter:increment(5, riakc_counter:new()))},
+             {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))},
+             {<<"maps">>, map, riakc_map:to_op(riakc_map:add({<<"bar">>, counter}, riakc_map:new()))}],
+    [ begin
+          rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
+          rt:wait_until_bucket_type_status(BType, active, Nodes)
+      end || {BType, DType, _Op} <- Types ],
+
+    lager:info("Checking that CRDT fetch is denied"),
+
+    [ ?assertDenied(rhc:fetch_type(RHC, {BType, <<"bucket">>}, <<"key">>))
+     ||  {BType, _, _} <- Types],
+
+    lager:info("Granting CRDT riak_kv.get, checking that fetches succeed"),
+
+    [ grant(Node, ["riak_kv.get", "ON", binary_to_list(Type), "TO", "user"]) || {Type, _, _} <- Types ],
+
+    [ ?assertEqual({error, {notfound, DType}},
+                  (rhc:fetch_type(RHC, {BType, <<"bucket">>}, <<"key">>))) ||
+          {BType, DType, _, _} <- Types],
+
+    lager:info("Checking that CRDT update is denied"),
+
+    [ ?assertDenied(rhc:update_type(RHC, {BType, <<"bucket">>}, <<"key">>, Op))
+     ||  {BType, _, Op} <- Types],
+
+
+    lager:info("Granting CRDT riak_kv.put, checking that updates succeed"),
+
+    [ grant(Node, ["riak_kv.put", "ON", binary_to_list(Type), "TO", "user"]) || {Type, _, _} <- Types ],
+
+    [?assertEqual(ok, (rhc:update_type(RHC, {BType, <<"bucket">>}, <<"key">>, Op)))
+     ||  {BType, _, Op} <- Types],
+
+    ok.
+
+grant(Node, Args) ->
+    ok = rpc:call(Node, riak_core_console, grant, [Args]).
