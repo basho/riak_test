@@ -26,6 +26,7 @@
 %% Make it multi-backend compatible.
 -define(BUCKETS, [<<"eleveldb1">>, <<"memory1">>]).
 -define(NUM_ITEMS, 1000).
+-define(NUM_DELETES, 100).
 -define(SCAN_BATCH_SIZE, 100).
 -define(N_VAL, 3).
 
@@ -58,7 +59,13 @@ confirm() ->
      || Bucket <- ?BUCKETS],
     lager:info("Now mess index spec code and change values"),
     set_skip_index_specs(Node1, true),
-    [[put_obj(PBC, Bucket, N, N) || N <- lists:seq(1, NumItems)]
+    NumDel = ?NUM_DELETES,
+    [[put_obj(PBC, Bucket, N, N) || N <- lists:seq(1, NumItems-NumDel)]
+     || Bucket <- ?BUCKETS],
+    DelRange = lists:seq(NumItems-NumDel+1, NumItems),
+    [[del_obj(PBC, Bucket, N) || N <- DelRange] || Bucket <- ?BUCKETS],
+    DelKeys = [to_key(N) || N <- DelRange], 
+    [rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, DelKeys) end)
      || Bucket <- ?BUCKETS],
     % Verify they are damaged
     lager:info("Verify change did not take, needs repair"),
@@ -80,7 +87,7 @@ confirm() ->
             ?assertEqual(aae_2i_repair_complete, aae_2i_repair_timeout)
     end,
     lager:info("Now verify that previous changes are visible after repair"),
-    ExpectedFinal = [{to_key(N), to_key(N)} || N <- lists:seq(1, NumItems)],
+    ExpectedFinal = [{to_key(N), to_key(N)} || N <- lists:seq(1, NumItems-NumDel)],
     [assert_range_query(PBC, Bucket, ExpectedFinal, Index, 1, NumItems+1)
      || Bucket <- ?BUCKETS],
     lager:info("Et voila"),
@@ -107,6 +114,16 @@ put_obj(PBC, Bucket, N, IN) ->
     MD2 = riakc_obj:set_secondary_index(MD, {{integer_index, "i"}, [IN]}),
     Obj2 = riakc_obj:update_metadata(Obj, MD2),
     riakc_pb_socket:put(PBC, Obj2, [{dw, ?N_VAL}]).
+
+del_obj(PBC, Bucket, N) ->
+    K = to_key(N),
+    case riakc_pb_socket:get(PBC, Bucket, K) of
+        {ok, ExistingObj} ->
+            ?assertMatch(ok, riakc_pb_socket:delete_obj(PBC, ExistingObj));
+        _ ->
+            ?assertMatch(ok, riakc_pb_socket:delete(PBC, Bucket, K))
+    end.
+
 
 assert_range_query(Pid, Bucket, Expected0, Index, StartValue, EndValue) ->
     lager:info("Searching Index ~p/~p for ~p-~p", [Bucket, Index, StartValue, EndValue]),
