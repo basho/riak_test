@@ -3,6 +3,8 @@
 -behavior(riak_test).
 -export([confirm/0]).
 
+-export([map_object_value/3, reduce_set_union/2, mapred_modfun_input/3]).
+
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
@@ -383,6 +385,88 @@ confirm() ->
                                                   <<"Riak.reduceSum">>},
                                          undefined, true}])),
 
+    lager:info("checking mapreduce with a whitelisted modfun works"),
+    ?assertEqual({ok, [{1, [<<"1">>]}]},
+                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
+                                       [{map, {modfun, riak_kv_mapreduce,
+                                               map_object_value}, undefined, false},
+                                        {reduce, {modfun,
+                                                  riak_kv_mapreduce,
+                                                  reduce_set_union},
+                                         undefined, true}])),
+
+    %% load this module on all the nodes
+    ok = rt:load_modules_on_nodes([?MODULE], Nodes),
+
+    lager:info("checking mapreduce with a insecure modfun input fails"),
+    ?assertMatch({error, <<"{inputs,{insecure_module_path",_/binary>>},
+                 riakc_pb_socket:mapred_bucket(PB, {modfun, ?MODULE,
+                                                    mapred_modfun_input, []},
+                                       [{map, {modfun, riak_kv_mapreduce,
+                                               map_object_value}, undefined, false},
+                                        {reduce, {modfun,
+                                                  riak_kv_mapreduce,
+                                                  reduce_set_union},
+                                         undefined, true}])),
+
+    lager:info("checking mapreduce with a insecure modfun phase fails"),
+    ?assertMatch({error, <<"{query,{insecure_module_path",_/binary>>},
+                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
+                                       [{map, {modfun, ?MODULE,
+                                               map_object_value}, undefined, false},
+                                        {reduce, {modfun,
+                                                  ?MODULE,
+                                                  reduce_set_union},
+                                         undefined, true}])),
+
+    lager:info("whitelisting module path"),
+    ok = rpc:call(Node, application, set_env, [riak_kv, add_paths,
+                                    [filename:dirname(code:which(?MODULE))]]),
+
+    lager:info("checking mapreduce with a insecure modfun input fails when"
+               " whitelisted but lacking permissions"),
+    ?assertMatch({error, <<"Permission",_/binary>>},
+                 riakc_pb_socket:mapred_bucket(PB, {modfun, ?MODULE,
+                                                    mapred_modfun_input, []},
+                                       [{map, {modfun, riak_kv_mapreduce,
+                                               map_object_value}, undefined, false},
+                                        {reduce, {modfun,
+                                                  riak_kv_mapreduce,
+                                                  reduce_set_union},
+                                         undefined, true}])),
+
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.mapreduce", "ON",
+                                                    "ANY", "TO", "user"]]),
+    ?assertEqual({ok, [{1, [<<"1">>]}]},
+                 riakc_pb_socket:mapred_bucket(PB, {modfun, ?MODULE,
+                                                    mapred_modfun_input, []},
+                                       [{map, {modfun, riak_kv_mapreduce,
+                                               map_object_value}, undefined, false},
+                                        {reduce, {modfun,
+                                                  riak_kv_mapreduce,
+                                                  reduce_set_union},
+                                         undefined, true}])),
+
+    ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.mapreduce", "ON",
+                                                    "ANY", "FROM", "user"]]),
+
+    lager:info("checking mapreduce with a insecure modfun phase works when"
+               " whitelisted"),
+    ?assertEqual({ok, [{1, [<<"1">>]}]},
+                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
+                                       [{map, {modfun, ?MODULE,
+                                               map_object_value}, undefined, false},
+                                        {reduce, {modfun,
+                                                  ?MODULE,
+                                                  reduce_set_union},
+                                         undefined, true}])),
+
+
+
+    lager:info("link walking should fail with a deprecation error"),
+    ?assertMatch({error, _}, riakc_pb_socket:mapred(PB, [{<<"lists">>, <<"mine">>}],
+                               [{link, <<"items">>, '_', true}])),
+
     %% revoke only the list_keys permission
     lager:info("Revoking list-keys, checking that full-bucket mapred fails"),
     ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "ON",
@@ -701,3 +785,13 @@ crdt_tests([Node|_]=Nodes, PB) ->
       ||  {BType, _, Op} <- Types ],
     
     ok.
+
+map_object_value(RiakObject, A, B) ->
+    riak_kv_mapreduce:map_object_value(RiakObject, A, B).
+
+reduce_set_union(List, A) ->
+    riak_kv_mapreduce:reduce_set_union(List, A).
+
+mapred_modfun_input(Pipe, _Args, _Timeout) ->
+    riak_pipe:queue_work(Pipe, {{<<"hello">>, <<"world">>}, {struct, []}}),
+    riak_pipe:eoi(Pipe).
