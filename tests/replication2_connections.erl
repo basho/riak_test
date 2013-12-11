@@ -74,6 +74,7 @@ confirm() ->
 
     lager:info("Enabling realtime replication from A to B."),
     repl_util:enable_realtime(AFirst, "B"),
+    rt:wait_until_ring_converged(ANodes),
     repl_util:start_realtime(AFirst, "B"),
 
     lager:info("Connecting B to A"),
@@ -81,6 +82,7 @@ confirm() ->
 
     lager:info("Enabling realtime replication from B to A."),
     repl_util:enable_realtime(BFirst, "A"),
+    rt:wait_until_ring_converged(BNodes),
     repl_util:start_realtime(BFirst, "A"),
 
     lager:info("Verifying connectivity between clusters."),
