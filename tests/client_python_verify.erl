@@ -14,7 +14,8 @@
 
 confirm() ->
     {ok, TestCommand} = prereqs(),
-    Config = [{riak_search, [{enabled, true}]}],
+    Config = [{riak_kv, [{secondary_index_sort_default, true}]},
+              {riak_search, [{enabled, true}]}],
     [Node] = rt:deploy_nodes(1, Config),
     rt:wait_for_service(Node, riak_search),
 
