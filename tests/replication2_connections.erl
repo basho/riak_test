@@ -65,9 +65,11 @@ confirm() ->
 
     lager:info("Naming A"),
     repl_util:name_cluster(AFirst, "A"),
+    rt:wait_until_ring_converged(ANodes),
 
     lager:info("Naming B"),
     repl_util:name_cluster(BFirst, "B"),
+    rt:wait_until_ring_converged(BNodes),
 
     lager:info("Connecting A to B"),
     connect_clusters(AFirst, BFirst),
@@ -76,6 +78,7 @@ confirm() ->
     repl_util:enable_realtime(AFirst, "B"),
     rt:wait_until_ring_converged(ANodes),
     repl_util:start_realtime(AFirst, "B"),
+    rt:wait_until_ring_converged(ANodes),
 
     lager:info("Connecting B to A"),
     connect_clusters(BFirst, AFirst),
@@ -84,6 +87,7 @@ confirm() ->
     repl_util:enable_realtime(BFirst, "A"),
     rt:wait_until_ring_converged(BNodes),
     repl_util:start_realtime(BFirst, "A"),
+    rt:wait_until_ring_converged(BNodes),
 
     lager:info("Verifying connectivity between clusters."),
     [verify_connectivity(Node, "B") || Node <- ANodes],
@@ -93,9 +97,22 @@ confirm() ->
 
 %% @doc Verify connectivity between sources and sink.
 verify_connectivity(Node, Cluster) ->
+    print_repl_ring(Node),
     wait_for_connections(Node, Cluster),
+    print_repl_ring(Node),
     restart_process(Node, riak_core_connection_manager),
     wait_for_connections(Node, Cluster).
+
+print_repl_ring(Node) ->
+    {ok, Ring} = rpc:call(Node,
+                          riak_core_ring_manager,
+                          get_my_ring,
+                          []),
+    Clusters = rpc:call(Node,
+                        riak_repl_ring,
+                        get_clusters,
+                        [Ring]),
+    lager:info("REPL ring shows clusters as: ~p", [Clusters]).
 
 %% @doc Wait for connections to be established from this node to the
 %%      named cluster.
