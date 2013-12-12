@@ -118,7 +118,7 @@ check_kill_repair(Node1) ->
     case ExitStatus of
         normal ->
             lager:info("Shucks. Repair finished before we could kill it");
-        kill ->
+        killed ->
             lager:info("Repair was forcibly killed");
         user_request ->
             lager:info("Repair exited gracefully, we should be able to "
