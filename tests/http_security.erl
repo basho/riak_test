@@ -30,6 +30,9 @@ confirm() ->
                                                      "certs/selfsigned/site3-key.pem"])}
                             ]},
                     {security, true}
+                    ]},
+             {riak_search, [
+                     {enabled, true}
                     ]}
     ],
     Nodes = rt:build_cluster(4, Conf),
@@ -406,6 +409,31 @@ confirm() ->
                                                true}])),
 
     crdt_tests(Nodes, C7),
+
+    URL = lists:flatten(io_lib:format("https://127.0.0.1:~b", [Port])),
+    
+    lager:info("checking link walking fails because it is deprecated"),
+
+    ?assertMatch({ok, "403", _, <<"Link walking is deprecated", _/binary>>}, 
+                       ibrowse:send_req(URL ++ "/riak/hb/first/_,_,_", [], get,
+                     [], [{response_format, binary}, {is_ssl, true},
+                          {ssl_options, [
+                                         {cacertfile, filename:join([PrivDir,
+                                                                     "certs/selfsigned/ca/rootcert.pem"])},
+                                         {verify, verify_peer},
+                                         {reuse_sessions, false}]}])),
+
+    lager:info("checking search 1.0 404s because search won't start with"
+               " security enabled"),
+
+    ?assertMatch({ok, "404", _, _}, 
+                       ibrowse:send_req(URL ++ "/solr/index/select?q=foo:bar&wt=json", [], get,
+                     [], [{response_format, binary}, {is_ssl, true},
+                          {ssl_options, [
+                                         {cacertfile, filename:join([PrivDir,
+                                                                     "certs/selfsigned/ca/rootcert.pem"])},
+                                         {verify, verify_peer},
+                                         {reuse_sessions, false}]}])),
     ok.
 
 enable_ssl(Node) ->
