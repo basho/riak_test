@@ -772,6 +772,8 @@ wait_until_pg(Node, Pid, Bucket, Key, Cid) ->
                 case riak_repl_pb_api:get(Pid,Bucket,Key,Cid) of
                     {error, notfound} ->
                         false;
+                    {error, disconnected} ->
+                        false;
                     {ok, _Value} -> true;
                     _ -> false
                 end
