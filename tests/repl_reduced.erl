@@ -359,9 +359,11 @@ read_repair_interaction_test_() ->
                     GotValue = lists:foldl(fun({_Node, _Pid, Object}, Acc) ->
                         Value = case riak_object:get_values(Object) of
                             [V] -> V;
-                            Values ->
-                                lager:warning("key ~p has mutltiple values in the object: ~p", [Key, Object]),
+                            [V | _] = Values ->
+                                %lager:warning("key ~p has mutltiple values in the object: ~p", [Key, Object]),
+                                lager:warning("(First Read) Double check {~p, ~p} as reduced n mutator got multiple values", [Bucket, Key]),
                                 lists:foldl(fun(B,Ba) ->
+                                    ?assertEqual(V, B),
                                     <<B/binary, Ba/binary>>
                                 end, <<>>, Values)
                         end,
@@ -376,13 +378,22 @@ read_repair_interaction_test_() ->
             end,
 
             AssertSecondRead = fun
-                (_Key, {ok, _Obj}) ->
+                (Key, {ok, _Obj}) ->
                     MutateGets = riak_repl_reduced_intercepts:get_all_reports(),
                     ?assertEqual(9, length(MutateGets)),
                     ?assertEqual(5, length(lists:usort(MutateGets))),
                     ExpectValue = <<Bin/binary, Bin/binary, Bin/binary, Bin/binary, Bin/binary>>,
                     GotValue = lists:foldl(fun({_Node, _Pid, Object}, Acc) ->
-                        Value = riak_object:get_value(Object),
+                        Value = case riak_object:get_values(Object) of
+                            [V] -> V;
+                            [V | _] = Values ->
+                                %lager:warning("Key ~p has multiple values in the object ~p (second read asserts)", [Key, Object]),
+                                lager:warning("(Second Read) Double check {~p, ~p} as reduced n mutator got multiple values", [Bucket, Key]),
+                                lists:foldl(fun(B,Ba) ->
+                                    ?assertEqual(V, B),
+                                    <<B/binary, Ba/binary>>
+                                end, <<>>, Values)
+                        end,
                         <<Acc/binary, Value/binary>>
                     end, <<>>, MutateGets),
                     ?assertEqual(ExpectValue, GotValue),
