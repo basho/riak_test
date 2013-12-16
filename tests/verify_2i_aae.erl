@@ -31,13 +31,12 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    Nodes =
     [Node1] = rt:build_cluster(1,
                                [{riak_kv,
-                                 [{anti_entropy_build_limit, {100, 1000}},
+                                 [{anti_entropy, {off, []}},
+                                  {anti_entropy_build_limit, {100, 1000}},
                                   {anti_entropy_concurrency, 100},
                                   {anti_entropy_tick, 1000}]}]),
-    rt:wait_until_aae_trees_built(Nodes),
     rt_intercept:load_code(Node1),
     rt_intercept:add(Node1,
                      {riak_object,
@@ -61,13 +60,25 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     Index = {integer_index, "i"},
     set_skip_index_specs(Node1, false),
     lager:info("Putting ~p objects with indexes", [NumItems]),
-    [put_obj(PBC, Bucket, N, N+1, Index) || N <- lists:seq(1, NumItems),
+    HalfNumItems = NumItems div 2,
+    [put_obj(PBC, Bucket, N, N+1, Index) || N <- lists:seq(1, HalfNumItems),
                                             Bucket <- ?BUCKETS],
+    lager:info("Put half the objects, now enable AAE and build tress"),
+    %% Enable AAE and build trees.
+    ok = rpc:call(Node1, application, set_env,
+                  [riak_kv, anti_entropy, {on, [debug]}]),
+    ok = rpc:call(Node1, riak_kv_entropy_manager, enable, []),
+    rt:wait_until_aae_trees_built([Node1]),
+
+    lager:info("AAE trees built, now put the rest of the data"),
+    [put_obj(PBC, Bucket, N, N+1, Index)
+     || N <- lists:seq(HalfNumItems+1, NumItems), Bucket <- ?BUCKETS],
     %% Verify they are there.
     ExpectedInitial = [{to_key(N+1), to_key(N)} || N <- lists:seq(1, NumItems)],
     lager:info("Check objects are there as expected"),
     [assert_range_query(PBC, Bucket, ExpectedInitial, Index, 1, NumItems+1)
      || Bucket <- ?BUCKETS],
+
     lager:info("Now mess index spec code and change values"),
     set_skip_index_specs(Node1, true),
     [put_obj(PBC, Bucket, N, N, Index) || N <- lists:seq(1, NumItems-NumDel),
