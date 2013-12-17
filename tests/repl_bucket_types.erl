@@ -108,23 +108,18 @@ confirm() ->
     lager:info("bucket type of object:~p", [riakc_obj:bucket_type(UndefObjTyped)]),
     riakc_pb_socket:put(PBA, UndefObjTyped, [{w,3}]),
 
-    lager:info("waiting for undefined type pb get on B, there should be no response"),
+    lager:info("waiting for undefined type pb get on B, should get error <<\"no_type\">>"),
 
-    FUndefType = fun() ->
-       case riakc_pb_socket:get(PBB, UndefBucketTyped, UndefKeyTyped) of
+    case riakc_pb_socket:get(PBB, UndefBucketTyped, UndefKeyTyped) of
+        {error, E} ->
+            lager:info("Got error:~p from get on cluster B", [E]),
+            ?assertEqual(<<"no_type">>, E),
+            false;
         {ok, Res} ->
             lager:info("Got result from get on B"),          
             ?assertEqual(<<"data data data">>, riakc_obj:get_value(Res)),
-            false;
-        _ ->
-            lager:info("No result from untyped get on B, trying again..."),          
-            true
-        end
+            false
     end,
-
-    rt:wait_until(FUndefType),
-
-    lager:info("Undefined type object not replicated, correct response."),
 
     pass.
 
