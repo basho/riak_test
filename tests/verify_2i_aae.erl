@@ -37,7 +37,7 @@ confirm() ->
                                  [{anti_entropy_build_limit, {100, 1000}},
                                   {anti_entropy_concurrency, 100},
                                   {anti_entropy_tick, 1000}]}]),
-    rt:wait_until_aae_trees_built(Nodes),
+    repl_util:wait_until_aae_trees_built(Nodes),
     rt_intercept:load_code(Node1),
     rt_intercept:add(Node1,
                      {riak_object,
