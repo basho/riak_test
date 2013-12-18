@@ -261,26 +261,18 @@ nodes_all_have_version(Nodes, Version) ->
     Nodes == nodes_with_version(Nodes, Version).
 
 %% AAE support
-wait_until_aae_trees_built([AnyNode|_]=Nodes) ->
-    lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
-    %% Wait until all nodes report no undefined trees
-    rt:wait_until(AnyNode,
-                  fun(_) ->
-                          Busy = lists:foldl(
-                                   fun(Node,Busy1) ->
-                                           %% will be false when all trees are built on Node
-                                           lists:keymember(undefined,
-                                                           2,
-                                                           rpc:call(Node,
-                                                                    riak_kv_entropy_info,
-                                                                    compute_tree_info,
-                                                                    []))
-                                               or Busy1
-                                   end,
-                                   false,
-                                   Nodes),
-                          not Busy
-                  end).
+wait_until_aae_trees_built(Cluster) ->
+    lager:info("Check if all trees built for nodes ~p", [Cluster]),
+    F = fun(Node) ->
+            Info = rpc:call(Node,
+                            riak_kv_entropy_info,
+                            compute_tree_info,
+                            []),
+            NotBuilt = [X || {_,undefined}=X <- Info],
+            NotBuilt == []
+    end,
+    [rt:wait_until(Node, F) || Node <- Cluster],
+    ok.
 
 %% Return the number of partitions in the cluster where Node is a member.
 num_partitions(Node) ->
