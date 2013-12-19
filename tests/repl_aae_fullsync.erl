@@ -15,6 +15,12 @@ confirm() ->
     NumKeysAOnly = 10000,       %% how many keys on A that are missing on B
     NumKeysBoth = 10000,        %% number of common keys on both A and B
     Conf = [                    %% riak configuration
+            {riak_core,
+                [
+                 {ring_creation_size, 8},
+                 {default_bucket_props, [{n_val, 1}]}
+                ]
+            },
             {riak_kv,
                 [
                  %% Specify fast building of AAE trees
