@@ -77,11 +77,14 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
     rt:wait_until_ring_converged(ANodes),
 
     TargetA = hd(ANodes -- [LeaderA]),
+    TargetB = hd(BNodes),
     %% find out how many indices the first node owns
-    NumIndicies = length(rpc:call(TargetA, riak_core_ring, my_indices,
+    NumIndiciesA = length(rpc:call(TargetA, riak_core_ring, my_indices,
                     [rt:get_ring(TargetA)])),
+    NumIndiciesB = length(rpc:call(TargetB, riak_core_ring, my_indices,
+                    [rt:get_ring(TargetB)])),
 
-    lager:info("~p owns ~p indices", [TargetA, NumIndicies]),
+    lager:info("~p owns ~p indices", [TargetA, NumIndiciesA]),
 
     %% BLOOD FOR THE BLOOD GOD
     ?assertEqual([], repl_util:do_write(AFirst, 1, 2000,
@@ -89,34 +92,43 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
 
     %% Before enabling fullsync, ensure trees on one source node return
     %% not_built to defer fullsync process.
-    ok = rt_intercept:add(TargetA, {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]}),
+    validate_fullsync(TargetA,
+                      {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]},
+                      LeaderA,
+                      NumIndiciesA),
 
-    check_fullsync(LeaderA, NumIndicies),
-
-    reboot(TargetA),
+    validate_fullsync(TargetB,
+                      {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]},
+                      LeaderA,
+                      NumIndiciesB),
 
     %% Before enabling fullsync, ensure trees on one source node return
     %% not_built to defer fullsync process.
-    ok = rt_intercept:add(TargetA, {riak_kv_index_hashtree, [{{get_lock, 2},
-                                                              already_locked}]}),
+    % validate_fullsync(TargetA,
+    %                   {riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
+    %                   LeaderA,
+    %                   NumIndiciesA),
 
-    check_fullsync(LeaderA, NumIndicies),
-
-    reboot(TargetA),
+    % validate_fullsync(TargetB,
+    %                   {riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
+    %                   LeaderA,
+    %                   NumIndiciesB),
 
     %% emulate the partitoons are changing ownership
-    ok = rt_intercept:add(TargetA, {riak_kv_vnode, [{{hashtree_pid, 1},
-                                                     wrong_node}]}),
+    validate_fullsync(TargetA,
+                      {riak_kv_vnode, [{{hashtree_pid, 1}, wrong_node}]},
+                      LeaderA,
+                      NumIndiciesA),
 
-    check_fullsync(LeaderA, NumIndicies),
-
-    reboot(TargetA),
-
-    repl_util:wait_until_aae_trees_built([TargetA]),
-
-    check_fullsync(LeaderA, 0),
+    %% emulate the partitoons are changing ownership on sink
+    validate_fullsync(TargetB,
+                      {riak_kv_vnode, [{{hashtree_pid, 1}, wrong_node}]},
+                      LeaderA,
+                      NumIndiciesB),
 
     %% verify data is replicated to B
+    repl_util:wait_until_aae_trees_built([TargetA]),
+    check_fullsync(LeaderA, 0),
     rt:log_to_nodes(AllNodes,
                     "Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
                     [NumKeysAOnly, LeaderA, BFirst]),
@@ -145,3 +157,8 @@ reboot(Node) ->
     rt:stop_and_wait(Node),
     rt:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv).
+
+validate_fullsync(TargetA, Intercept, LeaderA, NumIndicies) ->
+    ok = rt_intercept:add(TargetA, Intercept),
+    check_fullsync(LeaderA, NumIndicies),
+    reboot(TargetA).
