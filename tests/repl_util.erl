@@ -153,11 +153,6 @@ start_and_wait_until_fullsync_complete(Node) ->
     Count = proplists:get_value(server_fullsyncs, Status0) + 1,
     lager:info("waiting for fullsync count to be ~p", [Count]),
 
-    %% Before enabling fullsync, ensure trees on one source node return
-    %% not_built to defer fullsync process.
-    Intercept = {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]},
-    ok = rt_intercept:add(Node, Intercept),
-
     lager:info("Starting fullsync on ~p (~p)", [Node,
             rtdev:node_version(rtdev:node_id(Node))]),
     rpc:call(Node, riak_repl_console, fullsync, [["start"]]),

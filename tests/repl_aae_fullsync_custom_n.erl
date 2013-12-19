@@ -19,6 +19,12 @@ confirm() ->
     NumKeysAOnly = 10000,       %% how many keys on A that are missing on B
     NumKeysBoth = 10000,        %% number of common keys on both A and B
     Conf = [                    %% riak configuration
+            {riak_core,
+                [
+                 {ring_creation_size, 8},
+                 {default_bucket_props, [{n_val, 1}]}
+                ]
+            },
             {riak_kv,
                 [
                  %% Specify fast building of AAE trees
@@ -81,7 +87,8 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
                  [NumKeysAOnly, LeaderA, BFirst]),
     lager:info("Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
                [NumKeysAOnly, LeaderA, BFirst]),
-    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, NumKeysAOnly, TestBucket, 2)),
+    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, NumKeysAOnly,
+                                             TestBucket, 1)),
 
     ok.
 

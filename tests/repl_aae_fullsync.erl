@@ -75,6 +75,12 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
                [LeaderA]),
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
+
+    %% Before enabling fullsync, ensure trees on one source node return
+    %% not_built to defer fullsync process.
+    Intercept = {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]},
+    ok = rt_intercept:add(AFirst, Intercept),
+
     {Time,_} = timer:tc(repl_util,
                         start_and_wait_until_fullsync_complete,
                         [LeaderA]),
