@@ -83,6 +83,10 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
 
     lager:info("~p owns ~p indices", [TargetA, NumIndicies]),
 
+    %% BLOOD FOR THE BLOOD GOD
+    ?assertEqual([], repl_util:do_write(AFirst, 1, 2000,
+                                        <<"scarificial">>, 1)),
+
     %% Before enabling fullsync, ensure trees on one source node return
     %% not_built to defer fullsync process.
     ok = rt_intercept:add(TargetA, {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]}),
