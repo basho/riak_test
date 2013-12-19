@@ -18,7 +18,6 @@
 %% -- adds a new value to the set
 %% -- Puts the new value back to riak
 %% This results in 99 siblings, each a subset of the following sibling [0] | [0, 1] | [0, 1, 2],  [0, 1, 2, 3] etc
-%% Running this against a branch like bug/rdb/sib-ex results in two sibling values
 confirm() ->
     Conf = [{riak_core, [{default_bucket_props, [{allow_mult, true}]}]}],
     [Node1] = rt:deploy_nodes(1, Conf),
@@ -46,14 +45,24 @@ assert_sibling_values(Values, N) ->
     Expected = lists:seq(0, N-2),
     ?assertEqual(Expected, L).
 
-%% Pick one of the two clients, and perform a fetch, resolve, update
-%% cycle
+%% Pick one of the two objects, and perform a fetch, resolve, update
+%% cycle with it. The point is that the two object's writes are
+%% interleaved. First A is updated, then B. Each object already has a
+%% "latest" vclock returned from it's last put. This simulates the
+%% case where a client fetches a vclock before PUT, but another write
+%% lands at the vnode after the vclock is returned and before the next
+%% PUT. Each PUT sees all but one write that Riak as seen, meaning
+%% there is a perpetual race / sibling. Without DVV that means ALL
+%% writes are added to the sibling set. With DVV, we correctly capture
+%% the resolution of seen writes.
 explode(_PB, {A, B}, 1) ->
     {A, B};
-explode(PB, Objs, Cnt) ->
-    Elem = (Cnt rem 2) +1,
-    Obj = resolve_mutate_store(PB, Cnt, element(Elem, Objs)),
-    explode(PB, setelement(Elem, Objs, Obj), Cnt-1).
+explode(PB, {A0, B}, Cnt) when Cnt rem 2 == 0 ->
+    A = resolve_mutate_store(PB, Cnt, A0),
+    explode(PB, {A, B}, Cnt-1);
+explode(PB, {A, B0}, Cnt) when Cnt rem 2 /= 0  ->
+    B = resolve_mutate_store(PB, Cnt, B0),
+    explode(PB, {A, B}, Cnt-1).
 
 %% resolve the fetch, and put a new value
 resolve_mutate_store(PB, N, Obj0) ->
