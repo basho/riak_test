@@ -168,7 +168,7 @@ confirm() ->
                                          <<"mybucket">>}),
     ?assertEqual(5, proplists:get_value(n_val, BProps6)),
 
-    rhc:reset_bucket_type(RHC, <<"mytype">>),
+    rhc:set_bucket_type(RHC, <<"mytype">>, [{n_val, 3}]),
 
     {ok, BProps7} = rhc:get_bucket_type(RHC, <<"mytype">>),
 
