@@ -17,7 +17,7 @@ confirm() ->
     Conf = [                    %% riak configuration
             {riak_core,
                 [
-                 {ring_creation_size, 16},
+                 {ring_creation_size, 8},
                  {default_bucket_props, [{n_val, 1}]}
                 ]
             },
@@ -107,6 +107,8 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
     check_fullsync(LeaderA, NumIndicies),
 
     reboot(TargetA),
+
+    repl_util:wait_until_aae_trees_built([TargetA]),
 
     check_fullsync(LeaderA, 0),
 
