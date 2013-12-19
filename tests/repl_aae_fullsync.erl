@@ -17,7 +17,7 @@ confirm() ->
     Conf = [                    %% riak configuration
             {riak_core,
                 [
-                 {ring_creation_size, 8},
+                 {ring_creation_size, 16},
                  {default_bucket_props, [{n_val, 1}]}
                 ]
             },
@@ -76,15 +76,39 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
 
+    TargetA = hd(ANodes -- [LeaderA]),
+    %% find out how many indices the first node owns
+    NumIndicies = length(rpc:call(TargetA, riak_core_ring, my_indices,
+                    [rt:get_ring(TargetA)])),
+
+    lager:info("~p owns ~p indices", [TargetA, NumIndicies]),
+
     %% Before enabling fullsync, ensure trees on one source node return
     %% not_built to defer fullsync process.
-    Intercept = {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]},
-    ok = rt_intercept:add(AFirst, Intercept),
+    ok = rt_intercept:add(TargetA, {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]}),
 
-    {Time,_} = timer:tc(repl_util,
-                        start_and_wait_until_fullsync_complete,
-                        [LeaderA]),
-    lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
+    check_fullsync(LeaderA, NumIndicies),
+
+    reboot(TargetA),
+
+    %% Before enabling fullsync, ensure trees on one source node return
+    %% not_built to defer fullsync process.
+    ok = rt_intercept:add(TargetA, {riak_kv_index_hashtree, [{{get_lock, 2},
+                                                              already_locked}]}),
+
+    check_fullsync(LeaderA, NumIndicies),
+
+    reboot(TargetA),
+
+    %% emulate the partitoons are changing ownership
+    ok = rt_intercept:add(TargetA, {riak_kv_vnode, [{{hashtree_pid, 1},
+                                                     wrong_node}]}),
+
+    check_fullsync(LeaderA, NumIndicies),
+
+    reboot(TargetA),
+
+    check_fullsync(LeaderA, 0),
 
     %% verify data is replicated to B
     rt:log_to_nodes(AllNodes,
@@ -96,3 +120,22 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
             BFirst, 1, NumKeysAOnly, TestBucket, 2)),
 
     ok.
+
+check_fullsync(Node, ExpectedFailures) ->
+    {Time,_} = timer:tc(repl_util,
+                        start_and_wait_until_fullsync_complete,
+                        [Node]),
+    lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
+
+    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    [{_Name, Props}] = proplists:get_value(fullsync_coordinator, Status),
+    %% check that the expected number of partitions failed to sync
+    ?assertEqual(ExpectedFailures, proplists:get_value(error_exits, Props)),
+    %% check that we retried each of them 5 times
+    ?assert(proplists:get_value(retry_exits, Props) >= ExpectedFailures * 5),
+    ok.
+
+reboot(Node) ->
+    rt:stop_and_wait(Node),
+    rt:start_and_wait(Node),
+    rt:wait_for_service(Node, riak_kv).
