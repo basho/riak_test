@@ -119,6 +119,7 @@
          wait_for_service/2,
          wait_for_control/1,
          wait_for_control/2,
+         wait_until/3,
          wait_until/2,
          wait_until/1,
          wait_until_all_members/1,
