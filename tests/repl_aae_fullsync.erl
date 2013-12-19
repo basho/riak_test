@@ -119,7 +119,7 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
     lager:info("Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
                [NumKeysAOnly, LeaderA, BFirst]),
     ?assertEqual(0, repl_util:wait_for_reads(
-            BFirst, 1, NumKeysAOnly, TestBucket, 2)),
+            BFirst, 1, NumKeysAOnly, TestBucket, 1)),
 
     ok.
 
