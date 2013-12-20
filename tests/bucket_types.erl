@@ -165,7 +165,7 @@ confirm() ->
                                                     <<"mybucket">>}),
     ?assertEqual(5, proplists:get_value(n_val, BProps6)),
 
-    riakc_pb_socket:reset_bucket_type(PB, Type),
+    riakc_pb_socket:set_bucket_type(PB, Type, [{n_val, 3}]),
 
     {ok, BProps7} = riakc_pb_socket:get_bucket_type(PB, Type),
 
