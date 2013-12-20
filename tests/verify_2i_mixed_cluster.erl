@@ -66,10 +66,6 @@ confirm() ->
     assertRangeQuery(Clients, [K(N) || N <- lists:seq(10, 19), N /= 11], <<"field2_int">>, 10, 19),
     assertRangeQuery(Clients, [K(N) || N <- lists:seq(10, 17), N /= 11], <<"$key">>, <<"obj10">>, <<"obj17">>),
 
-    %% Verify the $key index, and riak_kv#367 regression
-    assertRangeQuery(Clients, [<<"obj06">>], <<"$key">>, <<"obj06">>, <<"obj06">>),
-    assertRangeQuery(Clients, [<<"obj06">>, <<"obj07">>], <<"$key">>, <<"obj06">>, <<"obj07">>),
-
     pass.
 
 assertExactQuery(C, K, F, V) ->
