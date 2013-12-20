@@ -66,6 +66,16 @@ toggle_enabled_test_() ->
     c456
 }).
 
+data_push() ->
+    Tests = data_push_test_(),
+    case eunit:test(Tests, [verbose]) of
+        ok ->
+            pass;
+        error ->
+            exit(error),
+            fail
+    end.
+
 data_push_test_() ->
     {timeout, rt_cascading:timeout(1000000000000000), {setup, fun() ->
         Nodes = rt:deploy_nodes(6, conf()),
@@ -80,7 +90,14 @@ data_push_test_() ->
         #data_push_test{nodes = Nodes, c123 = C123, c456 = C456}
     end,
     fun(State) ->
-        rt:clean_cluster(State#data_push_test.nodes)
+        case rt_config:config_or_os_env(skip_teardown, false) of
+            "false" ->
+                rt:clean_cluster(State#data_push_test.nodes);
+            false ->
+                rt:clean_cluster(State#data_push_test.nodes);
+            _ ->
+                ok
+        end
     end,
     fun(State) -> [
 
@@ -166,7 +183,7 @@ data_push_test_() ->
             [rt:wait_until(Node, WaitFun) || Node <- State#data_push_test.c456],
             Client123 = rt:pbc(N1),
             Bin = <<"only carry reduced objects">>,
-            Key = <<"ocro">>,
+            Key = <<"ocro2">>,
             Bucket = <<"objects">>,
             Obj = riakc_obj:new(Bucket, Key, Bin),
             riakc_pb_socket:put(Client123, Obj, [{w,3}]),
