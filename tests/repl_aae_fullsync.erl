@@ -110,11 +110,10 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
                       LeaderA,
                       NumIndiciesA),
 
-    %% XXX this will deadlock forever right now
-    %validate_fullsync(TargetB,
-                      %{riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
-                      %LeaderA,
-                      %NumIndiciesB),
+    validate_fullsync(TargetB,
+                      {riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
+                      LeaderA,
+                      NumIndiciesB),
 
     %% emulate the partitoons are changing ownership
     validate_fullsync(TargetA,
