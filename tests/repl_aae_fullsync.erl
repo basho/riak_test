@@ -85,6 +85,7 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
                     [rt:get_ring(TargetB)])),
 
     lager:info("~p owns ~p indices", [TargetA, NumIndiciesA]),
+    lager:info("~p owns ~p indices", [TargetB, NumIndiciesB]),
 
     %% BLOOD FOR THE BLOOD GOD
     ?assertEqual([], repl_util:do_write(AFirst, 1, 2000,
@@ -104,15 +105,16 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
 
     %% Before enabling fullsync, ensure trees on one source node return
     %% not_built to defer fullsync process.
-    % validate_fullsync(TargetA,
-    %                   {riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
-    %                   LeaderA,
-    %                   NumIndiciesA),
+    validate_fullsync(TargetA,
+                      {riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
+                      LeaderA,
+                      NumIndiciesA),
 
-    % validate_fullsync(TargetB,
-    %                   {riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
-    %                   LeaderA,
-    %                   NumIndiciesB),
+    %% XXX this will deadlock forever right now
+    %validate_fullsync(TargetB,
+                      %{riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
+                      %LeaderA,
+                      %NumIndiciesB),
 
     %% emulate the partitoons are changing ownership
     validate_fullsync(TargetA,
@@ -161,4 +163,5 @@ reboot(Node) ->
 validate_fullsync(TargetA, Intercept, LeaderA, NumIndicies) ->
     ok = rt_intercept:add(TargetA, Intercept),
     check_fullsync(LeaderA, NumIndicies),
-    reboot(TargetA).
+    reboot(TargetA),
+    repl_util:wait_until_aae_trees_built([TargetA]).
