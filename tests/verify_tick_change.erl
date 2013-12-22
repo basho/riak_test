@@ -39,7 +39,7 @@ confirm() ->
     read_stuff(Nodes, Start, End, Bucket, W, <<>>),
 
     io:format("Start ticktime daemon on ~p, then wait a few seconds\n",[Node1]),
-    rpc:call(Node1, riak_core_util, start_set_net_ticktime_daemon,
+    rpc:call(Node1, riak_core_net_ticktime, start_set_net_ticktime_daemon,
              [Node1, NewTime]),
     timer:sleep(2*1000),
 
@@ -58,13 +58,13 @@ confirm() ->
     %% [begin
     %%      io:format("Torture: change time to ~p\n", [NTime]),
     %%      io:format("Torture: stop daemons\n", []),
-    %%      [ok = rpc:call(Node, riak_core_util, stop_set_net_ticktime_daemon,
+    %%      [ok = rpc:call(Node, riak_core_net_ticktime, stop_set_net_ticktime_daemon,
     %%                     [Node]) || Node <- [node()|nodes(connected)]],
     %%      io:format("Some daemons can linger a few seconds, we can wait..."),
     %%      timer:sleep(5000),
 
     %%      io:format("Torture: start daemons\n", []),
-    %%      rpc:call(Node1, riak_core_util, start_set_net_ticktime_daemon,
+    %%      rpc:call(Node1, riak_core_net_ticktime, start_set_net_ticktime_daemon,
     %%               [Node1, NTime]),
     %%      timer:sleep(2*100),
 
