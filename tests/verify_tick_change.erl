@@ -25,6 +25,7 @@
 
 confirm() ->
     ClusterSize = 4,
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
     NewConfig = [],
     Nodes = rt:build_cluster(ClusterSize, NewConfig),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
@@ -40,7 +41,7 @@ confirm() ->
     io:format("Start ticktime daemon on ~p, then wait a few seconds\n",[Node1]),
     rpc:call(Node1, riak_core_util, start_set_net_ticktime_daemon,
              [Node1, NewTime]),
-    timer:sleep(2*100),
+    timer:sleep(2*1000),
 
     io:format("Changing net_ticktime to ~p\n", [NewTime]),
     ok = write_read_poll_loop(Nodes, NewTime, Start, End, Bucket, W),
