@@ -25,7 +25,6 @@
 
 confirm() ->
     ClusterSize = 4,
-    rt:set_backend(memory),
     NewConfig = [],
     Nodes = rt:build_cluster(ClusterSize, NewConfig),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
