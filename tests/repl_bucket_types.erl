@@ -184,7 +184,7 @@ value_unchanged(Pid, Bucket, Key, Bin) ->
     case riakc_pb_socket:get(Pid, Bucket, Key) of
         {error, E} ->
             lager:info("Got error:~p from get on cluster B", [E]),
-	    false;
+            false;
         {ok, Res} ->
             ?assertEqual(Bin, riakc_obj:get_value(Res)),
             true
