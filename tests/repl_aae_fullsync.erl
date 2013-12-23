@@ -33,7 +33,8 @@ confirm() ->
              [
               {fullsync_strategy, aae},
               {fullsync_on_connect, false},
-              {fullsync_interval, disabled}
+              {fullsync_interval, disabled},
+              {max_fssource_retries, 5}
              ]}
            ],
 
