@@ -84,12 +84,14 @@ confirm() ->
     end,
 
     DefaultProps = get_current_bucket_props(BNodes, DefinedType),
-    update_props(DefinedType, DefaultProps, LeaderB, BNodes),
+    update_props(DefinedType,  [{n_val, 1}], DefaultProps, LeaderB, BNodes),
 
     UnequalObjBin = <<"unequal props val">>,
     UnequalPropsObj = riakc_obj:new(BucketTyped, KeyTyped, UnequalObjBin),
+    lager:info("doing put of typed bucket on A where bucket properties (n_val 3 versus n_val 1) are not equal on B"),
     riakc_pb_socket:put(PBA, UnequalPropsObj, [{w,3}]),
 
+    lager:info("checking to ensure the bucket contents were not updated."),
     ensure_bucket_not_updated(PBB, BucketTyped, KeyTyped, Bin),
 
     riakc_pb_socket:stop(PBA),
@@ -175,16 +177,17 @@ make_pbget_fun(Pid, Bucket, Key, Bin) ->
    end.
 
 ensure_bucket_not_updated(Pid, Bucket, Key, Bin) ->
-    [ value_unchanged(Pid, Bucket, Key, Bin) || _I <- lists:seq(1, ?ENSURE_READ_ITERATIONS)].
+    Results = [ value_unchanged(Pid, Bucket, Key, Bin) || _I <- lists:seq(1, ?ENSURE_READ_ITERATIONS)],
+    ?assertEqual(false, lists:member(false, Results)).
 
 value_unchanged(Pid, Bucket, Key, Bin) ->
     case riakc_pb_socket:get(Pid, Bucket, Key) of
         {error, E} ->
             lager:info("Got error:~p from get on cluster B", [E]),
-	    true;
+	    false;
         {ok, Res} ->
             ?assertEqual(Bin, riakc_obj:get_value(Res)),
-            false
+            true
     end,
     timer:sleep(?ENSURE_READ_INTERVAL).
 
@@ -193,8 +196,7 @@ get_pb_pid(Leader) ->
     {ok, Pid} = riakc_pb_socket:start_link(IP, PortA, []),
     Pid.
 
-update_props(Type, DefaultProps, Node, Nodes) -> 
-    Updates = [{n_val, 1}],
+update_props(Type, Updates, DefaultProps, Node, Nodes) -> 
     lager:info("Setting bucket properties ~p for bucket type ~p on node ~p", 
                [Updates, Type, Node]),
     rpc:call(Node, riak_core_bucket_type, update, [Type, Updates]),    
