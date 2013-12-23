@@ -8,6 +8,9 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(ENSURE_READ_ITERATIONS, 5).
+-define(ENSURE_READ_INTERVAL, 1000).
+
 %% Replication Bucket Types test
 %%
 
@@ -40,11 +43,11 @@ confirm() ->
     lager:info("Enabling realtime between ~p and ~p", [LeaderA, LeaderB]),
     enable_rt(LeaderA, ANodes),
 
-    lager:info("doing untyped put on A"),
     Bin = <<"data data data">>,
     Key = <<"key">>,
     Bucket = <<"kicked">>,
     DefaultObj = riakc_obj:new(Bucket, Key, Bin),
+    lager:info("doing untyped put on A, bucket:~p", [Bucket]),
     riakc_pb_socket:put(PBA, DefaultObj, [{w,3}]),
     
     UntypedWait = make_pbget_fun(PBB, Bucket, Key, Bin),
@@ -54,6 +57,7 @@ confirm() ->
     KeyTyped = <<"keytyped">>,
     ObjTyped = riakc_obj:new(BucketTyped, KeyTyped, Bin),
 
+    lager:info("doing typed put on A, bucket:~p", [BucketTyped]),
     riakc_pb_socket:put(PBA, ObjTyped, [{w,3}]),
 
     TypedWait = make_pbget_fun(PBB, BucketTyped, KeyTyped, Bin),
@@ -63,6 +67,7 @@ confirm() ->
     UndefKeyTyped = <<"badkeytyped">>,
     UndefObjTyped = riakc_obj:new(UndefBucketTyped, UndefKeyTyped, Bin),
 
+    lager:info("doing typed put on A where type is not defined on B, bucket:~p", [UndefBucketTyped]),
     riakc_pb_socket:put(PBA, UndefObjTyped, [{w,3}]),
 
     lager:info("waiting for undefined type pb get on B, should get error <<\"no_type\">>"),
@@ -78,6 +83,17 @@ confirm() ->
             false
     end,
 
+    DefaultProps = get_current_bucket_props(BNodes, DefinedType),
+    update_props(DefinedType, DefaultProps, LeaderB, BNodes),
+
+    UnequalObjBin = <<"unequal props val">>,
+    UnequalPropsObj = riakc_obj:new(BucketTyped, KeyTyped, UnequalObjBin),
+    riakc_pb_socket:put(PBA, UnequalPropsObj, [{w,3}]),
+
+    ensure_bucket_not_updated(PBB, BucketTyped, KeyTyped, Bin),
+
+    riakc_pb_socket:stop(PBA),
+    riakc_pb_socket:stop(PBB),
     pass.
 
 %% @doc Turn on Realtime replication on the cluster lead by LeaderA.
@@ -158,8 +174,42 @@ make_pbget_fun(Pid, Bucket, Key, Bin) ->
         end
    end.
 
+ensure_bucket_not_updated(Pid, Bucket, Key, Bin) ->
+    [ value_unchanged(Pid, Bucket, Key, Bin) || _I <- lists:seq(1, ?ENSURE_READ_ITERATIONS)].
+
+value_unchanged(Pid, Bucket, Key, Bin) ->
+    case riakc_pb_socket:get(Pid, Bucket, Key) of
+        {error, E} ->
+            lager:info("Got error:~p from get on cluster B", [E]),
+	    true;
+        {ok, Res} ->
+            ?assertEqual(Bin, riakc_obj:get_value(Res)),
+            false
+    end,
+    timer:sleep(?ENSURE_READ_INTERVAL).
+
 get_pb_pid(Leader) ->
     {ok, [{IP, PortA}] } = rpc:call(Leader, application, get_env, [riak_api, pb]),
     {ok, Pid} = riakc_pb_socket:start_link(IP, PortA, []),
     Pid.
+
+update_props(Type, DefaultProps, Node, Nodes) -> 
+    Updates = [{n_val, 1}],
+    lager:info("Setting bucket properties ~p for bucket type ~p on node ~p", 
+               [Updates, Type, Node]),
+    rpc:call(Node, riak_core_bucket_type, update, [Type, Updates]),    
+    rt:wait_until_ring_converged(Nodes),
+
+    UpdatedProps = get_current_bucket_props(Nodes, Type),
+    ?assertNotEqual(DefaultProps, UpdatedProps).
     
+%% fetch bucket properties via rpc 
+%% from a node or a list of nodes (one node is chosen at random)
+get_current_bucket_props(Nodes, Type) when is_list(Nodes) ->    
+    Node = lists:nth(length(Nodes), Nodes),
+    get_current_bucket_props(Node, Type);
+get_current_bucket_props(Node, Type) when is_atom(Node) ->
+    rpc:call(Node, 
+             riak_core_bucket_type,
+             get,
+             [Type]).
