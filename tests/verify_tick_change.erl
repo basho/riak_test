@@ -48,36 +48,13 @@ confirm() ->
            fun() ->
                    write_read_poll_check(Nodes, NewTime, Start, End, Bucket, W)
            end),
-    io:format("If we got this far, then write_read_poll_loop found no inconsistencies\n"),
+    lager:info("If we got this far, then we found no inconsistencies\n"),
     [begin
          RemoteTime = rpc:call(Node, net_kernel, get_net_ticktime, []),
          io:format("Node ~p tick is ~p\n", [Node, RemoteTime]),
          ?assertEqual(NewTime, RemoteTime)
      end || Node <- lists:usort([node()|nodes(connected)])],
     io:format("If we got this far, all nodes are using the same tick time\n"),
-
-    %% %% End of normal test.  Time for torture, for demo purposes only.
-
-    %% [begin
-    %%      io:format("Torture: change time to ~p\n", [NTime]),
-    %%      io:format("Torture: stop daemons\n", []),
-    %%      [ok = rpc:call(Node, riak_core_net_ticktime, stop_set_net_ticktime_daemon,
-    %%                     [Node]) || Node <- [node()|nodes(connected)]],
-    %%      io:format("Some daemons can linger a few seconds, we can wait..."),
-    %%      timer:sleep(5000),
-
-    %%      io:format("Torture: start daemons\n", []),
-    %%      rpc:call(Node1, riak_core_net_ticktime, start_set_net_ticktime_daemon,
-    %%               [Node1, NTime]),
-    %%      timer:sleep(2*100),
-
-    %%      ok = write_read_poll_loop(Nodes, NTime, Start, End, Bucket, W),
-    %%      [begin
-    %%           RemoteTime = rpc:call(Node, net_kernel, get_net_ticktime, []),
-    %%           io:format("Node ~p tick is ~p\n", [Node, RemoteTime]),
-    %%           ?assertEqual(NTime, RemoteTime)
-    %%       end || Node <- lists:usort([node()|nodes(connected)])]
-    %%  end || NTime <- [5, 15] ],
 
     pass.
 
@@ -105,10 +82,4 @@ write_read_poll_check(Nodes, NewTime, Start, End, Bucket, W) ->
     Common = make_common(),
     write_stuff(Nodes, Start, End, Bucket, W, Common),
     read_stuff(Nodes, Start, End, Bucket, W, Common),
-    case is_set_net_ticktime_done(Nodes, NewTime) of
-        true ->
-            io:format("Huzzah! write_read_poll_loop() is finished.\n"),
-            true;
-        Else ->
-            Else
-    end.
+    is_set_net_ticktime_done(Nodes, NewTime).
