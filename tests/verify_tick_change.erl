@@ -44,7 +44,10 @@ confirm() ->
     timer:sleep(2*1000),
 
     io:format("Changing net_ticktime to ~p\n", [NewTime]),
-    ok = write_read_poll_loop(Nodes, NewTime, Start, End, Bucket, W),
+    ok = rt:wait_until(
+           fun() ->
+                   write_read_poll_check(Nodes, NewTime, Start, End, Bucket, W)
+           end),
     io:format("If we got this far, then write_read_poll_loop found no inconsistencies\n"),
     [begin
          RemoteTime = rpc:call(Node, net_kernel, get_net_ticktime, []),
@@ -98,18 +101,14 @@ is_set_net_ticktime_done(Nodes, Time) ->
             false
     end.
 
-write_read_poll_loop(Nodes, NewTime, Start, End, Bucket, W) ->
+write_read_poll_check(Nodes, NewTime, Start, End, Bucket, W) ->
+    Common = make_common(),
+    write_stuff(Nodes, Start, End, Bucket, W, Common),
+    read_stuff(Nodes, Start, End, Bucket, W, Common),
     case is_set_net_ticktime_done(Nodes, NewTime) of
         true ->
             io:format("Huzzah! write_read_poll_loop() is finished.\n"),
-            ok;
-        false ->
-            Common = make_common(),
-            write_stuff(Nodes, Start, End, Bucket, W, Common),
-            read_stuff(Nodes, Start, End, Bucket, W, Common),
-            timer:sleep(20),
-            write_read_poll_loop(Nodes, NewTime, Start, End, Bucket, W)
+            true;
+        Else ->
+            Else
     end.
-            
-%% End riak_test stuff ... begin daemon stuff ...
-
