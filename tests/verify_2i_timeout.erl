@@ -45,7 +45,7 @@ confirm() ->
 
     %% Override app.config
     {ok, Res} =  stream_pb(PBPid, Query, [{timeout, 5000}]),
-    ?assertEqual(ExpectedKeys, proplists:get_value(keys, Res, [])),
+    ?assertEqual(ExpectedKeys, lists:sort(proplists:get_value(keys, Res, []))),
 
     {ok, {{_, ErrCode, _}, _, Body}} = httpc:request(url("~s/buckets/~s/index/~s/~s~s",
                                                      [Http, ?BUCKET, <<"$bucket">>, ?BUCKET, []])),
@@ -54,7 +54,7 @@ confirm() ->
     ?assertMatch({match, _}, re:run(Body, "request timed out|{error,timeout}")), %% shows the app.config timeout
 
     HttpRes = http_query(Http, Query, [{timeout, 5000}]),
-    ?assertEqual(ExpectedKeys, proplists:get_value(<<"keys">>, HttpRes, [])),
+    ?assertEqual(ExpectedKeys, lists:sort(proplists:get_value(<<"keys">>, HttpRes, []))),
 
     stream_http(Http, Query, ExpectedKeys),
 
@@ -65,5 +65,5 @@ stream_http(Http, Query, ExpectedKeys) ->
      Res = http_stream(Http, Query, []),
      ?assert(lists:member({<<"error">>,<<"timeout">>}, Res)),
      Res2 = http_stream(Http, Query, [{timeout, 5000}]),
-     ?assertEqual(ExpectedKeys, proplists:get_value(<<"keys">>, Res2, [])).
+     ?assertEqual(ExpectedKeys, lists:sort(proplists:get_value(<<"keys">>, Res2, []))).
 

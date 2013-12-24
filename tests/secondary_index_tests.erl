@@ -21,12 +21,17 @@
 -behavior(riak_test).
 -export([confirm/0]).
 -export([put_an_object/2, put_an_object/4, int_to_key/1,
-        stream_pb/2, stream_pb/3, pb_query/3, http_query/2,
-         http_query/3, http_stream/3, int_to_field1_bin/1, url/2]).
+         stream_pb/2, stream_pb/3, pb_query/3, http_query/2,
+         http_query/3, http_stream/3, int_to_field1_bin/1, url/2,
+         assertExactQuery/5, assertRangeQuery/7]).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
 -define(BUCKET, <<"2ibucket">>).
+-define(KEYS(A), [int_to_key(A)]).
+-define(KEYS(A,B), [int_to_key(N) || N <- lists:seq(A,B)]).
+-define(KEYS(A,B,C), [int_to_key(N) || N <- lists:seq(A,B), C]).
+-define(KEYS(A,B,G1,G2), [int_to_key(N) || N <- lists:seq(A,B), G1, G2]).
 
 confirm() ->
     Nodes = rt:build_cluster(3),
@@ -46,12 +51,14 @@ confirm() ->
     
     K = fun int_to_key/1,
 
-    assertExactQuery(Clients, [K(5)], <<"field1_bin">>, <<"val5">>),
-    assertExactQuery(Clients, [K(5)], <<"field2_int">>, 5),
-    assertExactQuery(Clients, [K(N) || N <- lists:seq(5, 9)], <<"field3_int">>, 5),
-    assertRangeQuery(Clients, [K(N) || N <- lists:seq(10, 18)], <<"field1_bin">>, <<"val10">>, <<"val18">>),
-    assertRangeQuery(Clients, [K(N) || N <- lists:seq(10, 19)], <<"field2_int">>, 10, 19),
-    assertRangeQuery(Clients, [K(N) || N <- lists:seq(10, 17)], <<"$key">>, <<"obj10">>, <<"obj17">>),
+    assertExactQuery(Clients, ?KEYS(5), <<"field1_bin">>, <<"val5">>),
+    assertExactQuery(Clients, ?KEYS(5), <<"field2_int">>, 5),
+    assertExactQuery(Clients, ?KEYS(5, 9), <<"field3_int">>, 5),
+    assertRangeQuery(Clients, ?KEYS(10, 18), <<"field1_bin">>, <<"val10">>, <<"val18">>),
+    assertRangeQuery(Clients, ?KEYS(12), <<"field1_bin">>, <<"val10">>, <<"val18">>, <<"v...2">>),
+    assertRangeQuery(Clients, ?KEYS(10, 19), <<"field2_int">>, 10, 19),
+    assertRangeQuery(Clients, ?KEYS(10, 17), <<"$key">>, <<"obj10">>, <<"obj17">>),
+    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"ob..2">>),
 
     lager:info("Delete an object, verify deletion..."),
     ToDel = [<<"obj05">>, <<"obj11">>],
@@ -61,32 +68,34 @@ confirm() ->
     
     assertExactQuery(Clients, [], <<"field1_bin">>, <<"val5">>),
     assertExactQuery(Clients, [], <<"field2_int">>, 5),
-    assertExactQuery(Clients, [K(N) || N <- lists:seq(6, 9)], <<"field3_int">>, 5),
-    assertRangeQuery(Clients, [K(N) || N <- lists:seq(10, 18), N /= 11], <<"field1_bin">>, <<"val10">>, <<"val18">>),
-    assertRangeQuery(Clients, [K(N) || N <- lists:seq(10, 19), N /= 11], <<"field2_int">>, 10, 19),
-    assertRangeQuery(Clients, [K(N) || N <- lists:seq(10, 17), N /= 11], <<"$key">>, <<"obj10">>, <<"obj17">>),
+    assertExactQuery(Clients, ?KEYS(6, 9), <<"field3_int">>, 5),
+    assertRangeQuery(Clients, ?KEYS(10, 18, N /= 11), <<"field1_bin">>, <<"val10">>, <<"val18">>),
+    assertRangeQuery(Clients, ?KEYS(10), <<"field1_bin">>, <<"val10">>, <<"val18">>, <<"10$">>),
+    assertRangeQuery(Clients, ?KEYS(10, 19, N /= 11), <<"field2_int">>, 10, 19),
+    assertRangeQuery(Clients, ?KEYS(10, 17, N /= 11), <<"$key">>, <<"obj10">>, <<"obj17">>),
+    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"2">>),
 
     %% Verify the $key index, and riak_kv#367 regression
-    assertRangeQuery(Clients, [<<"obj06">>], <<"$key">>, <<"obj06">>, <<"obj06">>),
-    assertRangeQuery(Clients, [<<"obj06">>, <<"obj07">>], <<"$key">>, <<"obj06">>, <<"obj07">>),
+    assertRangeQuery(Clients, ?KEYS(6), <<"$key">>, <<"obj06">>, <<"obj06">>),
+    assertRangeQuery(Clients, ?KEYS(6,7), <<"$key">>, <<"obj06">>, <<"obj07">>),
 
     %% Exercise sort set to true by default
     SetResult2 = rpc:multicall(Nodes, application, set_env,
                                [riak_kv, secondary_index_sort_default, true]),
     ?assertMatch({AOK, []}, SetResult2),
                                                     
-    assertExactQuery(Clients, [K(N) || N <- lists:seq(15, 19)],
+    assertExactQuery(Clients, ?KEYS(15, 19),
                      <<"field3_int">>, 15, {undefined, true}),
     %% Keys ordered by val index term, since 2i order is {term, key}
     KsVal = [A || {_, A} <-
                   lists:sort([{int_to_field1_bin(N), K(N)} ||
                         N <- lists:seq(0, 20), N /= 11, N /= 5])],
     assertRangeQuery(Clients, KsVal,
-                     <<"field1_bin">>, <<"val0">>, <<"val9">>, {undefined, true}),
-    assertRangeQuery(Clients, [K(N) || N <- lists:seq(0, 20), N /= 11, N /= 5],
-                     <<"field2_int">>, 0, 20, {undefined, true}),
-    assertRangeQuery(Clients, [K(N) || N <- lists:seq(0, 20), N /= 11, N /= 5],
-                     <<"$key">>, <<"obj00">>, <<"obj20">>, {undefined, true}),
+                     <<"field1_bin">>, <<"val0">>, <<"val9">>, undefined, {undefined, true}),
+    assertRangeQuery(Clients, ?KEYS(0, 20, N /= 11, N /= 5),
+                     <<"field2_int">>, 0, 20, undefined, {undefined, true}),
+    assertRangeQuery(Clients, ?KEYS(0, 20, N /= 11, N /= 5),
+                     <<"$key">>, <<"obj00">>, <<"obj20">>, undefined, {undefined, true}),
 
     %% Verify bignum sort order in sext -- eleveldb only (riak_kv#499)
     TestIdxVal = 1362400142028,
@@ -112,11 +121,10 @@ assertExactQuery({ClientType, Client}, Expected, Index, Value,
     {ok, ?INDEX_RESULTS{keys=Results}} = case ClientType of
         pb ->
              riakc_pb_socket:get_index_eq(Client, ?BUCKET, Index, Value,
-                                          [{sort, Sort} || Sort /= undefined]);
+                                          [{pagination_sort, Sort} || Sort /= undefined]);
         http ->
-            rhc:get_index(Client, ?BUCKET, Index, Value, [{sort, Sort}])
+            rhc:get_index(Client, ?BUCKET, Index, Value, [{pagination_sort, Sort}])
     end,
-            
             
     ActualKeys = case ExpectSorted of
         true -> Results;
@@ -128,22 +136,27 @@ assertExactQuery({ClientType, Client}, Expected, Index, Value,
     ?assertEqual(Expected, ActualKeys). 
 
 assertRangeQuery(Clients, Expected, Index, StartValue, EndValue) ->
-    assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, {false, false}),
-    assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, {true, true}).
+    assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, undefined).
+
+assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re) ->
+    assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, {false, false}),
+    assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, {true, true}).
     
-assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Sort) when is_list(Clients) ->
-    [assertRangeQuery(C, Expected, Index, StartValue, EndValue, Sort) || C <- Clients];
-assertRangeQuery({ClientType, Client}, Expected, Index, StartValue, EndValue,
+assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, Sort) when is_list(Clients) ->
+    [assertRangeQuery(C, Expected, Index, StartValue, EndValue, Re, Sort) || C <- Clients];
+assertRangeQuery({ClientType, Client}, Expected, Index, StartValue, EndValue, Re,
                  {Sort, ExpectSorted}) ->
-    lager:info("Searching Index ~p for ~p-~p sort: ~p, ~p with ~p client",
-               [Index, StartValue, EndValue, Sort, ExpectSorted, ClientType]),
+    lager:info("Searching Index ~p for ~p-~p re:~p, sort: ~p, ~p with ~p client",
+               [Index, StartValue, EndValue, Re, Sort, ExpectSorted, ClientType]),
     {ok, ?INDEX_RESULTS{keys=Results}} = case ClientType of
         pb ->
             riakc_pb_socket:get_index_range(Client, ?BUCKET, Index, StartValue, EndValue,
-                                      [{sort, Sort} || Sort /= undefined]);
+                                            [{term_regex, Re} || Re /= undefined] ++
+                                            [{pagination_sort, Sort} || Sort /= undefined]);
         http ->
             rhc:get_index(Client,  ?BUCKET, Index, {StartValue, EndValue},
-                          [{sort, Sort}])
+                                            [{term_regex, Re} || Re /= undefined] ++
+                                            [{pagination_sort, Sort}])
     end,
     ActualKeys = case ExpectSorted of
         true -> Results;
@@ -166,13 +179,15 @@ put_an_object(Pid, N) ->
               ],
     put_an_object(Pid, Key, Data, Indexes).
 
-put_an_object(Pid, Key, Data, Indexes) ->
+put_an_object(Pid, Key, Data, Indexes) when is_list(Indexes) ->
     lager:info("Putting object ~p", [Key]),
     MetaData = dict:from_list([{<<"index">>, Indexes}]),
     Robj0 = riakc_obj:new(?BUCKET, Key),
     Robj1 = riakc_obj:update_value(Robj0, Data),
     Robj2 = riakc_obj:update_metadata(Robj1, MetaData),
-    riakc_pb_socket:put(Pid, Robj2).
+    riakc_pb_socket:put(Pid, Robj2);
+put_an_object(Pid, Key, IntIndex, BinIndex) when is_integer(IntIndex), is_binary(BinIndex) ->
+    put_an_object(Pid, Key, Key, [{"field1_bin", BinIndex},{"field2_int", IntIndex}]).
 
 int_to_key(N) ->
     case N < 100 of
