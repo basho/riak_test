@@ -22,14 +22,13 @@ confirm() ->
     PrivDir = rt:priv_dir(),
     Conf = [
             {riak_core, [
-                         {default_bucket_props, [{allow_mult, true}]},
+                    {default_bucket_props, [{allow_mult, true}]},
                     {ssl, [
                             {certfile, filename:join([PrivDir,
                                                       "certs/selfsigned/site3-cert.pem"])},
                             {keyfile, filename:join([PrivDir,
                                                      "certs/selfsigned/site3-key.pem"])}
-                            ]},
-                    {security, true}
+                            ]}
                     ]},
              {riak_search, [
                      {enabled, true}
@@ -37,6 +36,8 @@ confirm() ->
     ],
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
+    %% enable security on the cluster
+    ok = rpc:call(Node, riak_core_console, security_enable, [[]]),
     enable_ssl(Node),
     %[enable_ssl(N) || N <- Nodes],
     {ok, [{"127.0.0.1", Port0}]} = rpc:call(Node, application, get_env,
