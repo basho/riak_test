@@ -424,10 +424,10 @@ confirm() ->
                                          {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
 
-    lager:info("checking search 1.0 404s because search won't start with"
-               " security enabled"),
+    lager:info("checking search 1.0 403s because search won't allow"
+               "connections with security enabled"),
 
-    ?assertMatch({ok, "404", _, _}, 
+    ?assertMatch({ok, "403", _, <<"Riak Search 1.0 is deprecated", _/binary>>},
                        ibrowse:send_req(URL ++ "/solr/index/select?q=foo:bar&wt=json", [], get,
                      [], [{response_format, binary}, {is_ssl, true},
                           {ssl_options, [

@@ -744,7 +744,8 @@ group_test(Node, Port, CertDir) ->
                                                           <<"world">>))),
 
     lager:info("riak search should not be running with security enabled"),
-    ?assertEqual({error, <<"Unknown message code.">>}, riakc_pb_socket:search(PB, <<"index">>, <<"foo:bar">>)),
+    ?assertMatch({error, <<"Riak Search 1.0 is deprecated", _/binary>>},
+                           riakc_pb_socket:search(PB, <<"index">>, <<"foo:bar">>)),
 
     riakc_pb_socket:stop(PB),
     ok.
