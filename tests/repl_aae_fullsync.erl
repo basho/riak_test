@@ -9,69 +9,84 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+-import(rt, [deploy_nodes/2]).
+
+-define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
+-define(NUM_KEYS,    1000).
+
+-define(CONF, [
+        {riak_core,
+            [
+             {ring_creation_size, 8},
+             {default_bucket_props, [{n_val, 1}]}
+            ]
+        },
+        {riak_kv,
+            [
+             %% Specify fast building of AAE trees
+             {anti_entropy, {on, []}},
+             {anti_entropy_build_limit, {100, 1000}},
+             {anti_entropy_concurrency, 100}
+            ]
+        },
+        {riak_repl,
+         [
+          {fullsync_strategy, aae},
+          {fullsync_on_connect, false},
+          {fullsync_interval, disabled},
+          {max_fssource_retries, 5}
+         ]}
+        ]).
+
 confirm() ->
-    NumNodesWanted = 6,         %% total number of nodes needed
-    ClusterASize = 3,           %% how many to allocate to cluster A
-    NumKeysAOnly = 10000,       %% how many keys on A that are missing on B
-    NumKeysBoth = 10000,        %% number of common keys on both A and B
-    Conf = [                    %% riak configuration
-            {riak_core,
-                [
-                 {ring_creation_size, 8},
-                 {default_bucket_props, [{n_val, 1}]}
-                ]
-            },
-            {riak_kv,
-                [
-                 %% Specify fast building of AAE trees
-                 {anti_entropy, {on, []}},
-                 {anti_entropy_build_limit, {100, 1000}},
-                 {anti_entropy_concurrency, 100}
-                ]
-            },
-            {riak_repl,
-             [
-              {fullsync_strategy, aae},
-              {fullsync_on_connect, false},
-              {fullsync_interval, disabled},
-              {max_fssource_retries, 5}
-             ]}
-           ],
-
-    %% build clusters
-    {ANodes, BNodes} = repl_aae_fullsync_util:make_clusters(
-            NumNodesWanted, ClusterASize, Conf),
-
-    %% run normal aae repl test
-    aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes),
-
+    simple_test(),
+    exhaustive_test(),
     pass.
 
-aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
-    %% populate them with data
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
-                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+simple_test() ->
+    %% Deploy 6 nodes.
+    Nodes = deploy_nodes(6, ?CONF),
 
-    TestBucket = <<TestHash/binary, "-systest_a">>,
-    repl_aae_fullsync_util:prepare_cluster_data(TestBucket,
-                                                NumKeysAOnly,
-                                                NumKeysBoth,
-                                                ANodes,
-                                                BNodes),
+    %% Break up the 6 nodes into three clustes.
+    {ANodes, BNodes} = lists:split(3, Nodes),
+
+    lager:info("ANodes: ~p", [ANodes]),
+    lager:info("BNodes: ~p", [BNodes]),
+
+    lager:info("Building two clusters."),
+    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
-    AllNodes = ANodes ++ BNodes,
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
-    %%---------------------------------------------------------
-    %% TEST: fullsync, check that non-RT'd keys get repl'd to B
-    %% keys: 1..NumKeysAOnly
-    %%---------------------------------------------------------
+    lager:info("Naming clusters."),
+    repl_util:name_cluster(AFirst, "A"),
+    repl_util:name_cluster(BFirst, "B"),
 
-    rt:log_to_nodes(AllNodes,
-                    "Test fullsync from cluster A leader ~p to cluster B",
-                    [LeaderA]),
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+
+    lager:info("Get leaders."),
+    LeaderA = get_leader(AFirst),
+    LeaderB = get_leader(BFirst),
+
+    lager:info("Finding connection manager ports."),
+    BPort = get_port(LeaderB),
+
+    lager:info("Connecting cluster A to B"),
+    connect_cluster(LeaderA, BPort, "B"),
+
+    %% Write keys prior to fullsync.
+    write_to_cluster(AFirst, 1, ?NUM_KEYS),
+
+    %% Read keys prior to fullsync.
+    read_from_cluster(BFirst, 1, ?NUM_KEYS, ?NUM_KEYS),
+
+    %% Wait for trees to compute.
+    repl_util:wait_until_aae_trees_built(ANodes),
+    repl_util:wait_until_aae_trees_built(BNodes),
+
     lager:info("Test fullsync from cluster A leader ~p to cluster B",
                [LeaderA]),
     repl_util:enable_fullsync(LeaderA, "B"),
@@ -79,89 +94,245 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
 
     TargetA = hd(ANodes -- [LeaderA]),
     TargetB = hd(BNodes),
-    %% find out how many indices the first node owns
-    NumIndiciesA = length(rpc:call(TargetA, riak_core_ring, my_indices,
-                    [rt:get_ring(TargetA)])),
-    NumIndiciesB = length(rpc:call(TargetB, riak_core_ring, my_indices,
-                    [rt:get_ring(TargetB)])),
 
-    lager:info("~p owns ~p indices", [TargetA, NumIndiciesA]),
-    lager:info("~p owns ~p indices", [TargetB, NumIndiciesB]),
+    %% Flush AAE trees to disk.
+    perform_sacrifice(AFirst),
 
-    %% BLOOD FOR THE BLOOD GOD
-    ?assertEqual([], repl_util:do_write(AFirst, 1, 2000,
-                                        <<"scarificial">>, 1)),
+    %% Validate replication from A -> B is fault-tolerant regardless of
+    %% errors occurring on the source or destination.
+    validate_intercepted_fullsync(TargetA, LeaderA, "B"),
+    validate_intercepted_fullsync(TargetB, LeaderA, "B"),
 
-    %% Before enabling fullsync, ensure trees on one source node return
-    %% not_built to defer fullsync process.
-    validate_fullsync(TargetA,
-                      {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]},
-                      LeaderA,
-                      NumIndiciesA),
+    %% Verify data is replicated from A -> B successfully once the
+    %% intercepts are removed.
+    validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
 
-    validate_fullsync(TargetB,
-                      {riak_kv_index_hashtree, [{{get_lock, 2}, not_built}]},
-                      LeaderA,
-                      NumIndiciesB),
+    pass.
 
-    %% Before enabling fullsync, ensure trees on one source node return
-    %% not_built to defer fullsync process.
-    validate_fullsync(TargetA,
-                      {riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
-                      LeaderA,
-                      NumIndiciesA),
+exhaustive_test() ->
+    %% Deploy 6 nodes.
+    Nodes = deploy_nodes(6, ?CONF),
 
-    validate_fullsync(TargetB,
-                      {riak_kv_index_hashtree, [{{get_lock, 2}, already_locked}]},
-                      LeaderA,
-                      NumIndiciesB),
+    %% Break up the 6 nodes into three clustes.
+    {ANodes, Rest} = lists:split(2, Nodes),
+    {BNodes, CNodes} = lists:split(2, Rest),
 
-    %% emulate the partitoons are changing ownership
-    validate_fullsync(TargetA,
-                      {riak_kv_vnode, [{{hashtree_pid, 1}, wrong_node}]},
-                      LeaderA,
-                      NumIndiciesA),
+    lager:info("ANodes: ~p", [ANodes]),
+    lager:info("BNodes: ~p", [BNodes]),
+    lager:info("BNodes: ~p", [CNodes]),
 
-    %% emulate the partitoons are changing ownership on sink
-    validate_fullsync(TargetB,
-                      {riak_kv_vnode, [{{hashtree_pid, 1}, wrong_node}]},
-                      LeaderA,
-                      NumIndiciesB),
+    lager:info("Building three clusters."),
+    [repl_util:make_cluster(N) || N <- [ANodes, BNodes, CNodes]],
 
-    %% verify data is replicated to B
-    repl_util:wait_until_aae_trees_built([TargetA]),
-    check_fullsync(LeaderA, 0),
-    rt:log_to_nodes(AllNodes,
-                    "Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
-                    [NumKeysAOnly, LeaderA, BFirst]),
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
+    CFirst = hd(CNodes),
+
+    lager:info("Naming clusters."),
+    repl_util:name_cluster(AFirst, "A"),
+    repl_util:name_cluster(BFirst, "B"),
+    repl_util:name_cluster(CFirst, "C"),
+
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+    rt:wait_until_ring_converged(CNodes),
+
+    lager:info("Get leaders."),
+    LeaderA = get_leader(AFirst),
+    LeaderB = get_leader(BFirst),
+    LeaderC = get_leader(CFirst),
+
+    lager:info("Finding connection manager ports."),
+    APort = get_port(LeaderA),
+    BPort = get_port(LeaderB),
+    CPort = get_port(LeaderC),
+
+    lager:info("Connecting all clusters into fully connected topology."),
+    connect_cluster(LeaderA, BPort, "B"),
+    connect_cluster(LeaderA, CPort, "C"),
+    connect_cluster(LeaderB, APort, "A"),
+    connect_cluster(LeaderB, CPort, "C"),
+    connect_cluster(LeaderC, APort, "A"),
+    connect_cluster(LeaderC, BPort, "B"),
+
+    %% Write keys to cluster A, verify B and C do not have them.
+    write_to_cluster(AFirst, 1, ?NUM_KEYS),
+    read_from_cluster(BFirst, 1, ?NUM_KEYS, ?NUM_KEYS),
+    read_from_cluster(CFirst, 1, ?NUM_KEYS, ?NUM_KEYS),
+
+    %% Enable fullsync from A to B.
+    lager:info("Enabling fullsync from A to B"),
+    repl_util:enable_fullsync(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+
+    %% Enable fullsync from A to C.
+    %% TODO: This causes the test to fail and fullsync to stall.
+    lager:info("Enabling fullsync from A to C"),
+    repl_util:enable_fullsync(LeaderA, "C"),
+    rt:wait_until_ring_converged(ANodes),
+
+    %% Flush AAE trees to disk.
+    perform_sacrifice(AFirst),
+
+    %% Verify data is replicated from A -> B successfully once the
+    %% intercepts are removed.
+    validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
+
+    %% Verify data is replicated from A -> B successfully once the
+    %% intercepts are removed.
+    validate_completed_fullsync(LeaderA, CFirst, "C", 1, ?NUM_KEYS),
+
+    pass.
+
+%% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
+%%      trees to flush to disk.
+perform_sacrifice(Node) ->
+    ?assertEqual([], repl_util:do_write(Node, 1, 2000,
+                                        <<"scarificial">>, 1)).
+
+%% @doc Validate fullsync completed and all keys are available.
+validate_completed_fullsync(ReplicationLeader,
+                            DestinationNode,
+                            DestinationCluster,
+                            Start,
+                            End) ->
+    ok = check_fullsync(ReplicationLeader, DestinationCluster, 0),
     lager:info("Verify: Reading ~p keys repl'd from A(~p) to B(~p)",
-               [NumKeysAOnly, LeaderA, BFirst]),
-    ?assertEqual(0, repl_util:wait_for_reads(
-            BFirst, 1, NumKeysAOnly, TestBucket, 1)),
+               [?NUM_KEYS, ReplicationLeader, DestinationNode]),
+    ?assertEqual(0,
+                 repl_util:wait_for_reads(DestinationNode,
+                                          Start,
+                                          End,
+                                          ?TEST_BUCKET,
+                                          1)).
 
-    ok.
-
-check_fullsync(Node, ExpectedFailures) ->
-    {Time,_} = timer:tc(repl_util,
-                        start_and_wait_until_fullsync_complete,
-                        [Node]),
+%% @doc Assert we can perform one fullsync cycle, and that the number of
+%%      expected failures is correct.
+check_fullsync(Node, Cluster, ExpectedFailures) ->
+    {Time, _} = timer:tc(repl_util,
+                         start_and_wait_until_fullsync_complete,
+                         [Node]),
     lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
 
     Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-    [{_Name, Props}] = proplists:get_value(fullsync_coordinator, Status),
+
+    Props = case proplists:get_value(fullsync_coordinator, Status, undefined) of
+        [{_Name, Props0}] ->
+            Props0;
+        Multiple ->
+            {_Name, Props0} = lists:keyfind(Cluster, 1, Multiple),
+            Props0
+    end,
+
     %% check that the expected number of partitions failed to sync
-    ?assertEqual(ExpectedFailures, proplists:get_value(error_exits, Props)),
+    ?assertEqual(ExpectedFailures,
+                 proplists:get_value(error_exits, Props)),
+
     %% check that we retried each of them 5 times
-    ?assert(proplists:get_value(retry_exits, Props) >= ExpectedFailures * 5),
+    ?assert(
+        proplists:get_value(retry_exits, Props) >= ExpectedFailures * 5),
+
     ok.
 
-reboot(Node) ->
-    rt:stop_and_wait(Node),
-    rt:start_and_wait(Node),
-    rt:wait_for_service(Node, riak_kv).
+%% @doc Validate fullsync handles errors for all possible intercept
+%%      combinations.
+validate_intercepted_fullsync(InterceptTarget,
+                              ReplicationLeader,
+                              ReplicationCluster) ->
+    NumIndicies = length(rpc:call(InterceptTarget,
+                                  riak_core_ring,
+                                  my_indices,
+                                  [rt:get_ring(InterceptTarget)])),
+    lager:info("~p owns ~p indices",
+               [InterceptTarget, NumIndicies]),
 
-validate_fullsync(TargetA, Intercept, LeaderA, NumIndicies) ->
-    ok = rt_intercept:add(TargetA, Intercept),
-    check_fullsync(LeaderA, NumIndicies),
-    reboot(TargetA),
-    repl_util:wait_until_aae_trees_built([TargetA]).
+    %% Before enabling fullsync, ensure trees on one source node return
+    %% not_built to defer fullsync process.
+    validate_intercepted_fullsync(InterceptTarget,
+                                  {riak_kv_index_hashtree,
+                                   [{{get_lock, 2}, not_built}]},
+                                  ReplicationLeader,
+                                  ReplicationCluster,
+                                  NumIndicies),
+
+    %% Before enabling fullsync, ensure trees on one source node return
+    %% already_locked to defer fullsync process.
+    validate_intercepted_fullsync(InterceptTarget,
+                                  {riak_kv_index_hashtree,
+                                   [{{get_lock, 2}, already_locked}]},
+                                  ReplicationLeader,
+                                  ReplicationCluster,
+                                  NumIndicies),
+
+    %% Emulate in progress ownership transfers.
+    validate_intercepted_fullsync(InterceptTarget,
+                                  {riak_kv_vnode,
+                                   [{{hashtree_pid, 1}, wrong_node}]},
+                                  ReplicationLeader,
+                                  ReplicationCluster,
+                                  NumIndicies).
+
+%% @doc Add an intercept on a target node to simulate a given failure
+%%      mode, and then enable fullsync replication and verify completes
+%%      a full cycle.  Subsequently reboot the node.
+validate_intercepted_fullsync(InterceptTarget,
+                              Intercept,
+                              ReplicationLeader,
+                              ReplicationCluster,
+                              NumIndicies) ->
+    lager:info("Validating intercept ~p on ~p.",
+               [Intercept, InterceptTarget]),
+
+    %% Add intercept.
+    ok = rt_intercept:add(InterceptTarget, Intercept),
+
+    %% Verify fullsync.
+    ok = check_fullsync(ReplicationLeader,
+                        ReplicationCluster,
+                        NumIndicies),
+
+    %% Reboot node.
+    rt:stop_and_wait(InterceptTarget),
+    rt:start_and_wait(InterceptTarget),
+
+    %% Wait for riak_kv and riak_repl to initialize.
+    rt:wait_for_service(InterceptTarget, riak_kv),
+    rt:wait_for_service(InterceptTarget, riak_repl),
+
+    %% Wait until AAE trees are compueted on the rebooted node.
+    repl_util:wait_until_aae_trees_built([InterceptTarget]).
+
+%% @doc Given a node, find the port that the cluster manager is
+%%      listening on.
+get_port(Node) ->
+    {ok, {_IP, Port}} = rpc:call(Node,
+                                 application,
+                                 get_env,
+                                 [riak_core, cluster_mgr]),
+    Port.
+
+%% @doc Given a node, find out who the current replication leader in its
+%%      cluster is.
+get_leader(Node) ->
+    rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
+
+%% @doc Connect two clusters using a given name.
+connect_cluster(Source, Port, Name) ->
+    lager:info("Connecting ~p to ~p for cluster ~p.",
+               [Source, Port, Name]),
+    repl_util:connect_cluster(Source, "127.0.0.1", Port),
+    ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
+
+%% @doc Write a series of keys and ensure they are all written.
+write_to_cluster(Node, Start, End) ->
+    lager:info("Writing ~p keys to node ~p.", [End - Start, Node]),
+    ?assertEqual([],
+                 repl_util:do_write(Node, Start, End, ?TEST_BUCKET, 1)).
+
+%% @doc Read from cluster a series of keys, asserting a certain number
+%%      of errors.
+read_from_cluster(Node, Start, End, Errors) ->
+    lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
+    Res2 = rt:systest_read(Node, Start, ?NUM_KEYS, ?TEST_BUCKET, 1),
+    ?assertEqual(Errors, length(Res2)).
