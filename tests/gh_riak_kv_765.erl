@@ -21,6 +21,14 @@
 %% This module tests the various AAE additions made in
 %% https://github.com/basho/riak_kv/pull/765
 
+%% !!! DO NOT ADD TO GIDDYUP
+%%
+%% This module is not meant to be used as an automated CI test. It
+%% exists for development/code review purposes to ensure the changes
+%% made in basho/riak_kv#765 work as the pull-request claims.
+%%
+%% !!! DO NOT ADD TO GIDDYUP
+
 -module(gh_riak_kv_765).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -67,7 +75,7 @@ check_throttle_and_expiration() ->
     enable_aae(Node),
     time_build(Node),
     Duration1 = rebuild(Node, 30000, 1000),
-    Duration2 = rebuild(Node, 30000, 3500),
+    Duration2 = rebuild(Node, 30000, 5500),
     ?assert(Duration2 > (2 * Duration1)),
 
     %% Test manual expiration
