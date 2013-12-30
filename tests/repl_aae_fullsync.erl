@@ -280,6 +280,9 @@ bidirectional_test() ->
     %% Verify B replicated to A.
     validate_completed_fullsync(LeaderB, AFirst, "A", ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
 
+    %% Clean.
+    rt:clean_cluster(Nodes),
+
     pass.
 
 %% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
