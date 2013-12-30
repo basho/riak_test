@@ -206,6 +206,82 @@ dual_test() ->
 
     pass.
 
+bidirectional_test() ->
+    %% Deploy 6 nodes.
+    Nodes = deploy_nodes(6, ?CONF(5)),
+
+    %% Break up the 6 nodes into three clustes.
+    {ANodes, BNodes} = lists:split(3, Nodes),
+
+    lager:info("ANodes: ~p", [ANodes]),
+    lager:info("BNodes: ~p", [BNodes]),
+
+    lager:info("Building two clusters."),
+    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
+
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
+
+    lager:info("Naming clusters."),
+    repl_util:name_cluster(AFirst, "A"),
+    repl_util:name_cluster(BFirst, "B"),
+
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+
+    lager:info("Get leaders."),
+    LeaderA = get_leader(AFirst),
+    LeaderB = get_leader(BFirst),
+
+    lager:info("Finding connection manager ports."),
+    APort = get_port(LeaderA),
+    BPort = get_port(LeaderB),
+
+    lager:info("Connecting cluster A to B"),
+    connect_cluster(LeaderA, BPort, "B"),
+
+    lager:info("Connecting cluster B to A"),
+    connect_cluster(LeaderB, APort, "A"),
+
+    %% Write keys to cluster A, verify B does not have them.
+    write_to_cluster(AFirst, 1, ?NUM_KEYS),
+    read_from_cluster(BFirst, 1, ?NUM_KEYS, ?NUM_KEYS),
+
+    %% Enable fullsync from A to B.
+    lager:info("Enabling fullsync from A to B"),
+    repl_util:enable_fullsync(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+
+    %% Enable fullsync from B to A.
+    lager:info("Enabling fullsync from B to A"),
+    repl_util:enable_fullsync(LeaderB, "A"),
+    rt:wait_until_ring_converged(BNodes),
+
+    %% Wait for trees to compute.
+    repl_util:wait_until_aae_trees_built(ANodes),
+
+    %% Flush AAE trees to disk.
+    perform_sacrifice(AFirst),
+
+    %% Verify A replicated to B.
+    validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
+
+    %% Write keys to cluster B, verify A does not have them.
+    write_to_cluster(AFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
+    read_from_cluster(BFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
+
+    %% Wait for trees to compute.
+    repl_util:wait_until_aae_trees_built(BNodes),
+
+    %% Flush AAE trees to disk.
+    perform_sacrifice(BFirst),
+
+    %% Verify B replicated to A.
+    validate_completed_fullsync(LeaderB, AFirst, "A", ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
+
+    pass.
+
 %% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
 %%      trees to flush to disk.
 perform_sacrifice(Node) ->
