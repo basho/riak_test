@@ -67,6 +67,10 @@ simple_test() ->
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
+    lager:info("Waiting for transfers to complete."),
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
+
     lager:info("Get leaders."),
     LeaderA = get_leader(AFirst),
     LeaderB = get_leader(BFirst),
@@ -139,6 +143,11 @@ dual_test() ->
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
     rt:wait_until_ring_converged(CNodes),
+
+    lager:info("Waiting for transfers to complete."),
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
+    rt:wait_until_transfers_complete(CNodes),
 
     lager:info("Get leaders."),
     LeaderA = get_leader(AFirst),
@@ -229,6 +238,10 @@ bidirectional_test() ->
     lager:info("Waiting for convergence."),
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
+
+    lager:info("Waiting for transfers to complete."),
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
 
     lager:info("Get leaders."),
     LeaderA = get_leader(AFirst),
