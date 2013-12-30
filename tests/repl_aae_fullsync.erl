@@ -40,7 +40,7 @@
 
 confirm() ->
     simple_test(),
-    exhaustive_test(),
+    dual_test(),
     pass.
 
 simple_test() ->
@@ -111,7 +111,7 @@ simple_test() ->
 
     pass.
 
-exhaustive_test() ->
+dual_test() ->
     %% Deploy 6 nodes.
     Nodes = deploy_nodes(6, ?CONF(infinity)),
 
@@ -169,7 +169,6 @@ exhaustive_test() ->
     rt:wait_until_ring_converged(ANodes),
 
     %% Enable fullsync from A to C.
-    %% TODO: This causes the test to fail and fullsync to stall.
     lager:info("Enabling fullsync from A to C"),
     repl_util:enable_fullsync(LeaderA, "C"),
     rt:wait_until_ring_converged(ANodes),
@@ -188,11 +187,12 @@ exhaustive_test() ->
     %% Verify data is replicated from A -> C successfully
     validate_completed_fullsync(LeaderA, CFirst, "C", 1, ?NUM_KEYS),
 
-
-    write_to_cluster(AFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
-    read_from_cluster(BFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
-    read_from_cluster(CFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
-
+    write_to_cluster(AFirst,
+                     ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
+    read_from_cluster(BFirst,
+                      ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
+    read_from_cluster(CFirst,
+                      ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
 
     %% Verify that duelling fullsyncs eventually complete
     {Time, _} = timer:tc(repl_util,
@@ -201,7 +201,8 @@ exhaustive_test() ->
 
     read_from_cluster(BFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, 0),
     read_from_cluster(CFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, 0),
-    lager:info("Fullsync A->B and A->C completed in ~p seconds", [Time/1000/1000]),
+    lager:info("Fullsync A->B and A->C completed in ~p seconds",
+               [Time/1000/1000]),
 
     pass.
 
@@ -238,7 +239,7 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
 
     Status = rpc:call(Node, riak_repl_console, status, [quiet]),
 
-    Props = case proplists:get_value(fullsync_coordinator, Status, undefined) of
+    Props = case proplists:get_value(fullsync_coordinator, Status) of
         [{_Name, Props0}] ->
             Props0;
         Multiple ->
