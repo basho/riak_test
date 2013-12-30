@@ -258,11 +258,11 @@ bidirectional_test() ->
     repl_util:enable_fullsync(LeaderB, "A"),
     rt:wait_until_ring_converged(BNodes),
 
-    %% Wait for trees to compute.
-    repl_util:wait_until_aae_trees_built(ANodes),
-
     %% Flush AAE trees to disk.
     perform_sacrifice(AFirst),
+
+    %% Wait for trees to compute.
+    repl_util:wait_until_aae_trees_built(ANodes),
 
     %% Verify A replicated to B.
     validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
@@ -271,11 +271,11 @@ bidirectional_test() ->
     write_to_cluster(AFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
     read_from_cluster(BFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
 
-    %% Wait for trees to compute.
-    repl_util:wait_until_aae_trees_built(BNodes),
-
     %% Flush AAE trees to disk.
     perform_sacrifice(BFirst),
+
+    %% Wait for trees to compute.
+    repl_util:wait_until_aae_trees_built(BNodes),
 
     %% Verify B replicated to A.
     validate_completed_fullsync(LeaderB, AFirst, "A", ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
