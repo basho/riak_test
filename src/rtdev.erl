@@ -243,7 +243,7 @@ get_backends() ->
     end.
 
 get_backends(DevPath) ->
-    [get_backend(AppConfig) || AppConfig <- all_the_app_configs(DevPath)].
+    rt:pmap(fun get_backend/1, all_the_app_configs(DevPath)).
 
 get_backend(AppConfig) ->
     lager:info("get_backend(~s)", [AppConfig]),
@@ -395,7 +395,7 @@ stop_all(DevPath) ->
                 end,
                 lager:info("Stopped Node... ~s ~~ ~s.", [Cmd, Status])
             end,
-            [Stop(D) || D <- Devs];
+            rt:pmap(Stop, Devs);
         _ -> lager:info("~s is not a directory.", [DevPath])
     end,
     ok.
@@ -587,7 +587,7 @@ get_version() ->
 teardown() ->
     rt_cover:maybe_stop_on_nodes(),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    [stop_all(X ++ "/dev") || X <- devpaths()].
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()).
 
 whats_up() ->
     io:format("Here's what's running...~n"),
