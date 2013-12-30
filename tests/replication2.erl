@@ -11,14 +11,21 @@
              wait_until_no_pending_changes/1]).
 
 confirm() ->
-    NumNodes = rt:config(num_nodes, 6),
-    ClusterASize = rt:config(cluster_a_size, 3),
+
+    %% test requires allow_mult=false
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]), 
+
+    NumNodes = rt_config:get(num_nodes, 6),
+    ClusterASize = rt_config:get(cluster_a_size, 3),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
             {riak_kv,
                 [
-                    {anti_entropy, {off, []}}
+                 %% Specify fast building of AAE trees
+                 {anti_entropy, {on, []}},
+                 {anti_entropy_build_limit, {100, 1000}},
+                 {anti_entropy_concurrency, 100}
                 ]
             },
             {riak_repl,
@@ -30,6 +37,7 @@ confirm() ->
     ],
 
     Nodes = deploy_nodes(NumNodes, Conf),
+ 
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
@@ -131,6 +139,16 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             log_to_nodes(AllNodes, "Test fullsync with leader ~p", [LeaderA]),
             repl_util:start_and_wait_until_fullsync_complete(LeaderA),
+
+            case rpc:call(LeaderA, init, script_id, []) of
+                {"riak", Vsn} when Vsn > "1.4" ->
+                    %% check that the number of successful FS source exists matches the number of partitions
+                    NumExits = repl_util:get_fs_coord_status_item(LeaderA, "B", successful_exits),
+                    NumPartitions = repl_util:num_partitions(LeaderA),
+                    ?assertEqual(NumPartitions, NumExits);
+                _ ->
+                    ok
+            end,
 
             lager:info("Check keys written before repl was connected are present"),
             ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, 200, TestBucket, 2));
@@ -528,7 +546,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("got ~p write failures to ~p", [length(WriteErrors), Target]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster node, ~p", [BSecond]),
-    {ok, [{_IP, Port2}|_]} = rpc:call(BSecond, application, get_env, [riak_core, http]),
+    [{_, {IP, Port2}},_] = rt:connection_info(BSecond),
     C2 = rhc:create("127.0.0.1", Port2, "riak", []),
     ReadErrors = http_read(C2, 12000, 22000, TestBucket, 2),
     lager:info("got ~p read failures from ~p", [length(ReadErrors), BSecond]),
@@ -640,3 +658,4 @@ collect_results(Workers, Acc) ->
         {'DOWN', _, _, Pid, _Reason} ->
             collect_results(lists:keydelete(Pid, 1, Workers), Acc)
     end.
+

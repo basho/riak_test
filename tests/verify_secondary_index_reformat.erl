@@ -21,9 +21,10 @@
 -behaviour(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("riakc/include/riakc.hrl").
 
 confirm() ->
-    [Node] = rt:build_cluster([previous]),
+    [Node] = rt:build_cluster([legacy]),
     rt:wait_until_nodes_ready([Node]),
 
     check_fixed_index_statuses(Node, undefined),
@@ -57,13 +58,13 @@ confirm() ->
     {3, 0, 0} = rpc:call(Node, riak_kv_util, fix_incorrect_index_entries, []),
 
     Client1 = rt:pbc(Node),
-    {ok, Results} = riakc_pb_socket:get_index(Client1,
-                                              TestBucket,
-                                              TestIndex,
-                                              1000000000000,
-                                              TestIdxValue),
-    lager:info("found keys: ~p", [Results]),
-    ?assertEqual([TestKey], Results),
+    Results = riakc_pb_socket:get_index(Client1, TestBucket,
+                                        TestIndex, 1000000000000,
+                                        TestIdxValue),
+    ?assertMatch({ok, #index_results_v1{}}, Results),
+    {ok, ?INDEX_RESULTS{keys=ResultKeys}} = Results,
+    lager:info("found keys: ~p", [ResultKeys]),
+    ?assertEqual([TestKey], ResultKeys),
 
     check_fixed_index_statuses(Node, true),
 
@@ -99,7 +100,21 @@ check_fixed_index_statuses(Node, ExpectedStatuses) ->
     BadIndexes = [{Idx, proplists:get_value(fixed_indexes, Status)} ||
                      {Idx, [{backend_status,_,Status}]} <- Statuses,
                      not fixed_index_status_ok(Status, ExpectedStatuses)],
-    ?assertEqual([], BadIndexes).
+    ?assertEqual([], BadIndexes),
+    %% if we are checking for undefined then we are on old version that doesn't
+    %% have riak_kv_status:fixed_index_status/0
+    case lists:member(undefined, ExpectedStatuses) of
+        false ->
+            IncompleteIndexes = [Idx || {Idx, [{backend_status,_,Status}]} <- Statuses,
+                                        fixed_index_status_ok(Status, [false])],
+            RPCStatus = rpc:call(Node, riak_kv_status, fixed_index_status, []),
+            case IncompleteIndexes of
+                [] -> ?assert(RPCStatus);
+                _ -> ?assertNot(RPCStatus)
+            end;
+        true ->
+            ok
+    end.
 
 fixed_index_status_ok(Status, Expected) ->
     Found = proplists:get_value(fixed_indexes, Status),

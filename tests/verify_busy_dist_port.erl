@@ -70,20 +70,33 @@ confirm() ->
         go ->
             lager:info("busy_dist_port event fired on node 1 (~p), checking logs", [Node1])
     after
-        60000 ->
-            lager:error("no busy_dist_port event fired on node 1 in 60s. test is borked",
+        rt_config:get(rt_max_wait_time) ->
+            lager:error("no busy_dist_port event fired on node 1. test is borked",
                         [])
     end,
 
-    Logs = rpc:call(Node1, riak_test_lager_backend, get_logs, []),
-    Success = case re:run(Logs, "monitor busy_dist_port .*#Port", []) of
-                  {match, _} ->
-                      lager:info("found busy_dist_port message in log", []),
-                      true;
-                  nomatch -> 
-                      lager:error("busy_dist_port message not found in log", []),
-                      false
-              end,                                    
+    lager:info("Verifying busy_dist_port message ended up in the log"),
+    CheckLogFun = fun(Node) ->
+            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+            try case re:run(Logs, "monitor busy_dist_port .*#Port", []) of
+                    {match, _} -> true;
+                    nomatch    -> false
+                end
+            catch
+                Err:Reason ->
+                    lager:error("busy_dist_port re:run failed w/ ~p: ~p", [Err, Reason]),
+                    false
+            end
+    end,
+
+    Success = case rt:wait_until(Node1, CheckLogFun) of
+        ok ->
+            lager:info("found busy_dist_port message in log", []),
+            true;
+        _ ->
+            lager:error("busy_dist_port message not found in log", []),
+            false
+    end,
 
     lager:info("continuing node 2 (~p) pid ~s", [Node2, OsPid]),
     %% NOTE: this call must be executed on the OS running Node2 in order to unpause it

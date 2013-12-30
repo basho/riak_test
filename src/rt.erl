@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -24,6 +24,7 @@
 %% Please extend this module with new functions that prove useful between
 %% multiple independent tests.
 -module(rt).
+-include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
@@ -31,49 +32,45 @@
 -export([
          admin/2,
          assert_nodes_agree_about_ownership/1,
-         assert_which/1,
          async_start/1,
          attach/2,
+         attach_direct/2,
+         brutal_kill/1,
          build_cluster/1,
          build_cluster/2,
          build_cluster/3,
          capability/2,
+         capability/3,
          check_singleton_node/1,
+         check_ibrowse/0,
          claimant_according_to/1,
          clean_cluster/1,
          clean_data_dir/1,
          clean_data_dir/2,
          cmd/1,
          cmd/2,
-         config/1,
-         config/2,
-         config_or_os_env/1,
-         config_or_os_env/2,
          connection_info/1,
          console/2,
+         create_and_activate_bucket_type/3,
          deploy_nodes/1,
          deploy_nodes/2,
          down/2,
-         download/1,
          enable_search_hook/2,
+         expect_in_log/2,
          get_deps/0,
          get_node_logs/0,
-         get_os_env/1,
-         get_os_env/2,
          get_ring/1,
          get_version/0,
          heal/1,
-         home_dir/0,
          http_url/1,
+         https_url/1,
          httpc/1,
          httpc_read/3,
          httpc_write/4,
-         install_on_absence/2,
          is_mixed_cluster/1,
          is_pingable/1,
          join/2,
          leave/1,
-         load_config/1,
          load_modules_on_nodes/2,
          log_to_nodes/2,
          log_to_nodes/3,
@@ -87,13 +84,18 @@
          pbc_write/4,
          pbc_put_dir/3,
          pbc_put_file/4,
+         pbc_really_deleted/3,
          pmap/2,
+         post_result/2,
+         priv_dir/0,
          remove/2,
          riak/2,
          rpc_get_env/2,
          set_backend/1,
-         set_config/2,
+         set_backend/2,
+         set_conf/2,
          setup_harness/2,
+         setup_log_capture/1,
          slow_upgrade/3,
          spawn_cmd/1,
          spawn_cmd/2,
@@ -104,26 +106,32 @@
          stop/1,
          stop_and_wait/1,
          str/2,
-         stream_cmd/1,
-         stream_cmd/2,
          systest_read/2,
          systest_read/3,
          systest_read/5,
+         systest_read/6,
          systest_write/2,
          systest_write/3,
          systest_write/5,
+         systest_write/6,
          teardown/0,
          update_app_config/2,
          upgrade/2,
-         url_to_filename/1,
+         upgrade/3,
          versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
+         wait_for_control/1,
+         wait_for_control/2,
+         wait_until/3,
          wait_until/2,
+         wait_until/1,
+         wait_until_aae_trees_built/1,
          wait_until_all_members/1,
          wait_until_all_members/2,
          wait_until_capability/3,
+         wait_until_capability/4,
          wait_until_connected/1,
          wait_until_legacy_ringready/1,
          wait_until_owners_according_to/2,
@@ -132,21 +140,38 @@
          wait_until_nodes_ready/1,
          wait_until_pingable/1,
          wait_until_ready/1,
+         wait_until_registered/2,
          wait_until_ring_converged/1,
          wait_until_status_ready/1,
          wait_until_transfers_complete/1,
          wait_until_unpingable/1,
-         whats_up/0,
-         which/1,
-         brutal_kill/1
+         wait_until_bucket_type_status/3,
+         whats_up/0
         ]).
 
--define(HARNESS, (rt:config(rt_harness))).
+-define(HARNESS, (rt_config:get(rt_harness))).
 
-%% @doc Return the home directory of the riak_test script.
--spec home_dir() -> file:filename().
-home_dir() ->
-    filename:dirname(filename:absname(escript:script_name())).
+priv_dir() ->
+    LocalPrivDir = "./priv",
+    %% XXX for some reason, codew:priv_dir returns riak_test/riak_test/priv,
+    %% which is wrong, so fix it.
+    DepPrivDir = re:replace(code:priv_dir(riak_test), "riak_test(/riak_test)*",
+        "riak_test", [{return, list}]),
+    PrivDir = case {filelib:is_dir(LocalPrivDir), filelib:is_dir(DepPrivDir)} of
+        {true, _} ->
+            lager:debug("Local ./priv detected, using that..."),
+            %% we want an absolute path!
+            filename:absname(LocalPrivDir);
+        {false, true} ->
+            lager:debug("riak_test dependency priv_dir detected, using that..."),
+            DepPrivDir;
+        _ ->
+            ?assertEqual({true, bad_priv_dir}, {false, bad_priv_dir})
+    end,
+
+    lager:info("priv dir: ~p -> ~p", [code:priv_dir(riak_test), PrivDir]),
+    ?assert(filelib:is_dir(PrivDir)),
+    PrivDir.
 
 %% @doc gets riak deps from the appropriate harness
 -spec get_deps() -> list().
@@ -160,65 +185,14 @@ str(String, Substr) ->
         _ -> true
     end.
 
-%% @doc Get the value of an OS Environment variable. The arity 1 version of
-%%      this function will fail the test if it is undefined.
-get_os_env(Var) ->
-    case get_os_env(Var, undefined) of
-        undefined ->
-            lager:error("ENV['~s'] is not defined", [Var]),
-            ?assert(false);
-        Value -> Value
-    end.
-
-%% @doc Get the value of an OS Evironment variable. The arity 2 version of
-%%      this function will return the Default if the OS var is undefined.
-get_os_env(Var, Default) ->
-    case os:getenv(Var) of
-        false -> Default;
-        Value -> Value
-    end.
-
-%% @doc Wrap 'which' to give a good output if something is not installed
-which(Command) ->
-    lager:info("Checking for presence of ~s", [Command]),
-    Cmd = lists:flatten(io_lib:format("which ~s; echo $?", [Command])),
-    case rt:str(os:cmd(Cmd), "0") of
-        false ->
-            lager:warning("`~s` is not installed", [Command]),
-            false;
-        true ->
-            true
-    end.
-
-download(Url) ->
-    lager:info("Downloading ~s", [Url]),
-    Filename = url_to_filename(Url),
-    case filelib:is_file(filename:join(rt:config(rt_scratch_dir), Filename))  of
-        true ->
-            lager:info("Got it ~p", [Filename]),
-            ok;
-        _ ->
-            lager:info("Getting it ~p", [Filename]),
-            rt:stream_cmd("curl  -O -L " ++ Url, [{cd, rt:config(rt_scratch_dir)}])
-    end.
-
-url_to_filename(Url) ->
-    lists:last(string:tokens(Url, "/")).
-%% @doc like rt:which, but asserts on failure
-assert_which(Command) ->
-    ?assert(rt:which(Command)).
-
-%% @doc checks if Command is installed and runs InstallCommand if not
-%% ex:  rt:install_on_absence("bundler", "gem install bundler --no-rdoc --no-ri"),
-install_on_absence(Command, InstallCommand) ->
-    case rt:which(Command) of
-        false ->
-            lager:info("Attempting to install `~s` with command `~s`", [Command, InstallCommand]),
-            ?assertCmd(InstallCommand);
-        _True ->
-            ok
-    end.
-
+-spec set_conf(atom(), [{string(), string()}]) -> ok.
+set_conf(all, NameValuePairs) ->
+    ?HARNESS:set_conf(all, NameValuePairs);
+set_conf(Node, NameValuePairs) ->
+    stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:set_conf(Node, NameValuePairs),
+    start(Node).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in `Config'.
@@ -247,14 +221,18 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 -type interfaces() :: [interface()].
 -type conn_info() :: [{node(), interfaces()}].
 
--spec connection_info([node()]) -> conn_info().
-connection_info(Nodes) ->
-    [begin
-         {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
-         {ok, [{HTTP_IP, HTTP_Port}]} =
-             rpc:call(Node, application, get_env, [riak_core, http]),
-         {Node, [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}]}
-     end || Node <- Nodes].
+-spec connection_info(node() | [node()]) -> interfaces() | conn_info().
+connection_info(Node) when is_atom(Node) ->
+    {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
+    {ok, [{HTTP_IP, HTTP_Port}]} = get_http_conn_info(Node),
+    case get_https_conn_info(Node) of
+        undefined ->
+            [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}];
+        {ok, [{HTTPS_IP, HTTPS_Port}]} ->
+            [{http, {HTTP_IP, HTTP_Port}}, {https, {HTTPS_IP, HTTPS_Port}}, {pb, {PB_IP, PB_Port}}]
+    end;
+connection_info(Nodes) when is_list(Nodes) ->
+    [ {Node, connection_info(Node)} || Node <- Nodes].
 
 -spec get_pb_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
 get_pb_conn_info(Node) ->
@@ -267,6 +245,26 @@ get_pb_conn_info(Node) ->
             {ok, PB_Port} = rpc_get_env(Node, [{riak_api, pb_port},
                                                {riak_kv, pb_port}]),
             {ok, [{PB_IP, PB_Port}]};
+        _ ->
+            undefined
+    end.
+
+-spec get_http_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
+get_http_conn_info(Node) ->
+    case rpc_get_env(Node, [{riak_api, http},
+                            {riak_core, http}]) of
+        {ok, [{IP, Port}|_]} ->
+            {ok, [{IP, Port}]};
+        _ ->
+            undefined
+    end.
+
+-spec get_https_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
+get_https_conn_info(Node) ->
+    case rpc_get_env(Node, [{riak_api, https},
+                            {riak_core, https}]) of
+        {ok, [{IP, Port}|_]} ->
+            {ok, [{IP, Port}]};
         _ ->
             undefined
     end.
@@ -320,9 +318,14 @@ stop_and_wait(Node) ->
     stop(Node),
     ?assertEqual(ok, wait_until_unpingable(Node)).
 
-%% @doc Upgrade a Riak `Node' to a specific version
+%% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
 upgrade(Node, NewVersion) ->
     ?HARNESS:upgrade(Node, NewVersion).
+
+%% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
+%% the config based on entries in `Config'.
+upgrade(Node, NewVersion, Config) ->
+    ?HARNESS:upgrade(Node, NewVersion, Config).
 
 %% @doc Upgrade a Riak node to a specific version using the alternate
 %%      leave/upgrade/rejoin approach
@@ -357,38 +360,50 @@ stage_commit(Node) ->
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
-    R = try_join(Node, PNode),
+    R = rpc:call(Node, riak_core, join, [PNode]),
     lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
     ?assertEqual(ok, R),
     ok.
 
-%% @doc try_join tries different rpc:calls to join a node, because the module changed
-%%      in riak 1.2.0
-try_join(Node, PNode) ->
-    case rpc:call(Node, riak_core, join, [PNode]) of
-        {badrpc, _} ->
-            rpc:call(Node, riak, join, [PNode]);
-        Result ->
-            Result
+%% @doc Have `Node' send a join request to `PNode'
+staged_join(Node, PNode) ->
+    R = rpc:call(Node, riak_core, staged_join, [PNode]),
+    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
+    ?assertEqual(ok, R),
+    ok.
+
+plan_and_commit(Node) ->
+    timer:sleep(500),
+    lager:info("planning and commiting cluster join"),
+    case rpc:call(Node, riak_core_claimant, plan, []) of
+        {error, ring_not_ready} ->
+            lager:info("plan: ring not ready"),
+            timer:sleep(100),
+            plan_and_commit(Node);
+        {ok, _, _} ->
+            do_commit(Node)
+    end.
+
+do_commit(Node) ->
+    case rpc:call(Node, riak_core_claimant, commit, []) of
+        {error, plan_changed} ->
+            lager:info("commit: plan changed"),
+            timer:sleep(100),
+            plan_and_commit(Node);
+        {error, ring_not_ready} ->
+            lager:info("commit: ring not ready"),
+            timer:sleep(100),
+            do_commit(Node);
+        ok ->
+            ok
     end.
 
 %% @doc Have the `Node' leave the cluster
 leave(Node) ->
-    R = try_leave(Node),
+    R = rpc:call(Node, riak_core, leave, []),
     lager:info("[leave] ~p: ~p", [Node, R]),
     ?assertEqual(ok, R),
     ok.
-
-%% @doc try_leave tries different rpc:calls to leave a `Node', because the module changed
-%%      in riak 1.2.0
-try_leave(Node) ->
-    case rpc:call(Node, riak_core, leave, []) of
-        {badrpc, _} ->
-            rpc:call(Node, riak_kv_console, leave, [[]]),
-            ok;
-        Result ->
-            Result
-    end.
 
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
@@ -407,6 +422,7 @@ partition(P1, P2) ->
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
     [true = rpc:call(N, erlang, set_cookie, [N, NewCookie]) || N <- P1],
     [[true = rpc:call(N, erlang, disconnect_node, [P2N]) || N <- P1] || P2N <- P2],
+    wait_until_partitioned(P1, P2),
     {NewCookie, OldCookie, P1, P2}.
 
 %% @doc heal the partition created by call to `partition/2'
@@ -510,7 +526,7 @@ is_pingable(Node) ->
 
 is_mixed_cluster(Nodes) when is_list(Nodes) ->
     %% If the nodes are bad, we don't care what version they are
-    {Versions, _BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt:config(rt_max_wait_time)),
+    {Versions, _BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt_config:get(rt_max_wait_time)),
     length(lists:usort(Versions)) > 1;
 is_mixed_cluster(Node) ->
     Nodes = rpc:call(Node, erlang, nodes, []),
@@ -520,9 +536,12 @@ is_mixed_cluster(Node) ->
 is_ready(Node) ->
     case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
         {ok, Ring} ->
-            lists:member(Node, riak_core_ring:ready_members(Ring));
-        _ ->
-            false
+            case lists:member(Node, riak_core_ring:ready_members(Ring)) of
+                true -> true;
+                false -> {not_ready, Node}
+            end;
+        Other ->
+            Other
     end.
 
 %% @private
@@ -539,26 +558,30 @@ is_ring_ready(Node) ->
 %%      number of retries is reached. The retry limit is based on the
 %%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
-wait_until(Node, Fun) ->
-    wait_until(Node, Fun, fun(_N) -> fail end).
-
-wait_until(Node, Fun, TimeoutFun) ->
-    MaxTime = rt:config(rt_max_wait_time),
-    Delay = rt:config(rt_retry_delay),
+wait_until(Fun) when is_function(Fun) ->
+    MaxTime = rt_config:get(rt_max_wait_time),
+    Delay = rt_config:get(rt_retry_delay),
     Retry = MaxTime div Delay,
-    wait_until(Node, Fun, Retry, Delay, TimeoutFun).
+    wait_until(Fun, Retry, Delay).
 
-%% @deprecated Use {@link wait_until/2} instead.
-wait_until(Node, Fun, Retry, Delay, TimeoutFun) ->
-    Pass = Fun(Node),
-    case {Retry, Pass} of
-        {_, true} ->
+%% @doc Convenience wrapper for wait_until for the myriad functions that
+%% take a node as single argument.
+wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
+    wait_until(fun() -> Fun(Node) end).
+
+%% @doc Retry `Fun' until it returns `Retry' times, waiting `Delay'
+%% milliseconds between retries. This is our eventual consistency bread
+%% and butter
+wait_until(Fun, Retry, Delay) when Retry > 0 ->
+    Res = Fun(),
+    case Res of
+        true ->
             ok;
-        {0, _} ->
-            TimeoutFun(Node);
+        _ when Retry == 1 ->
+            {fail, Res};
         _ ->
             timer:sleep(Delay),
-            wait_until(Node, Fun, Retry-1, Delay, TimeoutFun)
+            wait_until(Fun, Retry-1, Delay)
     end.
 
 %% @doc Wait until the specified node is considered ready by `riak_core'.
@@ -578,23 +601,23 @@ wait_until_status_ready(Node) ->
                                         case rpc:call(Node, riak_kv_console, status, [[]]) of
                                             ok ->
                                                 true;
-                                            _ ->
-                                                false
+                                            Res ->
+                                                Res
                                         end
                                 end)).
 
 %% @doc Given a list of nodes, wait until all nodes believe there are no
 %% on-going or pending ownership transfers.
 -spec wait_until_no_pending_changes([node()]) -> ok | fail.
-wait_until_no_pending_changes(Nodes0) ->
-    lager:info("Wait until no pending changes on ~p", [Nodes0]),
-    F = fun(Nodes) ->
+wait_until_no_pending_changes(Nodes) ->
+    lager:info("Wait until no pending changes on ~p", [Nodes]),
+    F = fun() ->
                 rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
                 {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
                 Changes = [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
                 BadNodes =:= [] andalso length(Changes) =:= length(Nodes) andalso lists:all(fun(T) -> T end, Changes)
         end,
-    ?assertEqual(ok, wait_until(Nodes0, F)),
+    ?assertEqual(ok, wait_until(F)),
     ok.
 
 %% @doc Waits until no transfers are in-flight or pending, checked by
@@ -612,12 +635,12 @@ wait_until_transfers_complete([Node0|_]) ->
 wait_for_service(Node, Services) when is_list(Services) ->
     F = fun(N) ->
                 case rpc:call(N, riak_core_node_watcher, services, [N]) of
-                    {badrpc, _Error} ->
-                        false;
+                    {badrpc, Error} ->
+                        {badrpc, Error};
                     CurrServices when is_list(CurrServices) ->
                         lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
-                    _ ->
-                        false
+                    Res ->
+                        Res
                 end
         end,
     ?assertEqual(ok, wait_until(Node, F)),
@@ -672,8 +695,8 @@ wait_until_legacy_ringready(Node) ->
                           case rpc:call(Node, riak_kv_status, ringready, []) of
                               {ok, _Nodes} ->
                                   true;
-                              _ ->
-                                  false
+                              Res ->
+                                  Res
                           end
                   end).
 
@@ -700,40 +723,86 @@ wait_until_pingable(Node) ->
 wait_until_unpingable(Node) ->
     lager:info("Wait until ~p is not pingable", [Node]),
     _OSPidToKill = rpc:call(Node, os, getpid, []),
-    F = fun(N) ->
-                net_adm:ping(N) =:= pang
+    F = fun() -> net_adm:ping(Node) =:= pang end,
+    %% riak stop will kill -9 after 5 mins, so we try to wait at least that
+    %% amount of time.
+    Delay = rt_config:get(rt_retry_delay),
+    Retry = lists:max([360000, rt_config:get(rt_max_wait_time)]) div Delay,
+    case wait_until(F, Retry, Delay) of
+        ok -> ok;
+        _ ->
+            lager:error("Timed out waiting for node ~p to shutdown", [Node]),
+            ?assert(node_shutdown_timed_out)
+    end.
+
+
+% Waits until a certain registered name pops up on the remote node.
+wait_until_registered(Node, Name) ->
+    lager:info("Wait until ~p is up on ~p", [Name, Node]),
+
+    F = fun() ->
+                Registered = rpc:call(Node, erlang, registered, []),
+                lists:member(Name, Registered)
         end,
-    TimeoutFun = fun(N) ->
-                         lager:info("We tried it the easy way, but ~s wouldn't listen, so now it's 'kill -9' time", [N]),
-                         lager:info("Not actually killing anything... long live `riak stop`"),
-                         %%rpc:cast(N, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
-                         fail
-        end,
-    %% Hard coding a 6 minute timeout on this wait only. This function is called to see that
-    %% riak has stopped. Riak stop should only take about 5 minutes before its timeouts kill
-    %% the process. This wait should at least wait that long.
-    Delay = rt:config(rt_retry_delay),
-    Retry = 360000 div Delay,
-    ?assertEqual(ok, wait_until(Node, F, Retry, Delay, TimeoutFun)),
-    ok.
+    case wait_until(F) of
+        ok ->
+            ok;
+        _ ->
+            lager:info("The server with the name ~p on ~p is not coming up.",
+                       [Name, Node]),
+            ?assert(registered_name_timed_out)
+    end.
+
+
+%% Waits until the cluster actually detects that it is partitioned.
+wait_until_partitioned(P1, P2) ->
+    lager:info("Waiting until partition acknowledged: ~p ~p", [P1, P2]),
+    [ begin
+          lager:info("Waiting for ~p to be partitioned from ~p", [Node, P2]),
+          wait_until(fun() -> is_partitioned(Node, P2) end)
+      end || Node <- P1 ],
+    [ begin
+          lager:info("Waiting for ~p to be partitioned from ~p", [Node, P1]),
+          wait_until(fun() -> is_partitioned(Node, P1) end)
+      end || Node <- P2 ].
+
+is_partitioned(Node, Peers) ->
+    AvailableNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
+    lists:all(fun(Peer) -> not lists:member(Peer, AvailableNodes) end, Peers).
 
 % when you just can't wait
 brutal_kill(Node) ->
-   lager:info("Killing node ~p", [Node]),
-   OSPidToKill = rpc:call(Node, os, getpid, []),
-   rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
-   ok.
+    rt_cover:maybe_stop_on_node(Node),
+    lager:info("Killing node ~p", [Node]),
+    OSPidToKill = rpc:call(Node, os, getpid, []),
+    rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+    ok.
 
 capability(Node, all) ->
     rpc:call(Node, riak_core_capability, all, []);
 capability(Node, Capability) ->
     rpc:call(Node, riak_core_capability, get, [Capability]).
 
+capability(Node, Capability, Default) ->
+    rpc:call(Node, riak_core_capability, get, [Capability, Default]).
+
 wait_until_capability(Node, Capability, Value) ->
     rt:wait_until(Node,
                   fun(_) ->
-                          Value == capability(Node, Capability)
+                          cap_equal(Value, capability(Node, Capability))
                   end).
+
+wait_until_capability(Node, Capability, Value, Default) ->
+    rt:wait_until(Node,
+                  fun(_) ->
+                          Cap = capability(Node, Capability, Default),
+                          cap_equal(Value, Cap)
+                  end).
+
+cap_equal(Val, Cap) when is_list(Cap) ->
+    lists:sort(Cap) == lists:sort(Val);
+cap_equal(Val, Cap) ->
+    Val == Cap.
 
 wait_until_owners_according_to(Node, Nodes) ->
     SortedNodes = lists:usort(Nodes),
@@ -747,6 +816,28 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
     lager:info("Wait until nodes agree about ownership ~p", [Nodes]),
     Results = [ wait_until_owners_according_to(Node, Nodes) || Node <- Nodes ],
     ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
+
+%% AAE support
+wait_until_aae_trees_built([AnyNode|_]=Nodes) ->
+    lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
+    %% Wait until all nodes report no undefined trees
+    rt:wait_until(AnyNode,
+                  fun(_) ->
+                          Busy = lists:foldl(
+                                   fun(Node,Busy1) ->
+                                           %% will be false when all trees are built on Node
+                                           lists:keymember(undefined,
+                                                           2,
+                                                           rpc:call(Node,
+                                                                    riak_kv_entropy_info,
+                                                                    compute_tree_info,
+                                                                    []))
+                                               or Busy1
+                                   end,
+                                   false,
+                                   Nodes),
+                          not Busy
+                  end).
 
 %%%===================================================================
 %%% Ring Functions
@@ -844,11 +935,25 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
+<<<<<<< HEAD
     %% [join(Node, Node1) || Node <- OtherNodes],
     [stage_join(Node, Node1) || Node <- OtherNodes],
     ?assertEqual(ok, wait_until_all_members(Nodes)),
     stage_plan(Node1),
     stage_commit(Node1),
+=======
+    case OtherNodes of
+        [] ->
+            %% no other nodes, nothing to join/plan/commit
+            ok;
+        _ ->
+            %% ok do a staged join and then commit it, this eliminates the
+            %% large amount of redundant handoff done in a sequential join
+            [staged_join(Node, Node1) || Node <- OtherNodes],
+            plan_and_commit(Node1),
+            try_nodes_ready(Nodes, 3, 500)
+    end,
+>>>>>>> origin/master
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
 
@@ -859,6 +964,19 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     lager:info("Cluster built: ~p", [Nodes]),
     Nodes.
+
+try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
+    lager:info("Nodes not ready after initial plan/commit, retrying"),
+    plan_and_commit(Node1);
+try_nodes_ready(Nodes, N, SleepMs) ->
+    ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
+    case ReadyNodes of
+        Nodes ->
+            ok;
+        _ ->
+            timer:sleep(SleepMs),
+            try_nodes_ready(Nodes, N-1, SleepMs)
+    end.
 
 %% @doc Stop nodes and wipe out their data directories
 clean_cluster(Nodes) when is_list(Nodes) ->
@@ -894,6 +1012,9 @@ systest_write(Node, Size) ->
 systest_write(Node, Size, W) ->
     systest_write(Node, 1, Size, <<"systest">>, W).
 
+systest_write(Node, Start, End, Bucket, W) ->
+    systest_write(Node, Start, End, Bucket, W, <<>>).
+
 %% @doc Write (End-Start)+1 objects to Node. Objects keys will be
 %% `Start', `Start+1' ... `End', each encoded as a 32-bit binary
 %% (`<<Key:32/integer>>'). Object values are the same as their keys.
@@ -902,11 +1023,13 @@ systest_write(Node, Size, W) ->
 %% encountered. If all writes were successful, return value is an
 %% empty list. Each error has the form `{N :: integer(), Error :: term()}',
 %% where N is the unencoded key of the object that failed to store.
-systest_write(Node, Start, End, Bucket, W) ->
+systest_write(Node, Start, End, Bucket, W, CommonValBin)
+  when is_binary(CommonValBin) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
-                Obj = riak_object:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
+                Obj = riak_object:new(Bucket, <<N:32/integer>>,
+                                      <<N:32/integer, CommonValBin/binary>>),
                 try C:put(Obj, W) of
                     ok ->
                         Acc;
@@ -926,13 +1049,17 @@ systest_read(Node, Size, R) ->
     systest_read(Node, 1, Size, <<"systest">>, R).
 
 systest_read(Node, Start, End, Bucket, R) ->
+    systest_read(Node, Start, End, Bucket, R, <<>>).
+
+systest_read(Node, Start, End, Bucket, R, CommonValBin)
+  when is_binary(CommonValBin) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
                 case C:get(Bucket, <<N:32/integer>>, R) of
                     {ok, Obj} ->
                         case riak_object:get_value(Obj) of
-                            <<N:32/integer>> ->
+                            <<N:32/integer, CommonValBin/binary>> ->
                                 Acc;
                             WrongVal ->
                                 [{N, {wrong_val, WrongVal}} | Acc]
@@ -987,6 +1114,37 @@ pbc_put_dir(Pid, Bucket, Dir) ->
     [pbc_put_file(Pid, Bucket, list_to_binary(F), filename:join([Dir, F]))
      || F <- Files].
 
+%% @doc True if the given keys have been really, really deleted.
+%% Useful when you care about the keys not being there. Delete simply writes
+%% tombstones under the given keys, so those are still seen by key folding
+%% operations.
+pbc_really_deleted(Pid, Bucket, Keys) ->
+    StillThere =
+    fun(K) ->
+            Res = riakc_pb_socket:get(Pid, Bucket, K,
+                                      [{r, 1},
+                                      {notfound_ok, false},
+                                      {basic_quorum, false},
+                                      deletedvclock]),
+            case Res of
+                {error, notfound} ->
+                    false;
+                _ ->
+                    %% Tombstone still around
+                    true
+            end
+    end,
+    [] == lists:filter(StillThere, Keys).
+
+%% @doc Returns HTTPS URL information for a list of Nodes
+https_url(Nodes) when is_list(Nodes) ->
+    [begin
+         {Host, Port} = orddict:fetch(https, Connections),
+         lists:flatten(io_lib:format("https://~s:~b", [Host, Port]))
+     end || {_Node, Connections} <- connection_info(Nodes)];
+https_url(Node) ->
+    hd(https_url([Node])).
+
 %% @doc Returns HTTP URL information for a list of Nodes
 http_url(Nodes) when is_list(Nodes) ->
     [begin
@@ -1000,7 +1158,7 @@ http_url(Node) ->
 -spec httpc(node()) -> term().
 httpc(Node) ->
     rt:wait_for_service(Node, riak_kv),
-    {ok, [{IP, Port}|_]} = rpc:call(Node, application, get_env, [riak_core, http]),
+    {ok, [{IP, Port}]} = get_http_conn_info(Node),
     rhc:create(IP, Port, "riak", []).
 
 %% @doc does a read via the http erlang client.
@@ -1047,6 +1205,11 @@ search_cmd(Node, Args) ->
 attach(Node, Expected) ->
     ?HARNESS:attach(Node, Expected).
 
+%% @doc Runs 'riak attach-direct' on a specific node
+%% @see rt:attach/2
+attach_direct(Node, Expected) ->
+    ?HARNESS:attach_direct(Node, Expected).
+
 %% @doc Runs `riak console' on a specific node
 %% @see rt:attach/2
 console(Node, Expected) ->
@@ -1075,18 +1238,40 @@ enable_search_hook(Node, Bucket) when is_binary(Bucket) ->
 %%      Currently, there is no way to request multiple backends, so the
 %%      list return type should be considered an error.
 -spec set_backend(atom()) -> atom()|[atom()].
-set_backend(bitcask) ->
+set_backend(Backend) ->
+    set_backend(Backend, []).
+
+-spec set_backend(atom(), [{atom(), term()}]) -> atom()|[atom()].
+set_backend(bitcask, _) ->
     set_backend(riak_kv_bitcask_backend);
-set_backend(eleveldb) ->
+set_backend(eleveldb, _) ->
     set_backend(riak_kv_eleveldb_backend);
-set_backend(memory) ->
+set_backend(memory, _) ->
     set_backend(riak_kv_memory_backend);
-set_backend(Backend) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
+set_backend(Backend, _) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
     lager:info("rt:set_backend(~p)", [Backend]),
     ?HARNESS:set_backend(Backend);
-set_backend(Other) ->
+set_backend(Backend, Extras) when Backend == multi; Backend == riak_kv_multi_backend ->
+    MultiConfig = proplists:get_value(multi_config, Extras, default),
+    set_multi_backend(MultiConfig);
+set_backend(Other, _) ->
     lager:warning("rt:set_backend doesn't recognize ~p as a legit backend, using the default.", [Other]),
     ?HARNESS:get_backends().
+
+set_multi_backend(default) ->
+    Config = [{multi_backend_default, <<"eleveldb1">>},
+              {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                               {<<"memory1">>, riak_kv_memory_backend, []},
+                               {<<"bitcask1">>, riak_kv_bitcask_backend, []}]}],
+    ?HARNESS:set_backend(riak_kv_multi_backend, Config);
+set_multi_backend(indexmix) ->
+    Config = [{multi_backend_default, <<"eleveldb1">>},
+              {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                               {<<"memory1">>, riak_kv_memory_backend, []}]}],
+    ?HARNESS:set_backend(riak_kv_multi_backend, Config);
+set_multi_backend(Other) ->
+    lager:warning("rt:set_multi_backend doesn't recognize ~p as legit multi-backend config, using default", [Other]),
+    set_multi_backend(default).
 
 %% @doc Gets the current version under test. In the case of an upgrade test
 %%      or something like that, it's the version you're upgrading to.
@@ -1122,7 +1307,7 @@ pmap(F, L) ->
     Parent = self(),
     lists:foldl(
       fun(X, N) ->
-              spawn(fun() ->
+              spawn_link(fun() ->
                             Parent ! {pmap, N, F(X)}
                     end),
               N+1
@@ -1135,111 +1320,163 @@ pmap(F, L) ->
 setup_harness(Test, Args) ->
     ?HARNESS:setup_harness(Test, Args).
 
-%% @private
-load_config(undefined) ->
-    load_dot_config("default");
-load_config(ConfigName) ->
-    case load_config_file(ConfigName) of
-        ok -> ok;
-        {error, enoent} -> load_dot_config(ConfigName)
-    end.
-
-%% @private
-load_dot_config(ConfigName) ->
-    case file:consult(filename:join([os:getenv("HOME"), ".riak_test.config"])) of
-        {ok, Terms} ->
-            %% First, set up the defaults
-            case proplists:get_value(default, Terms) of
-                undefined -> meh; %% No defaults set, move on.
-                Default -> [set_config(Key, Value) || {Key, Value} <- Default]
-            end,
-            %% Now, overlay the specific project
-            Config = proplists:get_value(list_to_atom(ConfigName), Terms),
-            [set_config(Key, Value) || {Key, Value} <- Config],
-            ok;
-        {error, Reason} ->
-            erlang:error("Failed to parse config file", ["~/.riak_test.config", Reason])
- end.
-
-%% @private
-load_config_file(File) ->
-    case file:read_file_info(File) of
-        {ok, _} ->
-            io:format("*********************************************************************************~n"),
-            io:format("WARNING! Use of config files is now deprecated, use ~~/.riak_test.config instead.~n"),
-            io:format("*********************************************************************************~n"),
-            io:format("Please acknowledge that you're aware that this functionality will be gone soon.~n"),
-            Input = io:get_chars("[y/N] ", 1),
-            case Input of
-                "y" -> ok;
-                "Y" -> ok;
-                _ -> exit(1)
-            end;
-        _ -> meh
-    end,
-    case file:consult(File) of
-        {ok, Terms} ->
-            [set_config(Key, Value) || {Key, Value} <- Terms],
-            ok;
-        {error, enoent} ->
-            {error, enoent};
-        {error, Reason} ->
-            erlang:error("Failed to parse config file", [File, Reason])
-    end.
-
-%% @private
-set_config(Key, Value) ->
-    ok = application:set_env(riak_test, Key, Value).
-
-%% @private
-config(Key) ->
-    case kvc:path(Key, application:get_all_env(riak_test)) of
-        [] -> erlang:error("Missing configuration key", [Key]);
-        Value -> Value
-    end.
-
-%% @private
-config(Key, Default) ->
-    case kvc:path(Key, application:get_all_env(riak_test)) of
-        [] -> Default;
-        Value -> Value
-    end.
-
--spec config_or_os_env(atom()) -> term().
-config_or_os_env(Config) ->
-    OSEnvVar = to_upper(atom_to_list(Config)),
-    case {get_os_env(OSEnvVar, undefined), config(Config, undefined)} of
-        {undefined, undefined} ->
-            MSG = io_lib:format("Neither riak_test.~p nor ENV['~p'] are defined", [Config, OSEnvVar]),
-            erlang:error(binary_to_list(iolist_to_binary(MSG)));
-        {undefined, V} ->
-            lager:info("Found riak_test.~s: ~s", [Config, V]),
-            V;
-        {V, _} ->
-            lager:info("Found ENV[~s]: ~s", [OSEnvVar, V]),
-            rt:set_config(Config, V),
-            V
-    end.
-
--spec config_or_os_env(atom(), term()) -> term().
-config_or_os_env(Config, Default) ->
-    OSEnvVar = to_upper(atom_to_list(Config)),
-    case {get_os_env(OSEnvVar, undefined), config(Config, undefined)} of
-        {undefined, undefined} -> Default;
-        {undefined, V} ->
-            lager:info("Found riak_test.~s: ~s", [Config, V]),
-            V;
-        {V, _} ->
-            lager:info("Found ENV[~s]: ~s", [OSEnvVar, V]),
-            rt:set_config(Config, V),
-            V
-    end.
-
-to_upper(S) -> lists:map(fun char_to_upper/1, S).
-char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
-char_to_upper(C) -> C.
-
 %% @doc Downloads any extant log files from the harness's running
 %%   nodes.
 get_node_logs() ->
     ?HARNESS:get_node_logs().
+
+check_ibrowse() ->
+    try sys:get_status(ibrowse) of
+        {status, _Pid, {module, gen_server} ,_} -> ok
+    catch
+        Throws ->
+            lager:error("ibrowse error ~p", [Throws]),
+            lager:error("Restarting ibrowse"),
+            application:stop(ibrowse),
+            application:start(ibrowse)
+    end.
+
+post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
+    lager:info("Posting result to ~s ~s", [Name, URL]),
+    try ibrowse:send_req(URL,
+            [{"Content-Type", "application/json"}],
+            post,
+            mochijson2:encode(TestResult),
+            [{content_type, "application/json"}] ++ HookHeaders,
+            300000) of  %% 5 minute timeout
+
+        {ok, RC=[$2|_], Headers, _Body} ->
+            {ok, RC, Headers};
+        {ok, ResponseCode, Headers, Body} ->
+            lager:info("Test Result did not generate the expected 2XX HTTP response code."),
+            lager:debug("Post"),
+            lager:debug("Response Code: ~p", [ResponseCode]),
+            lager:debug("Headers: ~p", [Headers]),
+            lager:debug("Body: ~p", [Body]),
+            error;
+        X ->
+            lager:warning("Some error POSTing test result: ~p", [X]),
+            error
+    catch
+        Throws ->
+            lager:error("Error reporting to ~s. ~p", [Name, Throws]),
+            lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
+    end.
+
+%%%===================================================================
+%%% Bucket Types Functions
+%%%===================================================================
+
+%% @doc create and immediately activate a bucket type
+create_and_activate_bucket_type(Node, Type, Props) ->
+    ok = rpc:call(Node, riak_core_bucket_type, create, [Type, Props]),
+    wait_until_bucket_type_status(Type, ready, Node),
+    ok = rpc:call(Node, riak_core_bucket_type, activate, [Type]),
+    wait_until_bucket_type_status(Type, active, Node).
+
+wait_until_bucket_type_status(Type, ExpectedStatus, Nodes) when is_list(Nodes) ->
+    [wait_until_bucket_type_status(Type, ExpectedStatus, Node) || Node <- Nodes];
+wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
+    F = fun() ->
+                ActualStatus = rpc:call(Node, riak_core_bucket_type, status, [Type]),
+                ExpectedStatus =:= ActualStatus
+        end,
+    ?assertEqual(ok, rt:wait_until(F)).
+
+%% @doc Set up in memory log capture to check contents in a test.
+setup_log_capture(Nodes) when is_list(Nodes) ->
+    rt:load_modules_on_nodes([riak_test_lager_backend], Nodes),
+    [?assertEqual({Node, ok},
+                  {Node,
+                   rpc:call(Node,
+                            gen_event,
+                            add_handler,
+                            [lager_event,
+                             riak_test_lager_backend,
+                             [info, false]])}) || Node <- Nodes],
+    [?assertEqual({Node, ok},
+                  {Node,
+                   rpc:call(Node,
+                            lager,
+                            set_loglevel,
+                            [riak_test_lager_backend,
+                             info])}) || Node <- Nodes];
+setup_log_capture(Node) when not is_list(Node) ->
+    setup_log_capture([Node]).
+
+
+expect_in_log(Node, Pattern) ->
+    CheckLogFun = fun() ->
+            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+            lager:info("looking for pattern ~s in logs for ~p",
+                       [Pattern, Node]),
+            case re:run(Logs, Pattern, []) of
+                {match, _} ->
+                    lager:info("Found match"),
+                    true;
+                nomatch    ->
+                    lager:info("No match"),
+                    false
+            end
+    end,
+    case rt:wait_until(CheckLogFun) of
+        ok ->
+            true;
+        _ ->
+            false
+    end.
+
+%% @doc Wait for Riak Control to start on a single node.
+%%
+%% Non-optimal check, because we're blocking for the gen_server to start
+%% to ensure that the routes have been added by the supervisor.
+%%
+wait_for_control(Vsn, Node) when is_atom(Node) ->
+    lager:info("Waiting for riak_control to start on node ~p.", [Node]),
+
+    %% Wait for the gen_server.
+    rt:wait_until(Node, fun(N) ->
+                case rpc:call(N,
+                              riak_control_session,
+                              get_version,
+                              []) of
+                    {ok, _} ->
+                        true;
+                    Error ->
+                        lager:info("Error was ~p.", [Error]),
+                        false
+                end
+        end),
+
+    GuiResource = case Vsn of
+        legacy ->
+            admin_gui;
+        _ ->
+            riak_control_wm_gui
+    end,
+
+    %% Wait for routes to be added by supervisor.
+    rt:wait_until(Node, fun(N) ->
+                case rpc:call(N,
+                              webmachine_router,
+                              get_routes,
+                              []) of
+                    {badrpc, Error} ->
+                        lager:info("Error was ~p.", [Error]),
+                        false;
+                    Routes ->
+                        case lists:keyfind(GuiResource, 2,
+                                           Routes) of
+                            false ->
+                                lager:info("Control routes not found yet: ~p ~p.", 
+                                           [Vsn, Routes]),
+                                false;
+                            _ ->
+                                true
+                        end
+                end
+        end).
+
+%% @doc Wait for Riak Control to start on a series of nodes.
+wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
+    [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].

@@ -19,20 +19,24 @@
 %% -------------------------------------------------------------------
 -module(jmx_verify).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, test_supervision/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 -prereq("java").
 
 %% You should have curl installed locally to do this.
 confirm() ->
+    test_supervision(),
+
+    test_application_stop(),
+
     JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
     Nodes = rt:deploy_nodes(1, Config),
     [Node1] = Nodes,
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
-    {ok, [{IP, _Port}|_]} = rpc:call(Node1, application, get_env, [riak_core, http]),
+    [{http, {IP, _Port}}|_] = rt:connection_info(Node1),
 
     JMXDumpCmd = jmx_dump_cmd(IP, JMXPort),
 
@@ -101,6 +105,93 @@ confirm() ->
                             {<<"read_repairs">>, 1}]),
     pass.
 
+test_supervision() ->
+    JMXPort = 80,
+    Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
+    [Node|[]] = rt:deploy_nodes(1, Config),
+    timer:sleep(20000),
+    case net_adm:ping(Node) of
+        pang ->
+            lager:error("riak_jmx crash able to crash riak node"),
+            ?assertEqual("riak_jmx crash able to crash riak node", true);
+        _ ->
+            yay
+    end,
+
+    %% Let's make sure the thing's restarting as planned
+    lager:info("calling riak_jmx:stop() to reset retry counters"),
+    rpc:call(Node, riak_jmx, stop, ["stopping for test purposes"]),
+
+    lager:info("loading lager backend on node"),
+    rt:load_modules_on_nodes([riak_test_lager_backend], [Node]),
+    ok = rpc:call(Node, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
+    ok = rpc:call(Node, lager, set_loglevel, [riak_test_lager_backend, info]),
+  
+    lager:info("Now we're capturing logs on the node, let's start jmx"),
+    lager:info("calling riak_jmx:start() to get these retries started"),
+    rpc:call(Node, riak_jmx, start, []),
+
+    timer:sleep(40000), %% wait 2000 millis per restart + fudge factor
+    Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+
+    lager:info("It can fail, it can fail 10 times"),
+
+    RetryCount = lists:foldl(
+        fun(Log, Sum) -> 
+            try case re:run(Log, "JMX server monitor .* exited with code .*\. Retry #.*", []) of
+                    {match, _} -> 1 + Sum;
+                    _ -> Sum
+                end
+            catch
+            Err:Reason ->
+                lager:error("jmx supervision re:run failed w/ ~p: ~p", [Err, Reason]),
+                Sum
+            end
+        end, 
+        0, Logs),
+    ?assertEqual({retry_count, RetryCount}, {retry_count, 10}),
+    rt:stop(Node),
+    ok_ok.
+
+test_application_stop() ->
+    lager:info("Testing application:stop()"),
+    JMXPort = 41111,
+    Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
+    Nodes = rt:deploy_nodes(1, Config),
+    [Node] = Nodes,
+    ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
+
+    %% Let's make sure the java process is alive!
+    lager:info("checking for riak_jmx.jar running."),
+    rt:wait_until(Node, fun(_N) ->
+        try case re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", []) of
+            nomatch -> false;
+            _ -> true
+            end
+        catch
+        Err:Reason ->
+            lager:error("jmx stop re:run failed w/ ~p: ~p", [Err, Reason]),
+            false
+        end
+    end),
+    
+    rpc:call(Node, riak_jmx, stop, ["Stopping riak_jmx"]),
+    timer:sleep(20000),
+    case net_adm:ping(Node) of
+        pang ->
+            lager:error("riak_jmx stop takes down riak node"),
+            ?assertEqual("riak_jmx stop takes down riak node", true);
+        _ ->
+            yay
+    end,
+
+    %% Let's make sure the java process is dead!
+    lager:info("checking for riak_jmx.jar not running."),
+
+    ?assertEqual(nomatch, re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
+
+    rt:stop(Node).
+
 verify_inc(Prev, Props, Keys) ->
     [begin
          Old = proplists:get_value(Key, Prev, 0),
@@ -127,36 +218,4 @@ jmx_dump(Cmd) ->
     timer:sleep(40000), %% JMX only updates every 30seconds
     Output = string:strip(os:cmd(Cmd), both, $\n),
     JSONOutput = mochijson2:decode(Output),
-    [ {process_key(Key), Value} || {struct, [{Key, Value}]} <- JSONOutput].
-
-process_key(<<"CPUNProcs">>) -> <<"cpu_nprocs">>;
-process_key(<<"MemAllocated">>) -> <<"mem_allocated">>;
-process_key(<<"MemTotal">>) -> <<"mem_total">>;
-process_key(<<"NodeGets">>) -> <<"node_gets">>;
-process_key(<<"NodeGetsTotal">>) -> <<"node_gets_total">>;
-process_key(<<"NodePuts">>) -> <<"node_puts">>;
-process_key(<<"NodePutsTotal">>) -> <<"node_puts_total">>;
-process_key(<<"VnodeGets">>) -> <<"vnode_gets">>;
-process_key(<<"VnodeGetsTotal">>) -> <<"vnode_gets_total">>;
-process_key(<<"VnodePuts">>) -> <<"vnode_puts">>;
-process_key(<<"VnodePutsTotal">>) -> <<"vnode_puts_total">>;
-process_key(<<"PbcActive">>) -> <<"pbc_active">>;
-process_key(<<"PbcConnects">>) -> <<"pbc_connects">>;
-process_key(<<"PbcConnectsTotal">>) -> <<"pbc_connects_total">>;
-process_key(<<"NodeName">>) -> <<"nodename">>;
-process_key(<<"RingCreationSize">>) -> <<"ring_creation_size">>;
-process_key(<<"CpuAvg1">>) -> <<"cpu_avg1">>;
-process_key(<<"CpuAvg5">>) -> <<"cpu_avg5">>;
-process_key(<<"CpuAvg15">>) -> <<"cpu_avg15">>;
-process_key(<<"NodeGetFsmTime95">>) -> <<"node_get_fsm_time_95">>;
-process_key(<<"NodeGetFsmTime99">>) -> <<"node_get_fsm_time_99">>;
-process_key(<<"NodeGetFsmTimeMax">>) -> <<"node_get_fsm_time_100">>;
-process_key(<<"NodeGetFsmTimeMean">>) -> <<"node_get_fsm_time_mean">>;
-process_key(<<"NodeGetFsmTimeMedian">>) -> <<"node_get_fsm_time_median">>;
-process_key(<<"NodePutFsmTime95">>) -> <<"node_put_fsm_time_95">>;
-process_key(<<"NodePutFsmTime99">>) -> <<"node_put_fsm_time_99">>;
-process_key(<<"NodePutFsmTimeMax">>) -> <<"node_put_fsm_time_100">>;
-process_key(<<"NodePutFsmTimeMean">>) -> <<"node_put_fsm_time_mean">>;
-process_key(<<"NodePutFsmTimeMedian">>) -> <<"node_put_fsm_time_median">>;
-process_key(<<"ReadRepairs">>) -> <<"read_repairs">>;
-process_key(<<"ReadRepairsTotal">>) -> <<"read_repairs_total">>.
+    [ {Key, Value} || {struct, [{Key, Value}]} <- JSONOutput].

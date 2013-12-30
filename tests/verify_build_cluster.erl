@@ -26,6 +26,8 @@
              wait_until_no_pending_changes/1]).
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),    
     %% Deploy a set of new nodes
     lager:info("Deploying 4 nodes"),
     %% handoff_concurrency needs to be raised to make the leave operation faster.

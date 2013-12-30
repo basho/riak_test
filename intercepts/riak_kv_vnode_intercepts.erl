@@ -17,6 +17,14 @@ slow_handle_command(Req, Sender, State) ->
     timer:sleep(500),
     ?M:handle_command_orig(Req, Sender, State).
 
+%% @doc Make all KV vnode coverage commands take abnormally long.
+slow_handle_coverage(Req, Filter, Sender, State) ->
+    random:seed(erlang:now()),
+    Rand = random:uniform(5000),
+    error_logger:info_msg("coverage sleeping ~p", [Rand]),
+    timer:sleep(Rand),
+    ?M:handle_coverage_orig(Req, Filter, Sender, State).
+
 %% @doc Simulate dropped gets/network partitions byresponding with
 %%      noreply during get requests.
 drop_do_get(Sender, BKey, ReqId, State) ->
@@ -77,3 +85,15 @@ error_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
                     ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State)
             end
     end.
+
+corrupting_handle_handoff_data(BinObj0, State) ->
+    BinObj =
+        case random:uniform(20) of
+            10 ->
+                corrupt_binary(BinObj0);
+            _ -> BinObj0
+        end,
+    ?M:handle_handoff_data_orig(BinObj, State).
+
+corrupt_binary(O) ->
+    crypto:rand_bytes(byte_size(O)).

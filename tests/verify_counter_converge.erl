@@ -25,95 +25,84 @@
 
 -module(verify_counter_converge).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, set_allow_mult_true/1]).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(BUCKET, <<"test-counters">>).
+
 confirm() ->
-    inets:start(),
-    Key = a,
+    Key = <<"a">>,
 
     [N1, N2, N3, N4]=Nodes = rt:build_cluster(4),
-    [HP1, HP2, HP3, HP4]=Hosts =  get_host_ports(Nodes),
+    [C1, C2, C3, C4]=Clients =  [ rt:httpc(N) || N <- Nodes ],
 
-    increment_counter(HP1, Key),
-    increment_counter(HP2, Key, 10),
+    set_allow_mult_true(Nodes),
 
-    [?assertEqual(11, get_counter(HP, Key)) || HP <- Hosts],
+    increment_counter(C1, Key),
+    increment_counter(C2, Key, 10),
 
-    decrement_counter(HP3, Key),
-    decrement_counter(HP4, Key, 2),
+    [?assertEqual(11, get_counter(C, Key)) || C <- Clients],
 
-    [?assertEqual(8, get_counter(HP, Key)) || HP <- Hosts],
+    decrement_counter(C3, Key),
+    decrement_counter(C4, Key, 2),
+
+    [?assertEqual(8, get_counter(C, Key)) || C <- Clients],
 
     lager:info("Partition cluster in two."),
 
     PartInfo = rt:partition([N1, N2], [N3, N4]),
 
     %% increment one side
-    increment_counter(HP1, Key, 5),
+    increment_counter(C1, Key, 5),
 
-    %% check vaule on one side is different from other
-    [?assertEqual(13, get_counter(HP, Key)) || HP <- [HP1, HP2]],
-    [?assertEqual(8, get_counter(HP, Key)) || HP <- [HP3, HP4]],
+    %% check value on one side is different from other
+    [?assertEqual(13, get_counter(C, Key)) || C <- [C1, C2]],
+    [?assertEqual(8, get_counter(C, Key)) || C <- [C3, C4]],
 
     %% decrement other side
-    decrement_counter(HP3, Key, 2),
+    decrement_counter(C3, Key, 2),
 
     %% verify values differ
-    [?assertEqual(13, get_counter(HP, Key)) || HP <- [HP1, HP2]],
-    [?assertEqual(6, get_counter(HP, Key)) || HP <- [HP3, HP4]],
+    [?assertEqual(13, get_counter(C, Key)) || C <- [C1, C2]],
+    [?assertEqual(6, get_counter(C, Key)) || C <- [C3, C4]],
 
     %% heal
     lager:info("Heal and check merged values"),
     ok = rt:heal(PartInfo),
-    ok = rt:wait_for_cluster_service(Nodes, riak_dt),
+    ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree
-    [?assertEqual(ok, rt:wait_until(HP, fun(N) ->
-                                                11 == get_counter(N, Key)
-                                        end)) ||  HP <- Hosts],
+    [?assertEqual(ok, rt:wait_until(fun() ->
+                                            11 == get_counter(HP, Key)
+                                    end)) ||  HP <- Clients ],
 
     pass.
 
-get_host_ports(Nodes) ->
-    {ResL, []} = rpc:multicall(Nodes, application, get_env, [riak_core, http]),
-    [{Host, Port} || {ok, [{Host, Port}]} <- ResL].
+set_allow_mult_true(Nodes) ->
+    %% Counters REQUIRE allow_mult=true
+    N1 = hd(Nodes),
+    AllowMult = [{allow_mult, true}],
+    lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
+               [AllowMult, ?BUCKET, N1]),
+    rpc:call(N1, riak_core_bucket, set_bucket, [?BUCKET, AllowMult]),
+    rt:wait_until_ring_converged(Nodes).
 
 %% Counter API
-get_counter(HostPort, Key) ->
-    get(HostPort, Key).
+get_counter(Client, Key) ->
+    {ok, Val} = rhc:counter_val(Client, ?BUCKET, Key),
+    Val.
 
-increment_counter(HostPort, Key) ->
-    increment_counter(HostPort, Key, 1).
+increment_counter(Client, Key) ->
+    increment_counter(Client, Key, 1).
 
-increment_counter(HostPort, Key, Amt) ->
-    update_counter(HostPort, Key, increment, Amt).
+increment_counter(Client, Key, Amt) ->
+    update_counter(Client, Key, Amt).
 
-decrement_counter(HostPort, Key) ->
-    decrement_counter(HostPort, Key, 1).
+decrement_counter(Client, Key) ->
+    decrement_counter(Client, Key, 1).
 
-decrement_counter(HostPort, Key, Amt) ->
-    update_counter(HostPort, Key, decrement, Amt).
+decrement_counter(Client, Key, Amt) ->
+    update_counter(Client, Key, -Amt).
 
-update_counter(HostPort, Key, Action, Amt) ->
-    post(HostPort, [Key, Action], integer_to_list(Amt)).
-
-%% HTTP API
-url({Host, Port}, PathElements) ->
-    Path = path([counters|PathElements]),
-    lists:flatten(io_lib:format("http://~s:~p~s", [Host, Port, Path])).
-
-path(Elements) ->
-    [lists:concat(['/', E]) || E <- Elements].
-
-get(HostPort, Key) ->
-    Url = url(HostPort, [Key]),
-    {ok, {{_Version, 200, _}, _, Body}} =
-        httpc:request(Url),
-    list_to_integer(Body).
-
-post(HostPort, PathElements, Body) ->
-    Url = url(HostPort, PathElements),
-    {ok, {{_Version, 204, _}, _, _}} =
-        httpc:request(post, {Url, [], [], Body}, [], []),
-    ok.
+update_counter(Client, Key, Amt) ->
+    rhc:counter_incr(Client, ?BUCKET, Key, Amt).

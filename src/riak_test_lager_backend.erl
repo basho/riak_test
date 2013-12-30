@@ -53,17 +53,13 @@ get_logs() ->
 %% @private
 %% @doc Initializes the event handler
 init(Level) when is_atom(Level) ->
-    case lists:member(Level, ?LEVELS) of
-        true ->
-            {ok, #state{level=lager_util:level_to_num(Level), verbose=false}};
-        _ ->
-            {error, bad_log_level}
-    end;
+    init([Level, false]);
 init([Level, Verbose]) ->
-    case lists:member(Level, ?LEVELS) of
-        true ->
-            {ok, #state{level=lager_util:level_to_num(Level), verbose=Verbose}};
-        _ ->
+    try parse_level(Level) of
+        Lvl ->
+            {ok, #state{level=Lvl, verbose=Verbose}}
+    catch
+        _:_ ->
             {error, bad_log_level}
     end.
 
@@ -95,16 +91,15 @@ handle_event({log, Level, {Date, Time}, [LevelStr, Location, Message]}, %% lager
             [Time, " ", LevelStr, Message]
         end,
     {ok, State#state{log=[Log|Logs]}};
-handle_event({log, {lager_msg, Dest, _Meta, Level, Timestamp, Message}}, State) -> %% lager master
-    case lager_util:level_to_num(Level) of
-        L when L =< State#state.level ->
-            handle_event({log, L, Timestamp, 
-                          [["[",atom_to_list(Level),"] "], " ", Message]}, 
-                         State);
-        L -> 
-            handle_event({log, Dest, L, Timestamp, 
-                          [["[",atom_to_list(Level),"] "], " ", Message]}, 
-                         State)
+handle_event({log, Msg},
+  #state{level=Level, verbose=Verbose, log = Logs} = State) -> %% lager 2.0.0
+    case lager_util:is_loggable(Msg, Level, ?MODULE) of
+        true ->
+            Format = log_format(Verbose),
+            Log = lager_default_formatter:format(Msg, Format),
+            {ok, State#state{log=[Log|Logs]}};
+        false ->
+            {ok, State}
     end;
 handle_event(Event, State) ->
     {ok, State#state{log = [Event|State#state.log]}}.
@@ -115,10 +110,11 @@ handle_event(Event, State) ->
 handle_call(get_loglevel, #state{level=Level} = State) ->
     {ok, Level, State};
 handle_call({set_loglevel, Level}, State) ->
-    case lists:member(Level, ?LEVELS) of
-        true ->
-            {ok, ok, State#state{level=lager_util:level_to_num(Level)}};
-        _ ->
+    try parse_level(Level) of
+        Lvl ->
+            {ok, ok, State#state{level=Lvl}}
+    catch
+        _:_ ->
             {ok, {error, bad_log_level}, State}
     end;
 handle_call(get_logs, #state{log = Logs} = State) ->
@@ -142,6 +138,29 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc gen_event callback, does nothing.
 terminate(_Reason, #state{log=Logs}) ->
     {ok, lists:reverse(Logs)}.
+
+parse_level(Level) ->
+    try lager_util:config_to_mask(Level) of
+        Res ->
+            Res
+    catch
+        error:undef ->
+            %% must be lager < 2.0
+            lager_util:level_to_num(Level)
+    end.
+
+log_format(true) ->
+    [date, " " , time, " [", severity, "] ",
+     {pid, ""},
+     {module, [
+               module,
+               {function, [":", function], ""},
+               {line, [":", line], ""},
+               " "], ""},
+     message, "\r\n"];
+log_format(false) ->
+    [time, " [", severity, "] ", message, "\r\n"].
+
 
 -ifdef(TEST).
 

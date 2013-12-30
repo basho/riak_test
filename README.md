@@ -14,7 +14,7 @@ contents of `$HOME/rt/riak` might look something like this:
 
 ```
 $ ls $HOME/rt/riak
-current riak-1.0.3 riak-1.1.4 riak-1.2.0
+current riak-1.1.4 riak-1.2.1 riak-1.3.2
 ```
 
 Inside each of these directories is a `dev` folder, typically
@@ -73,7 +73,7 @@ The first one that we want to look at is `rtdev-build-releases.sh`. If
 left unchanged, this script is going to do the following:
 
 1. Download the source for the past three major Riak versions (e.g.
-   1.0.3, 1.1.4, and 1.2.1)
+   1.1.4, 1.2.1 and 1.3.2)
 1. Build the proper version of Erlang that release was built with,
    using kerl (which it will also download)
 1. Build those releases of Riak.
@@ -81,11 +81,11 @@ left unchanged, this script is going to do the following:
 You'll want to run this script from an empty directory. Also, you
 might be thinking that you already have all the required versions of
 erlang. Great! You can crack open the script and set the paths to your
-installation:
+installation or set them from the command-line:
 
 ```bash
 R14B04=${R14B04:-$HOME/erlang-R14B04}
-R15B03=${R15B03:-$HOME/erlang-R15B03}
+R15B01=${R15B01:-$HOME/erlang-R15B01}
 ```
 
 **Kerlveat**: If you want kerl to build erlangs with serious 64-bit
@@ -101,27 +101,22 @@ have kerl. If you say no, the script quits. If you say yes, or all of
 your erlang paths check out, then go get a cup of coffee, you'll be
 building for a little while.
 
-**Warning**: If you are running OS X 10.7+ and trying to build Riak
-1.0.3, then the erlang_js dependency won't compile for you, but it
-fails silently. Fortunately, the precomipled OS X build includes this
-dependency in it's working form. Just run `rtdev-lion-fix.sh` after
-`rtdev-build-releases.sh` to patch it. **Please run this patch before
-proceeding on to the next script**
-
 ### rtdev-setup-releases.sh
 
 The `rtdev-setup-releases.sh` will get the releases you just built
-into a local git repository. Currently, running this script from the
+into a local git repository. Run this script from the
 same directory that you just built all of your releases into.
-Currently this script initializes this repository into `$HOME/rt/riak` but
-it's probably worth making that configurable in the near term.
+By default this script initializes the repository into `$HOME/rt/riak` but
+you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-setup-releases.sh#L11).
 
 ### rtdev-current.sh
 
 `rtdev-current.sh` is where it gets interesting. You need to run that
 from the Riak source folder you're wanting to test as the current
 version of Riak. Also, make sure that you've already run `make devrel`
-or `make stagedevrel` before you run `rtdev-current.sh`.
+or `make stagedevrel` before you run `rtdev-current.sh`. Like setting up
+releases you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-current.sh#L6)
+so all your riak builds are in one place.
 
 ### Config file.
 
@@ -147,8 +142,8 @@ to tell riak_test about them. The method of choice is to create a
     {rt_project, "riak"},
     {rtdev_path, [{root,     "/home/you/rt/riak"},
                   {current,  "/home/you/rt/riak/current"},
-                  {previous, "/home/you/rt/riak/riak-1.2.1"},
-                  {legacy,   "/home/you/rt/riak/riak-1.1.4"}
+                  {previous, "/home/you/rt/riak/riak-1.3.2"},
+                  {legacy,   "/home/you/rt/riak/riak-1.2.1"}
                  ]}
 ]}.
 ```
@@ -171,7 +166,46 @@ override these.
         [ {riak_core, [ {ring_creation_size, 16} ]} ] }
 ]}
 ```
+#### Coverage
+You can generate a coverage report for a test run through [Erlang Cover](http://www.erlang.org/doc/apps/tools/cover_chapter.html).
+Coverage information for all **current** code run on any Riak node started by any of the tests in the run will be output as HTML in the coverage directory.
+That is, legacy and previous nodes used in the test will not be included, as the tool can only work on one version of the code at a time.
+Also, cover starts running in the Riak nodes after the node is up, so it will not report coverage of application initialization or other early code paths. 
+You can specify a list of modules for which you want coverage generated like this:
+```erlang
+    {cover_modules, [riak_kv_bitcask_backend, riak_core_ring]}
+```
+Or entire applications by using:
+```erlang
+    {cover_apps, [riak_kv, riak_core]}
+```
 
+#### Web hooks
+When reporting is enabled, each test result is posted to [Giddy Up](http://giddyup.basho.com). You can specify
+any number of webhooks that will also receive a POST request with JSON formatted test information, plus the URL
+of the Giddy Up resource page.  
+
+```erlang
+    {webhooks, [
+                [{name, "Bishop"},
+                 {url, "http://basho-engbot.herokuapp.com/riak_test"}]
+                ]}
+```
+
+This is an example test result JSON message posted to a webhook:
+```json
+{ "test": "verify_build_cluster",
+  "status": "fail",
+  "log": "Some really long lines of log output",
+  "backend": "bitcask",
+  "id": "144",
+  "platform": "osx-64",
+  "version": "riak-1.4.0-9-g740a58d-master",
+  "project": "riak",
+  "reason": "{{assertion_failed, and_probably_a_massive_stacktrace_and stuff}}",
+  "giddyup_url": "http://giddyup.basho.com/test_results/53" }
+```
+Notice that the giddyup URL is not the page for the test result, but a resource from which you can GET information about the test in JSON.
 ### Running riak_test for the first time
 
 Run a test! `./riak_test -c rtdev -t verify_build_cluster`

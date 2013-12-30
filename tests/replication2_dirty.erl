@@ -11,8 +11,8 @@ confirm() ->
     TestHash = erlang:md5(term_to_binary(os:timestamp())),
     TestBucket = <<TestHash/binary, "-systest_a">>,
 
-    NumNodes = rt:config(num_nodes, 6),
-    ClusterASize = rt:config(cluster_a_size, 4),
+    NumNodes = rt_config:get(num_nodes, 6),
+    ClusterASize = rt_config:get(cluster_a_size, 4),
     lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
             {riak_repl,
@@ -154,38 +154,9 @@ confirm() ->
     wait_until_coord_has_dirty(DirtyD),
 
     % Clear out all dirty state
-    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
+    %repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 
-
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    rt:log_to_nodes(AllNodes, "Brutally kill the sink nodes"),
-    lager:info("Brutally kill the sink nodes"),
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-    spawn(fun() ->
-                % wait a second and then kill off sink nodes
-                % once a second
-                timer:sleep(1000),
-                [begin
-                  timer:sleep(1000),
-                  rt:brutal_kill(Node)
-                 end || Node <- BNodes]
-          end),
-    write_until_coord_has_any_dirty(LeaderA, TestBucket),
-
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    rt:log_to_nodes(AllNodes, "Check rt_dirty state after shutdown"),
-    lager:info("Check rt_dirty state after shutdown"),
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    [ rt:stop_and_wait(Node) || Node <- ANodes],
-    [ rt:start_and_wait(Node) || Node <- ANodes],
-    wait_until_coord_has_any_dirty(LeaderA),
-
-    rt:log_to_nodes(AllNodes, "Test completed"),
+    rt:log_to_nodes(AllNodes, "rt_dirty test completed"),
     pass.
 
 get_dirty_stat(Node) ->
@@ -217,40 +188,40 @@ wait_until_coord_has_dirty(Node) ->
             end),
     ?assertEqual(ok, Res).
 
-wait_until_coord_has_any_dirty(SourceLeader) ->
-    Res = rt:wait_until(SourceLeader,
-                        fun(_) ->
-                    lager:info("Checking for any dirty nodes"),
-                    Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
-                    case Status of
-                        {badrpc, _} -> false;
-                        [] -> false;
-                        [{_,Stats}|_Rest] ->
-                            NodeString = proplists:get_value(fullsync_suggested, Stats),
-                            Nodes = string:tokens(NodeString,","),
-                            lager:info("Nodes = ~p",[Nodes]),
-                            length(Nodes) > 0
-                    end
-            end),
-    ?assertEqual(ok, Res).
-
-write_until_coord_has_any_dirty(SourceLeader, TestBucket) ->
-    Res = rt:wait_until(SourceLeader,
-                        fun(_) ->
-                    lager:info("Writing data while checking for any dirty nodes"),
-                    ?assertEqual([], repl_util:do_write(SourceLeader, 0, 5000, TestBucket, 2)),
-                    Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
-                    case Status of
-                        {badrpc, _} -> false;
-                        [] -> false;
-                        [{_,Stats}|_Rest] ->
-                            NodeString = proplists:get_value(fullsync_suggested, Stats),
-                            Nodes = string:tokens(NodeString,","),
-                            lager:info("Nodes = ~p",[Nodes]),
-                            length(Nodes) > 0
-                    end
-            end),
-    ?assertEqual(ok, Res).
+%wait_until_coord_has_any_dirty(SourceLeader) ->
+%    Res = rt:wait_until(SourceLeader,
+%                        fun(_) ->
+%                    lager:info("Checking for any dirty nodes"),
+%                    Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
+%                    case Status of
+%                        {badrpc, _} -> false;
+%                        [] -> false;
+%                        [{_,Stats}|_Rest] ->
+%                            NodeString = proplists:get_value(fullsync_suggested, Stats),
+%                            Nodes = string:tokens(NodeString,","),
+%                            lager:info("Nodes = ~p",[Nodes]),
+%                            length(Nodes) > 0
+%                    end
+%            end),
+%    ?assertEqual(ok, Res).
+%
+%write_until_coord_has_any_dirty(SourceLeader, TestBucket) ->
+%    Res = rt:wait_until(SourceLeader,
+%                        fun(_) ->
+%                    lager:info("Writing data while checking for any dirty nodes"),
+%                    ?assertEqual([], repl_util:do_write(SourceLeader, 0, 5000, TestBucket, 2)),
+%                    Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
+%                    case Status of
+%                        {badrpc, _} -> false;
+%                        [] -> false;
+%                        [{_,Stats}|_Rest] ->
+%                            NodeString = proplists:get_value(fullsync_suggested, Stats),
+%                            Nodes = string:tokens(NodeString,","),
+%                            lager:info("Nodes = ~p",[Nodes]),
+%                            length(Nodes) > 0
+%                    end
+%            end),
+%    ?assertEqual(ok, Res).
 
 
 

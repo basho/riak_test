@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -20,7 +20,7 @@
 
 %% @doc riak_test_runner runs a riak_test module's run/0 function.
 -module(riak_test_runner).
--export([confirm/4, metadata/0, metadata/1]).
+-export([confirm/4, metadata/0, metadata/1, function_name/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
@@ -34,7 +34,7 @@ metadata() ->
 metadata(Pid) ->
     riak_test ! {metadata, Pid},
     receive
-        {metadata, TestMeta} -> TestMeta 
+        {metadata, TestMeta} -> TestMeta
     end.
 
 -spec(confirm(integer(), atom(), [{atom(), term()}], list()) -> [tuple()]).
@@ -43,23 +43,27 @@ metadata(Pid) ->
 confirm(TestModule, Outdir, TestMetaData, HarnessArgs) ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, HarnessArgs),
-    Backend = rt:set_backend(proplists:get_value(backend, TestMetaData)),
-    
-    {Status, Reason} = case check_prereqs(TestModule) of
+    BackendExtras = case proplists:get_value(multi_config, TestMetaData) of
+                        undefined -> [];
+                        Value -> [{multi_config, Value}]
+                    end,
+    Backend = rt:set_backend(proplists:get_value(backend, TestMetaData), BackendExtras),
+    {Mod, Fun} = function_name(TestModule),
+    {Status, Reason} = case check_prereqs(Mod) of
         true ->
             lager:notice("Running Test ~s", [TestModule]),
-            execute(TestModule, TestMetaData);
+            execute(TestModule, {Mod, Fun}, TestMetaData);
         not_present ->
             {fail, test_does_not_exist};
         _ ->
             {fail, all_prereqs_not_present}
     end,
-    
-    lager:notice("~s Test Run Complete", [TestModule]),
-    {ok, Log} = stop_lager_backend(),
-    Logs = iolist_to_binary(lists:foldr(fun(L, Acc) -> [L ++ "\n" | Acc] end, [], Log)),
 
-    RetList = [{test, TestModule}, {status, Status}, {log, Logs}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
+    lager:notice("~s Test Run Complete", [TestModule]),
+    {ok, Logs} = stop_lager_backend(),
+    Log = unicode:characters_to_binary(Logs),
+
+    RetList = [{test, TestModule}, {status, Status}, {log, Log}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
     case Status of
         fail -> RetList ++ [{reason, iolist_to_binary(io_lib:format("~p", [Reason]))}];
         _ -> RetList
@@ -69,20 +73,20 @@ start_lager_backend(TestModule, Outdir) ->
     case Outdir of
         undefined -> ok;
         _ ->
-            gen_event:add_handler(lager_event, lager_file_backend, 
-                {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output", 
-                 rt:config(lager_level, info), 10485760, "$D0", 1}),
-            lager:set_loglevel(lager_file_backend, rt:config(lager_level, info))
+            gen_event:add_handler(lager_event, lager_file_backend,
+                {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output",
+                 rt_config:get(lager_level, info), 10485760, "$D0", 1}),
+            lager:set_loglevel(lager_file_backend, rt_config:get(lager_level, info))
     end,
-    gen_event:add_handler(lager_event, riak_test_lager_backend, [rt:config(lager_level, info), false]),
-    lager:set_loglevel(riak_test_lager_backend, rt:config(lager_level, info)).
+    gen_event:add_handler(lager_event, riak_test_lager_backend, [rt_config:get(lager_level, info), false]),
+    lager:set_loglevel(riak_test_lager_backend, rt_config:get(lager_level, info)).
 
 stop_lager_backend() ->
     gen_event:delete_handler(lager_event, lager_file_backend, []),
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
 %% does some group_leader swapping, in the style of EUnit.
-execute(TestModule, TestMetaData) ->
+execute(TestModule, {Mod, Fun}, TestMetaData) ->
     process_flag(trap_exit, true),
     OldGroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
@@ -91,7 +95,7 @@ execute(TestModule, TestMetaData) ->
     {0, UName} = rt:cmd("uname -a"),
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
-    Pid = spawn_link(TestModule, confirm, []),
+    Pid = spawn_link(Mod, Fun, []),
 
     {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
     riak_test_group_leader:tidy_up(OldGroupLeader),
@@ -104,6 +108,16 @@ execute(TestModule, TestMetaData) ->
         _ -> meh
     end,
     {Status, Reason}.
+
+function_name(TestModule) ->
+    TMString = atom_to_list(TestModule),
+    Tokz = string:tokens(TMString, ":"),
+    case length(Tokz) of
+        1 -> {TestModule, confirm};
+        2 ->
+            [Module, Function] = Tokz,
+            {list_to_atom(Module), list_to_atom(Function)}
+    end.
 
 rec_loop(Pid, TestModule, TestMetaData) ->
     receive
@@ -121,13 +135,13 @@ rec_loop(Pid, TestModule, TestMetaData) ->
 
 check_prereqs(Module) ->
     try Module:module_info(attributes) of
-        Attrs ->       
+        Attrs ->
             Prereqs = proplists:get_all_values(prereq, Attrs),
-            P2 = [ {Prereq, rt:which(Prereq)} || Prereq <- Prereqs],
+            P2 = [ {Prereq, rt_local:which(Prereq)} || Prereq <- Prereqs],
             lager:info("~s prereqs: ~p", [Module, P2]),
             [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
             lists:all(fun({_, Present}) -> Present end, P2)
-    catch 
+    catch
         _DontCare:_Really ->
             not_present
     end.
