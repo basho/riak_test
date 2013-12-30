@@ -1,0 +1,8 @@
+to get the reporting stuff working, you'll need to have gnuplot 
+installed on your local machine, at at least version 4.6.3. If
+you need to install from source, you'll need at least these two
+deps:
+sudo apt-get install libgd2-xpm-dev libreadline6-dev
+
+
+
