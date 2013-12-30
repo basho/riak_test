@@ -15,6 +15,7 @@
          wait_until_aae_trees_built/1,
          wait_for_reads/5,
          start_and_wait_until_fullsync_complete/1,
+         start_and_wait_until_fullsync_complete/2,
          connect_cluster/3,
          disconnect_cluster/2,
          wait_for_connection/2,
@@ -149,13 +150,30 @@ get_fs_coord_status_item(Node, SinkName, ItemName) ->
     proplists:get_value(ItemName, ClusterProps).
 
 start_and_wait_until_fullsync_complete(Node) ->
+    start_and_wait_until_fullsync_complete(Node, undefined).
+
+start_and_wait_until_fullsync_complete(Node, Cluster) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
-    Count = proplists:get_value(server_fullsyncs, Status0) + 1,
+    Count0 = proplists:get_value(server_fullsyncs, Status0),
+    Count = case Cluster of
+                undefined ->
+                    %% count the # of fullsync enabled clusters
+                    Count0 + length(string:tokens(proplists:get_value(fullsync_enabled,
+                                                        Status0), ", "));
+                _ ->
+                    Count0 + 1
+            end,
     lager:info("waiting for fullsync count to be ~p", [Count]),
 
     lager:info("Starting fullsync on ~p (~p)", [Node,
             rtdev:node_version(rtdev:node_id(Node))]),
-    rpc:call(Node, riak_repl_console, fullsync, [["start"]]),
+    Args = case Cluster of
+               undefined ->
+                   ["start"];
+               _ ->
+                   ["start", Cluster]
+           end,
+    rpc:call(Node, riak_repl_console, fullsync, [Args]),
     %% sleep because of the old bug where stats will crash if you call it too
     %% soon after starting a fullsync
     timer:sleep(500),
