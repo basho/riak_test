@@ -27,7 +27,7 @@
          config_or_os_env/2,
          get_os_env/1,
          get_os_env/2,
-         load/1,
+         load/2,
          set/2
 ]).
 
@@ -49,15 +49,17 @@ get_os_env(Var, Default) ->
         Value -> Value
     end.
 
-%% @private
-load(undefined) ->
-    load_dot_config("default");
-load(ConfigName) ->
-    load_dot_config(ConfigName).
+%% @doc Load the configuration from the specified config file.
+load(Config, undefined) ->
+    load(Config, filename:join([os:getenv("HOME"), ".riak_test.config"]));
+load(undefined, ConfigFile) ->
+    load_dot_config("default", ConfigFile);
+load(ConfigName, ConfigFile) ->
+    load_dot_config(ConfigName, ConfigFile).
 
 %% @private
-load_dot_config(ConfigName) ->
-    case file:consult(filename:join([os:getenv("HOME"), ".riak_test.config"])) of
+load_dot_config(ConfigName, ConfigFile) ->
+    case file:consult(ConfigFile) of
         {ok, Terms} ->
             %% First, set up the defaults
             case proplists:get_value(default, Terms) of
@@ -69,7 +71,7 @@ load_dot_config(ConfigName) ->
             [set(Key, Value) || {Key, Value} <- Config],
             ok;
         {error, Reason} ->
-            erlang:error("Failed to parse config file", ["~/.riak_test.config", Reason])
+            erlang:error("Failed to parse config file", [ConfigFile, Reason])
  end.
 
 %% @private
