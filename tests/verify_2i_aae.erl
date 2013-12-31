@@ -34,18 +34,18 @@ confirm() ->
     [Node1] = rt:build_cluster(1,
                                [{riak_kv,
                                  [{anti_entropy, {off, []}},
-                                  {anti_entropy_build_limit, {100, 1000}},
+                                  {anti_entropy_build_limit, {100, 500}},
                                   {anti_entropy_concurrency, 100},
-                                  {anti_entropy_tick, 1000}]}]),
+                                  {anti_entropy_tick, 200}]}]),
     rt_intercept:load_code(Node1),
     rt_intercept:add(Node1,
                      {riak_object,
                       [{{index_specs, 1}, skippable_index_specs},
                        {{diff_index_specs, 2}, skippable_diff_index_specs}]}),
     lager:info("Installed intercepts to corrupt index specs on node ~p", [Node1]),
+    %%rpc:call(Node1, lager, set_loglevel, [lager_console_backend, debug]),
     PBC = rt:pbc(Node1),
     NumItems = ?NUM_ITEMS,
-    %%NumDelItems = NumItems div 10,
     NumDel = ?NUM_DELETES,
     pass = check_lost_objects(Node1, PBC, NumItems, NumDel),
     pass = check_lost_indexes(Node1, PBC, NumItems),
@@ -101,6 +101,33 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
      || Bucket <- ?BUCKETS],
     pass.
 
+do_tree_rebuild(Node) ->
+    lager:info("Let's go through a tree rebuild right here"),
+    %% Cheat by clearing build times from ETS directly, as the code doesn't
+    %% ever clear them currently.
+    ?assertEqual(true, rpc:call(Node, ets, delete_all_objects, [ets_riak_kv_entropy])),
+    %% Make it so it doesn't go wild rebuilding things when the expiration is
+    %% tiny.
+    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+                                                           anti_entropy_build_limit,
+                                                           {0, 5000}])),
+    %% Make any tree expire on tick.
+    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+                                                           anti_entropy_expire,
+                                                           1])),
+    %% Wait for a good number of ticks.
+    timer:sleep(5000),
+    %% Make sure things stop expiring on tick
+    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+                                                           anti_entropy_expire,
+                                                           7 * 24 * 60 * 60 * 1000])),
+    %% And let the manager start allowing builds again.
+    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+                                                           anti_entropy_build_limit,
+                                                           {100, 1000}])),
+    rt:wait_until_aae_trees_built([Node]),
+    ok.
+
 %% Write objects without a 2i index. Test that running 2i repair will generate
 %% the missing indexes.
 check_lost_indexes(Node1, PBC, NumItems) ->
@@ -112,6 +139,7 @@ check_lost_indexes(Node1, PBC, NumItems) ->
     lager:info("Verify that objects cannot be found via index"),
     [assert_range_query(PBC, Bucket, [], Index, 1, NumItems+1)
      || Bucket <- ?BUCKETS],
+    do_tree_rebuild(Node1),
     run_2i_repair(Node1),
     lager:info("Check that objects can now be found via index"),
     Expected = [{to_key(N+1), to_key(N)} || N <- lists:seq(1, NumItems)],

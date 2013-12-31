@@ -670,26 +670,54 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
     ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
 
 %% AAE support
-wait_until_aae_trees_built([AnyNode|_]=Nodes) ->
+wait_until_aae_trees_built(Nodes) ->
     lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
     %% Wait until all nodes report no undefined trees
-    rt:wait_until(AnyNode,
-                  fun(_) ->
-                          Busy = lists:foldl(
-                                   fun(Node,Busy1) ->
-                                           %% will be false when all trees are built on Node
-                                           lists:keymember(undefined,
-                                                           2,
-                                                           rpc:call(Node,
-                                                                    riak_kv_entropy_info,
-                                                                    compute_tree_info,
-                                                                    []))
-                                               or Busy1
-                                   end,
-                                   false,
-                                   Nodes),
-                          not Busy
-                  end).
+    AllBuiltFun =
+    fun(_, _AllBuilt = false) ->
+            false;
+       (Node, _AllBuilt = true) ->
+            Info = rpc:call(Node,
+                            riak_kv_entropy_info,
+                            compute_tree_info,
+                            []),
+            lager:debug("Entropy table on node ~p : ~p", [Node, Info]),
+            AllHaveBuildTimes = not lists:keymember(undefined, 2, Info),
+            case AllHaveBuildTimes of
+                false ->
+                    false;
+                true ->
+                    lager:debug("Check if really built by locking"),
+                    %% Try to lock each partition. If you get not_built,
+                    %% the manager has not detected the built process has 
+                    %% died yet.
+                    %% Notice that the process locking is spawned by the
+                    %% pmap. That's important! as it should die eventually
+                    %% so the test can lock on the tree.
+                    IdxBuilt =
+                    fun(Idx) ->
+                            {ok, TreePid} = rpc:call(Node, riak_kv_vnode,
+                                                     hashtree_pid, [Idx]),
+                            TreeLocked =
+                            rpc:call(Node, riak_kv_index_hashtree, get_lock,
+                                     [TreePid, for_riak_test]),
+                            lager:debug("Partition ~p : ~p", [Idx, TreeLocked]),
+                            TreeLocked == ok
+                            orelse TreeLocked == already_locked
+                    end,
+
+                    Partitions = [I || {I, _} <- Info],
+
+                    AllBuilt =
+                    lists:all(fun(V) -> V == true end,
+                              rt:pmap(IdxBuilt, Partitions)),
+                    lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),  
+                    AllBuilt
+            end
+    end,
+    wait_until(fun() ->
+                       lists:foldl(AllBuiltFun, true, Nodes)
+               end).
 
 %%%===================================================================
 %%% Ring Functions
