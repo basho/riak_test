@@ -125,7 +125,7 @@ dual_test() ->
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
-    lager:info("BNodes: ~p", [CNodes]),
+    lager:info("CNodes: ~p", [CNodes]),
 
     lager:info("Building three clusters."),
     [repl_util:make_cluster(N) || N <- [ANodes, BNodes, CNodes]],
