@@ -41,6 +41,7 @@
 confirm() ->
     simple_test(),
     dual_test(),
+    bidirectional_test(),
     pass.
 
 simple_test() ->
