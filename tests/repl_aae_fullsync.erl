@@ -198,19 +198,19 @@ dual_test() ->
     validate_completed_fullsync(LeaderA, CFirst, "C", 1, ?NUM_KEYS),
 
     write_to_cluster(AFirst,
-                     ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
+                     ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS),
     read_from_cluster(BFirst,
-                      ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
+                      ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
     read_from_cluster(CFirst,
-                      ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
+                      ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
 
     %% Verify that duelling fullsyncs eventually complete
     {Time, _} = timer:tc(repl_util,
                          start_and_wait_until_fullsync_complete,
                          [LeaderA]),
 
-    read_from_cluster(BFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, 0),
-    read_from_cluster(CFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, 0),
+    read_from_cluster(BFirst, ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS, 0),
+    read_from_cluster(CFirst, ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS, 0),
     lager:info("Fullsync A->B and A->C completed in ~p seconds",
                [Time/1000/1000]),
 
@@ -282,8 +282,8 @@ bidirectional_test() ->
     validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
 
     %% Write keys to cluster B, verify A does not have them.
-    write_to_cluster(AFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
-    read_from_cluster(BFirst, ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
+    write_to_cluster(AFirst, ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS),
+    read_from_cluster(BFirst, ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS, ?NUM_KEYS),
 
     %% Flush AAE trees to disk.
     perform_sacrifice(BFirst),
@@ -292,7 +292,7 @@ bidirectional_test() ->
     repl_util:wait_until_aae_trees_built(BNodes),
 
     %% Verify B replicated to A.
-    validate_completed_fullsync(LeaderB, AFirst, "A", ?NUM_KEYS, ?NUM_KEYS + ?NUM_KEYS),
+    validate_completed_fullsync(LeaderB, AFirst, "A", ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS),
 
     %% Clean.
     rt:clean_cluster(Nodes),
