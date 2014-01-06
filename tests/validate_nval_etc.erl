@@ -28,7 +28,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"test">>).
--define(DEFAULT_PROPS, [{allow_mult,false},
+-define(DEFAULT_PROPS, [{allow_mult,true},
                         {basic_quorum,false},
                         {big_vclock,50},
                         {chash_keyfun,{riak_core_util,chash_std_keyfun}},
