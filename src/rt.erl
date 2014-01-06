@@ -124,7 +124,6 @@
          wait_until/3,
          wait_until/2,
          wait_until/1,
-         wait_until_aae_trees_built/1,
          wait_until_all_members/1,
          wait_until_all_members/2,
          wait_until_capability/3,
@@ -755,28 +754,6 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
     lager:info("Wait until nodes agree about ownership ~p", [Nodes]),
     Results = [ wait_until_owners_according_to(Node, Nodes) || Node <- Nodes ],
     ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
-
-%% AAE support
-wait_until_aae_trees_built([AnyNode|_]=Nodes) ->
-    lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
-    %% Wait until all nodes report no undefined trees
-    rt:wait_until(AnyNode,
-                  fun(_) ->
-                          Busy = lists:foldl(
-                                   fun(Node,Busy1) ->
-                                           %% will be false when all trees are built on Node
-                                           lists:keymember(undefined,
-                                                           2,
-                                                           rpc:call(Node,
-                                                                    riak_kv_entropy_info,
-                                                                    compute_tree_info,
-                                                                    []))
-                                               or Busy1
-                                   end,
-                                   false,
-                                   Nodes),
-                          not Busy
-                  end).
 
 %%%===================================================================
 %%% Ring Functions

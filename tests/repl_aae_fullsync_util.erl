@@ -30,7 +30,7 @@ make_clusters(NumNodesWanted, ClusterSize, Conf) ->
     repl_util:make_cluster(BNodes),
     {ANodes, BNodes}.
 
-prepare_cluster_data(TestBucket, NumKeysAOnly, NumKeysBoth, [AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
+prepare_cluster_data(TestBucket, NumKeysAOnly, _NumKeysBoth, [AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     AllNodes = ANodes ++ BNodes,
     log_to_nodes(AllNodes, "Starting AAE Fullsync test"),
 
@@ -68,38 +68,13 @@ prepare_cluster_data(TestBucket, NumKeysAOnly, NumKeysBoth, [AFirst|_] = ANodes,
     %%---------------------------------------------------
 
     lager:info("Writing ~p keys to A(~p)", [NumKeysAOnly, AFirst]),
-    ?assertEqual([], repl_util:do_write(AFirst, 1, NumKeysAOnly, TestBucket, 2)),
+    ?assertEqual([], repl_util:do_write(AFirst, 1, NumKeysAOnly, TestBucket, 1)),
 
     %% check that the keys we wrote initially aren't replicated yet, because
     %% we've disabled fullsync_on_connect
     lager:info("Check keys written before repl was connected are not present"),
-    Res2 = rt:systest_read(BFirst, 1, NumKeysAOnly, TestBucket, 2),
+    Res2 = rt:systest_read(BFirst, 1, NumKeysAOnly, TestBucket, 1),
     ?assertEqual(NumKeysAOnly, length(Res2)),
-
-    %%-----------------------------------------------
-    %% TEST: write data, replicated by RT
-    %% keys: NumKeysAOnly+1..NumKeysAOnly+NumKeysBoth
-    %%-----------------------------------------------
-    %% Enable and start Real-time replication
-    repl_util:enable_realtime(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),
-    repl_util:start_realtime(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),
-
-    log_to_nodes(AllNodes, "Write data to A, verify replication to B via realtime"),
-    %% write some data on A
-    lager:info("Writing ~p more keys to A(~p)", [NumKeysBoth, LeaderA]),
-    ?assertEqual([], repl_util:do_write(LeaderA,
-                                        NumKeysAOnly+1,
-                                        NumKeysAOnly+NumKeysBoth,
-                                        TestBucket, 2)),
-
-    %% verify data is replicated to B
-    lager:info("Verify: Reading ~p keys written to ~p from ~p", [NumKeysBoth, LeaderA, BFirst]),
-    ?assertEqual(0, repl_util:wait_for_reads(BFirst,
-                                             NumKeysAOnly+1,
-                                             NumKeysAOnly+NumKeysBoth,
-                                             TestBucket, 2)),
 
     %% wait for the AAE trees to be built so that we don't get a not_built error
     repl_util:wait_until_aae_trees_built(ANodes),
