@@ -1274,9 +1274,10 @@ post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
             lager:warning("Some error POSTing test result: ~p", [X]),
             error
     catch
-        Throws ->
-            lager:error("Error reporting to ~s. ~p", [Name, Throws]),
-            lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
+        Class:Reason ->
+            lager:error("Error reporting to ~s. ~p:~p", [Name, Class, Reason]),
+            lager:error("Payload: ~p", [TestResult]),
+            error
     end.
 
 %%%===================================================================
