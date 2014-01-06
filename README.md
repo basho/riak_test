@@ -317,7 +317,7 @@ them with.  The example above would result in all calls to
 
 To add the `dropped_put` intercept manually you would do the following.
 
-    `rt_intercept:add(Node, {riak_kv_vnode, [{{put,7}, dropped_put}]})`
+    rt_intercept:add(Node, {riak_kv_vnode, [{{put,7}, dropped_put}]})
 
 ### How Does it Work?
 
