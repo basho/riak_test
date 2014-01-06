@@ -22,7 +22,7 @@
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
     rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
-      
+
     case eunit:test(?MODULE, [verbose]) of
         ok ->
             pass;
@@ -115,7 +115,7 @@ simple_test_() ->
             wait_until_pending_count_zero([State#simple_state.middle,
                                            State#simple_state.beginning,
                                            State#simple_state.ending])
-	end}
+        end}
     ] end}}.
 
 big_circle_test_() ->
@@ -231,7 +231,7 @@ big_circle_test_() ->
         end},
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
-	end}
+        end}
     ] end}}.
 
 circle_test_() ->
@@ -296,7 +296,7 @@ circle_test_() ->
         end},
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
-	end}
+        end}
     ] end}}.
 
 pyramid_test_() ->
@@ -350,7 +350,7 @@ pyramid_test_() ->
         end},
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
-	end}
+         end}
     ] end}}.
 
 diamond_test_() ->
@@ -444,7 +444,7 @@ diamond_test_() ->
         end},
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
-	end}
+        end}
     ] end}}.
 
 circle_and_spurs_test_() ->
@@ -520,7 +520,7 @@ circle_and_spurs_test_() ->
         end},
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
-	end}
+        end}
     ] end}}.
 
 mixed_version_clusters_test_() ->
@@ -705,7 +705,7 @@ Reses)]),
         }},
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
-	end}
+        end}
 
     ] end}}.
 
@@ -796,7 +796,7 @@ new_to_old_test_dep() ->
         end},
         {"check pendings", fun() ->
             wait_until_pending_count_zero(["new1", "old2", "new3"])
-	end}
+        end}
     ] end}}.
 
 ensure_ack_test_() ->
