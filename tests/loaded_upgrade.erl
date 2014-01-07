@@ -25,14 +25,14 @@
 
 -export([kv_valgen/1, bucket/1, erlang_mr/0, int_to_key/1]).
 
--define(TIME_BETWEEN_UPGRADES, 300). %% Seconds!
+-define(TIME_BETWEEN_UPGRADES, 120). %% Seconds!
 
 confirm() ->
 
     case whereis(loaded_upgrade) of
         undefined -> meh;
         _ -> unregister(loaded_upgrade)
-    end, 
+    end,
     register(loaded_upgrade, self()),
     %% Build Cluster
     TestMetaData = riak_test_runner:metadata(),
@@ -46,50 +46,43 @@ confirm() ->
     Nodes = rt:build_cluster(Vsns),
 
     seed_cluster(Nodes),
+
     %% Now we have a cluster!
     %% Let's spawn workers against it.
-    timer:sleep(10000),
-
     Concurrent = rt_config:get(load_workers, 10),
 
-    Sups = [
-        {rt_worker_sup:start_link([
-            {concurrent, Concurrent},
-            {node, Node},
-            {backend, Backend},
-            {version, OldVsn}
-        ]), Node}
-    || Node <- Nodes],
+    Sups = [{rt_worker_sup:start_link([{concurrent, Concurrent},
+                                       {node, Node},
+                                       {backend, Backend},
+                                       {version, OldVsn},
+                                       {report_pid, self()}]), Node} || Node <- Nodes],
 
     upgrade_recv_loop(),
 
     [begin
-        exit(Sup, normal),
-        lager:info("Upgrading ~p", [Node]),
-        rt:upgrade(Node, current),
-        {ok, NewSup} = rt_worker_sup:start_link([
-            {concurrent, Concurrent},
-            {node, Node},
-            {backend, Backend},
-            {version, current}
-        ]),
-
-        _NodeMon = init_node_monitor(Node, NewSup, self()),
-        upgrade_recv_loop()
-
-    end || {{ok, Sup}, Node} <- Sups],
-
+         exit(Sup, normal),
+         lager:info("Upgrading ~p", [Node]),
+         rt:upgrade(Node, current),
+         rt:wait_for_service(Node, [riak_search,riak_kv,riak_pipe]),
+         {ok, NewSup} = rt_worker_sup:start_link([{concurrent, Concurrent},
+                                                  {node, Node},
+                                                  {backend, Backend},
+                                                  {version, current},
+                                                  {report_pid, self()}]),
+         _NodeMon = init_node_monitor(Node, NewSup, self()),
+         upgrade_recv_loop()
+     end || {{ok, Sup}, Node} <- Sups],
     pass.
 
 upgrade_recv_loop() ->
     {SMega, SSec, SMicro} = os:timestamp(),
     EndSecs = SSec + ?TIME_BETWEEN_UPGRADES,
     EndTime = case EndSecs > 1000000 of
-        true ->
-            {SMega + 1, EndSecs - 1000000, SMicro};
-        _ ->
-            {SMega, EndSecs, SMicro}
-    end,
+                  true ->
+                      {SMega + 1, EndSecs - 1000000, SMicro};
+                  _ ->
+                      {SMega, EndSecs, SMicro}
+              end,
     upgrade_recv_loop(EndTime).
 
 %% TODO: Collect error message counts in ets table
@@ -99,23 +92,23 @@ upgrade_recv_loop(EndTime) ->
         true ->
             lager:info("Done waiting 'cause ~p > ~p", [Now, EndTime]);
         _ ->
-        receive
-            {mapred, Node, bad_result} ->
-                ?assertEqual(true, {mapred, Node, bad_result});
-            {kv, Node, not_equal} ->
-                ?assertEqual(true, {kv, Node, bad_result});
-            {kv, Node, {notfound, Key}} ->
-                ?assertEqual(true, {kv, Node, {notfound, Key}});
-            {listkeys, Node, not_equal} ->
-                ?assertEqual(true, {listkeys, Node, not_equal});
-            {search, Node, bad_result} ->
-                ?assertEqual(true, {search, Node, bad_result});
-            Msg ->
-                lager:debug("Received Mesg ~p", [Msg]),
-                upgrade_recv_loop(EndTime)
-        after timer:now_diff(EndTime, Now) div 1000 ->
-            lager:info("Done waiting 'cause ~p is up", [?TIME_BETWEEN_UPGRADES])
-        end
+            receive
+                {mapred, Node, bad_result} ->
+                    ?assertEqual(true, {mapred, Node, bad_result});
+                {kv, Node, not_equal} ->
+                    ?assertEqual(true, {kv, Node, bad_result});
+                {kv, Node, {notfound, Key}} ->
+                    ?assertEqual(true, {kv, Node, {notfound, Key}});
+                {listkeys, Node, not_equal} ->
+                    ?assertEqual(true, {listkeys, Node, not_equal});
+                {search, Node, bad_result} ->
+                    ?assertEqual(true, {search, Node, bad_result});
+                Msg ->
+                    lager:debug("Received Mesg ~p", [Msg]),
+                    upgrade_recv_loop(EndTime)
+            after timer:now_diff(EndTime, Now) div 1000 ->
+                    lager:info("Done waiting 'cause ~p is up", [?TIME_BETWEEN_UPGRADES])
+            end
     end.
 
 seed_cluster(Nodes=[Node1|_]) ->
@@ -127,9 +120,9 @@ seed_cluster(Nodes=[Node1|_]) ->
     ?assertEqual([], rt:systest_read(Node1, 100, 1)),
 
     seed(Node1, 0, 100, fun(Key) ->
-        Bin = iolist_to_binary(io_lib:format("~p", [Key])),
-        riakc_obj:new(<<"objects">>, Bin, Bin)
-    end),
+                                Bin = iolist_to_binary(io_lib:format("~p", [Key])),
+                                riakc_obj:new(<<"objects">>, Bin, Bin)
+                        end),
 
     %% For KV
     kv_seed(Node1),
@@ -155,9 +148,9 @@ seed_search(Node) ->
     Pid = rt:pbc(Node),
     SpamDir = rt_config:get(spam_dir),
     Files = case SpamDir of
-            undefined -> undefined;
-            _ -> filelib:wildcard(SpamDir ++ "/*")
-        end,
+                undefined -> undefined;
+                _ -> filelib:wildcard(SpamDir ++ "/*")
+            end,
     seed_search(Pid, Files),
     riakc_pb_socket:stop(Pid).
 
@@ -169,8 +162,8 @@ seed_search(Pid, [File|Files]) ->
 
 kv_seed(Node) ->
     ValFun = fun(Key) ->
-            riakc_obj:new(bucket(kv), iolist_to_binary(io_lib:format("~p", [Key])), kv_valgen(Key))
-    end,
+                     riakc_obj:new(bucket(kv), iolist_to_binary(io_lib:format("~p", [Key])), kv_valgen(Key))
+             end,
     seed(Node, 0, 7999, ValFun).
 
 kv_valgen(Key) ->
@@ -184,36 +177,36 @@ int_to_key(KInt) ->
 %% bin_plustwo -> [<<"Key + 2">>]
 twoi_seed(Node) ->
     ValFun = fun(Key) ->
-        Obj = riakc_obj:new(bucket(twoi), iolist_to_binary(io_lib:format("~p", [Key])), kv_valgen(Key)),
-        MD1 = riakc_obj:get_update_metadata(Obj),
-        MD2 = riakc_obj:set_secondary_index(MD1, [
-            {{integer_index, "plusone"}, [Key + 1, Key + 10000]},
-            {{binary_index, "plustwo"}, [int_to_key(Key + 2)]}
-        ]),
-        riakc_obj:update_metadata(Obj, MD2)
-    end,
+                     Obj = riakc_obj:new(bucket(twoi), iolist_to_binary(io_lib:format("~p", [Key])), kv_valgen(Key)),
+                     MD1 = riakc_obj:get_update_metadata(Obj),
+                     MD2 = riakc_obj:set_secondary_index(MD1, [
+                                                               {{integer_index, "plusone"}, [Key + 1, Key + 10000]},
+                                                               {{binary_index, "plustwo"}, [int_to_key(Key + 2)]}
+                                                              ]),
+                     riakc_obj:update_metadata(Obj, MD2)
+             end,
     seed(Node, 0, 7999, ValFun).
 
 erlang_mr() ->
     [{map, {modfun, riak_kv_mapreduce, map_object_value}, none, false},
-         {reduce, {modfun, riak_kv_mapreduce, reduce_count_inputs}, none, true}].
+     {reduce, {modfun, riak_kv_mapreduce, reduce_count_inputs}, none, true}].
 
 mr_seed(Node) ->
-%% to be used along with sequential_int keygen to populate known
-%% mapreduce set
+    %% to be used along with sequential_int keygen to populate known
+    %% mapreduce set
     ValFun = fun(Key) ->
-            Value = iolist_to_binary(io_lib:format("~p", [Key])),
-            riakc_obj:new(bucket(mapred), Value, Value)
-        end,
+                     Value = iolist_to_binary(io_lib:format("~p", [Key])),
+                     riakc_obj:new(bucket(mapred), Value, Value)
+             end,
     seed(Node, 0, 9999, ValFun).
 
 seed(Node, Start, End, ValFun) ->
     PBC = rt:pbc(Node),
 
     [ begin
-        Obj = ValFun(Key),
-        riakc_pb_socket:put(PBC, Obj, [{w,3}])
-    end || Key <- lists:seq(Start, End)],
+          Obj = ValFun(Key),
+          riakc_pb_socket:put(PBC, Obj, [{w,3}])
+      end || Key <- lists:seq(Start, End)],
 
     riakc_pb_socket:stop(PBC).
 
