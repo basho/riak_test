@@ -18,8 +18,11 @@ setup_repl_clusters(Conf) ->
 
     Nodes = deploy_nodes(NumNodes, Conf),
      [rt_intercept:add(Node, {riak_repl_util, [{{start_fullsync_timer,3},
-                                                start_fullsync_timer}]})
+                                                start_fullsync_timer},
+                                               {{schedule_fullsync,1},
+                                                schedule_fullsync}]})
          || Node <- Nodes],
+
     lager:info("Nodes = ~p", [Nodes]),
     {[AFirst|_] = ANodes, Rest} = lists:split(2, Nodes),
     {[BFirst|_] = BNodes, [CFirst|_] = CNodes} = lists:split(2, Rest),
@@ -53,8 +56,8 @@ setup_repl_clusters(Conf) ->
     [begin
                 rpc:call(N, riak_repl_console, max_fssource_cluster,
                     [["10"]]),
-                rpc:call(N, riak_repl_console, max_fssource_node, [["1"]]),
-                rpc:call(N, riak_repl_console, max_fssink_node, [["1"]])
+                rpc:call(N, riak_repl_console, max_fssource_node, [["5"]]),
+                rpc:call(N, riak_repl_console, max_fssink_node, [["5"]])
         end || N <- [AFirst, BFirst, CFirst]],
 
     %% get the leader for the first cluster
@@ -76,7 +79,6 @@ setup_repl_clusters(Conf) ->
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "C")),
     rt:wait_until_ring_converged(ANodes),
 
-    %% write some data on A
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
 
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
@@ -117,23 +119,52 @@ test_single_schedule() ->
     rt:log_to_nodes(AllNodes, "Test shared fullsync schedule from A -> [B,C]"),
     %% let some msgs queue up, doesn't matter how long we wait
     lager:info("Waiting for fullsyncs"),
+    wait_until_fullsyncs(LeaderA, "B", 10),
     wait_until_fullsyncs(LeaderA, "C", 10),
     rt:clean_cluster(AllNodes),
     pass.
 
+test_mixed_12_13() ->
+    Conf = [
+            {riak_core, [{ring_creation_size, 4}]},
+            {riak_repl,
+             [
+              {fullsync_on_connect, false},
+              {fullsync_interval, 99}
+             ]}
+           ],
+    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
+        setup_repl_clusters(Conf),
+
+    {_AFirst, BFirst, _CFirst} = get_firsts(AllNodes),
+
+    repl_util:wait_until_leader_converge(ANodes),
+    repl_util:wait_until_leader_converge(BNodes),
+    repl_util:wait_until_leader_converge(CNodes),
+
+    lager:info("Adding repl listener to cluster A"),
+    ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "9010"]],
+    Res = rpc:call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
+    ?assertEqual(ok, Res),
+
+    lager:info("Adding repl site to cluster B"),
+    SiteArgs = ["127.0.0.1", "9010", "rtmixed"],
+    Res = rpc:call(BFirst, riak_repl_console, add_site, [SiteArgs]),
+
+    lager:info("Waiting for v2 repl to catch up. Good time to light up a cold can of Tab."),
+    wait_until_fullsyncs(LeaderA, "B", 3),
+    wait_until_fullsyncs(LeaderA, "C", 3),
+    wait_until_12_fs_complete(LeaderA, 9),
+    rt:clean_cluster(AllNodes),
+    pass.
+
+
 confirm() ->
-    AllTests = [test_multiple_schedules(), test_single_schedule()],
+    AllTests = [test_mixed_12_13(), test_multiple_schedules(), test_single_schedule()],
     case lists:all(fun (Result) -> Result == pass end, AllTests) of
         true ->  pass;
         false -> sadtrombone
     end.
-
-get_cluster_fullsyncs(Node, ClusterName) ->
-    Status = rpc:call(Node, riak_repl2_fscoordinator, status, []),
-                                                % let it fail if keys are missing
-    ClusterData = proplists:get_value(ClusterName, Status),
-    proplists:get_value(fullsyncs_completed, ClusterData).
-
 
 wait_until_fullsyncs(Node, ClusterName, N) ->
     Res = rt:wait_until(Node,
@@ -144,13 +175,37 @@ wait_until_fullsyncs(Node, ClusterName, N) ->
                         false;
                     undefined ->
                         false;
-                    N ->
-                        true;
-                    X when X > N ->
+                    X when X >= N ->
                         true;
                     _ ->
                         false
                 end
         end),
     ?assertEqual(ok, Res).
+
+wait_until_12_fs_complete(Node, N) ->
+    rt:wait_until(Node,
+                  fun(_) ->
+                          Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                          lager:info("~p",
+                                     [proplists:get_value(server_fullsyncs, Status)]),
+                          case proplists:get_value(server_fullsyncs, Status) of
+                              C when C >= N ->
+                                  true;
+                              _ ->
+                                  false
+                          end
+                  end).
+
+get_firsts(Nodes) ->
+    {[AFirst|_] = _ANodes, Rest} = lists:split(2, Nodes),
+    {[BFirst|_] = _BNodes, [CFirst|_] = _CNodes} = lists:split(2, Rest),
+    {AFirst, BFirst, CFirst}.
+
+get_cluster_fullsyncs(Node, ClusterName) ->
+    Status = rpc:call(Node, riak_repl2_fscoordinator, status, []),
+                                                % let it fail if keys are missing
+    ClusterData = proplists:get_value(ClusterName, Status),
+    proplists:get_value(fullsyncs_completed, ClusterData).
+
 

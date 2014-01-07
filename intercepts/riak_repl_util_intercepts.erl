@@ -21,3 +21,10 @@ start_fullsync_timer(Pid, FullsyncIvalMins, Cluster) ->
         _ -> ok
     end,
     gen_server:cast(Pid, start_fullsync).
+
+
+schedule_fullsync(Pid) ->
+    io:format(user, "Scheduled v2 fullsync in ~p minutes~n", [application:get_env(riak_repl,
+                                                                    fullsync_interval)]),
+    erlang:send_after(1, Pid, start_fullsync).
+
