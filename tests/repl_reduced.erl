@@ -78,7 +78,7 @@ data_push_test_() ->
         repl_util:name_cluster(N4, "c456"),
         Port = repl_util:get_cluster_mgr_port(N4),
         lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
-        repl_util:connect_rt(N1, Port, "c456"),
+        connect_rt(N1, Port, "c456"),
         #data_push_test{nodes = Nodes, c123 = C123, c456 = C456}
     end,
     fun(State) ->
@@ -927,3 +927,51 @@ write_n_keys(Source, Destination, M, N) ->
     %% verify data is replicated to B
     lager:info("Reading ~p keys written from ~p", [Last-First+1, Destination]),
     ?assertEqual(0, repl_util:wait_for_reads(Destination, First, Last, TestBucket, 2)).
+
+connect_rt(Node, Port, Sinkname) ->
+    lager:info("attempting to ensure clusters are connected"),
+    {Pid, Mon} = spawn_monitor(repl_util, connect_rt, [Node, Port, Sinkname]),
+    receive
+        {'DOWN', Mon, process, Pid, normal} ->
+            wait_for_rt(Node, Sinkname),
+            wait_for_rt_source(Node, Sinkname)
+    after 2000 ->
+        connect_rt(Node, Port, Sinkname)
+    end.
+
+wait_for_rt(Node, Sinkname) ->
+    lager:info("attempting to ensure realtime is started"),
+    rt:wait_until(fun() ->
+        Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+        Started = proplists:get_value(realtime_started, Status),
+        case {Started, Sinkname} of
+            {A,A} ->
+                true;
+            {[], _} ->
+                false;
+            {B, _} when is_integer(hd(B)) ->
+                false;
+            {_, _} when is_list(Started) ->
+                lists:member(Sinkname, Started)
+        end
+    end).
+
+wait_for_rt_source(Node, Sinkname) ->
+    rt:wait_until(fun() ->
+        Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+        Sources = proplists:get_value(sources, Status),
+        is_source_connected(Sinkname, Sources)
+    end).
+
+is_source_connected(_Sinkname, []) ->
+    lager:info("no connection this time, looping around"),
+    false;
+is_source_connected(Sinkname, [Source | Sources]) ->
+    {source_stats, Data} = Source,
+    ConnTo = proplists:get_value(rt_source_connected_to, Data),
+    SourceName = proplists:get_value(source, ConnTo),
+    if
+        SourceName =:= Sinkname -> true;
+        true -> is_source_connected(Sinkname, Sources)
+    end.
+
