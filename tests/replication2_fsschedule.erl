@@ -204,8 +204,13 @@ get_firsts(Nodes) ->
 
 get_cluster_fullsyncs(Node, ClusterName) ->
     Status = rpc:call(Node, riak_repl2_fscoordinator, status, []),
-                                                % let it fail if keys are missing
-    ClusterData = proplists:get_value(ClusterName, Status),
-    proplists:get_value(fullsyncs_completed, ClusterData).
+    case proplists:lookup(ClusterName, Status) of
+        none -> 0;
+        {_, ClusterData} ->
+            case proplists:lookup(fullsyncs_completed, ClusterData) of
+                none -> 0;
+                FSC -> FSC
+            end
+    end.
 
 
