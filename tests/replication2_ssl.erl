@@ -5,6 +5,10 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+
+    %% test requires allow_mult=false
+    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
+
     NumNodes = rt_config:get(num_nodes, 6),
     ClusterASize = rt_config:get(cluster_a_size, 3),
 
