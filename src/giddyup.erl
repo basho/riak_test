@@ -82,10 +82,14 @@ post_result(TestResult) ->
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
     rt:check_ibrowse(),
-    {ok, RC, Headers} = rt:post_result(TestResult, #rt_webhook{name="GiddyUp", url=URL, headers=[basic_auth()]}),
-    {_, Location} = lists:keyfind("Location", 1, Headers),
-    lager:info("Test Result successfully POSTed to GiddyUp! ResponseCode: ~s, URL: ~s", [RC, Location]),
-    {ok, Location}.
+    case rt:post_result(TestResult, #rt_webhook{name="GiddyUp", url=URL, headers=[basic_auth()]}) of
+        {ok, RC, Headers} ->
+            {_, Location} = lists:keyfind("Location", 1, Headers),
+            lager:info("Test Result successfully POSTed to GiddyUp! ResponseCode: ~s, URL: ~s", [RC, Location]),
+            {ok, Location};
+        error ->
+            error
+    end.
 
 post_artifact(TRURL, {FName, Body}) ->
     %% First compute the path of where to post the artifact
