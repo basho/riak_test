@@ -87,6 +87,7 @@
          priv_dir/0,
          remove/2,
          riak/2,
+         riak_repl/2,
          rpc_get_env/2,
          set_backend/1,
          set_backend/2,
@@ -1078,6 +1079,11 @@ admin(Node, Args) ->
 riak(Node, Args) ->
     ?HARNESS:riak(Node, Args).
 
+
+%% @doc Call 'bin/riak-repl' command on `Node' with arguments `Args'
+riak_repl(Node, Args) ->
+    ?HARNESS:riak_repl(Node, Args).
+
 search_cmd(Node, Args) ->
     {ok, Cwd} = file:get_cwd(),
     rpc:call(Node, riak_search_cmd, command, [[Cwd | Args]]).
@@ -1373,3 +1379,4 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
+
