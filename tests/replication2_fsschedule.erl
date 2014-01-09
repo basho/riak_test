@@ -187,8 +187,6 @@ wait_until_12_fs_complete(Node, N) ->
     rt:wait_until(Node,
                   fun(_) ->
                           Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-                          lager:info("~p",
-                                     [proplists:get_value(server_fullsyncs, Status)]),
                           case proplists:get_value(server_fullsyncs, Status) of
                               C when C >= N ->
                                   true;
