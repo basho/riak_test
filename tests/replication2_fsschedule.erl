@@ -18,9 +18,9 @@ setup_repl_clusters(Conf) ->
 
     Nodes = deploy_nodes(NumNodes, Conf),
      [rt_intercept:add(Node, {riak_repl_util, [{{start_fullsync_timer,3},
-                                                start_fullsync_timer},
+                                                interval_check_v3},
                                                {{schedule_fullsync,1},
-                                                schedule_fullsync}]})
+                                                interval_check_v2}]})
          || Node <- Nodes],
 
     lager:info("Nodes = ~p", [Nodes]),
