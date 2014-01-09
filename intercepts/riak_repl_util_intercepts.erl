@@ -35,7 +35,6 @@ interval_check_v3(Pid, FullsyncIvalMins, Cluster) ->
 %% interval (99 minutes) for all sink clusters.
 %% run fullsync after checking interval
 interval_check_v2(Pid) ->
-    %328:Scheduled v2 fullsync in [{"B",1},{"C",2}] minutes
     {ok, Interval} = application:get_env(riak_repl, fullsync_interval),
     io:format(user, "Scheduled v2 fullsync in ~p minutes~n", [Interval]),
     case Interval of
