@@ -741,7 +741,7 @@ upgrade_source_test_() ->
             [N1 | _] = C123,
             [N4 | _] = C456,
             rpc:call(N1, riak_repl_console, proxy_get, [["enable", "c456"]]),
-            First = 301, Last = 600, Bucket = <<"upgrade">>,
+            First = fill_size() + 1, Last = First - 1 + fill_size(), Bucket = <<"upgrade">>,
             ReadGot = repl_util:wait_for_reads(N4, First, Last, Bucket, 1),
             ?assertEqual(0, ReadGot)
         end}
