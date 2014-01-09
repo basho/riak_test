@@ -9,19 +9,16 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% This tests fullsync scheduling in 1.4+ Advanced Replication
+%% This tests fullsync scheduling in 1.4+ Advanced Replication%% intercept
+%% gets called w/ v3 test too, let it
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-setup_repl_clusters(Conf) ->
+setup_repl_clusters(Conf, InterceptSetup) ->
     NumNodes = 6,
     lager:info("Deploy ~p nodes", [NumNodes]),
 
     Nodes = deploy_nodes(NumNodes, Conf),
-     [rt_intercept:add(Node, {riak_repl_util, [{{start_fullsync_timer,3},
-                                                interval_check_v3},
-                                               {{schedule_fullsync,1},
-                                                interval_check_v2}]})
-         || Node <- Nodes],
+    InterceptSetup(Nodes),
 
     lager:info("Nodes = ~p", [Nodes]),
     {[AFirst|_] = ANodes, Rest} = lists:split(2, Nodes),
@@ -98,7 +95,7 @@ test_multiple_schedules() ->
              ]}
            ],
     {LeaderA, _ANodes, _BNodes, _CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, fun install_v3_intercepts/1),
     lager:info("Waiting for fullsyncs"),
     wait_until_fullsyncs(LeaderA, "B", 5),
     wait_until_fullsyncs(LeaderA, "C", 5),
@@ -115,7 +112,7 @@ test_single_schedule() ->
              ]}
            ],
     {LeaderA, _ANodes, _BNodes, _CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, fun install_v3_intercepts/1),
     rt:log_to_nodes(AllNodes, "Test shared fullsync schedule from A -> [B,C]"),
     %% let some msgs queue up, doesn't matter how long we wait
     lager:info("Waiting for fullsyncs"),
@@ -134,7 +131,7 @@ test_mixed_12_13() ->
              ]}
            ],
     {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
-        setup_repl_clusters(Conf),
+        setup_repl_clusters(Conf, fun install_mixed_intercepts/1),
 
     {_AFirst, BFirst, _CFirst} = get_firsts(AllNodes),
 
@@ -211,4 +208,18 @@ get_cluster_fullsyncs(Node, ClusterName) ->
             end
     end.
 
+%% skip v2 repl interval checks
+install_v3_intercepts(Nodes) ->
+    [rt_intercept:add(Node, {riak_repl_util, [{{start_fullsync_timer,3},
+                                                interval_check_v3}
+                                                ]})
+               || Node <- Nodes].
+
+%% check v2 + v3 intervals
+install_mixed_intercepts(Nodes) ->
+     [rt_intercept:add(Node, {riak_repl_util, [{{start_fullsync_timer,3},
+                                                interval_check_v3},
+                                               {{schedule_fullsync,1},
+                                                interval_check_v2}]})
+             || Node <- Nodes].
 

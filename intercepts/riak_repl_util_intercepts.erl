@@ -5,7 +5,8 @@
 -define(M, riak_repl_util_orig).
 
 
-%% intercept calls to start_fullsync_timer, which is used for v3 repl
+%% intercept calls to riak_repl_util:start_fullsync_timer/3,
+%% which is used for v3 repl
 %% don't sleep, but see if the specified interval is correct
 %% run fullsync after checking interval
 interval_check_v3(Pid, FullsyncIvalMins, Cluster) ->
@@ -27,11 +28,15 @@ interval_check_v3(Pid, FullsyncIvalMins, Cluster) ->
     end.
 
 
-%% intercept calls to schedule_fullsync, which is used for v2 repl
+%% intercept calls to riak_repl_util:schedule_fullsync,
+%% which is used for v2 repl
 %% don't sleep, but see if the interval in app:env is correct
+%% the test that uses this intercept specifies a single 
+%% interval (99 minutes) for all sink clusters.
 %% run fullsync after checking interval
 interval_check_v2(Pid) ->
-    Interval = [application:get_env(riak_repl, fullsync_interval)],
+    %328:Scheduled v2 fullsync in [{"B",1},{"C",2}] minutes
+    {ok, Interval} = application:get_env(riak_repl, fullsync_interval),
     io:format(user, "Scheduled v2 fullsync in ~p minutes~n", [Interval]),
     case Interval of
         99 -> riak_repl_keylist_server:start_fullsync(Pid),
