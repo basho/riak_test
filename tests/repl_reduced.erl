@@ -205,7 +205,7 @@ aae_tree_nuke_test_() ->
         Port = repl_util:get_cluster_mgr_port(N4),
         lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
         %repl_util:connect_rt(N1, Port, "c456"),
-        maybe_reconnect_rt(N1, N4, "c456"),
+        connect_rt(N1, Port, "c456"),
         {Nodes, C123, C456}
     end,
     fun({Nodes, _, _}) ->
@@ -305,7 +305,8 @@ aae_test_() ->
         Port = repl_util:get_cluster_mgr_port(N4),
         lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
         %repl_util:connect_rt(N1, Port, "c456"),
-        maybe_reconnect_rt(N1, N4, "c456"),
+        %maybe_reconnect_rt(N1, N4, "c456"),
+        connect_rt(N1, Port, "c456"),
         {Nodes, C123, C456}
     end,
     fun({Nodes, _C123, _C456}) ->
@@ -327,6 +328,7 @@ aae_test_() ->
             WaitFun = fun(Node) ->
                 case rpc:call(Node, riak_repl_console, full_objects, [[]]) of
                     1 ->
+                        lager:info("~p is all set", [Node]),
                         true;
                     Uh ->
                         lager:info("~p got ~p", [Node, Uh]),
@@ -369,7 +371,7 @@ read_repair_interaction_test_() ->
         repl_util:name_cluster(N4, "c456"),
         Port = repl_util:get_cluster_mgr_port(N4),
         lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
-        repl_util:connect_rt(N1, Port, "c456"),
+        connect_rt(N1, Port, "c456"),
         #data_push_test{nodes = Nodes, c123 = C123, c456 = C456}
     end,
     fun(State) ->
@@ -599,7 +601,7 @@ upgrade_sink_test_() ->
         Port = repl_util:get_cluster_mgr_port(N4),
         lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
         %repl_util:connect_rt(N1, Port, "c456"),
-        maybe_reconnect_rt(N1, N4, "c456"),
+        connect_rt(N1, N4, "c456"),
         {Nodes, C123, C456}
     end,
     fun({Nodes, _, _}) ->
@@ -678,7 +680,7 @@ upgrade_source_test_() ->
         repl_util:name_cluster(N4, "c456"),
         Port = repl_util:get_cluster_mgr_port(N4),
         lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
-        repl_util:connect_rt(N1, Port, "c456"),
+        connect_rt(N1, Port, "c456"),
         {Nodes, C123, C456}
     end,
     fun({Nodes, _, _}) ->
@@ -942,26 +944,41 @@ connect_rt(Node, Port, Sinkname) ->
 wait_for_rt(Node, Sinkname) ->
     lager:info("attempting to ensure realtime is started"),
     rt:wait_until(fun() ->
-        Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-        Started = proplists:get_value(realtime_started, Status),
-        case {Started, Sinkname} of
-            {A,A} ->
-                true;
-            {[], _} ->
-                false;
-            {B, _} when is_integer(hd(B)) ->
-                false;
-            {_, _} when is_list(Started) ->
-                lists:member(Sinkname, Started)
-        end
+        is_source_enabled(Node, Sinkname)
     end).
 
 wait_for_rt_source(Node, Sinkname) ->
     rt:wait_until(fun() ->
         Status = rpc:call(Node, riak_repl_console, status, [quiet]),
         Sources = proplists:get_value(sources, Status),
-        is_source_connected(Sinkname, Sources)
+        case is_source_connected(Sinkname, Sources) of
+            false ->
+                case is_source_enabled(Node, Sinkname) of
+                    false ->
+                        repl_util:enable_realtime(Node, Sinkname),
+                        repl_util:start_realtime(Node, Sinkname),
+                        false;
+                    true ->
+                        false
+                end;
+            true ->
+                true
+        end
     end).
+
+is_source_enabled(Node, Sinkname) ->
+    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    Started = proplists:get_value(realtime_started, Status),
+    case {Started, Sinkname} of
+        {A,A} ->
+            true;
+        {[], _} ->
+            false;
+        {B, _} when is_integer(hd(B)) ->
+            false;
+        {_, _} when is_list(Started) ->
+            lists:member(Sinkname, Started)
+    end.
 
 is_source_connected(_Sinkname, []) ->
     lager:info("no connection this time, looping around"),
