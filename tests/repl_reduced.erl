@@ -8,6 +8,8 @@
 % individual tests
 -export([toggle_enabled/0, data_push/0, aae/0]).
 
+-define(default_fill, 300).
+
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
@@ -233,7 +235,7 @@ aae_tree_nuke_test_() ->
             end,
             [rt:wait_until(Node, WaitFun) || Node <- C456],
 
-            First = 1, Last = 300, Bucket = <<"aae_test_bucket">>,
+            First = 1, Last = fill_size(), Bucket = <<"aae_test_bucket">>,
             lager:info("writing ~p keys to aae_test_bucket on c123", [Last]),
             WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
             ?assertEqual([], WriteGot),
@@ -337,7 +339,7 @@ aae_test_() ->
             end,
             [rt:wait_until(Node, WaitFun) || Node <- C456],
 
-            First = 1, Last = 300, Bucket = <<"aae_test_bucket">>,
+            First = 1, Last = fill_size(), Bucket = <<"aae_test_bucket">>,
             lager:info("writing ~p keys to aae_test_bucket on c123", [Last]),
             WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
             ?assertEqual([], WriteGot),
@@ -491,12 +493,7 @@ read_repair_interaction_test_() ->
                 rt_intercept:add(Node, {riak_repl_reduced, []})
             end, State#data_push_test.c456),
 
-            FillSize = case rt_config:config_or_os_env(fill_size, 1000) of
-                FS when is_integer(FS) ->
-                    FS;
-                FS when is_list(FS) ->
-                    list_to_integer(FS)
-            end,
+            FillSize = fill_size(),
             % Fill the source node and let the sink get it all
             lager:info("filling c123 cluster"),
             write(State#data_push_test.c123, 1, FillSize, Bucket, Bin),
@@ -601,7 +598,7 @@ upgrade_sink_test_() ->
         Port = repl_util:get_cluster_mgr_port(N4),
         lager:info("attempting to connect ~p to c456 on port ~p", [N1, Port]),
         %repl_util:connect_rt(N1, Port, "c456"),
-        connect_rt(N1, N4, "c456"),
+        connect_rt(N1, Port, "c456"),
         {Nodes, C123, C456}
     end,
     fun({Nodes, _, _}) ->
@@ -628,7 +625,7 @@ upgrade_sink_test_() ->
 
             maybe_reconnect_rt(N1, N4, "c456"),
 
-            First = 1, Last = 300, Bucket = <<"upgrade">>,
+            First = 1, Last = fill_size(), Bucket = <<"upgrade">>,
             WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
             ?assertEqual([], WriteGot),
 
@@ -646,19 +643,19 @@ upgrade_sink_test_() ->
             end,
             [rt:wait_until(Node, WaitForMutateCap) || Node <- C123],
 
-            First = 301, Last = 600, Bucket = <<"upgrade">>,
+            First = fill_size() + 1, Last = First - 1 + fill_size(), Bucket = <<"upgrade">>,
             WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
             ?assertEqual([], WriteGot),
             lager:info("waiting for reads on c456"),
             ReadGot = repl_util:wait_for_reads(N4, First, Last, Bucket, 1),
-            ?assertEqual(300, ReadGot)
+            ?assertEqual(fill_size(), ReadGot)
         end},
 
         {"enable proxy get and last notfounds become founds", timeout, rt_cascading:timeout(5), fun() ->
             [N1 | _] = C123,
             [N4 | _] = C456,
             rpc:call(N1, riak_repl_console, proxy_get, [["enable", "c456"]]),
-            First = 301, Last = 600, Bucket = <<"upgrade">>,
+            First = fill_size() + 1, Last = First - 1 + fill_size(), Bucket = <<"upgrade">>,
             ReadGot = repl_util:wait_for_reads(N4, First, Last, Bucket, 1),
             ?assertEqual(0, ReadGot)
         end}
@@ -705,7 +702,7 @@ upgrade_source_test_() ->
 
             maybe_reconnect_rt(N1, N4, "c456"),
 
-            First = 1, Last = 300, Bucket = <<"upgrade">>,
+            First = 1, Last = fill_size(), Bucket = <<"upgrade">>,
             WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
             ?assertEqual([], WriteGot),
 
@@ -713,12 +710,12 @@ upgrade_source_test_() ->
             % manual testing indicates it gets there, just maybe not as
             % fast as this function expects.
             ReadGot = case repl_util:wait_for_reads(N4, First, Last, Bucket, 1) of
-                300 ->
-                    300;
+                Last ->
+                    Last;
                 _ ->
                     repl_util:wait_for_reads(N4, First, Last, bucket, 1)
             end,
-            ?assertEqual(300, ReadGot)
+            ?assertEqual(Last, ReadGot)
 
         end},
 
@@ -732,12 +729,12 @@ upgrade_source_test_() ->
             [rt:wait_until(Node, WaitForMutateCap) || Node <- C456],
             rpc:call(N4, riak_repl_console, full_objects, [["0"]]),
 
-            First = 301, Last = 600, Bucket = <<"upgrade">>,
+            First = fill_size() + 1, Last = First - 1 + fill_size(), Bucket = <<"upgrade">>,
             WriteGot = repl_util:do_write(N1, First, Last, Bucket, 3),
             ?assertEqual([], WriteGot),
             lager:info("waiting for reads on c456"),
             ReadGot = repl_util:wait_for_reads(N4, First, Last, Bucket, 1),
-            ?assertEqual(300, ReadGot)
+            ?assertEqual(fill_size(), ReadGot)
         end},
 
         {"enable proxy get and last notfounds become founds", timeout, rt_cascading:timeout(5), fun() ->
@@ -990,5 +987,14 @@ is_source_connected(Sinkname, [Source | Sources]) ->
     if
         SourceName =:= Sinkname -> true;
         true -> is_source_connected(Sinkname, Sources)
+    end.
+
+
+fill_size() ->
+    case rt_config:config_or_os_env(fill_size, ?default_fill) of
+        FS when is_integer(FS) ->
+            FS;
+        FS when is_list(FS) ->
+            list_to_integer(FS)
     end.
 
