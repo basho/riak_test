@@ -56,6 +56,7 @@ confirm() ->
                         {{clustername,1}, verify_clustername},
                         {{modes,1}, verify_modes},
                         {{clusterstats,1}, verify_clusterstats},
+                        {{realtime_cascades,1}, verify_realtime_cascades},
                         {{max_fssource_node,1}, verify_max_fssource_node},
                         {{max_fssource_cluster,1}, verify_max_fssource_cluster},
                         {{max_fssink_node,1}, verify_max_fssink_node},
