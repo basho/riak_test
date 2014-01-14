@@ -27,33 +27,33 @@
 %% API
 -export([assert_equal/2]).
 
--export([list_keys_tester/4, kv_tester/4, mapred_tester/4, 
-         twoi_tester/4, search_tester/4, tester_start_link/3]).
+-export([list_keys_tester/5, kv_tester/5, mapred_tester/5,
+         twoi_tester/5, search_tester/5, tester_start_link/4]).
 
 -export([init/1]).
--export([start_link/4]).
+-export([start_link/5]).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(Name, FunName, Node, Vsn), { 
+-define(CHILD(Name, FunName, Node, Vsn, ReportPid), {
     list_to_atom(atom_to_list(Name) ++ "_" ++ atom_to_list(FunName)),
-    {   ?MODULE, 
-        tester_start_link, 
-        [FunName, Node, Vsn]}, 
+    {   ?MODULE,
+        tester_start_link,
+        [FunName, Node, Vsn, ReportPid]},
         permanent, 5000, worker, [?MODULE]}).
 
-start_link(Name, Node, Backend, Vsn) ->
-    supervisor:start_link(?MODULE, [Name, Node, Backend, Vsn]).
+start_link(Name, Node, Backend, Vsn, ReportPid) ->
+    supervisor:start_link(?MODULE, [Name, Node, Backend, Vsn, ReportPid]).
 
-init([Name, Node, Backend, Vsn]) ->
+init([Name, Node, Backend, Vsn, ReportPid]) ->
     rt:wait_for_service(Node, [riak_search,riak_kv,riak_pipe]),
 
-    ChildSpecs1 = [ 
-        ?CHILD(Name, FunName, Node, Vsn) 
-        || FunName <- [list_keys_tester, mapred_tester, kv_tester, search_tester]],
+    ChildSpecs1 = [
+        ?CHILD(Name, FunName, Node, Vsn, ReportPid)
+        || FunName <- [list_keys_tester, kv_tester, search_tester]],
 
     ChildSpecs = case Backend of
         eleveldb ->
-            [?CHILD(Name, twoi_tester, Node, Vsn) | ChildSpecs1];
+            [?CHILD(Name, twoi_tester, Node, Vsn, ReportPid) | ChildSpecs1];
         _ -> ChildSpecs1
     end,
     {ok, {{one_for_one, 1000, 60}, ChildSpecs}}.
@@ -63,10 +63,10 @@ init([Name, Node, Backend, Vsn]) ->
 %%% Internal functions
 %%%===================================================================
 
-tester_start_link(Function, Node, Vsn) ->
-    {ok, spawn_link(?MODULE, Function, [Node, 0, undefined, Vsn])}.
+tester_start_link(Function, Node, Vsn, ReportPid) ->
+    {ok, spawn_link(?MODULE, Function, [Node, 0, undefined, Vsn, ReportPid])}.
 
-list_keys_tester(Node, Count, Pid, Vsn) ->
+list_keys_tester(Node, Count, Pid, Vsn, ReportPid) ->
     PBC = pb_pid_recycler(Pid, Node),
     case riakc_pb_socket:list_keys(PBC, <<"objects">>) of
         {ok, Keys} ->
@@ -74,42 +74,43 @@ list_keys_tester(Node, Count, Pid, Vsn) ->
             ExpectedKeys = lists:usort([loaded_upgrade:int_to_key(K) || K <- lists:seq(0, 100)]),
             case assert_equal(ExpectedKeys, ActualKeys) of
                 true -> cool;
-                _ -> loaded_upgrade ! {listkeys, Node, not_equal}
+                _ -> ReportPid ! {listkeys, Node, not_equal}
             end;
         {error, timeout} ->
-            loaded_upgrade ! {listkeys, Node, timeout};
+            ReportPid ! {listkeys, Node, timeout};
         {error, {timeout, _}} ->
-            loaded_upgrade ! {listkeys, Node, timeout};
+            ReportPid ! {listkeys, Node, timeout};
         Unexpected ->
-            loaded_upgrade ! {listkeys, Node, Unexpected}
+            ReportPid ! {listkeys, Node, Unexpected}
     end,
-    list_keys_tester(Node, Count + 1, PBC, Vsn).
+    list_keys_tester(Node, Count + 1, PBC, Vsn, ReportPid).
 
-kv_tester(Node, Count, Pid, Vsn) ->
+kv_tester(Node, Count, Pid, Vsn, ReportPid) ->
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
     case riakc_pb_socket:get(PBC, loaded_upgrade:bucket(kv), loaded_upgrade:int_to_key(Key)) of
         {ok, Val} ->
             case loaded_upgrade:kv_valgen(Key) == riakc_obj:get_value(Val) of
                 true -> cool;
-                _ -> loaded_upgrade ! {kv, Node, not_equal}
+                _ -> ReportPid ! {kv, Node, not_equal}
             end;
         {error, disconnected} ->
             ok;
         {error, notfound} ->
-            loaded_upgrade ! {kv, Node, {notfound, Key}};
+            ReportPid ! {kv, Node, {notfound, Key}};
         Unexpected ->
-            loaded_upgrade ! {kv, Node, Unexpected}
+            ReportPid ! {kv, Node, Unexpected}
     end,
-    kv_tester(Node, Count + 1, PBC, Vsn).
+    kv_tester(Node, Count + 1, PBC, Vsn, ReportPid).
 
-mapred_tester(Node, Count, Pid, Vsn) ->
+mapred_tester(Node, Count, Pid, Vsn, ReportPid) ->
     PBC = pb_pid_recycler(Pid, Node),
     case riakc_pb_socket:mapred(PBC, loaded_upgrade:bucket(mapred), loaded_upgrade:erlang_mr()) of
         {ok, [{1, [10000]}]} ->
             ok;
-        {ok, _R} ->
-            loaded_upgrade ! {mapred, Node, bad_result};
+        {ok, R} ->
+            lager:warning("Bad MR result: ~p", [R]),
+            ReportPid ! {mapred, Node, bad_result};
         {error, disconnected} ->
             ok;
         %% Finkmaster Flex says timeouts are ok
@@ -138,16 +139,16 @@ mapred_tester(Node, Count, Pid, Vsn) ->
         {error, <<"{\"phase\":0,\"error\":\"[{vnode_down,noproc}]", _/binary>>} ->
             ok;
         Unexpected ->
-            loaded_upgrade ! {mapred, Node, Unexpected}
+            ReportPid ! {mapred, Node, Unexpected}
     end,
-    mapred_tester(Node, Count + 1, PBC, Vsn).
+    mapred_tester(Node, Count + 1, PBC, Vsn, ReportPid).
 
-twoi_tester(Node, 0, undefined, legacy) ->
+twoi_tester(Node, 0, undefined, legacy, ReportPid) ->
     lager:warning("Legacy nodes do not have 2i load applied"),
-    twoi_tester(Node, 1, undefined, legacy);
-twoi_tester(Node, Count, Pid, legacy) ->
-    twoi_tester(Node, Count + 1, Pid, legacy);
-twoi_tester(Node, Count, Pid, Vsn) ->
+    twoi_tester(Node, 1, undefined, legacy, ReportPid);
+twoi_tester(Node, Count, Pid, legacy, ReportPid) ->
+    twoi_tester(Node, Count + 1, Pid, legacy, ReportPid);
+twoi_tester(Node, Count, Pid, Vsn, ReportPid) ->
     PBC = pb_pid_recycler(Pid, Node),
     Key = Count rem 8000,
     ExpectedKeys = [loaded_upgrade:int_to_key(Key)],
@@ -158,38 +159,40 @@ twoi_tester(Node, Count, Pid, Vsn) ->
                               {binary_index, "plustwo"},
                               loaded_upgrade:int_to_key(Key + 2)),
       riakc_pb_socket:get_index(
-                              PBC, 
+                              PBC,
                               loaded_upgrade:bucket(twoi),
                               {integer_index, "plusone"},
                               Key + 1)
-     } of 
+     } of
         {{ok, ?INDEX_RESULTS{keys=BinKeys}}, {ok, ?INDEX_RESULTS{keys=IntKeys}}} ->
             case {assert_equal(ExpectedKeys, BinKeys), assert_equal(ExpectedKeys, IntKeys)} of
                 {true, true} -> cool;
                 {false, false} ->
-                    loaded_upgrade ! {twoi, Node, bolth_no_match};
+                    ReportPid ! {twoi, Node, bolth_no_match};
                 {false, true} ->
-                    loaded_upgrade ! {twoi, Node, bin_no_match};
+                    ReportPid ! {twoi, Node, bin_no_match};
                 {true, false} ->
-                    loaded_upgrade ! {twoi, Node, int_no_match}
+                    ReportPid ! {twoi, Node, int_no_match}
             end;
         {{error, Reason}, _} ->
-            loaded_upgrade ! {twoi, Node, {error, Reason}};
+            ReportPid ! {twoi, Node, {error, Reason}};
         {_, {error, Reason}} ->
-            loaded_upgrade ! {twoi, Node, {error, Reason}};
+            ReportPid ! {twoi, Node, {error, Reason}};
         Unexpected ->
-            loaded_upgrade ! {twoi, Node, Unexpected}
+            ReportPid ! {twoi, Node, Unexpected}
     end,
-    twoi_tester(Node, Count + 1, PBC, Vsn).
+    twoi_tester(Node, Count + 1, PBC, Vsn, ReportPid).
 
-search_tester(Node, Count, Pid, Vsn) ->
+search_tester(Node, Count, Pid, Vsn, ReportPid) ->
     PBC = pb_pid_recycler(Pid, Node),
     {Term, Size} = search_check(Count),
     case riakc_pb_socket:search(PBC, loaded_upgrade:bucket(search), Term) of
         {ok, Result} ->
             case Size == Result#search_results.num_found of
                 true -> ok;
-                _ -> loaded_upgrade ! {search, Node, bad_result}
+                _ ->
+                    lager:warning("Bad search result: ~p Expected: ~p", [Result#search_results.num_found, Size]),
+                    ReportPid ! {search, Node, bad_result}
             end;
         {error, disconnected} ->
             %% oh well, reconnect
@@ -197,24 +200,24 @@ search_tester(Node, Count, Pid, Vsn) ->
 
         {error, <<"Error processing incoming message: throw:{timeout,range_loop}:[{riak_search_backend", _/binary>>} ->
             case rt:is_mixed_cluster(Node) of
-                true -> 
+                true ->
                     ok;
                 _ ->
-                    loaded_upgrade ! {search, Node, {timeout, range_loop}}
+                    ReportPid ! {search, Node, {timeout, range_loop}}
             end;
 
         {error,<<"Error processing incoming message: error:{case_clause,", _/binary>>} ->
             %% although it doesn't say so, this is the infamous badfun
             case rt:is_mixed_cluster(Node) of
-                true -> 
+                true ->
                     ok;
                 _ ->
-                    loaded_upgrade ! {search, Node, {error, badfun}}
+                    ReportPid ! {search, Node, {error, badfun}}
             end;
         Unexpected ->
-            loaded_upgrade ! {search, Node, Unexpected}
+            ReportPid ! {search, Node, Unexpected}
     end,
-    search_tester(Node, Count + 1, PBC, Vsn).
+    search_tester(Node, Count + 1, PBC, Vsn, ReportPid).
 
 search_check(Count) ->
     case Count rem 6 of
@@ -227,7 +230,7 @@ search_check(Count) ->
     end.
 
 assert_equal(Expected, Actual) ->
-    case Expected -- Actual of 
+    case Expected -- Actual of
         [] -> ok;
         Diff -> lager:info("Expected -- Actual: ~p", [Diff])
     end,
@@ -243,4 +246,3 @@ pb_pid_recycler(Pid, Node) ->
             riakc_pb_socket:stop(Pid),
             rt:pbc(Node)
     end.
-    
