@@ -33,6 +33,9 @@ get_deps() ->
 riakcmd(Path, N, Cmd) ->
     io_lib:format("~s/dev/dev~b/bin/riak ~s", [Path, N, Cmd]).
 
+riakreplcmd(Path, N, Cmd) ->
+    io_lib:format("~s/dev/dev~b/bin/riak-repl ~s", [Path, N, Cmd]).
+
 gitcmd(Path, Cmd) ->
     io_lib:format("git --git-dir=\"~s/.git\" --work-tree=\"~s/\" ~s",
                   [Path, Path, Cmd]).
@@ -72,6 +75,12 @@ run_riak(N, Path, Cmd) ->
         _ ->
             R
     end.
+
+run_riak_repl(N, Path, Cmd) ->
+    lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
+    os:cmd(riakreplcmd(Path, N, Cmd)).
+    %% don't mess with intercepts and/or coverage,
+    %% they should already be setup at this point
 
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
@@ -513,6 +522,14 @@ riak(Node, Args) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Result = run_riak(N, Path, Args),
+    lager:info("~s", [Result]),
+    {ok, Result}.
+
+
+riak_repl(Node, Args) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    Result = run_riak_repl(N, Path, Args),
     lager:info("~s", [Result]),
     {ok, Result}.
 
