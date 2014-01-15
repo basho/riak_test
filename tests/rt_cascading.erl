@@ -886,7 +886,7 @@ wait_until_pending_count_zero(Nodes) ->
 check_status(Status) ->            
     case proplists:get_all_values(consumers, Status) of
         undefined ->
-	    true;
+	        true;
         [] ->
             true;
         Cs ->
