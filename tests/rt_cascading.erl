@@ -110,8 +110,12 @@ simple_test_() ->
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.ending, ?bucket, Bin))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero([State#simple_state.middle,
+                                           State#simple_state.beginning,
+                                           State#simple_state.ending])
         end}
-
     ] end}}.
 
 big_circle_test_() ->
@@ -224,8 +228,10 @@ big_circle_test_() ->
             % so, by adding 4 clusters, we've added 2 overlaps.
             % best guess based on what's above is:
             %  NumDuplicateWrites = ceil(NumClusters/2 - 1.5)
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 circle_test_() ->
@@ -287,8 +293,10 @@ circle_test_() ->
             Status = rpc:call(Two, riak_repl2_rt, status, []),
             [SinkData] = proplists:get_value(sinks, Status, [[]]),
             ?assertEqual(2, proplists:get_value(expect_seq, SinkData))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 pyramid_test_() ->
@@ -339,8 +347,10 @@ pyramid_test_() ->
                 ?debugFmt("Checking ~p", [N]),
                 ?assertEqual(Bin, maybe_eventually_exists(N, Bucket, Bin))
             end, Nodes)
-        end}
-
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
+         end}
     ] end}}.
 
 diamond_test_() ->
@@ -431,8 +441,10 @@ diamond_test_() ->
             [Sink2] = proplists:get_value(sinks, Status2, [[]]),
             GotSeq = proplists:get_value(expect_seq, Sink2),
             ?assertEqual(ExpectSeq, GotSeq)
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 circle_and_spurs_test_() ->
@@ -505,8 +517,10 @@ circle_and_spurs_test_() ->
                 ?debugFmt("Checking ~p", [N]),
                 ?assertEqual({error, notfound}, maybe_eventually_exists(N, Bucket, Bin))
             end || N <- Nodes, N =/= NorthSpur]
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 mixed_version_clusters_test_() ->
@@ -688,7 +702,10 @@ Reses)]),
                 end,
                 [MakeTest(Node, N) || Node <- Nodes, N <- lists:seq(1, 3)]
             end
-        }}
+        }},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
+        end}
 
     ] end}}.
 
@@ -776,8 +793,10 @@ new_to_old_test_dep() ->
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(New3, ?bucket, Bin)),
             ?assertEqual({error, notfound}, maybe_eventually_exists(New1, ?bucket, Bin))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(["new1", "old2", "new3"])
         end}
-
     ] end}}.
 
 ensure_ack_test_() ->
@@ -1133,3 +1152,24 @@ maybe_skip_teardown(TearDownFun) ->
         end
     end.
 
+wait_until_pending_count_zero(Nodes) ->
+    WaitFun = fun() ->
+        {Statuses, _} =  rpc:multicall(Nodes, riak_repl2_rtq, status, []),
+        Out = [check_status(S) || S <- Statuses],
+        not lists:member(false, Out)	      
+    end,
+    ?assertEqual(ok, rt:wait_until(WaitFun)),
+    ok.
+
+check_status(Status) ->            
+    case proplists:get_all_values(consumers, Status) of
+        undefined ->
+	    true;
+	[] ->
+	    true;
+	Cs ->
+	    PendingList = [proplists:lookup_all(pending, C) || {_, C} <- lists:flatten(Cs)],
+            PendingCount = lists:sum(proplists:get_all_values(pending, lists:flatten(PendingList))),
+	    ?debugFmt("RTQ status pending on test node:~p", [PendingCount]),
+	    PendingCount == 0
+    end.
