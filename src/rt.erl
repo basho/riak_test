@@ -40,6 +40,7 @@
          capability/2,
          capability/3,
          check_singleton_node/1,
+         check_fullsync/3,
          check_ibrowse/0,
          claimant_according_to/1,
          clean_cluster/1,
@@ -85,8 +86,12 @@
          pmap/2,
          post_result/2,
          priv_dir/0,
+         read_from_cluster/5,
          remove/2,
          riak/2,
+         repl_get_leader/1,
+         repl_get_port/1,
+         repl_connect_cluster/3,
          rpc_get_env/2,
          set_backend/1,
          set_backend/2,
@@ -115,6 +120,7 @@
          update_app_config/2,
          upgrade/2,
          upgrade/3,
+         validate_completed_fullsync/6,
          versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
@@ -142,7 +148,8 @@
          wait_until_transfers_complete/1,
          wait_until_unpingable/1,
          wait_until_bucket_type_status/3,
-         whats_up/0
+         whats_up/0,
+         write_to_cluster/4
         ]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
@@ -734,6 +741,7 @@ wait_until_capability(Node, Capability, Value, Default) ->
     rt:wait_until(Node,
                   fun(_) ->
                           Cap = capability(Node, Capability, Default),
+                io:format("capability is ~p ~p",[Node, Cap]),
                           cap_equal(Value, Cap)
                   end).
 
@@ -1374,3 +1382,83 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
+
+%% @doc Connect two clusters using a given name.
+repl_connect_cluster(Source, Port, Name) ->
+    lager:info("Connecting ~p to ~p for cluster ~p.",
+               [Source, Port, Name]),
+    repl_util:connect_cluster(Source, "127.0.0.1", Port),
+    ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
+
+%% @doc Given a node, find the port that the cluster manager is
+%%      listening on.
+repl_get_port(Node) ->
+    {ok, {_IP, Port}} = rpc:call(Node,
+                                 application,
+                                 get_env,
+                                 [riak_core, cluster_mgr]),
+    Port.
+
+%% @doc Given a node, find out who the current replication leader in its
+%%      cluster is.
+repl_get_leader(Node) ->
+    rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
+
+%% @doc Validate fullsync completed and all keys are available.
+validate_completed_fullsync(ReplicationLeader,
+                            DestinationNode,
+                            DestinationCluster,
+                            Start,
+                            End,
+                            Bucket) ->
+    ok = check_fullsync(ReplicationLeader, DestinationCluster, 0),
+    lager:info("Verify: Reading ~p keys repl'd from A(~p) to ~p(~p)",
+               [End - Start, ReplicationLeader,
+                DestinationCluster, DestinationNode]),
+    ?assertEqual(0,
+                 repl_util:wait_for_reads(DestinationNode,
+                                          Start,
+                                          End,
+                                          Bucket,
+                                          1)).
+
+%% @doc Write a series of keys and ensure they are all written.
+write_to_cluster(Node, Start, End, Bucket) ->
+    lager:info("Writing ~p keys to node ~p.", [End - Start, Node]),
+    ?assertEqual([],
+                 repl_util:do_write(Node, Start, End, Bucket, 1)).
+
+%% @doc Read from cluster a series of keys, asserting a certain number
+%%      of errors.
+read_from_cluster(Node, Start, End, Bucket, Errors) ->
+    lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
+    Res2 = rt:systest_read(Node, Start, End, Bucket, 1),
+    ?assertEqual(Errors, length(Res2)).
+
+%% @doc Assert we can perform one fullsync cycle, and that the number of
+%%      expected failures is correct.
+check_fullsync(Node, Cluster, ExpectedFailures) ->
+    {Time, _} = timer:tc(repl_util,
+                         start_and_wait_until_fullsync_complete,
+                         [Node, Cluster]),
+    lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
+
+    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+
+    Props = case proplists:get_value(fullsync_coordinator, Status) of
+        [{_Name, Props0}] ->
+            Props0;
+        Multiple ->
+            {_Name, Props0} = lists:keyfind(Cluster, 1, Multiple),
+            Props0
+    end,
+
+    %% check that the expected number of partitions failed to sync
+    ?assertEqual(ExpectedFailures,
+                 proplists:get_value(error_exits, Props)),
+
+    %% check that we retried each of them 5 times
+    ?assert(
+        proplists:get_value(retry_exits, Props) >= ExpectedFailures * 5),
+
+    ok.
