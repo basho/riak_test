@@ -377,7 +377,7 @@ read_repair_interaction_test_() ->
         #data_push_test{nodes = Nodes, c123 = C123, c456 = C456}
     end,
     fun(State) ->
-        case rt_config:config_or_os_env(skip_teardown, false) of
+        case rt_config:config_or_os_env(skip_teardowns, false) of
             "false" ->
                 rt:clean_cluster(State#data_push_test.nodes);
             false ->
@@ -487,11 +487,18 @@ read_repair_interaction_test_() ->
         {"read repair interacton in the large", timeout, rt_cascading:timeout(1000000), fun() ->
             Bucket = <<"rrit_objects_lots">>,
             Bin = <<"datadatadata">>,
-            % to avoid overloading the message queue here, we're going
-            % to reset the intercepts
+
             lists:map(fun(Node) ->
-                rt_intercept:add(Node, {riak_repl_reduced, []})
+                rt_intercept:add(Node, {riak_repl_reduced, [
+                    {{mutate_get, 1}, tag_mutate_get},
+                    {{mutate_put, 5}, tag_mutate_put}
+                ]})
             end, State#data_push_test.c456),
+            lists:map(fun(Node) ->
+                rt_intercept:add(Node, {riak_repl_reduced, [
+                    {{mutate_put, 5}, tag_mutate_put}
+                ]})
+            end, State#data_push_test.c123),
 
             FillSize = fill_size(),
             % Fill the source node and let the sink get it all
@@ -506,65 +513,28 @@ read_repair_interaction_test_() ->
 
             % read all the things, ensuring read-repair happens
             % as expected
-            lists:map(fun(Node) ->
-                rt_intercept:add(Node, {riak_repl_reduced, [
-                    {{mutate_get, 1}, report_mutate_get},
-                    {{mutate_put, 5}, report_mutate_put}
-                ]})
-            end, State#data_push_test.c456),
-            riak_repl_reduced_intercepts:register_as_target(),
-            riak_repl_reduced_intercepts:put_all_reports(),
-            riak_repl_reduced_intercepts:get_all_reports(),
+            %riak_repl_reduced_intercepts:register_as_target(),
+            %riak_repl_reduced_intercepts:put_all_reports(),
+            %riak_repl_reduced_intercepts:get_all_reports(),
 
             AssertFirstRead = fun
-                (Key, {ok, _Obj}) ->
-                    MutateGets = riak_repl_reduced_intercepts:get_all_reports(),
-                    ?assertEqual(5, length(MutateGets)),
-                    ?assertEqual(3, length(lists:usort(MutateGets))),
-                    ExpectValue = <<Bin/binary, Bin/binary, Bin/binary>>,
-                    GotValue = lists:foldl(fun({_Node, _Pid, Object}, Acc) ->
-                        Value = case riak_object:get_values(Object) of
-                            [V] -> V;
-                            [V | _] = Values ->
-                                %lager:warning("key ~p has mutltiple values in the object: ~p", [Key, Object]),
-                                lager:warning("(First Read) Double check {~p, ~p} as reduced n mutator got multiple values", [Bucket, Key]),
-                                lists:foldl(fun(B,Ba) ->
-                                    ?assertEqual(V, B),
-                                    <<B/binary, Ba/binary>>
-                                end, <<>>, Values)
-                        end,
-                        <<Acc/binary, Value/binary>>
-                    end, <<>>, MutateGets),
-                    ?assertEqual(ExpectValue, GotValue),
-                    MutatePuts = riak_repl_reduced_intercepts:put_all_reports(),
-                    ?assertEqual(2, length(MutatePuts));
+                (_Key, {ok, Obj}) ->
+                    %lager:info("Asserting ~p", [Key]),
+                    ?assert(riak_repl_reduced_intercepts:is_get_tagged(Obj)),
+                    ?assert(riak_repl_reduced_intercepts:is_put_tagged(Obj));
+                (Key, {error, timeout}) ->
+                    lager:warning("Timeout on ~p, check again on second assert", [Key]),
+                    ok;
                 (Key, Error) ->
                     lager:warning("Didn't get ~p as expected: ~p", [Key, Error]),
                     ?assertMatch({ok, _}, Error)
             end,
 
             AssertSecondRead = fun
-                (Key, {ok, _Obj}) ->
-                    MutateGets = riak_repl_reduced_intercepts:get_all_reports(),
-                    ?assertEqual(9, length(MutateGets)),
-                    ?assertEqual(5, length(lists:usort(MutateGets))),
-                    ExpectValue = <<Bin/binary, Bin/binary, Bin/binary, Bin/binary, Bin/binary>>,
-                    GotValue = lists:foldl(fun({_Node, _Pid, Object}, Acc) ->
-                        Value = case riak_object:get_values(Object) of
-                            [V] -> V;
-                            [V | _] = Values ->
-                                %lager:warning("Key ~p has multiple values in the object ~p (second read asserts)", [Key, Object]),
-                                lager:warning("(Second Read) Double check {~p, ~p} as reduced n mutator got multiple values", [Bucket, Key]),
-                                lists:foldl(fun(B,Ba) ->
-                                    ?assertEqual(V, B),
-                                    <<B/binary, Ba/binary>>
-                                end, <<>>, Values)
-                        end,
-                        <<Acc/binary, Value/binary>>
-                    end, <<>>, MutateGets),
-                    ?assertEqual(ExpectValue, GotValue),
-                    MutatePuts = riak_repl_reduced_intercepts:put_all_reports(),
-                    ?assertEqual(0, length(MutatePuts));
+                (_Key, {ok, Obj}) ->
+                    %lager:info("Asserting ~p", [Key]),
+                    ?assert(riak_repl_reduced_intercepts:is_get_tagged(Obj)),
+                    ?assert(riak_repl_reduced_intercepts:is_put_tagged(Obj));
                 (Key, Error) ->
                     lager:warning("Didn't get ~p as expected: ~p", [Key, Error]),
                     ?assertMatch({ok, _}, Error)
@@ -802,7 +772,8 @@ conf() ->
     {riak_repl, [
         {fullsync_on_connect, false},
         {fullsync_interval, disabled},
-        {diff_batch_size, 10}
+        {diff_batch_size, 10},
+        {rt_heartbeat_interval, undefined}
     ]}].
 
 exists(Nodes, Bucket, Key) ->
