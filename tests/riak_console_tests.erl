@@ -22,6 +22,117 @@
 
 -export([confirm/0]).
 
+
+cluster_tests(Node) ->
+    %% riak-admin cluster
+    check_admin_cmd(Node, "cluster join dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster leave"),
+    check_admin_cmd(Node, "cluster leave dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster force-remove dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster replace dev98@127.0.0.1 dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster force-replace dev98@127.0.0.1 dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster resize-ring 42"),
+    check_admin_cmd(Node, "cluster resize-ring abort"),
+    check_admin_cmd(Node, "cluster plan"),
+    check_admin_cmd(Node, "cluster commit"),
+    check_admin_cmd(Node, "cluster clear").
+
+bucket_tests(Node) ->
+    %% riak-admin bucket_type
+    check_admin_cmd(Node, "bucket-type status foo"),
+    check_admin_cmd(Node, "bucket-type activate foo"),
+    check_admin_cmd(Node, "bucket-type create foo {\"props\":{[]}}"),
+    check_admin_cmd(Node, "bucket-type update foo {\"props\":{[]}}"),
+    check_admin_cmd(Node, "bucket-type list").
+
+
+security_tests(Node) ->
+    %% riak-admin security
+    check_admin_cmd(Node, "security add-user foo"),
+    check_admin_cmd(Node, "security add-user foo x1=y1 x2=y2"),
+    check_admin_cmd(Node, "security alter-user foo x1=y1"),
+    check_admin_cmd(Node, "security alter-user foo x1=y1 x2=y2"),
+    check_admin_cmd(Node, "security del-user foo"),
+
+    %% TODO: update add-source docs: users comma sep
+    check_admin_cmd(Node, "security add-source all 192.168.100.0/22 y"),
+    check_admin_cmd(Node, "security add-source all 192.168.100.0/22 x x1=y1"),
+    check_admin_cmd(Node, "security add-source foo,bar 192.168.100.0/22 x x1=y1"),
+    check_admin_cmd(Node, "security add-source foo,bar,baz 192.168.100.0/22 x x1=y1 x2=y2"),
+    check_admin_cmd(Node, "security del-source all 192.168.100.0/22"),
+    check_admin_cmd(Node, "security del-source x 192.168.100.0/22"),
+    check_admin_cmd(Node, "security del-source x,y,z 192.168.100.0/22"),
+    check_admin_cmd(Node, "security grant foo on any my_bucket to x"),
+    check_admin_cmd(Node, "security grant foo,bar on any my_bucket to x"),
+    check_admin_cmd(Node, "security grant foo on any my_bucket to x,y,z"),
+    check_admin_cmd(Node, "security grant foo,bar,baz on any my_bucket to y"),
+    check_admin_cmd(Node, "security grant foo,bar,baz on foo my_bucket to y"),
+    check_admin_cmd(Node, "security revoke foo on any my_bucket from x"),
+    check_admin_cmd(Node, "security revoke foo,bar on any my_bucket from x"),
+    check_admin_cmd(Node, "security revoke foo on any my_bucket from x,y,z"),
+    check_admin_cmd(Node, "security revoke foo,bar,baz on any my_bucket from y"),
+    check_admin_cmd(Node, "security revoke foo,bar,baz on foo my_bucket from y"),
+    check_admin_cmd(Node, "security print-users"),
+    check_admin_cmd(Node, "security print-sources"),
+    check_admin_cmd(Node, "security enable"),
+    check_admin_cmd(Node, "security disable"),
+    check_admin_cmd(Node, "security status"),
+    check_admin_cmd(Node, "security print-user foo"),
+    check_admin_cmd(Node, "security ciphers foo").
+
+riak_admin_tests(Node) ->
+    %% "top level" riak-admin COMMANDS
+    check_admin_cmd(Node, "join -f dev99@127.0.0.1"),
+    check_admin_cmd(Node, "leave -f"),
+    check_admin_cmd(Node, "force-remove -f dev99@127.0.0.1"),
+    check_admin_cmd(Node, "force_remove -f dev99@127.0.0.1"),
+    check_admin_cmd(Node, "down dev98@127.0.0.1"),
+    check_admin_cmd(Node, "status"),
+    check_admin_cmd(Node, "vnode-status"),
+    check_admin_cmd(Node, "vnode_status"),
+    check_admin_cmd(Node, "ringready"),
+    check_admin_cmd(Node, "transfers"),
+    check_admin_cmd(Node, "member-status"),
+    check_admin_cmd(Node, "member_status"),
+
+    check_admin_cmd(Node, "ring-status"),
+    check_admin_cmd(Node, "ring_status"),
+
+    check_admin_cmd(Node, "aae-status"),
+    check_admin_cmd(Node, "aae_status"),
+
+    check_admin_cmd(Node, "repair_2i status"),
+    check_admin_cmd(Node, "repair_2i kill"),
+    check_admin_cmd(Node, "repair_2i --speed 5 foo bar baz"),
+
+    check_admin_cmd(Node, "repair-2i status"),
+    check_admin_cmd(Node, "repair-2i kill"),
+    check_admin_cmd(Node, "repair-2i --speed 5 foo bar baz"),
+
+    check_admin_cmd(Node, "cluster_info foo local"),
+    check_admin_cmd(Node, "cluster_info foo local dev99@127.0.0.1"),
+
+    check_admin_cmd(Node, "erl-reload"),
+    check_admin_cmd(Node, "erl_reload"),
+
+    %% TODO
+    %%check_admin_cmd(Node, "reip a b"),
+
+    %% restore riak_kv_backup
+    %% backup  riak_kv_backup
+    %% test    riak:client_test
+    %% diag    riaknostic
+    %% top     etop
+    %% transfer-limit riak_core_console transfer_limit
+    %% reformat-indexes riak_kv_console reformat_indexes
+    %% downgrade-objects riak_kv_console reformat_objects
+
+
+    %% TODO: services
+    %% wait-for-services
+    %% js-reload  riak_kv_js_manager
+    ok.
+
 confirm() ->
     %% Deploy a node to test against
     lager:info("Deploy node to test riak command line"),
@@ -30,6 +141,9 @@ confirm() ->
     rt_intercept:add(Node,
                      {riak_core_console,
                       [
+                        {{transfers,1}, verify_console_transfers},
+                        {{member_status,1}, verify_console_member_status},
+                        {{ring_status,1}, verify_console_ring_status},
                         {{stage_remove,1}, verify_console_stage_remove},
                         {{stage_leave,1}, verify_console_stage_leave},
                         {{stage_replace, 1}, verify_console_stage_replace},
@@ -56,7 +170,19 @@ confirm() ->
     rt_intercept:add(Node,
                      {riak_kv_console,
                       [
+                        {{join,1}, verify_console_join},
+                        {{leave,1}, verify_console_leave},
+                        {{remove,1}, verify_console_remove},
                         {{staged_join,1}, verify_console_staged_join},
+                        {{down,1}, verify_console_down},
+                        {{status,1}, verify_console_status},
+                        {{vnode_status,1}, verify_console_vnode_status},
+                        {{ringready,1}, verify_console_ringready},
+                        {{aae_status,1}, verify_console_aae_status},
+                        {{cluster_info, 1}, verify_console_cluster_info},
+                        {{reload_code, 1}, verify_console_reload_code},
+                        {{repair_2i, 1}, verify_console_repair_2i},
+                        {{reip, 1}, verify_console_reip},
                         {{bucket_type_status,1}, verify_console_bucket_type_status},
                         {{bucket_type_activate,1}, verify_console_bucket_type_activate},
                         {{bucket_type_create,1}, verify_console_bucket_type_create},
@@ -67,64 +193,11 @@ confirm() ->
     rt_intercept:wait_until_loaded(Node),
 
 
-    %% riak-admin cluster
-    check_admin_cmd(Node, "cluster join dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster leave"),
-    check_admin_cmd(Node, "cluster leave dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster force-remove dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster replace dev98@127.0.0.1 dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster force-replace dev98@127.0.0.1 dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster resize-ring 42"),
-    check_admin_cmd(Node, "cluster resize-ring abort"),
-    check_admin_cmd(Node, "cluster plan"),
-    check_admin_cmd(Node, "cluster commit"),
-    check_admin_cmd(Node, "cluster clear"),
-
-    %% riak-admin bucket_type
-    check_admin_cmd(Node, "bucket-type status foo"),
-    check_admin_cmd(Node, "bucket-type activate foo"),
-    check_admin_cmd(Node, "bucket-type create foo {\"props\":{[]}}"),
-    check_admin_cmd(Node, "bucket-type update foo {\"props\":{[]}}"),
-    check_admin_cmd(Node, "bucket-type list"),
-
-    %% riak-admin security
-    check_admin_cmd(Node, "security add-user foo"),
-    check_admin_cmd(Node, "security add-user foo x1=y1 x2=y2"),
-    check_admin_cmd(Node, "security alter-user foo x1=y1"),
-    check_admin_cmd(Node, "security alter-user foo x1=y1 x2=y2"),
-    check_admin_cmd(Node, "security del-user foo"),
-
-    %% TODO: update add-source docs: users comma sep
-    check_admin_cmd(Node, "security add-source all 192.168.100.0/22 y"),
-    check_admin_cmd(Node, "security add-source all 192.168.100.0/22 x x1=y1"),
-    check_admin_cmd(Node, "security add-source foo,bar 192.168.100.0/22 x x1=y1"),
-    check_admin_cmd(Node, "security add-source foo,bar,baz 192.168.100.0/22 x x1=y1 x2=y2"),
-
-    check_admin_cmd(Node, "security del-source all 192.168.100.0/22"),
-    check_admin_cmd(Node, "security del-source x 192.168.100.0/22"),
-    check_admin_cmd(Node, "security del-source x,y,z 192.168.100.0/22"),
-
-    check_admin_cmd(Node, "security grant foo on any my_bucket to x"),
-    check_admin_cmd(Node, "security grant foo,bar on any my_bucket to x"),
-    check_admin_cmd(Node, "security grant foo on any my_bucket to x,y,z"),
-    check_admin_cmd(Node, "security grant foo,bar,baz on any my_bucket to y"),
-    check_admin_cmd(Node, "security grant foo,bar,baz on foo my_bucket to y"),
-
-    check_admin_cmd(Node, "security revoke foo on any my_bucket from x"),
-    check_admin_cmd(Node, "security revoke foo,bar on any my_bucket from x"),
-    check_admin_cmd(Node, "security revoke foo on any my_bucket from x,y,z"),
-    check_admin_cmd(Node, "security revoke foo,bar,baz on any my_bucket from y"),
-    check_admin_cmd(Node, "security revoke foo,bar,baz on foo my_bucket from y"),
-
-    check_admin_cmd(Node, "security print-users"),
-    check_admin_cmd(Node, "security print-sources"),
-    check_admin_cmd(Node, "security enable"),
-    check_admin_cmd(Node, "security disable"),
-    check_admin_cmd(Node, "security status"),
-    check_admin_cmd(Node, "security print-user foo"),
-    check_admin_cmd(Node, "security ciphers foo"),
-
-     pass.
+    riak_admin_tests(Node),
+    cluster_tests(Node),
+    bucket_tests(Node),
+    security_tests(Node),
+    pass.
 
 check_admin_cmd(Node, Cmd) ->
     S = string:tokens(Cmd, " "),

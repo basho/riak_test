@@ -157,3 +157,22 @@ verify_console_ciphers(Val) ->
         ["foo"] -> ?PASS;
         _ -> ?FAIL
     end.
+
+verify_console_transfers(Val) ->
+    case Val of
+        [] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
+verify_console_member_status(Val) ->
+    case Val of
+        [] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
+verify_console_ring_status(Val) ->
+    case Val of
+        [] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
