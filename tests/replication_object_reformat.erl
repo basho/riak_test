@@ -32,7 +32,8 @@
         ]).
 
 confirm() ->
-    verify_replication(v0, v1, 1, ?NUM_KEYS).
+    verify_replication(v0, v1, 1, ?NUM_KEYS),
+    verify_replication(v1, v0, 1, ?NUM_KEYS).
 
 verify_replication(AVersion, BVersion, Start, End) ->
     Nodes = deploy_nodes(6, ?CONF(infinity)),
