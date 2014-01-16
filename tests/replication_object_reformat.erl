@@ -74,14 +74,14 @@ verify_replication(AVersion, BVersion, Start, End) ->
     rt:wait_until_transfers_complete(BNodes),
 
     lager:info("Get leaders."),
-    LeaderA = rt:repl_get_leader(AFirst),
-    LeaderB = rt:repl_get_leader(BFirst),
+    LeaderA = repl_util:get_leader(AFirst),
+    LeaderB = repl_util:get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    BPort = rt:repl_get_port(LeaderB),
+    BPort = repl_util:get_port(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    rt:repl_connect_cluster(LeaderA, BPort, "B"),
+    repl_util:connect_cluster_by_name(LeaderA, BPort, "B"),
 
     lager:info("Enabling fullsync from A to B"),
     repl_util:enable_fullsync(LeaderA, "B"),
@@ -97,22 +97,21 @@ verify_replication(AVersion, BVersion, Start, End) ->
      || N <- BNodes],
 
     lager:info("Ensuring connection from cluster A to B"),
-    rt:repl_connect_cluster(LeaderA, BPort, "B"),
+    repl_util:connect_cluster_by_name(LeaderA, BPort, "B"),
 
     lager:info("Write keys, assert they are not available yet."),
-    rt:write_to_cluster(AFirst, Start, End, ?TEST_BUCKET),
+    repl_util:write_to_cluster(AFirst, Start, End, ?TEST_BUCKET),
 
     lager:info("Verify we can not read the keys on the sink."),
-    rt:read_from_cluster(BFirst, Start, End, ?TEST_BUCKET, ?NUM_KEYS),
+    repl_util:read_from_cluster(BFirst, Start, End, ?TEST_BUCKET, ?NUM_KEYS),
 
     lager:info("Verify we can read the keys on the source."),
-    rt:read_from_cluster(AFirst, Start, End, ?TEST_BUCKET, 0),
+    repl_util:read_from_cluster(AFirst, Start, End, ?TEST_BUCKET, 0),
 
     lager:info("Performing sacrifice."),
     perform_sacrifice(AFirst, Start),
 
-    rt:validate_completed_fullsync(LeaderA, BFirst, "B",
-                                   Start, End, ?TEST_BUCKET),
+    repl_util:validate_completed_fullsync(LeaderA, BFirst, "B", Start, End, ?TEST_BUCKET),
 
     rt:clean_cluster(Nodes).
 
