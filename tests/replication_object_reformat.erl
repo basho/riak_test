@@ -57,9 +57,24 @@ confirm() ->
     rt:wait_until_transfers_complete(ANodes),
     rt:wait_until_transfers_complete(BNodes),
 
-    verify_replication({ANodes, v0}, {BNodes, v1}, 1).
+    lager:info("Get leaders."),
+    LeaderA = rt:repl_get_leader(AFirst),
+    LeaderB = rt:repl_get_leader(BFirst),
 
-verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start) ->
+    lager:info("Finding connection manager ports."),
+    BPort = rt:repl_get_port(LeaderB),
+
+    lager:info("Connecting cluster A to B"),
+    rt:repl_connect_cluster(LeaderA, BPort, "B"),
+
+    lager:info("Enabling fullsync from A to B"),
+    repl_util:enable_fullsync(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+
+    verify_replication({ANodes, v0}, {BNodes, v1}, 1, ?NUM_KEYS),
+    verify_replication({ANodes, v0}, {BNodes, v1}, ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS).
+
+verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start, End) ->
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
 
@@ -90,21 +105,17 @@ verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start) ->
     lager:info("Finding connection manager ports."),
     BPort = rt:repl_get_port(LeaderB),
 
-    lager:info("Connecting cluster A to B"),
+    lager:info("Ensuring connection from cluster A to B"),
     rt:repl_connect_cluster(LeaderA, BPort, "B"),
 
     lager:info("Write keys, assert they are not available yet."),
-    rt:write_to_cluster(AFirst, Start, ?NUM_KEYS, ?TEST_BUCKET),
-    rt:read_from_cluster(BFirst, Start, ?NUM_KEYS, ?TEST_BUCKET, ?NUM_KEYS),
+    rt:write_to_cluster(AFirst, Start, End, ?TEST_BUCKET),
+    rt:read_from_cluster(BFirst, Start, End, ?TEST_BUCKET, ?NUM_KEYS),
 
     %% Flush AAE trees to disk.
     perform_sacrifice(AFirst),
 
-    lager:info("Enabling fullsync from A to B"),
-    repl_util:enable_fullsync(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),
-
-    rt:validate_completed_fullsync(LeaderA, BFirst, "B", Start, ?NUM_KEYS, ?TEST_BUCKET).
+    rt:validate_completed_fullsync(LeaderA, BFirst, "B", Start, End, ?TEST_BUCKET).
 
 %% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
 %%      trees to flush to disk.
