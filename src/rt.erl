@@ -735,6 +735,7 @@ wait_until_capability(Node, Capability, Value, Default) ->
     rt:wait_until(Node,
                   fun(_) ->
                           Cap = capability(Node, Capability, Default),
+                io:format("capability is ~p ~p",[Node, Cap]),
                           cap_equal(Value, Cap)
                   end).
 
