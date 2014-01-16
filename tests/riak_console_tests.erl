@@ -43,12 +43,10 @@ confirm() ->
                         {{del_user, 1}, verify_console_del_user},
                         {{add_source, 1}, verify_console_add_source},
                         {{del_source, 1}, verify_console_del_source},
-                        {{grant, 1}, verify_grant}
+                        {{grant, 1}, verify_grant},
+                        {{revoke, 1}, verify_revoke}
                 ]}),
     rt_intercept:wait_until_loaded(Node),
-
-
-
 
     %% riak-admin security
     check_admin_cmd(Node, "security add-user foo"),
@@ -74,6 +72,19 @@ confirm() ->
     check_admin_cmd(Node, "security grant foo,bar,baz on any my_bucket to y"),
     check_admin_cmd(Node, "security grant foo,bar,baz on foo my_bucket to y"),
 
+    check_admin_cmd(Node, "security revoke foo on any my_bucket from x"),
+    check_admin_cmd(Node, "security revoke foo,bar on any my_bucket from x"),
+    check_admin_cmd(Node, "security revoke foo on any my_bucket from x,y,z"),
+    check_admin_cmd(Node, "security revoke foo,bar,baz on any my_bucket from y"),
+    check_admin_cmd(Node, "security revoke foo,bar,baz on foo my_bucket from y"),
+
+    %print-users
+    %print-sources
+    %enable -> security_enable
+    %disable -> security_disable
+    %status -> security_disable
+    %print-user
+    %ciphers
 
     %% riak-admin cluster
     %% TODO: cluster join
