@@ -51,9 +51,42 @@ confirm() ->
                         {{security_enable,1}, verify_console_security_enable},
                         {{security_disable,1}, verify_console_security_disable},
                         {{security_status,1}, verify_console_security_stats},
-                        {{ciphers,1}, verify_console_ciphers}
-                ]}),
+                        {{ciphers,1}, verify_console_ciphers} ]}),
+
+    rt_intercept:add(Node,
+                     {riak_kv_console,
+                      [
+                        {{bucket_type_status,1}, verify_console_bucket_type_status},
+                        {{bucket_type_activate,1}, verify_console_bucket_type_activate},
+                        {{bucket_type_create,1}, verify_console_bucket_type_create},
+                        {{bucket_type_update,1}, verify_console_bucket_type_update},
+                        {{bucket_type_list,1}, verify_console_bucket_type_list},
+                      ]}),
+
     rt_intercept:wait_until_loaded(Node),
+
+
+    %% riak-admin bucket_type
+    check_admin_cmd(Node, "bucket-type status"),
+    check_admin_cmd(Node, "bucket-type activate foo"),
+    check_admin_cmd(Node, "bucket-type create foo {\"props\":{[]}}"),
+    check_admin_cmd(Node, "bucket-type update foo {\"props\":{[]}}"),
+    check_admin_cmd(Node, "bucket-type list"),
+
+    %% riak-admin cluster
+    %% TODO: cluster join
+    check_admin_cmd(Node, "cluster leave"),
+    check_admin_cmd(Node, "cluster leave dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster force-remove dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster replace dev98@127.0.0.1 dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster force-replace dev98@127.0.0.1 dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster resize-ring 42"),
+    check_admin_cmd(Node, "cluster resize-ring abort"),
+    check_admin_cmd(Node, "cluster plan"),
+    check_admin_cmd(Node, "cluster commit"),
+    check_admin_cmd(Node, "cluster clear"),
+
+
 
     %% riak-admin security
     check_admin_cmd(Node, "security add-user foo"),
@@ -92,20 +125,7 @@ confirm() ->
     check_admin_cmd(Node, "security print-user foo"),
     check_admin_cmd(Node, "security ciphers foo"),
 
-    %% riak-admin cluster
-    %% TODO: cluster join
-    check_admin_cmd(Node, "cluster leave"),
-    check_admin_cmd(Node, "cluster leave dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster force-remove dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster replace dev98@127.0.0.1 dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster force-replace dev98@127.0.0.1 dev99@127.0.0.1"),
-    check_admin_cmd(Node, "cluster resize-ring 42"),
-    check_admin_cmd(Node, "cluster resize-ring abort"),
-    check_admin_cmd(Node, "cluster plan"),
-    check_admin_cmd(Node, "cluster commit"),
-    check_admin_cmd(Node, "cluster clear"),
-
-    pass.
+     pass.
 
 check_admin_cmd(Node, Cmd) ->
     S = string:tokens(Cmd, " "),
