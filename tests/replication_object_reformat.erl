@@ -15,9 +15,17 @@
              {default_bucket_props, [{n_val, 1}]}
             ]
         },
+        {riak_kv,
+            [
+             %% Specify fast building of AAE trees
+             {anti_entropy, {on, []}},
+             {anti_entropy_build_limit, {100, 1000}},
+             {anti_entropy_concurrency, 100}
+            ]
+        },
         {riak_repl,
          [
-          {fullsync_strategy, keylist},
+          {fullsync_strategy, aae},
           {fullsync_on_connect, false},
           {fullsync_interval, disabled},
           {max_fssource_retries, Retries}
@@ -25,7 +33,7 @@
         ]).
 
 confirm() ->
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = deploy_nodes(6, ?CONF(infinity)),
 
     {ANodes, BNodes} = lists:split(3, Nodes),
 
@@ -102,6 +110,21 @@ verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start, End) ->
 
     lager:info("Write keys, assert they are not available yet."),
     rt:write_to_cluster(AFirst, Start, End, ?TEST_BUCKET),
+
+    lager:info("Verify we can not read the keys on the sink."),
     rt:read_from_cluster(BFirst, Start, End, ?TEST_BUCKET, ?NUM_KEYS),
 
-    rt:validate_completed_fullsync(LeaderA, BFirst, "B", Start, End, ?TEST_BUCKET).
+    lager:info("Verify we can read the keys on the source."),
+    rt:read_from_cluster(AFirst, Start, End, ?TEST_BUCKET, 0),
+
+    lager:info("Performing sacrifice."),
+    perform_sacrifice(AFirst, Start),
+
+    rt:validate_completed_fullsync(LeaderA, BFirst, "B",
+                                   Start, End, ?TEST_BUCKET).
+
+%% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
+%%      trees to flush to disk.
+perform_sacrifice(Node, Start) ->
+    ?assertEqual([], repl_util:do_write(Node, Start, 2000,
+                                        <<"sacrificial">>, 1)).
