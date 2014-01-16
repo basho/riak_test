@@ -17,7 +17,6 @@
         },
         {riak_kv,
             [
-             %% Specify fast building of AAE trees
              {anti_entropy, {on, []}},
              {anti_entropy_build_limit, {100, 1000}},
              {anti_entropy_concurrency, 100}
@@ -33,12 +32,27 @@
         ]).
 
 confirm() ->
+    verify_replication(v0, v1, 1, ?NUM_KEYS).
+
+verify_replication(AVersion, BVersion, Start, End) ->
     Nodes = deploy_nodes(6, ?CONF(infinity)),
 
     {ANodes, BNodes} = lists:split(3, Nodes),
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
+
+    lager:info("Updating app config to force ~p on source cluster.",
+               [AVersion]),
+    [rt:update_app_config(N, [{riak_kv,
+                               [{object_format, AVersion}]}])
+     || N <- ANodes],
+
+    lager:info("Updating app config to force ~p on sink cluster.",
+               [BVersion]),
+    [rt:update_app_config(N, [{riak_kv,
+                               [{object_format, BVersion}]}])
+     || N <- BNodes],
 
     lager:info("Building two clusters."),
     [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
@@ -71,24 +85,7 @@ confirm() ->
     lager:info("Enabling fullsync from A to B"),
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
-
-    verify_replication({ANodes, v0}, {BNodes, v1}, 1, ?NUM_KEYS).
-
-verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start, End) ->
-    AFirst = hd(ANodes),
-    BFirst = hd(BNodes),
-
-    lager:info("Updating app config to force ~p on source cluster.",
-               [AVersion]),
-    [rt:update_app_config(N, [{riak_kv,
-                               [{object_format, AVersion}]}])
-     || N <- ANodes],
-
-    lager:info("Updating app config to force ~p on sink cluster.",
-               [BVersion]),
-    [rt:update_app_config(N, [{riak_kv,
-                               [{object_format, BVersion}]}])
-     || N <- BNodes],
+    rt:wait_until_ring_converged(BNodes),
 
     lager:info("Wait for capability on source cluster."),
     [rt:wait_until_capability(N, {riak_kv, object_format}, AVersion, v0)
@@ -97,13 +94,6 @@ verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start, End) ->
     lager:info("Wait for capability on sink cluster."),
     [rt:wait_until_capability(N, {riak_kv, object_format}, BVersion, v0)
      || N <- BNodes],
-
-    lager:info("Get leaders."),
-    LeaderA = rt:repl_get_leader(AFirst),
-    LeaderB = rt:repl_get_leader(BFirst),
-
-    lager:info("Finding connection manager ports."),
-    BPort = rt:repl_get_port(LeaderB),
 
     lager:info("Ensuring connection from cluster A to B"),
     rt:repl_connect_cluster(LeaderA, BPort, "B"),
@@ -121,7 +111,9 @@ verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start, End) ->
     perform_sacrifice(AFirst, Start),
 
     rt:validate_completed_fullsync(LeaderA, BFirst, "B",
-                                   Start, End, ?TEST_BUCKET).
+                                   Start, End, ?TEST_BUCKET),
+
+    rt:clean_cluster(Nodes).
 
 %% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
 %%      trees to flush to disk.
