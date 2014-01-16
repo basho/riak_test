@@ -43,8 +43,15 @@ confirm() ->
                         {{del_user, 1}, verify_console_del_user},
                         {{add_source, 1}, verify_console_add_source},
                         {{del_source, 1}, verify_console_del_source},
-                        {{grant, 1}, verify_grant},
-                        {{revoke, 1}, verify_revoke}
+                        {{grant, 1}, verify_console_grant},
+                        {{revoke, 1}, verify_console_revoke},
+                        {{print_user,1}, verify_console_print_user},
+                        {{print_users,1}, verify_console_print_users},
+                        {{print_sources, 1}, verify_console_print_sources},
+                        {{security_enable,1}, verify_console_security_enable},
+                        {{security_disable,1}, verify_console_security_disable},
+                        {{security_status,1}, verify_console_security_stats},
+                        {{ciphers,1}, verify_console_ciphers}
                 ]}),
     rt_intercept:wait_until_loaded(Node),
 
@@ -65,7 +72,6 @@ confirm() ->
     check_admin_cmd(Node, "security del-source x 192.168.100.0/22"),
     check_admin_cmd(Node, "security del-source x,y,z 192.168.100.0/22"),
 
-
     check_admin_cmd(Node, "security grant foo on any my_bucket to x"),
     check_admin_cmd(Node, "security grant foo,bar on any my_bucket to x"),
     check_admin_cmd(Node, "security grant foo on any my_bucket to x,y,z"),
@@ -78,26 +84,26 @@ confirm() ->
     check_admin_cmd(Node, "security revoke foo,bar,baz on any my_bucket from y"),
     check_admin_cmd(Node, "security revoke foo,bar,baz on foo my_bucket from y"),
 
-    %print-users
-    %print-sources
-    %enable -> security_enable
-    %disable -> security_disable
-    %status -> security_disable
-    %print-user
-    %ciphers
+    check_admin_cmd(Node, "security print-users"),
+    check_admin_cmd(Node, "security print-sources"),
+    check_admin_cmd(Node, "security enable"),
+    check_admin_cmd(Node, "security disable"),
+    check_admin_cmd(Node, "security status"),
+    check_admin_cmd(Node, "security print-user foo"),
+    check_admin_cmd(Node, "security ciphers foo"),
 
     %% riak-admin cluster
     %% TODO: cluster join
-    %check_admin_cmd(Node, "cluster leave"),
-    %check_admin_cmd(Node, "cluster leave dev99@127.0.0.1"),
-    %check_admin_cmd(Node, "cluster force-remove dev99@127.0.0.1"),
-    %check_admin_cmd(Node, "cluster replace dev98@127.0.0.1 dev99@127.0.0.1"),
-    %check_admin_cmd(Node, "cluster force-replace dev98@127.0.0.1 dev99@127.0.0.1"),
-    %check_admin_cmd(Node, "cluster resize-ring 42"),
-    %check_admin_cmd(Node, "cluster resize-ring abort"),
-    %check_admin_cmd(Node, "cluster plan"),
-    %check_admin_cmd(Node, "cluster commit"),
-    %check_admin_cmd(Node, "cluster clear"),
+    check_admin_cmd(Node, "cluster leave"),
+    check_admin_cmd(Node, "cluster leave dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster force-remove dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster replace dev98@127.0.0.1 dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster force-replace dev98@127.0.0.1 dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster resize-ring 42"),
+    check_admin_cmd(Node, "cluster resize-ring abort"),
+    check_admin_cmd(Node, "cluster plan"),
+    check_admin_cmd(Node, "cluster commit"),
+    check_admin_cmd(Node, "cluster clear"),
 
     pass.
 
