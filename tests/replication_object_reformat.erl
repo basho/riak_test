@@ -15,16 +15,9 @@
              {default_bucket_props, [{n_val, 1}]}
             ]
         },
-        {riak_kv,
-            [
-             {anti_entropy, {on, []}},
-             {anti_entropy_build_limit, {100, 1000}},
-             {anti_entropy_concurrency, 100}
-            ]
-        },
         {riak_repl,
          [
-          {fullsync_strategy, aae},
+          {fullsync_strategy, keylist},
           {fullsync_on_connect, false},
           {fullsync_interval, disabled},
           {max_fssource_retries, Retries}
@@ -71,8 +64,7 @@ confirm() ->
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
 
-    verify_replication({ANodes, v0}, {BNodes, v1}, 1, ?NUM_KEYS),
-    verify_replication({ANodes, v0}, {BNodes, v1}, ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS).
+    verify_replication({ANodes, v0}, {BNodes, v1}, 1, ?NUM_KEYS).
 
 verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start, End) ->
     AFirst = hd(ANodes),
@@ -112,13 +104,4 @@ verify_replication({ANodes, AVersion}, {BNodes, BVersion}, Start, End) ->
     rt:write_to_cluster(AFirst, Start, End, ?TEST_BUCKET),
     rt:read_from_cluster(BFirst, Start, End, ?TEST_BUCKET, ?NUM_KEYS),
 
-    %% Flush AAE trees to disk.
-    perform_sacrifice(AFirst),
-
     rt:validate_completed_fullsync(LeaderA, BFirst, "B", Start, End, ?TEST_BUCKET).
-
-%% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
-%%      trees to flush to disk.
-perform_sacrifice(Node) ->
-    ?assertEqual([], repl_util:do_write(Node, 1, 2000,
-                                        <<"sacrificial">>, 1)).
