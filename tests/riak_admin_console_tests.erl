@@ -17,11 +17,18 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(riak_console_tests).
+-module(riak_admin_console_tests).
 -include_lib("eunit/include/eunit.hrl").
 
 -export([confirm/0]).
 
+%% UNTESTED, as they don't use rpc, or have a non-trivial impl
+%%   test
+%%   diag
+%%   top
+%%   wait-for-services
+%%   js-reload
+%%   reip
 
 cluster_tests(Node) ->
     %% riak-admin cluster
@@ -44,7 +51,6 @@ bucket_tests(Node) ->
     check_admin_cmd(Node, "bucket-type create foo {\"props\":{[]}}"),
     check_admin_cmd(Node, "bucket-type update foo {\"props\":{[]}}"),
     check_admin_cmd(Node, "bucket-type list").
-
 
 security_tests(Node) ->
     %% riak-admin security
@@ -94,52 +100,40 @@ riak_admin_tests(Node) ->
     check_admin_cmd(Node, "transfers"),
     check_admin_cmd(Node, "member-status"),
     check_admin_cmd(Node, "member_status"),
-
     check_admin_cmd(Node, "ring-status"),
     check_admin_cmd(Node, "ring_status"),
-
     check_admin_cmd(Node, "aae-status"),
     check_admin_cmd(Node, "aae_status"),
-
     check_admin_cmd(Node, "repair_2i status"),
     check_admin_cmd(Node, "repair_2i kill"),
     check_admin_cmd(Node, "repair_2i --speed 5 foo bar baz"),
-
     check_admin_cmd(Node, "repair-2i status"),
     check_admin_cmd(Node, "repair-2i kill"),
     check_admin_cmd(Node, "repair-2i --speed 5 foo bar baz"),
-
     check_admin_cmd(Node, "cluster_info foo local"),
     check_admin_cmd(Node, "cluster_info foo local dev99@127.0.0.1"),
-
     check_admin_cmd(Node, "erl-reload"),
     check_admin_cmd(Node, "erl_reload"),
-
     check_admin_cmd(Node, "transfer-limit 1"),
     check_admin_cmd(Node, "transfer-limit dev55@127.0.0.1 1"),
-
     check_admin_cmd(Node, "transfer_limit 1"),
     check_admin_cmd(Node, "transfer_limit dev55@127.0.0.1 1"),
-
     check_admin_cmd(Node, "reformat-indexes --downgrade"),
     check_admin_cmd(Node, "reformat-indexes 5"),
     check_admin_cmd(Node, "reformat-indexes 6 7"),
     check_admin_cmd(Node, "reformat-indexes 5 --downgrade"),
     check_admin_cmd(Node, "reformat-indexes 6 7 --downgrade"),
-
     check_admin_cmd(Node, "reformat_indexes --downgrade"),
     check_admin_cmd(Node, "reformat_indexes 5"),
     check_admin_cmd(Node, "reformat_indexes 6 7"),
     check_admin_cmd(Node, "reformat_indexes 5 --downgrade"),
     check_admin_cmd(Node, "reformat_indexes 6 7 --downgrade"),
-
     check_admin_cmd(Node, "downgrade_objects true"),
     check_admin_cmd(Node, "downgrade_objects true 1"),
-
     check_admin_cmd(Node, "downgrade_objects true"),
     check_admin_cmd(Node, "downgrade_objects true 1"),
-
-       ok.
+    check_admin_cmd(Node, "js-reload foo bar baz"),
+    ok.
 
 confirm() ->
     %% Deploy a node to test against
@@ -191,7 +185,6 @@ confirm() ->
                         {{cluster_info, 1}, verify_console_cluster_info},
                         {{reload_code, 1}, verify_console_reload_code},
                         {{repair_2i, 1}, verify_console_repair_2i},
-                        {{reip, 1}, verify_console_reip},
                         {{reformat_indexes, 1}, verify_console_reformat_indexes},
                         {{reformat_objects, 1}, verify_console_reformat_objects},
                         {{bucket_type_status,1}, verify_console_bucket_type_status},
@@ -202,35 +195,17 @@ confirm() ->
                       ]}),
 
     rt_intercept:add(Node,
-                     {riak_kv_backup,
+                     {riak_kv_js_manager,
                       [
-                        {{restore,2}, verify_console_restore},
-                        {{backup,3}, verify_console_backup}
+                        {{reload,1}, verify_console_reload}
                       ]}),
 
     rt_intercept:wait_until_loaded(Node),
-
-    check_admin_cmd(Node, "restore dev1@127.0.0.1 fish autoexec.bat"),
-    %check_admin_cmd(Node, "backup <node> <cookie> <filename> [node|all]"),
 
     riak_admin_tests(Node),
     cluster_tests(Node),
     bucket_tests(Node),
     security_tests(Node),
-
-    %% TODO
-    %%check_admin_cmd(Node, "reip a b"),
-
-    %% test    riak:client_test
-    %% diag    riaknostic
-    %% top     etop
-
-
-    %% TODO: services
-    %% wait-for-services
-    %% js-reload  riak_kv_js_manager
-
-
     pass.
 
 check_admin_cmd(Node, Cmd) ->
