@@ -22,6 +22,17 @@
 
 -export([confirm/0]).
 
+%% This test passes params to the riak-admin shell script on to intercepts
+%% that either return ?PASS or ?FAIL (which print out "pass" or "fail" to
+%% the console). If an unexpected input is received in Erlang, ?FAIL is
+%% returned. This test should (will?) make sure we don't implement
+%% any unportable shell code. For example, `riak-repl cascades foo`
+%% didn't work on Ubuntu due to an invalid call to shift. Since this test
+%% will be run on giddyup and hence many platforms, we should be able
+%% to catch these types of bugs earlier.
+%% See also: replication2_console_tests.erl for a more detailed
+%% description. 
+
 %% UNTESTED, as they don't use rpc, or have a non-trivial impl
 %%   test
 %%   diag
@@ -30,8 +41,8 @@
 %%   js-reload
 %%   reip
 
+%% riak-admin cluster
 cluster_tests(Node) ->
-    %% riak-admin cluster
     check_admin_cmd(Node, "cluster join dev99@127.0.0.1"),
     check_admin_cmd(Node, "cluster leave"),
     check_admin_cmd(Node, "cluster leave dev99@127.0.0.1"),
@@ -44,23 +55,22 @@ cluster_tests(Node) ->
     check_admin_cmd(Node, "cluster commit"),
     check_admin_cmd(Node, "cluster clear").
 
+%% riak-admin bucket_type
 bucket_tests(Node) ->
-    %% riak-admin bucket_type
     check_admin_cmd(Node, "bucket-type status foo"),
     check_admin_cmd(Node, "bucket-type activate foo"),
     check_admin_cmd(Node, "bucket-type create foo {\"props\":{[]}}"),
     check_admin_cmd(Node, "bucket-type update foo {\"props\":{[]}}"),
     check_admin_cmd(Node, "bucket-type list").
 
+
+%% riak-admin security
 security_tests(Node) ->
-    %% riak-admin security
     check_admin_cmd(Node, "security add-user foo"),
     check_admin_cmd(Node, "security add-user foo x1=y1 x2=y2"),
     check_admin_cmd(Node, "security alter-user foo x1=y1"),
     check_admin_cmd(Node, "security alter-user foo x1=y1 x2=y2"),
     check_admin_cmd(Node, "security del-user foo"),
-
-    %% TODO: update add-source docs: users comma sep
     check_admin_cmd(Node, "security add-source all 192.168.100.0/22 y"),
     check_admin_cmd(Node, "security add-source all 192.168.100.0/22 x x1=y1"),
     check_admin_cmd(Node, "security add-source foo,bar 192.168.100.0/22 x x1=y1"),
@@ -86,8 +96,8 @@ security_tests(Node) ->
     check_admin_cmd(Node, "security print-user foo"),
     check_admin_cmd(Node, "security ciphers foo").
 
+%% "top level" riak-admin COMMANDS
 riak_admin_tests(Node) ->
-    %% "top level" riak-admin COMMANDS
     check_admin_cmd(Node, "join -f dev99@127.0.0.1"),
     check_admin_cmd(Node, "leave -f"),
     check_admin_cmd(Node, "force-remove -f dev99@127.0.0.1"),
