@@ -4,8 +4,24 @@
 %% legacy: 1.2.1
 %%
 %% uses the following configs with given defaults:
-%% default_timeout = 1000 :: timeout(), base timeout value; some tests will
-%% use a larger value (multiple of).
+%%
+%% ## default_timeout = 1000 :: timeout()
+%%
+%% Base timeout value; some tests will use a larger value (multiple of).
+%%
+%% ## run_rt_cascading_1_3_tests = false :: any()
+%%
+%% Some tests (new_to_old and mixed_version_clusters) only make sense to
+%% run if one is testing the version before cascading was introduced and
+%% the version it was added; eg current being riak 1.4 and previous being
+%% riak 1.3. If this is set to anything (other than 'false') those tests
+%% are run. They will not function properly unless the correct versions
+%% for riak are avialable. The tests check if the versions under test are
+%% too old to be valid however.
+%%
+%% With this set to default, the tests that depend on this option will
+%% emit a log message saying they are not configured to run.
+%%
 
 -module(rt_cascading).
 -compile(export_all).
