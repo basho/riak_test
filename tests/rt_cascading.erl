@@ -4,8 +4,24 @@
 %% legacy: 1.2.1
 %%
 %% uses the following configs with given defaults:
-%% default_timeout = 1000 :: timeout(), base timeout value; some tests will
-%% use a larger value (multiple of).
+%%
+%% ## default_timeout = 1000 :: timeout()
+%%
+%% Base timeout value; some tests will use a larger value (multiple of).
+%%
+%% ## run_rt_cascading_1_3_tests = false :: any()
+%%
+%% Some tests (new_to_old and mixed_version_clusters) only make sense to
+%% run if one is testing the version before cascading was introduced and
+%% the version it was added; eg current being riak 1.4 and previous being
+%% riak 1.3. If this is set to anything (other than 'false') those tests
+%% are run. They will not function properly unless the correct versions
+%% for riak are avialable. The tests check if the versions under test are
+%% too old to be valid however.
+%%
+%% With this set to default, the tests that depend on this option will
+%% emit a log message saying they are not configured to run.
+%%
 
 -module(rt_cascading).
 -compile(export_all).
@@ -16,6 +32,7 @@
 -define(bucket, <<"objects">>).
 
 -export([confirm/0]).
+-export([new_to_old/0, mixed_version_clusters/0]).
 
 % cluster_mgr port = 10006 + 10n where n is devN
 
@@ -523,6 +540,19 @@ circle_and_spurs_test_() ->
         end}
     ] end}}.
 
+mixed_version_clusters() ->
+    case eunit:test(?MODULE:mixed_version_clusters_test_(), [verbose]) of
+        ok ->
+            pass;
+        error ->
+            % at the time this is written, the return value isn't acutally
+            % checked, the only way to fail is to crash the process.
+            % i leave the fail here in hopes a future version will actually
+            % do what the documentation says.
+            exit(error),
+            fail
+    end.
+
 mixed_version_clusters_test_() ->
     %      +-----+
     %      | n12 |
@@ -552,25 +582,39 @@ mixed_version_clusters_test_dep() ->
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
         Nodes = rt:deploy_nodes(DeployConfs),
         [N1, N2, N3, N4, N5, N6] =  Nodes,
-        N12 = [N1, N2],
-        N34 = [N3, N4],
-        N56 = [N5, N6],
-        repl_util:make_cluster(N12),
-        repl_util:make_cluster(N34),
-        repl_util:make_cluster(N56),
-        repl_util:name_cluster(N1, "n12"),
-        repl_util:name_cluster(N3, "n34"),
-        repl_util:name_cluster(N5, "n56"),
-        [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
-        connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
-        connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
-        connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
-        Nodes
+        case rpc:call(N1, application, get_key, [riak_core, vsn]) of
+            % this is meant to test upgrading from early BNW aka
+            % Brave New World aka Advanced Repl aka version 3 repl to
+            % a cascading realtime repl. Other tests handle going from pre
+            % repl 3 to repl 3.
+            {ok, Vsn} when Vsn < "1.3.0" ->
+                {too_old, Nodes};
+            _ ->
+                N12 = [N1, N2],
+                N34 = [N3, N4],
+                N56 = [N5, N6],
+                repl_util:make_cluster(N12),
+                repl_util:make_cluster(N34),
+                repl_util:make_cluster(N56),
+                repl_util:name_cluster(N1, "n12"),
+                repl_util:name_cluster(N3, "n34"),
+                repl_util:name_cluster(N5, "n56"),
+                [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
+                connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
+                connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
+                connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
+                Nodes
+        end
     end,
-    fun(Nodes) ->
+    fun(MaybeNodes) ->
+        Nodes = case MaybeNodes of
+            {too_old, Ns} -> Ns;
+            _ -> MaybeNodes
+        end,
         rt:clean_cluster(Nodes)
     end,
-    fun([N1, N2, N3, N4, N5, N6] = Nodes) -> [
+    fun({too_old, _Nodes}) -> [];
+       ([N1, N2, N3, N4, N5, N6] = Nodes) -> [
 
         {"no cascading at first", timeout, timeout(35), [
             {timeout, timeout(15), fun() ->
@@ -709,6 +753,19 @@ Reses)]),
 
     ] end}}.
 
+new_to_old() ->
+    case eunit:test(?MODULE:new_to_old_test_(), [verbose]) of
+        ok ->
+            pass;
+        error ->
+            % at the time this is written, the return value isn't acutally
+            % checked, the only way to fail is to crash the process.
+            % i leave the fail here in hopes a future version will actually
+            % do what the documentation says.
+            exit(error),
+            fail
+    end.
+
 new_to_old_test_() ->
     %      +------+
     %      | New1 |
@@ -737,19 +794,33 @@ new_to_old_test_dep() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
         [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        Names = ["new1", "old2", "new3"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        connect_rt(New1, 10026, "old2"),
-        connect_rt(Old2, 10036, "new3"),
-        connect_rt(New3, 10016, "new1"),
-        Nodes
+        case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
+            % this is meant to test upgrading from early BNW aka
+            % Brave New World aka Advanced Repl aka version 3 repl to
+            % a cascading realtime repl. Other tests handle going from pre
+            % repl 3 to repl 3.
+            {ok, Vsn} when Vsn < "1.3.0" ->
+                {too_old, Nodes};
+            _ ->
+                [repl_util:make_cluster([N]) || N <- Nodes],
+                Names = ["new1", "old2", "new3"],
+                [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+                [repl_util:wait_until_is_leader(N) || N <- Nodes],
+                connect_rt(New1, 10026, "old2"),
+                connect_rt(Old2, 10036, "new3"),
+                connect_rt(New3, 10016, "new1"),
+                Nodes
+        end
     end,
-    fun(Nodes) ->
+    fun(MaybeNodes) ->
+        Nodes = case MaybeNodes of
+            {too_old, Ns} -> Ns;
+            _ -> MaybeNodes
+        end,
         rt:clean_cluster(Nodes)
     end,
-    fun([New1, Old2, New3]) -> [
+    fun({too_old, _}) -> [];
+       ([New1, Old2, New3]) -> [
 
         {"From new1 to old2", timeout, timeout(25), fun() ->
             Client = rt:pbc(New1),
