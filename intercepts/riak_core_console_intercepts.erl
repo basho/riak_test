@@ -176,3 +176,9 @@ verify_console_ring_status(Val) ->
         _ -> ?FAIL
     end.
 
+verify_console_transfer_limit(Val) ->
+    case Val of
+        ["1"] -> ?PASS;
+        ["dev55@127.0.0.1", "1"] -> ?PASS;
+        _ -> ?FAIL
+    end.

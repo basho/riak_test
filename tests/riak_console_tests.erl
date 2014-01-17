@@ -115,6 +115,31 @@ riak_admin_tests(Node) ->
     check_admin_cmd(Node, "erl-reload"),
     check_admin_cmd(Node, "erl_reload"),
 
+    check_admin_cmd(Node, "transfer-limit 1"),
+    check_admin_cmd(Node, "transfer-limit dev55@127.0.0.1 1"),
+
+    check_admin_cmd(Node, "transfer_limit 1"),
+    check_admin_cmd(Node, "transfer_limit dev55@127.0.0.1 1"),
+
+
+    check_admin_cmd(Node, "reformat-indexes --downgrade"),
+    check_admin_cmd(Node, "reformat-indexes 5"),
+    check_admin_cmd(Node, "reformat-indexes 6 7"),
+    check_admin_cmd(Node, "reformat-indexes 5 --downgrade"),
+    check_admin_cmd(Node, "reformat-indexes 6 7 --downgrade"),
+
+    check_admin_cmd(Node, "reformat_indexes --downgrade"),
+    check_admin_cmd(Node, "reformat_indexes 5"),
+    check_admin_cmd(Node, "reformat_indexes 6 7"),
+    check_admin_cmd(Node, "reformat_indexes 5 --downgrade"),
+    check_admin_cmd(Node, "reformat_indexes 6 7 --downgrade"),
+
+    check_admin_cmd(Node, "downgrade_objects true"),
+    check_admin_cmd(Node, "downgrade_objects true 1"),
+
+    check_admin_cmd(Node, "downgrade_objects true"),
+    check_admin_cmd(Node, "downgrade_objects true 1"),
+
     %% TODO
     %%check_admin_cmd(Node, "reip a b"),
 
@@ -123,9 +148,6 @@ riak_admin_tests(Node) ->
     %% test    riak:client_test
     %% diag    riaknostic
     %% top     etop
-    %% transfer-limit riak_core_console transfer_limit
-    %% reformat-indexes riak_kv_console reformat_indexes
-    %% downgrade-objects riak_kv_console reformat_objects
 
 
     %% TODO: services
@@ -152,6 +174,7 @@ confirm() ->
                         {{print_staged, 1}, verify_console_print_staged},
                         {{commit_staged, 1}, verify_console_commit_staged},
                         {{clear_staged, 1}, verify_console_clear_staged},
+                        {{transfer_limit, 1}, verify_console_transfer_limit},
                         {{add_user, 1}, verify_console_add_user},
                         {{alter_user, 1}, verify_console_alter_user},
                         {{del_user, 1}, verify_console_del_user},
@@ -183,6 +206,8 @@ confirm() ->
                         {{reload_code, 1}, verify_console_reload_code},
                         {{repair_2i, 1}, verify_console_repair_2i},
                         {{reip, 1}, verify_console_reip},
+                        {{reformat_indexes, 1}, verify_console_reformat_indexes},
+                        {{reformat_objects, 1}, verify_console_reformat_objects},
                         {{bucket_type_status,1}, verify_console_bucket_type_status},
                         {{bucket_type_activate,1}, verify_console_bucket_type_activate},
                         {{bucket_type_create,1}, verify_console_bucket_type_create},
