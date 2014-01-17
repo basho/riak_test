@@ -16,6 +16,7 @@
 -define(bucket, <<"objects">>).
 
 -export([confirm/0]).
+-export([new_to_old/0, mixed_version_clusters/0]).
 
 % cluster_mgr port = 10006 + 10n where n is devN
 
@@ -509,6 +510,19 @@ circle_and_spurs_test_() ->
 
     ] end}}.
 
+mixed_version_clusters() ->
+    case eunit:test(?MODULE:mixed_version_clusters_test_(), [verbose]) of
+        ok ->
+            pass;
+        error ->
+            % at the time this is written, the return value isn't acutally
+            % checked, the only way to fail is to crash the process.
+            % i leave the fail here in hopes a future version will actually
+            % do what the documentation says.
+            exit(error),
+            fail
+    end.
+
 mixed_version_clusters_test_() ->
     %      +-----+
     %      | n12 |
@@ -705,6 +719,19 @@ Reses)]),
         }}
 
     ] end}}.
+
+new_to_old() ->
+    case eunit:test(?MODULE:new_to_old_test_(), [verbose]) of
+        ok ->
+            pass;
+        error ->
+            % at the time this is written, the return value isn't acutally
+            % checked, the only way to fail is to crash the process.
+            % i leave the fail here in hopes a future version will actually
+            % do what the documentation says.
+            exit(error),
+            fail
+    end.
 
 new_to_old_test_() ->
     %      +------+
