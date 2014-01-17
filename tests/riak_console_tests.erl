@@ -121,7 +121,6 @@ riak_admin_tests(Node) ->
     check_admin_cmd(Node, "transfer_limit 1"),
     check_admin_cmd(Node, "transfer_limit dev55@127.0.0.1 1"),
 
-
     check_admin_cmd(Node, "reformat-indexes --downgrade"),
     check_admin_cmd(Node, "reformat-indexes 5"),
     check_admin_cmd(Node, "reformat-indexes 6 7"),
@@ -140,20 +139,7 @@ riak_admin_tests(Node) ->
     check_admin_cmd(Node, "downgrade_objects true"),
     check_admin_cmd(Node, "downgrade_objects true 1"),
 
-    %% TODO
-    %%check_admin_cmd(Node, "reip a b"),
-
-    %% restore riak_kv_backup
-    %% backup  riak_kv_backup
-    %% test    riak:client_test
-    %% diag    riaknostic
-    %% top     etop
-
-
-    %% TODO: services
-    %% wait-for-services
-    %% js-reload  riak_kv_js_manager
-    ok.
+       ok.
 
 confirm() ->
     %% Deploy a node to test against
@@ -215,13 +201,36 @@ confirm() ->
                         {{bucket_type_list,1}, verify_console_bucket_type_list}
                       ]}),
 
+    rt_intercept:add(Node,
+                     {riak_kv_backup,
+                      [
+                        {{restore,2}, verify_console_restore},
+                        {{backup,3}, verify_console_backup}
+                      ]}),
+
     rt_intercept:wait_until_loaded(Node),
 
+    check_admin_cmd(Node, "restore dev1@127.0.0.1 fish autoexec.bat"),
+    %check_admin_cmd(Node, "backup <node> <cookie> <filename> [node|all]"),
 
     riak_admin_tests(Node),
     cluster_tests(Node),
     bucket_tests(Node),
     security_tests(Node),
+
+    %% TODO
+    %%check_admin_cmd(Node, "reip a b"),
+
+    %% test    riak:client_test
+    %% diag    riaknostic
+    %% top     etop
+
+
+    %% TODO: services
+    %% wait-for-services
+    %% js-reload  riak_kv_js_manager
+
+
     pass.
 
 check_admin_cmd(Node, Cmd) ->
