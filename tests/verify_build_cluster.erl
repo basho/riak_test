@@ -27,12 +27,12 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),    
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     %% Deploy a set of new nodes
     lager:info("Deploying 4 nodes"),
     %% handoff_concurrency needs to be raised to make the leave operation faster.
     %% most clusters go up to 10, but this one is one louder, isn't it?
-    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4, [{riak_core, [{handoff_concurrency, 11}]}]), 
+    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4, [{riak_core, [{handoff_concurrency, 11}]}]),
 
     %% Ensure each node owns 100% of it's own ring
     lager:info("Ensure each nodes 100% of it's own ring"),

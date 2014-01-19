@@ -17,7 +17,7 @@
 %% @doc riak_test entry point
 confirm() ->
 
-    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     %% Start up two >1.3.2 clusters and connect them,
     {LeaderA, LeaderB, ANodes, BNodes} = make_clusters(),
 
