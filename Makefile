@@ -7,6 +7,7 @@ PLT = $(HOME)/.riak-test_dialyzer_plt
 
 all: deps compile
 	./rebar skip_deps=true escriptize
+	SMOKE_TEST=1 ./rebar skip_deps=true escriptize
 
 deps:
 	./rebar get-deps
