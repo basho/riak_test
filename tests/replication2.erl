@@ -378,7 +378,6 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     Res10 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
     ?assertEqual(100, length(Res10)),
 
-
     lager:info("Write 100 more keys into realtime only bucket on ~p",
         [ASecond]),
     ?assertEqual([], repl_util:do_write(ASecond, 101, 200,
@@ -408,8 +407,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:wait_until_ring_converged(ANodes),
 
     lager:info("Writing 100 keys"),
-    ?assertEqual([], repl_util:do_write(LeaderA4, 800, 900,
-            TestBucket, 2)),
+    ?assertEqual([], repl_util:do_write(LeaderA4, 800, 900, TestBucket, 2)),
 
     lager:info("Starting realtime"),
     repl_util:start_realtime(LeaderA4, "B"),
@@ -428,9 +426,17 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     repl_util:stop_realtime(LeaderA4, "B"),
     rt:wait_until_ring_converged(ANodes),
 
-    lager:info("Writing 100 keys"),
-    ?assertEqual([], repl_util:do_write(Target, 900, 1000,
-            TestBucket, 2)),
+    lager:info("Verifying 100 keys are missing from ~p", [Target]),
+    repl_util:read_from_cluster(Target, 901, 1000, TestBucket, 100),
+
+    lager:info("Writing 100 keys to ~p", [Target]),
+    ?assertEqual([], repl_util:do_write(Target, 901, 1000, TestBucket, 2)),
+
+    lager:info("Verifying 100 keys are read from ~p", [Target]),
+    repl_util:read_from_cluster(Target, 901, 1000, TestBucket, 0),
+
+    lager:info("Verifying 100 keys are missing from ~p", [BSecond]),
+    repl_util:read_from_cluster(BSecond, 901, 1000, TestBucket, 100),
 
     io:format("queue status: ~p",
               [rpc:call(Target, riak_repl2_rtq, status, [])]),
@@ -444,9 +450,11 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     repl_util:start_realtime(LeaderA4, "B"),
     timer:sleep(3000),
 
+    lager:info("Verifying 100 keys are now available on ~p", [BSecond]),
+    repl_util:read_from_cluster(BSecond, 901, 1000, TestBucket, 0),
+
     lager:info("Reading keys written while repl was stopped"),
-    ?assertEqual(0, repl_util:wait_for_reads(BSecond, 900, 1000,
-            TestBucket, 2)),
+    ?assertEqual(0, repl_util:wait_for_reads(BSecond, 901, 1000, TestBucket, 2)),
 
     lager:info("Restarting node ~p", [Target]),
 
