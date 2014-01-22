@@ -1,0 +1,8 @@
+case os:getenv("SMOKE_TEST") of
+    false -> CONFIG;
+    [] -> CONFIG;
+    _ ->
+      C1 = lists:keystore(escript_emu_args, 1, CONFIG,
+                      {escript_emu_args, "%%! -escript main smoke_test_escript +K true +P 10000 -env ERL_MAX_PORTS 10000\n"}),
+      lists:keystore(escript_name, 1, C1, {escript_name, smoke_test})
+end.
