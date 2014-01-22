@@ -20,7 +20,7 @@ main(Args) ->
     {ok, {Parsed, _Other}} = getopt:parse(cli_options(), Args),
     application:start(ibrowse),
     lager:start(),
-    rt_config:load("default", filename:join([os:getenv("HOME"), ".smoke_test.config"])),
+    rt_config:load("default", filename:join([os:getenv("HOME"), ".riak_test.config"])),
     case lists:keyfind(project, 1, Parsed) of
         false ->
             lager:error("Must specify project!"),
