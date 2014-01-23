@@ -9,7 +9,7 @@ confirm() ->
 
     CuttlefishConf = [
         {"ring_size", "8"},
-        {"leveldb.sync", true}
+        {"leveldb.sync_on_write", "on"}
     ],
 
     [Node] = rt:deploy_nodes(1, {cuttlefish, CuttlefishConf}),
