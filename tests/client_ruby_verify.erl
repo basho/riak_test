@@ -17,10 +17,9 @@ confirm() ->
     prereqs(),
     clone_repo(),
     install_dependencies(),
-    Nodes = rt:deploy_nodes([{current,
-                              [{riak_kv, [{test, true}]},
-                               {riak_search, [{enabled, true}]}]}],
-                            [riak_search]),
+    rt:set_conf(all, [{"search", "on"}]),
+    Config = [{riak_kv, [{test, true}]}],
+    Nodes = rt:deploy_nodes(1, Config),
     [Node1] = Nodes,
 
     configure_test_client(Node1),
