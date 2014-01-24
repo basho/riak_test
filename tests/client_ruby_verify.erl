@@ -17,9 +17,7 @@ confirm() ->
     prereqs(),
     clone_repo(),
     install_dependencies(),
-    rt:set_conf(all, [{"search", "on"}]),
-    Config = [{riak_kv, [{test, true}]}],
-    Nodes = rt:deploy_nodes(1, Config),
+    rt:deploy_nodes(1, {cuttlefish, [{"search", "on"}]}),
     [Node1] = Nodes,
 
     configure_test_client(Node1),
