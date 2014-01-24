@@ -17,8 +17,7 @@ confirm() ->
     prereqs(),
     clone_repo(),
     install_dependencies(),
-    rt:deploy_nodes(1, {cuttlefish, [{"search", "on"}]}),
-    [Node1] = Nodes,
+    [Node1] = rt:deploy_nodes(1, {cuttlefish, [{"search", "on"}]}),
 
     configure_test_client(Node1),
 
