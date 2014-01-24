@@ -30,7 +30,7 @@ confirm() ->
 
     lager:info("Cmd: ~s", [Cmd]),
 
-    {Code, RubyLog} = rt_local:stream_cmd(Cmd, [{cd, RUBY_CHECKOUT}]),
+    {Code, RubyLog} = rt_local:stream_cmd(Cmd, [{cd, ?RUBY_CHECKOUT}]),
     ?assert(rt:str(RubyLog, " 0 failures")),
     ?assert(Code =:= 0),
     pass.
@@ -66,9 +66,9 @@ install_dependencies() ->
 
 configure_test_client(Node) ->
     [{Node, ConnectionInfo}] = rt:connection_info([Node]),
-    Hostname = atom_to_list(Node1),
+    Hostname = atom_to_list(Node),
     {_PB_Host, PB_Port} = orddict:fetch(pb, ConnectionInfo),
     ConfigYaml = io_lib:format("host: ~s~npb_port: ~b~n", [Hostname, PB_Port]),
-    TestClientFilename = filename:join([RUBY_CHECKOUT, "spec/support/test_client.yml"]),
+    TestClientFilename = filename:join([?RUBY_CHECKOUT, "spec/support/test_client.yml"]),
     
     ?assertMatch(ok, file:write_file(TestClientFilename, ConfigYaml)).
