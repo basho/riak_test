@@ -9,7 +9,6 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     [Node] = rt:build_cluster(1),
     rt:wait_until_pingable(Node),
 
@@ -56,12 +55,17 @@ confirm() ->
     {ok, O} = rhc:get(HC, <<"foo">>, <<"bar">>, [{timeout, 4000}]),
 
     %% either of these are potentially valid.
-    case riakc_obj:get_value(O) of
-        <<"foobarbaz\n">> ->
+    case riakc_obj:get_values(O) of
+        [<<"foobarbaz\n">>] ->
             lager:info("Original Value"),
             ok;
-        <<"getgetgetgetget\n">> ->
+        [<<"getgetgetgetget\n">>] ->
             lager:info("New Value"),
+            ok;
+        [_A, _B] = L ->
+            ?assertEqual([<<"foobarbaz\n">>,<<"getgetgetgetget\n">>],
+                         lists:sort(L)),
+            lager:info("Both Values"),
             ok;
         V -> ?assertEqual({object_value, <<"getgetgetgetget\n">>},
                           {object_value, V})
@@ -99,14 +103,19 @@ confirm() ->
                                   [{timeout, 4000}]),
 
     %% either of these are potentially valid.
-    case riakc_obj:get_value(O2) of
-        <<"get2get2get2get2get\n">> ->
+    case riakc_obj:get_values(O2) of
+        [<<"get2get2get2get2get\n">>] ->
             lager:info("New Value"),
             ok;
-        <<"foobarbaz2\n">> ->
+        [<<"foobarbaz2\n">>] ->
             lager:info("Original Value"),
             ok;
-        V2 -> ?assertEqual({object_value, <<"get2get2get2get2get\n">>},
+        [_A2, _B2] = L2 ->
+            ?assertEqual([<<"foobarbaz2\n">>, <<"get2get2get2get2get\n">>],
+                         lists:sort(L2)),
+            lager:info("Both Values"),
+            ok;
+        V2 -> ?assertEqual({object_value, <<"get2get2get2get2get\n">>}, 
                            {object_value, V2})
     end,
 
