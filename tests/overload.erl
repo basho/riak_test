@@ -21,8 +21,8 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--define(NUM_REQUESTS, 40).
--define(THRESHOLD, 20).
+-define(NUM_REQUESTS, 200).
+-define(THRESHOLD, 100).
 -define(BUCKET, <<"test">>).
 -define(KEY, <<"hotkey">>).
 
@@ -44,9 +44,9 @@ confirm() ->
     RO = riak_object:new(?BUCKET, ?KEY, <<"test">>),
 
 
-%%    ok = test_no_overload_protection(Nodes, Victim, RO),
+    ok = test_no_overload_protection(Nodes, Victim, RO),
     ok = test_vnode_protection(Nodes, Victim, RO),
-%%    ok = test_fsm_protection(Nodes, Victim, RO),
+    ok = test_fsm_protection(Nodes, Victim, RO),
     pass.
 
 test_no_overload_protection(Nodes, Victim, RO) ->
@@ -57,7 +57,7 @@ test_no_overload_protection(Nodes, Victim, RO) ->
     ok.
 
 test_vnode_protection(Nodes, Victim, RO) ->
-    [Node1, _Node2] = Nodes,
+    [Node1, Node2] = Nodes,
     lager:info("Testing with vnode queue protection enabled"),
     lager:info("Setting vnode overload threshold to ~b", [?THRESHOLD]),
     Config2 = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD}]}],
@@ -86,12 +86,12 @@ test_vnode_protection(Nodes, Victim, RO) ->
 
     test_overload_list_keys(Nodes),
 
-%%    lager:info("Suspending vnode proxy for ~b", [Victim]),
-%%    Pid = suspend_vnode_proxy(Node2, Victim),
-%%    {NumProcs3, QueueLen3} = run_test(Nodes, Victim, RO),
-%%    Pid ! resume,
-%%    ?assert(NumProcs3 >= (2*?NUM_REQUESTS * 0.9)),
-%%    ?assert(QueueLen3 =< (?THRESHOLD * 1.1)),
+    lager:info("Suspending vnode proxy for ~b", [Victim]),
+    Pid = suspend_vnode_proxy(Node2, Victim),
+    {NumProcs3, QueueLen3} = run_test(Nodes, Victim, RO),
+    Pid ! resume,
+    ?assert(NumProcs3 >= (2*?NUM_REQUESTS * 0.9)),
+    ?assert(QueueLen3 =< (?THRESHOLD * 1.1)),
     ok.
 
 test_fsm_protection(Nodes, Victim, RO) ->
@@ -135,17 +135,21 @@ run_test(Nodes, Victim, RO) ->
 
 test_overload_list_keys(Nodes) ->
     [Node1, Node2] = Nodes,
-    lager:info("Suspending all vnodes on Node2~n"),
+    lager:info("Suspending all vnodes on Node2"),
     Pid = suspend_all_vnodes(Node2),
+    timer:sleep(3000),
     lager:info("Sending ~b list_keys requests", [?NUM_REQUESTS]),
     Pids = spawn_list_keys(Node1, ?NUM_REQUESTS),
-    {ok, C} = riak:client_connect(Node1),
-    Keys = riak_client:list_keys(?BUCKET, C),
-    io:format("KEYS = ~p~n", [Keys]),
-    ?assertEqual({error, overload}, Keys),
+    timer:sleep(3000),
+    Keys = rpc:call(Node1, ?MODULE, list_keys, []),
+    ?assertEqual({error, mailbox_overload}, Keys),
     resume_all_vnodes(Pid),
     wait_for_all_vnode_queues_empty(Node2),
     kill_pids(Pids).
+
+list_keys() ->
+    {ok, C} = riak:client_connect(node()),
+    riak_client:list_keys(?BUCKET, C).
 
 wait_for_all_vnode_queues_empty(Node) ->
     rt:wait_until(Node, fun(N) ->
@@ -180,8 +184,7 @@ read_until_success(C, Count) ->
 
 spawn_list_keys(Node, Num) ->
     [spawn(fun() ->
-           {ok, C} = riak:client_connect(Node),
-           riak_client:list_keys(?BUCKET, C)
+           rpc:call(Node, ?MODULE, list_keys, [])
     end) || _ <- lists:seq(1,Num)].
 
 spawn_reads(Node, Num) ->
@@ -199,9 +202,12 @@ suspend_all_vnodes(Node) ->
 remote_suspend_all_vnodes() ->
     spawn(fun() ->
                   Vnodes = riak_core_vnode_manager:all_vnodes(),
-                  [erlang:suspend_process(Pid, []) || {_, _, Pid} <- Vnodes],
+                  [erlang:suspend_process(Pid, []) || {riak_kv_vnode, _, Pid}
+                      <- Vnodes],
                   receive resume ->
-                      [erlang:resume_process(Pid) || {_, _, Pid} <- Vnodes]
+                      io:format("Resuming vnodes~n"),
+                      [erlang:resume_process(Pid) || {riak_kv_vnode, _, Pid}
+                          <- Vnodes]
                   end
           end).
 
