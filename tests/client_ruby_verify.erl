@@ -45,7 +45,7 @@ prereqs() ->
     ok.
 
 
-clone_reop() ->
+clone_repo() ->
     lager:info("Cleaning up ruby scratch directory"),
     CleanupCmd = io_lib:format("rm -rf ~s", [?RUBY_CHECKOUT]),
     os:cmd(CleanupCmd),
