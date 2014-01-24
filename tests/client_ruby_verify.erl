@@ -19,8 +19,7 @@ confirm() ->
     install_dependencies(),
     Nodes = rt:deploy_nodes([{current,
                               [{riak_kv, [{test, true}]},
-                               {riak_search, [{enabled, true},
-                                              {search_backend, riak_search_test_backend}]}]}],
+                               {riak_search, [{enabled, true}]}]}],
                             [riak_search]),
     [Node1] = Nodes,
 
