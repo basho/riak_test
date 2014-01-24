@@ -65,9 +65,8 @@ install_dependencies() ->
 
 configure_test_client(Node) ->
     [{Node, ConnectionInfo}] = rt:connection_info([Node]),
-    Hostname = atom_to_list(Node),
-    {_PB_Host, PB_Port} = orddict:fetch(pb, ConnectionInfo),
-    ConfigYaml = io_lib:format("host: ~s~npb_port: ~b~n", [Hostname, PB_Port]),
+    {PB_IP, PB_Port} = orddict:fetch(pb, ConnectionInfo),
+    ConfigYaml = io_lib:format("host: ~s~npb_port: ~b~n", [PB_IP, PB_Port]),
     TestClientFilename = filename:join([?RUBY_CHECKOUT, "spec/support/test_client.yml"]),
     
     ?assertMatch(ok, file:write_file(TestClientFilename, ConfigYaml)).
