@@ -135,21 +135,38 @@ run_test(Nodes, Victim, RO) ->
 
 test_overload_list_keys(Nodes) ->
     [Node1, Node2] = Nodes,
-    lager:info("Suspending all vnodes on Node2"),
+    lager:info("Suspending all kv vnodes on Node2"),
     Pid = suspend_all_vnodes(Node2),
     timer:sleep(3000),
+
     lager:info("Sending ~b list_keys requests", [?NUM_REQUESTS]),
     Pids = spawn_list_keys(Node1, ?NUM_REQUESTS),
-    timer:sleep(3000),
-    Keys = rpc:call(Node1, ?MODULE, list_keys, []),
-    ?assertEqual({error, mailbox_overload}, Keys),
+    timer:sleep(1000),
+
+    lager:info("Checking Coverage queries for overload"),
+
+    Res = list_keys(Node1),
+    ?assertEqual({error, mailbox_overload}, Res),
+    lager:info("list_keys correctly handled overload"),
+
+    Res2 = list_buckets(Node1),
+    ?assertEqual({error, mailbox_overload}, Res2),
+    lager:info("list_buckets correctly handled overload"),
+
+    lager:info("Resuming all kv vnodes on Node2"),
     resume_all_vnodes(Pid),
+
+    lager:info("Waiting for vnode queues to empty"),
     wait_for_all_vnode_queues_empty(Node2),
     kill_pids(Pids).
 
-list_keys() ->
-    {ok, C} = riak:client_connect(node()),
-    riak_client:list_keys(?BUCKET, C).
+list_keys(Node) ->
+    {ok, C} = riak:client_connect(Node),
+    riak_client:list_keys(?BUCKET, 30000, C).
+
+list_buckets(Node) ->
+    {ok, C} = riak:client_connect(Node),
+    riak_client:list_buckets(30000, C).
 
 wait_for_all_vnode_queues_empty(Node) ->
     rt:wait_until(Node, fun(N) ->
