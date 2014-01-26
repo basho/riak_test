@@ -36,6 +36,7 @@ cli_options() ->
  {tests,              $t, "tests",    string,     "specifies which tests to run"},
  {suites,             $s, "suites",   string,     "which suites to run"},
  {dir,                $d, "dir",      string,     "run all tests in the specified directory"},
+ {skip,               $x, "skip",     string,     "list of tests to skip in a directory"},
  {verbose,            $v, "verbose",  undefined,  "verbose output"},
  {outdir,             $o, "outdir",   string,     "output directory"},
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
@@ -201,7 +202,8 @@ parse_command_line_tests(ParsedArgs) ->
     [code:add_patha(CodePath) || CodePath <- CodePaths,
                                  CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
-    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+    SkipTests = string:tokens(proplists:get_value(skip, ParsedArgs, []), [$,]),
+    DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
     lists:foldl(fun(Test, Tests) ->
             [{
               list_to_atom(Test),
@@ -372,12 +374,26 @@ results_filter(Result) ->
             true
     end.
 
-load_tests_in_dir(Dir) ->
+load_tests_in_dir(Dir, SkipTests) ->
     case filelib:is_dir(Dir) of
         true ->
             code:add_path(Dir),
-            lists:sort([ string:substr(Filename, 1, length(Filename) - 5) || Filename <- filelib:wildcard("*.beam", Dir)]);
+            lists:sort(
+              lists:foldl(load_tests_folder(SkipTests),
+                          [],
+                          filelib:wildcard("*.beam", Dir)));
         _ -> io:format("~s is not a dir!~n", [Dir])
+    end.
+
+load_tests_folder(SkipTests) ->
+    fun(X, Acc) ->
+            Test = string:substr(X, 1, length(X) - 5),
+            case lists:member(Test, SkipTests) of
+                true ->
+                    Acc;
+                false ->
+                    [Test | Acc]
+            end
     end.
 
 so_kill_riak_maybe() ->
