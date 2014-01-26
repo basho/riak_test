@@ -4,8 +4,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% Change when a new release comes out.
--define(JAVA_FAT_BE_URL, rt_config:get(java.fat_be_url)).
--define(JAVA_TESTS_URL, rt_config:get(java.tests_url)).
+-define(JAVA_FAT_BE_URL, rt_config:get('java.fat_be_url')).
+-define(JAVA_TESTS_URL, rt_config:get('java.tests_url')).
 
 -prereq("java").
 -prereq("curl").

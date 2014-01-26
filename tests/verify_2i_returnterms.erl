@@ -47,9 +47,7 @@ confirm() ->
     ExpectedFooKeys = lists:sort([int_to_key(N) || N <- lists:seq(101, 200)]),
     assertEqual(RiakHttp, PBPid, ExpectedFooKeys, {<<"field1_bin">>, ?FOO}, ?Q_OPTS, keys),
 
-    %% Note: not sorted by key, but by value (the int index)
-    %% Should return "val, key" pairs
-    ExpectedRangeResults = [{list_to_binary(integer_to_list(N)), int_to_key(N)} || N <- lists:seq(1, 100)],
+    ExpectedRangeResults = lists:sort([{list_to_binary(integer_to_list(N)), int_to_key(N)} || N <- lists:seq(1, 100)]),
     assertEqual(RiakHttp, PBPid, ExpectedRangeResults, {<<"field2_int">>, "1", "100"}, ?Q_OPTS, results),
 
     riakc_pb_socket:stop(PBPid),
@@ -63,8 +61,8 @@ assertEqual(Http, PB, Expected, Query, Opts, ResultKey) ->
     HTTPRes = http_query(Http, Query, Opts),
     HTTPResults0 = proplists:get_value(atom_to_binary(ResultKey, latin1), HTTPRes, []),
     HTTPResults = decode_http_results(ResultKey, HTTPResults0),
-    ?assertEqual(Expected, PBKeys),
-    ?assertEqual(Expected, HTTPResults).
+    ?assertEqual(Expected, lists:sort(PBKeys)),
+    ?assertEqual(Expected, lists:sort(HTTPResults)).
 
 decode_http_results(keys, Keys) ->
     Keys;

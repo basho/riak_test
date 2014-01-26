@@ -57,7 +57,9 @@ confirm() ->
                  rt:httpc_write(HTTP, <<"failkey">>, <<"fail">>, <<"value">>)),
 
     lager:info("Checking fix for BZ1244 - riak_kv_wm_object makes call to riak_client:get/3 with invalid type for key"),
-    ?assertMatch({error, {ok, "201", _, _}},
+    %% riak_kv_wm_object:ensure_doc will return {error, not_found}, leading to 404.
+    %% see https://github.com/basho/riak_kv/pull/237 for details of the fix.
+    ?assertMatch({error, {ok, "404", _, _}},
                  rt:httpc_write(HTTP, <<"bz1244bucket">>, undefined, <<"value">>)),
 
     lager:info("Checking that postcommit fires."),

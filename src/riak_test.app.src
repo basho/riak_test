@@ -1,7 +1,7 @@
 {application, riak_test,
  [
   {description, ""},
-  {vsn, "0.1.0"},
+  {vsn, git},
   {registered, []},
   {applications, [
                   kernel,
@@ -14,8 +14,8 @@
     {rt_max_wait_time, 180000},
     {rt_retry_delay, 500},
     {rt_harness, rtdev},
-    {java, [{fat_be_url, "http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.1.0-SNAPSHOT-jar-with-dependencies-and-tests.jar"},
-            {tests_url, "http://s3.amazonaws.com/builds.basho.com/riak-java-client/CURRENT/riak-client-1.1.0-SNAPSHOT-tests.jar"}
+    {java, [{fat_be_url, "http://riak-java-client.s3.amazonaws.com/riak-client-1.4.2-jar-with-dependencies-and-tests.jar"},
+            {tests_url, "http://riak-java-client.s3.amazonaws.com/riak-client-1.4.2-tests.jar"}
     ]}
   ]}
  ]}.

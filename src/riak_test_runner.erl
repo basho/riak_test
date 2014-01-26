@@ -34,7 +34,7 @@ metadata() ->
 metadata(Pid) ->
     riak_test ! {metadata, Pid},
     receive
-        {metadata, TestMeta} -> TestMeta 
+        {metadata, TestMeta} -> TestMeta
     end.
 
 -spec(confirm(integer(), atom(), [{atom(), term()}]) -> [tuple()]).
@@ -58,12 +58,12 @@ confirm(TestModule, Outdir, TestMetaData) ->
         _ ->
             {fail, all_prereqs_not_present}
     end,
-    
-    lager:notice("~s Test Run Complete", [TestModule]),
-    {ok, Log} = stop_lager_backend(),
-    Logs = iolist_to_binary(lists:foldr(fun(L, Acc) -> [L ++ "\n" | Acc] end, [], Log)),
 
-    RetList = [{test, TestModule}, {status, Status}, {log, Logs}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
+    lager:notice("~s Test Run Complete", [TestModule]),
+    {ok, Logs} = stop_lager_backend(),
+    Log = unicode:characters_to_binary(Logs),
+
+    RetList = [{test, TestModule}, {status, Status}, {log, Log}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
     case Status of
         fail -> RetList ++ [{reason, iolist_to_binary(io_lib:format("~p", [Reason]))}];
         _ -> RetList
@@ -73,8 +73,8 @@ start_lager_backend(TestModule, Outdir) ->
     case Outdir of
         undefined -> ok;
         _ ->
-            gen_event:add_handler(lager_event, lager_file_backend, 
-                {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output", 
+            gen_event:add_handler(lager_event, lager_file_backend,
+                {Outdir ++ "/" ++ atom_to_list(TestModule) ++ ".dat_test_output",
                  rt_config:get(lager_level, info), 10485760, "$D0", 1}),
             lager:set_loglevel(lager_file_backend, rt_config:get(lager_level, info))
     end,
@@ -96,8 +96,20 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
     Pid = spawn_link(Mod, Fun, []),
+    Ref = case rt_config:get(test_timeout, undefined) of
+        Timeout when is_integer(Timeout) ->
+            erlang:send_after(Timeout, self(), test_took_too_long);
+        _ ->
+            undefined
+    end,
 
     {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
+    case Ref of
+        undefined ->
+            ok;
+        _ ->
+            erlang:cancel_timer(Ref)
+    end,
     riak_test_group_leader:tidy_up(OldGroupLeader),
     case Status of
         fail ->
@@ -114,13 +126,16 @@ function_name(TestModule) ->
     Tokz = string:tokens(TMString, ":"),
     case length(Tokz) of
         1 -> {TestModule, confirm};
-        2 ->  
+        2 ->
             [Module, Function] = Tokz,
             {list_to_atom(Module), list_to_atom(Function)}
     end.
 
 rec_loop(Pid, TestModule, TestMetaData) ->
     receive
+        test_took_too_long ->
+            exit(Pid, kill),
+            {fail, test_timed_out};
         metadata ->
             Pid ! {metadata, TestMetaData},
             rec_loop(Pid, TestModule, TestMetaData);
@@ -135,13 +150,13 @@ rec_loop(Pid, TestModule, TestMetaData) ->
 
 check_prereqs(Module) ->
     try Module:module_info(attributes) of
-        Attrs ->       
+        Attrs ->
             Prereqs = proplists:get_all_values(prereq, Attrs),
             P2 = [ {Prereq, rt_local:which(Prereq)} || Prereq <- Prereqs],
             lager:info("~s prereqs: ~p", [Module, P2]),
             [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
             lists:all(fun({_, Present}) -> Present end, P2)
-    catch 
+    catch
         _DontCare:_Really ->
             not_present
     end.

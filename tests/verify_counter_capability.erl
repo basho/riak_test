@@ -31,19 +31,20 @@
 -define(BUCKET, <<"test-counters">>).
 -define(KEY, <<"foo">>).
 
+
 confirm() ->
-    %% Create a mixed cluster of current and previous versions
+    %% Create a mixed cluster of legacy and previous
     %% Create a PB client
-    %% GET  / PUT on 1.4 and previous cluster
-    %% Upgrade nodes
+    %% GET  / PUT on older and newer cluster
+    %% Upgrade nodes to previous
     %% Get put on all nodes
     Config = [],
-    [Previous, Current]=Nodes = rt:build_cluster([{previous, Config}, {current, Config}]),
-    ?assertEqual(ok, rt:wait_until_capability(Current, {riak_kv, crdt}, [])),
+    [Legacy, Previous]=Nodes = rt:build_cluster([{legacy, Config}, {previous, Config}]),
+    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [])),
     verify_counter_converge:set_allow_mult_true(Nodes),
 
-    {PrevPB, PrevHttp} = get_clients(Previous),
-    {PB, Http} = get_clients(Current),
+    {PrevPB, PrevHttp} = get_clients(Legacy),
+    {PB, Http} = get_clients(Previous),
 
     ?assertMatch({error, {ok, "404", _, _}}, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
     ?assertMatch({error, {ok, "404", _, _}}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
@@ -56,9 +57,9 @@ confirm() ->
     ?assertEqual({error,<<"\"Counters are not supported\"">>}, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
     ?assertEqual({error,<<"\"Counters are not supported\"">>}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
 
-    rt:upgrade(Previous, current),
+    rt:upgrade(Legacy, previous),
 
-    ?assertEqual(ok, rt:wait_until_capability(Current, {riak_kv, crdt}, [pncounter])),
+    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter])),
 
     ?assertMatch(ok, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
     ?assertMatch({ok, 1}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
@@ -70,6 +71,9 @@ confirm() ->
     ?assertEqual({ok, 3}, riakc_pb_socket:counter_val(PrevPB, ?BUCKET, ?KEY)),
     ?assertEqual(ok, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
     ?assertEqual({ok, 4}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
+
+    [riakc_pb_socket:stop(C) || C <- [PB, PrevPB]],
+
     pass.
 
 get_clients(Node) ->

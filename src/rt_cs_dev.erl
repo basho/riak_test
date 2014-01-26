@@ -155,7 +155,7 @@ get_backends(DevPath) ->
 
 get_backend(AppConfig) ->
     {ok, [Config]} = file:consult(AppConfig),
-    kvc:path(riak_kv.storage_backend, Config).
+    kvc:path('riak_kv.storage_backend', Config).
 
 node_path(Node) ->
     N = node_id(Node),
@@ -446,14 +446,15 @@ set_backend(Backend) ->
     get_backends().
 
 get_version() ->
-    case file:read_file(relpath(current) ++ "/VERSION") of
+    case file:read_file(relpath(cs_current) ++ "/VERSION") of
         {error, enoent} -> unknown;
         {ok, Version} -> Version
     end.
 
 teardown() ->
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    [stop_all(X ++ "/dev") || X <- devpaths()].
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end,
+            devpaths()).
 
 whats_up() ->
     io:format("Here's what's running...~n"),
@@ -462,14 +463,21 @@ whats_up() ->
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
 
 devpaths() ->
-    lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt_config:get(build_paths))]).
+    lists:usort([ DevPath || {Name, DevPath} <- rt_config:get(build_paths),
+                             not lists:member(Name, [root, ee_root, cs_root, stanchion_root])
+                ]).
 
 versions() ->
     proplists:get_keys(rt_config:get(build_paths)) -- [root].
 
 get_node_logs() ->
-    Root = filename:absname(proplists:get_value(root, ?BUILD_PATHS)),
-    RootLen = length(Root) + 1, %% Remove the leading slash
+    lists:flatmap(fun get_node_logs/1, [root, ee_root, cs_root, stanchion_root]).
+
+get_node_logs(Base) ->
+    Root = filename:absname(proplists:get_value(Base, ?BUILD_PATHS)),
+    %% Unlike Riak, Riak CS has multiple things in the root and so we need
+    %% to distinguish between them.
+    RootLen = length(filename:dirname(Root)) + 1, %% Remove the leading slash
     [ begin
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}

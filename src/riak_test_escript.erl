@@ -20,6 +20,7 @@
 
 %% @private
 -module(riak_test_escript).
+-include("rt.hrl").
 -export([main/1]).
 
 add_deps(Path) ->
@@ -40,7 +41,8 @@ cli_options() ->
  {outdir,             $o, "outdir",   string,     "output directory"},
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
- {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"}
+ {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
+ {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
 ].
 
 print_help() ->
@@ -77,12 +79,17 @@ main(Args) ->
     %% Start Lager
     application:load(lager),
     Config = proplists:get_value(config, ParsedArgs),
+    ConfigFile = proplists:get_value(file, ParsedArgs),
 
     %% Loads application defaults
     application:load(riak_test),
 
     %% Loads from ~/.riak_test.config
-    rt_config:load(Config),
+    rt_config:load(Config, ConfigFile),
+
+    %% Sets up extra paths earlier so that tests can be loadable
+    %% without needing the -d flag.
+    code:add_paths(rt_config:get(test_paths, [])),
 
     %% Ensure existance of scratch_dir
     case file:make_dir(rt_config:get(rt_scratch_dir)) of
@@ -119,14 +126,36 @@ main(Args) ->
     end,
 
     CommandLineTests = parse_command_line_tests(ParsedArgs),
-    Tests = which_tests_to_run(Report, CommandLineTests),
+    Tests0 = which_tests_to_run(Report, CommandLineTests),
 
-    case Tests of
+    case Tests0 of
         [] ->
             lager:warning("No tests are scheduled to run"),
             init:stop(1);
         _ -> keep_on_keepin_on
     end,
+
+    Tests = case {rt_config:get(offset, undefined), rt_config:get(workers, undefined)} of
+                {undefined, undefined} ->
+                    Tests0;
+                {undefined, _} ->
+                    Tests0;
+                {_, undefined} ->
+                    Tests0;
+                {Offset, Workers} ->
+                    TestCount = length(Tests0),
+                    %% Avoid dividing by zero, computers hate that
+                    Denominator = case Workers rem (TestCount+1) of
+                                      0 -> 1;
+                                      D -> D
+                                  end,
+                    ActualOffset = ((TestCount div Denominator) * Offset) rem (TestCount+1),
+                    {TestA, TestB} = lists:split(ActualOffset, Tests0),
+                    lager:info("Offsetting ~b tests by ~b (~b workers, ~b"
+                               " offset)", [TestCount, ActualOffset, Workers,
+                                            Offset]),
+                    TestB ++ TestA
+            end,
 
     io:format("Tests to run: ~p~n", [Tests]),
     %% Two hard-coded deps...
@@ -136,19 +165,23 @@ main(Args) ->
     [add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
     ENode = rt_config:get(rt_nodename, 'riak_test@127.0.0.1'),
     Cookie = rt_config:get(rt_cookie, riak),
+    CoverDir = rt_config:get(cover_output, "coverage"),
     [] = os:cmd("epmd -daemon"),
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
+    rt_cover:maybe_start(),
 
     TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
-    print_summary(TestResults, Verbose),
+    Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
         {1, fail} ->
+            print_summary(TestResults, Coverage, Verbose),
             so_kill_riak_maybe();
         _ ->
             lager:info("Multiple tests run or no failure"),
-            rt:teardown()
+            rt:teardown(),
+            print_summary(TestResults, Coverage, Verbose)
     end,
     ok.
 
@@ -249,32 +282,38 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
     case Report of
         undefined -> ok;
         _ ->
-            %% Old Code for concatinating log files for upload to giddyup
-            %% They're too big now, causing problems which will be solved by
-            %% GiddyUp's new Artifact feature, comming soon from a Cribbs near you.
-
-            %% The point is, this is here in case we need to turn this back on
-            %% before artifacts are ready. And to remind jd that this is the place
-            %% to write the artifact client
-
-            %% {log, TestLog} = lists:keyfind(log, 1, SingleTestResult),
-            %% NodeLogs = cat_node_logs(),
-            %% EncodedNodeLogs = unicode:characters_to_binary(iolist_to_binary(NodeLogs),
-            %%                                                latin1, utf8),
-            %% NewLogs = iolist_to_binary([TestLog, EncodedNodeLogs]),
-            %% ResultWithNodeLogs = lists:keyreplace(log, 1, SingleTestResult,
-            %%                                       {log, NewLogs}),
-            %% giddyup:post_result(ResultWithNodeLogs)
-            case giddyup:post_result(SingleTestResult) of
+            {value, {log, L}, TestResult} = lists:keytake(log, 1, SingleTestResult),
+            case giddyup:post_result(TestResult) of
                 error -> woops;
                 {ok, Base} ->
-                    %% Now push up the artifacts
-                    [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ]
+                    %% Now push up the artifacts, starting with the test log
+                    giddyup:post_artifact(Base, {"riak_test.log", L}),
+                    [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ],
+                    ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
+                    [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ]
             end
     end,
     SingleTestResult.
 
-print_summary(TestResults, Verbose) ->
+get_webhooks() ->
+    Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
+                        [],
+                        rt_config:get(webhooks, [])),
+    lists:filter(fun(E) -> E =/= undefined end, Hooks).
+
+parse_webhook(Props) ->
+    Url = proplists:get_value(url, Props),
+    case is_list(Url) of
+        true ->
+            #rt_webhook{url= Url,
+                        name=proplists:get_value(name, Props, "Webhook"),
+                        headers=proplists:get_value(headers, Props, [])};
+        false ->
+            lager:error("Invalid configuration for webhook : ~p", Props),
+            undefined
+    end.
+
+print_summary(TestResults, CoverResult, Verbose) ->
     io:format("~nTest Results:~n"),
 
     Results = [
@@ -303,6 +342,15 @@ print_summary(TestResults, Verbose) ->
         false -> (PassCount / (PassCount + FailCount)) * 100
     end,
     io:format("That's ~w% for those keeping score~n", [Percentage]),
+
+    case CoverResult of
+        cover_disabled ->
+            ok;
+        {Coverage, AppCov} ->
+            io:format("Coverage : ~.1f%~n", [Coverage]),
+            [io:format("    ~s : ~.1f%~n", [App, Cov])
+             || {App, Cov, _} <- AppCov]
+    end,
     ok.
 
 test_name_width(Results) ->

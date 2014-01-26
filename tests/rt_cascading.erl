@@ -4,8 +4,24 @@
 %% legacy: 1.2.1
 %%
 %% uses the following configs with given defaults:
-%% default_timeout = 1000 :: timeout(), base timeout value; some tests will
-%% use a larger value (multiple of).
+%%
+%% ## default_timeout = 1000 :: timeout()
+%%
+%% Base timeout value; some tests will use a larger value (multiple of).
+%%
+%% ## run_rt_cascading_1_3_tests = false :: any()
+%%
+%% Some tests (new_to_old and mixed_version_clusters) only make sense to
+%% run if one is testing the version before cascading was introduced and
+%% the version it was added; eg current being riak 1.4 and previous being
+%% riak 1.3. If this is set to anything (other than 'false') those tests
+%% are run. They will not function properly unless the correct versions
+%% for riak are avialable. The tests check if the versions under test are
+%% too old to be valid however.
+%%
+%% With this set to default, the tests that depend on this option will
+%% emit a log message saying they are not configured to run.
+%%
 
 -module(rt_cascading).
 -compile(export_all).
@@ -16,10 +32,14 @@
 -define(bucket, <<"objects">>).
 
 -export([confirm/0]).
+-export([new_to_old/0, mixed_version_clusters/0]).
 
 % cluster_mgr port = 10006 + 10n where n is devN
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+
     case eunit:test(?MODULE, [verbose]) of
         ok ->
             pass;
@@ -107,8 +127,12 @@ simple_test_() ->
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.ending, ?bucket, Bin))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero([State#simple_state.middle,
+                                           State#simple_state.beginning,
+                                           State#simple_state.ending])
         end}
-
     ] end}}.
 
 big_circle_test_() ->
@@ -221,8 +245,10 @@ big_circle_test_() ->
             % so, by adding 4 clusters, we've added 2 overlaps.
             % best guess based on what's above is:
             %  NumDuplicateWrites = ceil(NumClusters/2 - 1.5)
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 circle_test_() ->
@@ -284,8 +310,10 @@ circle_test_() ->
             Status = rpc:call(Two, riak_repl2_rt, status, []),
             [SinkData] = proplists:get_value(sinks, Status, [[]]),
             ?assertEqual(2, proplists:get_value(expect_seq, SinkData))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 pyramid_test_() ->
@@ -336,8 +364,10 @@ pyramid_test_() ->
                 ?debugFmt("Checking ~p", [N]),
                 ?assertEqual(Bin, maybe_eventually_exists(N, Bucket, Bin))
             end, Nodes)
-        end}
-
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
+         end}
     ] end}}.
 
 diamond_test_() ->
@@ -428,8 +458,10 @@ diamond_test_() ->
             [Sink2] = proplists:get_value(sinks, Status2, [[]]),
             GotSeq = proplists:get_value(expect_seq, Sink2),
             ?assertEqual(ExpectSeq, GotSeq)
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 circle_and_spurs_test_() ->
@@ -502,9 +534,24 @@ circle_and_spurs_test_() ->
                 ?debugFmt("Checking ~p", [N]),
                 ?assertEqual({error, notfound}, maybe_eventually_exists(N, Bucket, Bin))
             end || N <- Nodes, N =/= NorthSpur]
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
+
+mixed_version_clusters() ->
+    case eunit:test(?MODULE:mixed_version_clusters_test_(), [verbose]) of
+        ok ->
+            pass;
+        error ->
+            % at the time this is written, the return value isn't acutally
+            % checked, the only way to fail is to crash the process.
+            % i leave the fail here in hopes a future version will actually
+            % do what the documentation says.
+            exit(error),
+            fail
+    end.
 
 mixed_version_clusters_test_() ->
     %      +-----+
@@ -515,30 +562,59 @@ mixed_version_clusters_test_() ->
     % +-----+    +-----+
     % | n56 | <- | n34 |
     % +-----+    +-----+
+    % 
+    % This test is configurable for 1.3 versions of Riak, but off by default.
+    % place the following config in ~/.riak_test_config to run:
+    % 
+    % {run_rt_cascading_1_3_tests, true}
+    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
+        false -> 
+            lager:info("mixed_version_clusters_test_ not configured to run!"),
+            [];
+        _ ->
+            lager:info("new_to_old_test_ configured to run for 1.3"),
+            mixed_version_clusters_test_dep()
+    end.
+
+mixed_version_clusters_test_dep() ->
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
         Nodes = rt:deploy_nodes(DeployConfs),
         [N1, N2, N3, N4, N5, N6] =  Nodes,
-        N12 = [N1, N2],
-        N34 = [N3, N4],
-        N56 = [N5, N6],
-        repl_util:make_cluster(N12),
-        repl_util:make_cluster(N34),
-        repl_util:make_cluster(N56),
-        repl_util:name_cluster(N1, "n12"),
-        repl_util:name_cluster(N3, "n34"),
-        repl_util:name_cluster(N5, "n56"),
-        [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
-        connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
-        connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
-        connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
-        Nodes
+        case rpc:call(N1, application, get_key, [riak_core, vsn]) of
+            % this is meant to test upgrading from early BNW aka
+            % Brave New World aka Advanced Repl aka version 3 repl to
+            % a cascading realtime repl. Other tests handle going from pre
+            % repl 3 to repl 3.
+            {ok, Vsn} when Vsn < "1.3.0" ->
+                {too_old, Nodes};
+            _ ->
+                N12 = [N1, N2],
+                N34 = [N3, N4],
+                N56 = [N5, N6],
+                repl_util:make_cluster(N12),
+                repl_util:make_cluster(N34),
+                repl_util:make_cluster(N56),
+                repl_util:name_cluster(N1, "n12"),
+                repl_util:name_cluster(N3, "n34"),
+                repl_util:name_cluster(N5, "n56"),
+                [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
+                connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
+                connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
+                connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
+                Nodes
+        end
     end,
-    fun(Nodes) ->
+    fun(MaybeNodes) ->
+        Nodes = case MaybeNodes of
+            {too_old, Ns} -> Ns;
+            _ -> MaybeNodes
+        end,
         rt:clean_cluster(Nodes)
     end,
-    fun([N1, N2, N3, N4, N5, N6] = Nodes) -> [
+    fun({too_old, _Nodes}) -> [];
+       ([N1, N2, N3, N4, N5, N6] = Nodes) -> [
 
         {"no cascading at first", timeout, timeout(35), [
             {timeout, timeout(15), fun() ->
@@ -670,9 +746,25 @@ Reses)]),
                 end,
                 [MakeTest(Node, N) || Node <- Nodes, N <- lists:seq(1, 3)]
             end
-        }}
+        }},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
+        end}
 
     ] end}}.
+
+new_to_old() ->
+    case eunit:test(?MODULE:new_to_old_test_(), [verbose]) of
+        ok ->
+            pass;
+        error ->
+            % at the time this is written, the return value isn't acutally
+            % checked, the only way to fail is to crash the process.
+            % i leave the fail here in hopes a future version will actually
+            % do what the documentation says.
+            exit(error),
+            fail
+    end.
 
 new_to_old_test_() ->
     %      +------+
@@ -684,23 +776,51 @@ new_to_old_test_() ->
     % | New3 | <- | Old2 |
     % +------+    +------+
     %
+    % This test is configurable for 1.3 versions of Riak, but off by default.
+    % place the following config in ~/.riak_test_config to run:
+    % 
+    % {run_rt_cascading_1_3_tests, true}
+    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
+        false -> 
+            lager:info("new_to_old_test_ not configured to run!"),
+            [];
+        _ ->
+            lager:info("new_to_old_test_ configured to run for 1.3"),
+            new_to_old_test_dep()
+    end.
+
+new_to_old_test_dep() ->
     {timeout, timeout(105), {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
         [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        Names = ["new1", "old2", "new3"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        connect_rt(New1, 10026, "old2"),
-        connect_rt(Old2, 10036, "new3"),
-        connect_rt(New3, 10016, "new1"),
-        Nodes
+        case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
+            % this is meant to test upgrading from early BNW aka
+            % Brave New World aka Advanced Repl aka version 3 repl to
+            % a cascading realtime repl. Other tests handle going from pre
+            % repl 3 to repl 3.
+            {ok, Vsn} when Vsn < "1.3.0" ->
+                {too_old, Nodes};
+            _ ->
+                [repl_util:make_cluster([N]) || N <- Nodes],
+                Names = ["new1", "old2", "new3"],
+                [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+                [repl_util:wait_until_is_leader(N) || N <- Nodes],
+                connect_rt(New1, 10026, "old2"),
+                connect_rt(Old2, 10036, "new3"),
+                connect_rt(New3, 10016, "new1"),
+                Nodes
+        end
     end,
-    fun(Nodes) ->
+    fun(MaybeNodes) ->
+        Nodes = case MaybeNodes of
+            {too_old, Ns} -> Ns;
+            _ -> MaybeNodes
+        end,
         rt:clean_cluster(Nodes)
     end,
-    fun([New1, Old2, New3]) -> [
+    fun({too_old, _}) -> [];
+       ([New1, Old2, New3]) -> [
 
         {"From new1 to old2", timeout, timeout(25), fun() ->
             Client = rt:pbc(New1),
@@ -744,6 +864,207 @@ new_to_old_test_() ->
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(New3, ?bucket, Bin)),
             ?assertEqual({error, notfound}, maybe_eventually_exists(New1, ?bucket, Bin))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(["new1", "old2", "new3"])
+        end}
+    ] end}}.
+
+ensure_ack_test_() ->
+    {timeout, timeout(130), {setup, fun() ->
+        Conf = conf(),
+        [LeaderA, LeaderB] = Nodes = rt:deploy_nodes(2, Conf),
+        [repl_util:make_cluster([N]) || N <- Nodes],
+        [repl_util:wait_until_is_leader(N) || N <- Nodes],
+        Names = ["A", "B"],
+        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+        %repl_util:name_cluster(LeaderA, "A"),
+        %repl_util:name_cluster(LeaderB, "B"), 
+        lager:info("made it past naming"), 
+        Port = get_cluster_mgr_port(LeaderB),
+        lager:info("made it past port"), 
+        connect_rt(LeaderA, Port, "B"),
+        lager:info("made it past connect"), 
+        [LeaderA, LeaderB]
+    end,
+    fun(Nodes) ->
+        rt:clean_cluster(Nodes)
+    end,
+
+    fun([LeaderA, LeaderB] = _Nodes) -> [
+        {"ensure acks", timeout, timeout(65), fun() ->
+            lager:info("Nodes:~p, ~p", [LeaderA, LeaderB]),
+            TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+            TestBucket = <<TestHash/binary, "-rt_test_a">>,
+
+            %% Write some objects to the source cluster (A),
+            lager:info("Writing 1 key to ~p, which should RT repl to ~p",
+            [LeaderA, LeaderB]),
+            ?assertEqual([], repl_util:do_write(LeaderA, 1, 1, TestBucket, 2)),
+
+            %% verify data is replicated to B
+            lager:info("Reading 1 key written from ~p", [LeaderB]),
+            ?assertEqual(0, repl_util:wait_for_reads(LeaderB, 1, 1, TestBucket, 2)),
+
+            RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+
+            Consumers = proplists:get_value(consumers, RTQStatus),
+            case proplists:get_value("B", Consumers) of
+                 undefined ->
+                    [];
+                 Consumer ->
+                    Unacked = proplists:get_value(unacked, Consumer, 0),
+                    lager:info("unacked: ~p", [Unacked]),
+                    ?assertEqual(0, Unacked)
+            end
+
+        end}
+    ]
+    end}}.
+
+ensure_unacked_and_queue() ->
+    eunit(ensure_unacked_and_queue_test_()).
+
+ensure_unacked_and_queue_test_() ->
+    {timeout, timeout(2300), {setup, fun() ->
+        Nodes = rt:deploy_nodes(6, conf()),
+        {N123, N456} = lists:split(3, Nodes),
+        repl_util:make_cluster(N123),
+        repl_util:make_cluster(N456),
+        repl_util:wait_until_leader_converge(N123),
+        repl_util:wait_until_leader_converge(N456),
+        repl_util:name_cluster(hd(N123), "n123"),
+        repl_util:name_cluster(hd(N456), "n456"),
+        N456Port = get_cluster_mgr_port(hd(N456)),
+        connect_rt(hd(N123), N456Port, "n456"),
+        N123Port = get_cluster_mgr_port(hd(N123)),
+        connect_rt(hd(N456), N123Port, "n123"),
+        {N123, N456}
+    end,
+    maybe_skip_teardown(fun({N123, N456}) ->
+        rt:clean_cluster(N123),
+        rt:clean_cluster(N456)
+    end),
+    fun({N123, N456}) -> [
+
+        {"unacked does not increase when there are skips", timeout, timeout(100), fun() ->
+            N123Leader = hd(N123),
+            N456Leader = hd(N456),
+
+            write_n_keys(N123Leader, N456Leader, 1, 10000),
+
+            write_n_keys(N456Leader, N123Leader, 10001, 20000),
+
+            Res = rt:wait_until(fun() ->
+                RTQStatus = rpc:call(N123Leader, riak_repl2_rtq, status, []),
+
+                Consumers = proplists:get_value(consumers, RTQStatus),
+                Data = proplists:get_value("n456", Consumers),
+                Unacked = proplists:get_value(unacked, Data),
+                ?debugFmt("unacked: ~p", [Unacked]),
+                0 == Unacked
+            end),
+            ?assertEqual(ok, Res)
+        end},
+
+        {"after acks, queues are empty", fun() ->
+            Nodes = N123 ++ N456,
+            Got = lists:map(fun(Node) ->
+                rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+            end, Nodes),
+            Expected = [true || _ <- lists:seq(1, length(Nodes))],
+            ?assertEqual(Expected, Got)
+        end},
+
+        {"after acks, queues truly are empty. Truly", fun() ->
+            Nodes = N123 ++ N456,
+            Gots = lists:map(fun(Node) ->
+                {Node, rpc:call(Node, riak_repl2_rtq, dumpq, [])}
+            end, Nodes),
+            lists:map(fun({Node, Got}) ->
+                ?debugFmt("Checking data from ~p", [Node]),
+                ?assertEqual([], Got)
+            end, Gots)
+        end},
+
+        {"dual loads keeps unacked satisfied", timeout, timeout(100), fun() ->
+            N123Leader = hd(N123),
+            N456Leader = hd(N456),
+            LoadN123Pid = spawn(fun() ->
+                {Time, Val} = timer:tc(fun write_n_keys/4, [N123Leader, N456Leader, 20001, 30000]),
+                ?debugFmt("loading 123 to 456 took ~p to get ~p", [Time, Val]),
+                Val
+            end),
+            LoadN456Pid = spawn(fun() ->
+                {Time, Val} = timer:tc(fun write_n_keys/4, [N456Leader, N123Leader, 30001, 40000]),
+                ?debugFmt("loading 456 to 123 took ~p to get ~p", [Time, Val]),
+                Val
+            end),
+            Exits = wait_exit([LoadN123Pid, LoadN456Pid], infinity),
+            ?assert(lists:all(fun(E) -> E == normal end, Exits)),
+
+            StatusDig = fun(SinkName, Node) ->
+                Status = rpc:call(Node, riak_repl2_rtq, status, []),
+                Consumers = proplists:get_value(consumers, Status, []),
+                ConsumerStats = proplists:get_value(SinkName, Consumers, []),
+                proplists:get_value(unacked, ConsumerStats)
+            end,
+
+            N123UnackedRes = rt:wait_until(fun() ->
+                Unacked = StatusDig("n456", N123Leader),
+                ?debugFmt("Unacked: ~p", [Unacked]),
+                0 == Unacked
+            end),
+            ?assertEqual(ok, N123UnackedRes),
+
+            N456Unacked = StatusDig("n123", N456Leader),
+            case N456Unacked of
+                0 ->
+                    ?assert(true);
+                _ ->
+                    N456Unacked2 = StatusDig("n123", N456Leader),
+                    ?debugFmt("Not 0, are they at least decreasing?~n"
+                        "    ~p, ~p", [N456Unacked2, N456Unacked]),
+                    ?assert(N456Unacked2 < N456Unacked)
+            end
+        end},
+
+        {"after dual load acks, queues are empty", fun() ->
+            Nodes = N123 ++ N456,
+            Got = lists:map(fun(Node) ->
+                rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+            end, Nodes),
+            Expected = [true || _ <- lists:seq(1, length(Nodes))],
+            ?assertEqual(Expected, Got)
+        end},
+
+        {"after dual load acks, queues truly are empty. Truly", fun() ->
+            Nodes = N123 ++ N456,
+            Gots = lists:map(fun(Node) ->
+                {Node, rpc:call(Node, riak_repl2_rtq, dumpq, [])}
+            end, Nodes),
+            lists:map(fun({Node, Got}) ->
+                ?debugFmt("Checking data from ~p", [Node]),
+                ?assertEqual([], Got)
+            end, Gots)
+        end},
+
+        {"no negative pendings", fun() ->
+            Nodes = N123 ++ N456,
+            GetPending = fun({sink_stats, SinkStats}) ->
+                ConnTo = proplists:get_value(rt_sink_connected_to, SinkStats),
+                proplists:get_value(pending, ConnTo)
+            end,
+            lists:map(fun(Node) ->
+                ?debugFmt("Checking node ~p", [Node]),
+                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                Sinks = proplists:get_value(sinks, Status),
+                lists:map(fun(SStats) ->
+                    Pending = GetPending(SStats),
+                    ?assertEqual(0, Pending)
+                end, Sinks)
+            end, Nodes)
         end}
 
     ] end}}.
@@ -751,6 +1072,17 @@ new_to_old_test_() ->
 %% =====
 %% utility functions for teh happy
 %% ====
+
+wait_exit(Pids, Timeout) ->
+    Mons = [{erlang:monitor(process, Pid), Pid} || Pid <- Pids],
+    lists:map(fun({Mon, Pid}) ->
+        receive
+            {'DOWN', Mon, process, Pid, Cause} ->
+                Cause
+        after Timeout ->
+            timeout
+        end
+    end, Mons).
 
 conf() ->
     [{lager, [
@@ -772,7 +1104,8 @@ conf() ->
     {riak_repl, [
         {fullsync_on_connect, false},
         {fullsync_interval, disabled},
-        {diff_batch_size, 10}
+        {diff_batch_size, 10},
+        {rt_heartbeat_interval, undefined}
     ]}].
 
 get_cluster_mgr_port(Node) ->
@@ -847,6 +1180,22 @@ wait_for_rt_started(Node, ToName) ->
     end,
     rt:wait_until(Node, Fun).
 
+write_n_keys(Source, Destination, M, N) ->
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+    First = M,
+    Last = N,
+
+    %% Write some objects to the source cluster (A),
+    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
+               [Last-First+1, Source, Destination]),
+    ?assertEqual([], repl_util:do_write(Source, First, Last, TestBucket, 2)),
+
+    %% verify data is replicated to B
+    lager:info("Reading ~p keys written from ~p", [Last-First+1, Destination]),
+    ?assertEqual(0, repl_util:wait_for_reads(Destination, First, Last, TestBucket, 2)).
+
 timeout(MultiplyBy) ->
     case rt_config:get(default_timeout, 1000) of
         infinity ->
@@ -855,3 +1204,43 @@ timeout(MultiplyBy) ->
             N * MultiplyBy
     end.
 
+eunit(TestDef) ->
+    case eunit:test(TestDef, [verbose]) of
+        ok ->
+            pass;
+        error ->
+            exit(error),
+            fail
+    end.
+
+maybe_skip_teardown(TearDownFun) ->
+    fun(Arg) ->
+        case rt_config:config_or_os_env(skip_teardowns, undefined) of
+            undefined ->
+                TearDownFun(Arg);
+            _ ->
+                ok
+        end
+    end.
+
+wait_until_pending_count_zero(Nodes) ->
+    WaitFun = fun() ->
+        {Statuses, _} =  rpc:multicall(Nodes, riak_repl2_rtq, status, []),
+        Out = [check_status(S) || S <- Statuses],
+        not lists:member(false, Out)	      
+    end,
+    ?assertEqual(ok, rt:wait_until(WaitFun)),
+    ok.
+
+check_status(Status) ->            
+    case proplists:get_all_values(consumers, Status) of
+        undefined ->
+	    true;
+	[] ->
+	    true;
+	Cs ->
+	    PendingList = [proplists:lookup_all(pending, C) || {_, C} <- lists:flatten(Cs)],
+            PendingCount = lists:sum(proplists:get_all_values(pending, lists:flatten(PendingList))),
+	    ?debugFmt("RTQ status pending on test node:~p", [PendingCount]),
+	    PendingCount == 0
+    end.

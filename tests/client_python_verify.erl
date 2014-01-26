@@ -3,8 +3,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-%% @todo set this to 1.5.2 or greater, once that's released
--define(PYTHON_CLIENT_TAG, "1.5-stable").
+-define(PYTHON_CLIENT_TAG, "1.5.2").
 -define(PYTHON_CHECKOUT, filename:join([rt_config:get(rt_scratch_dir), "riak-python-client"])).
 -define(PYTHON_GIT_URL, "git://github.com/basho/riak-python-client.git").
 
@@ -14,8 +13,11 @@
 -prereq("virtualenv").
 
 confirm() ->
-    prereqs(),
-    Config = [{riak_search, [{enabled, true}]}],
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    {ok, TestCommand} = prereqs(),
+    Config = [{riak_kv, [{secondary_index_sort_default, true}]},
+              {riak_search, [{enabled, true}]}],
     [Node] = rt:deploy_nodes(1, Config),
     rt:wait_for_service(Node, riak_search),
 
@@ -28,7 +30,7 @@ confirm() ->
     lager:info("Enabling search hook on 'searchbucket'"),
     rt:enable_search_hook(Node, <<"searchbucket">>),
 
-    {ExitCode, PythonLog} = rt_local:stream_cmd("bin/python setup.py develop test",
+    {ExitCode, PythonLog} = rt_local:stream_cmd(TestCommand,
                                           [{cd, ?PYTHON_CHECKOUT},
                                            {env,[{"RIAK_TEST_PB_HOST", PB_Host},
                                                  {"RIAK_TEST_PB_PORT", integer_to_list(PB_Port)},
@@ -64,12 +66,19 @@ prereqs() ->
     rt_local:stream_cmd(Cmd),
 
     lager:info("[PREREQ] Resetting python client to tag '~s'", [?PYTHON_CLIENT_TAG]),
-    %% @todo below is how to reset to a tag, use that when 1.5.2 is available
-    %%TagCmd = io_lib:format("git reset --hard ~s", [?PYTHON_CLIENT_TAG]),
-    rt_local:stream_cmd("git reset --hard", [{cd, ?PYTHON_CHECKOUT}]),
-    TagCmd = io_lib:format("git checkout -b ~s", [?PYTHON_CLIENT_TAG]),
+    TagCmd = io_lib:format("git checkout ~s", [?PYTHON_CLIENT_TAG]),
     rt_local:stream_cmd(TagCmd, [{cd, ?PYTHON_CHECKOUT}]),
 
     lager:info("[PREREQ] Installing an isolated environment with virtualenv in ~s", [?PYTHON_CHECKOUT]),
     rt_local:stream_cmd("virtualenv --clear --no-site-packages .", [{cd, ?PYTHON_CHECKOUT}]),
-    ok.
+
+    lager:info("[PREREQ] Installing dependencies"),
+    rt_local:stream_cmd("bin/python setup.py develop", [{cd, ?PYTHON_CHECKOUT}]),
+    case Minor of
+        $6 ->
+            lager:info("[PREREQ] Installing unittest2 for python 2.6"),
+            rt_local:stream_cmd("bin/easy_install unittest2", [{cd, ?PYTHON_CHECKOUT}]),
+            {ok, "bin/unit2 riak.tests.test_all"};
+        _ ->
+            {ok, "bin/python setup.py test"}
+    end.

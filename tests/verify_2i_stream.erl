@@ -54,14 +54,15 @@ confirm() ->
 
 %% Check the PB result against our expectations
 %% and the non-streamed HTTP
-assertEqual(Http, PB, Expected, Query) ->
+assertEqual(Http, PB, Expected0, Query) ->
     {ok, PBRes} = stream_pb(PB, Query),
     PBKeys = proplists:get_value(keys, PBRes, []),
     HTTPRes = http_query(Http, Query),
     StreamHTTPRes = http_stream(Http, Query, []),
     HTTPKeys = proplists:get_value(<<"keys">>, HTTPRes, []),
     StreamHttpKeys = proplists:get_value(<<"keys">>, StreamHTTPRes, []),
-    ?assertEqual(Expected, PBKeys),
-    ?assertEqual(Expected, HTTPKeys),
-    ?assertEqual(Expected, StreamHttpKeys).
+    Expected = lists:sort(Expected0),
+    ?assertEqual(Expected, lists:sort(PBKeys)),
+    ?assertEqual(Expected, lists:sort(HTTPKeys)),
+    ?assertEqual(Expected, lists:sort(StreamHttpKeys)).
 

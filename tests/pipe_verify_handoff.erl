@@ -163,7 +163,11 @@ confirm() ->
                                    P1MovedPrimaryToSecondary,
                                    P2MovedPrimaryToSecondary),
 
-    PFoldReqs = [X || riak_core_fold_req_v1=X <- PTraces],
+    PFoldReqs = [X || X <- PTraces,
+                      %% it would be really nice to import ?FOLD_REQ
+                      %% from riak_core_vnode.hrl
+                      (X == riak_core_fold_req_v1 orelse
+                       X == riak_core_fold_req_v2)],
     PArchives = [X || cmd_archive=X <- PTraces],
 
     %% number of active vnodes migrating from Primary to Secondary,

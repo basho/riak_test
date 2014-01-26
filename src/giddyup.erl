@@ -21,19 +21,20 @@
 
 -export([get_suite/1, post_result/1, post_artifact/2]).
 -define(STREAM_CHUNK_SIZE, 8192).
+-include("rt.hrl").
 
 -spec get_suite(string()) -> [{atom(), term()}].
 get_suite(Platform) ->
     Schema = get_schema(Platform),
-    Name = kvc:path(project.name, Schema),
+    Name = kvc:path('project.name', Schema),
     lager:info("Retrieved Project: ~s", [Name]),
-    Tests = kvc:path(project.tests, Schema),
+    Tests = kvc:path('project.tests', Schema),
     TestProps  =
         fun(Test) ->
             [
                 {id, kvc:path(id, Test)},
                 {backend,
-                 case kvc:path(tags.backend, Test) of
+                 case kvc:path('tags.backend', Test) of
                      [] -> undefined;
                      X -> binary_to_atom(X, utf8)
                  end},
@@ -41,11 +42,11 @@ get_suite(Platform) ->
                 {version, rt:get_version()},
                 {project, Name}
             ] ++
-            case kvc:path(tags.upgrade_version, Test) of
+            case kvc:path('tags.upgrade_version', Test) of
                 [] -> [];
                 UpgradeVsn -> [{upgrade_version, binary_to_atom(UpgradeVsn, utf8)}]
             end ++
-            case kvc:path(tags.multi_config, Test) of
+            case kvc:path('tags.multi_config', Test) of
                 [] -> [];
                 MultiConfig -> [{multi_config, binary_to_atom(MultiConfig, utf8)}]
             end
@@ -62,7 +63,7 @@ get_schema(Platform, Retries) ->
     URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
 
-    check_ibrowse(),
+    rt:check_ibrowse(),
     case {Retries, ibrowse:send_req(URL, [], get, [], [])} of
         {_, {ok, "200", _Headers, JSON}} -> mochijson2:decode(JSON);
         {0, Error} ->
@@ -80,32 +81,14 @@ post_result(TestResult) ->
     Host = rt_config:get(giddyup_host),
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
-    check_ibrowse(),
-    try ibrowse:send_req(URL,
-            [{"Content-Type", "application/json"}],
-            post,
-            mochijson2:encode(TestResult),
-            [ {content_type, "application/json"}, basic_auth()],
-            300000) of  %% 5 minute timeout
-
-        {ok, RC=[$2|_], Headers, _Body} ->
+    rt:check_ibrowse(),
+    case rt:post_result(TestResult, #rt_webhook{name="GiddyUp", url=URL, headers=[basic_auth()]}) of
+        {ok, RC, Headers} ->
             {_, Location} = lists:keyfind("Location", 1, Headers),
             lager:info("Test Result successfully POSTed to GiddyUp! ResponseCode: ~s, URL: ~s", [RC, Location]),
             {ok, Location};
-        {ok, ResponseCode, Headers, Body} ->
-            lager:info("Test Result did not generate the expected 2XX HTTP response code."),
-            lager:debug("Post"),
-            lager:debug("Response Code: ~p", [ResponseCode]),
-            lager:debug("Headers: ~p", [Headers]),
-            lager:debug("Body: ~p", [Body]),
-            error;
-        X ->
-            lager:warning("Some error POSTing test result: ~p", [X]),
+        error ->
             error
-    catch
-        Throws ->
-            lager:error("Error reporting to giddyup. ~p", [Throws]),
-            lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
     end.
 
 post_artifact(TRURL, {FName, Body}) ->
@@ -142,17 +125,6 @@ post_artifact(TRURL, {FName, Body}) ->
 
 basic_auth() ->
     {basic_auth, {rt_config:get(giddyup_user), rt_config:get(giddyup_password)}}.
-
-check_ibrowse() ->
-    try sys:get_status(ibrowse) of
-        {status, _Pid, {module, gen_server} ,_} -> ok
-    catch
-        Throws ->
-            lager:error("ibrowse error ~p", [Throws]),
-            lager:error("Restarting ibrowse"),
-            application:stop(ibrowse),
-            application:start(ibrowse)
-    end.
 
 %% Given a URI parsed by http_uri, reconstitute it.
 generate({_Scheme, _UserInfo, _Host, _Port, _Path, _Query}=URI) ->
@@ -198,13 +170,13 @@ read_fully(File, Data0) ->
 
 %% Guesses the MIME type of the file being uploaded.
 guess_ctype(FName) ->
-    case filename:extension(FName) of
-        ".log" -> "text/plain"; %% A log file
-        ".dump" -> "text/plain"; %% An erl_crash.dump file
-        ".1" -> "text/plain"; %% e.g. erlang.log.1
-        Else ->
+    case string:tokens(filename:basename(FName), ".") of
+        [_, "log"|_] -> "text/plain"; %% console.log, erlang.log.5, etc
+        ["erl_crash", "dump"] -> "text/plain"; %% An erl_crash.dump file
+        [_, Else] ->
             case mochiweb_mime:from_extension(Else) of
                 undefined -> "binary/octet-stream";
                 CTG -> CTG
-            end
+            end;
+        _ -> "binary/octet-stream"
     end.

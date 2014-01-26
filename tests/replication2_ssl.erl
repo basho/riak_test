@@ -5,6 +5,10 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+
+    %% test requires allow_mult=false
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+
     NumNodes = rt_config:get(num_nodes, 6),
     ClusterASize = rt_config:get(cluster_a_size, 3),
 
@@ -188,24 +192,23 @@ confirm() ->
     rt:wait_for_service(Node2, riak_repl),
 
 
-
     lager:info("===testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
     ?assertEqual(ok, test_connection({Node1, BaseConf}, {Node2, BaseConf})),
 
     lager:info("===testing you can't connect to a server with a cert with the same common name"),
     rt:log_to_nodes([Node1, Node2], "Testing identical cert is disallowed"),
-    ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
+    ?assertMatch({fail, _}, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
     lager:info("===testing you can't connect when peer doesn't support SSL"),
     rt:log_to_nodes([Node1, Node2], "Testing missing ssl on peer fails"),
-    ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
+    ?assertMatch({fail, _}, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, BaseConf})),
 
     lager:info("===testing you can't connect when local doesn't support SSL"),
     rt:log_to_nodes([Node1, Node2], "Testing missing ssl locally fails"),
-    ?assertEqual(fail, test_connection({Node1, BaseConf},
+    ?assertMatch({fail, _}, test_connection({Node1, BaseConf},
             {Node2, merge_config(SSLConfig2, BaseConf)})),
 
     lager:info("===testing simple SSL connectivity"),
@@ -225,7 +228,7 @@ confirm() ->
 
     lager:info("===testing disallowing intermediate CAs disallows connections"),
     rt:log_to_nodes([Node1, Node2], "Disallowing intermediate CA test 2"),
-    ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
+    ?assertMatch({fail, _}, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
     lager:info("===testing wildcard and strict ACLs with cacert.org certs"),
@@ -235,7 +238,7 @@ confirm() ->
 
     lager:info("===testing expired certificates fail"),
     rt:log_to_nodes([Node1, Node2], "expired certificates test"),
-    ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
+    ?assertMatch({fail, _}, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig7, BaseConf)})),
 
     lager:info("Connectivity tests passed"),

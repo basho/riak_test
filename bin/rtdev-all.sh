@@ -4,7 +4,7 @@ ORIGDIR=`pwd`
 pushd `dirname $0` > /dev/null
 SCRIPT_DIR=`pwd`
 popd > /dev/null
-CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R15B01}
+CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R16B02}
 
 if [ -n "$DEBUG_RTDEV" ]; then
     echo "= Configuration ================================================="
@@ -33,15 +33,6 @@ echo "= Building Riak Releases ========================================"
 echo
 
 source $SCRIPT_DIR/rtdev-build-releases.sh
-
-if [[ `uname -s` =~ ^Darwin ]]; then
-  if [[ `sw_vers|grep ProductVersion|awk '{print $2}'` > "10.7" ]]; then
-    echo
-    echo "= Patching OSX > 10.7 ======================================"
-    echo
-    source $SCRIPT_DIR/rtdev-lion-fix.sh
-  fi
-fi
 
 echo "= Installing Riak Releases ======================================"
 echo
