@@ -40,6 +40,7 @@
 
 confirm() ->
     difference_test(),
+    deadlock_test(),
     simple_test(),
     bidirectional_test(),
     dual_test(),
@@ -387,6 +388,75 @@ difference_test() ->
     {ok, O2} = riakc_pb_socket:get(BPBC, <<"foo">>, <<"bar">>,
                                   [{timeout, 4000}]),
     ?assertEqual([<<"baz">>, <<"baz2">>], lists:sort(riakc_obj:get_values(O2))),
+
+    rt:clean_cluster(Nodes),
+
+    pass.
+
+deadlock_test() ->
+    %% Deploy 6 nodes.
+    Nodes = deploy_nodes(6, ?CONF(5)),
+
+    %% Break up the 6 nodes into three clustes.
+    {ANodes, BNodes} = lists:split(3, Nodes),
+
+    lager:info("ANodes: ~p", [ANodes]),
+    lager:info("BNodes: ~p", [BNodes]),
+
+    lager:info("Building two clusters."),
+    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
+
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
+
+    lager:info("Naming clusters."),
+    repl_util:name_cluster(AFirst, "A"),
+    repl_util:name_cluster(BFirst, "B"),
+
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+
+    lager:info("Waiting for transfers to complete."),
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
+
+    lager:info("Get leaders."),
+    LeaderA = get_leader(AFirst),
+    LeaderB = get_leader(BFirst),
+
+    lager:info("Finding connection manager ports."),
+    BPort = get_port(LeaderB),
+
+    lager:info("Connecting cluster A to B"),
+    connect_cluster(LeaderA, BPort, "B"),
+
+    %% Add intercept for delayed comparison of hashtrees.
+    Intercept = {riak_kv_index_hashtree, [{{compare, 4}, delayed_compare}]},
+    [ok = rt_intercept:add(Target, Intercept) || Target <- ANodes],
+
+    %% Wait for trees to compute.
+    repl_util:wait_until_aae_trees_built(ANodes),
+    repl_util:wait_until_aae_trees_built(BNodes),
+
+    lager:info("Test fullsync from cluster A leader ~p to cluster B",
+               [LeaderA]),
+    repl_util:enable_fullsync(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+
+    %% Start fullsync.
+    lager:info("Starting fullsync to cluster B."),
+    rpc:call(LeaderA, riak_repl_console, fullsync, [["start", "B"]]),
+
+    %% Wait for fullsync to initialize and the AAE repl processes to
+    %% stall from the suspended intercepts.
+    %% TODO: What can be done better here?
+    timer:sleep(25000),
+
+    %% Attempt to get status from fscoordintor.
+    Result = rpc:call(LeaderA, riak_repl2_fscoordinator, status, [], 500),
+    lager:info("Status result: ~p", [Result]),
+    ?assertNotEqual({badrpc, timeout}, Result),
 
     rt:clean_cluster(Nodes),
 
