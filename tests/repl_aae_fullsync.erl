@@ -387,7 +387,7 @@ difference_test() ->
     %% Read key from after fullsync.
     {ok, O2} = riakc_pb_socket:get(BPBC, <<"foo">>, <<"bar">>,
                                   [{timeout, 4000}]),
-    ?assertEqual(<<"baz2">>, riakc_obj:get_values(O2)),
+    ?assertEqual(<<"baz2">>, riakc_obj:get_value(O2)),
 
     rt:clean_cluster(Nodes),
 
