@@ -58,9 +58,17 @@ test_no_overload_protection(Nodes, Victim, RO) ->
 
 test_vnode_protection(Nodes, Victim, RO) ->
     [Node1, Node2] = Nodes,
+
+    %% Setting check_interval to one ensures that process_info is called
+    %% to check the queue length on each vnode send.
+    %% This allows us to artificially raise vnode queue lengths with dummy
+    %% messages instead of having to go through the vnode path for coverage
+    %% query overload testing.
     lager:info("Testing with vnode queue protection enabled"),
     lager:info("Setting vnode overload threshold to ~b", [?THRESHOLD]),
-    Config2 = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD}]}],
+    lager:info("Setting vnode check interval to 1"),
+    Config2 = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
+                            {vnode_check_interval, 1}]}],
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config2)
             end, Nodes),
@@ -84,7 +92,7 @@ test_vnode_protection(Nodes, Victim, RO) ->
     lager:info("Unnecessary dropped requests: ~b", [Dropped]),
     ?assert(Dropped =< CheckInterval),
 
-    test_overload_list_keys(Nodes),
+    test_cover_queries_overload(Nodes),
 
     lager:info("Suspending vnode proxy for ~b", [Victim]),
     Pid = suspend_vnode_proxy(Node2, Victim),
@@ -133,15 +141,10 @@ run_test(Nodes, Victim, RO) ->
     kill_pids(Reads),
     {NumProcs2 - NumProcs1, QueueLen}.
 
-test_overload_list_keys(Nodes) ->
+test_cover_queries_overload(Nodes) ->
     [Node1, Node2] = Nodes,
     lager:info("Suspending all kv vnodes on Node2"),
-    Pid = suspend_all_vnodes(Node2),
-    timer:sleep(3000),
-
-    lager:info("Sending ~b list_keys requests", [?NUM_REQUESTS]),
-    Pids = spawn_list_keys(Node1, ?NUM_REQUESTS),
-    timer:sleep(1000),
+    Pid = suspend_and_overload_all_kv_vnodes(Node2),
 
     lager:info("Checking Coverage queries for overload"),
 
@@ -157,8 +160,7 @@ test_overload_list_keys(Nodes) ->
     resume_all_vnodes(Pid),
 
     lager:info("Waiting for vnode queues to empty"),
-    wait_for_all_vnode_queues_empty(Node2),
-    kill_pids(Pids).
+    wait_for_all_vnode_queues_empty(Node2).
 
 list_keys(Node) ->
     {ok, C} = riak:client_connect(Node),
@@ -199,11 +201,6 @@ read_until_success(C, Count) ->
             Count
     end.
 
-spawn_list_keys(Node, Num) ->
-    [spawn(fun() ->
-           rpc:call(Node, ?MODULE, list_keys, [])
-    end) || _ <- lists:seq(1,Num)].
-
 spawn_reads(Node, Num) ->
     [spawn(fun() ->
            {ok, C} = riak:client_connect(Node),
@@ -213,20 +210,33 @@ spawn_reads(Node, Num) ->
 kill_pids(Pids) ->
     [exit(Pid, kill) || Pid <- Pids].
 
-suspend_all_vnodes(Node) ->
-    rpc:call(Node, ?MODULE, remote_suspend_all_vnodes, []).
+suspend_and_overload_all_kv_vnodes(Node) ->
+    Pid = rpc:call(Node, ?MODULE, remote_suspend_and_overload, []),
+    Pid ! {overload, self()},
+    receive overloaded ->
+        Pid
+    end.
 
-remote_suspend_all_vnodes() ->
+remote_suspend_and_overload() ->
     spawn(fun() ->
                   Vnodes = riak_core_vnode_manager:all_vnodes(),
                   [erlang:suspend_process(Pid, []) || {riak_kv_vnode, _, Pid}
                       <- Vnodes],
+                  receive {overload, From} ->
+                      io:format("Overloading vnodes ~n"),
+                      [?MODULE:overload(Pid) || {riak_kv_vnode, _, Pid}
+                          <- Vnodes],
+                      From ! overloaded
+                  end,
                   receive resume ->
                       io:format("Resuming vnodes~n"),
                       [erlang:resume_process(Pid) || {riak_kv_vnode, _, Pid}
                           <- Vnodes]
                   end
           end).
+
+overload(Pid) ->
+    [Pid ! hola || _ <- lists:seq(1, ?NUM_REQUESTS)].
 
 suspend_vnode(Node, Idx) ->
     Pid = rpc:call(Node, ?MODULE, remote_suspend_vnode, [Idx], infinity),
