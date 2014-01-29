@@ -14,23 +14,31 @@ get_deps() ->
 harness_opts() ->
     %% Option Name, Short Code, Long Code, Argument Spec, Help Message
     [
-     {test_name, undefined, "name", {string, "ad-hoc"}, 
+     {test_name, undefined, "name", {string, "ad-hoc"},
       "name for this test"},
-     {bin_size, undefined, "bin-size", {integer, 4096}, 
+     {bin_size, undefined, "bin-size", {integer, 4096},
       "size of fixed binaries (median for non-fixed)"},
-     {bin_type, undefined, "bin-type", {atom, fixed}, 
+     {bin_type, undefined, "bin-type", {atom, fixed},
       "fixed | exponential"},
-     {load_type, undefined, "load-type", {atom, write_heavy}, 
+     {load_type, undefined, "load-type", {atom, write_heavy},
       "read_heavy | write_heavy"},
-     {version, undefined, "version", {string, "master"}, 
+     {version, undefined, "version", {string, "master"},
       "version to test"},
-     {prepop, undefined, "prepop", {integer, 0},
+     {prepop, undefined, "prepop", {boolean, false},
+      "prepopulate cluster"},
+     {prepop_size, undefined, "prepop-size", {integer, 0},
       "number of values to prepop (approximate)"},
-     {test_type, undefined, "type",  {atom, uniform}, 
+     {test_type, undefined, "type",  {atom, uniform},
       "uniform | pareto"},
-     {stop, undefined, "stop", {boolean, false}, 
+     {stop, undefined, "stop", {boolean, false},
       "stop running riak cluster and start new"},
-     {dataset, undefined, "dataset", {string, ""}, 
+     {cuttle, undefined, "cuttle", {boolean, true},
+      "use cuttlefish config system"},
+     {drop_cache, undefined, "drop-cache", {boolean, true},
+      "drop file caches before starting bb run"},
+     {run_time, undefined, "run-time", {integer, undefined},
+      "how long to run the test for"},
+     {dataset, undefined, "dataset", {string, ""},
       "use pre-existing dataset and ring (count must match)"}
     ].
 
@@ -41,36 +49,37 @@ setup_harness(_Test, Args) ->
         case getopt:parse(harness_opts(), Args) of
             {ok, {Parsed, []}} ->
                 V = proplists:get_value(version, Parsed),
-                rt:set_config(perf_version, V),
+                rt_config:set(perf_version, V),
                 B = proplists:get_value(bin_size, Parsed),
-                rt:set_config(perf_binsize, B),
+                rt_config:set(perf_binsize, B),
                 BT = proplists:get_value(bin_type, Parsed),
-                rt:set_config(perf_bin_type, BT),
+                rt_config:set(perf_bin_type, BT),
                 LT = proplists:get_value(load_type, Parsed),
-                rt:set_config(perf_load_type, LT),
+                rt_config:set(perf_load_type, LT),
                 T = proplists:get_value(test_type, Parsed),
-                rt:set_config(perf_test_type, T),
+                rt_config:set(perf_test_type, T),
                 N = proplists:get_value(test_name, Parsed),
-                rt:set_config(perf_test_name, N),
+                rt_config:set(perf_test_name, N),
                 D = proplists:get_value(dataset, Parsed),
-                rt:set_config(perf_dataset, D),
-                PC = proplists:get_value(prepop, Parsed),
+                rt_config:set(perf_dataset, D),
+                RT = proplists:get_value(run_time, Parsed),
+                rt_config:set(perf_runtime, RT),
+                Fish = proplists:get_value(cuttle, Parsed),
+                rt_config:set(cuttle, Fish),
+                Drop = proplists:get_value(drop_cache, Parsed),
+                rt_config:set(perf_drop_cache, Drop),
+                P = proplists:get_value(prepop, Parsed),
+                PS = proplists:get_value(prepop_size, Parsed),
 
-                P = case PC of 
-                        0 -> false;
-                        Count when Count > 0 -> 
-                            case D of
-                                "" -> 
-                                    true;
-                                _ -> 
-                                    lager:error("Dataset and prepop are "
-                                                "mutually exclusive"),
-                                    halt(1)
-                            end
-                    end,
-                rt:set_config(perf_prepop, P),
-                rt:set_config(perf_prepop_size, PC),
-                rt:set_config(perf_restart, 
+                if D =/= "" andalso P ->
+                        lager:error("Dataset and prepop are "
+                                    "mutually exclusive"),
+                        halt(1);
+                   true -> ok
+                end,
+                rt_config:set(perf_prepop, P),
+                rt_config:set(perf_prepop_size, PS),
+                rt_config:set(perf_restart,
                               proplists:get_value(stop, Parsed)),
                 V;
             _Huh ->
@@ -81,10 +90,10 @@ setup_harness(_Test, Args) ->
         end,
 
     Hosts = load_hosts(),
-    rt:set_config(rt_hostnames, Hosts),
+    rt_config:set(rt_hostnames, Hosts),
 
-    case Version of 
-        meh -> 
+    case Version of
+        meh ->
             Path = relpath(root),
 
             %% [io:format("R: ~p~n", [wildcard(Host, "/tmp/*")]) || Host <- Hosts],
@@ -109,7 +118,7 @@ setup_harness(_Test, Args) ->
 
 set_backend(Backend) ->
     %%lager:info("setting backend to ~p", [Backend]),
-    rt:set_config(rt_backend, Backend).
+    rt_config:set(rt_backend, Backend).
 
 get_backends() ->
     [riak_kv_bitcask_backend,
@@ -123,7 +132,7 @@ cmd(Cmd, Opts) ->
     wait_for_cmd(spawn_cmd(Cmd, Opts)).
 
 deploy_nodes(NodeConfig) ->
-    Hosts = rt:config(rtssh_hosts),
+    Hosts = rt_config:get(rtssh_hosts),
     NumNodes = length(NodeConfig),
     NumHosts = length(Hosts),
     case NumNodes > NumHosts of
@@ -147,12 +156,23 @@ deploy_nodes(NodeConfig, Hosts) ->
     {Versions, Configs} = lists:unzip(NodeConfig),
     VersionMap = lists:zip(Nodes, Versions),
 
-    rt:set_config(rt_hosts, HostMap),
-    rt:set_config(rt_versions, VersionMap),
+    rt_config:set(rt_hosts, HostMap),
+    rt_config:set(rt_versions, VersionMap),
+
 
     rt:pmap(fun({_, default}) ->
                     ok;
-               ({Node, Config}) -> 
+               ({Node, {cuttlefish, Config0}}) ->
+                    Host = get_host(Node),
+                    Config = Config0 ++
+                        [{nodename, atom_to_list(Node)},
+                         {"listener.protobuf.internal",
+                          Host++":8087"},
+                         {"listener.http.internal",
+                          Host++":8098"}
+                        ],
+                    set_conf(Node, Config);
+               ({Node, Config}) ->
                     %%lager:info("update ~p", [self()]),
                     update_app_config(Node, Config)
             end,
@@ -160,30 +180,37 @@ deploy_nodes(NodeConfig, Hosts) ->
 
     timer:sleep(500),
 
-    rt:pmap(fun(Node) ->
-                    Host = get_host(Node),
-                    %%lager:info("ports ~p", [self()]),
-                    Config = [{riak_api, [{pb, fun([{_, Port}]) ->
+    case rt_config:get(cuttle, true) of
+        false ->
+            rt:pmap(fun(Node) ->
+                            Host = get_host(Node),
+                            %%lager:info("ports ~p", [self()]),
+                            Config = [{riak_api,
+                                       [{pb, fun([{_, Port}]) ->
+                                                     [{Host, Port}]
+                                             end},
+                                        {pb_ip, fun(_) ->
+                                                        Host
+                                                end}]},
+                                      {riak_core,
+                                       [{http, fun([{_, Port}]) ->
                                                        [{Host, Port}]
-                                               end},
-                                          {pb_ip, fun(_) ->
-                                                          Host
-                                                  end}]},
-                              {riak_core, [{http, fun([{_, Port}]) ->
-                                                          [{Host, Port}]
-                                                  end}]}],
-                    update_app_config(Node, Config)
-            end, Nodes),
+                                               end}]}],
+                            update_app_config(Node, Config)
+                    end, Nodes),
 
-    timer:sleep(500),
+            timer:sleep(500),
 
-    rt:pmap(fun(Node) ->
-                    update_vm_args(Node, [{"-name", Node},
-                                          {"-zddbl", "32768"},
-                                          {"-P", "256000"}])
-            end, Nodes),
+            rt:pmap(fun(Node) ->
+                            update_vm_args(Node,
+                                           [{"-name", Node},
+                                            {"-zddbl", "32768"},
+                                            {"-P", "256000"}])
+                    end, Nodes),
 
-    timer:sleep(500),
+            timer:sleep(500);
+        true -> ok
+    end,
 
     rt:pmap(fun start/1, Nodes),
 
@@ -239,8 +266,8 @@ riak_admin_cmd(Node, Args) ->
 load_hosts() ->
     {HostsIn, Aliases} = read_hosts_file("hosts"),
     Hosts = lists:sort(HostsIn),
-    rt:set_config(rtssh_hosts, Hosts),
-    rt:set_config(rtssh_aliases, Aliases),
+    rt_config:set(rtssh_hosts, Hosts),
+    rt_config:set(rtssh_aliases, Aliases),
     Hosts.
 
 read_hosts_file(File) ->
@@ -259,7 +286,7 @@ read_hosts_file(File) ->
     end.
 
 get_host(Node) ->
-    orddict:fetch(Node, rt:config(rt_hosts)).
+    orddict:fetch(Node, rt_config:get(rt_hosts)).
 
 %%%===================================================================
 %%% Remote file operations
@@ -275,7 +302,7 @@ wildcard(Node, Path) ->
     end.
 
 spawn_ssh_cmd(Node, Cmd) ->
-    
+
     spawn_ssh_cmd(Node, Cmd, []).
 
 spawn_ssh_cmd(Node, Cmd, Opts) when is_atom(Node) ->
@@ -289,13 +316,13 @@ spawn_ssh_cmd(Node, Cmd, Opts, Return) when is_atom(Node) ->
     Host = get_host(Node),
     spawn_ssh_cmd(Host, Cmd, Opts, Return);
 spawn_ssh_cmd(Host, Cmd, Opts, Return) ->
-    Quiet = 
-	case Return of
-	    true -> "";
-	    false -> " > /dev/null 2>&1"
-	end,
-    SSHCmd = format("ssh -q -o 'StrictHostKeyChecking no' ~s '~s'"++Quiet, 
-		    [Host, Cmd]),
+    Quiet =
+    case Return of
+        true -> "";
+        false -> " > /dev/null 2>&1"
+    end,
+    SSHCmd = format("ssh -q -o 'StrictHostKeyChecking no' ~s '~s'"++Quiet,
+            [Host, Cmd]),
     spawn_cmd(SSHCmd, Opts).
 
 ssh_cmd(Node, Cmd) ->
@@ -340,7 +367,7 @@ update_vm_args(Node, Props) ->
                             VBin = to_binary(Value),
                             case re:replace(Acc,
                                             <<"((^|\\n)", CBin/binary, ").+\\n">>,
-                                            <<"\\1 ", VBin/binary, $\n>>) of 
+                                            <<"\\1 ", VBin/binary, $\n>>) of
                                 CBin -> <<CBin/binary, VBin/binary, $\n>>;
                                 Mod -> Mod
                             end
@@ -391,6 +418,63 @@ update_app_config_file(Node, ConfigFile, Config) ->
     ?assertEqual(ok, remote_write_file(Node, ConfigFile, NewConfigOut)),
     ok.
 
+-spec set_conf(atom() | string(), [{string(), string()}]) -> ok.
+%% set_conf(all, NameValuePairs) ->
+%%     lager:info("rtdev:set_conf(all, ~p)", [NameValuePairs]),
+%%     [ set_conf(DevPath, NameValuePairs) || DevPath <- devpaths()],
+%%     ok;
+set_conf(Node0, NameValuePairs) when is_atom(Node0) ->
+    Node = host_from_node(Node0),
+    Path = node_path(Node0) ++ "/etc/riak.conf",
+    append_to_conf_file(Node,
+                        Path,
+                        remote_read_file(Node, Path),
+                        NameValuePairs),
+    ok.%% ;
+%% set_conf(DevPath, NameValuePairs) ->
+%%     [append_to_conf_file(RiakConf, NameValuePairs)
+%%      || RiakConf <- all_the_files(DevPath, "etc/riak.conf")],
+%%     ok.
+
+all_the_files(DevPath, File) ->
+    case filelib:is_dir(DevPath) of
+        true ->
+            Wildcard = io_lib:format("~s/dev/dev*/~s", [DevPath, File]),
+            filelib:wildcard(Wildcard);
+        _ ->
+            lager:debug("~s is not a directory.", [DevPath]),
+            []
+    end.
+
+
+%% get_riak_conf(Node) ->
+%%     Path = relpath(node_version(N)),
+%%     io_lib:format("~s/dev/dev~b/etc/riak.conf", [Path, N]).
+
+append_to_conf_file(Node, Path, File, NameValuePairs) ->
+    Settings = lists:flatten(
+                 [begin
+                      Name =
+                          case Name0 of
+                              N when is_atom(N) ->
+                                  atom_to_list(N);
+                              _ ->
+                                  Name0
+                          end,
+                      Value =
+                          case Value0 of
+                              V when is_atom(V) ->
+                                  atom_to_list(V);
+                              V when is_integer(V) ->
+                                  integer_to_list(V);
+                              _ ->
+                                  Value0
+                          end,
+                      io_lib:format("~n~s = ~s~n", [Name, Value])
+                  end
+                  || {Name0, Value0} <- NameValuePairs]),
+    remote_write_file(Node, Path, iolist_to_binary([File]++Settings)).
+
 consult_string(Bin) when is_binary(Bin) ->
     consult_string(binary_to_list(Bin));
 consult_string(Str) ->
@@ -401,7 +485,7 @@ consult_string(Str) ->
 ensure_remote_build(Hosts, Version) ->
     lager:info("Ensuring remote build: ~p", [Version]),
     %%lager:info("~p ~n ~p", [Version, Hosts]),
-    Base = rt:config(perf_builds),
+    Base = rt_config:get(perf_builds),
     Dir = Base++"/"++Version++"/",
     lager:info("Using build at ~p", [Dir]),
     {ok, Info} = file:read_file_info(Dir),
@@ -414,12 +498,12 @@ ensure_remote_build(Hosts, Version) ->
         end,
 
     F = fun(Host) ->
-                case ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir) of 
+                case ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir) of
                     {0, Sum} -> ok;
-                    {2, []} -> 
+                    {2, []} ->
                         {0, _} = deploy_build(Host, Dir),
                         {0, Sum} = ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir);
-                    {0, OtherSum} -> 
+                    {0, OtherSum} ->
                         error("Bad build on host "++Host++" with sum "++OtherSum)
                 end,
                 lager:info("Build OK on host: ~p", [Host]),
@@ -429,15 +513,15 @@ ensure_remote_build(Hosts, Version) ->
                 lager:info("Cleaned up host ~p", [Host])
         end,
     rt:pmap(F, Hosts),
-    %% if we get here, we need to reset rtdev path, because we're not 
+    %% if we get here, we need to reset rtdev path, because we're not
     %% using it as defined.
-    rt:set_config(rtdev_path, [{root, Base}, {Version, Dir}]),
+    rt_config:set(rtdev_path, [{root, Base}, {Version, Dir}]),
     ok.
-            
+
 
 scp(Host, Path, RemotePath) ->
     ssh_cmd(Host, "mkdir -p "++RemotePath),
-    SCP = format("scp -qr -o 'StrictHostKeyChecking no' ~s ~s:~s", 
+    SCP = format("scp -qr -o 'StrictHostKeyChecking no' ~s ~s:~s",
                  [Path, Host, RemotePath]),
     %%lager:info("SCP ~p", [SCP]),
     wait_for_cmd(spawn_cmd(SCP)).
@@ -447,7 +531,7 @@ deploy_build(Host, Dir) ->
     Base0 = filename:split(Dir),
     Base1 = lists:delete(lists:last(Base0), Base0),
     Base = filename:join(Base1),
-    SCP = format("scp -qr -o 'StrictHostKeyChecking no' ~s ~s:~s", 
+    SCP = format("scp -qr -o 'StrictHostKeyChecking no' ~s ~s:~s",
                  [Dir, Host, Base]),
     %%lager:info("SCP ~p", [SCP]),
     wait_for_cmd(spawn_cmd(SCP)).
@@ -456,7 +540,7 @@ deploy_build(Host, Dir) ->
 %%% Riak devrel path utilities
 %%%===================================================================
 
--define(PATH, (rt:config(rtdev_path))).
+-define(PATH, (rt_config:get(rtdev_path))).
 
 dev_path(Path, N) ->
     format("~s/dev/dev~b", [Path, N]).
@@ -490,12 +574,12 @@ node_path(Node) ->
     %%lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
 
 node_id(_Node) ->
-    %% NodeMap = rt:config(rt_nodes),
+    %% NodeMap = rt_config:get(rt_nodes),
     %% orddict:fetch(Node, NodeMap).
     1.
 
 node_version(Node) ->
-    orddict:fetch(Node, rt:config(rt_versions)).
+    orddict:fetch(Node, rt_config:get(rt_versions)).
 
 %%%===================================================================
 %%% Local command spawning
@@ -505,25 +589,26 @@ spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
 spawn_cmd(Cmd, Opts) ->
     Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
+    put(Port, Cmd),
     Port.
 
 wait_for_cmd(Port) ->
     rt:wait_until(node(),
                   fun(_) ->
-			  %%lager:info("waiting until"),
+              %%lager:info("waiting until"),
                           receive
                               {Port, Msg={data, _}} ->
-				  %%lager:info("got data ~p", [Msg]),
+                  %%lager:info("got data ~p", [Msg]),
                                   self() ! {Port, Msg},
                                   false;
                               {Port, Msg={exit_status, _}} ->
-				  %%lager:info("got exit"),
+                  %%lager:info("got exit"),
                                   catch port_close(Port),
                                   self() ! {Port, Msg},
                                   true
-			  after 0 ->
-				  %%lager:info("timed out"),
-				  false
+              after 0 ->
+                  %%lager:info("timed out"),
+                  false
                           end
                   end),
     get_cmd_result(Port, []).
@@ -531,10 +616,17 @@ wait_for_cmd(Port) ->
 get_cmd_result(Port, Acc) ->
     receive
         {Port, {data, Bytes}} ->
-	    %%lager:info("got bytes: ~p", [Bytes]),
-	    get_cmd_result(Port, [Bytes|Acc]);
+        %%lager:info("got bytes: ~p", [Bytes]),
+        get_cmd_result(Port, [Bytes|Acc]);
         {Port, {exit_status, Status}} ->
-	    lager:info("got exit status: ~p", [Status]),
+            case Status of
+                0 -> ok;
+                _ ->
+                    Cmd = get(Port),
+                    lager:info("~p returned exit status: ~p",
+                               [Cmd, Status])
+            end,
+            erase(Port),
             Output = lists:flatten(lists:reverse(Acc)),
             {Status, Output}
     %% after 0 ->
@@ -546,15 +638,15 @@ get_cmd_result(Port, Acc) ->
 %%%===================================================================
 
 devpaths() ->
-    Paths = proplists:delete(root, rt:config(rtdev_path)),
+    Paths = proplists:delete(root, rt_config:get(rtdev_path)),
     lists:usort([DevPath || {_Name, DevPath} <- Paths]).
 
 %% in the perf case, we don't always (or even usually) want to stop
 maybe_stop_all(Hosts) ->
-    case rt:config(perf_restart, meh) of
+    case rt_config:get(perf_restart, meh) of
         true ->
             F = fun(Host) ->
-                        lager:info("Checking host ~p for running riaks", 
+                        lager:info("Checking host ~p for running riaks",
                                    [Host]),
                         Cmd = "ps aux | grep beam.sm[p] | awk \"{ print \\$11 }\"",
                         {0, Dirs} = ssh_cmd(Host, Cmd),
@@ -563,7 +655,7 @@ maybe_stop_all(Hosts) ->
                         lists:foreach(
                               fun(Dir) ->
                                       Path = lists:nth(1, string:tokens(Dir, ".")),
-                                      lager:info("Detected running riak at: ~p", 
+                                      lager:info("Detected running riak at: ~p",
                                                  [Path]),
                                       %% not really safe, but fast and effective.
                                       _ = ssh_cmd(Host, "killall beam.smp")
@@ -572,7 +664,7 @@ maybe_stop_all(Hosts) ->
             rt:pmap(F, Hosts);
         _ -> ok
     end.
-                                
+
 
 stop_all(Hosts) ->
     %% [stop_all(Host, DevPath ++ "/dev") || Host <- Hosts,
@@ -603,7 +695,12 @@ stop_all(Host, DevPath) ->
     ok.
 
 teardown() ->
-    stop_all(rt:config(rt_hostnames)).
+    case rt_config:get(perf_restart, meh) of
+        true ->
+            stop_all(rt_config:get(rt_hostnames));
+        _  ->
+            ok
+    end.
 
 %%%===================================================================
 %%% Utilities
@@ -618,4 +715,3 @@ to_binary(X) when is_binary(X) ->
     X;
 to_binary(X) ->
     list_to_binary(to_list(X)).
-

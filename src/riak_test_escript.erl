@@ -271,8 +271,11 @@ is_runnable_test({TestModule, _}) ->
     code:ensure_loaded(Mod),
     erlang:function_exported(Mod, Fun, 0).
 
-run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
-    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
+run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
+    SingleTestResult = riak_test_runner:confirm(Test,
+                                                Outdir,
+                                                TestMetaData,
+                                                HarnessArgs),
     case NumTests of
         1 -> keep_them_up;
         _ -> rt:teardown()

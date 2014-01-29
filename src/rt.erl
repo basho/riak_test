@@ -287,7 +287,7 @@ deploy_nodes(Versions, Services) ->
     NodeConfig = [ version_to_config(Version) || Version <- Versions ],
     Nodes = ?HARNESS:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
-    [ ok = wait_for_service(Node, Service) || Node <- Nodes, 
+    [ ok = wait_for_service(Node, Service) || Node <- Nodes,
                                               Service <- Services ],
     Nodes.
 
@@ -935,13 +935,6 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
-<<<<<<< HEAD
-    %% [join(Node, Node1) || Node <- OtherNodes],
-    [stage_join(Node, Node1) || Node <- OtherNodes],
-    ?assertEqual(ok, wait_until_all_members(Nodes)),
-    stage_plan(Node1),
-    stage_commit(Node1),
-=======
     case OtherNodes of
         [] ->
             %% no other nodes, nothing to join/plan/commit
@@ -953,7 +946,6 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
             plan_and_commit(Node1),
             try_nodes_ready(Nodes, 3, 500)
     end,
->>>>>>> origin/master
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
 
@@ -1468,7 +1460,7 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                         case lists:keyfind(GuiResource, 2,
                                            Routes) of
                             false ->
-                                lager:info("Control routes not found yet: ~p ~p.", 
+                                lager:info("Control routes not found yet: ~p ~p.",
                                            [Vsn, Routes]),
                                 false;
                             _ ->
