@@ -17,7 +17,7 @@
 %% @doc riak_test entry point
 confirm() ->
 
-    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     %% Start up two >1.3.2 clusters and connect them,
     {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(),
 
@@ -26,13 +26,13 @@ confirm() ->
 
     {DefinedType,  UndefType} = Types = {<<"working_type">>, <<"undefined_type">>},
 
-    rt:create_and_activate_bucket_type(LeaderA, DefinedType, [{n_val, 3}]),
+    rt:create_and_activate_bucket_type(LeaderA, DefinedType, [{n_val, 3}, {allow_mult, false}]),
     rt:wait_until_bucket_type_status(DefinedType, active, ANodes),
 
-    rt:create_and_activate_bucket_type(LeaderB, DefinedType, [{n_val, 3}]),
+    rt:create_and_activate_bucket_type(LeaderB, DefinedType, [{n_val, 3}, {allow_mult, false}]),
     rt:wait_until_bucket_type_status(DefinedType, active, BNodes),
 
-    rt:create_and_activate_bucket_type(LeaderA, UndefType, [{n_val, 3}]),
+    rt:create_and_activate_bucket_type(LeaderA, UndefType, [{n_val, 3}, {allow_mult, false}]),
     rt:wait_until_bucket_type_status(UndefType, active, ANodes),
 
     connect_clusters(LeaderA, LeaderB),
