@@ -15,7 +15,7 @@ setup_harness(_Test, _Args) ->
     rt_config:set(rt_hostnames, Hosts),
     %% [io:format("R: ~p~n", [wildcard(Host, "/tmp/*")]) || Host <- Hosts],
 
-    case rt_config:get(rtssh_bench) of
+    case rt_config:get(rtssh_bench, undefined) of
         undefined ->
             ok;
         BenchPath ->
@@ -421,7 +421,7 @@ stop_all(Host, DevPath) ->
     ok.
 
 sync_bench(Hosts) ->
-    case rt_config:get(rtssh_bench) of
+    case rt_config:get(rtssh_bench, undefined) of
         undefined ->
             ok;
         Path ->
@@ -435,7 +435,7 @@ sync_bench(Hosts) ->
     end.
 
 sync_proxy(Hosts) ->
-    case rt_config:get(rtssh_proxy) of
+    case rt_config:get(rtssh_proxy, undefined) of
         undefined ->
             ok;
         Path ->
@@ -449,7 +449,7 @@ sync_proxy(Hosts) ->
     end.
 
 stop_all_bench(Hosts) ->
-    case rt_config:get(rtssh_bench) of
+    case rt_config:get(rtssh_bench, undefined) of
         undefined ->
             ok;
         Path ->
@@ -473,7 +473,7 @@ deploy_bench() ->
     deploy_bench(rt_config:get(rtssh_bench_hosts)).
 
 deploy_bench(Hosts) ->
-    case rt_config:get(rtssh_bench) of
+    case rt_config:get(rtssh_bench, undefined) of
         undefined ->
             ok;
         Path ->
@@ -500,7 +500,7 @@ deploy_proxy(Seed) ->
 
 deploy_proxy(Seed, Hosts) ->
     SeedStr = atom_to_list(Seed),
-    case rt_config:get(rtssh_proxy) of
+    case rt_config:get(rtssh_proxy, undefined) of
         undefined ->
             ok;
         Path ->
