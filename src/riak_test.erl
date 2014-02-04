@@ -22,6 +22,7 @@
 -module(riak_test).
 -export([main/1]).
 -export([behaviour_info/1]).
+-export([add_deps/1]).
 
 %% Define the riak_test behavior
 behaviour_info(callbacks) ->
@@ -46,6 +47,7 @@ cli_options() ->
  {outdir,             $o, "outdir",   string,     "output directory"},
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
+ {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"}
 ].
 
@@ -142,6 +144,13 @@ main(Args) ->
     TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
     print_summary(TestResults, Verbose),
 
+    Teardown = not proplists:get_value(keep, ParsedArgs, false),
+    maybe_teardown(Teardown, TestResults),
+    ok.
+
+maybe_teardown(false, _TestResults) ->
+    lager:info("Keeping cluster running as requested");
+maybe_teardown(true, TestResults) ->
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
         {1, fail} ->
             so_kill_riak_maybe();
