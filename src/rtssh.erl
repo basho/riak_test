@@ -20,7 +20,7 @@ setup_harness(_Test, _Args) ->
             ok;
         BenchPath ->
             code:add_path(BenchPath ++ "/ebin"),
-            riak_test:add_deps(BenchPath ++ "/deps")
+            riak_test_escript:add_deps(BenchPath ++ "/deps")
     end,
 
     sync_bench(Bench),
