@@ -22,6 +22,7 @@
 -module(riak_test_escript).
 -include("rt.hrl").
 -export([main/1]).
+-export([add_deps/1]).
 
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
@@ -41,6 +42,7 @@ cli_options() ->
  {outdir,             $o, "outdir",   string,     "output directory"},
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
+ {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
  {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
 ].
@@ -174,6 +176,14 @@ main(Args) ->
     TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
+    Teardown = not proplists:get_value(keep, ParsedArgs, false),
+    maybe_teardown(Teardown, TestResults, Coverage, Verbose),
+    ok.
+
+maybe_teardown(false, TestResults, Coverage, Verbose) ->
+    print_summary(TestResults, Coverage, Verbose),
+    lager:info("Keeping cluster running as requested");
+maybe_teardown(true, TestResults, Coverage, Verbose) ->
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
         {1, fail} ->
             print_summary(TestResults, Coverage, Verbose),
