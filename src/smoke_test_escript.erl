@@ -104,6 +104,16 @@ worker(Rebar, PWD, Suites) ->
                                 giddyup:post_result([{test, Suite}, {status, get_status(Res)},
                                                      {log, CleanedLog} | Config]),
                                 Res;
+                            "xref" ->
+                                P = erlang:open_port({spawn_executable, Rebar},
+                                                     [{args, ["xref", "skip_deps=true"]},
+                                                      {cd, FDep}, exit_status,
+                                                      {line, 1024}, stderr_to_stdout, binary]),
+                                {Res, Log} = accumulate(P, []),
+                                CleanedLog = cleanup_logs(Log),
+                                giddyup:post_result([{test, Suite}, {status, get_status(Res)},
+                                                     {log, CleanedLog} | Config]),
+                                Res;
                             _ ->
                                 ok
 
