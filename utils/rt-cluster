@@ -21,6 +21,7 @@ build_options() ->
  {clusters,  undefined, "clusters",  integer,    "number of clusters"},
  {backend,          $b, "backend",   atom,       "backend [memory | bitcask | eleveldb | yessir]"},
  {ring_size,        $r, "ring-size", integer,    "cluster ring size"},
+ {repl,      undefined, "repl",      atom,       "connect clusters [primary | bidirect]"},
  {file,             $F, "file",      string,     "use the specified file instead of ~/.riak_test.config"}
 ].
 
@@ -30,6 +31,14 @@ build_defaults() ->
      {clusters, 1},
      {backend, undefined},
      {ring_size, undefined}].
+
+teardown_options() ->
+%% Option Name, Short Code, Long Code, Argument Spec, Help Message
+[
+ {help,             $h, "help",      undefined,  "Print this usage page"},
+ {config,           $c, "conf",      string,     "project configuration"},
+ {file,             $F, "file",      string,     "use the specified file instead of ~/.riak_test.config"}
+].
 
 print_help(Cmd, CmdOpts) ->
     getopt:usage(CmdOpts, escript:script_name() ++ " " ++ Cmd),
@@ -80,19 +89,30 @@ main(Args) ->
 command(["build"|Args]) ->
     Opts = parse_args(Args, "build", build_options(), build_defaults()),
     NumNodes = proplists:get_value(nodes, Opts),
+    NumClusters = proplists:get_value(clusters, Opts),
     KVConfig = [{storage_backend, get_backend(Opts)}],
     CoreConfig = [{ring_creation_size, proplists:get_value(ring_size, Opts)}],
     ConfigOpts = [maybe_config(riak_kv, KVConfig),
                   maybe_config(riak_core, CoreConfig)],
     Config = lists:flatten(ConfigOpts),
-    setup2(Opts),
+    setup_rt(Opts),
     io:format("Config: ~p~n", [Config]),
-    Nodes = rt:build_cluster(NumNodes, Config),
-    [Node1|_] = Nodes,
-    rpc:call(Node1, riak_core_console, member_status, [[]]),
+    Settings = [{NumNodes, Config} || _ <- lists:seq(1, NumClusters)],
+    Clusters = rt:build_clusters(Settings),
+    lists:foldl(fun(Nodes, N) ->
+                        io:format("---~nCluster ~b: ~p~n", [N, Nodes]),
+                        rpc:call(hd(Nodes), riak_core_console, member_status, [[]]),
+                        N+1
+                end, 1, Clusters),
+    Repl = proplists:get_value(repl, Opts),
+    (length(Clusters) > 1) andalso maybe_connect_repl(Repl, Clusters),
+    info("Finished building clusters"),
+    info(""),
     ok;
-command(["teardown"|_Args]) ->
-    io:format("teardown~n"),
+command(["teardown"|Args]) ->
+    Opts = parse_args(Args, "teardown", teardown_options(), []),
+    setup_rt(Opts),
+    rt:teardown(),
     ok;
 command(_) ->
     usage().
@@ -121,7 +141,7 @@ maybe_config(App, Config) ->
             [{App, MaybeConfig}]
     end.
 
-setup2(Opts) ->
+setup_rt(Opts) ->
     register(riak_test, self()),
 
     %% ibrowse
@@ -155,3 +175,53 @@ setup2(Opts) ->
 
     rt:setup_harness(undefined, []),
     ok.
+
+maybe_connect_repl(undefined, _) ->
+    ok;
+maybe_connect_repl(primary, Clusters) ->
+    info("Connecting cluster1 (source) to other clusters (sink)"),
+    NamedClusters = name_clusters(Clusters),
+    [Primary|Others] = NamedClusters,
+    [connect_clusters(Primary, Other) || Other <- Others],
+    ok;
+maybe_connect_repl(bidirect, Clusters) ->
+    info("Connecting all clusters bidirectionally"),
+    NamedClusters = name_clusters(Clusters),
+    [connect_clusters(A, B) || A <- NamedClusters,
+                               B <- NamedClusters,
+                               A =/= B],
+    ok;
+maybe_connect_repl(Other, _) ->
+    info("Unknown --repl option: ~p~n", [Other]),
+    ok.
+
+connect_clusters({A, Source}, {B, Sink}) ->
+    NodeA = hd(Source),
+    NodeB = hd(Sink),
+    Leader = rpc:call(NodeA, riak_core_cluster_mgr, get_leader, []),
+    {ok, {IP, Port}} = rpc:call(NodeB, application, get_env,
+                                [riak_core, cluster_mgr]),
+    info("connecting ~p to ~p at ~p:~p", [A, B, IP, Port]),
+    repl_util:connect_cluster(Leader, IP, Port),
+    ok = repl_util:wait_for_connection(Leader, B),
+    info("....connected"),
+    ok.
+
+name_clusters(Clusters) ->
+    info("Setting cluster names~n"),
+    {NamedClusters, _} =
+        lists:mapfoldl(fun(Nodes, N) ->
+                               Name = "cluster" ++ integer_to_list(N),
+                               repl_util:name_cluster(hd(Nodes), Name),
+                               {{Name, Nodes}, N+1}
+                       end, 1, Clusters),
+    [begin
+         rt:wait_until_ring_converged(Nodes),
+         ok = repl_util:wait_until_leader_converge(Nodes)
+     end || Nodes <- Clusters],
+    NamedClusters.
+
+info(Msg) ->
+    lager:log(info, self(), Msg).
+info(Format, Args) ->
+    lager:log(info, self(), Format, Args).

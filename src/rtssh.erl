@@ -263,7 +263,6 @@ maybe_clusters(Terms=[L|_]) when is_list(L) ->
               end || Host <- Hosts] || Hosts <- Terms],
     Clusters = lists:zip(Labels, Hosts),
     rt_config:set(rtssh_clusters, Clusters),
-    io:format("Clusters: ~p", [Clusters]),
     lists:append(Terms);
 maybe_clusters(Terms) ->
     Terms.
