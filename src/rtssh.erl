@@ -321,6 +321,7 @@ ssh_cmd(Node, Cmd) ->
     wait_for_cmd(spawn_ssh_cmd(Node, Cmd)).
 
 remote_read_file(Node, File) ->
+    timer:sleep(500),
     case ssh_cmd(Node, "cat " ++ File) of
         {0, Text} ->
             %% io:format("~p/~p: read: ~p~n", [Node, File, Text]),
