@@ -6,7 +6,19 @@ get_version() ->
     unknown.
 
 get_deps() ->
-    "deps".
+    Path = relpath(current),
+    case filelib:is_dir(Path) of
+        true ->
+            lists:flatten(io_lib:format("~s/dev/dev1/lib", [Path]));
+        false ->
+            case rt_config:get(rt_deps, undefined) of
+                undefined ->
+                    throw("Unable to determine Riak library path");
+                _ ->
+                    ok
+            end,
+            ""
+    end.
 
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
@@ -66,7 +78,7 @@ deploy_nodes(NodeConfig, Hosts) ->
     %% NumNodes = length(NodeConfig),
     %% NodesN = lists:seq(1, NumNodes),
     %% Nodes = [?DEV(N) || N <- NodesN],
-    Nodes = [list_to_atom("dev1@" ++ Host) || Host <- Hosts],
+    Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
     HostMap = lists:zip(Nodes, Hosts),
 
     %% NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
@@ -81,6 +93,8 @@ deploy_nodes(NodeConfig, Hosts) ->
 
     rt:pmap(fun({_, default}) ->
                     ok;
+               ({Node, {cuttlefish, Config}}) ->
+                    set_conf(Node, Config);
                ({Node, Config}) ->
                     update_app_config(Node, Config)
             end,
@@ -90,27 +104,62 @@ deploy_nodes(NodeConfig, Hosts) ->
     rt:pmap(fun(Node) ->
                     Host = get_host(Node),
                     IP = get_ip(Host),
-                    Config = [{riak_api, [{pb, fun([{_, Port}]) ->
-                                                       [{IP, Port}]
-                                               end},
-                                          {pb_ip, fun(_) ->
-                                                          IP
-                                                  end}]},
-                              {riak_core, [{http, fun([{_, Port}]) ->
-                                                          [{IP, Port}]
-                                                  end}]}],
+                    Config = [{riak_api, [{pb, [{IP, 10017}]},
+                                          {pb_ip, IP},
+                                          {http,[{IP, 10018}]}]},
+                              {riak_core, [{http, [{IP, 10018}]},
+                                           {cluster_mgr,{IP, 10016}}]}],
+                    %% Config = [{riak_api, [{pb, fun([{_, Port}]) ->
+                    %%                                    [{IP, Port}]
+                    %%                            end},
+                    %%                       {pb_ip, fun(_) ->
+                    %%                                       IP
+                    %%                               end}]},
+                    %%           {riak_core, [{http, fun([{_, Port}]) ->
+                    %%                                       [{IP, Port}]
+                    %%                               end}]}],
                     update_app_config(Node, Config)
             end, Nodes),
     timer:sleep(500),
 
-    rt:pmap(fun(Node) ->
-                    update_vm_args(Node, [{"-name", Node}])
-            end, Nodes),
-    timer:sleep(500),
+    %% rt:pmap(fun(Node) ->
+    %%                 update_vm_args(Node, [{"-name", Node}])
+    %%         end, Nodes),
+    %% timer:sleep(500),
+
+    create_dirs(Nodes),
 
     rt:pmap(fun start/1, Nodes),
 
     Nodes.
+
+deploy_clusters(ClusterConfigs) ->
+    Clusters = rt_config:get(rtssh_clusters, []),
+    NumConfig = length(ClusterConfigs),
+    case length(Clusters) < NumConfig of
+        true ->
+            erlang:error("Requested more clusters than available");
+        false ->
+            Both = lists:zip(lists:sublist(Clusters, NumConfig), ClusterConfigs),
+            Deploy =
+                [begin
+                     NumNodes = length(NodeConfig),
+                     NumHosts = length(Hosts),
+                     case NumNodes > NumHosts of
+                         true ->
+                             erlang:error("Not enough hosts available to deploy nodes",
+                                          [NumNodes, NumHosts]);
+                         false ->
+                             Hosts2 = lists:sublist(Hosts, NumNodes),
+                             {Hosts2, NodeConfig}
+                     end
+                 end || {{_,Hosts}, NodeConfig} <- Both],
+            [deploy_nodes(NodeConfig, Hosts) || {Hosts, NodeConfig} <- Deploy]
+    end.
+
+create_dirs(Nodes) ->
+    [ssh_cmd(Node, "mkdir -p " ++ node_path(Node) ++ "/data/snmp/agent/db")
+     || Node <- Nodes].
 
 start(Node) ->
     run_riak(Node, "start"),
@@ -118,6 +167,36 @@ start(Node) ->
 
 stop(Node) ->
     run_riak(Node, "stop"),
+    ok.
+
+upgrade(Node, NewVersion) ->
+    upgrade(Node, NewVersion, same).
+
+upgrade(Node, NewVersion, Config) ->
+    Version = node_version(Node),
+    lager:info("Upgrading ~p : ~p -> ~p", [Node, Version, NewVersion]),
+    stop(Node),
+    rt:wait_until_unpingable(Node),
+    OldPath = node_path(Node, Version),
+    NewPath = node_path(Node, NewVersion),
+
+    Commands = [
+        io_lib:format("cp -p -P -R \"~s/data\" \"~s\"",
+                       [OldPath, NewPath]),
+        io_lib:format("rm -rf ~s/data/*",
+                       [OldPath]),
+        io_lib:format("cp -p -P -R \"~s/etc\" \"~s\"",
+                       [OldPath, NewPath])
+    ],
+    [remote_cmd(Node, Cmd) || Cmd <- Commands],
+    VersionMap = orddict:store(Node, NewVersion, rt_config:get(rt_versions)),
+    rt_config:set(rt_versions, VersionMap),
+    case Config of
+	same -> ok;
+	_ -> update_app_config(Node, Config)
+    end,
+    start(Node),
+    rt:wait_until_pingable(Node),
     ok.
 
 run_riak(Node, Cmd) ->
@@ -129,6 +208,11 @@ run_git(Host, Path, Cmd) ->
     Exec = gitcmd(Path, Cmd),
     lager:info("Running: ~s :: ~s", [Host, Exec]),
     ssh_cmd(Host, Exec).
+
+remote_cmd(Node, Cmd) ->
+    lager:info("Running: ~s :: ~s", [get_host(Node), Cmd]),
+    {0, Result} = ssh_cmd(Node, Cmd),
+    {ok, Result}.
 
 admin(Node, Args) ->
     Cmd = riak_admin_cmd(Node, Args),
@@ -176,6 +260,7 @@ load_bench() ->
 read_hosts_file(File) ->
     case file:consult(File) of
         {ok, Terms} ->
+            Terms2 = maybe_clusters(Terms),
             lists:mapfoldl(fun({Alias, Host}, Aliases) ->
                                    Aliases2 = orddict:store(Host, Host, Aliases),
                                    Aliases3 = orddict:store(Alias, Host, Aliases2),
@@ -183,10 +268,25 @@ read_hosts_file(File) ->
                               (Host, Aliases) ->
                                    Aliases2 = orddict:store(Host, Host, Aliases),
                                    {Host, Aliases2}
-                           end, orddict:new(), Terms);
+                           end, orddict:new(), Terms2);
         _ ->
             erlang:error({"Missing or invalid rtssh hosts file", file:get_cwd()})
     end.
+
+maybe_clusters(Terms=[L|_]) when is_list(L) ->
+    Labels = lists:seq(1, length(Terms)),
+    Hosts = [[case Host of
+                  {H, _} ->
+                      H;
+                  H ->
+                      H
+              end || Host <- Hosts] || Hosts <- Terms],
+    Clusters = lists:zip(Labels, Hosts),
+    rt_config:set(rtssh_clusters, Clusters),
+    io:format("Clusters: ~p", [Clusters]),
+    lists:append(Terms);
+maybe_clusters(Terms) ->
+    Terms.
 
 get_host(Node) ->
     orddict:fetch(Node, rt_config:get(rt_hosts)).
@@ -248,6 +348,21 @@ format(Msg, Args) ->
 update_vm_args(_Node, []) ->
     ok;
 update_vm_args(Node, Props) ->
+    Etc = node_path(Node) ++ "/etc/",
+    Files = [filename:basename(File) || File <- wildcard(Node, Etc ++ "*")],
+    VMArgsExists = lists:member("vm.args", Files),
+    AdvExists = lists:member("advanced.config", Files),
+    if VMArgsExists ->
+            do_update_vm_args(Node, Props);
+       AdvExists ->
+            update_app_config_file(Node, Etc ++ "advanced.config",
+                                   [{vm_args, Props}], undefined);
+       true ->
+            update_app_config_file(Node, Etc ++ "advanced.config",
+                                   [{vm_args, Props}], [])
+    end.
+
+do_update_vm_args(Node, Props) ->
     %% TODO: Make non-matched options be appended to file
     VMArgs = node_path(Node) ++ "/etc/vm.args",
     Bin = remote_read_file(Node, VMArgs),
@@ -264,21 +379,24 @@ update_vm_args(Node, Props) ->
     ok.
 
 update_app_config(Node, Config) ->
-    ConfigFile = node_path(Node) ++ "/etc/app.config",
-    update_app_config_file(Node, ConfigFile, Config).
+    Etc = node_path(Node) ++ "/etc/",
+    Files = [filename:basename(File) || File <- wildcard(Node, Etc ++ "*")],
+    AppExists = lists:member("app.config", Files),
+    AdvExists = lists:member("advanced.config", Files),
+    if AppExists ->
+            update_app_config_file(Node, Etc ++ "app.config", Config, undefined);
+       AdvExists ->
+            update_app_config_file(Node, Etc ++ "advanced.config", Config, undefined);
+       true ->
+            update_app_config_file(Node, Etc ++ "advanced.config", Config, [])
+    end.
+    %% ConfigFile = node_path(Node) ++ "/etc/app.config",
+    %% update_app_config_file(Node, ConfigFile, Config).
 
-update_app_config_file(Node, ConfigFile, Config) ->
+update_app_config_file(Node, ConfigFile, Config, Current) ->
     lager:info("rtssh:update_app_config_file(~p, ~s, ~p)",
                [Node, ConfigFile, Config]),
-    Bin = remote_read_file(Node, ConfigFile),
-    BaseConfig =
-        try
-            {ok, BC} = consult_string(Bin),
-            BC
-        catch
-            _:_ ->
-                erlang:error({"Failed to parse app.config for", Node, Bin})
-        end,
+    BaseConfig = current_config(Node, ConfigFile, Current),
     %% io:format("BaseConfig: ~p~n", [BaseConfig]),
     MergeA = orddict:from_list(Config),
     MergeB = orddict:from_list(BaseConfig),
@@ -299,11 +417,58 @@ update_app_config_file(Node, ConfigFile, Config) ->
     ?assertEqual(ok, remote_write_file(Node, ConfigFile, NewConfigOut)),
     ok.
 
+current_config(Node, ConfigFile, undefined) ->
+    Bin = remote_read_file(Node, ConfigFile),
+    try
+        {ok, BC} = consult_string(Bin),
+        BC
+    catch
+        _:_ ->
+            erlang:error({"Failed to parse app.config for", Node, Bin})
+    end;
+current_config(_Node, _ConfigFile, Current) ->
+    Current.
+
 consult_string(Bin) when is_binary(Bin) ->
     consult_string(binary_to_list(Bin));
 consult_string(Str) ->
     {ok, Tokens, _} = erl_scan:string(Str),
     erl_parse:parse_term(Tokens).
+
+-spec set_conf(atom(), [{string(), string()}]) -> ok.
+set_conf(all, NameValuePairs) ->
+    lager:info("rtssh:set_conf(all, ~p)", [NameValuePairs]),
+    Hosts = rt_config:get(rtssh_hosts),
+    All = [{Host, DevPath} || Host <- Hosts,
+                              DevPath <- devpaths()],
+    rt:pmap(fun({Host, DevPath}) ->
+                    AllFiles = all_the_files(Host, DevPath, "etc/riak.conf"),
+                    [append_to_conf_file(Host, File, NameValuePairs) || File <- AllFiles],
+                    ok
+            end, All),
+    ok;
+set_conf(Node, NameValuePairs) when is_atom(Node) ->
+    append_to_conf_file(Node, get_riak_conf(Node), NameValuePairs),
+    ok.
+
+get_riak_conf(Node) ->
+    node_path(Node) ++ "/etc/riak.conf".
+
+append_to_conf_file(Node, File, NameValuePairs) ->
+    Current = remote_read_file(Node, File),
+    Settings = [[$\n, to_list(Name), $=, to_list(Val), $\n] || {Name, Val} <- NameValuePairs],
+    Output = iolist_to_binary([Current, Settings]),
+    remote_write_file(Node, File, Output).
+
+all_the_files(Host, DevPath, File) ->
+    case wildcard(Host, DevPath ++ "/dev/dev*/" ++ File) of
+        error ->
+            lager:info("~s is not a directory.", [DevPath]),
+            [];
+        Files ->
+            io:format("~s :: files: ~p~n", [Host, Files]),
+            Files
+    end.
 
 %%%===================================================================
 %%% Riak devrel path utilities
@@ -334,8 +499,11 @@ relpath(_, _) ->
     throw("Version requested but only one path provided").
 
 node_path(Node) ->
+    node_path(Node, node_version(Node)).
+
+node_path(Node, Version) ->
     N = node_id(Node),
-    Path = relpath(node_version(Node)),
+    Path = relpath(Version),
     lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
 
 node_id(_Node) ->

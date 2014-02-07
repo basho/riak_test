@@ -37,6 +37,7 @@
          build_cluster/1,
          build_cluster/2,
          build_cluster/3,
+         build_clusters/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
@@ -52,6 +53,7 @@
          create_and_activate_bucket_type/3,
          deploy_nodes/1,
          deploy_nodes/2,
+         deploy_clusters/1,
          down/2,
          enable_search_hook/2,
          expect_in_log/2,
@@ -289,6 +291,27 @@ deploy_nodes(Versions, Services) ->
 
 version_to_config({_, _}=Config) -> Config;
 version_to_config(Version) -> {Version, default}.
+
+%%%%%%%%%%%%%%%%%%%%
+deploy_clusters(Settings) ->
+    ClusterConfigs = [case Setting of
+                          Configs when is_list(Configs) ->
+                              Configs;
+                          NumNodes when is_integer(NumNodes) ->
+                              [{current, default} || _ <- lists:seq(1, NumNodes)];
+                          {NumNodes, InitialConfig} when is_integer(NumNodes) ->
+                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                      end || Setting <- Settings],
+    ?HARNESS:deploy_clusters(ClusterConfigs).
+
+build_clusters(Settings) ->
+    Clusters = deploy_clusters(Settings),
+    [begin
+         join_cluster(Nodes),
+         lager:info("Cluster built: ~p", [Nodes])
+     end || Nodes <- Clusters],
+    Clusters.
+%%%%%%%%%%%%%%%%%%%%
 
 %% @doc Start the specified Riak node
 start(Node) ->
@@ -834,6 +857,11 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
                 deploy_nodes(Versions)
         end,
 
+    join_cluster(Nodes),
+    lager:info("Cluster built: ~p", [Nodes]),
+    Nodes.
+
+join_cluster(Nodes) ->
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
 
@@ -856,9 +884,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     %% Ensure each node owns a portion of the ring
     wait_until_nodes_agree_about_ownership(Nodes),
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
-
-    lager:info("Cluster built: ~p", [Nodes]),
-    Nodes.
+    ok.
 
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
