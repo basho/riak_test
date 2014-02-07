@@ -23,24 +23,11 @@ get_deps() ->
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
     Hosts = load_hosts(),
-    Bench = load_bench(),
     rt_config:set(rt_hostnames, Hosts),
     %% [io:format("R: ~p~n", [wildcard(Host, "/tmp/*")]) || Host <- Hosts],
 
-    case rt_config:get(rtssh_bench, undefined) of
-        undefined ->
-            ok;
-        BenchPath ->
-            code:add_path(BenchPath ++ "/ebin"),
-            riak_test_escript:add_deps(BenchPath ++ "/deps")
-    end,
-
-    sync_bench(Bench),
-    sync_proxy(Bench),
-
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
     stop_all(Hosts),
-    stop_all_bench(Bench),
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
@@ -248,13 +235,6 @@ load_hosts() ->
     Hosts = lists:sort(HostsIn),
     rt_config:set(rtssh_hosts, Hosts),
     rt_config:set(rtssh_aliases, Aliases),
-    Hosts.
-
-load_bench() ->
-    {HostsIn, _Aliases} = read_hosts_file("bench"),
-    Hosts = lists:sort(HostsIn),
-    rt_config:set(rtssh_bench_hosts, Hosts),
-    io:format("Bench: ~p~n", [Hosts]),
     Hosts.
 
 read_hosts_file(File) ->
@@ -578,10 +558,10 @@ stop_all(Host, DevPath) ->
             [begin
                  Cmd = D ++ "/bin/riak stop",
                  {_, Result} = ssh_cmd(Host, Cmd),
-                 [Output | _Tail] = string:tokens(Result, "\n"),
-                 Status = case Output of
-                              "ok" -> "ok";
-                              _ -> "wasn't running"
+                 Status = case string:tokens(Result, "\n") of
+                              ["ok"|_] -> "ok";
+                              [_|_] -> "wasn't running";
+                              [] -> "error"
                           end,
                  lager:info("Stopping Node... ~s :: ~s ~~ ~s.",
                             [Host, Cmd, Status])
@@ -589,128 +569,8 @@ stop_all(Host, DevPath) ->
     end,
     ok.
 
-sync_bench(Hosts) ->
-    case rt_config:get(rtssh_bench, undefined) of
-        undefined ->
-            ok;
-        Path ->
-            Paths = filename:split(Path),
-            Root = filename:join(lists:sublist(Paths, length(Paths)-1)),
-            rt:pmap(fun(Host) ->
-                            Cmd = "rsync -tr " ++ Path ++ " " ++ Host ++ ":" ++ Root,
-                            Result = cmd(Cmd),
-                            lager:info("Syncing bench :: ~p :: ~p :: ~p~n", [Host, Cmd, Result])
-                    end, Hosts)
-    end.
-
-sync_proxy(Hosts) ->
-    case rt_config:get(rtssh_proxy, undefined) of
-        undefined ->
-            ok;
-        Path ->
-            Paths = filename:split(Path),
-            Root = filename:join(lists:sublist(Paths, length(Paths)-1)),
-            rt:pmap(fun(Host) ->
-                            Cmd = "rsync -tr " ++ Path ++ " " ++ Host ++ ":" ++ Root,
-                            Result = cmd(Cmd),
-                            lager:info("Syncing proxy :: ~p :: ~p :: ~p~n", [Host, Cmd, Result])
-                    end, Hosts)
-    end.
-
-stop_all_bench(Hosts) ->
-    case rt_config:get(rtssh_bench, undefined) of
-        undefined ->
-            ok;
-        Path ->
-            rt:pmap(fun(Host) ->
-                            Cmd = "cd " ++ Path ++ " && bash ./bb.sh stop",
-                            %% Result = ssh_cmd(Host, Cmd),
-                            %% lager:info("Stopping basho_bench... ~s :: ~s ~~ ~p.",
-                            %%            [Host, Cmd, Result])
-                            {_, Result} = ssh_cmd(Host, Cmd),
-                            [Output | _Tail] = string:tokens(Result, "\n"),
-                            Status = case Output of
-                                         "ok" -> "ok";
-                                         _ -> "wasn't running"
-                                     end,
-                            lager:info("Stopping basho_bench... ~s :: ~s ~~ ~s.",
-                                       [Host, Cmd, Status])
-                    end, Hosts)
-    end.
-
-deploy_bench() ->
-    deploy_bench(rt_config:get(rtssh_bench_hosts)).
-
-deploy_bench(Hosts) ->
-    case rt_config:get(rtssh_bench, undefined) of
-        undefined ->
-            ok;
-        Path ->
-            rt:pmap(fun(Host) ->
-                            Cookie = "riak",
-                            This = lists:flatten(io_lib:format("~s", [node()])),
-                            Cmd =
-                                "cd " ++ Path ++ " && bash ./bb.sh"
-                                " -N bench@" ++ Host ++
-                                " -C " ++ Cookie ++
-                                " -J " ++ This ++
-                                " -D",
-                            spawn_ssh_cmd(Host, Cmd),
-                            lager:info("Starting basho_bench... ~s :: ~s",
-                                       [Host, Cmd])
-                    end, Hosts),
-            [rt:wait_until_pingable(list_to_atom("bench@" ++ Host)) || Host <- Hosts],
-            timer:sleep(1000),
-            ok
-    end.
-
-deploy_proxy(Seed) ->
-    deploy_proxy(Seed, rt_config:get(rtssh_bench_hosts)).
-
-deploy_proxy(Seed, Hosts) ->
-    SeedStr = atom_to_list(Seed),
-    case rt_config:get(rtssh_proxy, undefined) of
-        undefined ->
-            ok;
-        Path ->
-            rt:pmap(fun(Host) ->
-                            Cmd = "cd " ++ Path ++ " && bash go.sh \"" ++ SeedStr ++ "\"",
-                            spawn_ssh_cmd(Host, Cmd),
-                            lager:info("Starting riak_proxycfg... ~s :: ~s",
-                                       [Host, Cmd])
-                    end, Hosts),
-            timer:sleep(2000),
-            ok
-    end.
-
 teardown() ->
     stop_all(rt_config:get(rt_hostnames)).
-
-%%%===================================================================
-%%% Collector stuff
-%%%===================================================================
-
-collector_group_start(Name) ->
-    collector_call({group_start, timestamp(), Name}).
-
-collector_group_end() ->
-    collector_call({group_end, timestamp()}).
-
-collector_bench_start(Name, Config, Desc) ->
-    collector_call({bench_start, timestamp(), Name, Config, Desc}).
-
-collector_bench_end() ->
-    collector_call({bench_end, timestamp()}).
-
-collector_call(Msg) ->
-    {Node, _, _} = rt_config:get(rtssh_collector),
-    gen_server:call({collector, Node}, Msg, 30000).
-
-timestamp() ->
-    timestamp(os:timestamp()).
-
-timestamp({Mega, Secs, Micro}) ->
-    Mega*1000*1000*1000 + Secs * 1000 + (Micro div 1000).
 
 %%%===================================================================
 %%% Utilities
