@@ -8,7 +8,6 @@
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
-
 -import(rt, [deploy_nodes/2]).
 
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
@@ -47,42 +46,12 @@ confirm() ->
     pass.
 
 simple_test() ->
-    %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
-
-    %% Break up the 6 nodes into three clustes.
-    {ANodes, BNodes} = lists:split(3, Nodes),
-
-    lager:info("ANodes: ~p", [ANodes]),
-    lager:info("BNodes: ~p", [BNodes]),
-
-    lager:info("Building two clusters."),
-    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
+    {Nodes, {ANodes, BNodes, _CNodes}} =  repl_util:provision_replication(),
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
 
-    lager:info("Naming clusters."),
-    repl_util:name_cluster(AFirst, "A"),
-    repl_util:name_cluster(BFirst, "B"),
-
-    lager:info("Waiting for convergence."),
-    rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
-
-    lager:info("Waiting for transfers to complete."),
-    rt:wait_until_transfers_complete(ANodes),
-    rt:wait_until_transfers_complete(BNodes),
-
-    lager:info("Get leaders."),
-    LeaderA = get_leader(AFirst),
-    LeaderB = get_leader(BFirst),
-
-    lager:info("Finding connection manager ports."),
-    BPort = get_port(LeaderB),
-
-    lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
+    LeaderA = repl_util:get_leader(AFirst),
 
     %% Write keys prior to fullsync.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -119,56 +88,13 @@ simple_test() ->
     pass.
 
 dual_test() ->
-    %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(infinity)),
-
-    %% Break up the 6 nodes into three clustes.
-    {ANodes, Rest} = lists:split(2, Nodes),
-    {BNodes, CNodes} = lists:split(2, Rest),
-
-    lager:info("ANodes: ~p", [ANodes]),
-    lager:info("BNodes: ~p", [BNodes]),
-    lager:info("CNodes: ~p", [CNodes]),
-
-    lager:info("Building three clusters."),
-    [repl_util:make_cluster(N) || N <- [ANodes, BNodes, CNodes]],
+    {Nodes, {ANodes, BNodes, CNodes}} =  repl_util:provision_replication(),
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
     CFirst = hd(CNodes),
 
-    lager:info("Naming clusters."),
-    repl_util:name_cluster(AFirst, "A"),
-    repl_util:name_cluster(BFirst, "B"),
-    repl_util:name_cluster(CFirst, "C"),
-
-    lager:info("Waiting for convergence."),
-    rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
-    rt:wait_until_ring_converged(CNodes),
-
-    lager:info("Waiting for transfers to complete."),
-    rt:wait_until_transfers_complete(ANodes),
-    rt:wait_until_transfers_complete(BNodes),
-    rt:wait_until_transfers_complete(CNodes),
-
-    lager:info("Get leaders."),
-    LeaderA = get_leader(AFirst),
-    LeaderB = get_leader(BFirst),
-    LeaderC = get_leader(CFirst),
-
-    lager:info("Finding connection manager ports."),
-    APort = get_port(LeaderA),
-    BPort = get_port(LeaderB),
-    CPort = get_port(LeaderC),
-
-    lager:info("Connecting all clusters into fully connected topology."),
-    connect_cluster(LeaderA, BPort, "B"),
-    connect_cluster(LeaderA, CPort, "C"),
-    connect_cluster(LeaderB, APort, "A"),
-    connect_cluster(LeaderB, CPort, "C"),
-    connect_cluster(LeaderC, APort, "A"),
-    connect_cluster(LeaderC, BPort, "B"),
+    LeaderA = repl_util:get_leader(AFirst),
 
     %% Write keys to cluster A, verify B and C do not have them.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -216,49 +142,18 @@ dual_test() ->
     lager:info("Fullsync A->B and A->C completed in ~p seconds",
                [Time/1000/1000]),
 
+    rt:clean_cluster(Nodes),
+
     pass.
 
 bidirectional_test() ->
-    %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
-
-    %% Break up the 6 nodes into three clustes.
-    {ANodes, BNodes} = lists:split(3, Nodes),
-
-    lager:info("ANodes: ~p", [ANodes]),
-    lager:info("BNodes: ~p", [BNodes]),
-
-    lager:info("Building two clusters."),
-    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
+    {Nodes, {ANodes, BNodes, _CNodes}} =  repl_util:provision_replication(),
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
 
-    lager:info("Naming clusters."),
-    repl_util:name_cluster(AFirst, "A"),
-    repl_util:name_cluster(BFirst, "B"),
-
-    lager:info("Waiting for convergence."),
-    rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
-
-    lager:info("Waiting for transfers to complete."),
-    rt:wait_until_transfers_complete(ANodes),
-    rt:wait_until_transfers_complete(BNodes),
-
-    lager:info("Get leaders."),
-    LeaderA = get_leader(AFirst),
-    LeaderB = get_leader(BFirst),
-
-    lager:info("Finding connection manager ports."),
-    APort = get_port(LeaderA),
-    BPort = get_port(LeaderB),
-
-    lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
-
-    lager:info("Connecting cluster B to A"),
-    connect_cluster(LeaderB, APort, "A"),
+    LeaderA = repl_util:get_leader(AFirst),
+    LeaderB = repl_util:get_leader(BFirst),
 
     %% Write keys to cluster A, verify B does not have them.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -302,42 +197,13 @@ bidirectional_test() ->
     pass.
 
 difference_test() ->
-    %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
-
-    %% Break up the 6 nodes into three clustes.
-    {ANodes, BNodes} = lists:split(3, Nodes),
-
-    lager:info("ANodes: ~p", [ANodes]),
-    lager:info("BNodes: ~p", [BNodes]),
-
-    lager:info("Building two clusters."),
-    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
+    {Nodes, {ANodes, BNodes, _CNodes}} =  repl_util:provision_replication(),
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
 
-    lager:info("Naming clusters."),
-    repl_util:name_cluster(AFirst, "A"),
-    repl_util:name_cluster(BFirst, "B"),
-
-    lager:info("Waiting for convergence."),
-    rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
-
-    lager:info("Waiting for transfers to complete."),
-    rt:wait_until_transfers_complete(ANodes),
-    rt:wait_until_transfers_complete(BNodes),
-
-    lager:info("Get leaders."),
-    LeaderA = get_leader(AFirst),
-    LeaderB = get_leader(BFirst),
-
-    lager:info("Finding connection manager ports."),
-    BPort = get_port(LeaderB),
-
-    lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
+    LeaderA = repl_util:get_leader(AFirst),
+    LeaderB = repl_util:get_leader(BFirst),
 
     %% Get PBC connections.
     APBC = rt:pbc(LeaderA),
@@ -394,42 +260,11 @@ difference_test() ->
     pass.
 
 deadlock_test() ->
-    %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
-
-    %% Break up the 6 nodes into three clustes.
-    {ANodes, BNodes} = lists:split(3, Nodes),
-
-    lager:info("ANodes: ~p", [ANodes]),
-    lager:info("BNodes: ~p", [BNodes]),
-
-    lager:info("Building two clusters."),
-    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
+    {Nodes, {ANodes, BNodes, _CNodes}} =  repl_util:provision_replication(),
 
     AFirst = hd(ANodes),
-    BFirst = hd(BNodes),
 
-    lager:info("Naming clusters."),
-    repl_util:name_cluster(AFirst, "A"),
-    repl_util:name_cluster(BFirst, "B"),
-
-    lager:info("Waiting for convergence."),
-    rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
-
-    lager:info("Waiting for transfers to complete."),
-    rt:wait_until_transfers_complete(ANodes),
-    rt:wait_until_transfers_complete(BNodes),
-
-    lager:info("Get leaders."),
-    LeaderA = get_leader(AFirst),
-    LeaderB = get_leader(BFirst),
-
-    lager:info("Finding connection manager ports."),
-    BPort = get_port(LeaderB),
-
-    lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
+    LeaderA = repl_util:get_leader(AFirst),
 
     %% Add intercept for delayed comparison of hashtrees.
     Intercept = {riak_kv_index_hashtree, [{{compare, 4}, delayed_compare}]},
@@ -580,27 +415,6 @@ validate_intercepted_fullsync(InterceptTarget,
 
     %% Wait until AAE trees are compueted on the rebooted node.
     repl_util:wait_until_aae_trees_built([InterceptTarget]).
-
-%% @doc Given a node, find the port that the cluster manager is
-%%      listening on.
-get_port(Node) ->
-    {ok, {_IP, Port}} = rpc:call(Node,
-                                 application,
-                                 get_env,
-                                 [riak_core, cluster_mgr]),
-    Port.
-
-%% @doc Given a node, find out who the current replication leader in its
-%%      cluster is.
-get_leader(Node) ->
-    rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
-
-%% @doc Connect two clusters using a given name.
-connect_cluster(Source, Port, Name) ->
-    lager:info("Connecting ~p to ~p for cluster ~p.",
-               [Source, Port, Name]),
-    repl_util:connect_cluster(Source, "127.0.0.1", Port),
-    ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
 
 %% @doc Write a series of keys and ensure they are all written.
 write_to_cluster(Node, Start, End) ->
