@@ -1,4 +1,5 @@
 -module(repl_util).
+
 -export([make_cluster/1,
          name_cluster/2,
          node_has_version/2,
@@ -36,9 +37,12 @@
          write_to_cluster/4,
          read_from_cluster/5,
          check_fullsync/3,
-         validate_completed_fullsync/6
-        ]).
+         validate_completed_fullsync/6,
+         provision_replication/0]).
+
 -include_lib("eunit/include/eunit.hrl").
+
+-import(rt, [deploy_nodes/2]).
 
 make_cluster(Nodes) ->
     [First|Rest] = Nodes,
@@ -405,3 +409,89 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
     ?assert(RetryExits >= ExpectedFailures * 5),
 
     ok.
+
+-define(REPL_CONFIG(FSSourceRetries), [
+        {riak_core,
+            [{ring_creation_size, 8},
+             {default_bucket_props, [{n_val, 1}]}]
+        },
+        {riak_kv,
+            [{anti_entropy, {on, []}},
+             {anti_entropy_build_limit, {100, 1000}},
+             {anti_entropy_concurrency, 100}]
+        },
+        {riak_repl,
+         [{fullsync_strategy, aae},
+          {fullsync_on_connect, false},
+          {fullsync_interval, disabled},
+          {max_fssource_retries, FSSourceRetries}]}
+        ]).
+
+provision_replication() ->
+    %% Deploy 6 nodes.
+    Nodes = deploy_nodes(6, ?REPL_CONFIG(infinity)),
+
+    %% Break up the 6 nodes into three clustes.
+    {ANodes, Rest} = lists:split(2, Nodes),
+    {BNodes, CNodes} = lists:split(2, Rest),
+
+    lager:info("ANodes: ~p", [ANodes]),
+    lager:info("BNodes: ~p", [BNodes]),
+    lager:info("CNodes: ~p", [CNodes]),
+
+    lager:info("Building three clusters."),
+    [repl_util:make_cluster(N) || N <- [ANodes, BNodes, CNodes]],
+
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
+    CFirst = hd(CNodes),
+
+    lager:info("Naming clusters."),
+    repl_util:name_cluster(AFirst, "A"),
+    repl_util:name_cluster(BFirst, "B"),
+    repl_util:name_cluster(CFirst, "C"),
+
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ANodes),
+    rt:wait_until_ring_converged(BNodes),
+    rt:wait_until_ring_converged(CNodes),
+
+    lager:info("Waiting for transfers to complete."),
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
+    rt:wait_until_transfers_complete(CNodes),
+
+    lager:info("Get leaders."),
+    LeaderA = get_leader(AFirst),
+    LeaderB = get_leader(BFirst),
+    LeaderC = get_leader(CFirst),
+
+    lager:info("Finding connection manager ports."),
+    APort = get_port(LeaderA),
+    BPort = get_port(LeaderB),
+    CPort = get_port(LeaderC),
+
+    lager:info("Connecting all clusters into fully connected topology."),
+    connect_cluster_by_name(LeaderA, BPort, "B"),
+    connect_cluster_by_name(LeaderA, CPort, "C"),
+    connect_cluster_by_name(LeaderB, APort, "A"),
+    connect_cluster_by_name(LeaderB, CPort, "C"),
+    connect_cluster_by_name(LeaderC, APort, "A"),
+    connect_cluster_by_name(LeaderC, BPort, "B"),
+
+    %% Enable fullsync from A to B.
+    lager:info("Enabling fullsync from A to B"),
+    repl_util:enable_fullsync(LeaderA, "B"),
+    rt:wait_until_ring_converged(ANodes),
+
+    %% Enable fullsync from A to C.
+    lager:info("Enabling fullsync from A to C"),
+    repl_util:enable_fullsync(LeaderA, "C"),
+    rt:wait_until_ring_converged(ANodes),
+
+    %% Enable fullsync from B to A.
+    lager:info("Enabling fullsync from B to A"),
+    repl_util:enable_fullsync(LeaderB, "A"),
+    rt:wait_until_ring_converged(BNodes),
+
+    {Nodes, {ANodes, BNodes, CNodes}}.
