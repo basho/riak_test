@@ -57,6 +57,7 @@
          expect_in_log/2,
          get_deps/0,
          get_node_logs/0,
+         get_replica/5,
          get_ring/1,
          get_version/0,
          heal/1,
@@ -964,6 +965,29 @@ systest_read(Node, Start, End, Bucket, R, CommonValBin)
                 end
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
+
+% @doc Reads a single replica of a value. This issues a get command directly
+% to the vnode handling the Nth primary partition of the object's preflist.
+get_replica(Node, Bucket, Key, I, N) ->
+    BKey = {Bucket, Key},
+    Chash = rpc:call(Node, riak_core_util, chash_key, [BKey]),
+    Pl = rpc:call(Node, riak_core_apl, get_primary_apl, [Chash, N, riak_kv]),
+    {{Partition, PNode}, primary} = lists:nth(I, Pl),
+    Ref = Reqid = make_ref(),
+    Sender = {raw, Ref, self()},
+    rpc:call(PNode, riak_kv_vnode, get,
+             [{Partition, PNode}, BKey, Ref, Sender]),
+    receive
+        {Ref, {r, Result, _, Reqid}} ->
+            Result;
+        {Ref, Reply} ->
+            Reply
+    after
+        60000 ->
+            lager:error("Replica ~p get for ~p/~p timed out",
+                        [I, Bucket, Key]),
+            ?assert(false)
+    end.
 
 %%%===================================================================
 %%% PBC & HTTPC Functions
