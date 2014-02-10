@@ -66,7 +66,6 @@ confirm() ->
                         {{del_nat_map,1}, verify_del_nat_map},
                         {{show_nat_map,1}, verify_show_nat_map},
                         {{realtime,1}, verify_realtime},
-                        {{full_objects,1}, verify_full_objects},
                         {{add_block_provider_redirect,1}, verify_add_block_provider_redirect},
                         {{show_block_provider_redirect,1}, verify_show_block_provider_redirect},
                         {{delete_block_provider_redirect,1}, verify_delete_block_provider_redirect},
@@ -109,10 +108,6 @@ confirm() ->
     check_cmd(Node, "nat-map show"),
     check_cmd(Node, "nat-map add 1.2.3.4:4321 192.168.1.1"),
     check_cmd(Node, "nat-map del 1.2.3.4:4321 192.168.1.1"),
-
-    check_cmd(Node, "full_objects"),
-    check_cmd(Node, "full_objects always"),
-    check_cmd(Node, "full_objects 99"),
 
     check_cmd(Node, "add-block-provider-redirect a b"),
     check_cmd(Node, "show-block-provider-redirect a"),

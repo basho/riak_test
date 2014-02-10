@@ -108,14 +108,6 @@ verify_modes(Val) ->
         _ -> ?FAIL
     end.
 
-verify_full_objects(Val) ->
-     case Val of
-        [] -> ?PASS;
-        ["always"] -> ?PASS;
-        ["99"] -> ?PASS;
-        _ -> ?FAIL
-    end.
-
 verify_add_block_provider_redirect(Val) ->
     case Val of
         ["a","b"] -> ?PASS;
