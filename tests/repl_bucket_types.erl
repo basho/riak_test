@@ -288,13 +288,6 @@ enable_fullsync(LeaderA, ANodes) ->
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes).
 
-
-%% @doc Turn ff fullsync replication on the cluster lead by LeaderA.
-%%      The clusters must already have been named and connected.
-%disable_fullsync(LeaderA, ANodes) ->
-%    repl_util:disable_fullsync(LeaderA, "B"),
-%    rt:wait_until_ring_converged(ANodes).
-
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
     {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
