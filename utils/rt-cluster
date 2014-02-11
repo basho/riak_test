@@ -19,7 +19,7 @@ build_options() ->
  {version,          $v, "version",   atom,       "Riak version (eg. current, previous legacy)"},
  {nodes,            $n, "num",       integer,    "number of nodes/cluster (required)"},
  {clusters,  undefined, "clusters",  integer,    "number of clusters"},
- {backend,          $b, "backend",   atom,       "backend [memory | bitcask | eleveldb | yessir]"},
+ {backend,          $b, "backend",   atom,       "backend [memory | bitcask | leveldb | yessir]"},
  {ring_size,        $r, "ring-size", integer,    "cluster ring size"},
  {repl,      undefined, "repl",      atom,       "connect clusters [primary | bidirect]"},
  {file,             $F, "file",      string,     "use the specified file instead of ~/.riak_test.config"}
