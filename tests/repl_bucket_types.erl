@@ -6,6 +6,7 @@
 -module(repl_bucket_types).
 -behaviour(riak_test).
 -export([confirm/0]).
+-compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(ENSURE_READ_ITERATIONS, 5).
@@ -18,13 +19,13 @@
 confirm() ->
 
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
-    %% Start up two >1.3.2 clusters and connect them,
+
     {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(),
 
     PBA = get_pb_pid(LeaderA),
     PBB = get_pb_pid(LeaderB),
 
-    {DefinedType,  UndefType} = Types = {<<"working_type">>, <<"undefined_type">>},
+    {DefinedType, UndefType} = Types = {<<"working_type">>, <<"undefined_type">>},
 
     rt:create_and_activate_bucket_type(LeaderA, DefinedType, [{n_val, 3}, {allow_mult, false}]),
     rt:wait_until_bucket_type_status(DefinedType, active, ANodes),
@@ -53,7 +54,7 @@ confirm() ->
     DPBA = get_pb_pid(MixedLeaderA),
     DPBB = get_pb_pid(MixedLeaderB),
 
-    connect_clusters(LeaderA, LeaderB),
+    connect_clusters(MixedLeaderA, MixedLeaderB),
 
     realtime_mixed_version_test(MixedClusterNodes, Types, DPBA, DPBB),
     fullsync_mixed_version_test(MixedClusterNodes, Types, DPBA, DPBB),
@@ -239,16 +240,17 @@ fullsync_mixed_version_test(ClusterNodes, BucketTypes, PBA, PBB) ->
     lager:info("Enabling fullsync between ~p and ~p", [LeaderA, LeaderB]),
     enable_fullsync(LeaderA, ANodes),
 
-    Bin = <<"data data data">>,
+    Bin = <<"good data">>,
     Key = <<"key">>,
     Bucket = <<"fullsync-kicked">>,
     DefaultObj = riakc_obj:new(Bucket, Key, Bin),
     lager:info("doing untyped put on A, bucket:~p", [Bucket]),
     riakc_pb_socket:put(PBA, DefaultObj, [{w,3}]),
 
-    BucketTyped = {DefinedType, <<"fullsync-typekicked">>},
+    BucketTyped = {DefinedType, Bucket},
     KeyTyped = <<"keytyped">>,
-    ObjTyped = riakc_obj:new(BucketTyped, KeyTyped, Bin),
+    BadBin = <<"overwritten">>,
+    ObjTyped = riakc_obj:new(BucketTyped, KeyTyped, BadBin),
 
     lager:info("doing typed put on A, bucket:~p", [BucketTyped]),
     riakc_pb_socket:put(PBA, ObjTyped, [{w,3}]),
@@ -260,10 +262,15 @@ fullsync_mixed_version_test(ClusterNodes, BucketTypes, PBA, PBB) ->
     lager:info("Fullsync completed in ~p seconds", [SyncTime1/1000/1000]),
 
     ReadResult1 = riakc_pb_socket:get(PBB, Bucket, Key),
-    ReadResult2 = riakc_pb_socket:get(PBB, BucketTyped, KeyTyped),
-
     ?assertMatch({ok, _}, ReadResult1),
-    ?assertMatch({error, _}, ReadResult2).
+ 
+    %% The following check appears to be the best we can do. If a 2.x source
+    %% sends a typed bucket to the 1.x sink, the put will occur.
+    %% The bucket is undefined to the interfaces, but some parts of it 
+    %% appear to be written to the sink node. Since we cannot check using pb,
+    %% here we at least make sure we haven't written over an existing default 
+    %% bucket with data from a typed bucket of the same name.
+    ensure_bucket_not_updated(PBB, Bucket, Key, Bin).
   
 %% @doc Turn on Realtime replication on the cluster lead by LeaderA.
 %%      The clusters must already have been named and connected.
