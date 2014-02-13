@@ -704,11 +704,11 @@ group_test(Node, Port, CertDir) ->
 
     lager:info("Creating a new group"),
     %% create a new group
-    ok = rpc:call(Node, riak_core_console, add_user, [["group"]]),
+    ok = rpc:call(Node, riak_core_console, add_group, [["group"]]),
 
     lager:info("Creating a user in the group"),
     %% create a new user in that group
-    ok = rpc:call(Node, riak_core_console, add_user, [["myuser", "roles=group"]]),
+    ok = rpc:call(Node, riak_core_console, add_user, [["myuser", "groups=group"]]),
 
 
     lager:info("Granting get/put/delete on a bucket type to the group, checking those requests work"),
