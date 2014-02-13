@@ -118,6 +118,19 @@ deploy_nodes(NodeConfig, Hosts) ->
 
     rt:pmap(fun start/1, Nodes),
 
+    %% Ensure nodes started
+    [ok = rt:wait_until_pingable(N) || N <- Nodes],
+
+    %% %% Enable debug logging
+    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+
+    %% We have to make sure that riak_core_ring_manager is running before we can go on.
+    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
+
+    %% Ensure nodes are singleton clusters
+    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
+                                        Version /= "0.14.2"],
+
     Nodes.
 
 deploy_clusters(ClusterConfigs) ->

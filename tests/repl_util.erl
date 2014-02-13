@@ -31,7 +31,7 @@
          get_cluster_mgr_port/1,
          maybe_reconnect_rt/3,
          connect_rt/3,
-         connect_cluster_by_name/3,
+         connect_cluster_by_name/4,
          get_port/1,
          get_leader/1,
          write_to_cluster/4,
@@ -208,9 +208,12 @@ start_and_wait_until_fullsync_complete(Node, Cluster) ->
     lager:info("Fullsync on ~p complete", [Node]).
 
 connect_cluster(Node, IP, Port) ->
+    lager:info("Connecting cluster ~p to ~p:~p",
+ 	       [Node, IP, Port]),
     Res = rpc:call(Node, riak_repl_console, connect,
         [[IP, integer_to_list(Port)]]),
-    ?assertEqual(ok, Res).
+    ?assertEqual(ok, Res),
+    lager:info("Connected!").
 
 disconnect_cluster(Node, Name) ->
     Res = rpc:call(Node, riak_repl_console, disconnect,
@@ -223,6 +226,7 @@ wait_for_connection(Node, Name) ->
                 case rpc:call(Node, riak_core_cluster_mgr,
                         get_connections, []) of
                     {ok, Connections} ->
+ 			lager:info("Got ~p", [Connections]),
                         Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
                         case Conn of
                             [] ->
@@ -329,10 +333,10 @@ connect_rt(SourceNode, SinkPort, SinkName) ->
     repl_util:start_realtime(SourceNode, SinkName).
 
 %% @doc Connect two clusters using a given name.
-connect_cluster_by_name(Source, Port, Name) ->
-    lager:info("Connecting ~p to ~p for cluster ~p.",
-               [Source, Port, Name]),
-    repl_util:connect_cluster(Source, "127.0.0.1", Port),
+connect_cluster_by_name(Source, Destination, Port, Name) ->
+    lager:info("Connecting ~p to ~p:~p for cluster ~p.",
+               [Source, Destination, Port, Name]),
+    repl_util:connect_cluster(Source, Destination, Port),
     ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
 
 %% @doc Given a node, find the port that the cluster manager is
@@ -429,18 +433,11 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
 
 provision_replication() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?REPL_CONFIG(infinity)),
-
-    %% Break up the 6 nodes into three clustes.
-    {ANodes, Rest} = lists:split(2, Nodes),
-    {BNodes, CNodes} = lists:split(2, Rest),
+    Nodes = [ANodes, BNodes, CNodes] = rt:build_clusters([2, 2, 2]),
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
     lager:info("CNodes: ~p", [CNodes]),
-
-    lager:info("Building three clusters."),
-    [repl_util:make_cluster(N) || N <- [ANodes, BNodes, CNodes]],
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
@@ -472,12 +469,12 @@ provision_replication() ->
     CPort = get_port(LeaderC),
 
     lager:info("Connecting all clusters into fully connected topology."),
-    connect_cluster_by_name(LeaderA, BPort, "B"),
-    connect_cluster_by_name(LeaderA, CPort, "C"),
-    connect_cluster_by_name(LeaderB, APort, "A"),
-    connect_cluster_by_name(LeaderB, CPort, "C"),
-    connect_cluster_by_name(LeaderC, APort, "A"),
-    connect_cluster_by_name(LeaderC, BPort, "B"),
+    connect_cluster_by_name(LeaderA, LeaderB, BPort, "B"),
+    connect_cluster_by_name(LeaderA, LeaderC, CPort, "C"),
+    connect_cluster_by_name(LeaderB, LeaderA, APort, "A"),
+    connect_cluster_by_name(LeaderB, LeaderC, CPort, "C"),
+    connect_cluster_by_name(LeaderC, LeaderA, APort, "A"),
+    connect_cluster_by_name(LeaderC, LeaderB, BPort, "B"),
 
     %% Enable fullsync from A to B.
     lager:info("Enabling fullsync from A to B"),
