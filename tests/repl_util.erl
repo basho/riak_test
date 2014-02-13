@@ -24,6 +24,8 @@
          enable_fullsync/2,
          start_realtime/2,
          stop_realtime/2,
+         stop_fullsync/2,
+         disable_fullsync/2,
          do_write/5,
          get_fs_coord_status_item/3,
          num_partitions/1,
@@ -247,6 +249,14 @@ disable_realtime(Node, Cluster) ->
 
 enable_fullsync(Node, Cluster) ->
     Res = rpc:call(Node, riak_repl_console, fullsync, [["enable", Cluster]]),
+    ?assertEqual(ok, Res).
+
+disable_fullsync(Node, Cluster) ->
+    Res = rpc:call(Node, riak_repl_console, fullsync, [["disable", Cluster]]),
+    ?assertEqual(ok, Res).
+
+stop_fullsync(Node, Cluster) ->
+    Res = rpc:call(Node, riak_repl_console, fullsync, [["stop", Cluster]]),
     ?assertEqual(ok, Res).
 
 start_realtime(Node, Cluster) ->
