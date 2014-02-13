@@ -149,7 +149,7 @@ test_cover_queries_overload(Nodes) ->
     lager:info("Checking Coverage queries for overload"),
 
     Res = list_keys(Node1),
-    ?assertEqual({error, mailbox_overload}, Res),
+    ?assertEqual({error, <<"mailbox_overload">>}, Res),
     lager:info("list_keys correctly handled overload"),
 
     Res2 = list_buckets(Node1),
@@ -163,8 +163,8 @@ test_cover_queries_overload(Nodes) ->
     wait_for_all_vnode_queues_empty(Node2).
 
 list_keys(Node) ->
-    {ok, C} = riak:client_connect(Node),
-    riak_client:list_keys(?BUCKET, 30000, C).
+    Pid = rt:pbc(Node),
+    riakc_pb_socket:list_keys(Pid, ?BUCKET, 30000).
 
 list_buckets(Node) ->
     {ok, C} = riak:client_connect(Node),
@@ -195,7 +195,7 @@ read_until_success(Node) ->
 
 read_until_success(C, Count) ->
     case C:get(?BUCKET, ?KEY) of
-        {error, overload} ->
+        {error, mailbox_overload} ->
             read_until_success(C, Count+1);
         _ ->
             Count
