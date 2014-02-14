@@ -146,8 +146,14 @@ write_data(Node, KVs) ->
 write_data(Node, KVs, Opts) ->
     PB = rt:pbc(Node),
     [begin
-         O = riakc_obj:new(?BUCKET, K, V),
-         riakc_pb_socket:put(PB, O, Opts)
+         O =
+         case riakc_pb_socket:get(PB, ?BUCKET, K) of
+             {ok, Prev} ->
+                 riakc_obj:update_value(Prev, V);
+             _ ->
+                 riakc_obj:new(?BUCKET, K, V)
+         end,
+         ?assertMatch(ok, riakc_pb_socket:put(PB, O, Opts))
      end || {K, V} <- KVs],
     riakc_pb_socket:stop(PB),
     ok.
@@ -184,10 +190,19 @@ verify_data(Node, KeyValues) ->
     riakc_pb_socket:stop(PB),
     ok.
 
+merge_values(O) ->
+    Vals = riak_object:get_values(O),
+    lists:foldl(fun(NV, V) ->
+                        case size(NV) > size(V) of
+                            true -> NV;
+                            _ -> V
+                        end
+                end, <<>>, Vals).
+
 verify_replicas(Node, B, K, V, N) ->
     Replies = [rt:get_replica(Node, B, K, I, N)
                || I <- lists:seq(1,N)],
-    Vals = [riak_object:get_value(O) || {ok, O} <- Replies],
+    Vals = [merge_values(O) || {ok, O} <- Replies],
     Expected = [V || _ <- lists:seq(1, N)],
     Vals == Expected.
 
