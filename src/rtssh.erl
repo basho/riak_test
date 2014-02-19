@@ -444,8 +444,26 @@ set_conf(Node, NameValuePairs) when is_atom(Node) ->
     append_to_conf_file(Node, get_riak_conf(Node), NameValuePairs),
     ok.
 
+set_advanced_conf(all, NameValuePairs) ->
+    lager:debug("rtssh:set_advanced_conf(all, ~p)", [NameValuePairs]),
+    Hosts = rt_config:get(rtssh_hosts),
+    All = [{Host, DevPath} || Host <- Hosts,
+                              DevPath <- devpaths()],
+    rt:pmap(fun({Host, DevPath}) ->
+                    AllFiles = all_the_files(Host, DevPath, "etc/advanced.config"),
+                    [update_app_config_file(Host, File, NameValuePairs, undefined) || File <- AllFiles],
+                    ok
+            end, All),
+    ok;
+set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
+    append_to_conf_file(Node, get_advanced_riak_conf(Node), NameValuePairs),
+    ok.
+
 get_riak_conf(Node) ->
     node_path(Node) ++ "/etc/riak.conf".
+
+get_advanced_riak_conf(Node) ->
+    node_path(Node) ++ "/etc/advanced.config".
 
 append_to_conf_file(Node, File, NameValuePairs) ->
     Current = remote_read_file(Node, File),

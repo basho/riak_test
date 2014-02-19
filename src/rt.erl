@@ -94,6 +94,7 @@
          set_backend/1,
          set_backend/2,
          set_conf/2,
+         set_advanced_conf/2,
          setup_harness/2,
          setup_log_capture/1,
          slow_upgrade/3,
@@ -191,6 +192,15 @@ set_conf(Node, NameValuePairs) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_conf(Node, NameValuePairs),
+    start(Node).
+
+-spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
+set_advanced_conf(all, NameValuePairs) ->
+    ?HARNESS:set_advanced_conf(all, NameValuePairs);
+set_advanced_conf(Node, NameValuePairs) ->
+    stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:set_advanced_conf(Node, NameValuePairs),
     start(Node).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
