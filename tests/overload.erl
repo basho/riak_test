@@ -236,7 +236,9 @@ remote_suspend_and_overload() ->
           end).
 
 overload(Pid) ->
-    [Pid ! hola || _ <- lists:seq(1, ?NUM_REQUESTS)].
+    %% The actual message doesn't matter. This one just has the least side
+    % effects.
+    [Pid ! {set_concurrency_limit, some_lock, 1} || _ <- lists:seq(1, ?NUM_REQUESTS)].
 
 suspend_vnode(Node, Idx) ->
     Pid = rpc:call(Node, ?MODULE, remote_suspend_vnode, [Idx], infinity),
