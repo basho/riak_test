@@ -106,17 +106,26 @@ wait_until_new_leader(Node, OldLeader) ->
 wait_until_leader_converge([Node|_] = Nodes) ->
     rt:wait_until(Node,
         fun(_) ->
-                length(lists:usort([begin
-                        case rpc:call(N, riak_core_cluster_mgr, get_leader, []) of
-                            undefined ->
-                                false;
-                            L ->
-                                %lager:info("Leader for ~p is ~p",
-                                %[N,L]),
-                                L
-                        end
-                end || N <- Nodes])) == 1
+                LeaderResults =
+                    [rpc:call(N, riak_core_cluster_mgr, get_leader, []) ||
+                        N <- Nodes],
+                UniqueLeaders = lists:usort(
+                                  lists:filter(leader_result_filter_fun(),
+                                               LeaderResults)),
+                length(UniqueLeaders) == 1
         end).
+
+leader_result_filter_fun() ->
+    fun(L) ->
+            case L of
+                undefined ->
+                    false;
+                {badrpc, _} ->
+                    false;
+                _ ->
+                    true
+            end
+    end.
 
 wait_until_connection(Node) ->
     rt:wait_until(Node,
