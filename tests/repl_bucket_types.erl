@@ -15,55 +15,67 @@
 %% Replication Bucket Types test
 %%
 
-%% @doc riak_test entry point
-confirm() ->
-
+setup(Type) ->
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
-    {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(),
+    {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(Type),
 
-    PBA = get_pb_pid(LeaderA),
-    PBB = get_pb_pid(LeaderB),
+    PBA = rt:pbc(LeaderA),
+    PBB = rt:pbc(LeaderB),
 
     {DefinedType, UndefType} = Types = {<<"working_type">>, <<"undefined_type">>},
 
-    rt:create_and_activate_bucket_type(LeaderA, DefinedType, [{n_val, 3}, {allow_mult, false}]),
+    rt:create_and_activate_bucket_type(LeaderA,
+                                       DefinedType,
+                                       [{n_val, 3}, {allow_mult, false}]),
     rt:wait_until_bucket_type_status(DefinedType, active, ANodes),
 
-    rt:create_and_activate_bucket_type(LeaderB, DefinedType, [{n_val, 3}, {allow_mult, false}]),
-    rt:wait_until_bucket_type_status(DefinedType, active, BNodes),
+    case Type of
+        current ->
+            rt:create_and_activate_bucket_type(LeaderB,
+                                               DefinedType,
+                                               [{n_val, 3}, {allow_mult, false}]),
+            rt:wait_until_bucket_type_status(DefinedType, active, BNodes);
+        mixed ->
+            ok
+    end,
 
-    rt:create_and_activate_bucket_type(LeaderA, UndefType, [{n_val, 3}, {allow_mult, false}]),
+    rt:create_and_activate_bucket_type(LeaderA,
+                                       UndefType,
+                                       [{n_val, 3}, {allow_mult, false}]),
     rt:wait_until_bucket_type_status(UndefType, active, ANodes),
 
     connect_clusters(LeaderA, LeaderB),
+    {ClusterNodes, Types, PBA, PBB}.
 
-    realtime_test(ClusterNodes, Types, PBA, PBB),
-    fullsync_test(ClusterNodes, Types, PBA, PBB),
-
+cleanup({ClusterNodes, _Types, PBA, PBB}, CleanCluster) ->
     riakc_pb_socket:stop(PBA),
     riakc_pb_socket:stop(PBB),
+    {_, _, ANodes, BNodes} = ClusterNodes,
+    case CleanCluster of
+        true ->
+            rt:clean_cluster(ANodes ++ BNodes);
+        false ->
+            ok
+    end.
 
-    rt:clean_cluster(ANodes ++ BNodes),
+%% @doc riak_test entry point
+confirm() ->
+    %% Test two clusters of the current version
+    SetupData = setup(current),
+    realtime_test(SetupData),
+    fullsync_test(SetupData),
+    cleanup(SetupData, true),
 
-    {MixedLeaderA, MixedLeaderB, MixedANodes, _MixedBNodes} = MixedClusterNodes = make_mixed_clusters(),
-
-    rt:create_and_activate_bucket_type(MixedLeaderA, DefinedType, [{n_val, 3}, {allow_mult, false}]),
-    rt:wait_until_bucket_type_status(DefinedType, active, MixedANodes),
-
-    DPBA = get_pb_pid(MixedLeaderA),
-    DPBB = get_pb_pid(MixedLeaderB),
-
-    connect_clusters(MixedLeaderA, MixedLeaderB),
-
-    realtime_mixed_version_test(MixedClusterNodes, Types, DPBA, DPBB),
-    fullsync_mixed_version_test(MixedClusterNodes, Types, DPBA, DPBB),
-
-    riakc_pb_socket:stop(DPBA),
-    riakc_pb_socket:stop(DPBB),
+    %% Test a cluster of the current version replicating to a cluster
+    %% of the previous version
+    MixedSetupData = setup(mixed),
+    realtime_mixed_version_test(MixedSetupData),
+    fullsync_mixed_version_test(MixedSetupData),
+    cleanup(MixedSetupData, false),
     pass.
 
-realtime_test(ClusterNodes, BucketTypes, PBA, PBB) ->
+realtime_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes,
     {DefinedType, UndefType} = BucketTypes,
 
@@ -130,7 +142,7 @@ realtime_test(ClusterNodes, BucketTypes, PBA, PBB) ->
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, UpdatedProps2)),
     disable_rt(LeaderA, ANodes).
 
-realtime_mixed_version_test(ClusterNodes, BucketTypes, PBA, PBB) ->
+realtime_mixed_version_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     {LeaderA, LeaderB, ANodes, _BNodes} = ClusterNodes,
     {DefinedType, _UndefType} = BucketTypes,
 
@@ -159,7 +171,7 @@ realtime_mixed_version_test(ClusterNodes, BucketTypes, PBA, PBB) ->
     lager:info("checking to ensure the bucket contents were not sent to previous version B."),
     ensure_bucket_not_sent(PBB, DowngradedBucketTyped, KeyTyped).
 
-fullsync_test(ClusterNodes, BucketTypes, PBA, PBB) ->
+fullsync_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes,
     {DefinedType, UndefType} = BucketTypes,
 
@@ -232,7 +244,7 @@ fullsync_test(ClusterNodes, BucketTypes, PBA, PBB) ->
     lager:info("checking to ensure the bucket contents were not updated."),
     ensure_bucket_not_updated(PBB, BucketTyped, KeyTyped, Bin).
 
-fullsync_mixed_version_test(ClusterNodes, BucketTypes, PBA, PBB) ->
+fullsync_mixed_version_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     {LeaderA, LeaderB, ANodes, _BNodes} = ClusterNodes,
     {DefinedType, _UndefType} = BucketTypes,
 
@@ -263,15 +275,15 @@ fullsync_mixed_version_test(ClusterNodes, BucketTypes, PBA, PBB) ->
 
     ReadResult1 = riakc_pb_socket:get(PBB, Bucket, Key),
     ?assertMatch({ok, _}, ReadResult1),
- 
+
     %% The following check appears to be the best we can do. If a 2.x source
     %% sends a typed bucket to the 1.x sink, the put will occur.
-    %% The bucket is undefined to the interfaces, but some parts of it 
+    %% The bucket is undefined to the interfaces, but some parts of it
     %% appear to be written to the sink node. Since we cannot check using pb,
-    %% here we at least make sure we haven't written over an existing default 
+    %% here we at least make sure we haven't written over an existing default
     %% bucket with data from a typed bucket of the same name.
     ensure_bucket_not_updated(PBB, Bucket, Key, Bin).
-  
+
 %% @doc Turn on Realtime replication on the cluster lead by LeaderA.
 %%      The clusters must already have been named and connected.
 enable_rt(LeaderA, ANodes) ->
@@ -295,35 +307,48 @@ enable_fullsync(LeaderA, ANodes) ->
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes).
 
+%% @doc Connect two clusters using a given name.
+connect_cluster(Source, Port, Name) ->
+    lager:info("Connecting ~p to ~p for cluster ~p.",
+               [Source, Port, Name]),
+    repl_util:connect_cluster(Source, "127.0.0.1", Port),
+    ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
+
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
-                                 [riak_core, cluster_mgr]),
+    Port = repl_util:get_port(LeaderB),
     lager:info("connect cluster A:~p to B on port ~p", [LeaderA, Port]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")).
 
+cluster_conf() ->
+    [
+     {riak_repl,
+      [
+       %% turn off fullsync
+       {fullsync_on_connect, false},
+       {fullsync_interval, disabled},
+       {max_fssource_cluster, 20},
+       {max_fssource_node, 20},
+       {max_fssink_node, 20},
+       {rtq_max_bytes, 1048576}
+      ]}
+    ].
+
+deploy_nodes(NumNodes, current) ->
+    rt:deploy_nodes(NumNodes, cluster_conf());
+deploy_nodes(_, mixed) ->
+    Conf = cluster_conf(),
+    rt:deploy_nodes([{current, Conf}, {previous, Conf}]).
+
 %% @doc Create two clusters of 1 node each and connect them for replication:
 %%      Cluster "A" -> cluster "B"
-make_clusters() ->
+make_clusters(Type) ->
     NumNodes = rt_config:get(num_nodes, 2),
     ClusterASize = rt_config:get(cluster_a_size, 1),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
-    Conf = [
-            {riak_repl,
-             [
-              %% turn off fullsync
-              {fullsync_on_connect, false},
-              {fullsync_interval, disabled},
-              {max_fssource_cluster, 20},
-              {max_fssource_node, 20},
-              {max_fssink_node, 20},
-              {rtq_max_bytes, 1048576}
-             ]}
-           ],
-
-    Nodes = rt:deploy_nodes(NumNodes, Conf),
+    Nodes = deploy_nodes(NumNodes, Type),
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
@@ -334,74 +359,34 @@ make_clusters() ->
     lager:info("Build cluster B"),
     repl_util:make_cluster(BNodes),
 
-    %% get the leader for the first cluster
-    lager:info("waiting for leader to converge on cluster A"),
-    ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
     AFirst = hd(ANodes),
-
-    %% get the leader for the second cluster
-    lager:info("waiting for leader to converge on cluster B"),
-    ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
     BFirst = hd(BNodes),
 
     %% Name the clusters
     repl_util:name_cluster(AFirst, "A"),
-    rt:wait_until_ring_converged(ANodes),
-
     repl_util:name_cluster(BFirst, "B"),
+
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
-    {AFirst, BFirst, ANodes, BNodes}.
-
-%% @doc Create two clusters of 1 node each and connect them for replication:
-%%      Cluster "A" -> cluster "B"
-make_mixed_clusters() ->
-    NumNodes = rt_config:get(num_nodes, 2),
-    ClusterASize = rt_config:get(cluster_a_size, 1),
-
-    lager:info("Deploy ~p mixed version nodes", [NumNodes]),
-    Conf = [
-            {riak_repl,
-             [
-              %% turn off fullsync
-              {fullsync_on_connect, false},
-              {fullsync_interval, disabled},
-              {max_fssource_cluster, 20},
-              {max_fssource_node, 20},
-              {max_fssink_node, 20},
-              {rtq_max_bytes, 1048576}
-             ]}
-           ],
-    MixedConf = [{current, Conf}, {previous, Conf}],
-    Nodes = rt:deploy_nodes(MixedConf),
-    {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
-    lager:info("ANodes: ~p", [ANodes]),
-    lager:info("BNodes: ~p", [BNodes]),
-
-    lager:info("Build cluster A"),
-    repl_util:make_cluster(ANodes),
-
-    lager:info("Build cluster B"),
-    repl_util:make_cluster(BNodes),
+    lager:info("Waiting for transfers to complete."),
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
 
     %% get the leader for the first cluster
     lager:info("waiting for leader to converge on cluster A"),
     ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
-    AFirst = hd(ANodes),
 
     %% get the leader for the second cluster
     lager:info("waiting for leader to converge on cluster B"),
     ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
-    BFirst = hd(BNodes),
 
-    %% Name the clusters
-    repl_util:name_cluster(AFirst, "A"),
-    rt:wait_until_ring_converged(ANodes),
+    ALeader = repl_util:get_leader(hd(ANodes)),
+    BLeader = repl_util:get_leader(hd(BNodes)),
 
-    repl_util:name_cluster(BFirst, "B"),
-    rt:wait_until_ring_converged(BNodes),
-
-    {AFirst, BFirst, ANodes, BNodes}.
+    lager:info("ALeader: ~p BLeader: ~p", [ALeader, BLeader]),
+    {ALeader, BLeader, ANodes, BNodes}.
 
 make_pbget_fun(Pid, Bucket, Key, Bin) ->
     fun() ->
@@ -437,16 +422,11 @@ value_unchanged(Pid, Bucket, Key, Bin) ->
 assert_bucket_not_found(Pid, Bucket, Key) ->
     case riakc_pb_socket:get(Pid, Bucket, Key) of
         {error, notfound} ->
-	    true;
-	{ok, Res} ->
+            true;
+        {ok, Res} ->
             lager:error("Found bucket:~p and key:~p on sink when we should not have", [Res, Key]),
-	    false
+            false
     end.
-
-get_pb_pid(Leader) ->
-    {ok, [{IP, PortA}] } = rpc:call(Leader, application, get_env, [riak_api, pb]),
-    {ok, Pid} = riakc_pb_socket:start_link(IP, PortA, []),
-    Pid.
 
 update_props(Type, Updates, Node, Nodes) ->
     lager:info("Setting bucket properties ~p for bucket type ~p on node ~p",
