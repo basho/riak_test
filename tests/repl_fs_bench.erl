@@ -10,7 +10,7 @@
         {riak_core,
             [
              {ring_creation_size, 8},
-             {default_bucket_props, [{n_val, 1}]}
+             {default_bucket_props, [{n_val, 1}, {allow_mult, false}]}
             ]
         },
         {riak_kv,
@@ -25,17 +25,21 @@
           {fullsync_strategy, Strategy},
           {fullsync_on_connect, false},
           {fullsync_interval, disabled},
-          {max_fssource_retries, infinity}
+          {max_fssource_retries, infinity},
+          {max_fssource_cluster, 1},
+          {max_fssource_node, 1},
+          {max_fssink_node, 1}
          ]}
         ]).
 
 confirm() ->
-    {None, Full, Diff} = fullsync_test(aae),
+    {Empty, Full, Diff, None} = fullsync_test(aae),
 
     lager:info("Results:"),
-    lager:info("Empty fullsync completed in: ~pms", [None / 1000]),
+    lager:info("Empty fullsync completed in: ~pms", [Empty / 1000]),
     lager:info("All fullsync completed in:   ~pms", [Full / 1000]),
     lager:info("Diff fullsync completed in:  ~pms", [Diff / 1000]),
+    lager:info("None fullsync completed in:  ~pms", [None / 1000]),
 
     pass.
 
@@ -63,32 +67,47 @@ fullsync_test(Strategy) ->
     {ok, {IP, Port}} = rpc:call(BFirst, application, get_env,
                                 [riak_core, cluster_mgr]),
 
-    lager:info("connect cluster A:~p to B on port ~p", [LeaderA, Port]),
+    lager:info("connect cluster A:~p to B on port ~p",
+               [LeaderA, Port]),
     repl_util:connect_cluster(LeaderA, IP, Port),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
 
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
 
-    lager:info("Wait for cluster connection A:~p -> B:~p:~p", [LeaderA, BFirst, Port]),
+    lager:info("Wait for cluster connection A:~p -> B:~p:~p",
+               [LeaderA, BFirst, Port]),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
 
     %% Perform fullsync of an empty cluster.
     repl_util:wait_until_aae_trees_built(ANodes ++ BNodes),
-    {NoneTime, _} = timer:tc(repl_util, start_and_wait_until_fullsync_complete, [LeaderA]),
+    {EmptyTime, _} = timer:tc(repl_util,
+                              start_and_wait_until_fullsync_complete,
+                              [LeaderA]),
 
     %% Write keys and perform fullsync.
     write_to_cluster(AFirst, 0, ?FULL_NUM_KEYS),
     repl_util:wait_until_aae_trees_built(ANodes ++ BNodes),
-    {FullTime, _} = timer:tc(repl_util, start_and_wait_until_fullsync_complete, [LeaderA]),
+    {FullTime, _} = timer:tc(repl_util,
+                             start_and_wait_until_fullsync_complete,
+                             [LeaderA]),
 
     %% Rewrite first 10% keys and perform fullsync.
     write_to_cluster(AFirst, 0, ?DIFF_NUM_KEYS),
     repl_util:wait_until_aae_trees_built(ANodes ++ BNodes),
-    {DiffTime, _} = timer:tc(repl_util, start_and_wait_until_fullsync_complete, [LeaderA]),
+    {DiffTime, _} = timer:tc(repl_util,
+                             start_and_wait_until_fullsync_complete,
+                             [LeaderA]),
 
-    {NoneTime, FullTime, DiffTime}.
+    %% Write no keys, and perform the fullsync.
+    repl_util:wait_until_aae_trees_built(ANodes ++ BNodes),
+    {NoneTime, _} = timer:tc(repl_util,
+                             start_and_wait_until_fullsync_complete,
+                             [LeaderA]),
+
+    {EmptyTime, FullTime, DiffTime, NoneTime}.
 
 write_to_cluster(Node, Start, End) ->
     lager:info("Writing ~p keys to node ~p.", [End - Start, Node]),
-    ?assertEqual([], repl_util:do_write(Node, Start, End, ?TEST_BUCKET, 1)).
+    ?assertEqual([],
+                 repl_util:do_write(Node, Start, End, ?TEST_BUCKET, 1)).
