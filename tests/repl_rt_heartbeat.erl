@@ -9,8 +9,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(RPC_TIMEOUT, 5000).
--define(HB_TIMEOUT,  2000).
--define(HB_INTERVAL, 1000).
+-define(HB_TIMEOUT,  2).
+-define(HB_INTERVAL, 1).
 
 %% Replication Realtime Heartbeat test
 %% Valid for EE version 1.3.2 and up
@@ -66,7 +66,7 @@ confirm() ->
 
     %% sleep longer than the HB timeout interval to force re-connection;
     %% and give it time to restart the RT connection. Wait an extra 2 seconds.
-    timer:sleep(?HB_TIMEOUT + 2000),
+    timer:sleep(timer:seconds(?HB_TIMEOUT) + 2000),
 
     %% Verify that RT connection has restarted by noting that it's Pid has changed
     RTConnPid2 = get_rt_conn_pid(LeaderA),
@@ -80,7 +80,7 @@ confirm() ->
     %% Wait one second longer than the timeout
     rt:log_to_nodes([LeaderA], "Resuming HB"),
     resume_heartbeat_messages(LeaderA),
-    timer:sleep(?HB_TIMEOUT + 1000),
+    timer:sleep(timer:seconds(?HB_TIMEOUT) + 1000),
 
     %% Verify that heartbeats are being acknowledged by the sink (B) back to source (A)
     rt:log_to_nodes([LeaderA], "Verify resumed HB"),
