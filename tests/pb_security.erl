@@ -49,6 +49,9 @@ confirm() ->
     lager:info("Deploy some nodes"),
     PrivDir = rt:priv_dir(),
     Conf = [
+            {riak_core, [
+                    {default_bucket_props, [{allow_mult, true}]}
+                    ]},
             {riak_api, [
                     {certfile, filename:join([CertDir,"site3.basho.com/cert.pem"])},
                     {keyfile, filename:join([CertDir, "site3.basho.com/key.pem"])},
