@@ -167,10 +167,26 @@ set_conf(DevPath, NameValuePairs) ->
     [append_to_conf_file(RiakConf, NameValuePairs) || RiakConf <- all_the_files(DevPath, "etc/riak.conf")],
     ok.
 
+set_advanced_conf(all, NameValuePairs) ->
+    lager:info("rtdev:set_advanced_conf(all, ~p)", [NameValuePairs]),
+    [ set_advanced_conf(DevPath, NameValuePairs) || DevPath <- devpaths()],
+    ok;
+set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
+    append_to_conf_file(get_advanced_riak_conf(Node), NameValuePairs),
+    ok;
+set_advanced_conf(DevPath, NameValuePairs) ->
+    [update_app_config_file(RiakConf, NameValuePairs) || RiakConf <- all_the_files(DevPath, "etc/advanced.config")],
+    ok.
+
 get_riak_conf(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     io_lib:format("~s/dev/dev~b/etc/riak.conf", [Path, N]).
+
+get_advanced_riak_conf(Node) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    io_lib:format("~s/dev/dev~b/etc/advanced.config", [Path, N]).
 
 append_to_conf_file(File, NameValuePairs) ->
     Settings = lists:flatten(
