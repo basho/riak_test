@@ -6,6 +6,8 @@
 -define(FULL_NUM_KEYS, 10000).
 -define(TEST_BUCKET, <<"repl_bench">>).
 
+-define(HARNESS, (rt_config:get(rt_harness))).
+
 -define(CONF(Strategy), [
         {riak_core,
             [
@@ -32,20 +34,44 @@
          ]}
         ]).
 
-confirm() ->
-    {Empty, Full, Diff, None} = fullsync_test(aae),
+-import(rt, [deploy_nodes/2]).
 
-    lager:info("Results:"),
-    lager:info("Empty fullsync completed in: ~pms", [Empty / 1000]),
-    lager:info("All fullsync completed in:   ~pms", [Full / 1000]),
-    lager:info("Diff fullsync completed in:  ~pms", [Diff / 1000]),
-    lager:info("None fullsync completed in:  ~pms", [None / 1000]),
+confirm() ->
+    {AAEEmpty, AAEFull, AAEDiff, AAENone} = fullsync_test(aae),
+
+    {KeylistEmpty, KeylistFull, KeylistDiff, KeylistNone} = fullsync_test(keylist),
+
+    lager:info("Results for aae:"),
+    lager:info("Empty fullsync completed in: ~pms", [AAEEmpty / 1000]),
+    lager:info("All fullsync completed in:   ~pms", [AAEFull / 1000]),
+    lager:info("Diff fullsync completed in:  ~pms", [AAEDiff / 1000]),
+    lager:info("None fullsync completed in:  ~pms", [AAENone / 1000]),
+
+    lager:info("Results for keylist:"),
+    lager:info("Empty fullsync completed in: ~pms", [KeylistEmpty / 1000]),
+    lager:info("All fullsync completed in:   ~pms", [KeylistFull / 1000]),
+    lager:info("Diff fullsync completed in:  ~pms", [KeylistDiff / 1000]),
+    lager:info("None fullsync completed in:  ~pms", [KeylistNone / 1000]),
 
     pass.
 
 fullsync_test(Strategy) ->
     rt:set_advanced_conf(all, ?CONF(Strategy)),
-    [ANodes, BNodes] = rt:build_clusters([3, 3]),
+
+    {ANodes, BNodes} = case ?HARNESS of
+        rtssh ->
+            [A, B] = rt:build_clusters([3, 3]),
+            {A, B};
+        rtdev ->
+            Nodes = deploy_nodes(6, ?CONF(Strategy)),
+
+            %% Break up the 6 nodes into three clustes.
+            {A, B} = lists:split(3, Nodes),
+
+            lager:info("Building two clusters."),
+            [repl_util:make_cluster(N) || N <- [A, B]],
+            {A, B}
+    end,
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
@@ -104,6 +130,9 @@ fullsync_test(Strategy) ->
     {NoneTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
+
+    rt:clean_cluster(ANodes),
+    rt:clean_cluster(BNodes),
 
     {EmptyTime, FullTime, DiffTime, NoneTime}.
 
