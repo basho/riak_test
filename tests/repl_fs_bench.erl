@@ -63,20 +63,7 @@ confirm() ->
 fullsync_test(Strategy) ->
     rt:set_advanced_conf(all, ?CONF(Strategy)),
 
-    {ANodes, BNodes} = case ?HARNESS of
-        rtssh ->
-            [A, B] = rt:build_clusters([3, 3]),
-            {A, B};
-        rtdev ->
-            Nodes = deploy_nodes(6, ?CONF(Strategy)),
-
-            %% Break up the 6 nodes into three clustes.
-            {A, B} = lists:split(3, Nodes),
-
-            lager:info("Building two clusters."),
-            [repl_util:make_cluster(N) || N <- [A, B]],
-            {A, B}
-    end,
+    [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
