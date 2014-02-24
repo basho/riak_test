@@ -73,8 +73,12 @@ deploy_nodes(NodeConfig, Hosts) ->
     {Versions, Configs} = lists:unzip(NodeConfig),
     VersionMap = lists:zip(Nodes, Versions),
 
-    rt_config:set(rt_hosts, HostMap),
-    rt_config:set(rt_versions, VersionMap),
+    rt_config:set(rt_hosts, 
+	orddict:from_list(
+		orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ HostMap)),
+    rt_config:set(rt_versions, 
+	orddict:from_list(
+		orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
 
     %% io:format("~p~n", [Nodes]),
 
