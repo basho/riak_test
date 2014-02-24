@@ -165,6 +165,10 @@ create_dirs(Nodes) ->
     [ssh_cmd(Node, "mkdir -p " ++ node_path(Node) ++ "/data/snmp/agent/db")
      || Node <- Nodes].
 
+clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    [ssh_cmd(Node, "rm -rf " ++ node_path(Node) ++ "/data/" ++ SubDir) 
+     || Node <- Nodes].
+
 start(Node) ->
     run_riak(Node, "start"),
     ok.
@@ -314,6 +318,7 @@ spawn_ssh_cmd(Host, Cmd, Opts) ->
     spawn_cmd(SSHCmd, Opts).
 
 ssh_cmd(Node, Cmd) ->
+    lager:info("Running: ~s :: ~s", [Node, Cmd]),
     wait_for_cmd(spawn_ssh_cmd(Node, Cmd)).
 
 remote_read_file(Node, File) ->
