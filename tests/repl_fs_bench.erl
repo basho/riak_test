@@ -53,11 +53,6 @@ confirm() ->
     lager:info("Diff fullsync completed in:  ~pms", [KeylistDiff / 1000]),
     lager:info("None fullsync completed in:  ~pms", [KeylistNone / 1000]),
 
-    ?assert(AAEEmpty < KeylistEmpty),
-    ?assert(AAEFull < KeylistFull),
-    ?assert(AAEDiff < KeylistDiff),
-    ?assert(AAENone < KeylistNone),
-
     pass.
 
 fullsync_test(Strategy) ->
