@@ -1,4 +1,4 @@
--module(rt_cascading_rtq).
+-module(repl_rt_cascading_rtq).
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
