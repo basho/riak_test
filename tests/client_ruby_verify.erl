@@ -31,9 +31,12 @@ confirm() ->
     pass.
 
 prereqs() ->
-    lager:info("Checking ruby version is 1.9.3 or 2.0.0"),
+    lager:info("Checking ruby version is 1.9.3, 2.0.0, 2.1.0, or 2.1.1"),
     RubyVersion = os:cmd("ruby -v"),
-    ?assert(rt:str(RubyVersion, "1.9.3") orelse rt:str(RubyVersion, "2.0.0")),
+    ?assert(rt:str(RubyVersion, "1.9.3") orelse 
+            rt:str(RubyVersion, "2.0.0") orelse
+            rt:str(RubyVersion, "2.1.0") orelse
+            rt:str(RubyVersion, "2.1.1")),
 
     rt_local:install_on_absence("bundle", "gem install bundler --no-rdoc --no-ri"),
     ok.
