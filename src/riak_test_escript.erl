@@ -282,14 +282,14 @@ filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
 
 %% Check for api compatibility
 is_runnable_test({TestModule, _}) ->
-    {Mod, Fun} = riak_test_runner:function_name(TestModule),
+    {Mod, Fun} = riak_test_runner:function_name(confirm, TestModule),
     code:ensure_loaded(Mod),
-    erlang:function_exported(Mod, Fun, 0).
+    erlang:function_exported(Mod, Fun, 0) orelse
+        erlang:function_exported(Mod, Fun, 2).
 
 run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
     rt_cover:maybe_start(Test),
-    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData,
-                                                HarnessArgs),
+    SingleTestResult = riak_test_runner:run(Test, Outdir, TestMetaData, HarnessArgs),
     CoverDir = rt_config:get(cover_output, "coverage"),
     case NumTests of
         1 -> keep_them_up;
