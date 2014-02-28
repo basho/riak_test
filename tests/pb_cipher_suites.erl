@@ -40,9 +40,6 @@ confirm() ->
                     {keyfile, filename:join([CertDir, "site3.basho.com/key.pem"])},
                     {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
                     ]},
-            {riak_core, [
-                         {security, true}
-                        ]},
             {riak_search, [
                            {enabled, true}
                           ]}
@@ -50,6 +47,9 @@ confirm() ->
 
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
+    %% enable security on the cluster
+    ok = rpc:call(Node, riak_core_console, security_enable, [[]]),
+
 
     [_, {pb, {"127.0.0.1", Port}}] = rt:connection_info(Node),
 
@@ -62,12 +62,12 @@ confirm() ->
     ok = rpc:call(Node, riak_core_console, add_source, [["user", "127.0.0.1/32",
                                                     "password"]]),
 
-    CipherList = "ECDHE-RSA-AES128-SHA256:RC4-SHA",
+    CipherList = "AES256-SHA256:RC4-SHA",
     %% set a simple default cipher list, one good one a and one shitty one
     rpc:call(Node, riak_core_security, set_ciphers,
              [CipherList]),
 
-    [ECDHE, RC4] = ParsedCiphers = [begin
+    [AES, RC4] = ParsedCiphers = [begin
                 %% this includes the pseudo random function, which apparently
                 %% we don't want
                 {A, B, C, _D} = ssl_cipher:suite_definition(E),
@@ -78,7 +78,7 @@ confirm() ->
 
     lager:info("Check that the server's preference for ECDHE-RSA-AES128-SHA256"
                "is honored"),
-    ?assertEqual({ok, {'tlsv1.2', ECDHE}},
+    ?assertEqual({ok, {'tlsv1.2', AES}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,

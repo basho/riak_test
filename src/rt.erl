@@ -57,6 +57,7 @@
          expect_in_log/2,
          get_deps/0,
          get_node_logs/0,
+         get_replica/5,
          get_ring/1,
          get_version/0,
          heal/1,
@@ -125,6 +126,7 @@
          wait_until/3,
          wait_until/2,
          wait_until/1,
+         wait_until_aae_trees_built/1,
          wait_until_all_members/1,
          wait_until_all_members/2,
          wait_until_capability/3,
@@ -757,6 +759,56 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
     Results = [ wait_until_owners_according_to(Node, Nodes) || Node <- Nodes ],
     ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
 
+%% AAE support
+wait_until_aae_trees_built(Nodes) ->
+    lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
+    %% Wait until all nodes report no undefined trees
+    AllBuiltFun =
+    fun(_, _AllBuilt = false) ->
+            false;
+       (Node, _AllBuilt = true) ->
+            Info = rpc:call(Node,
+                            riak_kv_entropy_info,
+                            compute_tree_info,
+                            []),
+            lager:debug("Entropy table on node ~p : ~p", [Node, Info]),
+            AllHaveBuildTimes = not lists:keymember(undefined, 2, Info),
+            case AllHaveBuildTimes of
+                false ->
+                    false;
+                true ->
+                    lager:debug("Check if really built by locking"),
+                    %% Try to lock each partition. If you get not_built,
+                    %% the manager has not detected the built process has 
+                    %% died yet.
+                    %% Notice that the process locking is spawned by the
+                    %% pmap. That's important! as it should die eventually
+                    %% so the test can lock on the tree.
+                    IdxBuilt =
+                    fun(Idx) ->
+                            {ok, TreePid} = rpc:call(Node, riak_kv_vnode,
+                                                     hashtree_pid, [Idx]),
+                            TreeLocked =
+                            rpc:call(Node, riak_kv_index_hashtree, get_lock,
+                                     [TreePid, for_riak_test]),
+                            lager:debug("Partition ~p : ~p", [Idx, TreeLocked]),
+                            TreeLocked == ok
+                            orelse TreeLocked == already_locked
+                    end,
+
+                    Partitions = [I || {I, _} <- Info],
+
+                    AllBuilt =
+                    lists:all(fun(V) -> V == true end,
+                              rt:pmap(IdxBuilt, Partitions)),
+                    lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),  
+                    AllBuilt
+            end
+    end,
+    wait_until(fun() ->
+                       lists:foldl(AllBuiltFun, true, Nodes)
+               end).
+
 %%%===================================================================
 %%% Ring Functions
 %%%===================================================================
@@ -964,6 +1016,29 @@ systest_read(Node, Start, End, Bucket, R, CommonValBin)
                 end
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
+
+% @doc Reads a single replica of a value. This issues a get command directly
+% to the vnode handling the Nth primary partition of the object's preflist.
+get_replica(Node, Bucket, Key, I, N) ->
+    BKey = {Bucket, Key},
+    Chash = rpc:call(Node, riak_core_util, chash_key, [BKey]),
+    Pl = rpc:call(Node, riak_core_apl, get_primary_apl, [Chash, N, riak_kv]),
+    {{Partition, PNode}, primary} = lists:nth(I, Pl),
+    Ref = Reqid = make_ref(),
+    Sender = {raw, Ref, self()},
+    rpc:call(PNode, riak_kv_vnode, get,
+             [{Partition, PNode}, BKey, Ref, Sender]),
+    receive
+        {Ref, {r, Result, _, Reqid}} ->
+            Result;
+        {Ref, Reply} ->
+            Reply
+    after
+        60000 ->
+            lager:error("Replica ~p get for ~p/~p timed out",
+                        [I, Bucket, Key]),
+            ?assert(false)
+    end.
 
 %%%===================================================================
 %%% PBC & HTTPC Functions

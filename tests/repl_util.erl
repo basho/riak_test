@@ -24,6 +24,8 @@
          enable_fullsync/2,
          start_realtime/2,
          stop_realtime/2,
+         stop_fullsync/2,
+         disable_fullsync/2,
          do_write/5,
          get_fs_coord_status_item/3,
          num_partitions/1,
@@ -104,17 +106,26 @@ wait_until_new_leader(Node, OldLeader) ->
 wait_until_leader_converge([Node|_] = Nodes) ->
     rt:wait_until(Node,
         fun(_) ->
-                length(lists:usort([begin
-                        case rpc:call(N, riak_core_cluster_mgr, get_leader, []) of
-                            undefined ->
-                                false;
-                            L ->
-                                %lager:info("Leader for ~p is ~p",
-                                %[N,L]),
-                                L
-                        end
-                end || N <- Nodes])) == 1
+                LeaderResults =
+                    [rpc:call(N, riak_core_cluster_mgr, get_leader, []) ||
+                        N <- Nodes],
+                UniqueLeaders = lists:usort(
+                                  lists:filter(leader_result_filter_fun(),
+                                               LeaderResults)),
+                length(UniqueLeaders) == 1
         end).
+
+leader_result_filter_fun() ->
+    fun(L) ->
+            case L of
+                undefined ->
+                    false;
+                {badrpc, _} ->
+                    false;
+                _ ->
+                    true
+            end
+    end.
 
 wait_until_connection(Node) ->
     rt:wait_until(Node,
@@ -247,6 +258,14 @@ disable_realtime(Node, Cluster) ->
 
 enable_fullsync(Node, Cluster) ->
     Res = rpc:call(Node, riak_repl_console, fullsync, [["enable", Cluster]]),
+    ?assertEqual(ok, Res).
+
+disable_fullsync(Node, Cluster) ->
+    Res = rpc:call(Node, riak_repl_console, fullsync, [["disable", Cluster]]),
+    ?assertEqual(ok, Res).
+
+stop_fullsync(Node, Cluster) ->
+    Res = rpc:call(Node, riak_repl_console, fullsync, [["stop", Cluster]]),
     ?assertEqual(ok, Res).
 
 start_realtime(Node, Cluster) ->

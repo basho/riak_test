@@ -1,7 +1,7 @@
 -module(smoke_test_escript).
 -include_lib("kernel/include/file.hrl").
 
--export([main/1, get_version/0, worker/3]).
+-export([main/1, get_version/0, worker/4]).
 
 get_version() ->
     list_to_binary(string:strip(os:cmd("git describe"), right, $\n)).
@@ -9,10 +9,11 @@ get_version() ->
 cli_options() ->
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
 [
- {project,               $p, "project",     string,  "specifices which project"},
- {debug,               $v, "debug",         undefined,  "debug?"},
- {directory,               $d, "directory", string,  "source tree directory"},
- {jobs,               $j, "jobs",         integer,  "jobs?"}
+ {project,            $p, "project",     string,  "specifices which project"},
+ {debug,              $v, "debug",         undefined,  "debug?"},
+ {directory,          $d, "directory", string,  "source tree directory"},
+ {jobs,               $j, "jobs",         integer,  "jobs?"},
+ {tasks,               $T, "tasks",         string,  "What task(s) to run (eunit|dialyzer|xref)"}
 ].
 
 
@@ -37,6 +38,13 @@ main(Args) ->
             lager:info("Changing working dir to ~s", [Dir]),
             ok = file:set_cwd(filename:absname(Dir))
     end,
+    Tasks = case lists:keyfind(tasks, 1, Parsed) of
+        false ->
+            ["xref", "dialyzer", "eunit"];
+        {tasks, List} ->
+            string:tokens(List, ",")
+    end,
+
     case lists:member(debug, Parsed) of
         true ->
             lager:set_loglevel(lager_console_backend, debug);
@@ -68,21 +76,21 @@ main(Args) ->
                                     {Counter + 1, dict:append(Counter rem Jobs, S, Dict)}
                             end, {0, dict:new()}, Suites))),
             lager:debug("Split into ~p lists", [length(SplitSuites)]),
-            Workers = [spawn_monitor(?MODULE, worker, [Rebar, PWD, SS]) || {_, SS} <- SplitSuites],
-            wait_for_workers(Workers);
+            Workers = [spawn_monitor(?MODULE, worker, [Rebar, PWD, SS, Tasks]) || {_, SS} <- SplitSuites],
+            wait_for_workers([P || {P, _} <- Workers]);
         _ ->
-            worker(Rebar, PWD, Suites)
+            worker(Rebar, PWD, Suites, Tasks)
     end.
 
-worker(Rebar, PWD, Suites) ->
+worker(Rebar, PWD, Suites, Tasks) ->
     lists:foreach(fun({Suite, Config}) ->
                 lager:info("Suite ~p config ~p", [Suite, Config]),
                 [Dep, Task] = string:tokens(atom_to_list(Suite), ":"),
                 FDep = filename:join([PWD, deps, Dep]),
                 case filelib:is_dir(FDep) of
                     true ->
-                        case Task of
-                            "eunit" ->
+                        case {Task, lists:member(Task, Tasks)} of
+                            {"eunit", true} ->
                                 %% set up a symlink so that each dep has deps
                                 P = erlang:open_port({spawn_executable, Rebar},
                                                      [{args, ["eunit", "skip_deps=true"]},
@@ -93,7 +101,7 @@ worker(Rebar, PWD, Suites) ->
                                 giddyup:post_result([{test, Suite}, {status, get_status(Res)},
                                                      {log, CleanedLog} | Config]),
                                 Res;
-                            "dialyzer" ->
+                            {"dialyzer", true} ->
                                 P = erlang:open_port({spawn_executable, "/usr/bin/make"},
                                                      [{args, ["dialyzer"]},
                                                       {cd, FDep}, exit_status,
@@ -104,7 +112,18 @@ worker(Rebar, PWD, Suites) ->
                                 giddyup:post_result([{test, Suite}, {status, get_status(Res)},
                                                      {log, CleanedLog} | Config]),
                                 Res;
+                            {"xref", true} ->
+                                P = erlang:open_port({spawn_executable, Rebar},
+                                                     [{args, ["xref", "skip_deps=true"]},
+                                                      {cd, FDep}, exit_status,
+                                                      {line, 1024}, stderr_to_stdout, binary]),
+                                {Res, Log} = accumulate(P, []),
+                                CleanedLog = cleanup_logs(Log),
+                                giddyup:post_result([{test, Suite}, {status, get_status(Res)},
+                                                     {log, CleanedLog} | Config]),
+                                Res;
                             _ ->
+                                lager:info("Skipping suite ~p", [Suite]),
                                 ok
 
                         end;
@@ -145,24 +164,32 @@ setup_deps(Rebar, PWD, [Dep|Deps]) ->
     setup_deps(Rebar, PWD, Deps).
 
 remove_deps_dir(Dep) ->
-    case filelib:is_dir(filename:join(Dep, "deps")) of
+    DepDir = filename:join(Dep, "deps"),
+    case filelib:is_dir(DepDir) of
         true ->
-            %% there should ONLY be a deps dir leftover from a previous run,
-            %% so it should be a directory filled with symlinks
-            {ok, Files} = file:list_dir(filename:join(Dep, "deps")),
-            lists:foreach(fun(F) ->
-                        File = filename:join([Dep, "deps", F]),
-                        {ok, FI} = file:read_link_info(File),
-                        case FI#file_info.type of
-                            symlink ->
-                                ok = file:delete(File);
-                            _ ->
-                                ok
-                        end
-                end, Files),
-            %% this will fail if the directory is not now empty
-            ok = file:del_dir(filename:join(Dep, "deps")),
-            ok;
+            {ok, DI} = file:read_link_info(DepDir),
+            case DI#file_info.type of
+                symlink ->
+                    %% leftover symlink, probably from an aborted run
+                    ok = file:delete(DepDir);
+                _ ->
+                    %% there should ONLY be a deps dir leftover from a previous run,
+                    %% so it should be a directory filled with symlinks
+                    {ok, Files} = file:list_dir(DepDir),
+                    lists:foreach(fun(F) ->
+                                File = filename:join(DepDir, F),
+                                {ok, FI} = file:read_link_info(File),
+                                case FI#file_info.type of
+                                    symlink ->
+                                        ok = file:delete(File);
+                                    _ ->
+                                        ok
+                                end
+                        end, Files),
+                    %% this will fail if the directory is not now empty
+                    ok = file:del_dir(DepDir),
+                    ok
+            end;
         false ->
             ok
     end.
@@ -172,10 +199,11 @@ wait_for_workers([]) ->
 wait_for_workers(Workers) ->
     receive
         {'DOWN', _, _, Pid, normal} ->
-            lager:info("Worker exited normally"),
+            lager:info("Worker ~p exited normally, ~p left", [Pid, length(Workers)-1]),
             wait_for_workers(Workers -- [Pid]);
         {'DOWN', _, _, Pid, Reason} ->
-            lager:info("Worker exited abnormally: ~p", [Reason]),
+            lager:info("Worker ~p exited abnormally: ~p, ~p left", [Pid, Reason,
+                                                                 length(Workers)-1]),
             wait_for_workers(Workers -- [Pid])
     end.
 

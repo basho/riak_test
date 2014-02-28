@@ -34,6 +34,10 @@
     {rt_max_wait_time, 600000},
     {rt_retry_delay, 1000},
 
+    %% How long to let any test run before killing it, undefined means no limit.
+    %% Valid timeouts are in milliseconds.
+    {test_timeout, undefined},
+
     %% The harness specifies how Riak nodes under test will be
     %% manipulated. There is currently only `rtdev', which uses local
     %% `devrel's inside a git repository. In the future, we may have

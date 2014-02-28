@@ -4,6 +4,12 @@
 
 -define(M, riak_kv_index_hashtree_orig).
 
+%% @doc Perform a delayed compare, which delays the receipt of a
+%%      message.
+delayed_compare(_IndexN, _Remote, _AccFun, _TreePid) ->
+    timer:sleep(1000000),
+    [].
+
 %% @doc When attempting to get the lock on a hashtree, return the
 %%      not_built atom which means the tree has not been computed yet.
 not_built(_TreePid, _Type) ->

@@ -14,7 +14,7 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),    
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     {ok, TestCommand} = prereqs(),
     Config = [{riak_kv, [{secondary_index_sort_default, true}]},
               {riak_search, [{enabled, true}]}],
