@@ -20,9 +20,11 @@
 
 %% @doc riak_test_runner runs a riak_test module's run/0 function.
 -module(riak_test_runner).
--export([confirm/4, metadata/0, metadata/1, function_name/1]).
+
 %% Need to export to use with `spawn_link'.
 -export([return_to_exit/3]).
+-export([run/4, metadata/0, metadata/1, function_name/2]).
+-include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
@@ -39,10 +41,10 @@ metadata(Pid) ->
         {metadata, TestMeta} -> TestMeta
     end.
 
--spec(confirm(integer(), atom(), [{atom(), term()}], list()) -> [tuple()]).
+-spec(run(integer(), atom(), [{atom(), term()}], list()) -> [tuple()]).
 %% @doc Runs a module's run/0 function after setting up a log capturing backend for lager.
 %%      It then cleans up that backend and returns the logs as part of the return proplist.
-confirm(TestModule, Outdir, TestMetaData, HarnessArgs) ->
+run(TestModule, Outdir, TestMetaData, HarnessArgs) ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, HarnessArgs),
     BackendExtras = case proplists:get_value(multi_config, TestMetaData) of
@@ -50,11 +52,17 @@ confirm(TestModule, Outdir, TestMetaData, HarnessArgs) ->
                         Value -> [{multi_config, Value}]
                     end,
     Backend = rt:set_backend(proplists:get_value(backend, TestMetaData), BackendExtras),
-    {Mod, Fun} = function_name(TestModule),
-    {Status, Reason} = case check_prereqs(Mod) of
+    {PropsMod, PropsFun} = function_name(properties, TestModule, 0, rt_cluster),
+    {SetupMod, SetupFun} = function_name(setup, TestModule, 2, rt_cluster),
+    {ConfirmMod, ConfirmFun} = function_name(confirm, TestModule),
+    {Status, Reason} = case check_prereqs(ConfirmMod) of
         true ->
             lager:notice("Running Test ~s", [TestModule]),
-            execute(TestModule, {Mod, Fun}, TestMetaData);
+            execute(TestModule,
+                    {PropsMod, PropsFun},
+                    {SetupMod, SetupFun},
+                    {ConfirmMod, ConfirmFun},
+                    TestMetaData);
         not_present ->
             {fail, test_does_not_exist};
         _ ->
@@ -88,7 +96,7 @@ stop_lager_backend() ->
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
 %% does some group_leader swapping, in the style of EUnit.
-execute(TestModule, {Mod, Fun}, TestMetaData) ->
+execute(TestModule, PropsModFun, SetupModFun, ConfirmModFun, TestMetaData) ->
     process_flag(trap_exit, true),
     OldGroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
@@ -97,7 +105,8 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     {0, UName} = rt:cmd("uname -a"),
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
-    Pid = spawn_link(?MODULE, return_to_exit, [Mod, Fun, []]),
+    %% Pid = spawn_link(?MODULE, return_to_exit, [Mod, Fun, []]),
+    Pid = spawn_link(test_fun(PropsModFun, SetupModFun, ConfirmModFun, TestMetaData)),
     Ref = case rt_config:get(test_timeout, undefined) of
         Timeout when is_integer(Timeout) ->
             erlang:send_after(Timeout, self(), test_took_too_long);
@@ -123,7 +132,52 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     end,
     {Status, Reason}.
 
-function_name(TestModule) ->
+-spec test_fun({atom(), atom()}, {atom(), atom()}, {atom(), atom()}, proplists:proplist()) -> function().
+test_fun({PropsMod, PropsFun}, {SetupMod, SetupFun}, ConfirmModFun, MetaData) ->
+    fun() ->
+            Properties = PropsMod:PropsFun(),
+            case SetupMod:SetupFun(Properties, MetaData) of
+                {ok, SetupData} ->
+                    lager:info("Wait for transfers? ~p", [SetupData#rt_properties.wait_for_transfers]),
+                    ConfirmFun = compose_confirm_fun(ConfirmModFun,
+                                                     SetupData,
+                                                     MetaData),
+                    ConfirmFun();
+                _ ->
+                    fail
+            end
+    end.
+
+compose_confirm_fun({ConfirmMod, ConfirmFun},
+                    SetupData=#rt_properties{rolling_upgrade=true},
+                    MetaData) ->
+    Nodes = SetupData#rt_properties.nodes,
+    WaitForTransfers = SetupData#rt_properties.wait_for_transfers,
+    UpgradeVersion = SetupData#rt_properties.upgrade_version,
+    fun() ->
+            InitialResult = ConfirmMod:ConfirmFun(SetupData, MetaData),
+            OtherResults = [begin
+                                ensure_all_nodes_running(Nodes),
+                                _ = rt:upgrade(Node, UpgradeVersion),
+                                _ = rt_cluster:maybe_wait_for_transfers(Nodes, WaitForTransfers),
+                                ConfirmMod:ConfirmFun(SetupData, MetaData)
+                            end || Node <- Nodes],
+            lists:all(fun(R) -> R =:= pass end, [InitialResult | OtherResults])
+    end;
+compose_confirm_fun({ConfirmMod, ConfirmFun},
+                    SetupData=#rt_properties{rolling_upgrade=false},
+                    MetaData) ->
+    fun() ->
+            ConfirmMod:ConfirmFun(SetupData, MetaData)
+    end.
+
+ensure_all_nodes_running(Nodes) ->
+    [begin
+         ok = rt:start_and_wait(Node),
+         ok = rt:wait_until_registered(Node, riak_core_ring_manager)
+     end || Node <- Nodes].
+
+function_name(confirm, TestModule) ->
     TMString = atom_to_list(TestModule),
     Tokz = string:tokens(TMString, ":"),
     case length(Tokz) of
@@ -131,6 +185,14 @@ function_name(TestModule) ->
         2 ->
             [Module, Function] = Tokz,
             {list_to_atom(Module), list_to_atom(Function)}
+    end.
+
+function_name(FunName, TestModule, Arity, Default) when is_atom(TestModule) ->
+    case erlang:function_exported(TestModule, FunName, Arity) of
+        true ->
+            {TestModule, FunName};
+        false ->
+            {Default, FunName}
     end.
 
 rec_loop(Pid, TestModule, TestMetaData) ->
