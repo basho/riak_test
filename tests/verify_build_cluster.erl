@@ -18,26 +18,24 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_build_cluster).
--behavior(riak_test).
--export([confirm/0]).
+-export([properties/0,
+         confirm/2]).
+-include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [wait_until_nodes_ready/1,
-             wait_until_no_pending_changes/1]).
+properties() ->
+    DefaultProps = rt_cluster:properties(),
+    UpdConfig = rt_cluster:augment_config(riak_core,
+                                          {default_bucket_props, [{allow_mult, false}]},
+                                          DefaultProps#rt_properties.config),
+    DefaultProps#rt_properties{config=UpdConfig,
+                               node_count=4,
+                               rolling_upgrade=true,
+                               make_cluster=false,
+                               start_version=previous}.
 
-confirm() ->
-    %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
-    %% Deploy a set of new nodes
-    lager:info("Deploying 4 nodes"),
-    %% handoff_concurrency needs to be raised to make the leave operation faster.
-    %% most clusters go up to 10, but this one is one louder, isn't it?
-    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4, [{riak_core, [{handoff_concurrency, 11}]}]),
-
-    %% Ensure each node owns 100% of it's own ring
-    lager:info("Ensure each nodes 100% of it's own ring"),
-
-    [rt:wait_until_owners_according_to(Node, [Node]) || Node <- Nodes],
+confirm(#rt_properties{nodes=Nodes}, _MD) ->
+    [Node1, Node2, Node3, Node4] = Nodes,
 
     lager:info("Loading some data up in this cluster."),
     ?assertEqual([], rt:systest_write(Node1, 0, 1000, <<"verify_build_cluster">>, 2)),
