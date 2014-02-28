@@ -17,7 +17,13 @@ confirm() ->
     prereqs(),
     clone_repo(),
     install_dependencies(),
-    [Node1] = rt:deploy_nodes(1, {cuttlefish, [{"search", "on"}]}),
+    [Node1] = rt:deploy_nodes(1, {cuttlefish, [
+                                               {"search", "on"},
+                                               {"storage_backend", "memory"},
+                                               {"anti_entropy", "passive"}
+                                              ]}),
+
+    setup_bucket_types(Node1),
 
     configure_test_client(Node1),
 
@@ -61,6 +67,25 @@ install_dependencies() ->
     rt_local:stream_cmd(BundleCmd, [{cd, ?RUBY_CHECKOUT},
                                     {env, [{"BUNDLE_PATH", "vendor/bundle"}]}
                                    ]).
+
+setup_bucket_types(Node) ->
+    lager:info("Creating bucket types"),
+
+    CounterType = <<"counters">>,
+    rt:create_and_activate_bucket_type(Node, CounterType, [{datatype, counter}, {allow_mult, true}]),
+
+    MapType = <<"maps">>,
+    rt:create_and_activate_bucket_type(Node, MapType, [{datatype, map}, {allow_mult, true}]),
+
+    SetType = <<"sets">>,
+    rt:create_and_activate_bucket_type(Node, SetType, [{datatype, set}, {allow_mult, true}]),
+
+    lager:info("Waiting for bucket types"),
+    rt:wait_until_bucket_type_status(CounterType, active, [Node]),
+    rt:wait_until_bucket_type_status(MapType, active, [Node]),
+    rt:wait_until_bucket_type_status(SetType, active, [Node]),
+    lager:info("Bucket types ready").
+    
 
 configure_test_client(Node) ->
     [{Node, ConnectionInfo}] = rt:connection_info([Node]),
