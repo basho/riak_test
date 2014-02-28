@@ -23,3 +23,18 @@
         url :: string(),
         headers=[] :: [{atom(), string()}]
         }).
+
+-record(rt_properties, {
+          nodes :: [node()],
+          node_count=6 :: non_neg_integer(),
+          metadata=[] :: proplists:proplist(),
+          properties=[] :: proplists:proplist(),
+          rolling_upgrade=false :: boolean(),
+          start_version=current :: atom(),
+          upgrade_version=current :: atom(),
+          wait_for_transfers=false :: boolean(),
+          valid_backends=all :: all | [atom()],
+          make_cluster=true :: boolean(),
+          config :: term()
+         }).
+-type rt_properties() :: #rt_properties{}.

@@ -118,7 +118,7 @@ start2(CoverMods) ->
 %% These are read, per test, from the test module attributes
 %% `cover_modules' or `cover_apps'.
 find_cover_modules(Test) ->
-    {Mod, _Fun} = riak_test_runner:function_name(Test),
+    {Mod, _Fun} = riak_test_runner:function_name(confirm, Test),
     case proplists:get_value(cover_modules, Mod:module_info(attributes), []) of
         [] ->
             case proplists:get_value(cover_apps, Mod:module_info(attributes), []) of

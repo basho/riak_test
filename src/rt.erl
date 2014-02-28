@@ -1306,6 +1306,23 @@ update_acc(false, {error, _}=Val, N, Acc) ->
 update_acc(false, Val, N, Acc) ->
     [{N, {wrong_val, Val}} | Acc].
 
+verify_systest_value(N, Acc, CommonValBin, Obj) ->
+    Values = riak_object:get_values(Obj),
+    Res = [begin
+               case V of
+                   <<N:32/integer, CommonValBin/binary>> ->
+                       ok;
+                   _WrongVal ->
+                       wrong_val
+               end
+           end || V <- Values],
+    case lists:any(fun(X) -> X =:= ok end, Res) of
+        true ->
+            Acc;
+        false ->
+            [{N, {wrong_val, hd(Values)}} | Acc]
+    end.
+
 % @doc Reads a single replica of a value. This issues a get command directly
 % to the vnode handling the Nth primary partition of the object's preflist.
 get_replica(Node, Bucket, Key, I, N) ->
