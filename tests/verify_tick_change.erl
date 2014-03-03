@@ -48,6 +48,7 @@ confirm() ->
            fun() ->
                    write_read_poll_check(Nodes, NewTime, Start, End, Bucket, W)
            end),
+    timer:sleep(30000),
     lager:info("If we got this far, then we found no inconsistencies\n"),
     [begin
          RemoteTime = rpc:call(Node, net_kernel, get_net_ticktime, []),
@@ -55,6 +56,16 @@ confirm() ->
          ?assertEqual(NewTime, RemoteTime)
      end || Node <- lists:usort([node()|nodes(connected)])],
     io:format("If we got this far, all nodes are using the same tick time\n"),
+
+    lager:info("Sleeping for 3 minutes"),
+    timer:sleep(180000),
+
+    %% Start a riak attach node
+    _Res = rt:attach(Node1, [{send, "net_kernel:get_net_ticktime()."},
+                            {expect, "60"}, % <-- Default is 60, we should expect 11
+                            {send, [4]}]), %% 4 = Ctrl + D
+
+    lager:info("D'oh! If we get here, then the new tick time did not carry over to hidden node after waiting 3 minutes"),
 
     pass.
 
