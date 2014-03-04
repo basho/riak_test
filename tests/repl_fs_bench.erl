@@ -67,6 +67,8 @@ fullsync_test(Strategy, Latency) ->
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
 
+    [rt_intercept:load_code(Node) || Node <- ANodes],
+
     case {Strategy, Latency} of
         {aae, 10} ->
             [rt_intercept:add(Node,
