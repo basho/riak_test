@@ -22,6 +22,7 @@
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+-compile(export_all). % DELETEME!!!!!!!!!!!!!!!!!!!
 
 confirm() ->
     ClusterSize = 4,
@@ -33,7 +34,7 @@ confirm() ->
     Bucket = <<"systest">>,
     Start = 0, End = 100,
     W = quorum,
-    NewTime = 11,
+    NewTime = 14,
 
     write_stuff(Nodes, Start, End, Bucket, W, <<>>),
     read_stuff(Nodes, Start, End, Bucket, W, <<>>),
@@ -57,16 +58,22 @@ confirm() ->
      end || Node <- lists:usort([node()|nodes(connected)])],
     io:format("If we got this far, all nodes are using the same tick time\n"),
 
-    lager:info("Sleeping for 3 minutes"),
-    timer:sleep(180000),
+    lager:info("Sleeping for 2 seconds"),
+    timer:sleep(2*1000),
+    Node1PathRiakConf = rtdev:node_path(Node1) ++ "/etc/riak.conf",
+    {ok, FH} = file:open(Node1PathRiakConf, [append]),
+    io:format(FH, "## appended by verify_tick_change.erl\n", []),
+    io:format(FH, "erlang.distribution.net_ticktime = ~w\n", [NewTime]),
+    ok = file:close(FH),
+    io:format("Verify: ~s\n", [os:cmd("tail -3 " ++ Node1PathRiakConf)]),
 
     %% Start a riak attach node
-    _Res = rt:attach(Node1, [{send, "net_kernel:get_net_ticktime()."},
-                            {expect, "60"}, % <-- Default is 60, we should expect 11
+    Res = rt:attach(Node1, [
+                            {send, "lists:usort([rpc:call(Node, net_kernel, get_net_ticktime, []) || Node <- [node()|nodes(connected)]]) == [14]."},
+                            {expect, "true"},
                             {send, [4]}]), %% 4 = Ctrl + D
 
-    lager:info("D'oh! If we get here, then the new tick time did not carry over to hidden node after waiting 3 minutes"),
-
+    lager:info("Test succeeds, Res = ~p\n", [Res]),
     pass.
 
 make_common() ->
