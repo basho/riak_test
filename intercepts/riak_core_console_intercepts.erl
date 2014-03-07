@@ -99,6 +99,25 @@ verify_console_del_user(Val) ->
         _ -> ?FAIL
     end.
 
+verify_console_add_group(Val) ->
+    case Val of
+        ["group"] -> ?PASS;
+        ["group", "x1=y1", "x2=y2"] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
+verify_console_alter_group(Val) ->
+    case Val of
+        ["group", "x1=y1", "x2=y2"] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
+verify_console_del_group(Val) ->
+    case Val of
+        ["group"] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
 verify_console_add_source(Val) ->
     case Val of
         ["all","192.168.100.0/22","x","x1=y1"] -> ?PASS;
@@ -146,6 +165,24 @@ verify_console_print_user(Val) ->
 verify_console_print_users(Val) ->
     case Val of
         [] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
+verify_console_print_group(Val) ->
+    case Val of
+        ["group"] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
+verify_console_print_groups(Val) ->
+    case Val of
+        [] -> ?PASS;
+        _ -> ?FAIL
+    end.
+
+verify_console_print_grants(Val) ->
+    case Val of
+        ["foo"] -> ?PASS;
         _ -> ?FAIL
     end.
 
