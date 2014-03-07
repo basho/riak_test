@@ -31,7 +31,7 @@
 %% will be run on giddyup and hence many platforms, we should be able
 %% to catch these types of bugs earlier.
 %% See also: replication2_console_tests.erl for a more detailed
-%% description. 
+%% description.
 
 %% UNTESTED, as they don't use rpc, or have a non-trivial impl
 %%   test
@@ -66,11 +66,15 @@ bucket_tests(Node) ->
 
 %% riak-admin security
 security_tests(Node) ->
-    check_admin_cmd(Node, "security add-user foo"),
-    check_admin_cmd(Node, "security add-user foo x1=y1 x2=y2"),
-    check_admin_cmd(Node, "security alter-user foo x1=y1"),
-    check_admin_cmd(Node, "security alter-user foo x1=y1 x2=y2"),
+    check_admin_cmd_2x(Node, "security add-user foo"),
+    check_admin_cmd_2x(Node, "security add-user foo x1=y1 x2=y2"),
+    check_admin_cmd_2x(Node, "security add-group group"),
+    check_admin_cmd_2x(Node, "security add-group group x1=y1 x2=y2"),
+    check_admin_cmd_2x(Node, "security alter-user foo x1=y1"),
+    check_admin_cmd_2x(Node, "security alter-user foo x1=y1 x2=y2"),
+    check_admin_cmd_2x(Node, "security alter-group group x1=y1 x2=y2"),
     check_admin_cmd(Node, "security del-user foo"),
+    check_admin_cmd(Node, "security del-group group"),
     check_admin_cmd(Node, "security add-source all 192.168.100.0/22 y"),
     check_admin_cmd(Node, "security add-source all 192.168.100.0/22 x x1=y1"),
     check_admin_cmd(Node, "security add-source foo,bar 192.168.100.0/22 x x1=y1"),
@@ -90,10 +94,12 @@ security_tests(Node) ->
     check_admin_cmd(Node, "security revoke foo,bar,baz on foo my_bucket from y"),
     check_admin_cmd(Node, "security print-users"),
     check_admin_cmd(Node, "security print-sources"),
-    check_admin_cmd(Node, "security enable"),
-    check_admin_cmd(Node, "security disable"),
+    check_admin_cmd_2x(Node, "security enable"),
+    check_admin_cmd_2x(Node, "security disable"),
     check_admin_cmd(Node, "security status"),
     check_admin_cmd(Node, "security print-user foo"),
+    check_admin_cmd(Node, "security print-group group"),
+    check_admin_cmd(Node, "security print-grants foo"),
     check_admin_cmd(Node, "security ciphers foo").
 
 %% "top level" riak-admin COMMANDS
@@ -168,12 +174,18 @@ confirm() ->
                         {{add_user, 1}, verify_console_add_user},
                         {{alter_user, 1}, verify_console_alter_user},
                         {{del_user, 1}, verify_console_del_user},
+                        {{add_group, 1}, verify_console_add_group},
+                        {{alter_group, 1}, verify_console_alter_group},
+                        {{del_group, 1}, verify_console_del_group},
                         {{add_source, 1}, verify_console_add_source},
                         {{del_source, 1}, verify_console_del_source},
                         {{grant, 1}, verify_console_grant},
                         {{revoke, 1}, verify_console_revoke},
                         {{print_user,1}, verify_console_print_user},
                         {{print_users,1}, verify_console_print_users},
+                        {{print_group,1}, verify_console_print_group},
+                        {{print_groups,1}, verify_console_print_groups},
+                        {{print_grants,1}, verify_console_print_grants},
                         {{print_sources, 1}, verify_console_print_sources},
                         {{security_enable,1}, verify_console_security_enable},
                         {{security_disable,1}, verify_console_security_disable},
@@ -224,3 +236,11 @@ check_admin_cmd(Node, Cmd) ->
     {ok, Out} = rt:admin(Node, S),
     ?assertEqual("pass", Out).
 
+%% Recently we've started calling riak_core_console twice from the
+%% same riak-admin invocation; this will result in "passpass" as a
+%% return instead of a simple "pass"
+check_admin_cmd_2x(Node, Cmd) ->
+    S = string:tokens(Cmd, " "),
+    lager:info("Testing riak-admin ~s on ~s", [Cmd, Node]),
+    {ok, Out} = rt:admin(Node, S),
+    ?assertEqual("passpass", Out).
