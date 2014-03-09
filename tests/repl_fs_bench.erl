@@ -135,7 +135,7 @@ fullsync_test(Strategy, Latency) ->
                              [LeaderA]),
 
     %% Rewrite first 10% keys and perform fullsync.
-    repl_util:write_to_cluster(AFirst, 0, ?FULL_NUM_KEYS, ?TEST_BUCKET),
+    repl_util:write_to_cluster(AFirst, 0, ?DIFF_NUM_KEYS, ?TEST_BUCKET),
     repl_util:wait_until_aae_trees_built(ANodes ++ BNodes),
     {DiffTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
