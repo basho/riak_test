@@ -45,7 +45,7 @@ confirm() ->
 
     %% write implicitly to the default bucket
     riakc_pb_socket:put(PB, riakc_obj:update_value(O1, <<"newvalue">>)),
- 
+
     %% read from the default bucket explicitly
     {ok, O3} = riakc_pb_socket:get(PB, {<<"default">>, <<"bucket">>}, <<"key">>),
 
@@ -123,6 +123,35 @@ confirm() ->
     %% list buckets
     ?assertEqual({ok, []}, riakc_pb_socket:list_buckets(PB)),
     ?assertEqual({ok, [<<"bucket">>]}, riakc_pb_socket:list_buckets(PB, Type)),
+
+    %%% Beginning of UTF-8 test
+
+    lager:info("UTF-8 type get/put test"),
+    %% こんにちは - konnichiwa (Japanese)
+    UnicodeType = unicode:characters_to_binary([12371,12435,12395,12385,12399], utf8),
+    %% سلام - Salam (Arabic)
+    UnicodeBucket = unicode:characters_to_binary([1587,1604,1575,1605], utf8),
+    rt:create_and_activate_bucket_type(Node, UnicodeType, [{n_val, 3}]),
+    rt:wait_until_bucket_type_status(UnicodeType, active, Nodes),
+
+    lager:info("doing put"),
+    riakc_pb_socket:put(PB, riakc_obj:new({UnicodeType, UnicodeBucket},
+                                             <<"key">>, <<"yetanothervalue">>)),
+
+    lager:info("doing get"),
+    {ok, O6} = riakc_pb_socket:get(PB, {UnicodeType, UnicodeBucket}, <<"key">>),
+
+    ?assertEqual(<<"yetanothervalue">>, riakc_obj:get_value(O6)),
+
+    lager:info("custom type list_keys test"),
+    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB,
+                                                              {UnicodeType,
+                                                               UnicodeBucket})),
+    lager:info("custom type list_buckets test"),
+    %% list buckets
+    ?assertEqual({ok, [UnicodeBucket]}, riakc_pb_socket:list_buckets(PB, UnicodeType)),
+
+    %%% End of UTF-8 test
 
     lager:info("bucket properties tests"),
     riakc_pb_socket:set_bucket(PB, {<<"default">>, <<"mybucket">>},
