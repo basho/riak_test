@@ -174,11 +174,25 @@ confirm() ->
                                                     <<"mybucket">>}),
     ?assertEqual(5, proplists:get_value(n_val, BProps3)),
 
+    %% Check our unicode brethren
+    riakc_pb_socket:set_bucket(PB, {UnicodeType, UnicodeBucket},
+                               [{n_val, 4}]),
+    {ok, UBProps1} = riakc_pb_socket:get_bucket(PB, {UnicodeType,
+                                                     UnicodeBucket}),
+    ?assertEqual(4, proplists:get_value(n_val, UBProps1)),
+
     riakc_pb_socket:reset_bucket(PB, {Type, <<"mybucket">>}),
 
     {ok, BProps4} = riakc_pb_socket:get_bucket(PB, {Type,
                                                     <<"mybucket">>}),
     ?assertEqual(3, proplists:get_value(n_val, BProps4)),
+
+    riakc_pb_socket:reset_bucket(PB, {UnicodeType, UnicodeBucket}),
+
+    {ok, UBProps2} = riakc_pb_socket:get_bucket(PB, {UnicodeType,
+                                                     UnicodeBucket}),
+
+    ?assertEqual(3, proplists:get_value(n_val, UBProps2)),
 
     lager:info("bucket type properties test"),
 
@@ -199,6 +213,27 @@ confirm() ->
     {ok, BProps7} = riakc_pb_socket:get_bucket_type(PB, Type),
 
     ?assertEqual(3, proplists:get_value(n_val, BProps7)),
+
+    %% Repeat type checks for unicode type/bucket
+
+    riakc_pb_socket:set_bucket_type(PB, UnicodeType,
+                                    [{n_val, 5}]),
+
+    {ok, UBProps3} = riakc_pb_socket:get_bucket_type(PB, UnicodeType),
+
+    ?assertEqual(5, proplists:get_value(n_val, UBProps3)),
+
+    %% check that the bucket inherits from its type
+    {ok, UBProps4} = riakc_pb_socket:get_bucket(PB, {UnicodeType,
+                                                     UnicodeBucket}),
+
+    ?assertEqual(5, proplists:get_value(n_val, UBProps4)),
+
+    riakc_pb_socket:set_bucket_type(PB, UnicodeType, [{n_val, 3}]),
+
+    {ok, UBProps5} = riakc_pb_socket:get_bucket_type(PB, UnicodeType),
+
+    ?assertEqual(3, proplists:get_value(n_val, UBProps5)),
 
     %% make sure a regular bucket under the default type reflects app.config
     {ok, BProps8} = riakc_pb_socket:get_bucket(PB, {<<"default">>,
