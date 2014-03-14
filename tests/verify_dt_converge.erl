@@ -40,6 +40,8 @@
 
 %% Type, Bucket, Client, Mod
 
+-define(MODIFY_OPTS, [create, {include_context, false}]).
+
 confirm() ->
     Config = [ {riak_kv, [{handoff_concurrency, 100}]},
                {riak_core, [ {ring_creation_size, 16},
@@ -162,14 +164,14 @@ update_1({BType, counter}, Bucket, Client, CMod) ->
                      fun(C) ->
                              riakc_counter:increment(5, C)
                      end,
-                     {BType, Bucket}, ?KEY, [create]);
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
 update_1({BType, set}, Bucket, Client, CMod) ->
     lager:info("update_1: Updating set"),
     CMod:modify_type(Client,
                      fun(S) ->
                              riakc_set:add_element(<<"Riak">>, S)
                      end,
-                     {BType, Bucket}, ?KEY, [create]);
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
 update_1({BType, map}, Bucket, Client, CMod) ->
     lager:info("update_1: Updating map"),
     CMod:modify_type(Client,
@@ -186,7 +188,7 @@ update_1({BType, map}, Bucket, Client, CMod) ->
                                        riakc_counter:increment(10, C)
                                end, M1)
                      end,
-                     {BType, Bucket}, ?KEY, [create]).
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
 check_1({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_1: Checking counter value is correct"),
@@ -205,7 +207,7 @@ update_2a({BType, counter}, Bucket, Client, CMod) ->
                      fun(C) ->
                              riakc_counter:decrement(10, C)
                      end,
-                     {BType, Bucket}, ?KEY, [create]);
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
 update_2a({BType, set}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(S) ->
@@ -213,7 +215,7 @@ update_2a({BType, set}, Bucket, Client, CMod) ->
                                <<"Voldemort">>,
                                riakc_set:add_element(<<"Cassandra">>, S))
                      end,
-                     {BType, Bucket}, ?KEY, [create]);
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
 update_2a({BType, map}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(M) ->
@@ -224,7 +226,7 @@ update_2a({BType, map}, Bucket, Client, CMod) ->
                                     end, M),
                              riakc_map:add({<<"verified">>, flag}, M1)
                      end,
-                     {BType, Bucket}, ?KEY, [create]).
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
 check_2b({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_2b: Checking counter value is unchanged"),
@@ -243,13 +245,13 @@ update_3b({BType, counter}, Bucket, Client, CMod) ->
                      fun(C) ->
                              riakc_counter:increment(2, C)
                      end,
-                     {BType, Bucket}, ?KEY, [create]);
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
 update_3b({BType, set}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(S) ->
                              riakc_set:add_element(<<"Couchbase">>, S)
                      end,
-                     {BType, Bucket}, ?KEY, [create]);
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
 update_3b({BType, map},Bucket,Client,CMod) ->
     CMod:modify_type(Client,
                      fun(M) ->
@@ -266,7 +268,7 @@ update_3b({BType, map},Bucket,Client,CMod) ->
                                end,
                                M1)
                      end,
-                     {BType, Bucket}, ?KEY, [create]).
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
 check_3a({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_3a: Checking counter value is unchanged"),
