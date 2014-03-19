@@ -319,6 +319,7 @@ check_value(Client, CMod, Bucket, Key, DTMod, Expected, Options) ->
                           try
                               Result = CMod:fetch_type(Client, Bucket, Key,
                                                        Options),
+                              lager:info("Expected ~p~n got ~p~n", [Expected, Result]),
                               ?assertMatch({ok, _}, Result),
                               {ok, C} = Result,
                               ?assertEqual(true, DTMod:is_type(C)),
