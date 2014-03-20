@@ -52,7 +52,8 @@ riak_admin_cmd(Path, N, Args) ->
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
-    os:cmd(gitcmd(Path, Cmd)).
+    {0, Out} = cmd(gitcmd(Path, Cmd)),
+    Out.
 
 run_riak(N, Path, Cmd) ->
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
@@ -89,8 +90,8 @@ setup_harness(_Test, _Args) ->
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
-    run_git(Path, "reset HEAD --hard"),
-    run_git(Path, "clean -fd"),
+    _ = run_git(Path, "reset HEAD --hard"),
+    _ = run_git(Path, "clean -fd"),
 
     lager:info("Cleaning up lingering pipe directories"),
     rt:pmap(fun(Dir) ->
@@ -100,11 +101,7 @@ setup_harness(_Test, _Args) ->
                     %% the extra slashes will be pruned by filename:join, but this
                     %% ensures that there will be at least one between "/tmp" and Dir
                     PipeDir = filename:join(["/tmp//" ++ Dir, "dev"]),
-                    %% when using filelib:wildcard/2, there must be a wildchar char
-                    %% before the first '/'.
-                    Files = filelib:wildcard("dev?/*.{r,w}", PipeDir),
-                    [ file:delete(filename:join(PipeDir, File)) || File <- Files],
-                    file:del_dir(PipeDir)
+                    {0, _} = cmd("rm -rf " ++ PipeDir)
             end, devpaths()),
     ok.
 
@@ -392,12 +389,14 @@ stop_all(DevPath) ->
                                                "\n"),
                 try
                     _ = list_to_integer(MaybePid),
-                    os:cmd("kill -9 "++MaybePid)
+                    {0, Out} = cmd("kill -9 "++MaybePid),
+                    Out
                 catch
                     _:_ -> ok
                 end,
                 Cmd = C ++ "/bin/riak stop",
-                [Output | _Tail] = string:tokens(os:cmd(Cmd), "\n"),
+                {_, StopOut} = cmd(Cmd),
+                [Output | _Tail] = string:tokens(StopOut, "\n"),
                 Status = case Output of
                     "ok" -> "ok";
                     _ -> "wasn't running"
@@ -544,7 +543,7 @@ node_version(N) ->
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
 spawn_cmd(Cmd, Opts) ->
-    Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
+    Port = open_port({spawn, lists:flatten(Cmd)}, [stream, in, exit_status] ++ Opts),
     Port.
 
 wait_for_cmd(Port) ->
