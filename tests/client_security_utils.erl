@@ -144,4 +144,8 @@ setup() ->
     %% 1.4 counters
     %%
     grant(Node, ["riak_kv.put,riak_kv.get", "ON", "default", "counters", "TO", "testuser1"]),
-    Nodes.
+    {CertDir, Nodes}.
+
+grant(Node, Args) ->
+    ok = rpc:call(Node, riak_core_console, grant, [Args]).
+
