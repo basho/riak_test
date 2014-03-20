@@ -30,7 +30,11 @@
     start/0,
     maybe_start_on_node/2,
     maybe_write_coverage/2,
+    maybe_export_coverage/2,
+    maybe_import_coverage/1,
+    maybe_stop/0,
     stop/0,
+    maybe_reset/0,
     maybe_stop_on_node/1,
     maybe_stop_on_nodes/0,
     stop_on_nodes/0,
@@ -185,6 +189,21 @@ stop_on_nodes(Nodes) ->
 %% and links to detailed coverage for each module included in the analysis.
 maybe_write_coverage(CoverMods, Dir) ->
     if_coverage(fun() -> write_coverage(CoverMods, Dir) end).
+
+maybe_export_coverage(TestModule, Dir) ->
+    if_coverage(fun() ->
+                        prepare_output_dir(Dir),
+                        Filename = filename:join(Dir,
+                                                 atom_to_list(TestModule)
+                                                 ++ ".coverdata"),
+                        ok = cover:export(Filename),
+                        Filename
+                end).
+
+maybe_import_coverage(cover_disabled) ->
+    ok;
+maybe_import_coverage(File) ->
+    if_coverage(fun() -> cover:import(File) end).
 
 prepare_output_dir(Dir) ->
     %% NOTE: This is not a recursive make dir, only top level will be created.
@@ -363,6 +382,12 @@ write_module_coverage(CoverMod, CoverDir) ->
             end
     end.
 
+maybe_stop() ->
+    if_coverage(fun maybe_stop/0).
+
 stop() ->
     lager:info("Stopping cover"),
     cover:stop().
+
+maybe_reset() ->
+    if_coverage(fun() -> cover:reset() end).

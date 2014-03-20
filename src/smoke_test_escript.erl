@@ -91,6 +91,9 @@ worker(Rebar, PWD, Suites, Tasks) ->
                     true ->
                         case {Task, lists:member(Task, Tasks)} of
                             {"eunit", true} ->
+                                %% make rebar spit out the coverdata
+                                file:write_file(filename:join(FDep, "rebar.config"),
+                                                "\n{cover_export_enabled, true}.", [append]),
                                 %% set up a symlink so that each dep has deps
                                 P = erlang:open_port({spawn_executable, Rebar},
                                                      [{args, ["eunit", "skip_deps=true"]},
@@ -98,8 +101,14 @@ worker(Rebar, PWD, Suites, Tasks) ->
                                                       {line, 1024}, stderr_to_stdout, binary]),
                                 {Res, Log} = accumulate(P, []),
                                 CleanedLog = cleanup_logs(Log),
-                                giddyup:post_result([{test, Suite}, {status, get_status(Res)},
-                                                     {log, CleanedLog} | Config]),
+                                {ok, Base} = giddyup:post_result([{test, Suite}, {status, get_status(Res)},
+                                                                  {log, CleanedLog} | Config]),
+                                CoverFile = filename:join(FDep, ".eunit/eunit.coverdata"),
+                                case filelib:is_regular(CoverFile) of
+                                    true ->
+                                        giddyup:post_artifact(Base, {"eunit.coverdata.gz", zlib:gzip(element(2, file:read_file(CoverFile)))});
+                                    _ -> ok
+                                end,
                                 Res;
                             {"dialyzer", true} ->
                                 P = erlang:open_port({spawn_executable, "/usr/bin/make"},
