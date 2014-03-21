@@ -172,6 +172,7 @@ main(Args) ->
     rt_cover:maybe_start(),
 
     TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
+    [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) || R <- TestResults],
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
@@ -274,11 +275,14 @@ is_runnable_test({TestModule, _}) ->
     erlang:function_exported(Mod, Fun, 0).
 
 run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
+    rt_cover:maybe_reset(),
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
+    CoverDir = rt_config:get(cover_output, "coverage"),
     case NumTests of
         1 -> keep_them_up;
         _ -> rt:teardown()
     end,
+    CoverageFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
     case Report of
         undefined -> ok;
         _ ->
@@ -289,11 +293,13 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
                     %% Now push up the artifacts, starting with the test log
                     giddyup:post_artifact(Base, {"riak_test.log", L}),
                     [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ],
+                    [giddyup:post_artifact(Base, {filename:basename(CoverageFile) ++ ".gz",
+                                                  zlib:gzip(element(2,file:read_file(CoverageFile)))}) || CoverageFile /= cover_disabled ],
                     ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
                     [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ]
             end
     end,
-    SingleTestResult.
+    [{coverdata, CoverageFile} | SingleTestResult].
 
 get_webhooks() ->
     Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
