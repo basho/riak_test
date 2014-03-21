@@ -282,7 +282,7 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
         1 -> keep_them_up;
         _ -> rt:teardown()
     end,
-    CoverageFile = rt_cover:maybe_export_coverage(Test, CoverDir),
+    CoverageFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
     case Report of
         undefined -> ok;
         _ ->
