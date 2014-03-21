@@ -313,7 +313,6 @@ write_coverage(CoverModules, CoverDir) ->
             YComb(YComb)
     end,
     Pid = spawn(F),
-    lager:info("changing cover group leader to ~p", [Pid]),
     erlang:group_leader(Pid, whereis(cover_server)),
     % First write a file per module
     prepare_output_dir(CoverDir),
@@ -330,7 +329,6 @@ write_coverage(CoverModules, CoverDir) ->
     IdxFile = filename:join([CoverDir, "index.html"]),
     write_index_file(TotalCov, IdxFile),
     erlang:group_leader(GL, whereis(cover_server)),
-    lager:info("changing cover group leader back to ~p", [GL]),
     exit(Pid, kill),
     TotalCov.
 
