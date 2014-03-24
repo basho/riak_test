@@ -24,7 +24,9 @@
 
 -module(verify_dt_converge).
 -behavior(riak_test).
+-compile([export_all]).
 -export([confirm/0]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 -define(CTYPE, <<"counters">>).
@@ -40,7 +42,7 @@
 
 %% Type, Bucket, Client, Mod
 
--define(MODIFY_OPTS, [create, {include_context, false}]).
+-define(MODIFY_OPTS, [create]).
 
 confirm() ->
     Config = [ {riak_kv, [{handoff_concurrency, 100}]},
@@ -317,6 +319,7 @@ check_value(Client, CMod, Bucket, Key, DTMod, Expected, Options) ->
                           try
                               Result = CMod:fetch_type(Client, Bucket, Key,
                                                        Options),
+                              lager:info("Expected ~p~n got ~p~n", [Expected, Result]),
                               ?assertMatch({ok, _}, Result),
                               {ok, C} = Result,
                               ?assertEqual(true, DTMod:is_type(C)),
