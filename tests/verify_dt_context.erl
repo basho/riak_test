@@ -103,7 +103,7 @@ confirm() ->
                                    [{{<<"set1">>, set}, [<<"a">>, <<"b">>]},
                                     {{<<"set2">>, set}, [ <<"x">>, <<"y">>, <<"z">>]}]),
 
-    %% get the modified sides values
+    %% get the modified side's values
 
     S1_2 = fetch(P1, ?STYPE),
     M_2 = fetch(P1, ?MTYPE),
@@ -197,13 +197,10 @@ create_pb_clients(Nodes) ->
          C
      end || N <- Nodes].
 
-create_bucket_types([N1|_]=Nodes, Types) ->
+create_bucket_types([N1|_], Types) ->
     lager:info("Creating bucket types with datatypes: ~p", [Types]),
-    [ rpc:call(N1, riak_core_bucket_type, create,
-               [Name, [{datatype, Type}, {allow_mult, true}]]) ||
-        {Name, Type} <- Types ],
-    [rt:wait_until(N1, bucket_type_ready_fun(Name)) || {Name, _Type} <- Types],
-    [ rt:wait_until(N, bucket_type_matches_fun(Types)) || N <- Nodes].
+    [rt:create_and_activate_bucket_type(N1, Name, [{datatype, Type}, {allow_mult, true}])
+     || {Name, Type} <- Types ].
 
 bucket_type_ready_fun(Name) ->
     fun(Node) ->
