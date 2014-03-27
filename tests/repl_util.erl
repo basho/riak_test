@@ -109,10 +109,10 @@ wait_until_leader_converge([Node|_] = Nodes) ->
                 LeaderResults =
                     [rpc:call(N, riak_core_cluster_mgr, get_leader, []) ||
                         N <- Nodes],
-                UniqueLeaders = lists:usort(
-                                  lists:filter(leader_result_filter_fun(),
-                                               LeaderResults)),
-                length(UniqueLeaders) == 1
+                {Leaders, Errors} =
+                    lists:partition(leader_result_filter_fun(), LeaderResults),
+                UniqueLeaders = lists:usort(Leaders),
+                Errors == [] andalso length(UniqueLeaders) == 1
         end).
 
 leader_result_filter_fun() ->
@@ -131,15 +131,20 @@ wait_until_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-                case proplists:get_value(fullsync_coordinator, Status) of
-                    [] ->
+                case Status of
+                    {badrpc, _} ->
                         false;
-                    [_C] ->
-                        true;
-                    Conns ->
-                        lager:warning("multiple connections detected: ~p",
-                            [Conns]),
-                        true
+                    _ ->
+                        case proplists:get_value(fullsync_coordinator, Status) of
+                            [] ->
+                                false;
+                            [_C] ->
+                                true;
+                            Conns ->
+                                lager:warning("multiple connections detected: ~p",
+                                              [Conns]),
+                                true
+                        end
                 end
         end). %% 40 seconds is enough for repl
 
@@ -147,11 +152,16 @@ wait_until_no_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
                 Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-                case proplists:get_value(connected_clusters, Status) of
-                    [] ->
-                        true;
+                case Status of
+                    {badrpc, _} ->
+                        false;
                     _ ->
-                        false
+                        case proplists:get_value(connected_clusters, Status) of
+                            [] ->
+                                true;
+                            _ ->
+                                false
+                        end
                 end
         end). %% 40 seconds is enough for repl
 
