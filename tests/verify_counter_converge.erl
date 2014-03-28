@@ -25,7 +25,7 @@
 
 -module(verify_counter_converge).
 -behavior(riak_test).
--export([confirm/0, set_allow_mult_true/1]).
+-export([confirm/0, set_allow_mult_true/1, set_allow_mult_true/2]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"test-counters">>).
@@ -79,12 +79,15 @@ confirm() ->
     pass.
 
 set_allow_mult_true(Nodes) ->
+    set_allow_mult_true(Nodes, ?BUCKET).
+
+set_allow_mult_true(Nodes, Bucket) ->
     %% Counters REQUIRE allow_mult=true
     N1 = hd(Nodes),
     AllowMult = [{allow_mult, true}],
     lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
-               [AllowMult, ?BUCKET, N1]),
-    rpc:call(N1, riak_core_bucket, set_bucket, [?BUCKET, AllowMult]),
+               [AllowMult, Bucket, N1]),
+    rpc:call(N1, riak_core_bucket, set_bucket, [Bucket, AllowMult]),
     rt:wait_until_ring_converged(Nodes).
 
 %% Counter API
