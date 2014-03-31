@@ -37,6 +37,7 @@
          build_cluster/1,
          build_cluster/2,
          build_cluster/3,
+         build_clusters/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
@@ -52,6 +53,7 @@
          create_and_activate_bucket_type/3,
          deploy_nodes/1,
          deploy_nodes/2,
+         deploy_clusters/1,
          down/2,
          enable_search_hook/2,
          expect_in_log/2,
@@ -93,6 +95,7 @@
          set_backend/1,
          set_backend/2,
          set_conf/2,
+         set_advanced_conf/2,
          setup_harness/2,
          setup_log_capture/1,
          slow_upgrade/3,
@@ -191,6 +194,15 @@ set_conf(Node, NameValuePairs) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_conf(Node, NameValuePairs),
+    start(Node).
+
+-spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
+set_advanced_conf(all, NameValuePairs) ->
+    ?HARNESS:set_advanced_conf(all, NameValuePairs);
+set_advanced_conf(Node, NameValuePairs) ->
+    stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:set_advanced_conf(Node, NameValuePairs),
     start(Node).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
@@ -292,6 +304,25 @@ deploy_nodes(Versions, Services) ->
 version_to_config({_, _}=Config) -> Config;
 version_to_config(Version) -> {Version, default}.
 
+deploy_clusters(Settings) ->
+    ClusterConfigs = [case Setting of
+                          Configs when is_list(Configs) ->
+                              Configs;
+                          NumNodes when is_integer(NumNodes) ->
+                              [{current, default} || _ <- lists:seq(1, NumNodes)];
+                          {NumNodes, InitialConfig} when is_integer(NumNodes) ->
+                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                      end || Setting <- Settings],
+    ?HARNESS:deploy_clusters(ClusterConfigs).
+
+build_clusters(Settings) ->
+    Clusters = deploy_clusters(Settings),
+    [begin
+         join_cluster(Nodes),
+         lager:info("Cluster built: ~p", [Nodes])
+     end || Nodes <- Clusters],
+    Clusters.
+
 %% @doc Start the specified Riak node
 start(Node) ->
     ?HARNESS:start(Node).
@@ -361,6 +392,7 @@ plan_and_commit(Node) ->
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
             timer:sleep(100),
+            maybe_wait_for_changes(Node),
             plan_and_commit(Node);
         {ok, _, _} ->
             do_commit(Node)
@@ -371,13 +403,30 @@ do_commit(Node) ->
         {error, plan_changed} ->
             lager:info("commit: plan changed"),
             timer:sleep(100),
+            maybe_wait_for_changes(Node),
             plan_and_commit(Node);
         {error, ring_not_ready} ->
             lager:info("commit: ring not ready"),
             timer:sleep(100),
+            maybe_wait_for_changes(Node),
             do_commit(Node);
+        {error,nothing_planned} ->
+            %% Assume plan actually committed somehow
+            ok;
         ok ->
             ok
+    end.
+
+maybe_wait_for_changes(Node) ->
+    Ring = get_ring(Node),
+    Changes = riak_core_ring:pending_changes(Ring),
+    Joining = riak_core_ring:members(Ring, [joining]),
+    if Changes =:= [] ->
+            ok;
+       Joining =/= [] ->
+            ok;
+       true ->
+            ok = wait_until_no_pending_changes([Node])
     end.
 
 %% @doc Have the `Node' leave the cluster
@@ -886,6 +935,11 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
                 deploy_nodes(Versions)
         end,
 
+    join_cluster(Nodes),
+    lager:info("Cluster built: ~p", [Nodes]),
+    Nodes.
+
+join_cluster(Nodes) ->
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
 
@@ -908,9 +962,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     %% Ensure each node owns a portion of the ring
     wait_until_nodes_agree_about_ownership(Nodes),
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
-
-    lager:info("Cluster built: ~p", [Nodes]),
-    Nodes.
+    ok.
 
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),

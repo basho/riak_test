@@ -195,10 +195,9 @@ start_and_wait_until_fullsync_complete(Node, Cluster) ->
                 _ ->
                     Count0 + 1
             end,
-    lager:info("waiting for fullsync count to be ~p", [Count]),
+    lager:info("Waiting for fullsync count to be ~p", [Count]),
 
-    lager:info("Starting fullsync on ~p (~p)", [Node,
-            rtdev:node_version(rtdev:node_id(Node))]),
+    lager:info("Starting fullsync on: ~p", [Node]),
     Args = case Cluster of
                undefined ->
                    ["start"];
