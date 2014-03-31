@@ -1,0 +1,2 @@
+evan ALL=NOPASSWD: /usr/local/bos1/home/evan/bin/drop_caches.sh
+

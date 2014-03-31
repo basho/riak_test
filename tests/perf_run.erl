@@ -50,7 +50,8 @@ confirm() ->
                 {cuttlefish,
                  [{ring_size, rt:nearest_ringsize(Count)},
                   {storage_backend, leveldb},
-                  {anti_entropy, off}
+                  %%{"metadata_cache_size", "1MB"},
+                  {anti_entropy, active}
                  ]};
             {_, false} ->
                 [{riak_core,
@@ -61,8 +62,12 @@ confirm() ->
             {_, true} ->
                 {cuttlefish,
                  [{ring_size, 128}, %% rt:nearest_ringsize(Count)},
+		  %% {strong_consistency, on},
+                  {"storage_backend", "bitcask"},
+		  {"erlang.distribution_buffer_size", "64MB"},
                   {"bitcask.io_mode", nif},
-                  {anti_entropy, passive}]}
+                  %%{"metadata_cache_size", "1MB"},
+                  {anti_entropy, active}]}
         end,
     %% make sure that all of the remote nodes have a clean build at
     %% the remote location
@@ -86,6 +91,9 @@ confirm() ->
     rt:wait_until_ring_converged(Nodes),
     rt:wait_until_transfers_complete(Nodes),
 
+    %%[Node | _] = Nodes,
+    %%rt:create_and_activate_bucket_type(Node, <<"sc">>, [{consistent, true}]),
+
     case rt_config:get(perf_prepop) of
         true ->
             PPids = start_data_collectors(HostList),
@@ -93,7 +101,7 @@ confirm() ->
                 "-prepop-binsize"++integer_to_list(BinSize)++"-"++date_string(),
 
             do_prepop(HostList, BinSize, PrepopName),
-
+            timer:sleep(timer:minutes(1)+timer:seconds(30)),
             [exit(P, kill) || P <- PPids],
             collect_test_data(HostList, PrepopName);
         false ->
@@ -158,8 +166,9 @@ poll_stats(Host) ->
             file:close(Fd),
 
             timer:sleep(60000);
-        Else ->
-            lager:error("Web stat collector failed with: ~p", [Else]),
+        _Else ->
+            %% good to know, but turns out that this is just annoying
+            %%lager:error("Web stat collector failed with: ~p", [Else]),
             timer:sleep(100)
     end,
     poll_stats(Host).
@@ -194,6 +203,11 @@ collect_test_data(Hosts, TestName) ->
     rt:cmd("mv "++PrepDir++" results/"++TestName),
     ok.
 
+code_paths() ->
+     {code_paths, ["evan/basho_bench/deps/riakc",
+		   "evan/basho_bench/deps/riak_pb",
+		   "evan/basho_bench/deps/protobuffs"]}.    
+
 do_prepop(NodeList, BinSize, TestName) ->
     PrepopCount = rt_config:get(perf_prepop_size),
     Config = prepop_config(BinSize, NodeList, PrepopCount),
@@ -219,6 +233,7 @@ prepop_config(BinSize, NodeList, BinCount0) ->
      {rng_seed, now},
 
      {riakc_pb_bucket, <<"b1">>},
+     %%{riakc_pb_bucket, {<<"sc">>, <<"b1">>}},
      {key_generator, {int_to_bin, {partitioned_sequential_int, 0, BinCount}}},
      {value_generator, valgen(BinSize)},
      {operations, operations(prepop)},
@@ -228,8 +243,7 @@ prepop_config(BinSize, NodeList, BinCount0) ->
      {riakc_pb_ips, NodeList},
      {riakc_pb_replies, default},
      {driver, basho_bench_driver_riakc_pb},
-     {code_paths, ["evan/basho_bench/deps/riakc",
-                   "evan/basho_bench/deps/protobuffs"]}].
+     code_paths()].
 
 adjust_count(Count, Concurrency) ->
     case Count rem Concurrency of
@@ -240,7 +254,7 @@ adjust_count(Count, Concurrency) ->
 do_pareto(NodeList, BinSize, TestName) ->
     Config = pareto_config(BinSize, NodeList),
     lager:info("Config ~p", [Config]),
-    rt_bench:bench(Config, NodeList, TestName).
+    rt_bench:bench(Config, NodeList, TestName, 2).
 
 pareto_config(BinSize, NodeList) ->
     Count = length(NodeList),
@@ -260,8 +274,7 @@ pareto_config(BinSize, NodeList) ->
      {riakc_pb_ips, NodeList},
      {riakc_pb_replies, default},
      {driver, basho_bench_driver_riakc_pb},
-     {code_paths, ["evan/basho_bench/deps/riakc",
-                   "evan/basho_bench/deps/protobuffs"]}].
+     code_paths()].
 
 do_uniform(NodeList, BinSize, TestName) ->
     Config = uniform_config(BinSize, NodeList),
@@ -285,6 +298,7 @@ uniform_config(BinSize, NodeList) ->
      {rng_seed, now},
 
      {riakc_pb_bucket, <<"b1">>},
+     %%{riakc_pb_bucket, {<<"sc">>, <<"b1">>}},
      {key_generator, {int_to_bin, {uniform_int, Numkeys}}},
      {value_generator, valgen(BinSize)},
      {operations, operations(uniform)},
@@ -293,9 +307,7 @@ uniform_config(BinSize, NodeList) ->
      {riakc_pb_ips, NodeList},
      {riakc_pb_replies, default},
      {driver, basho_bench_driver_riakc_pb},
-     {code_paths, ["evan/basho_bench/deps/riakc",
-                   "evan/basho_bench/deps/protobuffs"]}].
-
+     code_paths()].
 
 
 get_md(BinSize) ->
