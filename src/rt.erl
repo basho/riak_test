@@ -302,7 +302,6 @@ deploy_nodes(Versions, Services) ->
 version_to_config({_, _}=Config) -> Config;
 version_to_config(Version) -> {Version, default}.
 
-%%%%%%%%%%%%%%%%%%%%
 deploy_clusters(Settings) ->
     ClusterConfigs = [case Setting of
                           Configs when is_list(Configs) ->
@@ -321,7 +320,6 @@ build_clusters(Settings) ->
          lager:info("Cluster built: ~p", [Nodes])
      end || Nodes <- Clusters],
     Clusters.
-%%%%%%%%%%%%%%%%%%%%
 
 %% @doc Start the specified Riak node
 start(Node) ->
