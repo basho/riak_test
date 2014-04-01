@@ -4,8 +4,24 @@
 %% legacy: 1.2.1
 %%
 %% uses the following configs with given defaults:
-%% default_timeout = 1000 :: timeout(), base timeout value; some tests will
-%% use a larger value (multiple of).
+%%
+%% ## default_timeout = 1000 :: timeout()
+%%
+%% Base timeout value; some tests will use a larger value (multiple of).
+%%
+%% ## run_rt_cascading_1_3_tests = false :: any()
+%%
+%% Some tests (new_to_old and mixed_version_clusters) only make sense to
+%% run if one is testing the version before cascading was introduced and
+%% the version it was added; eg current being riak 1.4 and previous being
+%% riak 1.3. If this is set to anything (other than 'false') those tests
+%% are run. They will not function properly unless the correct versions
+%% for riak are avialable. The tests check if the versions under test are
+%% too old to be valid however.
+%%
+%% With this set to default, the tests that depend on this option will
+%% emit a log message saying they are not configured to run.
+%%
 
 -module(rt_cascading).
 -compile(export_all).
@@ -16,12 +32,13 @@
 -define(bucket, <<"objects">>).
 
 -export([confirm/0]).
+-export([new_to_old/0, mixed_version_clusters/0]).
 
 % cluster_mgr port = 10006 + 10n where n is devN
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -110,8 +127,12 @@ simple_test_() ->
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.ending, ?bucket, Bin))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero([State#simple_state.middle,
+                                           State#simple_state.beginning,
+                                           State#simple_state.ending])
         end}
-
     ] end}}.
 
 big_circle_test_() ->
@@ -224,8 +245,10 @@ big_circle_test_() ->
             % so, by adding 4 clusters, we've added 2 overlaps.
             % best guess based on what's above is:
             %  NumDuplicateWrites = ceil(NumClusters/2 - 1.5)
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 circle_test_() ->
@@ -287,8 +310,10 @@ circle_test_() ->
             Status = rpc:call(Two, riak_repl2_rt, status, []),
             [SinkData] = proplists:get_value(sinks, Status, [[]]),
             ?assertEqual(2, proplists:get_value(expect_seq, SinkData))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 pyramid_test_() ->
@@ -339,8 +364,10 @@ pyramid_test_() ->
                 ?debugFmt("Checking ~p", [N]),
                 ?assertEqual(Bin, maybe_eventually_exists(N, Bucket, Bin))
             end, Nodes)
-        end}
-
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
+         end}
     ] end}}.
 
 diamond_test_() ->
@@ -431,8 +458,10 @@ diamond_test_() ->
             [Sink2] = proplists:get_value(sinks, Status2, [[]]),
             GotSeq = proplists:get_value(expect_seq, Sink2),
             ?assertEqual(ExpectSeq, GotSeq)
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
 
 circle_and_spurs_test_() ->
@@ -505,9 +534,24 @@ circle_and_spurs_test_() ->
                 ?debugFmt("Checking ~p", [N]),
                 ?assertEqual({error, notfound}, maybe_eventually_exists(N, Bucket, Bin))
             end || N <- Nodes, N =/= NorthSpur]
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
         end}
-
     ] end}}.
+
+mixed_version_clusters() ->
+    case eunit:test(?MODULE:mixed_version_clusters_test_(), [verbose]) of
+        ok ->
+            pass;
+        error ->
+            % at the time this is written, the return value isn't acutally
+            % checked, the only way to fail is to crash the process.
+            % i leave the fail here in hopes a future version will actually
+            % do what the documentation says.
+            exit(error),
+            fail
+    end.
 
 mixed_version_clusters_test_() ->
     %      +-----+
@@ -538,25 +582,39 @@ mixed_version_clusters_test_dep() ->
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
         Nodes = rt:deploy_nodes(DeployConfs),
         [N1, N2, N3, N4, N5, N6] =  Nodes,
-        N12 = [N1, N2],
-        N34 = [N3, N4],
-        N56 = [N5, N6],
-        repl_util:make_cluster(N12),
-        repl_util:make_cluster(N34),
-        repl_util:make_cluster(N56),
-        repl_util:name_cluster(N1, "n12"),
-        repl_util:name_cluster(N3, "n34"),
-        repl_util:name_cluster(N5, "n56"),
-        [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
-        connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
-        connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
-        connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
-        Nodes
+        case rpc:call(N1, application, get_key, [riak_core, vsn]) of
+            % this is meant to test upgrading from early BNW aka
+            % Brave New World aka Advanced Repl aka version 3 repl to
+            % a cascading realtime repl. Other tests handle going from pre
+            % repl 3 to repl 3.
+            {ok, Vsn} when Vsn < "1.3.0" ->
+                {too_old, Nodes};
+            _ ->
+                N12 = [N1, N2],
+                N34 = [N3, N4],
+                N56 = [N5, N6],
+                repl_util:make_cluster(N12),
+                repl_util:make_cluster(N34),
+                repl_util:make_cluster(N56),
+                repl_util:name_cluster(N1, "n12"),
+                repl_util:name_cluster(N3, "n34"),
+                repl_util:name_cluster(N5, "n56"),
+                [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
+                connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
+                connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
+                connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
+                Nodes
+        end
     end,
-    fun(Nodes) ->
+    fun(MaybeNodes) ->
+        Nodes = case MaybeNodes of
+            {too_old, Ns} -> Ns;
+            _ -> MaybeNodes
+        end,
         rt:clean_cluster(Nodes)
     end,
-    fun([N1, N2, N3, N4, N5, N6] = Nodes) -> [
+    fun({too_old, _Nodes}) -> [];
+       ([N1, N2, N3, N4, N5, N6] = Nodes) -> [
 
         {"no cascading at first", timeout, timeout(35), [
             {timeout, timeout(15), fun() ->
@@ -688,9 +746,25 @@ Reses)]),
                 end,
                 [MakeTest(Node, N) || Node <- Nodes, N <- lists:seq(1, 3)]
             end
-        }}
+        }},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(Nodes)
+        end}
 
     ] end}}.
+
+new_to_old() ->
+    case eunit:test(?MODULE:new_to_old_test_(), [verbose]) of
+        ok ->
+            pass;
+        error ->
+            % at the time this is written, the return value isn't acutally
+            % checked, the only way to fail is to crash the process.
+            % i leave the fail here in hopes a future version will actually
+            % do what the documentation says.
+            exit(error),
+            fail
+    end.
 
 new_to_old_test_() ->
     %      +------+
@@ -720,19 +794,33 @@ new_to_old_test_dep() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
         [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        Names = ["new1", "old2", "new3"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        connect_rt(New1, 10026, "old2"),
-        connect_rt(Old2, 10036, "new3"),
-        connect_rt(New3, 10016, "new1"),
-        Nodes
+        case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
+            % this is meant to test upgrading from early BNW aka
+            % Brave New World aka Advanced Repl aka version 3 repl to
+            % a cascading realtime repl. Other tests handle going from pre
+            % repl 3 to repl 3.
+            {ok, Vsn} when Vsn < "1.3.0" ->
+                {too_old, Nodes};
+            _ ->
+                [repl_util:make_cluster([N]) || N <- Nodes],
+                Names = ["new1", "old2", "new3"],
+                [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+                [repl_util:wait_until_is_leader(N) || N <- Nodes],
+                connect_rt(New1, 10026, "old2"),
+                connect_rt(Old2, 10036, "new3"),
+                connect_rt(New3, 10016, "new1"),
+                Nodes
+        end
     end,
-    fun(Nodes) ->
+    fun(MaybeNodes) ->
+        Nodes = case MaybeNodes of
+            {too_old, Ns} -> Ns;
+            _ -> MaybeNodes
+        end,
         rt:clean_cluster(Nodes)
     end,
-    fun([New1, Old2, New3]) -> [
+    fun({too_old, _}) -> [];
+       ([New1, Old2, New3]) -> [
 
         {"From new1 to old2", timeout, timeout(25), fun() ->
             Client = rt:pbc(New1),
@@ -776,8 +864,10 @@ new_to_old_test_dep() ->
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(New3, ?bucket, Bin)),
             ?assertEqual({error, notfound}, maybe_eventually_exists(New1, ?bucket, Bin))
+        end},
+        {"check pendings", fun() ->
+            wait_until_pending_count_zero(["new1", "old2", "new3"])
         end}
-
     ] end}}.
 
 ensure_ack_test_() ->
@@ -1133,3 +1223,24 @@ maybe_skip_teardown(TearDownFun) ->
         end
     end.
 
+wait_until_pending_count_zero(Nodes) ->
+    WaitFun = fun() ->
+        {Statuses, _} =  rpc:multicall(Nodes, riak_repl2_rtq, status, []),
+        Out = [check_status(S) || S <- Statuses],
+        not lists:member(false, Out)	      
+    end,
+    ?assertEqual(ok, rt:wait_until(WaitFun)),
+    ok.
+
+check_status(Status) ->            
+    case proplists:get_all_values(consumers, Status) of
+        undefined ->
+	    true;
+	[] ->
+	    true;
+	Cs ->
+	    PendingList = [proplists:lookup_all(pending, C) || {_, C} <- lists:flatten(Cs)],
+            PendingCount = lists:sum(proplists:get_all_values(pending, lists:flatten(PendingList))),
+	    ?debugFmt("RTQ status pending on test node:~p", [PendingCount]),
+	    PendingCount == 0
+    end.

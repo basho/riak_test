@@ -34,8 +34,7 @@ confirm() ->
                        {riak_kv, mapred_2i_pipe, true},
                        {riak_kv, mapred_system, pipe},
                        {riak_kv, vnode_vclocks, true},
-                       {riak_kv, anti_entropy, enabled_v1},
-                       {riak_kv, mutators, true}],
+                       {riak_kv, anti_entropy, enabled_v1}],
 
     ExpectedOld = case OldVsn of
         legacy ->   [{riak_core, vnode_routing, proxy},
@@ -44,16 +43,14 @@ confirm() ->
                      {riak_kv, listkeys_backpressure, true},
                      {riak_kv, mapred_2i_pipe, true},
                      {riak_kv, mapred_system, pipe},
-                     {riak_kv, vnode_vclocks, true},
-                     {riak_kv, mutators, false}];
+                     {riak_kv, vnode_vclocks, true}];
         previous -> [{riak_core, vnode_routing, proxy},
                      {riak_core, staged_joins, true},
                      {riak_kv, legacy_keylisting, false},
                      {riak_kv, listkeys_backpressure, true},
                      {riak_kv, mapred_2i_pipe, true},
                      {riak_kv, mapred_system, pipe},
-                     {riak_kv, vnode_vclocks, true},
-                     {riak_kv, mutators, false}];
+                     {riak_kv, vnode_vclocks, true}];
         _ -> []
     end,
     

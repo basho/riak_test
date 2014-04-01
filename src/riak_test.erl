@@ -22,4 +22,3 @@
 
 %% Define the riak_test behavior
 -callback confirm() -> pass | fail.
-

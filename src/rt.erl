@@ -27,8 +27,6 @@
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
-
 -export([
          admin/2,
          assert_nodes_agree_about_ownership/1,
@@ -39,6 +37,7 @@
          build_cluster/1,
          build_cluster/2,
          build_cluster/3,
+         build_clusters/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
@@ -54,11 +53,13 @@
          create_and_activate_bucket_type/3,
          deploy_nodes/1,
          deploy_nodes/2,
+         deploy_clusters/1,
          down/2,
          enable_search_hook/2,
          expect_in_log/2,
          get_deps/0,
          get_node_logs/0,
+         get_replica/5,
          get_ring/1,
          get_version/0,
          heal/1,
@@ -90,13 +91,16 @@
          priv_dir/0,
          remove/2,
          riak/2,
+         riak_repl/2,
          rpc_get_env/2,
          set_backend/1,
          set_backend/2,
          set_conf/2,
+         set_advanced_conf/2,
          setup_harness/2,
          setup_log_capture/1,
          slow_upgrade/3,
+         stream_cmd/1, stream_cmd/2,
          spawn_cmd/1,
          spawn_cmd/2,
          search_cmd/2,
@@ -192,6 +196,15 @@ set_conf(Node, NameValuePairs) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_conf(Node, NameValuePairs),
+    start(Node).
+
+-spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
+set_advanced_conf(all, NameValuePairs) ->
+    ?HARNESS:set_advanced_conf(all, NameValuePairs);
+set_advanced_conf(Node, NameValuePairs) ->
+    stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:set_advanced_conf(Node, NameValuePairs),
     start(Node).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
@@ -294,6 +307,25 @@ deploy_nodes(Versions, Services) ->
 version_to_config(Config) when is_tuple(Config)-> Config;
 version_to_config(Version) when is_list(Version) -> {Version, default}.
 
+deploy_clusters(Settings) ->
+    ClusterConfigs = [case Setting of
+                          Configs when is_list(Configs) ->
+                              Configs;
+                          NumNodes when is_integer(NumNodes) ->
+                              [{current, default} || _ <- lists:seq(1, NumNodes)];
+                          {NumNodes, InitialConfig} when is_integer(NumNodes) ->
+                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                      end || Setting <- Settings],
+    ?HARNESS:deploy_clusters(ClusterConfigs).
+
+build_clusters(Settings) ->
+    Clusters = deploy_clusters(Settings),
+    [begin
+         join_cluster(Nodes),
+         lager:info("Cluster built: ~p", [Nodes])
+     end || Nodes <- Clusters],
+    Clusters.
+
 %% @doc Start the specified Riak node
 start(Node) ->
     ?HARNESS:start(Node).
@@ -342,22 +374,6 @@ slow_upgrade(Node, NewVersion, Nodes) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
     ok.
 
-stage_join(Node, OtherNode) ->
-    %% rt:admin(Node, ["cluster", "join", atom_to_list(OtherNode)]).
-    rpc:call(Node, riak_core, staged_join, [OtherNode]).
-
-stage_leave(Node, OtherNode) ->
-    %% rt:admin(Node, ["cluster", "leave", atom_to_list(OtherNode)]).
-    rpc:call(Node, riak_core_claimant, leave_member, [OtherNode]).
-
-stage_plan(Node) ->
-    %% rt:admin(Node, ["cluster", "plan"]).
-    rpc:call(Node, riak_core_claimant, plan, []).
-
-stage_commit(Node) ->
-    %% rt:admin(Node, ["cluster", "commit"]).
-    rpc:call(Node, riak_core_claimant, commit, []).
-
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
     R = rpc:call(Node, riak_core, join, [PNode]),
@@ -379,6 +395,7 @@ plan_and_commit(Node) ->
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
             timer:sleep(100),
+            maybe_wait_for_changes(Node),
             plan_and_commit(Node);
         {ok, _, _} ->
             do_commit(Node)
@@ -389,13 +406,30 @@ do_commit(Node) ->
         {error, plan_changed} ->
             lager:info("commit: plan changed"),
             timer:sleep(100),
+            maybe_wait_for_changes(Node),
             plan_and_commit(Node);
         {error, ring_not_ready} ->
             lager:info("commit: ring not ready"),
             timer:sleep(100),
+            maybe_wait_for_changes(Node),
             do_commit(Node);
+        {error,nothing_planned} ->
+            %% Assume plan actually committed somehow
+            ok;
         ok ->
             ok
+    end.
+
+maybe_wait_for_changes(Node) ->
+    Ring = get_ring(Node),
+    Changes = riak_core_ring:pending_changes(Ring),
+    Joining = riak_core_ring:members(Ring, [joining]),
+    if Changes =:= [] ->
+            ok;
+       Joining =/= [] ->
+            ok;
+       true ->
+            ok = wait_until_no_pending_changes([Node])
     end.
 
 %% @doc Have the `Node' leave the cluster
@@ -796,6 +830,7 @@ wait_until_capability(Node, Capability, Value, Default) ->
     rt:wait_until(Node,
                   fun(_) ->
                           Cap = capability(Node, Capability, Default),
+                io:format("capability is ~p ~p",[Node, Cap]),
                           cap_equal(Value, Cap)
                   end).
 
@@ -818,26 +853,54 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
     ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
 
 %% AAE support
-wait_until_aae_trees_built([AnyNode|_]=Nodes) ->
+wait_until_aae_trees_built(Nodes) ->
     lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
     %% Wait until all nodes report no undefined trees
-    rt:wait_until(AnyNode,
-                  fun(_) ->
-                          Busy = lists:foldl(
-                                   fun(Node,Busy1) ->
-                                           %% will be false when all trees are built on Node
-                                           lists:keymember(undefined,
-                                                           2,
-                                                           rpc:call(Node,
-                                                                    riak_kv_entropy_info,
-                                                                    compute_tree_info,
-                                                                    []))
-                                               or Busy1
-                                   end,
-                                   false,
-                                   Nodes),
-                          not Busy
-                  end).
+    AllBuiltFun =
+    fun(_, _AllBuilt = false) ->
+            false;
+       (Node, _AllBuilt = true) ->
+            Info = rpc:call(Node,
+                            riak_kv_entropy_info,
+                            compute_tree_info,
+                            []),
+            lager:debug("Entropy table on node ~p : ~p", [Node, Info]),
+            AllHaveBuildTimes = not lists:keymember(undefined, 2, Info),
+            case AllHaveBuildTimes of
+                false ->
+                    false;
+                true ->
+                    lager:debug("Check if really built by locking"),
+                    %% Try to lock each partition. If you get not_built,
+                    %% the manager has not detected the built process has 
+                    %% died yet.
+                    %% Notice that the process locking is spawned by the
+                    %% pmap. That's important! as it should die eventually
+                    %% so the test can lock on the tree.
+                    IdxBuilt =
+                    fun(Idx) ->
+                            {ok, TreePid} = rpc:call(Node, riak_kv_vnode,
+                                                     hashtree_pid, [Idx]),
+                            TreeLocked =
+                            rpc:call(Node, riak_kv_index_hashtree, get_lock,
+                                     [TreePid, for_riak_test]),
+                            lager:debug("Partition ~p : ~p", [Idx, TreeLocked]),
+                            TreeLocked == ok
+                            orelse TreeLocked == already_locked
+                    end,
+
+                    Partitions = [I || {I, _} <- Info],
+
+                    AllBuilt =
+                    lists:all(fun(V) -> V == true end,
+                              rt:pmap(IdxBuilt, Partitions)),
+                    lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),  
+                    AllBuilt
+            end
+    end,
+    wait_until(fun() ->
+                       lists:foldl(AllBuiltFun, true, Nodes)
+               end).
 
 %%%===================================================================
 %%% Ring Functions
@@ -928,8 +991,11 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
                 deploy_nodes(Versions)
         end,
 
-    lager:info("Nodes ~p", [Nodes]),
+    join_cluster(Nodes),
+    lager:info("Cluster built: ~p", [Nodes]),
+    Nodes.
 
+join_cluster(Nodes) ->
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
 
@@ -952,10 +1018,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     %% Ensure each node owns a portion of the ring
     wait_until_nodes_agree_about_ownership(Nodes),
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
-    rpc:call(hd(Nodes), riak_core_console, member_status, [[]]),
-
-    lager:info("Cluster built: ~p", [Nodes]),
-    Nodes.
+    ok.
 
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
@@ -1061,6 +1124,29 @@ systest_read(Node, Start, End, Bucket, R, CommonValBin)
                 end
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
+
+% @doc Reads a single replica of a value. This issues a get command directly
+% to the vnode handling the Nth primary partition of the object's preflist.
+get_replica(Node, Bucket, Key, I, N) ->
+    BKey = {Bucket, Key},
+    Chash = rpc:call(Node, riak_core_util, chash_key, [BKey]),
+    Pl = rpc:call(Node, riak_core_apl, get_primary_apl, [Chash, N, riak_kv]),
+    {{Partition, PNode}, primary} = lists:nth(I, Pl),
+    Ref = Reqid = make_ref(),
+    Sender = {raw, Ref, self()},
+    rpc:call(PNode, riak_kv_vnode, get,
+             [{Partition, PNode}, BKey, Ref, Sender]),
+    receive
+        {Ref, {r, Result, _, Reqid}} ->
+            Result;
+        {Ref, Reply} ->
+            Reply
+    after
+        60000 ->
+            lager:error("Replica ~p get for ~p/~p timed out",
+                        [I, Bucket, Key]),
+            ?assert(false)
+    end.
 
 %%%===================================================================
 %%% PBC & HTTPC Functions
@@ -1176,6 +1262,11 @@ admin(Node, Args) ->
 %% @doc Call 'bin/riak' command on `Node' with arguments `Args'
 riak(Node, Args) ->
     ?HARNESS:riak(Node, Args).
+
+
+%% @doc Call 'bin/riak-repl' command on `Node' with arguments `Args'
+riak_repl(Node, Args) ->
+    ?HARNESS:riak_repl(Node, Args).
 
 search_cmd(Node, Args) ->
     {ok, Cwd} = file:get_cwd(),
@@ -1350,9 +1441,10 @@ post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
             lager:warning("Some error POSTing test result: ~p", [X]),
             error
     catch
-        Throws ->
-            lager:error("Error reporting to ~s. ~p", [Name, Throws]),
-            lager:error("Payload: ~s", [mochijson2:encode(TestResult)])
+        Class:Reason ->
+            lager:error("Error reporting to ~s. ~p:~p", [Name, Class, Reason]),
+            lager:error("Payload: ~p", [TestResult]),
+            error
     end.
 
 %%%===================================================================
@@ -1472,3 +1564,4 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
+

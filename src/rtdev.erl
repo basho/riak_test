@@ -33,6 +33,9 @@ get_deps() ->
 riakcmd(Path, N, Cmd) ->
     io_lib:format("~s/dev/dev~b/bin/riak ~s", [Path, N, Cmd]).
 
+riakreplcmd(Path, N, Cmd) ->
+    io_lib:format("~s/dev/dev~b/bin/riak-repl ~s", [Path, N, Cmd]).
+
 gitcmd(Path, Cmd) ->
     io_lib:format("git --git-dir=\"~s/.git\" --work-tree=\"~s/\" ~s",
                   [Path, Path, Cmd]).
@@ -49,7 +52,8 @@ riak_admin_cmd(Path, N, Args) ->
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
-    os:cmd(gitcmd(Path, Cmd)).
+    {0, Out} = cmd(gitcmd(Path, Cmd)),
+    Out.
 
 run_riak(N, Path, Cmd) ->
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
@@ -73,6 +77,12 @@ run_riak(N, Path, Cmd) ->
             R
     end.
 
+run_riak_repl(N, Path, Cmd) ->
+    lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
+    os:cmd(riakreplcmd(Path, N, Cmd)).
+    %% don't mess with intercepts and/or coverage,
+    %% they should already be setup at this point
+
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
@@ -80,8 +90,8 @@ setup_harness(_Test, _Args) ->
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
-    run_git(Path, "reset HEAD --hard"),
-    run_git(Path, "clean -fd"),
+    _ = run_git(Path, "reset HEAD --hard"),
+    _ = run_git(Path, "clean -fd"),
 
     lager:info("Cleaning up lingering pipe directories"),
     rt:pmap(fun(Dir) ->
@@ -91,11 +101,7 @@ setup_harness(_Test, _Args) ->
                     %% the extra slashes will be pruned by filename:join, but this
                     %% ensures that there will be at least one between "/tmp" and Dir
                     PipeDir = filename:join(["/tmp//" ++ Dir, "dev"]),
-                    %% when using filelib:wildcard/2, there must be a wildchar char
-                    %% before the first '/'.
-                    Files = filelib:wildcard("dev?/*.{r,w}", PipeDir),
-                    [ file:delete(filename:join(PipeDir, File)) || File <- Files],
-                    file:del_dir(PipeDir)
+                    {0, _} = cmd("rm -rf " ++ PipeDir)
             end, devpaths()),
     ok.
 
@@ -158,14 +164,30 @@ set_conf(DevPath, NameValuePairs) ->
     [append_to_conf_file(RiakConf, NameValuePairs) || RiakConf <- all_the_files(DevPath, "etc/riak.conf")],
     ok.
 
+set_advanced_conf(all, NameValuePairs) ->
+    lager:info("rtdev:set_advanced_conf(all, ~p)", [NameValuePairs]),
+    [ set_advanced_conf(DevPath, NameValuePairs) || DevPath <- devpaths()],
+    ok;
+set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
+    append_to_conf_file(get_advanced_riak_conf(Node), NameValuePairs),
+    ok;
+set_advanced_conf(DevPath, NameValuePairs) ->
+    [update_app_config_file(RiakConf, NameValuePairs) || RiakConf <- all_the_files(DevPath, "etc/advanced.config")],
+    ok.
+
 get_riak_conf(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     io_lib:format("~s/dev/dev~b/etc/riak.conf", [Path, N]).
 
+get_advanced_riak_conf(Node) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    io_lib:format("~s/dev/dev~b/etc/advanced.config", [Path, N]).
+
 append_to_conf_file(File, NameValuePairs) ->
     Settings = lists:flatten(
-        [io_lib:format("~n~s = ~s~n", [Name, Value]) || {Name, Value} <- NameValuePairs]), 
+        [io_lib:format("~n~s = ~s~n", [Name, Value]) || {Name, Value} <- NameValuePairs]),
     file:write_file(File, Settings, [append]).
 
 all_the_files(DevPath, File) ->
@@ -176,7 +198,7 @@ all_the_files(DevPath, File) ->
         _ ->
             lager:debug("~s is not a directory.", [DevPath]),
             []
-    end.    
+    end.
 
 all_the_app_configs(DevPath) ->
     AppConfigs = all_the_files(DevPath, "etc/app.config"),
@@ -201,23 +223,23 @@ update_app_config(Node, Config) when is_atom(Node) ->
     %% If there's an app.config, do it old style
     %% if not, use cuttlefish's adavnced.config
     case filelib:is_file(AppConfigFile) of
-        true -> 
+        true ->
             update_app_config_file(AppConfigFile, Config);
         _ ->
             update_app_config_file(AdvConfigFile, Config)
-    end; 
+    end;
 update_app_config(DevPath, Config) ->
     [update_app_config_file(AppConfig, Config) || AppConfig <- all_the_app_configs(DevPath)].
 
 update_app_config_file(ConfigFile, Config) ->
     lager:info("rtdev:update_app_config_file(~s, ~p)", [ConfigFile, Config]),
-    
+
     BaseConfig = case file:consult(ConfigFile) of
         {ok, [ValidConfig]} ->
             ValidConfig;
         {error, enoent} ->
             []
-    end, 
+    end,
     MergeA = orddict:from_list(Config),
     MergeB = orddict:from_list(BaseConfig),
     NewConfig =
@@ -243,7 +265,7 @@ get_backends() ->
     end.
 
 get_backends(DevPath) ->
-    [get_backend(AppConfig) || AppConfig <- all_the_app_configs(DevPath)].
+    rt:pmap(fun get_backend/1, all_the_app_configs(DevPath)).
 
 get_backend(AppConfig) ->
     lager:info("get_backend(~s)", [AppConfig]),
@@ -263,7 +285,7 @@ get_backend(AppConfig) ->
 
             %% ConfigFileOutputLine looks like this:
             %% -config /path/to/app.config -args_file /path/to/vm.args -vm_args /path/to/vm.args
-            Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"), 
+            Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"),
                                  ".config" == filename:extension(Filename) ],
 
             case Files of
@@ -283,7 +305,7 @@ get_backend(AppConfig) ->
     end,
 
     case file:consult(ConfigFile) of
-        {ok, [Config]} ->  
+        {ok, [Config]} ->
             kvc:path('riak_kv.storage_backend', Config);
         E ->
             lager:error("Error reading ~s, ~p", [ConfigFile, E]),
@@ -319,6 +341,23 @@ add_default_node_config(Nodes) ->
         BadValue ->
             lager:error("Invalid value for rt_default_config : ~p", [BadValue]),
             throw({invalid_config, {rt_default_config, BadValue}})
+    end.
+
+deploy_clusters(ClusterConfigs) ->
+    NumNodes = rt_config:get(num_nodes, 6),
+    RequestedNodes = lists:flatten(ClusterConfigs),
+
+    case length(RequestedNodes) > NumNodes of
+        true ->
+            erlang:error("Requested more nodes than available");
+        false ->
+            Nodes = deploy_nodes(RequestedNodes),
+            {DeployedClusters, _} = lists:foldl(
+                    fun(Cluster, {Clusters, RemNodes}) ->
+                        {A, B} = lists:split(length(Cluster), RemNodes),
+                        {Clusters ++ [A], B}
+                end, {[], Nodes}, ClusterConfigs),
+            DeployedClusters
     end.
 
 deploy_nodes(NodeConfig) ->
@@ -383,19 +422,21 @@ stop_all(DevPath) ->
                                                "\n"),
                 try
                     _ = list_to_integer(MaybePid),
-                    os:cmd("kill -9 "++MaybePid)
+                    {0, Out} = cmd("kill -9 "++MaybePid),
+                    Out
                 catch
                     _:_ -> ok
                 end,
                 Cmd = C ++ "/bin/riak stop",
-                [Output | _Tail] = string:tokens(os:cmd(Cmd), "\n"),
+                {_, StopOut} = cmd(Cmd),
+                [Output | _Tail] = string:tokens(StopOut, "\n"),
                 Status = case Output of
                     "ok" -> "ok";
                     _ -> "wasn't running"
                 end,
                 lager:info("Stopped Node... ~s ~~ ~s.", [Cmd, Status])
             end,
-            [Stop(D) || D <- Devs];
+            rt:pmap(Stop, Devs);
         _ -> lager:info("~s is not a directory.", [DevPath])
     end,
     ok.
@@ -516,6 +557,14 @@ riak(Node, Args) ->
     lager:info("~s", [Result]),
     {ok, Result}.
 
+
+riak_repl(Node, Args) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    Result = run_riak_repl(N, Path, Args),
+    lager:info("~s", [Result]),
+    {ok, Result}.
+
 node_id(Node) ->
     NodeMap = rt_config:get(rt_nodes),
     orddict:fetch(Node, NodeMap).
@@ -527,7 +576,7 @@ node_version(N) ->
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
 spawn_cmd(Cmd, Opts) ->
-    Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
+    Port = open_port({spawn, lists:flatten(Cmd)}, [stream, in, exit_status] ++ Opts),
     Port.
 
 wait_for_cmd(Port) ->
@@ -587,7 +636,7 @@ get_version() ->
 teardown() ->
     rt_cover:maybe_stop_on_nodes(),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    [stop_all(X ++ "/dev") || X <- devpaths()].
+    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()).
 
 whats_up() ->
     io:format("Here's what's running...~n"),

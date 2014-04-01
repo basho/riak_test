@@ -42,6 +42,7 @@ confirm() ->
 %% 4. bring up stopped nodes and ensure that either lazily queued messages or anti-entropy repair
 %%    propogates key to all nodes in cluster
 test_writes_after_partial_cluster_failure([N1 | _]=Nodes) ->
+    lager:info("testing writes after partial cluster failure"),
     metadata_put(N1, ?PREFIX1, ?KEY1, ?VAL1),
     wait_until_metadata_value(Nodes, ?PREFIX1, ?KEY1, ?VAL1),
     print_tree(N1, Nodes),
@@ -94,11 +95,13 @@ test_metadata_conflicts([N1, N2 | _]=Nodes) ->
 
     %% assert that we no longer have siblings when allow_put=true
     lager:info("checking object count afger resolve on get w/ put"),
-    wait_until_metadata_value([N1, N2], ?PREFIX1, ?KEY2,
+    wait_until_metadata_value(N1, ?PREFIX1, ?KEY2,
                               [{resolver, fun list_resolver/2}],
                               lists:usort([?VAL1, ?VAL2])),
-    ?assertEqual(1, rpc:call(N1, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
-    ?assertEqual(1, rpc:call(N2, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
+    wait_until_metadata_value([N1, N2], ?PREFIX1, ?KEY2,
+                              [{resolver, fun list_resolver/2}, {allow_put, false}],
+                              lists:usort([?VAL1, ?VAL2])),
+    wait_until_object_count([N1, N2], ?PREFIX1, ?KEY2, 1),
     ok.
 
 write_conflicting(N1, N2, Prefix, Key, Val1, Val2) ->
@@ -151,6 +154,17 @@ wait_until_metadata_value(Node, Prefix, Key, Opts, Val) ->
         end,
     ?assertEqual(ok, rt:wait_until(F)),
     ok.
+
+wait_until_object_count(Nodes, Prefix, Key, Count) when is_list(Nodes) ->
+    [wait_until_object_count(Node, Prefix, Key, Count) || Node <- Nodes];
+wait_until_object_count(Node, Prefix, Key, Count) ->
+    lager:info("wait until {~p, ~p} has object count ~p on ~p", [Prefix, Key, Count, Node]),
+    F = fun() ->
+                Count =:= rpc:call(Node, ?MODULE, object_count, [Prefix, Key])
+        end,
+    ?assertEqual(ok, rt:wait_until(F)),
+    ok.
+
 
 eager_peers(Node, Root) ->
     {Eagers, _} = rpc:call(Node, riak_core_broadcast, debug_get_peers, [Node, Root]),

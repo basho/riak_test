@@ -317,7 +317,7 @@ them with.  The example above would result in all calls to
 
 To add the `dropped_put` intercept manually you would do the following.
 
-    `rt_intercept:add(Node, {riak_kv_vnode, [{{put,7}, dropped_put}]})`
+    rt_intercept:add(Node, {riak_kv_vnode, [{{put,7}, dropped_put}]})
 
 ### How Does it Work?
 
@@ -374,3 +374,15 @@ the config survive restarts and are essentially always in play.  A
 user can also manually add an intercept by making an `rpc` call from
 the test code to the remote node.  This method is ephemeral and the
 intercept will not survive restarts.
+
+
+#### Shell Completion
+
+##### Bash
+
+To have bash shell complete test names, source the `utils/riak_test.bash` file.
+
+##### Zsh
+
+put `utils/riak_test.zsh` somewhere on `$fpath`.
+

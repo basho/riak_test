@@ -22,6 +22,7 @@
 -module(riak_test_escript).
 -include("rt.hrl").
 -export([main/1]).
+-export([add_deps/1]).
 
 add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
@@ -36,10 +37,12 @@ cli_options() ->
  {tests,              $t, "tests",    string,     "specifies which tests to run"},
  {suites,             $s, "suites",   string,     "which suites to run"},
  {dir,                $d, "dir",      string,     "run all tests in the specified directory"},
+ {skip,               $x, "skip",     string,     "list of tests to skip in a directory"},
  {verbose,            $v, "verbose",  undefined,  "verbose output"},
  {outdir,             $o, "outdir",   string,     "output directory"},
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
+ {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
  {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
 ].
@@ -171,8 +174,17 @@ main(Args) ->
     rt_cover:maybe_start(),
 
     TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
+    [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) || R <- TestResults],
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
+    Teardown = not proplists:get_value(keep, ParsedArgs, false),
+    maybe_teardown(Teardown, TestResults, Coverage, Verbose),
+    ok.
+
+maybe_teardown(false, TestResults, Coverage, Verbose) ->
+    print_summary(TestResults, Coverage, Verbose),
+    lager:info("Keeping cluster running as requested");
+maybe_teardown(true, TestResults, Coverage, Verbose) ->
     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
         {1, fail} ->
             print_summary(TestResults, Coverage, Verbose),
@@ -201,7 +213,8 @@ parse_command_line_tests(ParsedArgs) ->
     [code:add_patha(CodePath) || CodePath <- CodePaths,
                                  CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
-    DirTests = lists:append([load_tests_in_dir(Dir) || Dir <- Dirs]),
+    SkipTests = string:tokens(proplists:get_value(skip, ParsedArgs, []), [$,]),
+    DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
     lists:foldl(fun(Test, Tests) ->
             [{
               list_to_atom(Test),
@@ -271,28 +284,32 @@ is_runnable_test({TestModule, _}) ->
     code:ensure_loaded(Mod),
     erlang:function_exported(Mod, Fun, 0).
 
-run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
-    SingleTestResult = riak_test_runner:confirm(Test,
-                                                Outdir,
-                                                TestMetaData,
-                                                HarnessArgs),
+run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
+    rt_cover:maybe_reset(),
+    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
+    CoverDir = rt_config:get(cover_output, "coverage"),
     case NumTests of
         1 -> keep_them_up;
         _ -> rt:teardown()
     end,
+    CoverageFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
     case Report of
         undefined -> ok;
         _ ->
-           case giddyup:post_result(SingleTestResult) of
+            {value, {log, L}, TestResult} = lists:keytake(log, 1, SingleTestResult),
+            case giddyup:post_result(TestResult) of
                 error -> woops;
                 {ok, Base} ->
-                    %% Now push up the artifacts
+                    %% Now push up the artifacts, starting with the test log
+                    giddyup:post_artifact(Base, {"riak_test.log", L}),
                     [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ],
-                    ResultPlusGiddyUp = SingleTestResult ++ [{giddyup_url, list_to_binary(Base)}],
+                    [giddyup:post_artifact(Base, {filename:basename(CoverageFile) ++ ".gz",
+                                                  zlib:gzip(element(2,file:read_file(CoverageFile)))}) || CoverageFile /= cover_disabled ],
+                    ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
                     [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ]
             end
     end,
-    SingleTestResult.
+    [{coverdata, CoverageFile} | SingleTestResult].
 
 get_webhooks() ->
     Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
@@ -373,12 +390,26 @@ results_filter(Result) ->
             true
     end.
 
-load_tests_in_dir(Dir) ->
+load_tests_in_dir(Dir, SkipTests) ->
     case filelib:is_dir(Dir) of
         true ->
             code:add_path(Dir),
-            lists:sort([ string:substr(Filename, 1, length(Filename) - 5) || Filename <- filelib:wildcard("*.beam", Dir)]);
+            lists:sort(
+              lists:foldl(load_tests_folder(SkipTests),
+                          [],
+                          filelib:wildcard("*.beam", Dir)));
         _ -> io:format("~s is not a dir!~n", [Dir])
+    end.
+
+load_tests_folder(SkipTests) ->
+    fun(X, Acc) ->
+            Test = string:substr(X, 1, length(X) - 5),
+            case lists:member(Test, SkipTests) of
+                true ->
+                    Acc;
+                false ->
+                    [Test | Acc]
+            end
     end.
 
 so_kill_riak_maybe() ->

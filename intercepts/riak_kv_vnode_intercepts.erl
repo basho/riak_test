@@ -17,6 +17,11 @@ slow_handle_command(Req, Sender, State) ->
     timer:sleep(500),
     ?M:handle_command_orig(Req, Sender, State).
 
+%% @doc Return wrong_node error because ownership transfer is happening
+%%      when trying to get the hashtree pid for a partition.
+wrong_node(_Partition) ->
+    {error, wrong_node}.
+
 %% @doc Make all KV vnode coverage commands take abnormally long.
 slow_handle_coverage(Req, Filter, Sender, State) ->
     random:seed(erlang:now()),

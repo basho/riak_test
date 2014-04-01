@@ -96,8 +96,20 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
     Pid = spawn_link(Mod, Fun, []),
+    Ref = case rt_config:get(test_timeout, undefined) of
+        Timeout when is_integer(Timeout) ->
+            erlang:send_after(Timeout, self(), test_took_too_long);
+        _ ->
+            undefined
+    end,
 
     {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
+    case Ref of
+        undefined ->
+            ok;
+        _ ->
+            erlang:cancel_timer(Ref)
+    end,
     riak_test_group_leader:tidy_up(OldGroupLeader),
     case Status of
         fail ->
@@ -121,6 +133,9 @@ function_name(TestModule) ->
 
 rec_loop(Pid, TestModule, TestMetaData) ->
     receive
+        test_took_too_long ->
+            exit(Pid, kill),
+            {fail, test_timed_out};
         metadata ->
             Pid ! {metadata, TestMetaData},
             rec_loop(Pid, TestModule, TestMetaData);

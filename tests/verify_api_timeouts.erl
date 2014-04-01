@@ -9,10 +9,9 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.siblings", "off"}]),    
     [Node] = rt:build_cluster(1),
     rt:wait_until_pingable(Node),
-    
+
     HC = rt:httpc(Node),
     lager:info("setting up initial data and loading remote code"),
     rt:httpc_write(HC, <<"foo">>, <<"bar">>, <<"foobarbaz\n">>),
@@ -28,42 +27,47 @@ confirm() ->
                             [{{prepare,2}, slow_prepare}]}),
     rt_intercept:add(Node, {riak_kv_vnode,
                             [{{handle_coverage,4}, slow_handle_coverage}]}),
-    
-    
+
+
     lager:info("testing HTTP API"),
 
     lager:info("testing GET timeout"),
     {error, Tup1} = rhc:get(HC, <<"foo">>, <<"bar">>, [{timeout, 100}]),
     ?assertMatch({ok, "503", _, <<"request timed out\n">>}, Tup1),
-    
+
     lager:info("testing PUT timeout"),
     {error, Tup2} = rhc:put(HC, riakc_obj:new(<<"foo">>, <<"bar">>,
                                               <<"getgetgetgetget\n">>),
                             [{timeout, 100}]),
     ?assertMatch({ok, "503", _, <<"request timed out\n">>}, Tup2),
- 
+
     lager:info("testing DELETE timeout"),
     {error, Tup3} = rhc:delete(HC, <<"foo">>, <<"bar">>, [{timeout, 100}]),
     ?assertMatch({ok, "503", _, <<"request timed out\n">>}, Tup3),
-    
+
     lager:info("testing invalid timeout value"),
     {error, Tup4} = rhc:get(HC, <<"foo">>, <<"bar">>, [{timeout, asdasdasd}]),
     ?assertMatch({ok, "400", _,
-                  <<"Bad timeout value \"asdasdasd\"\n">>}, 
+                  <<"Bad timeout value \"asdasdasd\"\n">>},
                  Tup4),
 
     lager:info("testing GET still works before long timeout"),
     {ok, O} = rhc:get(HC, <<"foo">>, <<"bar">>, [{timeout, 4000}]),
 
     %% either of these are potentially valid.
-    case riakc_obj:get_value(O) of 
-        <<"foobarbaz\n">> -> 
+    case riakc_obj:get_values(O) of
+        [<<"foobarbaz\n">>] ->
             lager:info("Original Value"),
             ok;
-        <<"getgetgetgetget\n">> -> 
+        [<<"getgetgetgetget\n">>] ->
             lager:info("New Value"),
             ok;
-        V -> ?assertEqual({object_value, <<"getgetgetgetget\n">>}, 
+        [_A, _B] = L ->
+            ?assertEqual([<<"foobarbaz\n">>,<<"getgetgetgetget\n">>],
+                         lists:sort(L)),
+            lager:info("Both Values"),
+            ok;
+        V -> ?assertEqual({object_value, <<"getgetgetgetget\n">>},
                           {object_value, V})
     end,
 
@@ -79,32 +83,37 @@ confirm() ->
     ?assertEqual(BOOM, PGET),
 
     lager:info("testing PUT timeout"),
-    PPUT = riakc_pb_socket:put(PC, 
+    PPUT = riakc_pb_socket:put(PC,
                                riakc_obj:new(<<"foo">>, <<"bar2">>,
                                              <<"get2get2get2get2get\n">>),
                                [{timeout, 100}]),
     ?assertEqual(BOOM, PPUT),
- 
+
     lager:info("testing DELETE timeout"),
-    PDEL = riakc_pb_socket:delete(PC, <<"foo">>, <<"bar2">>, 
+    PDEL = riakc_pb_socket:delete(PC, <<"foo">>, <<"bar2">>,
                                   [{timeout, 100}]),
     ?assertEqual(BOOM, PDEL),
 
     lager:info("testing invalid timeout value"),
-    ?assertError(badarg, riakc_pb_socket:get(PC, <<"foo">>, <<"bar2">>, 
+    ?assertError(badarg, riakc_pb_socket:get(PC, <<"foo">>, <<"bar2">>,
                                              [{timeout, asdasdasd}])),
 
     lager:info("testing GET still works before long timeout"),
-    {ok, O2} = riakc_pb_socket:get(PC, <<"foo">>, <<"bar2">>, 
+    {ok, O2} = riakc_pb_socket:get(PC, <<"foo">>, <<"bar2">>,
                                   [{timeout, 4000}]),
 
     %% either of these are potentially valid.
-    case riakc_obj:get_value(O2) of  
-        <<"get2get2get2get2get\n">> -> 
+    case riakc_obj:get_values(O2) of
+        [<<"get2get2get2get2get\n">>] ->
             lager:info("New Value"),
             ok;
-        <<"foobarbaz2\n">> -> 
+        [<<"foobarbaz2\n">>] ->
             lager:info("Original Value"),
+            ok;
+        [_A2, _B2] = L2 ->
+            ?assertEqual([<<"foobarbaz2\n">>, <<"get2get2get2get2get\n">>],
+                         lists:sort(L2)),
+            lager:info("Both Values"),
             ok;
         V2 -> ?assertEqual({object_value, <<"get2get2get2get2get\n">>}, 
                            {object_value, V2})
@@ -143,8 +152,8 @@ confirm() ->
     lager:info("Checking stream buckets works w/ long timeout"),
     {ok, ReqId7} = riakc_pb_socket:stream_list_buckets(Pid, Long),
     wait_for_end(ReqId7),
-    
-    
+
+
     lager:info("Checking HTTP"),
     LHC = rt:httpc(Node),
     lager:info("Checking keys timeout"),
@@ -161,10 +170,10 @@ confirm() ->
     wait_for_end(ReqId4),
 
     lager:info("Checking buckets timeout"),
-    ?assertMatch({error, <<"timeout">>}, 
+    ?assertMatch({error, <<"timeout">>},
                  rhc:list_buckets(LHC, Short)),
     lager:info("Checking buckets w/ long timeout"),
-    ?assertMatch({ok, _}, 
+    ?assertMatch({ok, _},
                  rhc:list_buckets(LHC, Long)),
     lager:info("Checking stream buckets timeout"),
     {ok, ReqId3} = rhc:stream_list_buckets(LHC, Short),
@@ -218,7 +227,7 @@ wait_for_end(ReqId) ->
     end.
 
 
-put_buckets(Node, Num) -> 
+put_buckets(Node, Num) ->
     Pid = rt:pbc(Node),
     Buckets = [list_to_binary(["", integer_to_list(Ki)])
                || Ki <- lists:seq(0, Num - 1)],

@@ -30,7 +30,10 @@
     start/0,
     maybe_start_on_node/2,
     maybe_write_coverage/2,
+    maybe_export_coverage/3,
+    maybe_import_coverage/1,
     stop/0,
+    maybe_reset/0,
     maybe_stop_on_node/1,
     maybe_stop_on_nodes/0,
     stop_on_nodes/0,
@@ -186,6 +189,22 @@ stop_on_nodes(Nodes) ->
 maybe_write_coverage(CoverMods, Dir) ->
     if_coverage(fun() -> write_coverage(CoverMods, Dir) end).
 
+maybe_export_coverage(TestModule, Dir, Phash) ->
+    if_coverage(fun() ->
+                        prepare_output_dir(Dir),
+                        Filename = filename:join(Dir,
+                                                 atom_to_list(TestModule)
+                                                 ++ "-" ++ integer_to_list(Phash)
+                                                 ++ ".coverdata"),
+                        ok = cover:export(Filename),
+                        Filename
+                end).
+
+maybe_import_coverage(cover_disabled) ->
+    ok;
+maybe_import_coverage(File) ->
+    if_coverage(fun() -> cover:import(File) end).
+
 prepare_output_dir(Dir) ->
     %% NOTE: This is not a recursive make dir, only top level will be created.
     case file:make_dir(Dir) of
@@ -274,6 +293,27 @@ process_module(Mod, OutDir) ->
 write_coverage(all, Dir) ->
     write_coverage(rt_config:get(cover_modules, []), Dir);
 write_coverage(CoverModules, CoverDir) ->
+    % temporarily reassign the group leader, to suppress annoying io:format output
+    {group_leader, GL} = erlang:process_info(whereis(cover_server), group_leader),
+    %% tiny recursive fun that pretends to be a group leader$
+    F = fun() ->
+            YComb = fun(Fun) ->
+                    receive
+                        {io_request, From, ReplyAs, {put_chars, _Enc, _Msg}} ->
+                            From ! {io_reply, ReplyAs, ok},
+                            Fun(Fun);
+                        {io_request, From, ReplyAs, {put_chars, _Enc, _Mod, _Func, _Args}} ->
+                            From ! {io_reply, ReplyAs, ok},
+                            Fun(Fun);
+                        _Other ->
+                            io:format(user, "Other Msg ~p", [_Other]),
+                            Fun(Fun)
+                    end
+            end,
+            YComb(YComb)
+    end,
+    Pid = spawn(F),
+    erlang:group_leader(Pid, whereis(cover_server)),
     % First write a file per module
     prepare_output_dir(CoverDir),
     ModCovList0 = rt:pmap(fun(Mod) -> process_module(Mod, CoverDir) end,
@@ -288,7 +328,8 @@ write_coverage(CoverModules, CoverDir) ->
     % Now write main file with links to module files.
     IdxFile = filename:join([CoverDir, "index.html"]),
     write_index_file(TotalCov, IdxFile),
-
+    erlang:group_leader(GL, whereis(cover_server)),
+    exit(Pid, kill),
     TotalCov.
 
 write_index_file({TotalPerc, AppCovList}, File) ->
@@ -366,3 +407,6 @@ write_module_coverage(CoverMod, CoverDir) ->
 stop() ->
     lager:info("Stopping cover"),
     cover:stop().
+
+maybe_reset() ->
+    if_coverage(fun() -> cover:reset() end).

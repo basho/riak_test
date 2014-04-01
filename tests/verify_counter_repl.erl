@@ -61,7 +61,8 @@ confirm() ->
 
 make_clusters() ->
     Conf = [{riak_repl, [{fullsync_on_connect, false},
-                         {fullsync_interval, disabled}]}],
+                         {fullsync_interval, disabled}]},
+           {riak_core, [{default_bucket_props, [{allow_mult, true}]}]}],
     Nodes = rt:deploy_nodes(6, Conf),
     {ClusterA, ClusterB} = lists:split(3, Nodes),
     A = make_cluster(ClusterA, "A"),
@@ -70,7 +71,6 @@ make_clusters() ->
 
 make_cluster(Nodes, Name) ->
     repl_util:make_cluster(Nodes),
-    verify_counter_converge:set_allow_mult_true(Nodes),
     repl_util:name_cluster(hd(Nodes), Name),
     repl_util:wait_until_leader_converge(Nodes),
     Clients = [ rt:httpc(Node) || Node <- Nodes ],

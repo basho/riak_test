@@ -84,9 +84,8 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
     lager:info("Populating root node."),
     rt:systest_write(RootNode, NTestItems),
     %% write one object with a bucket type
-    ok = rpc:call(RootNode, riak_core_bucket_type, create, [<<"type">>, []]),
+    rt:create_and_activate_bucket_type(RootNode, <<"type">>, []),
     %% allow cluster metadata some time to propogate
-    timer:sleep(1000),
     rt:systest_write(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
 
     %% Test handoff on each node:

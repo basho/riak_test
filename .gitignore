@@ -2,6 +2,7 @@ deps
 ebin
 log
 riak_test
+smoke_test
 .eunit
 .DS_Store
 out
@@ -13,4 +14,5 @@ doc/
 !doc/overview.edoc
 *.jar
 coverage
-
+tags
+riak-*
