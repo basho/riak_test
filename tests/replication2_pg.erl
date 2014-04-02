@@ -405,6 +405,9 @@ test_pg_proxy(SSL) ->
     {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
     ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
 
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
+
     lager:info("Stopping leader on requester cluster"),
     PGLeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
     rt:log_to_nodes(AllNodes, "Killing leader on requester cluster"),
