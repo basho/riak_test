@@ -869,8 +869,7 @@ confirm() ->
         ],
     lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
     lager:error("The runnable tests in this module are: ~p", [AllTests]),
-    ?assert(false).
-
+    [?assertEqual(pass, erlang:apply(?MODULE, Test, [])) || Test <- AllTests].
 
 banner(T) ->
     banner(T, false).
