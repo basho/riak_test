@@ -1327,7 +1327,7 @@ log_to_nodes(Nodes, LFmt, LArgs) ->
                [] -> [info, Meta, "---riak_test--- " ++ LFmt];
                _  -> [info, Meta, "---riak_test--- " ++ LFmt, LArgs]
            end,
-    [rpc:call(Node, Module, Function, Args) || Node <- Nodes].
+    [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 
 %% @private utility function
 pmap(F, L) ->
