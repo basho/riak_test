@@ -67,6 +67,7 @@ add_nodes(NumNodes) ->
     lager:info("Deploying cluster of size ~p", [NumNodes]),
     Config = [{riak_core, [{ring_creation_size, ?RING_SIZE}]}],
     Nodes = rt:deploy_nodes(NumNodes, Config),
+    configure_nodes(Nodes),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
 
 add_nodes_next(S, _, [NumNodes]) ->
@@ -184,3 +185,11 @@ stop_node(Node) ->
 node_list(NumNodes) ->
     NodesN = lists:seq(1, NumNodes),
     [?DEV(N) || N <- NodesN].
+
+configure_nodes(Nodes) ->
+    [begin
+         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
+         ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
+         rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
+     end || Node <- Nodes],
+    ok.
