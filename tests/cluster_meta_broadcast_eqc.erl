@@ -1,3 +1,22 @@
+%% ---------------------------------------------------------------------
+%%
+%% Copyright (c) 2014 Basho Technologies, Inc.  All Rights Reserved.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% ---------------------------------------------------------------------
 -module(cluster_meta_broadcast_eqc).
 -compile(export_all).
 
@@ -9,12 +28,11 @@
 -export([confirm/0]).
 
 -behaviour(eqc_statem).
--export([command/1, initial_state/0, next_state/3,
-         precondition/2, postcondition/3]).
+%-export([command/1, initial_state/0, next_state/3,
+%         precondition/2, postcondition/3]).
+-export([initial_state/0]).
 
 -define(NUM_TESTS, 4).
--define(N, 3).
--define(R, 2).
 -define(RING_SIZE, 16).
 -define(LAZY_TIMER, 20).
 -define(MANAGER, riak_core_metadata_manager).
@@ -39,7 +57,9 @@ confirm() ->
     ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
     pass.
 
-%% Generators
+%% ====================================================================
+%% EQC generators
+%% ====================================================================
 gen_numnodes() ->
     oneof([2, 3, 4, 5, 6]).
 key() -> elements([k1, k2, k3, k4, k5]).
@@ -51,11 +71,15 @@ key_context(Key, NodeContext) ->
         {Key, Ctx} -> Ctx
     end.
 
-%% -- Commands ---------------------------------------------------------------
+%% ====================================================================
+%% EQC commands (using group commands)
+%% ====================================================================
 
+%% -- initial_state --
 initial_state() ->
     #state{}.
 
+%% -- add_nodes --
 add_nodes_pre(S) -> 
     S#state.nodes_up == [].
 
@@ -65,8 +89,7 @@ add_nodes_args(_S) ->
 
 add_nodes(NumNodes) ->
     lager:info("Deploying cluster of size ~p", [NumNodes]),
-    Config = [{riak_core, [{ring_creation_size, ?RING_SIZE}]}],
-    Nodes = rt:deploy_nodes(NumNodes, Config),
+    Nodes = rt:deploy_nodes(NumNodes),
     configure_nodes(Nodes),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
 
@@ -96,15 +119,17 @@ broadcast(Node, Key0, Val0, Context) ->
     context(Val).
 
 %broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
-%  S#state{ broadcast_node = lists:keystore(Node, #node.name, S#state.nodes_up,
+%  S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
 %                                  #node{ name = Node, context = Context }) }.
 
+%% ====================================================================
+%% EQC Properties
+%% ====================================================================
 prop_test() ->
     ?FORALL(Cmds, ?SIZED(N, resize(N div 2, commands(?MODULE))),
     ?LET(Shrinking, parameter(shrinking, false),
     ?ALWAYS(if Shrinking -> 1; true -> 1 end,
     begin
-        rt:setup_harness(dummy, dummy),
         lager:info("======================== Will run commands ======================="),
         [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
         {H, S, R} = run_commands(?MODULE, Cmds),
@@ -124,23 +149,22 @@ prop_test() ->
             eqc_gen:with_parameter(show_states, true, pretty_commands(?MODULE, Cmds, {H, S, R}, R == ok))
         end))).
 
+%% ====================================================================
 %% Helpers
-start_manager(Node) ->
-  Dir = atom_to_list(Node),
-  os:cmd("mkdir " ++ Dir),
-  os:cmd("rm " ++ Dir ++ "/*"),
-  (catch exit(whereis(?MANAGER), kill)),
-  timer:sleep(1),
-  {ok, Mgr} = ?MANAGER:start_link([{data_dir, Dir}, {node_name, Node}]),
-  unlink(Mgr).
-
-mk_key(Key) -> {?PREFIX, Key}.  %% TODO: prefix
-
-put_arguments(_Name, Key, Context, Val) ->
-  [Key, Context, Val].
-
+%% ====================================================================
 broadcast_obj(Key, Val) ->
   #metadata_broadcast{ pkey = Key, obj = Val }.
+
+configure_nodes(Nodes) ->
+    [begin
+         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
+         ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
+         rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
+     end || Node <- Nodes],
+    ok.
+
+context(Obj) ->
+    riak_core_metadata_object:context(Obj).
 
 get_view(Node) ->
   rpc:call(Node, ?MODULE, get_view, []).
@@ -155,12 +179,28 @@ iterate(It, Acc) ->
     false -> iterate(?MANAGER:iterate(It), [?MANAGER:iterator_value(It)|Acc])
   end.
 
+mk_key(Key) -> {?PREFIX, Key}.  %% TODO: prefix
+
+node_list(NumNodes) ->
+    NodesN = lists:seq(1, NumNodes),
+    [?DEV(N) || N <- NodesN].
+
+put_arguments(_Name, Key, Context, Val) ->
+  [Key, Context, Val].
+
+start_manager(Node) ->
+  Dir = atom_to_list(Node),
+  os:cmd("mkdir " ++ Dir),
+  os:cmd("rm " ++ Dir ++ "/*"),
+  (catch exit(whereis(?MANAGER), kill)),
+  timer:sleep(1),
+  {ok, Mgr} = ?MANAGER:start_link([{data_dir, Dir}, {node_name, Node}]),
+  unlink(Mgr).
+
 where_is_event_logger() ->
   io:format("event_logger: ~p\n", [global:whereis_name(event_logger)]).
 
-context(Obj) ->
-    riak_core_metadata_object:context(Obj).
-
+%% Cluster/node mgmt
 join_node(NodesReadyCount, ReadyNodes, UpNode1) ->
     NextNode = lists:nth(length(ReadyNodes) - NodesReadyCount + 1, ReadyNodes),
     lager:info("*******************[CMD] Join node ~p to ~p", [NextNode, UpNode1]),
@@ -182,14 +222,3 @@ stop_node(Node) ->
     rt:stop(Node),
     rt:wait_until_unpingable(Node).
 
-node_list(NumNodes) ->
-    NodesN = lists:seq(1, NumNodes),
-    [?DEV(N) || N <- NodesN].
-
-configure_nodes(Nodes) ->
-    [begin
-         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
-         ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
-         rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
-     end || Node <- Nodes],
-    ok.
