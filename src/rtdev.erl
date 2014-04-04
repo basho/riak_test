@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -411,33 +411,66 @@ deploy_nodes(NodeConfig) ->
     lager:info("Deployed nodes: ~p", [Nodes]),
     Nodes.
 
+stop_fun({C,Node}) ->
+    net_kernel:hidden_connect_node(Node),
+    Tmout = case rpc:call(Node, init, get_argument, [shutdown_time]) of
+		{ok,[[Tm]]} -> list_to_integer(Tm)+1000;
+		_ -> 11000
+	    end,
+    case rpc:call(Node, os, getpid, []) of
+	PidStr when is_list(PidStr) ->
+	    rpc:call(Node, timer, apply_after,
+		     [Tmout, os, cmd, ["kill -9 "++PidStr]]),
+	    lager:info("Preparing to stop node ~p (process ID ~s) with init:stop/0...",
+		       [Node, PidStr]),
+	    rpc:call(Node, init, stop, []);
+	BadRpc ->
+	    Cmd = C ++ "/bin/riak stop",
+	    lager:info("RPC to node ~p returned ~p, will try stop anyway... ~s",
+		       [Node, BadRpc, Cmd]),
+	    Output = os:cmd(Cmd),
+	    Status = case Output of
+			 "ok\n" -> "ok";
+			 _ -> "wasn't running"
+		     end,
+	    lager:info("Stopped node ~p, stop status: ~s.", [Node, Status])
+    end,
+    ok.
+
+kill_stragglers(DevPath) ->
+    {ok, Re} = re:compile("^\\s*\\S+\\s+(\\d+).+\\d+\\s+"++DevPath++"\\S+/beam"),
+    ReOpts = [{capture,all_but_first,list}],
+    Pids = tl(string:tokens(os:cmd("ps -ef"), "\n")),
+    Fold = fun(Proc, Acc) ->
+                   case re:run(Proc, Re, ReOpts) of
+                       nomatch ->
+                           Acc;
+                       {match,[Pid]} ->
+                           lager:info("Process ~s still running, killing...",
+                                      [Pid]),
+                           os:cmd("kill -15 "++Pid),
+                           timer:sleep(5000),
+                           os:cmd("kill -9 "++Pid),
+                           [Pid|Acc]
+                   end
+           end,
+    lists:foldl(Fold, [], Pids).
+
 stop_all(DevPath) ->
     case filelib:is_dir(DevPath) of
         true ->
             Devs = filelib:wildcard(DevPath ++ "/dev*"),
-            %% Works, but I'd like it to brag a little more about it.
-            Stop = fun(C) ->
-                %% If getpid available, kill -9 with it, we're serious here
-                [MaybePid | _] = string:tokens(os:cmd(C ++ "/bin/riak getpid"),
-                                               "\n"),
-                try
-                    _ = list_to_integer(MaybePid),
-                    {0, Out} = cmd("kill -9 "++MaybePid),
-                    Out
-                catch
-                    _:_ -> ok
-                end,
-                Cmd = C ++ "/bin/riak stop",
-                {_, StopOut} = cmd(Cmd),
-                [Output | _Tail] = string:tokens(StopOut, "\n"),
-                Status = case Output of
-                    "ok" -> "ok";
-                    _ -> "wasn't running"
-                end,
-                lager:info("Stopped Node... ~s ~~ ~s.", [Cmd, Status])
+            Nodes = [?DEV(N) || N <- lists:seq(1, length(Devs))],
+            case net_kernel:start(['riak_test@127.0.0.1', longnames]) of
+                {ok, _} ->
+                    true = erlang:set_cookie(?DEV(0), riak);
+                {error,{already_started,_}} ->
+                    ok
             end,
-            rt:pmap(Stop, Devs);
-        _ -> lager:info("~s is not a directory.", [DevPath])
+            rt:pmap(fun stop_fun/1, lists:zip(Devs, Nodes)),
+            kill_stragglers(DevPath);
+        _ ->
+	    lager:info("~s is not a directory.", [DevPath])
     end,
     ok.
 

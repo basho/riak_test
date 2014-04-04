@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -765,7 +765,11 @@ brutal_kill(Node) ->
     rt_cover:maybe_stop_on_node(Node),
     lager:info("Killing node ~p", [Node]),
     OSPidToKill = rpc:call(Node, os, getpid, []),
-    rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+    %% try a normal kill first, but set a timer to
+    %% kill -9 after 5 seconds just in case
+    rpc:cast(Node, timer, apply_after,
+             [5000, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]]),
+    rpc:cast(Node, os, cmd, [io_lib:format("kill -15 ~s", [OSPidToKill])]),
     ok.
 
 capability(Node, all) ->
