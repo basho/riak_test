@@ -57,7 +57,10 @@ confirm() ->
 
 make_clusters() ->
     Conf = [{riak_repl, [{fullsync_on_connect, false},
-                         {fullsync_interval, disabled}]}],
+                         {fullsync_interval, disabled}]},
+           {riak_core, [{default_bucket_props,
+                         [{dvv_enabled, true},
+                          {allow_mult, true}]}]}],
     Nodes = rt:deploy_nodes(6, Conf),
     {ClusterA, ClusterB} = lists:split(3, Nodes),
     A = make_cluster(ClusterA, "A"),
@@ -114,7 +117,10 @@ connect_realtime(ClusterA, ClusterB) ->
     repl_util:connect_cluster(LeaderA, "127.0.0.1", MgrPortB),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
     repl_util:enable_realtime(LeaderA, "B"),
-    repl_util:start_realtime(LeaderA, "B").
+    repl_util:start_realtime(LeaderA, "B"),
+    %% @TODO what is the right way to wait for this to "start" working
+    %% before writing objects?
+    timer:sleep(1000).
 
 get_leader(Node) ->
     rpc:call(Node, riak_core_cluster_mgr, get_leader, []).

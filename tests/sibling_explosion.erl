@@ -19,7 +19,8 @@
 %% -- Puts the new value back to riak
 %% This results in 99 siblings, each a subset of the following sibling [0] | [0, 1] | [0, 1, 2],  [0, 1, 2, 3] etc
 confirm() ->
-    Conf = [{riak_core, [{default_bucket_props, [{allow_mult, true}]}]}],
+    Conf = [{riak_core, [{default_bucket_props, [{allow_mult, true},
+                                                 {dvv_enabled, true}]}]}],
     [Node1] = rt:deploy_nodes(1, Conf),
     N = 100,
 
