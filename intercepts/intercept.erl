@@ -9,8 +9,9 @@
 -type form() :: term().
 -type proplist(K, V) :: proplists:proplist(K, V).
 -type fun_name() :: atom().
+-type fun_type() :: fun_name() | tuple().
 -type target_fun() :: {fun_name(), arity()}.
--type intercept_fun() :: fun_name().
+-type intercept_fun() :: fun_type().
 -type mapping() :: proplist(target_fun(), intercept_fun()).
 -type form_mod() :: fun((form()) -> form()).
 -type code_mod() :: fun((form(), abstract_code()) -> abstract_code()).
@@ -50,7 +51,7 @@ add(Target, Intercept, Mapping) ->
 %% @doc Compile the abstract code `AC' and load it into the code server.
 -spec compile_and_load(module(), abstract_code()) -> ok.
 compile_and_load(Module, AC) ->
-    {ok, Module, Bin} = compile:forms(AC),
+    {ok, Module, Bin} = compile:forms(AC,[debug_info]),
     {module, Module} = code:load_binary(Module, atom_to_list(Module), Bin),
     ok.
 
@@ -94,8 +95,8 @@ mapping_fun(Intercept, Mapping) ->
             case proplists:get_value(Key, Mapping, '$none') of
                 '$none' ->
                     Form;
-                InterceptFunName ->
-                    forward(Intercept, InterceptFunName, Form)
+                InterceptFun ->
+                    forward(Intercept, InterceptFun, Form)
             end
     end.
 
@@ -144,9 +145,9 @@ forward_all(Module, AC) ->
 
 %% @private
 %%
-%% @doc Modify the function `Form' to forward to `Module:FunName'.
--spec forward(module(), atom(), form()) -> form().
-forward(Module, FunName, Form) ->
+%% @doc Modify the function `Form' to forward to `Module:Fun'.
+-spec forward(module(), fun_type(), form()) -> form().
+forward(Module, Fun, Form) ->
     Clause = hd(fun_clauses(Form)),
     Args = clause_args(Clause),
     NumArgs = length(Args),
@@ -154,12 +155,147 @@ forward(Module, FunName, Form) ->
                || I <- lists:seq(1,NumArgs)],
     Clause2 = clause_set_args(Clause, GenArgs),
     Clause3 = clause_clear_guards(Clause2),
-    Body = [{call, 1, {remote,1,{atom,1,Module},{atom,1,FunName}}, GenArgs}],
+    Body = [{call, 1,
+             case Fun of
+                 Fun when is_atom(Fun) ->
+                     {remote,1,{atom,1,Module},{atom,1,Fun}};
+                 %% If Fun is a tuple, it's a pair comprising a list of
+                 %% local variables to capture and an anonymous function
+                 %% that's already in the abstract format. The anonymous
+                 %% function uses the local variables.
+                 {FreeVars, AnonFun} ->
+                     generate_fun_wrapper(FreeVars, AnonFun, NumArgs)
+             end, GenArgs}],
     Clause4 = clause_set_body(Clause3, Body),
     fun_set_clauses(Form, [Clause4]).
 
 change_module_name(NewName, AC) ->
     lists:keyreplace(module, 3, AC, {attribute,1,module,NewName}).
+
+%% @private
+%%
+%% @doc Generate an anonymous function wrapper that sets up calls for an
+%%      anonymous function interceptor.
+%%
+%% This function returns the abstract code equivalent of the following
+%% code. If you change this code, please update this comment.
+%%
+%% fun(__A0_, __A1_, ...) ->
+%%     __Bindings0_ = lists:foldl(fun({__Bn_,__Bv_},__Acc_) ->
+%%                                    erl_eval:add_binding(__Bn_,__Bv_,__Acc_)
+%%                                end,
+%%                                erl_eval:new_bindings(),
+%%                                <free vars from generate_freevars>),
+%%     __Bindings = lists:foldl(fun({{var,_,__Vn_},__V_},__Acc) ->
+%%                                  erl_eval:add_binding(__Vn_,__V_,__Acc_)
+%%                              end,
+%%                              __Bindings0_,
+%%                              <__A0_ etc. args from generate_freevars>),
+%%     erl_eval:expr(<abstract code for AnonFun(__A0_, __A1_, ...)>,
+%%                   __Bindings_, none, none, value).
+%%
+generate_fun_wrapper(FreeVars, AnonFun, NumArgs) ->
+    L = ?FAKE_LINE_NO,
+    Args = [{var,L,list_to_atom(lists:flatten(["__A",Var+$0],"_"))} ||
+               Var <- lists:seq(1, NumArgs)],
+    {'fun',L,
+     {clauses,
+      [{clause,L,Args,[],
+        [{match,L+1,
+          {var,L+1,'__Bindings0_'},
+          {call,L+1,
+           {remote,L+1,{atom,L+1,lists},{atom,L+1,foldl}},
+           [{'fun',L+1,
+             {clauses,
+              [{clause,L+1,
+                [{tuple,L+1,[{var,L+1,'__Bn_'},{var,L+1,'__Bv_'}]},
+                 {var,L+1,'__Acc_'}],
+                [],
+                [{call,L+2,
+                  {remote,L+2,
+                   {atom,L+2,erl_eval},
+                   {atom,L+2,add_binding}},
+                  [{var,L+2,'__Bn_'},{var,L+2,'__Bv_'},{var,L+2,'__Acc_'}]}]
+               }]}},
+            {call,L+3,
+             {remote,L+3,{atom,L+3,erl_eval},{atom,L+3,new_bindings}},[]},
+            generate_freevars(FreeVars,L+3)]}},
+         {match,L+4,
+          {var,L+4,'__Bindings_'},
+          {call,L+4,
+           {remote,L+4,{atom,L+4,lists},{atom,L+4,foldl}},
+           [{'fun',L+4,
+             {clauses,
+              [{clause,L+4,
+                [{tuple,L+4,[{tuple,L+4,[{atom,L+4,var},{var,L+4,'_'},
+                                         {var,L+4,'__Vn_'}]},{var,L+4,'__V_'}]},
+                 {var,L+4,'__Acc_'}],
+                [],
+                [{call,L+5,
+                  {remote,L+5,
+                   {atom,L+5,erl_eval},
+                   {atom,L+5,add_binding}},
+                  [{var,L+5,'__Vn_'},{var,L+5,'__V_'},{var,L+5,'__Acc_'}]}]
+               }]}},
+            {var,L+6,'__Bindings0_'},
+            lists:foldl(fun(V,Acc) ->
+                                AV = erl_parse:abstract(V),
+                                {cons,L+6,{tuple,L+6,[AV,V]},Acc}
+                        end,{nil,L+6},Args)]}},
+         {call,L+7,
+          {remote,L+7,
+           {atom,L+7,erl_eval},
+           {atom,L+7,expr}},
+          [erl_parse:abstract({call,L+7,AnonFun,
+                               [{var,L+7,V} || {var,_,V} <- Args]},L+7),
+           {var,L+7,'__Bindings_'},
+           {atom,L+7,none},
+           {atom,L+7,none},
+           {atom,L+7,value}]}]}]}}.
+
+%% @private
+%%
+%% @doc Convert generate_fun_wrapper freevars to abstract code
+generate_freevars([], L) ->
+    {nil,L};
+generate_freevars([FreeVar|FreeVars], L) ->
+    {cons,L,
+     generate_freevar(FreeVar,L),
+     generate_freevars(FreeVars,L)}.
+
+%% @private
+%%
+%% @doc Convert one freevar to abstract code
+%%
+%% This returns an abstract format tuple representing a freevar as
+%% {VarName, VarValue}. For function values we check their env for their
+%% own freevars, but if no env is available, we raise an error. Pids,
+%% ports, and references have no abstract format, so they are first
+%% converted to binaries and the abstract format of the binary is used
+%% instead. Their abstract format values generated here convert them back
+%% from binaries to terms when accessed.
+generate_freevar({Name,Var},L) when is_function(Var) ->
+    {env, Env} = erlang:fun_info(Var, env),
+    case Env of
+        [] ->
+            error({badarg, Var});
+        [FreeVars,_,_,Clauses] ->
+            {arity, Arity} = erlang:fun_info(Var, arity),
+            AnonFun = {'fun',L,{clauses,Clauses}},
+            {tuple,L,
+             [{atom,L,Name},
+              generate_fun_wrapper(FreeVars, AnonFun, Arity)]}
+    end;
+generate_freevar({Name,Var}, L)
+  when is_pid(Var); is_port(Var); is_reference(Var) ->
+    NVar = term_to_binary(Var),
+    {tuple,L,
+     [{atom,L,Name},
+      {call,L,
+       {remote,L,{atom,L,erlang},{atom,L,binary_to_term}},
+       [erl_parse:abstract(NVar)]}]};
+generate_freevar(NameVar, L) ->
+    erl_parse:abstract(NameVar,L).
 
 %% @private
 %%
