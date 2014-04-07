@@ -13,10 +13,6 @@
 -export([make_bucket/3]).
 
 confirm() ->
-    NumNodes = rt_config:get(num_nodes, 6),
-    ClusterASize = rt_config:get(cluster_a_size, 3),
-
-    lager:info("Deploy ~p nodes", [NumNodes]),
     Conf = [
             {riak_repl,
              [
@@ -25,21 +21,8 @@ confirm() ->
                 {diff_batch_size, 10}
              ]}
     ],
-
-    Nodes = deploy_nodes(NumNodes, Conf),
-
-    {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
-    lager:info("ANodes: ~p", [ANodes]),
-    lager:info("BNodes: ~p", [BNodes]),
-
-    lager:info("Build cluster A"),
-    rt:log_to_nodes(Nodes, "Build cluster A"),
-    repl_util:make_cluster(ANodes),
-
-    lager:info("Build cluster B"),
-    rt:log_to_nodes(Nodes, "Build cluster B"),
-    repl_util:make_cluster(BNodes),
-
+    rt:set_advanced_conf(all, Conf),
+    [ANodes, BNodes] = rt:build_clusters([3, 3]),
     replication(ANodes, BNodes, false),
     pass.
 
