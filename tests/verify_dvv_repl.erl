@@ -117,10 +117,7 @@ connect_realtime(ClusterA, ClusterB) ->
     repl_util:connect_cluster(LeaderA, "127.0.0.1", MgrPortB),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
     repl_util:enable_realtime(LeaderA, "B"),
-    repl_util:start_realtime(LeaderA, "B"),
-    %% @TODO what is the right way to wait for this to "start" working
-    %% before writing objects?
-    timer:sleep(1000).
+    repl_util:start_realtime(LeaderA, "B").
 
 get_leader(Node) ->
     rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
