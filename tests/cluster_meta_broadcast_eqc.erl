@@ -108,8 +108,8 @@ add_nodes_next(S, _, [NumNodes]) ->
 broadcast_pre(S) -> 
    S#state.nodes_up /= [].
 
-%broadcast_pre(S, [Node, _, _, _]) -> 
-%   lists:keymember(Node, #node.name, S#state.nodes_up).
+broadcast_pre(S, [Node, _, _, _]) -> 
+   lists:keymember(Node, #node.name, S#state.nodes_up).
 
 broadcast_args(S) ->
     ?LET({{Key, Val}, #node{name = Name, context = Context}}, 
@@ -124,16 +124,10 @@ broadcast(Node, Key0, Val0, Context) ->
     context(Val).
 
 broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
-  lager:info("====>~p", [S#state.nodes_up]),
-  case lists:keyfind(Node, #node.name, S#state.nodes_up) of 
-      false ->
-          lager:info("~p not found in state.nodes_up", [Node]),
-          S;
-      T ->
-          lager:info("~p found for node ~p; storing context ~p.", [T, Node, Context]),
-          S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
-                                             #node{ name = Node, context = Context }) }
-   end.
+    S1 = S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
+                                             #node{ name = Node, context = Context }) },
+    lager:info("stored context:~p, node_up:~p.", [Context, S1]),
+    S1.
 
 %% ====================================================================
 %% EQC Properties
