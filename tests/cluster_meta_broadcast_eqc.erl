@@ -28,8 +28,7 @@
 -export([confirm/0]).
 
 -behaviour(eqc_statem).
-%-export([command/1, initial_state/0, next_state/3,
-%         precondition/2, postcondition/3]).
+
 -export([initial_state/0]).
 
 -define(NUM_TESTS, 4).
@@ -53,6 +52,9 @@
 
 -record(node, {name, context}).
 
+%% ====================================================================
+%% riak_test callback
+%% ====================================================================
 confirm() -> 
     ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
     pass.
@@ -65,11 +67,13 @@ gen_numnodes() ->
 key() -> elements([k1, k2, k3, k4, k5]).
 val() -> elements([v1, v2, v3, v4, v5]).
 msg() -> {key(), val()}.
-key_context(Key, NodeContext) ->
+key_context(Key, NodeContext) when is_list(NodeContext) ->
     case lists:keyfind(Key, 1, NodeContext) of
         false -> undefined;
         {Key, Ctx} -> Ctx
-    end.
+    end;
+key_context(_Key, _NodeContext) ->
+    undefined.
 
 %% ====================================================================
 %% EQC commands (using group commands)
@@ -95,6 +99,7 @@ add_nodes(NumNodes) ->
 
 add_nodes_next(S, _, [NumNodes]) ->
     Nodes = node_list(NumNodes),
+    [ start_manager(Node) || Node <- Nodes ],
     NodeList = [ #node{ name = Node, context = [] } || Node <- Nodes ],
     lager:info("Node list:~p", [NodeList]),
     S#state{ nodes_up = NodeList }.
@@ -118,14 +123,23 @@ broadcast(Node, Key0, Val0, Context) ->
     rpc:call(Node, riak_core_broadcast, broadcast, [broadcast_obj(Key, Val), ?MANAGER]),
     context(Val).
 
-%broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
-%  S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
-%                                  #node{ name = Node, context = Context }) }.
+broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
+  lager:info("====>~p", [S#state.nodes_up]),
+  case lists:keyfind(Node, #node.name, S#state.nodes_up) of 
+      false ->
+          lager:info("~p not found in state.nodes_up", [Node]),
+          S;
+      T ->
+          lager:info("~p found for node ~p; storing context ~p.", [T, Node, Context]),
+          S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
+                                             #node{ name = Node, context = Context }) }
+   end.
 
 %% ====================================================================
 %% EQC Properties
 %% ====================================================================
 prop_test() ->
+    ?SETUP(fun() -> setup(), fun() -> ok end end,
     ?FORALL(Cmds, ?SIZED(N, resize(N div 2, commands(?MODULE))),
     ?LET(Shrinking, parameter(shrinking, false),
     ?ALWAYS(if Shrinking -> 1; true -> 1 end,
@@ -135,6 +149,9 @@ prop_test() ->
         {H, S, R} = run_commands(?MODULE, Cmds),
         lager:info("======================== Ran commands ============================"),
         #state{nodes_up = NU, cluster_nodes=CN} = S,
+        %{_Trace, Ok} = event_logger:get_events(300, 10000),
+        Views = [ {Node, get_view(Node)} || #node{name = Node} <- S#state.nodes_up ],
+        lager:info("VIEWS:~p", [Views]),
         Destroy =
         fun({node, N, _}) ->
             lager:info("Wiping out node ~p for good", [N]),
@@ -146,8 +163,21 @@ prop_test() ->
             Nodes = lists:usort(NU ++ CN),
             lager:info("======================== Taking all nodes down ~p", [Nodes]),
             lists:foreach(Destroy, Nodes),
-            eqc_gen:with_parameter(show_states, true, pretty_commands(?MODULE, Cmds, {H, S, R}, R == ok))
-        end))).
+            eqc_gen:with_parameter(show_states, true, 
+                pretty_commands(?MODULE, Cmds, {H, S, R},
+                    conjunction(
+                    [ {consistent, prop_consistent(Views)}
+                    , {valid_views, [] == [ bad || {_, View} <- Views, not is_list(View) ]}
+%%                    , {valid_views, [] == Views }
+%%                    , {termination, equals(ok, ok)}
+                ])))
+        end)))).
+
+
+prop_consistent([]) -> true;
+prop_consistent(Views) ->
+  Dicts = [ Dict || {_, Dict} <- Views ],
+  1 == length(lists:usort(Dicts)).
 
 %% ====================================================================
 %% Helpers
@@ -161,6 +191,7 @@ configure_nodes(Nodes) ->
          ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
          rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
      end || Node <- Nodes],
+    rt:load_modules_on_nodes([?MODULE], Nodes),
     ok.
 
 context(Obj) ->
@@ -188,7 +219,12 @@ node_list(NumNodes) ->
 put_arguments(_Name, Key, Context, Val) ->
   [Key, Context, Val].
 
+setup() ->
+  error_logger:tty(true),
+  (catch proxy_server:start_link()).
+
 start_manager(Node) ->
+  lager:info("Starting manager on node:~p", [Node]),
   Dir = atom_to_list(Node),
   os:cmd("mkdir " ++ Dir),
   os:cmd("rm " ++ Dir ++ "/*"),
