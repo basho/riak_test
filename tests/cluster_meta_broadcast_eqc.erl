@@ -93,7 +93,7 @@ add_nodes_args(_S) ->
 
 add_nodes(NumNodes) ->
     lager:info("Deploying cluster of size ~p", [NumNodes]),
-    Nodes = rt:deploy_nodes(NumNodes),
+    Nodes = rt:build_cluster(NumNodes),
     configure_nodes(Nodes),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
 
@@ -129,6 +129,12 @@ broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
     lager:info("stored context:~p, node_up:~p.", [Context, S1]),
     S1.
 
+%% -- sleep --
+sleep_pre(S) -> S#state.nodes_up /= [].
+sleep_args(_) -> [choose(1, ?LAZY_TIMER)].
+sleep(N) -> timer:sleep(N).
+
+
 %% ====================================================================
 %% EQC Properties
 %% ====================================================================
@@ -144,6 +150,8 @@ prop_test() ->
         lager:info("======================== Ran commands ============================"),
         #state{nodes_up = NU, cluster_nodes=CN} = S,
         %{_Trace, Ok} = event_logger:get_events(300, 10000),
+        stop_servers(S#state.nodes_up),
+        timer:sleep(5000),
         Views = [ {Node, get_view(Node)} || #node{name = Node} <- S#state.nodes_up ],
         lager:info("VIEWS:~p", [Views]),
         Destroy =
@@ -160,18 +168,18 @@ prop_test() ->
             eqc_gen:with_parameter(show_states, true, 
                 pretty_commands(?MODULE, Cmds, {H, S, R},
                     conjunction(
-                    [ {consistent, prop_consistent(Views)}
-                    , {valid_views, [] == [ bad || {_, View} <- Views, not is_list(View) ]}
-%%                    , {valid_views, [] == Views }
+                    [ 
+                     {consistent, prop_consistent(length(Nodes), Views)},
+                     {valid_views, [] == [ bad || {_, View} <- Views, not is_list(View) ]}
 %%                    , {termination, equals(ok, ok)}
                 ])))
         end)))).
 
 
-prop_consistent([]) -> true;
-prop_consistent(Views) ->
+prop_consistent(_NumNodes, []) -> true;
+prop_consistent(NumNodes, Views) ->
   Dicts = [ Dict || {_, Dict} <- Views ],
-  1 == length(lists:usort(Dicts)).
+  NumNodes == length(lists:usort(Dicts)).
 
 %% ====================================================================
 %% Helpers
@@ -204,6 +212,9 @@ iterate(It, Acc) ->
     false -> iterate(?MANAGER:iterate(It), [?MANAGER:iterator_value(It)|Acc])
   end.
 
+kill(Name) ->
+  catch exit(whereis(Name), kill).
+
 mk_key(Key) -> {?PREFIX, Key}.  %% TODO: prefix
 
 node_list(NumNodes) ->
@@ -226,6 +237,21 @@ start_manager(Node) ->
   timer:sleep(1),
   {ok, Mgr} = ?MANAGER:start_link([{data_dir, Dir}, {node_name, Node}]),
   unlink(Mgr).
+
+start_server(Node, Eager, Lazy, Names) ->
+  try
+    lager:info("running start link with Node:~p Names:~p, Eager:~p, Lazy:~p", [Node, Names, Eager, Lazy]),
+    {ok, Pid} = riak_core_broadcast:start_link(Names, Eager, Lazy, Names),
+    unlink(Pid),
+    start_manager(Node),
+    ok
+  catch _:Err ->
+    io:format("OOPS\n~p\n~p\n", [Err, erlang:get_stacktrace()])
+  end.
+
+stop_servers(Nodes) ->
+  [ rpc:call(Node, ?MODULE, kill, [riak_core_broadcast])
+    || #node{name = Node} <- Nodes ].
 
 where_is_event_logger() ->
   io:format("event_logger: ~p\n", [global:whereis_name(event_logger)]).
