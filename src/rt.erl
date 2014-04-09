@@ -27,6 +27,7 @@
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-compile(export_all).
 -export([
          admin/2,
          assert_nodes_agree_about_ownership/1,
@@ -38,6 +39,7 @@
          build_cluster/2,
          build_cluster/3,
          build_clusters/1,
+         join_cluster/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
@@ -1095,6 +1097,56 @@ get_replica(Node, Bucket, Key, I, N) ->
                         [I, Bucket, Key]),
             ?assert(false)
     end.
+
+%%%===================================================================
+
+%% @doc PBC-based version of {@link systest_write/1}
+pbc_systest_write(Node, Size) ->
+    pbc_systest_write(Node, Size, 2).
+
+pbc_systest_write(Node, Size, W) ->
+    pbc_systest_write(Node, 1, Size, <<"systest">>, W).
+
+pbc_systest_write(Node, Start, End, Bucket, W) ->
+    rt:wait_for_service(Node, riak_kv),
+    Pid = pbc(Node),
+    F = fun(N, Acc) ->
+                Obj = riakc_obj:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
+                try riakc_pb_socket:put(Pid, Obj, W) of
+                    ok ->
+                        Acc;
+                    Other ->
+                        [{N, Other} | Acc]
+                catch
+                    What:Why ->
+                        [{N, {What, Why}} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
+
+pbc_systest_read(Node, Size) ->
+    pbc_systest_read(Node, Size, 2).
+
+pbc_systest_read(Node, Size, R) ->
+    pbc_systest_read(Node, 1, Size, <<"systest">>, R).
+
+pbc_systest_read(Node, Start, End, Bucket, R) ->
+    rt:wait_for_service(Node, riak_kv),
+    Pid = pbc(Node),
+    F = fun(N, Acc) ->
+                case riakc_pb_socket:get(Pid, Bucket, <<N:32/integer>>, R) of
+                    {ok, Obj} ->
+                        case riakc_obj:get_value(Obj) of
+                            <<N:32/integer>> ->
+                                Acc;
+                            WrongVal ->
+                                [{N, {wrong_val, WrongVal}} | Acc]
+                        end;
+                    Other ->
+                        [{N, Other} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
 
 %%%===================================================================
 %%% PBC & HTTPC Functions
