@@ -939,12 +939,14 @@ members_according_to(Node) ->
     Members = riak_core_ring:all_members(Ring),
     Members.
 
-%% @doc Return an appropriate ringsize for the node count passed in
+%% @doc Return an appropriate ringsize for the node count passed
+%%      in. 24 is the number of cores on the bigger intel machines, but this
+%%      may be too large for the single-chip machines.
 nearest_ringsize(Count) ->
-    nearest_ringsize(Count * 10, 2).
+    nearest_ringsize(Count * 24, 2).
 
 nearest_ringsize(Count, Power) ->
-    case Count < trunc(Power * 1.5) of
+    case Count < trunc(Power * 0.9) of
         true ->
             Power;
         false ->
