@@ -63,7 +63,7 @@ confirm() ->
 %% EQC generators
 %% ====================================================================
 gen_numnodes() ->
-    oneof([2, 3, 4, 5, 6]).
+    oneof([2, 3, 4, 5]).
 key() -> elements([k1, k2, k3, k4, k5]).
 val() -> elements([v1, v2, v3, v4, v5]).
 msg() -> {key(), val()}.
@@ -99,17 +99,16 @@ add_nodes(NumNodes) ->
 
 add_nodes_next(S, _, [NumNodes]) ->
     Nodes = node_list(NumNodes),
-    [ start_manager(Node) || Node <- Nodes ],
     NodeList = [ #node{ name = Node, context = [] } || Node <- Nodes ],
     lager:info("Node list:~p", [NodeList]),
     S#state{ nodes_up = NodeList }.
  
 %% -- broadcast --
 broadcast_pre(S) -> 
-   S#state.nodes_up /= [].
+    S#state.nodes_up /= [].
 
 broadcast_pre(S, [Node, _, _, _]) -> 
-   lists:keymember(Node, #node.name, S#state.nodes_up).
+    lists:keymember(Node, #node.name, S#state.nodes_up).
 
 broadcast_args(S) ->
     ?LET({{Key, Val}, #node{name = Name, context = Context}}, 
@@ -118,28 +117,21 @@ broadcast_args(S) ->
 
 broadcast(Node, Key0, Val0, Context) ->
     Key = mk_key(Key0),
-    lager:info("Doing put of key:~p on node ~p", [Key, Node]),
     Val = rpc:call(Node, ?MANAGER, put, put_arguments(Node, Key, Context, Val0)),
+    lager:info("Doing put of key:~p, val:~p on node ~p", [Key, Val, Node]),
     rpc:call(Node, riak_core_broadcast, broadcast, [broadcast_obj(Key, Val), ?MANAGER]),
     context(Val).
 
 broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
     S1 = S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
                                              #node{ name = Node, context = Context }) },
-    lager:info("stored context:~p, node_up:~p.", [Context, S1]),
+%%    lager:info("stored context:~p, node_up:~p.", [Context, S1]),
     S1.
-
-%% -- sleep --
-sleep_pre(S) -> S#state.nodes_up /= [].
-sleep_args(_) -> [choose(1, ?LAZY_TIMER)].
-sleep(N) -> timer:sleep(N).
-
 
 %% ====================================================================
 %% EQC Properties
 %% ====================================================================
 prop_test() ->
-    ?SETUP(fun() -> setup(), fun() -> ok end end,
     ?FORALL(Cmds, ?SIZED(N, resize(N div 2, commands(?MODULE))),
     ?LET(Shrinking, parameter(shrinking, false),
     ?ALWAYS(if Shrinking -> 1; true -> 1 end,
@@ -149,9 +141,7 @@ prop_test() ->
         {H, S, R} = run_commands(?MODULE, Cmds),
         lager:info("======================== Ran commands ============================"),
         #state{nodes_up = NU, cluster_nodes=CN} = S,
-        %{_Trace, Ok} = event_logger:get_events(300, 10000),
-        stop_servers(S#state.nodes_up),
-        timer:sleep(5000),
+        timer:sleep(20000),
         Views = [ {Node, get_view(Node)} || #node{name = Node} <- S#state.nodes_up ],
         lager:info("VIEWS:~p", [Views]),
         Destroy =
@@ -169,17 +159,21 @@ prop_test() ->
                 pretty_commands(?MODULE, Cmds, {H, S, R},
                     conjunction(
                     [ 
-                     {consistent, prop_consistent(length(Nodes), Views)},
+                     {consistent, prop_consistent(Views)},
                      {valid_views, [] == [ bad || {_, View} <- Views, not is_list(View) ]}
 %%                    , {termination, equals(ok, ok)}
                 ])))
-        end)))).
+        end))).
 
 
-prop_consistent(_NumNodes, []) -> true;
-prop_consistent(NumNodes, Views) ->
-  Dicts = [ Dict || {_, Dict} <- Views ],
-  NumNodes == length(lists:usort(Dicts)).
+prop_consistent([]) -> true;
+prop_consistent(Views) ->
+  [ check_dict(Dict) || {_, Dict} <- Views ].
+
+check_dict(Dict) ->
+    Keys = dict:fetch_keys(Dict),
+    lager:info("View dict keys:~p", [Keys]).
+%%  NumNodes == length(lists:usort(Dicts)).
 
 %% ====================================================================
 %% Helpers
@@ -224,57 +218,6 @@ node_list(NumNodes) ->
 put_arguments(_Name, Key, Context, Val) ->
   [Key, Context, Val].
 
-setup() ->
-  error_logger:tty(true),
-  (catch proxy_server:start_link()).
 
-start_manager(Node) ->
-  lager:info("Starting manager on node:~p", [Node]),
-  Dir = atom_to_list(Node),
-  os:cmd("mkdir " ++ Dir),
-  os:cmd("rm " ++ Dir ++ "/*"),
-  (catch exit(whereis(?MANAGER), kill)),
-  timer:sleep(1),
-  {ok, Mgr} = ?MANAGER:start_link([{data_dir, Dir}, {node_name, Node}]),
-  unlink(Mgr).
 
-start_server(Node, Eager, Lazy, Names) ->
-  try
-    lager:info("running start link with Node:~p Names:~p, Eager:~p, Lazy:~p", [Node, Names, Eager, Lazy]),
-    {ok, Pid} = riak_core_broadcast:start_link(Names, Eager, Lazy, Names),
-    unlink(Pid),
-    start_manager(Node),
-    ok
-  catch _:Err ->
-    io:format("OOPS\n~p\n~p\n", [Err, erlang:get_stacktrace()])
-  end.
-
-stop_servers(Nodes) ->
-  [ rpc:call(Node, ?MODULE, kill, [riak_core_broadcast])
-    || #node{name = Node} <- Nodes ].
-
-where_is_event_logger() ->
-  io:format("event_logger: ~p\n", [global:whereis_name(event_logger)]).
-
-%% Cluster/node mgmt
-join_node(NodesReadyCount, ReadyNodes, UpNode1) ->
-    NextNode = lists:nth(length(ReadyNodes) - NodesReadyCount + 1, ReadyNodes),
-    lager:info("*******************[CMD] Join node ~p to ~p", [NextNode, UpNode1]),
-    rt:join(NextNode, UpNode1),
-    NextNode.
-
-wait_for_handoff(Ns) ->
-    lager:info("*******************[CMD] Wait for handoffs ~p", [Ns]), 
-    ?assertEqual(ok, rt:wait_until_no_pending_changes(Ns)).
-
-start_node(Node) ->
-    lager:info("*******************[CMD] Starting Node ~p", [Node]),
-    rt:start(Node),
-    lager:info("Waiting for riak_kv service to be ready in ~p", [Node]),
-    rt:wait_for_service(Node, riak_kv).
-
-stop_node(Node) ->
-    lager:info("*******************[CMD] Stopping Node ~p", [Node]),
-    rt:stop(Node),
-    rt:wait_until_unpingable(Node).
 
