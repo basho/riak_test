@@ -100,7 +100,6 @@ add_nodes(NumNodes) ->
 add_nodes_next(S, _, [NumNodes]) ->
     Nodes = node_list(NumNodes),
     NodeList = [ #node{ name = Node, context = [] } || Node <- Nodes ],
-    lager:info("Node list:~p", [NodeList]),
     S#state{ nodes_up = NodeList }.
  
 %% -- broadcast --
@@ -118,15 +117,13 @@ broadcast_args(S) ->
 broadcast(Node, Key0, Val0, Context) ->
     Key = mk_key(Key0),
     Val = rpc:call(Node, ?MANAGER, put, put_arguments(Node, Key, Context, Val0)),
-    lager:info("Doing put of key:~p, val:~p on node ~p", [Key, Val, Node]),
+%    lager:info("Doing put of key:~p, val:~p on node ~p", [Key, Val, Node]),
     rpc:call(Node, riak_core_broadcast, broadcast, [broadcast_obj(Key, Val), ?MANAGER]),
     context(Val).
 
 broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
-    S1 = S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
-                                             #node{ name = Node, context = Context }) },
-%%    lager:info("stored context:~p, node_up:~p.", [Context, S1]),
-    S1.
+    S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
+                                       #node{ name = Node, context = Context }) }.
 
 %% ====================================================================
 %% EQC Properties
@@ -141,9 +138,8 @@ prop_test() ->
         {H, S, R} = run_commands(?MODULE, Cmds),
         lager:info("======================== Ran commands ============================"),
         #state{nodes_up = NU, cluster_nodes=CN} = S,
-        timer:sleep(20000),
+        timer:sleep(10000),
         Views = [ {Node, get_view(Node)} || #node{name = Node} <- S#state.nodes_up ],
-        lager:info("VIEWS:~p", [Views]),
         Destroy =
         fun({node, N, _}) ->
             lager:info("Wiping out node ~p for good", [N]),
@@ -165,15 +161,11 @@ prop_test() ->
                 ])))
         end))).
 
-
 prop_consistent([]) -> true;
 prop_consistent(Views) ->
-  [ check_dict(Dict) || {_, Dict} <- Views ].
-
-check_dict(Dict) ->
-    Keys = dict:fetch_keys(Dict),
-    lager:info("View dict keys:~p", [Keys]).
-%%  NumNodes == length(lists:usort(Dicts)).
+    [{_, FirstVal}|RestViews] = Views,
+    Res = [ Val == FirstVal || {_, Val} <- RestViews ],
+    false == lists:member(false, Res).
 
 %% ====================================================================
 %% Helpers
@@ -183,7 +175,8 @@ broadcast_obj(Key, Val) ->
 
 configure_nodes(Nodes) ->
     [begin
-         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
+         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 100]),
+         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_lazy_timer, 100]),
          ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
          rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
      end || Node <- Nodes],
