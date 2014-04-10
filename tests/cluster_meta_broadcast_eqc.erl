@@ -55,8 +55,10 @@
 %% ====================================================================
 %% riak_test callback
 %% ====================================================================
-confirm() -> 
-    ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
+confirm() ->
+    lager:set_loglevel(lager_console_backend, warning),
+    OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
+    ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
     pass.
 
 %% ====================================================================
