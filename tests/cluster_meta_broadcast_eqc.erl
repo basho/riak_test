@@ -38,6 +38,7 @@
 -define(PREFIX, {x, x}).
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
+-define(THRESHOLD_SECS, 10).
 
 -include("../include/riak_core_metadata.hrl").
 
@@ -95,6 +96,8 @@ add_nodes_args(_S) ->
 
 add_nodes(NumNodes) ->
     lager:info("Deploying cluster of size ~p", [NumNodes]),
+    {ok, Pid} = cluster_meta_proxy_server:start_link(),
+    unlink(Pid),
     Nodes = rt:build_cluster(NumNodes),
     configure_nodes(Nodes),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
@@ -119,7 +122,6 @@ broadcast_args(S) ->
 broadcast(Node, Key0, Val0, Context) ->
     Key = mk_key(Key0),
     Val = rpc:call(Node, ?MANAGER, put, put_arguments(Node, Key, Context, Val0)),
-%    lager:info("Doing put of key:~p, val:~p on node ~p", [Key, Val, Node]),
     rpc:call(Node, riak_core_broadcast, broadcast, [broadcast_obj(Key, Val), ?MANAGER]),
     context(Val).
 
@@ -140,7 +142,7 @@ prop_test() ->
         {H, S, R} = run_commands(?MODULE, Cmds),
         lager:info("======================== Ran commands ============================"),
         #state{nodes_up = NU, cluster_nodes=CN} = S,
-        timer:sleep(10000),
+	wait_until_proxy_q_empty(),
         Views = [ {Node, get_view(Node)} || #node{name = Node} <- S#state.nodes_up ],
         Destroy =
         fun({node, N, _}) ->
@@ -213,6 +215,12 @@ node_list(NumNodes) ->
 put_arguments(_Name, Key, Context, Val) ->
   [Key, Context, Val].
 
+wait_until_proxy_q_empty() ->
+    lager:info("Wait until the proxy server's queue is empty"),
+    ?assertEqual(ok, rt:wait_until(fun() -> 
+                                      cluster_meta_proxy_server:is_empty(?THRESHOLD_SECS)
+                                   end)).
+					   
 
 
 
