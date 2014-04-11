@@ -24,8 +24,8 @@
 -compile(export_all).
 
 spam_nodes(TargetNodes) ->
-        [[spawn(?MODULE, spam, [N]) || _ <- lists:seq(1,10*1000)] || N <- TargetNodes].
+        [[spawn(?MODULE, spam, [N]) || _ <- lists:seq(1,1000*1000)] || N <- TargetNodes].
 
 spam(Node) ->
-    timer:sleep(random:uniform(1500)), 
+    timer:sleep(random:uniform(100)),
     catch rpc:call(Node, erlang, whereis, [rex]).
