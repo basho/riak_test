@@ -82,6 +82,9 @@
          partition/2,
          pbc/1,
          pbc_read/3,
+         pbc_read/4,
+         pbc_read_check/4,
+         pbc_read_check/5,
          pbc_set_bucket_prop/3,
          pbc_write/4,
          pbc_put_dir/3,
@@ -1164,8 +1167,25 @@ pbc(Node) ->
 %% @doc does a read via the erlang protobuf client
 -spec pbc_read(pid(), binary(), binary()) -> binary().
 pbc_read(Pid, Bucket, Key) ->
-    {ok, Value} = riakc_pb_socket:get(Pid, Bucket, Key),
+    pbc_read(Pid, Bucket, Key, []).
+
+-spec pbc_read(pid(), binary(), binary(), [any()]) -> binary().
+pbc_read(Pid, Bucket, Key, Options) ->
+    {ok, Value} = riakc_pb_socket:get(Pid, Bucket, Key, Options),
     Value.
+
+-spec pbc_read_check(pid(), binary(), binary(), [any()]) -> boolean().
+pbc_read_check(Pid, Bucket, Key, Allowed) ->
+    pbc_read_check(Pid, Bucket, Key, Allowed, []).
+
+-spec pbc_read_check(pid(), binary(), binary(), [any()], [any()]) -> boolean().
+pbc_read_check(Pid, Bucket, Key, Allowed, Options) ->
+    case riakc_pb_socket:get(Pid, Bucket, Key, Options) of
+        {ok, _} ->
+            true = lists:member(ok, Allowed);
+        Other ->
+            lists:member(Other, Allowed) orelse throw({failed, Other, Allowed})
+    end.
 
 %% @doc does a write via the erlang protobuf client
 -spec pbc_write(pid(), binary(), binary(), binary()) -> atom().
