@@ -84,6 +84,10 @@ run_riak_repl(N, Path, Cmd) ->
     %% they should already be setup at this point
 
 setup_harness(_Test, _Args) ->
+    %% make sure we stop any cover processes on any nodes
+    %% otherwise, if the next test boots a legacy node we'll end up with cover
+    %% incompatabilities and crash the cover server
+    rt_cover:maybe_stop_on_nodes(),
     Path = relpath(root),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
     rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
