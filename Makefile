@@ -27,6 +27,10 @@ clean:
 distclean: clean
 	@rm -rf riak_test deps
 
+quickbuild:
+	./rebar skip_deps=true compile
+	./rebar escriptize
+
 ##################
 # Dialyzer targets
 ##################
