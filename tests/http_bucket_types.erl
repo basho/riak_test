@@ -137,9 +137,6 @@ confirm() ->
 
     ok = rt:create_and_activate_bucket_type(Node, UnicodeTypeBin, [{n_val,3}]),
 
-    %% allow cluster metadata some time to propogate
-    timer:sleep(1000),
-
     lager:info("doing put"),
     ok = rhc:put(RHC, riakc_obj:new(UCBBin,
                                     <<"key">>, <<"unicode">>)),
