@@ -874,6 +874,8 @@ confirm() ->
         ],
     lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
     lager:error("The runnable tests in this module are: ~p", [AllTests]),
+    %% TODO: The problem with this LC is that it doesn't incorporate any
+    %% of riak_test's setup/teardown per test.
     [?assertEqual(pass, erlang:apply(?MODULE, Test, [])) || Test <- AllTests].
 
 banner(T) ->
@@ -924,6 +926,8 @@ verify_topology_change(SourceNodes, SinkNodes) ->
     %% Remove leader from the sink cluster.
     SinkLeader = rpc:call(SinkNode1,
                           riak_repl2_leader, leader_node, []),
+
+    %% Sad this takes 2.5 minutes
     lager:info("Removing current leader from the cluster: ~p.",
                [SinkLeader]),
     rt:leave(SinkLeader),
@@ -948,14 +952,13 @@ verify_topology_change(SourceNodes, SinkNodes) ->
     %% Before we join the nodes, install an intercept on all nodes for
     %% the leader election callback.
     lager:info("Installing set_leader_node intercept."),
-    Intercept = case SinkLeader of
-        SinkNode1 ->
-            {riak_repl2_leader, [{{set_leader,3}, set_leader_node3}]};
-        SinkNode2 ->
-            {riak_repl2_leader, [{{set_leader,3}, set_leader_node4}]}
-    end,
-    ok = rt_intercept:add(SinkNode1, Intercept),
-    ok = rt_intercept:add(SinkNode2, Intercept),
+    Result = riak_repl2_leader_intercepts:set_leader_node(SinkLeader),
+
+    lager:info("riak_repl2_leader_intercepts:set_leader_node(~p) = ~p", [SinkLeader, Result]),
+    [ begin
+        rt_intercept:load_code(N),
+        ok = rt_intercept:add(N, {riak_repl2_leader, [{{set_leader,3}, set_leader_node}]})
+    end || N <- SinkNodes ],
 
     %% Restart former leader and rejoin to the cluster.
     lager:info("Rejoining former leader."),
