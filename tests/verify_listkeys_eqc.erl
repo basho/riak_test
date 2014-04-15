@@ -52,7 +52,8 @@
                 nodes_down = [],
                 nodes_ready_count = 0,
                 cluster_nodes = [],
-                ring_size = 0
+                ring_size = 0,
+                num_keys = 0
                 }).
 
 -record(node, {name, context}).
@@ -93,6 +94,9 @@ key_context(_Key, _NodeContext) ->
 
 ring_sizes() ->
     elements([8, 16, 32, 64]).
+
+num_keys() ->
+    elements([10, 100, 1000]).
 
 g_uuid() ->
     eqc_gen:bind(eqc_gen:bool(), fun(_) -> druuid:v4_str() end).
@@ -170,9 +174,9 @@ preload_pre(S) ->
     S#state.nodes_up /= [].
 
 preload_args(S) ->
-    [g_uuid(), S#state.nodes_up].
+    [g_uuid(), S#state.nodes_up, num_keys()].
 
-preload(Bucket, Nodes) ->
+preload(Bucket, Nodes, NumKeys) ->
     Node = hd(Nodes),
     NodeName = Node#node.name,
     lager:info("*******************[CMD]  First node ~p", [NodeName]),
@@ -181,15 +185,16 @@ preload(Bucket, Nodes) ->
     %% put_buckets(Node, ?NUM_BUCKETS),
     %% @TODO Verify that puts have
     %% completed using similar wait as in repl_bucket_types test
-    put_keys(NodeName, Bucket, ?NUM_KEYS).
+    put_keys(NodeName, Bucket, NumKeys).
 
-preload_post(_S, Args, R) ->
-    [Bucket, Nodes] = Args,
-    KeyRes = [ list_keys(Node, Bucket, length(R), true) || {node, Node, _} <- Nodes ],
+preload_next(S, _, [_, _, NumKeys]) ->
+    lager:info("Setting num_keys in State to:~p in post condition", [NumKeys]),
+    S#state{ num_keys = NumKeys }.
+
+preload_post([S, [Bucket, Nodes], _R]) ->
+    lager:info("in preload post, Bucket:~p, Nodes:~p", [Bucket, Nodes]),
+    KeyRes = [ list_keys(Node, Bucket, S#state.num_keys, true) || {node, Node, _} <- Nodes ],
     false == lists:member(false, KeyRes).
-
-preload_next(S, _, _) ->
-    S.
 
 %% command(#state{nodes_up=[], nodes_down=[], nodes_ready_count = 0}) ->
 %%     {call, ?MODULE, init_cmd, [?NUM_NODES, ring_sizes()]};
@@ -354,12 +359,6 @@ assert_equal(Expected, Actual) ->
 %% ====================================================================
 
 configure_nodes(Nodes) ->
-    %% [begin
-    %%      ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 100]),
-    %%      ok = rpc:call(Node, application, set_env, [riak_core, broadcast_lazy_timer, 100]),
-    %%      ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
-    %%      rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
-    %%  end || Node <- Nodes],
     rt:load_modules_on_nodes([?MODULE], Nodes),
     ok.
 
