@@ -360,6 +360,8 @@ get_host(Node) when is_atom(Node) ->
     end;
 get_host(Host) -> Host.
 
+get_ip(Node) when is_atom(Node) ->
+    get_ip(get_host(Node));
 get_ip(Host) ->
     {ok, IP} = inet:getaddr(Host, inet),
     string:join([integer_to_list(X) || X <- tuple_to_list(IP)], ".").
@@ -715,4 +717,3 @@ to_binary(X) when is_binary(X) ->
     X;
 to_binary(X) ->
     list_to_binary(to_list(X)).
-

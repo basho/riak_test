@@ -60,6 +60,7 @@
          enable_search_hook/2,
          expect_in_log/2,
          get_deps/0,
+         get_ip/1,
          get_node_logs/0,
          get_replica/5,
          get_ring/1,
@@ -1439,6 +1440,10 @@ get_version() ->
 whats_up() ->
     ?HARNESS:whats_up().
 
+-spec get_ip(node()) -> string().
+get_ip(Node) ->
+    ?HARNESS:get_ip(Node).
+
 %% @doc Log a message to the console of the specified test nodes.
 %%      Messages are prefixed by the string "---riak_test--- "
 %%      Uses lager:info/1 'Fmt' semantics
@@ -1449,6 +1454,10 @@ log_to_nodes(Nodes, Fmt) ->
 %%      Messages are prefixed by the string "---riak_test--- "
 %%      Uses lager:info/2 'LFmt' and 'LArgs' semantics
 log_to_nodes(Nodes, LFmt, LArgs) ->
+    %% This logs to a node's info level, but if riak_test is running
+    %% at debug level, we want to know when we send this and what
+    %% we're saying
+    lager:debug("log_to_nodes: " ++ LFmt, LArgs),
     Module = lager,
     Function = log,
     Meta = [],

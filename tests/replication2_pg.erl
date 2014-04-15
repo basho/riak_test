@@ -706,7 +706,7 @@ test_mixed_pg(SSL) ->
     rt:wait_until_ring_converged(ANodes),
 
     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
-    lager:info("Enabled pg ~p:", [PGEnableResult]),
+    lager:info("Enabled pg: ~p", [PGEnableResult]),
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
@@ -731,14 +731,15 @@ test_mixed_pg(SSL) ->
     rt:wait_until_ring_converged(BNodes),
 
     rt:log_to_nodes([LeaderA], "Adding a listener"),
-    ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
+    ListenerIP = rt:get_ip(LeaderA),
+    ListenerArgs = [[atom_to_list(LeaderA), ListenerIP, "5666"]],
     Res = rpc:call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
     ?assertEqual(ok, Res),
 
     [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
 
     rt:log_to_nodes([FirstC], "Adding a site"),
-    SiteArgs = ["127.0.0.1", "5666", "rtmixed"],
+    SiteArgs = [ListenerIP, "5666", "rtmixed"],
     Res = rpc:call(FirstC, riak_repl_console, add_site, [SiteArgs]),
     lager:info("Res = ~p", [Res]),
 
