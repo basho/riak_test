@@ -106,10 +106,12 @@ make_clusters() ->
     BFirst = hd(BNodes),
 
     ok = rpc:call(AFirst, riak_ensemble_manager, enable, []),
+    rpc:call(AFirst, riak_core_ring_manager, force_update, []),
     ?assertEqual(true, rpc:call(AFirst, riak_ensemble_manager, enabled, [])),
     ensemble_util:wait_until_stable(AFirst, NVal),
 
     ok = rpc:call(BFirst, riak_ensemble_manager, enable, []),
+    rpc:call(BFirst, riak_core_ring_manager, force_update, []),
     ?assertEqual(true, rpc:call(BFirst, riak_ensemble_manager, enabled, [])),
     ensemble_util:wait_until_stable(BFirst, NVal),
 
