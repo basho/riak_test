@@ -147,7 +147,7 @@ make_clusters() ->
     ensemble_util:wait_until_stable(BFirst, NVal),
 
     LeaderA = repl_util:get_leader(AFirst),
-    LeaderB = repl_util:get_leader(AFirst),
+    LeaderB = repl_util:get_leader(BFirst),
 
     {LeaderA, LeaderB, ANodes, BNodes}.
 
