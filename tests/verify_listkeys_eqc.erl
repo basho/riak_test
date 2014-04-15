@@ -61,9 +61,11 @@
 %% riak_test callback
 %% ====================================================================
 confirm() ->
-    lager:set_loglevel(lager_console_backend, warning),
-    OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
-    ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
+%    lager:set_loglevel(lager_console_backend, warning),
+%    OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
+%    ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
+    ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
+
     pass.
 
 %% ====================================================================
@@ -115,8 +117,8 @@ prop_test() ->
                       lager:info("======================== Ran commands"),
                       #state{nodes_up = NU, cluster_nodes=CN} = S,
                       Destroy =
-                          fun(N) ->
-                                  %% lager:info("Wiping out node ~p for good", [N]),
+                          fun({node, N, _}) ->
+                                  lager:info("Wiping out node ~p for good", [N]),
                                   rt:clean_data_dir(N),
                                   %% rt:brutal_kill(N)
                                   rt:stop(N)
