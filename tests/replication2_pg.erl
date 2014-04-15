@@ -308,14 +308,15 @@ test_12_pg(Mode, SSL) ->
                   riak_repl_pb_api:get(PidB, Bucket, KeyA, CidA)),
 
     rt:log_to_nodes([LeaderA], "Adding a listener"),
-    ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
+    LeaderAIP = rt:get_ip(LeaderA),
+    ListenerArgs = [[atom_to_list(LeaderA), LeaderAIP, "5666"]],
     Res = rpc:call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
     ?assertEqual(ok, Res),
 
     [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
 
     rt:log_to_nodes([FirstB], "Adding a site"),
-    SiteArgs = ["127.0.0.1", "5666", "rtmixed"],
+    SiteArgs = [LeaderAIP, "5666", "rtmixed"],
     Res = rpc:call(FirstB, riak_repl_console, add_site, [SiteArgs]),
     lager:info("Res = ~p", [Res]),
 
@@ -334,14 +335,14 @@ test_12_pg(Mode, SSL) ->
     lager:info("Disable repl and wait for clusters to disconnect"),
 
     rt:log_to_nodes([LeaderA], "Delete listener"),
-    DelListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
+    DelListenerArgs = [[atom_to_list(LeaderA), LeaderAIP, "5666"]],
     DelListenerRes = rpc:call(LeaderA, riak_repl_console, del_listener, DelListenerArgs),
     ?assertEqual(ok, DelListenerRes),
 
     [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
 
     rt:log_to_nodes([FirstB], "Delete site"),
-    DelSiteArgs = ["127.0.0.1", "5666", "rtmixed"],
+    DelSiteArgs = [LeaderAIP, "5666", "rtmixed"],
     DelSiteRes = rpc:call(FirstB, riak_repl_console, add_site, [DelSiteArgs]),
     lager:info("Res = ~p", [DelSiteRes]),
 
@@ -455,9 +456,9 @@ test_cluster_mapping(SSL) ->
 
     % Cluser C-> connection must be set up for the proxy gets to work
     % with the cluster ID mapping
-    {ok, {_IP, CPort}} = rpc:call(FirstC, application, get_env,
+    {ok, {CIP, CPort}} = rpc:call(FirstC, application, get_env,
                                   [riak_core, cluster_mgr]),
-    repl_util:connect_cluster(LeaderB, "127.0.0.1", CPort),
+    repl_util:connect_cluster(LeaderB, CIP, CPort),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderB, "C")),
 
     % enable A to serve blocks to C
@@ -574,9 +575,9 @@ test_bidirectional_pg(SSL) ->
 
     LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
 
-    {ok, {_IP, APort}} = rpc:call(FirstA, application, get_env,
+    {ok, {AIP, APort}} = rpc:call(FirstA, application, get_env,
                                   [riak_core, cluster_mgr]),
-    repl_util:connect_cluster(LeaderB, "127.0.0.1", APort),
+    repl_util:connect_cluster(LeaderB, AIP, APort),
 
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
