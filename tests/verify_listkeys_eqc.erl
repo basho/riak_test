@@ -183,6 +183,11 @@ preload(Bucket, Nodes) ->
     %% completed using similar wait as in repl_bucket_types test
     put_keys(NodeName, Bucket, ?NUM_KEYS).
 
+preload_post(_S, Args, R) ->
+    [Bucket, Nodes] = Args,
+    KeyRes = [ list_keys(Node, Bucket, length(R), true) || {node, Node, _} <- Nodes ],
+    false == lists:member(false, KeyRes).
+
 preload_next(S, _, _) ->
     S.
 
