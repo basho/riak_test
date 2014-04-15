@@ -188,12 +188,12 @@ preload(Bucket, Nodes, NumKeys) ->
     put_keys(NodeName, Bucket, NumKeys).
 
 preload_next(S, _, [_, _, NumKeys]) ->
-    lager:info("Setting num_keys in State to:~p in post condition", [NumKeys]),
+    lager:info("Setting num_keys in State to:~p in next condition", [NumKeys]),
     S#state{ num_keys = NumKeys }.
 
-preload_post([S, [Bucket, Nodes], _R]) ->
-    lager:info("in preload post, Bucket:~p, Nodes:~p", [Bucket, Nodes]),
-    KeyRes = [ list_keys(Node, Bucket, S#state.num_keys, true) || {node, Node, _} <- Nodes ],
+preload_post(_S, [Bucket, Nodes, NumKeys], _R) ->
+    lager:info("In preload_post, Bucket:~p, Nodes:~p, NumKeys:~p", [Bucket, Nodes, NumKeys]),
+    KeyRes = [ list_keys(Node, Bucket, NumKeys, true) || {node, Node, _} <- Nodes ],
     false == lists:member(false, KeyRes).
 
 %% command(#state{nodes_up=[], nodes_down=[], nodes_ready_count = 0}) ->
