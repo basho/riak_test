@@ -27,6 +27,7 @@ build_cluster(Num, Config, NVal) ->
     Nodes = rt:deploy_nodes(Num, Config),
     Node = hd(Nodes),
     ok = rpc:call(Node, riak_ensemble_manager, enable, []),
+    _ = rpc:call(Node, riak_core_ring_manager, force_update, []),
     ensemble_util:wait_until_stable(Node, NVal),
     rt:join_cluster(Nodes),
     ensemble_util:wait_until_cluster(Nodes),
