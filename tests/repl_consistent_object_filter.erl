@@ -27,11 +27,15 @@ confirm() ->
     BucketType = <<"consistent_type">>,
 
     %% Create consistent bucket type on cluster A
-    rt:create_and_activate_bucket_type(LeaderA, BucketType, [{consistent, true}]),
+    rt:create_and_activate_bucket_type(LeaderA,
+                                       BucketType,
+                                       [{consistent, true}, {n_val, 5}]),
     rt:wait_until_bucket_type_status(BucketType, active, ANodes),
 
     %% Create consistent bucket type on cluster B
-    rt:create_and_activate_bucket_type(LeaderB, BucketType, [{consistent, true}]),
+    rt:create_and_activate_bucket_type(LeaderB,
+                                       BucketType,
+                                       [{consistent, true}, {n_val, 5}]),
     rt:wait_until_bucket_type_status(BucketType, active, BNodes),
 
     connect_clusters(LeaderA, LeaderB),
