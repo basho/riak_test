@@ -42,6 +42,7 @@
 -define(THRESHOLD_SECS, 10).
 
 -record(state, {
+          bucket_type = undefined,
           bucket = undefined,
           node_joining = undefined,
           nodes_up = [],
@@ -50,7 +51,8 @@
           cluster_nodes = [],
           ring_size = 0,
           num_keys = 0,
-          preload_complete = false
+          preload_complete = false,
+          setup_complete = false
          }).
 
 -record(node, {name, context}).
@@ -78,9 +80,15 @@ num_keys() ->
 g_uuid() ->
     eqc_gen:bind(eqc_gen:bool(), fun(_) -> druuid:v4_str() end).
 
+g_bucket_type() ->
+    oneof(bucket_types()).
+
 %% ====================================================================
 %% EQC Properties
 %% ====================================================================
+
+%% @TODO Make a separate property to test bucket listing
+%% put_buckets(Node, ?NUM_BUCKETS),
 
 prop_test() ->
     ?FORALL(Cmds, noshrink(commands(?MODULE)),
@@ -120,7 +128,7 @@ initial_state() ->
     #state{}.
 
 %% -- add_nodes --
-add_nodes_pre(S, _) ->
+add_nodes_pre(S) ->
     S#state.nodes_up == [].
 
 add_nodes_args(_S) ->
@@ -129,8 +137,7 @@ add_nodes_args(_S) ->
 add_nodes(NumNodes) ->
     lager:info("Deploying cluster of size ~p", [NumNodes]),
     Nodes = rt:build_cluster(NumNodes),
-    rt:wait_until_nodes_ready(Nodes),
-    rt:wait_until_transfers_complete(Nodes).
+    rt:wait_until_nodes_ready(Nodes).
 
 add_nodes_next(S, _, [NumNodes]) ->
     Nodes = node_list(NumNodes),
@@ -142,30 +149,51 @@ add_nodes_post(_S, _Args, ok) ->
 add_nodes_post(_S, _Args, _) ->
     false.
 
+setup_pre(S) when S#state.nodes_up /= [],
+                  S#state.setup_complete == false ->
+    true;
+setup_pre(_) ->
+    false.
+
+setup_args(S) ->
+    [S#state.nodes_up].
+
+setup(Nodes) ->
+    NodeList = [ N#node.name || N <- Nodes ],
+    Node = hd(NodeList),
+    rt:wait_until_transfers_complete(NodeList),
+    [begin
+         rt:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
+         rt:wait_until_bucket_type_status(BucketType, active, NodeList)
+     end || {BucketType, NVal} <- bucket_types()].
+
+setup_next(S, _, _) ->
+    S#state{setup_complete=true}.
+
 preload_pre(S) when S#state.nodes_up /= [],
+                    S#state.setup_complete == true,
                     S#state.preload_complete == false ->
     true;
 preload_pre(_) ->
     false.
 
 preload_args(S) ->
-    [g_uuid(), S#state.nodes_up, num_keys()].
+    [g_bucket_type(), g_uuid(), S#state.nodes_up, num_keys()].
 
-preload(Bucket, Nodes, NumKeys) ->
+preload({BucketType, _}, Bucket, Nodes, NumKeys) ->
     Node = hd(Nodes),
     NodeName = Node#node.name,
     lager:info("*******************[CMD]  First node ~p", [NodeName]),
     lager:info("Writing to bucket ~p", [Bucket]),
-    %% @TODO Make a separate property to test bucket listing
-    %% put_buckets(Node, ?NUM_BUCKETS),
-    put_keys(NodeName, Bucket, NumKeys).
+    put_keys(NodeName, {BucketType, Bucket}, NumKeys).
 
-preload_next(S, _, [Bucket, _, NumKeys]) ->
-    S#state{bucket = Bucket,
+preload_next(S, _, [{BucketType, _}, Bucket, _, NumKeys]) ->
+    S#state{bucket_type = BucketType,
+            bucket = Bucket,
             num_keys = NumKeys,
             preload_complete=true}.
 
-preload_post(_S, [_Bucket, _Nodes, _NumKeys], _R) ->
+preload_post(_S, [_BucketType, _Bucket, _Nodes, _NumKeys], _R) ->
     %% lager:info("In preload_post, Bucket:~p, Nodes:~p, NumKeys:~p", [Bucket, Nodes, NumKeys]),
     %% KeyRes = [ list_keys(Node, Bucket, NumKeys, true) || {node, Node, _} <- Nodes ],
     %% false == lists:member(false, KeyRes).
@@ -177,10 +205,10 @@ verify_pre(_) ->
     false.
 
 verify_args(S) ->
-    [S#state.bucket, S#state.nodes_up, S#state.num_keys].
+    [S#state.bucket_type, S#state.bucket, S#state.nodes_up, S#state.num_keys].
 
-verify(Bucket, Nodes, NumKeys) ->
-    [list_keys(Node#node.name, Bucket, NumKeys, true) || Node <- Nodes].
+verify(BucketType, Bucket, Nodes, NumKeys) ->
+    [list_keys(Node#node.name, {BucketType, Bucket}, NumKeys, true) || Node <- Nodes].
 
 verify_post(_S, _Args, R) ->
     false == lists:member(false, R).
@@ -243,3 +271,10 @@ assert_equal(Expected, Actual) ->
 node_list(NumNodes) ->
     NodesN = lists:seq(1, NumNodes),
     [?DEV(N) || N <- NodesN].
+
+bucket_types() ->
+    [{<<"n_val_one">>, 1},
+     {<<"n_val_two">>, 2},
+     {<<"n_val_three">>, 3},
+     {<<"n_val_four">>, 4},
+     {<<"n_val_five">>, 5}].
