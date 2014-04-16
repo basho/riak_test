@@ -109,7 +109,9 @@ main(Args) ->
             notice
     end,
 
-    application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel}]),
+    application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel},
+                                         {lager_file_backend, [{file, "log/test.log"},
+                                                               {level, ConsoleLagerLevel}]}]),
     lager:start(),
 
     %% Report
