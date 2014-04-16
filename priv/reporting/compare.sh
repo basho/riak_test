@@ -9,8 +9,8 @@ fi
 #digesting the files is expensive, don't do it by default
 if [ ! -z $3 -a $3 = "true" ]; then
     #make our digest files
-    (cd $1; rm -f *-digest; ~/bin/digest.py .; escript ~/bin/riak-digest.escript)
-    (cd $2; rm -f *-digest; ~/bin/digest.py .; escript ~/bin/riak-digest.escript)
+    (cd $1; rm -f *-digest; escript ~/bin/riak-digest.escript)
+    (cd $2; rm -f *-digest; escript ~/bin/riak-digest.escript)
 fi 
 
 D1=`basename "$1"`

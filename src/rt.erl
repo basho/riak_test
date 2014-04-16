@@ -485,6 +485,7 @@ wait_for_cmd(CmdHandle) ->
 %% @doc Spawn `Cmd' on the machine running the test harness, returning
 %%      the exit status and result
 cmd(Cmd) ->
+    lager:error("cmd ~p, ~p", [?HARNESS, Cmd]),
     ?HARNESS:cmd(Cmd).
 
 %% @doc Spawn `Cmd' on the machine running the test harness, returning

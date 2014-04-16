@@ -5,13 +5,14 @@
 -define(HARNESS, (rt_config:get(rt_harness))).
 
 confirm() ->
+    lager:info("entering get_put:confirm()"),
     HostList = rt_config:get(rt_hostnames),
     Count = length(HostList),
-    BinSize = rt_config:get(perf_binsize),
+    BinSize = rt_config:get(perf_bin_size),
 
     Config = rtperf:standard_config(Count),
 
-    ok = build_cluster(Config),
+    ok = rtperf:build_cluster(Config),
     
     SetSize = rtperf:target_size(rt_config:get(perf_target_pct),
                                  BinSize,

@@ -23,7 +23,12 @@ main(_) ->
 
     {ok, Files0} = file:list_dir("."),
     Files = [File || File <- Files0,
-             lists:prefix("rstats-1", File)],
+             lists:prefix("cstats-1", File)],
+    if Files =:= [] ->
+	    error(no_files_found);
+       true -> ok
+    end,
+
     %% io:format("Files: ~p ~p~n", [file:get_cwd(), Files]),
     Main = self(),
     [spawn(fun() -> read_file(Fn, Main) end)|| Fn <- Files],
@@ -36,17 +41,17 @@ main(_) ->
     Data1 = normalize_len(Data0),
 
     Timer(normalize_lens),
-    %%lens(Data1),
+    %% lens(Data1),
 
     Data = lists:map(fun winnow/1, Data1),
     Timer(winnow),
-    %%lens(Data),
+    %% lens(Data),
     {Names, Avg} = avg_lists(Data),
     Timer(average),
     %%io:format("~p ~p~n", [Names, length(Avg)]),
 
     {ok, Fd} = file:open("rstats-digest", [write]),
-    [file:write(Fd, io_lib:format("~p ", [Name]))
+    [file:write(Fd, io_lib:format("~s ", [atom_to_list(Name)]))
      || Name <- Names],
     file:write(Fd, io_lib:format("~n", [])),
 
@@ -59,11 +64,10 @@ main(_) ->
      || Item <- Avg],
     file:close(Fd).
 
-
-% lens(L) ->
-%     [io:format("~p ", [length(Ln)])
-%      || Ln <- L],
-%     io:format("~n").
+%% lens(L) ->
+%%     [io:format("~p ", [length(Ln)])
+%%      || Ln <- L],
+%%     io:format("~n").
 
 normalize_len(L) ->
     Lengths = lists:map(fun erlang:length/1, L),
@@ -100,11 +104,11 @@ discard_short(L) ->
                  end, L).
 
 avg_lists(LoL) ->
-    %%io:format("~p~n", [length(LoL)]),
     avg_lists(LoL, []).
 
 avg_lists(LoL, Acc) ->
-    HaTs = lists:map(fun([H|T]) -> {H, T} end, LoL),
+    HaTs = lists:map(fun([H|T]) -> {H, T}
+		     end, LoL),
     {Heads, Tails} = lists:unzip(HaTs),
     [First|_] = Heads,
     Names = [N || {N, _V} <- First],
@@ -137,21 +141,36 @@ avg_items(L, Names) ->
 %% get rid of timestamps an slim down the stats glob
 winnow(Data0) ->
     [strip_stats(Glob)
-     || {struct, Glob} <- Data0].
+     || Glob <- Data0,
+	is_list(Glob)].
 
 
 strip_stats(Glob) ->
-    Filter = [vnode_gets, vnode_puts,
+    Filter = [
+	      node_gets, node_puts,
+	      vnode_gets, vnode_puts,
               node_get_fsm_time_median,
               node_get_fsm_time_95,
               node_get_fsm_time_99,
               node_put_fsm_time_median,
               node_put_fsm_time_95,
               node_put_fsm_time_99,
-              riak_kv_vnodeq_max],
-    [{binary_to_atom(NameBin), Val}
-     || {NameBin, Val} <- Glob,
-        lists:member(binary_to_atom(NameBin), Filter)].
+              message_queue_max,
+	      cpu_utilization,
+	      cpu_iowait,
+	      memory_utilization,
+	      memory_page_dirty,
+	      memory_page_writeback,
+	      dropped_vnode_requests_total,
+	      node_get_fsm_objsize_median,
+	      node_get_fsm_objsize_95,
+	      node_get_fsm_objsize_99,
+	      %% this is not at all portable
+	      'dm-0_disk_utilization'
+	     ],
+    [begin
+	 {Name, Val}
+     end
+     || {Name, Val} <- Glob,
+        lists:member(Name, Filter)].
 
-binary_to_atom(Bin) ->
-    list_to_atom(binary_to_list(Bin)).

@@ -1,6 +1,83 @@
 -module(rtperf).
 -compile(export_all).
 
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("kernel/include/file.hrl").
+
+
+
+get_version() ->
+    unknown.
+
+get_deps() ->
+    case rt_config:get(rt_deps, undefined) of
+	undefined ->
+	    throw("Unable to determine Riak library path");
+	_ ->
+	    ok
+    end,
+    "deps".
+
+harness_opts() ->
+    
+    %% Option Name, Short Code, Long Code, Argument Spec, Help Message
+    [
+     {test_name, undefined, "name", {string, "ad-hoc"},
+      "name for this test"},
+     {bin_size, undefined, "bin-size", {integer, 4096},
+      "size of fixed binaries (median for non-fixed)"},
+     {bin_type, undefined, "bin-type", {atom, fixed},
+      "fixed | exponential"},
+     {version, undefined, "version", {string, "master"},
+      "version to test"},
+     {prepop, undefined, "prepop", {boolean, false},
+      "prepopulate cluster"},
+     {test_type, undefined, "type", {atom, uniform},
+      "uniform | pareto"},
+     {restart, undefined, "restart", {boolean, false},
+      "stop running riak cluster and start new"},
+     {force, undefined, "force", {boolean, false},
+      "overwrite remote deployments"},
+     {cuttle, undefined, "cuttle", {boolean, true},
+      "use cuttlefish config system"},
+     {duration, undefined, "run-time", {integer, undefined},
+      "how long to run the test for"},
+     {target_pct, undefined, "target-pct", {integer, 75},
+      "target block cache to dataset size ratio"},
+     {ram_size, undefined, "ram-size", {integer, undefined},
+      "ram size of individual test nodes"}
+    ].
+
+setup_harness(_Test, Args) ->
+    lager:info("Harness setup with args: ~p", [Args]),
+    case getopt:parse(harness_opts(), Args) of
+	{ok, {Parsed, []}} ->
+	    _ = [rt_config:set(prefix(K), V)
+		 || {K, V} <- Parsed];
+	_Huh ->
+	    %% lager:info("huh: ~p", [Huh]),
+	    getopt:usage(harness_opts(),
+			 escript:script_name()),
+	    halt(0)
+    end,
+
+    Hosts = rtssh:load_hosts(),
+    rt_config:set(rt_hostnames, Hosts),
+    maybe_stop_all(Hosts),
+    ok.
+
+prefix(Atom) ->
+    list_to_atom("perf_"++atom_to_list(Atom)).
+
+set_backend(Backend) ->
+    %%lager:info("setting backend to ~p", [Backend]),
+    rt_config:set(rt_backend, Backend).
+
+get_backends() ->
+    [riak_kv_bitcask_backend,
+     riak_kv_eleveldb_backend,
+     riak_kv_memory_backend].
+
 run_test(HostList, TestBenchConfig, BaseBenchConfig) ->
     Collectors = start_data_collectors(HostList),
     
@@ -9,13 +86,65 @@ run_test(HostList, TestBenchConfig, BaseBenchConfig) ->
     Base = maybe_start_base_load(BaseBenchConfig),
 
     rt_bench:bench(TestBenchConfig, HostList, TestName, 
-                   rt_config:get(perf_loadgens)),
+                   length(rt_config:get(perf_loadgens, [1]))),
 
     maybe_stop_base_load(Base),
     
     ok = stop_data_collectors(Collectors),
     
     ok = collect_test_data(HostList, TestName).
+
+teardown() ->
+    %% no!
+    ok.
+
+ensure_remote_build(Hosts, Version, _Force) ->
+    %%TODO: make force actually mean something, needs to be a command
+    %%line option.  the idea is a force will waste the remote dir
+    %%first, so it doesn't matter whether or it matches.
+
+    lager:info("Ensuring remote build: ~p", [Version]),
+    %%lager:info("~p ~n ~p", [Version, Hosts]),
+    Base = rt_config:get(perf_builds),
+    Dir = Base++"/"++Version++"/",
+    lager:info("Using build at ~p", [Dir]),
+    {ok, Info} = file:read_file_info(Dir),
+    ?assertEqual(directory, Info#file_info.type),
+    Sum =
+        case os:cmd("dir_sum.sh "++Dir) of
+            [] ->
+                throw("error runing dir validator");
+            S -> S
+        end,
+
+    F = fun(Host) ->
+                case rtssh:ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir) of
+                    {0, Sum} -> ok;
+                    {2, []} ->
+                        {0, _} = deploy_build(Host, Dir),
+                        {0, Sum} = rtssh:ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir);
+                    {0, OtherSum} ->
+                        error("Bad build on host "++Host++" with sum "++OtherSum)
+                end,
+                lager:info("Build OK on host: ~p", [Host]),
+                {0, _} = rtssh:ssh_cmd(Host, "rm -rf "++Dir++"/data/*"),
+                {0, _} = rtssh:ssh_cmd(Host, "mkdir -p "++Dir++"/data/snmp/agent/db/"),
+		%% consider making this a separate step
+                {0, _} = rtssh:ssh_cmd(Host, "rm -rf "++Dir++"/log/*"),
+                lager:info("Cleaned up host ~p", [Host])
+        end,
+    rt:pmap(F, Hosts),
+    %% if we get here, we need to reset rtdev path, because we're not
+    %% using it as defined.
+    rt_config:set(rtdev_path, [{root, Base}, {Version, Dir}]),
+    ok.
+
+deploy_build(Host, Dir) ->
+    rtssh:ssh_cmd(Host, "mkdir -p "++Dir),
+    Base0 = filename:split(Dir),
+    Base1 = lists:delete(lists:last(Base0), Base0),
+    Base = filename:join(Base1),
+    rtssh:scp_to(Host, Dir, Base).
 
 build_cluster(Config) ->
     Vsn = rt_config:get(perf_version),
@@ -27,7 +156,7 @@ build_cluster(Config) ->
     Force = rt_config:get(perf_force_build, false),
     case rt_config:get(perf_restart, meh) of
         true ->
-            case rtssh:ensure_remote_build(HostList, Vsn, Force) of
+            case ensure_remote_build(HostList, Vsn, Force) of
                 ok -> ok;
                 Else ->
                     lager:error("Got unexpected return ~p from deploy, stopping",
@@ -61,47 +190,145 @@ build_cluster(Config) ->
             error(cluster_setup_timeout)
     end.
 
-start_data_collectors(Hosts) ->
-    %% should probably only start this once?
-    inets:start(),
 
+%% a lot of duplication here, would be nice to think of some more
+%% clever way to clean it up.
+deploy_nodes(NodeConfig) ->
+    Hosts = rt_config:get(rtssh_hosts),
+    NumNodes = length(NodeConfig),
+    NumHosts = length(Hosts),
+    case NumNodes > NumHosts of
+        true ->
+            erlang:error("Not enough hosts available to deploy nodes",
+                         [NumNodes, NumHosts]);
+        false ->
+            Hosts2 = lists:sublist(Hosts, NumNodes),
+            deploy_nodes(NodeConfig, Hosts2)
+    end.
+
+deploy_nodes(NodeConfig, Hosts) ->
+    Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
+
+    {Versions, Configs} = lists:unzip(NodeConfig),
+
+
+    rt_config:set(rt_hosts, 
+	orddict:from_list(
+		orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ lists:zip(Nodes, Hosts))),
+    VersionMap = lists:zip(Nodes, Versions),
+    rt_config:set(rt_versions,
+		  orddict:from_list(
+		    orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
+
+    rt:pmap(fun({_, default}) ->
+                    ok;
+               ({{Node, Host}, {cuttlefish, Config0}}) ->
+		    Config = Config0 ++
+			[{nodename, Node},
+			 {"listener.protobuf.internal",
+			  Host++":8087"},
+			 {"listener.http.internal",
+			  Host++":8098"}
+			],
+                    rtssh:set_conf(Node, Config);
+               ({{Node, _}, Config}) ->
+                    rtssh:update_app_config(Node, Config)
+            end,
+            lists:zip(lists:zip(Nodes, Hosts), Configs)),
+    timer:sleep(500),
+
+    case rt_config:get(cuttle, true) of
+        false ->
+            rt:pmap(fun({Node, Host}) ->
+                            Config = [{riak_api,
+                                       [{pb, fun([{_, Port}]) ->
+                                                     [{Host, Port}]
+                                             end},
+                                        {pb_ip, fun(_) ->
+                                                        Host
+                                                end}]},
+                                      {riak_core,
+                                       [{http, fun([{_, Port}]) ->
+                                                       [{Host, Port}]
+                                               end}]}],
+                            rtssh:update_app_config(Node, Config)
+                    end, lists:zip(Nodes, Hosts)),
+
+            timer:sleep(500),
+
+            rt:pmap(fun(Node) ->
+                            rtssh:update_vm_args(Node,
+						 [{"-name", Node},
+						  {"-zddbl", "32768"},
+						  {"-P", "256000"}])
+                    end, Nodes),
+
+            timer:sleep(500);
+        true -> ok
+    end,
+
+    rtssh:create_dirs(Nodes),
+
+    rt:pmap(fun(N) -> rtssh:start(N) end, Nodes),
+
+    %% Ensure nodes started
+    [ok = rt:wait_until_pingable(N) || N <- Nodes],
+
+    %% %% Enable debug logging
+    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+
+    %% We have to make sure that riak_core_ring_manager is running before we can go on.
+    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
+
+    %% Ensure nodes are singleton clusters
+    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
+                                        Version /= "0.14.2"],
+
+    Nodes.
+
+cmd(Cmd) ->
+    rtssh:cmd(Cmd).
+
+stop_all(_Hosts) ->
+    lager:info("called stop all, ignoring?").
+    
+maybe_stop_all(Hosts) ->
+    maybe_stop_all(Hosts, false).
+    
+maybe_stop_all(Hosts, Srs) ->
+    case rt_config:get(perf_restart, false) orelse Srs of
+        true ->
+            F = fun(Host) ->
+                        lager:info("Checking host ~p for running riaks",
+                                   [Host]),
+                        Cmd = "ps aux | grep beam.sm[p] | awk \"{ print \\$11 }\"",
+                        {0, Dirs} = rtssh:ssh_cmd(Host, Cmd),
+                        %% lager:info("Dirs ~p", [Dirs]),
+                        DirList = string:tokens(Dirs, "\n"),
+                        lists:foreach(
+                              fun(Dir) ->
+                                      Path = lists:nth(1, string:tokens(Dir, ".")),
+                                      lager:info("Detected running riak at: ~p",
+                                                 [Path]),
+                                      {0, _} = rtssh:ssh_cmd(Host, "killall beam.smp")
+                              end, DirList)
+                end,
+            rt:pmap(F, Hosts);
+        _ -> ok
+    end.
+
+start_data_collectors(Hosts) ->
+    Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
+    
     OSPid = os:getpid(),
     PrepDir = "/tmp/perf-"++OSPid,
     file:make_dir(PrepDir),
+    {ok, Hostname} = inet:gethostname(),
+    observer:watch(Nodes, {Hostname, 65001, PrepDir}).
 
-    Cmd = "python ./bin/dstat -cdngyimrs --vm --fs --socket --tcp --disk-util "++
-        "--output "++"/tmp/dstat-"++os:getpid(),
-
-    file:write(PrepDir++"/START", io_lib:format("~w.~n", [calendar:local_time()])),
-
-    [spawn(rtssh, ssh_cmd, [Host, Cmd]) || Host <- Hosts] ++
-    [spawn(?MODULE, poll_stats, [Host]) || Host <- Hosts].
-
-poll_stats(Host) ->
-
-    case httpc:request("http://"++Host++":8098/stats/") of
-        {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
-
-            Stats = mochijson2:decode(Body),
-
-            OSPid = os:getpid(),
-            PrepDir = "/tmp/perf-"++OSPid,
-
-            {ok, Fd} = file:open(PrepDir++"/rstats-"++Host, [append]),
-            file:write(Fd, io_lib:format("~w.~n", [calendar:local_time()])),
-            file:write(Fd, io_lib:format("~p.~n", [Stats])),
-            file:close(Fd),
-
-            timer:sleep(60000);
-        _Else ->
-            %% good to know, but turns out that this is just annoying
-            %%lager:error("Web stat collector failed with: ~p", [Else]),
-            timer:sleep(100)
-    end,
-    poll_stats(Host).    
-
-stop_data_collectors(Collectors) ->
-    [C ! stop || C <- Collectors].
+stop_data_collectors(Collector) ->
+    Collector ! stop,
+    ok.
     
 maybe_start_base_load([]) ->
     none.
@@ -112,38 +339,30 @@ maybe_stop_base_load(none) ->
 %% need more sensible test names.
 test_name() ->
     Vsn = rt_config:get(perf_version),
-    BinSize = rt_config:get(perf_binsize),
+    BinSize = rt_config:get(perf_bin_size),
     rt_config:get(perf_test_name)++"-"++Vsn++"-"++
         atom_to_list(rt_config:get(perf_test_type))++"-"++
         atom_to_list(rt_config:get(perf_bin_type))++"-"++
         integer_to_list(BinSize)++"b-"++date_string().
 
 collect_test_data(Hosts, TestName) ->
-    %% stop the dstat watching processes
-    [rtssh:ssh_cmd(Host, "killall python") %% potentially unsafe
-     || Host <- Hosts],
-
     %% collect the files
     OSPid = os:getpid(),
     PrepDir = "/tmp/perf-"++OSPid,
 
-    file:write_file(PrepDir++"/END",
-                    io_lib:format("~w~n", [calendar:local_time()])),
+    %% collect loadgen logs
+    ok = rt_bench:collect_bench_data(TestName, PrepDir),
 
-    %% get rid of this hateful crap
+    %% collect node logs
+    Vsn = rt_config:get(perf_version),
+    Base = rt_config:get(perf_builds),
     [begin
-         rtssh:cmd("scp -q "++Host++":/tmp/dstat-"++OSPid++" "
-                   ++PrepDir++"/dstat-"++Host),
-         rtssh:ssh_cmd(Host, "rm /tmp/dstat-"++OSPid)
-     end || Host <- Hosts],
-
+	 rtssh:scp_from(Host, Base++"/"++Vsn++"/log", 
+			PrepDir++"/log-"++Host)
+     end
+     || Host <- Hosts],
     
-    ok = rt_bench:collect_bench_data(PrepDir),
-
-    %% grab all the benchmark stuff. need L to make real files because
-    %% it's a soft link
-    BBDir = rt_config:get(basho_bench),
-    rtssh:cmd("cp -aL "++BBDir++"/"++TestName++"/current_. "++PrepDir),
+    %% no need to collect stats output, it's already in the prepdir
 
     rt:cmd("mv "++PrepDir++" results/"++TestName),
     
@@ -159,20 +378,23 @@ maybe_prepop(Hosts, BinSize, SetSize) ->
             PrepopName = rt_config:get(perf_test_name)++"-"++Vsn++
                 "-prepop"++integer_to_list(BinSize)++"b-"++date_string(),
 
+	    lager:info("Target size = ~p", [SetSize]),
+
             PrepopConfig = 
                 rt_bench:config(
-                  max, 
-                  rt_config:get(perf_runtime),
+                  max,
+                  infinity,
                   Hosts,
-                  {int_to_bin_bigendian, {uniform_int, SetSize}},
+                  {int_to_bin_bigendian, {partitioned_sequential_int, SetSize}},
                   rt_bench:valgen(rt_config:get(perf_bin_type), BinSize),
                   [{put,1}]),            
 
+	    %% drop the cache
             rt_bench:bench(PrepopConfig, Hosts, PrepopName, 
-                           rt_config:get(perf_loadgens)),
+                           length(rt_config:get(perf_loadgens, [1])), true),
 
             timer:sleep(timer:minutes(1)+timer:seconds(30)),
-            [exit(P, kill) || P <- PPids],
+	    stop_data_collectors(PPids),
             collect_test_data(Hosts, PrepopName);
         false ->
             ok
@@ -219,14 +441,15 @@ mk_std_conf(riak_kv_memory_backend, true, Ring, AAE0) ->
     AAE = aae_cuttle(AAE0),
     {cuttlefish,
      [{ring_size, Ring*2},
-      {handoff_concurrency, 16},
+      {transfer_limit, 16},
       {"erlang.distribution_buffer_size", "128MB"},
       {storage_backend, memory},
       {anti_entropy, AAE}
      ]};
 mk_std_conf(riak_kv_eleveldb_backend, false, Ring, AAE) ->
     [{riak_core,
-      [{ring_creation_size, Ring}]},
+      [{handoff_concurrency, 16},
+       {ring_creation_size, Ring}]},
      {riak_kv,
       [{storage_backend, riak_kv_eleveldb_backend},
        {anti_entropy,{AAE,[]}},
@@ -238,12 +461,14 @@ mk_std_conf(riak_kv_eleveldb_backend, true, Ring, AAE0) ->
     AAE = aae_cuttle(AAE0),
     {cuttlefish,
      [{ring_size, Ring},
+      {transfer_limit, 16},
       {"erlang.distribution_buffer_size", "128MB"},
       {storage_backend, leveldb},
       {anti_entropy, AAE}
      ]};
 mk_std_conf(_, false, Ring, AAE) ->
     [{riak_core,
+      {handoff_concurrency, 16},
       [{ring_creation_size, Ring}]},
      {riak_kv,
       [{anti_entropy,{AAE, []}}]}
@@ -252,6 +477,7 @@ mk_std_conf(_, true, Ring, AAE0) ->
     AAE = aae_cuttle(AAE0),
     {cuttlefish,
      [{ring_size, Ring},
+      {transfer_limit, 16},
       {"storage_backend", "bitcask"},
       {"erlang.distribution_buffer_size", "128MB"},
       {"bitcask.io_mode", nif},
@@ -263,7 +489,7 @@ aae_cuttle(on) ->
     active.
 
 target_size(Percentage, BinSize, RamSize, NodeCount) ->
-    TotalRam = RamSize * NodeCount,
+    TotalRam = (RamSize * 1024 * 1024 * 1024) * NodeCount,
     CacheTarget = trunc((Percentage/100)*TotalRam),
     BinPlus = (BinSize + 300) * 3,
     %% hacky way of rounding up to the nearest 10k

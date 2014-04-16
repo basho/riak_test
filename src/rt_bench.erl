@@ -16,12 +16,8 @@ bench(Config, NodeList, TestName, Runners) ->
 bench(Config, NodeList, TestName, Runners, Drop) ->
     lager:info("Starting basho_bench run"),
 
-    LoadGens =
-        case rt_config:get(perf_loadgens) of
-            undefined -> ["localhost"];
-            LG -> LG
-        end,
-
+    LoadGens = rt_config:get(perf_loadgens, ["localhost"]),
+    
     case Drop of
         true ->
             Fun = fun(Node) ->
@@ -41,7 +37,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
     BBTmp = "/tmp/basho_bench_tmp"++os:getpid(),
     %% local staging version
     BBTmpStage = BBTmp ++ "_stage/",
-    ok = file:ensure_dir(BBTmpStage),
+    ok = filelib:ensure_dir(BBTmpStage),
     
     Filename = TestName++"-rt.config",
     ConfigPath = BBTmpStage++"/"++Filename,
@@ -51,12 +47,12 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
      || C <- Config],
     BBDir = rt_config:get(basho_bench),
     GenList =
-    [begin
-         G = lists:nth((C rem 2) + 1, LoadGens),
-         {G, C}
-     end
-     || C <- lists:seq(1, Runners)],
-
+	[begin
+	     G = lists:nth((C rem 2), LoadGens),
+	     {G, C}
+	 end
+	 || C <- lists:seq(1, Runners)],
+    
     F = fun({LG, N}, Owner) ->
                 try
                     Num = integer_to_list(N),
@@ -64,34 +60,49 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                     {0, _} = rtssh:ssh_cmd(LG, "mkdir -p "++BBTmp),
                     %% don't care much if we fail here
                     rtssh:ssh_cmd(LG, "rm -r " ++ seq_state_dir()),
-                    {0, _} = rtssh:scp(LG, ConfigPath, BBTmp),
+                    {0, _} = rtssh:scp_to(LG, ConfigPath, BBTmp),
                     %% run basho bench on the remote loadgen,
                     %% specifying the remote testdir and the newly
                     %% copied remote config location
-                    Cmd = ?ESCRIPT++
+                    Cmd = ?ESCRIPT++" "++
                         BBDir++"basho_bench -d "++
                         BBDir++"/"++TestName++"_"++Num++" "++RemotePath,
                     lager:info("Spawning remote basho_bench w/ ~p on ~p",
                                [Cmd, LG]),
                     {0, R} = rtssh:ssh_cmd(LG, Cmd, false),
                     lager:info("bench run finished, returned ~p", [R]),
-                    {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/")
+                    {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/"),
+		    Owner ! {done, ok}
                 catch
                     Class:Error ->
                         lager:error("basho_bench died with error ~p:~p",
-                                    [Class, Error])
+                                    [Class, Error]),
+			Owner ! {done, error}
                 after
                     lager:info("finished bb run")
-                end,
-                Owner ! done
+                end
         end,
     S = self(),
     [spawn(fun() -> F(R, S) end)|| R <- GenList],
-    [receive done -> ok end || _ <- GenList],
+    [ok] = lists:usort([receive {done, R} -> R end 
+			|| _ <- GenList]),
     lager:debug("removing stage dir"),
     {ok, FL} = file:list_dir(BBTmpStage),
     [file:delete(BBTmpStage++File) || File <- FL],
     ok = file:del_dir(BBTmpStage).
+
+collect_bench_data(TestName, Dir) ->
+    %% grab all the benchmark stuff. need L to make real files because
+    %% it's a soft link
+    BBDir = rt_config:get(basho_bench),
+    Gens = rt_config:get(perf_loadgens, ["localhost"]),
+    Len = length(Gens),
+    [begin
+	 N = integer_to_list(N0),
+	 rtssh:scp_from(Gen, BBDir++"/"++TestName++"_"++N++"/current", Dir)
+     end
+     || {Gen, N0} <- lists:zip(Gens, lists:seq(1, Len))],
+    ok.
 
 -define(CONCURRENCY_FACTOR, rt_config:get(basho_bench_concurrency, 30)).
 
@@ -108,7 +119,7 @@ config(Rate, Duration, NodeList, KeyGen,
     DriverReplies = append_atoms(Driver, '_replies'),
     DriverName = append_atoms(basho_bench_driver_, Driver),
     [
-     Rate,
+     {mode, {rate, Rate}},
      {duration, Duration},
      {concurrent, ?CONCURRENCY_FACTOR * length(NodeList)},
      {rng_seed, now},
@@ -123,8 +134,8 @@ config(Rate, Duration, NodeList, KeyGen,
 
      {DriverIps, NodeList},
      {DriverReplies, default},
-     {driver, DriverName},
-     rt_config:get(basho_bench_code_paths)
+     {driver, DriverName}
+     %%{code_paths, rt_config:get(basho_bench_code_paths)}
     ].
 
 append_atoms(L, R) ->

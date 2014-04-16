@@ -52,6 +52,7 @@ confirm(TestModule, Outdir, TestMetaData, HarnessArgs) ->
     {Status, Reason} = case check_prereqs(Mod) of
         true ->
             lager:notice("Running Test ~s", [TestModule]),
+	    lager:info("~p ~p ~p ~p", [TestModule, Mod, Fun, TestMetaData]),
             execute(TestModule, {Mod, Fun}, TestMetaData);
         not_present ->
             {fail, test_does_not_exist};

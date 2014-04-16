@@ -2,8 +2,8 @@
 unset multiplot 
 reset
 
-#set terminal png font "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf,9" size 850,1100
-#set output outfilename
+set terminal png font "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf,9" size 850,1100
+set output outfilename
 
 #set term x11 size 850, 1100
 
@@ -16,7 +16,6 @@ set tics out
 set lmargin 12
 set rmargin 10
 
-dd = dir1."/".'dstat-digest'
 rd = dir1."/".'rstats-digest'
 
 ## graph system stats
@@ -32,12 +31,11 @@ set xlabel "seconds"
 set ylabel "percentage"
 set y2label "fault rate"
 
-
-plot dd using "cpu-util" with lines, \
-     dd using "iowait" with lines, \
-     dd using "disk-util" with lines, \
-     dd using "memfree" with lines, \
-     dd using "page-faults" with lines axes x1y2 smooth bezier
+plot rd using "cpu_utilization" with lines, \
+     rd using "cpu_iowait" with lines, \
+     rd using "dm-0_disk_utilization" with lines, \
+     rd using "memory_utilization" with lines, \
+     rd using "memory_page_dirty" with lines axes x1y2 smooth bezier
 
 unset y2tics
 unset y2range
@@ -71,13 +69,12 @@ set origin 0, .63
 
 #ymax = median(rd) + 1000
 
-set yrange [0:1500]
+set yrange [0:50000]
 set ylabel "operations per node" 
 
 plot rd using "vnode_gets" with lines, \
      rd using "vnode_puts" with lines
 
-dd = dir2."/".'dstat-digest'
 rd = dir2."/".'rstats-digest'
 
 ## graph system stats
@@ -93,11 +90,11 @@ set xlabel "seconds"
 set ylabel "percentage"
 set y2label "fault rate"
 
-plot dd using "cpu-util" with lines, \
-     dd using "iowait" with lines, \
-     dd using "disk-util" with lines, \
-     dd using "memfree" with lines, \
-     dd using "page-faults" with lines axes x1y2 smooth bezier
+plot rd using "cpu_utilization" with lines, \
+     rd using "cpu_iowait" with lines, \
+     rd using "dm-0_disk_utilization" with lines, \
+     rd using "memory_utilization" with lines, \
+     rd using "memory_page_dirty" with lines axes x1y2 smooth bezier
 
 unset y2tics
 unset y2range
@@ -128,7 +125,7 @@ unset y2range
 ## graph ops performance 
 set origin .48, .63
 
-set yrange [0:15000]
+set yrange [0:50000]
 set ylabel "operations per node" 
 
 #hack to set the title for the whole graph
