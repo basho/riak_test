@@ -39,6 +39,7 @@
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
 -define(THRESHOLD_SECS, 10).
+-define(msg_q_ets, msq_q_ets).
 
 -include("../include/riak_core_metadata.hrl").
 
@@ -123,6 +124,7 @@ broadcast(Node, Key0, Val0, Context) ->
     Key = mk_key(Key0),
     Val = rpc:call(Node, ?MANAGER, put, put_arguments(Node, Key, Context, Val0)),
     rpc:call(Node, riak_core_broadcast, broadcast, [broadcast_obj(Key, Val), ?MANAGER]),
+    maybe_send_msgs(),
     context(Val).
 
 broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
@@ -140,6 +142,7 @@ prop_test() ->
         lager:info("======================== Will run commands ======================="),
         [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
         {H, S, R} = run_commands(?MODULE, Cmds),
+        cluster_meta_proxy_server:burst_send(),
         lager:info("======================== Ran commands ============================"),
         #state{nodes_up = NU, cluster_nodes=CN} = S,
 	wait_until_proxy_q_empty(),
@@ -161,7 +164,6 @@ prop_test() ->
                     [ 
                      {consistent, prop_consistent(Views)},
                      {valid_views, [] == [ bad || {_, View} <- Views, not is_list(View) ]}
-%%                    , {termination, equals(ok, ok)}
                 ])))
         end))).
 
@@ -179,10 +181,9 @@ broadcast_obj(Key, Val) ->
 
 configure_nodes(Nodes) ->
     [begin
-         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 100]),
-         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_lazy_timer, 100]),
-         ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
-         rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
+         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
+         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_lazy_timer,  4294967295]),
+          rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
      end || Node <- Nodes],
     rt:load_modules_on_nodes([?MODULE], Nodes),
     ok.
@@ -219,8 +220,11 @@ wait_until_proxy_q_empty() ->
     lager:info("Wait until the proxy server's queue is empty"),
     ?assertEqual(ok, rt:wait_until(fun() -> 
                                       cluster_meta_proxy_server:is_empty(?THRESHOLD_SECS)
-                                   end)).
-					   
+                                   end, 100, 1000)).
+maybe_send_msgs() ->
+    maybe_send(random:uniform(4)).
 
-
-
+maybe_send(R) when R == 3 ->    
+    cluster_meta_proxy_server:burst_send();
+maybe_send(_) ->
+    lager:info("letting queue build..."). 
