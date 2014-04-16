@@ -254,15 +254,8 @@ update_app_config_file(ConfigFile, Config) ->
     ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
     ok.
 get_backends() ->
-    Backends = lists:usort(
-        lists:flatten([ get_backends(DevPath) || DevPath <- devpaths()])),
-    case Backends of
-        [riak_kv_bitcask_backend] -> bitcask;
-        [riak_kv_eleveldb_backend] -> eleveldb;
-        [riak_kv_memory_backend] -> memory;
-        [Other] -> Other;
-        MoreThanOne -> MoreThanOne
-    end.
+    lists:usort(
+        lists:flatten([ get_backends(DevPath) || DevPath <- devpaths()])).
 
 get_backends(DevPath) ->
     rt:pmap(fun get_backend/1, all_the_app_configs(DevPath)).
@@ -306,7 +299,7 @@ get_backend(AppConfig) ->
 
     case file:consult(ConfigFile) of
         {ok, [Config]} ->
-            kvc:path('riak_kv.storage_backend', Config);
+            rt:get_backend(Config);
         E ->
             lager:error("Error reading ~s, ~p", [ConfigFile, E]),
             error
