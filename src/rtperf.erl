@@ -237,7 +237,7 @@ deploy_nodes(NodeConfig, Hosts) ->
             lists:zip(lists:zip(Nodes, Hosts), Configs)),
     timer:sleep(500),
 
-    case rt_config:get(cuttle, true) of
+    case rt_config:get(perf_cuttle, true) of
         false ->
             rt:pmap(fun({Node, Host}) ->
                             Config = [{riak_api,
@@ -391,11 +391,11 @@ maybe_prepop(Hosts, BinSize, SetSize) ->
 
 	    %% drop the cache
             rt_bench:bench(PrepopConfig, Hosts, PrepopName, 
-                           length(rt_config:get(perf_loadgens, [1])), true),
+                           1, true),
 
-            timer:sleep(timer:minutes(1)+timer:seconds(30)),
 	    stop_data_collectors(PPids),
-            collect_test_data(Hosts, PrepopName);
+            collect_test_data(Hosts, PrepopName),
+            timer:sleep(timer:minutes(1)+timer:seconds(30));
         false ->
             ok
     end.
@@ -423,7 +423,7 @@ standard_config(NodeCount) ->
 
 standard_config(NodeCount, AAE) ->
     Backend = rt_config:get(rt_backend, undefined),
-    Fish = rt_config:get(cuttle, true),
+    Fish = rt_config:get(perf_cuttle, true),
     RingSize = rt:nearest_ringsize(NodeCount),
     mk_std_conf(Backend, Fish, RingSize, AAE).
 
@@ -468,8 +468,8 @@ mk_std_conf(riak_kv_eleveldb_backend, true, Ring, AAE0) ->
      ]};
 mk_std_conf(_, false, Ring, AAE) ->
     [{riak_core,
-      {handoff_concurrency, 16},
-      [{ring_creation_size, Ring}]},
+      [{handoff_concurrency, 16},
+       {ring_creation_size, Ring}]},
      {riak_kv,
       [{anti_entropy,{AAE, []}}]}
     ];

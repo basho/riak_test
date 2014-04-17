@@ -16,4 +16,4 @@ doc/
 coverage
 tags
 riak-*
-results/
+*.png

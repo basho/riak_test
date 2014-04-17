@@ -32,15 +32,22 @@ watch(Nodes, Collector) ->
     Pid.
 
 watcher(Master, Nodes, {_Host, Port, _Dir} = Collector) ->
-    {ok, LSock} = gen_tcp:listen(Port, [{active, false}, binary, {packet, 2}]),
-    Acceptor = spawn_link(?MODULE, lloop, [self(), LSock]),
-    monitor(process, Master),
-    Probes = [{Node, undefined} || Node <- Nodes],
-    W = #watcher{nodes=Nodes,
-		 acceptor=Acceptor,
-                 collector=Collector,
-                 probes=Probes},
-    watcher_loop(W).
+    case gen_tcp:listen(Port, [{active, false}, binary, 
+			       {packet, 2}]) of
+	{ok, LSock} ->
+	    Acceptor = spawn_link(?MODULE, lloop, [self(), LSock]),
+	    monitor(process, Master),
+	    Probes = [{Node, undefined} || Node <- Nodes],
+	    W = #watcher{nodes=Nodes,
+			 acceptor={Acceptor, LSock},
+			 collector=Collector,
+			 probes=Probes},
+	    watcher_loop(W);
+	{error, eaddrinuse} ->
+	    timer:sleep(100),
+	    watcher(Master, Nodes, Collector)
+	%% case_clause other errors
+    end.
 
 lloop(Master, LSock) ->
     {ok, Sock} = gen_tcp:accept(LSock),
@@ -49,7 +56,7 @@ lloop(Master, LSock) ->
     lloop(Master, LSock).
 
 watcher_loop(W=#watcher{probes=Probes,
-			acceptor=Acceptor,
+			acceptor={Acceptor,LSock},
 			collector={_,_,Dir}}) ->
     Missing = [Node || {Node, undefined} <- Probes],
     %% io:format("Missing: ~p~n", [Missing]),
@@ -87,7 +94,12 @@ watcher_loop(W=#watcher{probes=Probes,
 	    ?MODULE:watcher_loop(W2);
 	stop ->
 	    exit(Acceptor),
-	    [file:close(FD) || {_Sock, FD} <- get()]
+	    gen_tcp:close(LSock),
+	    [begin
+		 file:close(FD),
+		 gen_tcp:close(Sock)
+	     end
+	     || {Sock, FD} <- get()]
     end.
 
 
@@ -184,16 +196,19 @@ collect(H0) ->
     {_, P} = report_processes(H),
     {H2, N} = report_network(H),
 
-    %% this needs to figure out the active disks on its own, or report
-    %% for all disks
-    {H3, D} = report_disk2([{<<"dm-0">>, "dm-0"},
-			    {<<"dm-1">>, "dm-1"}], H2),
-    %% H3 = report_disk2([{<<"xvdb">>, "xvdb"},
-    %%                    {<<"xvdc">>, "xvdc"},
-    %%                    {<<"raid0">>, "md127"}], H2),
+    DiskList = 
+	case get(disks) of
+	    undefined ->
+		Disks = determine_disks(),
+		put(disks, Disks),
+		Disks;
+	    Disks ->
+		Disks
+	end,
+
+    {H3, D} = report_disk2(DiskList, H2),
     {_, V} = report_vmstat(H3),
     {_, M} = report_memory(H3),
-    %% H3 = try report_disk2(H2) catch _:_ -> H2 end,
     C = report_stats(riak_core_stat, all),
     R = report_stats(riak_kv_stat, all),
     Stats0 = L ++ Q ++ P ++ N ++ D ++ V ++ M ++ C ++ R,
@@ -203,6 +218,26 @@ collect(H0) ->
     %% catch print_down(Nodes),
     H3.
 
+%% this portion is meant to be run inside a VM instance running riak
+determine_disks() ->
+    DataDir = 
+	case application:get_env(riak_kv, storage_backend) of
+	    {ok, riak_kv_bitcask_backend} ->
+		{ok, Dir} = application:get_env(bitcask, data_root),
+		Dir;
+	    {ok, riak_kv_eleveldb_backend} ->
+		{ok, Dir} = application:get_env(eleveldb, data_root),
+		Dir;
+	    _ ->
+		error(unhandled_backend)
+	end,
+    Name0 = os:cmd("basename `df "++DataDir++
+		       " | tail -1 | awk '{print $1}'`"),
+    {Name, _} = lists:split(length(Name0)-1, Name0),
+    %% keep the old format just in case we need to extend this later.
+    [{Name, Name}].
+		
+		 
 report_queues(H) ->
     Max = lists:max([Len || Pid <- processes(),
                             {message_queue_len, Len} <- [process_info(Pid, message_queue_len)]]),
@@ -264,8 +299,8 @@ report_disk2(Name, Dev, LastStats, #history{rate=Rate}) ->
 	end,
     {Stats, Report}.
 
-append_atoms(Atom, Binary) ->
-    list_to_atom(binary_to_list(Binary) ++ 
+append_atoms(Atom, List) ->
+    list_to_atom(List ++ 
 		     "_" ++ atom_to_list(Atom)).
 
 report_memory(H) ->

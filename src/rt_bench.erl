@@ -29,7 +29,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
         _ -> ok
     end,
 
-    %% make a local config file, to be copied to a remote
+    %% make a lxoocal config file, to be copied to a remote
     %% loadgen. They're named separately because for simplicity, we
     %% use network operations even for local load generation
 
@@ -48,7 +48,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
     BBDir = rt_config:get(basho_bench),
     GenList =
 	[begin
-	     G = lists:nth((C rem 2), LoadGens),
+	     G = lists:nth(C, LoadGens),
 	     {G, C}
 	 end
 	 || C <- lists:seq(1, Runners)],
@@ -70,7 +70,8 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                     lager:info("Spawning remote basho_bench w/ ~p on ~p",
                                [Cmd, LG]),
                     {0, R} = rtssh:ssh_cmd(LG, Cmd, false),
-                    lager:info("bench run finished, returned ~p", [R]),
+                    lager:info("bench run finished, on ~p returned ~p", 
+			       [LG, R]),
                     {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/"),
 		    Owner ! {done, ok}
                 catch
