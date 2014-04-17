@@ -60,10 +60,10 @@
 %% riak_test callback
 %% ====================================================================
 confirm() ->
-%    lager:set_loglevel(lager_console_backend, warning),
-%    OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
-%    ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
-    ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
+    lager:set_loglevel(lager_console_backend, warning),
+    OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
+    ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
+%    ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
     pass.
 
 %% ====================================================================
@@ -238,11 +238,12 @@ maybe_send(_) ->
     lager:info("letting queue build..."). 
 
 start_proxy_server() ->
-    lager:info("Starting cluster_meta_proxy_server."),
     case cluster_meta_proxy_server:start_link() of
         {ok, Pid} ->
+            lager:info("Starting cluster_meta_proxy_server."),
 	    Pid;
 	{error, {already_started, Pid}} ->
+            lager:info("cluster_meta_proxy_server already started, pid:~p.", [Pid]),
 	    Pid
     end.
 
