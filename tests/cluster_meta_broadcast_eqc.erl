@@ -31,7 +31,7 @@
 
 -export([initial_state/0]).
 
--define(NUM_TESTS, 4).
+-define(NUM_TESTS, 10).
 -define(RING_SIZE, 16).
 -define(LAZY_TIMER, 20).
 -define(MANAGER, riak_core_metadata_manager).
@@ -61,6 +61,7 @@ confirm() ->
     lager:set_loglevel(lager_console_backend, warning),
     OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
     ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
+%    ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
     pass.
 
 %% ====================================================================
@@ -85,6 +86,8 @@ key_context(_Key, _NodeContext) ->
 
 %% -- initial_state --
 initial_state() ->
+    lager:info("======================== Starting CM Proxy ======================="),
+    restart_proxy_server(),
     #state{}.
 
 %% -- add_nodes --
@@ -97,8 +100,6 @@ add_nodes_args(_S) ->
 
 add_nodes(NumNodes) ->
     lager:info("Deploying cluster of size ~p", [NumNodes]),
-    {ok, Pid} = cluster_meta_proxy_server:start_link(),
-    unlink(Pid),
     Nodes = rt:build_cluster(NumNodes),
     configure_nodes(Nodes),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
@@ -129,8 +130,9 @@ broadcast(Node, Key0, Val0, Context) ->
 
 broadcast_next(S, Context, [Node, _Key, _Val, _Context]) ->
     S#state{ nodes_up = lists:keystore(Node, #node.name, S#state.nodes_up,
-                                       #node{ name = Node, context = Context }) }.
-
+                                       #node{ name = Node, context = Context }) }.    
+        
+    
 %% ====================================================================
 %% EQC Properties
 %% ====================================================================
@@ -142,10 +144,9 @@ prop_test() ->
         lager:info("======================== Will run commands ======================="),
         [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
         {H, S, R} = run_commands(?MODULE, Cmds),
-        cluster_meta_proxy_server:burst_send(),
         lager:info("======================== Ran commands ============================"),
+        wait_until_proxy_q_empty(),
         #state{nodes_up = NU, cluster_nodes=CN} = S,
-	wait_until_proxy_q_empty(),
         Views = [ {Node, get_view(Node)} || #node{name = Node} <- S#state.nodes_up ],
         Destroy =
         fun({node, N, _}) ->
@@ -217,6 +218,7 @@ put_arguments(_Name, Key, Context, Val) ->
   [Key, Context, Val].
 
 wait_until_proxy_q_empty() ->
+    cluster_meta_proxy_server:burst_send(),
     lager:info("Wait until the proxy server's queue is empty"),
     ?assertEqual(ok, rt:wait_until(fun() -> 
                                       cluster_meta_proxy_server:is_empty(?THRESHOLD_SECS)
@@ -228,3 +230,22 @@ maybe_send(R) when R == 3 ->
     cluster_meta_proxy_server:burst_send();
 maybe_send(_) ->
     lager:info("letting queue build..."). 
+
+restart_proxy_server() ->
+    case whereis(cluster_meta_proxy_server) of
+        undefined ->
+            lager:info("cluster_meta_proxy_server not running, starting."),
+            cluster_meta_proxy_server:start_link();
+        _ ->
+            cluster_meta_proxy_server:burst_send(),
+            ensure_process_dead(cluster_meta_proxy_server),
+            lager:info("cluster_meta_proxy_server now dead, re-starting."),
+            cluster_meta_proxy_server:start_link()
+    end.
+
+ensure_process_dead(Name) ->
+     kill(Name),
+     lager:info("Killed ~p, waiting to ensure it's dead.", [Name]),
+     rt:wait_until(fun() -> 
+                       undefined == whereis(Name)
+                   end).
