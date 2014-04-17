@@ -3,8 +3,6 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/2]).
-
 -define(TEST_BUCKET, <<"object-reformat">>).
 -define(NUM_KEYS,    1000).
 
@@ -36,10 +34,9 @@ confirm() ->
     verify_replication(v1, v0, 1, ?NUM_KEYS).
 
 verify_replication(AVersion, BVersion, Start, End) ->
-    Nodes = deploy_nodes(6, ?CONF(infinity)),
+    rt:set_advanced_conf(all, ?CONF(infinity)),
 
-    {ANodes, BNodes} = lists:split(3, Nodes),
-
+    Nodes = [ANodes, BNodes] = rt:build_clusters([3, 3]),
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
 
@@ -54,9 +51,6 @@ verify_replication(AVersion, BVersion, Start, End) ->
     [rt:update_app_config(N, [{riak_kv,
                                [{object_format, BVersion}]}])
      || N <- BNodes],
-
-    lager:info("Building two clusters."),
-    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
@@ -111,9 +105,10 @@ verify_replication(AVersion, BVersion, Start, End) ->
     lager:info("Performing sacrifice."),
     perform_sacrifice(AFirst, Start),
 
-    repl_util:validate_completed_fullsync(LeaderA, BFirst, "B", Start, End, ?TEST_BUCKET),
+    repl_util:validate_completed_fullsync(
+        LeaderA, BFirst, "B", Start, End, ?TEST_BUCKET),
 
-    rt:clean_cluster(Nodes).
+    rt:clean_cluster(lists:flatten(Nodes)).
 
 %% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
 %%      trees to flush to disk.
