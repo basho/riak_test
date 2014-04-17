@@ -35,6 +35,7 @@
 -define(RING_SIZE, 16).
 -define(LAZY_TIMER, 20).
 -define(MANAGER, riak_core_metadata_manager).
+-define(PROXY_SERVER, cluster_meta_proxy_server).
 -define(PREFIX, {x, x}).
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
@@ -49,7 +50,8 @@
                 nodes_down = [],
                 nodes_ready_count = 0,
                 cluster_nodes = [],
-                ring_size = 0
+                ring_size = 0,
+                proxy_pid
                 }).
 
 -record(node, {name, context}).
@@ -58,10 +60,10 @@
 %% riak_test callback
 %% ====================================================================
 confirm() ->
-    lager:set_loglevel(lager_console_backend, warning),
-    OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
-    ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
-%    ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
+%    lager:set_loglevel(lager_console_backend, warning),
+%    OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
+%    ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
+    ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
     pass.
 
 %% ====================================================================
@@ -87,8 +89,10 @@ key_context(_Key, _NodeContext) ->
 %% -- initial_state --
 initial_state() ->
     lager:info("======================== Starting CM Proxy ======================="),
-    restart_proxy_server(),
-    #state{}.
+    ProxyPid = start_proxy_server(),
+    unlink(ProxyPid),
+    lager:info("Started proxy server, pid:~p", [ProxyPid]),
+    #state{ proxy_pid = ProxyPid }.
 
 %% -- add_nodes --
 add_nodes_pre(S) -> 
@@ -145,7 +149,7 @@ prop_test() ->
         [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
         {H, S, R} = run_commands(?MODULE, Cmds),
         lager:info("======================== Ran commands ============================"),
-        wait_until_proxy_q_empty(),
+        empty_q_and_stop_proxy(S#state.proxy_pid),
         #state{nodes_up = NU, cluster_nodes=CN} = S,
         Views = [ {Node, get_view(Node)} || #node{name = Node} <- S#state.nodes_up ],
         Destroy =
@@ -217,12 +221,14 @@ node_list(NumNodes) ->
 put_arguments(_Name, Key, Context, Val) ->
   [Key, Context, Val].
 
-wait_until_proxy_q_empty() ->
+empty_q_and_stop_proxy(Pid) ->
     cluster_meta_proxy_server:burst_send(),
-    lager:info("Wait until the proxy server's queue is empty"),
+    lager:info("Waiting until the proxy server's queue is empty."),
     ?assertEqual(ok, rt:wait_until(fun() -> 
                                       cluster_meta_proxy_server:is_empty(?THRESHOLD_SECS)
-                                   end, 100, 1000)).
+                                   end, 100, 1000)),
+    stop_proxy_server(Pid).
+
 maybe_send_msgs() ->
     maybe_send(random:uniform(4)).
 
@@ -231,21 +237,22 @@ maybe_send(R) when R == 3 ->
 maybe_send(_) ->
     lager:info("letting queue build..."). 
 
-restart_proxy_server() ->
-    case whereis(cluster_meta_proxy_server) of
-        undefined ->
-            lager:info("cluster_meta_proxy_server not running, starting."),
-            cluster_meta_proxy_server:start_link();
-        _ ->
-            cluster_meta_proxy_server:burst_send(),
-            ensure_process_dead(cluster_meta_proxy_server),
-            lager:info("cluster_meta_proxy_server now dead, re-starting."),
-            cluster_meta_proxy_server:start_link()
+start_proxy_server() ->
+    lager:info("Starting cluster_meta_proxy_server."),
+    case cluster_meta_proxy_server:start_link() of
+        {ok, Pid} ->
+	    Pid;
+	{error, {already_started, Pid}} ->
+	    Pid
     end.
 
-ensure_process_dead(Name) ->
-     kill(Name),
-     lager:info("Killed ~p, waiting to ensure it's dead.", [Name]),
-     rt:wait_until(fun() -> 
-                       undefined == whereis(Name)
-                   end).
+stop_proxy_server(Pid) ->
+    ensure_process_dead(Pid),
+    lager:info("cluster_meta_proxy_server now dead.").
+
+ensure_process_dead(Pid) ->
+    catch exit(Pid, kill),
+    lager:info("Killed ~p, waiting to ensure it's dead.", [Pid]),
+    rt:wait_until(fun() -> 
+                      undefined == erlang:process_info(Pid)
+                  end).
