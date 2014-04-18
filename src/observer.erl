@@ -276,7 +276,7 @@ report_disk2(Disks, H=#history{disk=DiskStats}) ->
                     end, {DiskStats, []}, Disks),
     {H#history{disk=NewStats}, NewReport}.
 
-report_disk2(Name, Dev, LastStats, #history{rate=Rate}) ->
+report_disk2(_Name, Dev, LastStats, #history{rate=Rate}) ->
     Stats = get_disk2(Dev),
     Report = 
 	case LastStats of
@@ -289,13 +289,13 @@ report_disk2(Name, Dev, LastStats, #history{rate=Rate}) ->
 		Svctime = disk_svctime(LastStats, Stats),
 		QueueLen = disk_qlength(LastStats, Stats),
 		Util = disk_util(LastStats, Stats),
-		[{append_atoms(disk_read, Name), ReadRate},
-		 {append_atoms(disk_write, Name), WriteRate},
-		 {append_atoms(disk_await_r, Name), AwaitR},
-		 {append_atoms(disk_await_w, Name),  AwaitW},
-		 {append_atoms(disk_svctime, Name), Svctime},
-		 {append_atoms(disk_queue_size, Name), QueueLen},
-		 {append_atoms(disk_utilization, Name), Util}]
+		[{disk_read, ReadRate},
+		 {disk_write, WriteRate},
+		 {disk_await_r, AwaitR},
+		 {disk_await_w, AwaitW},
+		 {disk_svctime, Svctime},
+		 {disk_queue_size, QueueLen},
+		 {disk_utilization, Util}]
 	end,
     {Stats, Report}.
 

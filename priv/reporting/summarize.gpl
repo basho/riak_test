@@ -33,7 +33,7 @@ set y2label "fault rate"
 
 plot rd using "cpu_utilization" with lines, \
      rd using "cpu_iowait" with lines, \
-     rd using "dm-0_disk_utilization" with lines, \
+     rd using "disk_utilization" with lines, \
      rd using "memory_utilization" with lines, \
      rd using "memory_page_dirty" with lines axes x1y2 smooth bezier
 
@@ -92,7 +92,7 @@ set y2label "fault rate"
 
 plot rd using "cpu_utilization" with lines, \
      rd using "cpu_iowait" with lines, \
-     rd using "dm-0_disk_utilization" with lines, \
+     rd using "disk_utilization" with lines, \
      rd using "memory_utilization" with lines, \
      rd using "memory_page_dirty" with lines axes x1y2 smooth bezier
 

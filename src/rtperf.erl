@@ -341,6 +341,7 @@ test_name() ->
     Vsn = rt_config:get(perf_version),
     BinSize = rt_config:get(perf_bin_size),
     rt_config:get(perf_test_name)++"-"++Vsn++"-"++
+	integer_to_list(rt_config:get(perf_target_pct))++"pct-"++
         atom_to_list(rt_config:get(perf_test_type))++"-"++
         atom_to_list(rt_config:get(perf_bin_type))++"-"++
         integer_to_list(BinSize)++"b-"++date_string().

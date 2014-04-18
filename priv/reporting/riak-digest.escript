@@ -123,7 +123,11 @@ avg_items(L, Names) ->
     %%io:format("~p~n", [length(L)]),
     Dicts = lists:map(fun orddict:from_list/1, L),
     [begin
-         Vals = lists:map(fun(D) -> orddict:fetch(Name, D) end,
+         Vals = lists:map(fun(D) -> 
+				  try orddict:fetch(Name, D) 
+				  catch _:_ -> 0
+				  end
+			  end,
                           Dicts),
          case Name of
              %% vnode gets and puts are a per-minute rolling window
@@ -138,7 +142,7 @@ avg_items(L, Names) ->
      || Name <- Names].
 
 
-%% get rid of timestamps an slim down the stats glob
+%% get rid of timestamps and slim down the stats glob
 winnow(Data0) ->
     [strip_stats(Glob)
      || Glob <- Data0,
@@ -165,8 +169,7 @@ strip_stats(Glob) ->
 	      node_get_fsm_objsize_median,
 	      node_get_fsm_objsize_95,
 	      node_get_fsm_objsize_99,
-	      %% this is not at all portable
-	      'dm-0_disk_utilization'
+	      disk_utilization
 	     ],
     [begin
 	 {Name, Val}
