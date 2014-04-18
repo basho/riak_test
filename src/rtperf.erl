@@ -11,15 +11,15 @@ get_version() ->
 
 get_deps() ->
     case rt_config:get(rt_deps, undefined) of
-	undefined ->
-	    throw("Unable to determine Riak library path");
-	_ ->
-	    ok
+        undefined ->
+            throw("Unable to determine Riak library path");
+        _ ->
+            ok
     end,
     "deps".
 
 harness_opts() ->
-    
+
     %% Option Name, Short Code, Long Code, Argument Spec, Help Message
     [
      {test_name, undefined, "name", {string, "ad-hoc"},
@@ -51,14 +51,14 @@ harness_opts() ->
 setup_harness(_Test, Args) ->
     lager:info("Harness setup with args: ~p", [Args]),
     case getopt:parse(harness_opts(), Args) of
-	{ok, {Parsed, []}} ->
-	    _ = [rt_config:set(prefix(K), V)
-		 || {K, V} <- Parsed];
-	_Huh ->
-	    %% lager:info("huh: ~p", [Huh]),
-	    getopt:usage(harness_opts(),
-			 escript:script_name()),
-	    halt(0)
+    {ok, {Parsed, []}} ->
+        _ = [rt_config:set(prefix(K), V)
+         || {K, V} <- Parsed];
+    _Huh ->
+        %% lager:info("huh: ~p", [Huh]),
+        getopt:usage(harness_opts(),
+             escript:script_name()),
+        halt(0)
     end,
 
     Hosts = rtssh:load_hosts(),
@@ -80,18 +80,18 @@ get_backends() ->
 
 run_test(HostList, TestBenchConfig, BaseBenchConfig) ->
     Collectors = start_data_collectors(HostList),
-    
+
     TestName = test_name(),
-        
+
     Base = maybe_start_base_load(BaseBenchConfig),
 
-    rt_bench:bench(TestBenchConfig, HostList, TestName, 
+    rt_bench:bench(TestBenchConfig, HostList, TestName,
                    length(rt_config:get(perf_loadgens, [1]))),
 
     maybe_stop_base_load(Base),
-    
+
     ok = stop_data_collectors(Collectors),
-    
+
     ok = collect_test_data(HostList, TestName).
 
 teardown() ->
@@ -99,9 +99,9 @@ teardown() ->
     ok.
 
 ensure_remote_build(Hosts, Version, _Force) ->
-    %%TODO: make force actually mean something, needs to be a command
-    %%line option.  the idea is a force will waste the remote dir
-    %%first, so it doesn't matter whether or it matches.
+    %% TODO: make force actually mean something, needs to be a command
+    %% line option.  the idea is a force will waste the remote dir
+    %% first, so it doesn't matter whether or it matches.
 
     lager:info("Ensuring remote build: ~p", [Version]),
     %%lager:info("~p ~n ~p", [Version, Hosts]),
@@ -129,7 +129,7 @@ ensure_remote_build(Hosts, Version, _Force) ->
                 lager:info("Build OK on host: ~p", [Host]),
                 {0, _} = rtssh:ssh_cmd(Host, "rm -rf "++Dir++"/data/*"),
                 {0, _} = rtssh:ssh_cmd(Host, "mkdir -p "++Dir++"/data/snmp/agent/db/"),
-		%% consider making this a separate step
+        %% consider making this a separate step
                 {0, _} = rtssh:ssh_cmd(Host, "rm -rf "++Dir++"/log/*"),
                 lager:info("Cleaned up host ~p", [Host])
         end,
@@ -150,7 +150,7 @@ build_cluster(Config) ->
     Vsn = rt_config:get(perf_version),
     HostList = rt_config:get(rt_hostnames),
     Count = length(HostList),
-    
+
     %% make sure that all of the remote nodes have a clean build at
     %% the remote location
     Force = rt_config:get(perf_force_build, false),
@@ -177,7 +177,7 @@ build_cluster(Config) ->
         end,
 
     Me = self(),
-    spawn(fun() -> 
+    spawn(fun() ->
                   ok = rt:wait_until_nodes_ready(Nodes),
                   ok = rt:wait_until_ring_converged(Nodes),
                   ok = rt:wait_until_transfers_complete(Nodes),
@@ -212,24 +212,24 @@ deploy_nodes(NodeConfig, Hosts) ->
     {Versions, Configs} = lists:unzip(NodeConfig),
 
 
-    rt_config:set(rt_hosts, 
-	orddict:from_list(
-		orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ lists:zip(Nodes, Hosts))),
+    rt_config:set(rt_hosts,
+    orddict:from_list(
+        orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ lists:zip(Nodes, Hosts))),
     VersionMap = lists:zip(Nodes, Versions),
     rt_config:set(rt_versions,
-		  orddict:from_list(
-		    orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
+          orddict:from_list(
+            orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
 
     rt:pmap(fun({_, default}) ->
                     ok;
                ({{Node, Host}, {cuttlefish, Config0}}) ->
-		    Config = Config0 ++
-			[{nodename, Node},
-			 {"listener.protobuf.internal",
-			  Host++":8087"},
-			 {"listener.http.internal",
-			  Host++":8098"}
-			],
+            Config = Config0 ++
+            [{nodename, Node},
+             {"listener.protobuf.internal",
+              Host++":8087"},
+             {"listener.http.internal",
+              Host++":8098"}
+            ],
                     rtssh:set_conf(Node, Config);
                ({{Node, _}, Config}) ->
                     rtssh:update_app_config(Node, Config)
@@ -258,9 +258,9 @@ deploy_nodes(NodeConfig, Hosts) ->
 
             rt:pmap(fun(Node) ->
                             rtssh:update_vm_args(Node,
-						 [{"-name", Node},
-						  {"-zddbl", "32768"},
-						  {"-P", "256000"}])
+                         [{"-name", Node},
+                          {"-zddbl", "32768"},
+                          {"-P", "256000"}])
                     end, Nodes),
 
             timer:sleep(500);
@@ -291,10 +291,10 @@ cmd(Cmd) ->
 
 stop_all(_Hosts) ->
     lager:info("called stop all, ignoring?").
-    
+
 maybe_stop_all(Hosts) ->
     maybe_stop_all(Hosts, false).
-    
+
 maybe_stop_all(Hosts, Srs) ->
     case rt_config:get(perf_restart, false) orelse Srs of
         true ->
@@ -319,7 +319,7 @@ maybe_stop_all(Hosts, Srs) ->
 
 start_data_collectors(Hosts) ->
     Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
-    
+
     OSPid = os:getpid(),
     PrepDir = "/tmp/perf-"++OSPid,
     file:make_dir(PrepDir),
@@ -329,7 +329,7 @@ start_data_collectors(Hosts) ->
 stop_data_collectors(Collector) ->
     Collector ! stop,
     ok.
-    
+
 maybe_start_base_load([]) ->
     none.
 
@@ -341,7 +341,7 @@ test_name() ->
     Vsn = rt_config:get(perf_version),
     BinSize = rt_config:get(perf_bin_size),
     rt_config:get(perf_test_name)++"-"++Vsn++"-"++
-	integer_to_list(rt_config:get(perf_target_pct))++"pct-"++
+    integer_to_list(rt_config:get(perf_target_pct))++"pct-"++
         atom_to_list(rt_config:get(perf_test_type))++"-"++
         atom_to_list(rt_config:get(perf_bin_type))++"-"++
         integer_to_list(BinSize)++"b-"++date_string().
@@ -358,20 +358,20 @@ collect_test_data(Hosts, TestName) ->
     Vsn = rt_config:get(perf_version),
     Base = rt_config:get(perf_builds),
     [begin
-	 rtssh:scp_from(Host, Base++"/"++Vsn++"/log", 
-			PrepDir++"/log-"++Host)
+     rtssh:scp_from(Host, Base++"/"++Vsn++"/log",
+            PrepDir++"/log-"++Host)
      end
      || Host <- Hosts],
-    
+
     %% no need to collect stats output, it's already in the prepdir
 
     rt:cmd("mv "++PrepDir++" results/"++TestName),
-    
+
     %% really, really need to compress the results so they don't take
     %% up os damn much space
     ok.
 
-maybe_prepop(Hosts, BinSize, SetSize) -> 
+maybe_prepop(Hosts, BinSize, SetSize) ->
    Vsn = rt_config:get(perf_version),
     case rt_config:get(perf_prepop) of
         true ->
@@ -379,22 +379,22 @@ maybe_prepop(Hosts, BinSize, SetSize) ->
             PrepopName = rt_config:get(perf_test_name)++"-"++Vsn++
                 "-prepop"++integer_to_list(BinSize)++"b-"++date_string(),
 
-	    lager:info("Target size = ~p", [SetSize]),
+        lager:info("Target size = ~p", [SetSize]),
 
-            PrepopConfig = 
+            PrepopConfig =
                 rt_bench:config(
                   max,
                   infinity,
                   Hosts,
                   {int_to_bin_bigendian, {partitioned_sequential_int, SetSize}},
                   rt_bench:valgen(rt_config:get(perf_bin_type), BinSize),
-                  [{put,1}]),            
+                  [{put,1}]),
 
-	    %% drop the cache
-            rt_bench:bench(PrepopConfig, Hosts, PrepopName, 
+        %% drop the cache
+            rt_bench:bench(PrepopConfig, Hosts, PrepopName,
                            1, true),
 
-	    stop_data_collectors(PPids),
+        stop_data_collectors(PPids),
             collect_test_data(Hosts, PrepopName),
             timer:sleep(timer:minutes(1)+timer:seconds(30));
         false ->
@@ -406,21 +406,8 @@ date_string() ->
     integer_to_list((Mega * 1000000) + Sec).
 
 
-%% in the end, it'd be nice to automatically generate some of the
-%% other config stuff as well, i.e. give a node count, some
-%% information (RAM, fast or slow disks, etc.) and generate a config
-%% that should more or less hit the same performance contours
-%% regardless of what machines are being used.  I suspect that
-%% data-set sizing here is what's important, the ratio of disk cache
-%% to data set size.
-
-%% this actually suggests an entirely different line of testing than
-%% what's been pursued so far, running a test at say, 50% ram usage,
-%% 150%, 200% etc.  Then we could skip the time-consuming and not
-%% terribly enlightening up-from-cold period.
-
 standard_config(NodeCount) ->
-    standard_config(NodeCount, off).
+    standard_config(NodeCount, on).
 
 standard_config(NodeCount, AAE) ->
     Backend = rt_config:get(rt_backend, undefined),

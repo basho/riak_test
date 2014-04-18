@@ -17,7 +17,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
     lager:info("Starting basho_bench run"),
 
     LoadGens = rt_config:get(perf_loadgens, ["localhost"]),
-    
+
     case Drop of
         true ->
             Fun = fun(Node) ->
@@ -38,7 +38,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
     %% local staging version
     BBTmpStage = BBTmp ++ "_stage/",
     ok = filelib:ensure_dir(BBTmpStage),
-    
+
     Filename = TestName++"-rt.config",
     ConfigPath = BBTmpStage++"/"++Filename,
     RemotePath = BBTmp++"/"++Filename,
@@ -47,16 +47,16 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
      || C <- Config],
     BBDir = rt_config:get(basho_bench),
     GenList =
-	[begin
-	     G = lists:nth(C, LoadGens),
-	     {G, C}
-	 end
-	 || C <- lists:seq(1, Runners)],
-    
+    [begin
+         G = lists:nth(C, LoadGens),
+         {G, C}
+     end
+     || C <- lists:seq(1, Runners)],
+
     F = fun({LG, N}, Owner) ->
                 try
                     Num = integer_to_list(N),
-                    
+
                     {0, _} = rtssh:ssh_cmd(LG, "mkdir -p "++BBTmp),
                     %% don't care much if we fail here
                     rtssh:ssh_cmd(LG, "rm -r " ++ seq_state_dir()),
@@ -70,23 +70,23 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                     lager:info("Spawning remote basho_bench w/ ~p on ~p",
                                [Cmd, LG]),
                     {0, R} = rtssh:ssh_cmd(LG, Cmd, false),
-                    lager:info("bench run finished, on ~p returned ~p", 
-			       [LG, R]),
+                    lager:info("bench run finished, on ~p returned ~p",
+                   [LG, R]),
                     {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/"),
-		    Owner ! {done, ok}
+            Owner ! {done, ok}
                 catch
                     Class:Error ->
                         lager:error("basho_bench died with error ~p:~p",
                                     [Class, Error]),
-			Owner ! {done, error}
+            Owner ! {done, error}
                 after
                     lager:info("finished bb run")
                 end
         end,
     S = self(),
     [spawn(fun() -> F(R, S) end)|| R <- GenList],
-    [ok] = lists:usort([receive {done, R} -> R end 
-			|| _ <- GenList]),
+    [ok] = lists:usort([receive {done, R} -> R end
+            || _ <- GenList]),
     lager:debug("removing stage dir"),
     {ok, FL} = file:list_dir(BBTmpStage),
     [file:delete(BBTmpStage++File) || File <- FL],
@@ -99,8 +99,8 @@ collect_bench_data(TestName, Dir) ->
     Gens = rt_config:get(perf_loadgens, ["localhost"]),
     Len = length(Gens),
     [begin
-	 N = integer_to_list(N0),
-	 rtssh:scp_from(Gen, BBDir++"/"++TestName++"_"++N++"/current", Dir)
+     N = integer_to_list(N0),
+     rtssh:scp_from(Gen, BBDir++"/"++TestName++"_"++N++"/current", Dir)
      end
      || {Gen, N0} <- lists:zip(Gens, lists:seq(1, Len))],
     ok.
@@ -110,10 +110,10 @@ collect_bench_data(TestName, Dir) ->
 config(Rate, Duration, NodeList, KeyGen,
        ValGen, Operations) ->
     config(Rate, Duration, NodeList, KeyGen,
-           ValGen, Operations, 
+           ValGen, Operations,
            <<"testbucket">>, riakc_pb).
 
-config(Rate, Duration, NodeList, KeyGen, 
+config(Rate, Duration, NodeList, KeyGen,
        ValGen, Operations, Bucket, Driver) ->
     DriverBucket = append_atoms(Driver, '_bucket'),
     DriverIps = append_atoms(Driver, '_ips'),
@@ -124,11 +124,11 @@ config(Rate, Duration, NodeList, KeyGen,
      {duration, Duration},
      {concurrent, ?CONCURRENCY_FACTOR * length(NodeList)},
      {rng_seed, now},
-     
+
      {DriverBucket, Bucket},
      {key_generator, KeyGen},
      {value_generator, ValGen},
-     {operations, Operations}, 
+     {operations, Operations},
      %% just leave this in in case we need it, it's harmless when not
      %% using the sequential generator
      {sequential_int_state_dir, seq_state_dir()},

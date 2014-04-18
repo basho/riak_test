@@ -73,12 +73,12 @@ deploy_nodes(NodeConfig, Hosts) ->
     {Versions, Configs} = lists:unzip(NodeConfig),
     VersionMap = lists:zip(Nodes, Versions),
 
-    rt_config:set(rt_hosts, 
-	orddict:from_list(
-		orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ HostMap)),
-    rt_config:set(rt_versions, 
-	orddict:from_list(
-		orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
+    rt_config:set(rt_hosts,
+    orddict:from_list(
+        orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ HostMap)),
+    rt_config:set(rt_versions,
+    orddict:from_list(
+        orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
 
     rt:pmap(fun({_, default}) ->
                     ok;
@@ -114,7 +114,7 @@ deploy_nodes(NodeConfig, Hosts) ->
             rt:pmap(fun(Node) ->
                             update_vm_args(Node,
                                            [{"-name", Node},
-                                            {"-zddbl", "32768"},
+                                            {"-zddbl", "65535"},
                                             {"-P", "256000"}])
                     end, Nodes),
 
@@ -170,7 +170,7 @@ create_dirs(Nodes) ->
      || Node <- Nodes].
 
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
-    [ssh_cmd(Node, "rm -rf " ++ node_path(Node) ++ "/data/" ++ SubDir) 
+    [ssh_cmd(Node, "rm -rf " ++ node_path(Node) ++ "/data/" ++ SubDir)
      || Node <- Nodes].
 
 start(Node) ->
@@ -204,8 +204,8 @@ upgrade(Node, NewVersion, Config) ->
     VersionMap = orddict:store(Node, NewVersion, rt_config:get(rt_versions)),
     rt_config:set(rt_versions, VersionMap),
     case Config of
-	same -> ok;
-	_ -> update_app_config(Node, Config)
+        same -> ok;
+        _ -> update_app_config(Node, Config)
     end,
     start(Node),
     rt:wait_until_pingable(Node),
@@ -337,7 +337,11 @@ ssh_cmd(Node, Cmd) ->
     ssh_cmd(Node, Cmd, true).
 
 ssh_cmd(Node, Cmd, Return) ->
-    lager:info("Running: ~s :: ~s", [Node, Cmd]),
+    case rt_config:get(rtssh_verbose, false) of
+        true ->
+            lager:info("Running: ~s :: ~s", [Node, Cmd]);
+        false -> ok
+    end,
     wait_for_cmd(spawn_ssh_cmd(Node, Cmd, [stderr_to_stdout], Return)).
 
 remote_read_file(Node, File) ->
@@ -565,12 +569,12 @@ node_path(Node) when is_atom(Node) ->
 node_path(Node, Version) ->
     %% this is awful but I can't think of anything better
     case rt_config:get(perf_version, undefined) of
-	undefined ->
-	    N = node_id(Node),
-	    Path = relpath(Version),
-	    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N]));
-	_ ->
-	    relpath(Version)
+    undefined ->
+        N = node_id(Node),
+        Path = relpath(Version),
+        lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N]));
+    _ ->
+        relpath(Version)
     end.
 
 node_id(_Node) ->
@@ -603,16 +607,16 @@ wait_for_cmd(Port) ->
                                   catch port_close(Port),
                                   self() ! {Port, Msg},
                                   true
-			  after 0 ->
-				  false
-			  end
+              after 0 ->
+                  false
+              end
                   end),
     get_cmd_result(Port, []).
 
 get_cmd_result(Port, Acc) ->
     receive
         {Port, {data, Bytes}} ->
-	    get_cmd_result(Port, [Bytes|Acc]);
+            get_cmd_result(Port, [Bytes|Acc]);
         {Port, {exit_status, Status}} ->
             case Status of
                 0 -> ok;
@@ -678,4 +682,3 @@ to_binary(X) when is_binary(X) ->
     X;
 to_binary(X) ->
     list_to_binary(to_list(X)).
-

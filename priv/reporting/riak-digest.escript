@@ -25,7 +25,7 @@ main(_) ->
     Files = [File || File <- Files0,
              lists:prefix("cstats-1", File)],
     if Files =:= [] ->
-	    error(no_files_found);
+        error(no_files_found);
        true -> ok
     end,
 
@@ -108,7 +108,7 @@ avg_lists(LoL) ->
 
 avg_lists(LoL, Acc) ->
     HaTs = lists:map(fun([H|T]) -> {H, T}
-		     end, LoL),
+             end, LoL),
     {Heads, Tails} = lists:unzip(HaTs),
     [First|_] = Heads,
     Names = [N || {N, _V} <- First],
@@ -123,11 +123,11 @@ avg_items(L, Names) ->
     %%io:format("~p~n", [length(L)]),
     Dicts = lists:map(fun orddict:from_list/1, L),
     [begin
-         Vals = lists:map(fun(D) -> 
-				  try orddict:fetch(Name, D) 
-				  catch _:_ -> 0
-				  end
-			  end,
+         Vals = lists:map(fun(D) ->
+                  try orddict:fetch(Name, D)
+                  catch _:_ -> 0
+                  end
+              end,
                           Dicts),
          case Name of
              %% vnode gets and puts are a per-minute rolling window
@@ -146,13 +146,13 @@ avg_items(L, Names) ->
 winnow(Data0) ->
     [strip_stats(Glob)
      || Glob <- Data0,
-	is_list(Glob)].
+    is_list(Glob)].
 
 
 strip_stats(Glob) ->
     Filter = [
-	      node_gets, node_puts,
-	      vnode_gets, vnode_puts,
+          node_gets, node_puts,
+          vnode_gets, vnode_puts,
               node_get_fsm_time_median,
               node_get_fsm_time_95,
               node_get_fsm_time_99,
@@ -160,20 +160,19 @@ strip_stats(Glob) ->
               node_put_fsm_time_95,
               node_put_fsm_time_99,
               message_queue_max,
-	      cpu_utilization,
-	      cpu_iowait,
-	      memory_utilization,
-	      memory_page_dirty,
-	      memory_page_writeback,
-	      dropped_vnode_requests_total,
-	      node_get_fsm_objsize_median,
-	      node_get_fsm_objsize_95,
-	      node_get_fsm_objsize_99,
-	      disk_utilization
-	     ],
+          cpu_utilization,
+          cpu_iowait,
+          memory_utilization,
+          memory_page_dirty,
+          memory_page_writeback,
+          dropped_vnode_requests_total,
+          node_get_fsm_objsize_median,
+          node_get_fsm_objsize_95,
+          node_get_fsm_objsize_99,
+          disk_utilization
+         ],
     [begin
-	 {Name, Val}
+     {Name, Val}
      end
      || {Name, Val} <- Glob,
         lists:member(Name, Filter)].
-

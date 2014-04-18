@@ -9,7 +9,7 @@
                   collector_sock}).
 
 -record(watcher, {nodes,
-		  acceptor,
+          acceptor,
                   collector,
                   probes}).
 
@@ -32,21 +32,21 @@ watch(Nodes, Collector) ->
     Pid.
 
 watcher(Master, Nodes, {_Host, Port, _Dir} = Collector) ->
-    case gen_tcp:listen(Port, [{active, false}, binary, 
-			       {packet, 2}]) of
-	{ok, LSock} ->
-	    Acceptor = spawn_link(?MODULE, lloop, [self(), LSock]),
-	    monitor(process, Master),
-	    Probes = [{Node, undefined} || Node <- Nodes],
-	    W = #watcher{nodes=Nodes,
-			 acceptor={Acceptor, LSock},
-			 collector=Collector,
-			 probes=Probes},
-	    watcher_loop(W);
-	{error, eaddrinuse} ->
-	    timer:sleep(100),
-	    watcher(Master, Nodes, Collector)
-	%% case_clause other errors
+    case gen_tcp:listen(Port, [{active, false}, binary,
+                   {packet, 2}]) of
+    {ok, LSock} ->
+        Acceptor = spawn_link(?MODULE, lloop, [self(), LSock]),
+        monitor(process, Master),
+        Probes = [{Node, undefined} || Node <- Nodes],
+        W = #watcher{nodes=Nodes,
+             acceptor={Acceptor, LSock},
+             collector=Collector,
+             probes=Probes},
+        watcher_loop(W);
+    {error, eaddrinuse} ->
+        timer:sleep(100),
+        watcher(Master, Nodes, Collector)
+    %% case_clause other errors
     end.
 
 lloop(Master, LSock) ->
@@ -56,8 +56,8 @@ lloop(Master, LSock) ->
     lloop(Master, LSock).
 
 watcher_loop(W=#watcher{probes=Probes,
-			acceptor={Acceptor,LSock},
-			collector={_,_,Dir}}) ->
+            acceptor={Acceptor,LSock},
+            collector={_,_,Dir}}) ->
     Missing = [Node || {Node, undefined} <- Probes],
     %% io:format("Missing: ~p~n", [Missing]),
     W2 = install_probes(Missing, W),
@@ -75,31 +75,31 @@ watcher_loop(W=#watcher{probes=Probes,
                     W3 = W2#watcher{probes=Probes3},
                     ?MODULE:watcher_loop(W3)
             end;
-	{tcp, Sock, Msg} ->
-	    inet:setopts(Sock, [{active, once}]),
-	    case catch binary_to_term(Msg) of
-		Stats when is_list(Stats) ->
-		    case get(Sock) of
-			undefined ->	
-			    {ok, {Addr, _Port}} = inet:peername(Sock),
-			    SAddr = inet:ntoa(Addr),
-			    %% not sure that we want to just blindly append...
-			    {ok, FD} = file:open(Dir++"/cstats-"++SAddr, [append]),
-			    dump_stats(Stats, FD),
-			    put(Sock, FD);
-			FD ->	
-			    dump_stats(Stats, FD)
-		    end
-	    end,
-	    ?MODULE:watcher_loop(W2);
-	stop ->
-	    exit(Acceptor),
-	    gen_tcp:close(LSock),
-	    [begin
-		 file:close(FD),
-		 gen_tcp:close(Sock)
-	     end
-	     || {Sock, FD} <- get()]
+    {tcp, Sock, Msg} ->
+        inet:setopts(Sock, [{active, once}]),
+        case catch binary_to_term(Msg) of
+        Stats when is_list(Stats) ->
+            case get(Sock) of
+            undefined ->
+                {ok, {Addr, _Port}} = inet:peername(Sock),
+                SAddr = inet:ntoa(Addr),
+                %% not sure that we want to just blindly append...
+                {ok, FD} = file:open(Dir++"/cstats-"++SAddr, [append]),
+                dump_stats(Stats, FD),
+                put(Sock, FD);
+            FD ->
+                dump_stats(Stats, FD)
+            end
+        end,
+        ?MODULE:watcher_loop(W2);
+    stop ->
+        exit(Acceptor),
+        gen_tcp:close(LSock),
+        [begin
+         file:close(FD),
+         gen_tcp:close(Sock)
+         end
+         || {Sock, FD} <- get()]
     end.
 
 
@@ -128,7 +128,7 @@ start(Master, Rate, Collector, Nodes, Fun) ->
 
 init(Master, Rate, {Host, Port, _Dir}, Nodes, Fun) ->
     lager:info("In init: ~p ~p~n", [node(), Host]),
-    {ok, Sock} = gen_tcp:connect(Host, Port, 
+    {ok, Sock} = gen_tcp:connect(Host, Port,
                                  [binary, {packet, 2}]),
     case application:get_env(riak_kv, storage_backend) of
         {ok, riak_kv_eleveldb_backend} ->
@@ -196,15 +196,15 @@ collect(H0) ->
     {_, P} = report_processes(H),
     {H2, N} = report_network(H),
 
-    DiskList = 
-	case get(disks) of
-	    undefined ->
-		Disks = determine_disks(),
-		put(disks, Disks),
-		Disks;
-	    Disks ->
-		Disks
-	end,
+    DiskList =
+    case get(disks) of
+        undefined ->
+        Disks = determine_disks(),
+        put(disks, Disks),
+        Disks;
+        Disks ->
+        Disks
+    end,
 
     {H3, D} = report_disk2(DiskList, H2),
     {_, V} = report_vmstat(H3),
@@ -220,24 +220,24 @@ collect(H0) ->
 
 %% this portion is meant to be run inside a VM instance running riak
 determine_disks() ->
-    DataDir = 
-	case application:get_env(riak_kv, storage_backend) of
-	    {ok, riak_kv_bitcask_backend} ->
-		{ok, Dir} = application:get_env(bitcask, data_root),
-		Dir;
-	    {ok, riak_kv_eleveldb_backend} ->
-		{ok, Dir} = application:get_env(eleveldb, data_root),
-		Dir;
-	    _ ->
-		error(unhandled_backend)
-	end,
+    DataDir =
+    case application:get_env(riak_kv, storage_backend) of
+        {ok, riak_kv_bitcask_backend} ->
+        {ok, Dir} = application:get_env(bitcask, data_root),
+        Dir;
+        {ok, riak_kv_eleveldb_backend} ->
+        {ok, Dir} = application:get_env(eleveldb, data_root),
+        Dir;
+        _ ->
+        error(unhandled_backend)
+    end,
     Name0 = os:cmd("basename `df "++DataDir++
-		       " | tail -1 | awk '{print $1}'`"),
+               " | tail -1 | awk '{print $1}'`"),
     {Name, _} = lists:split(length(Name0)-1, Name0),
     %% keep the old format just in case we need to extend this later.
     [{Name, Name}].
-		
-		 
+
+
 report_queues(H) ->
     Max = lists:max([Len || Pid <- processes(),
                             {message_queue_len, Len} <- [process_info(Pid, message_queue_len)]]),
@@ -250,14 +250,14 @@ report_processes(H) ->
 report_network(H=#history{network=LastStats, rate=Rate}) ->
     {RX, TX} = get_network(),
     Report =
-	case LastStats of
-	    undefined ->
-		[];
-	    {LastRX, LastTX} ->
-		RXRate = net_rate(LastRX, RX) div Rate,
-		TXRate = net_rate(LastTX, TX) div Rate,
-		[{net_rx, RXRate},
-		 {net_tx, TXRate}]
+    case LastStats of
+        undefined ->
+        [];
+        {LastRX, LastTX} ->
+        RXRate = net_rate(LastRX, RX) div Rate,
+        TXRate = net_rate(LastTX, TX) div Rate,
+        [{net_rx, RXRate},
+         {net_tx, TXRate}]
     end,
     {H#history{network={RX, TX}}, Report}.
 
@@ -271,37 +271,37 @@ report_disk2(Disks, H=#history{disk=DiskStats}) ->
                                                 LS
                                         end,
                             {Stats, Report} = report_disk2(Name, Dev, LastStats, H),
-                            {orddict:store(Dev, Stats, OrdAcc), 
-			     LstAcc ++ Report}
+                            {orddict:store(Dev, Stats, OrdAcc),
+                 LstAcc ++ Report}
                     end, {DiskStats, []}, Disks),
     {H#history{disk=NewStats}, NewReport}.
 
 report_disk2(_Name, Dev, LastStats, #history{rate=Rate}) ->
     Stats = get_disk2(Dev),
-    Report = 
-	case LastStats of
+    Report =
+    case LastStats of
         undefined ->
-		[];
-	    _ ->
-		ReadRate = disk_rate(#disk.read_sectors, LastStats, Stats) div Rate,
-		WriteRate = disk_rate(#disk.write_sectors, LastStats, Stats) div Rate,
-		{AwaitR, AwaitW} = disk_await(LastStats, Stats),
-		Svctime = disk_svctime(LastStats, Stats),
-		QueueLen = disk_qlength(LastStats, Stats),
-		Util = disk_util(LastStats, Stats),
-		[{disk_read, ReadRate},
-		 {disk_write, WriteRate},
-		 {disk_await_r, AwaitR},
-		 {disk_await_w, AwaitW},
-		 {disk_svctime, Svctime},
-		 {disk_queue_size, QueueLen},
-		 {disk_utilization, Util}]
-	end,
+        [];
+        _ ->
+        ReadRate = disk_rate(#disk.read_sectors, LastStats, Stats) div Rate,
+        WriteRate = disk_rate(#disk.write_sectors, LastStats, Stats) div Rate,
+        {AwaitR, AwaitW} = disk_await(LastStats, Stats),
+        Svctime = disk_svctime(LastStats, Stats),
+        QueueLen = disk_qlength(LastStats, Stats),
+        Util = disk_util(LastStats, Stats),
+        [{disk_read, ReadRate},
+         {disk_write, WriteRate},
+         {disk_await_r, AwaitR},
+         {disk_await_w, AwaitW},
+         {disk_svctime, Svctime},
+         {disk_queue_size, QueueLen},
+         {disk_utilization, Util}]
+    end,
     {Stats, Report}.
 
 append_atoms(Atom, List) ->
-    list_to_atom(List ++ 
-		     "_" ++ atom_to_list(Atom)).
+    list_to_atom(List ++
+             "_" ++ atom_to_list(Atom)).
 
 report_memory(H) ->
     Stats = get_memory(),
@@ -309,8 +309,8 @@ report_memory(H) ->
     Dirty = memory_dirty(Stats),
     Writeback = memory_writeback(Stats),
     {H, [{memory_utilization, Util},
-	 {memory_page_dirty, Dirty},
-	 {memory_page_writeback, Writeback}]}.
+     {memory_page_dirty, Dirty},
+     {memory_page_writeback, Writeback}]}.
 
 report_leveldb(H = #history{ lvlref = LRef}) ->
     try case eleveldb:status(LRef, <<"leveldb.ThrottleGauge">>) of
@@ -323,7 +323,7 @@ report_leveldb(H = #history{ lvlref = LRef}) ->
     catch
         _:_ ->
             LRef2 = get_leveldb_ref(),
-	    {H#history{lvlref=LRef2}, []}
+        {H#history{lvlref=LRef2}, []}
     end.
 
 net_rate(Bytes1, Bytes2) ->
@@ -353,7 +353,7 @@ disk_svctime(S1, S2) ->
 disk_util(S1, S2) ->
     Wait = S2#disk.io_wait_ms - S1#disk.io_wait_ms,
     Wait * 100 div 5000. %% Really should be div Rate
-    
+
 disk_qlength(S1, S2) ->
     (S2#disk.io_wait_weighted_ms - S1#disk.io_wait_weighted_ms) div 5000.
 
@@ -448,12 +448,12 @@ pid_name(_Pid, RegName, _VNodeMap) ->
 report_stats(Mod, Keys) ->
     Stats = Mod:get_stats(),
     case Keys of
-	all ->
-	    Stats;
-	_ ->
-	    lists:filter(fun({Key, _Value}) ->
-				 lists:member(Key, Keys)
-			 end, Stats)
+    all ->
+        Stats;
+    _ ->
+        lists:filter(fun({Key, _Value}) ->
+                 lists:member(Key, Keys)
+             end, Stats)
     end.
 
 %%%===================================================================
@@ -502,8 +502,8 @@ get_state(Pid) ->
     State.
 
 dump_stats(Stats, FD) ->
-    Out = io_lib:format("~p.~n ~p.~n", 
-			[os:timestamp(), Stats]),
+    Out = io_lib:format("~p.~n ~p.~n",
+            [os:timestamp(), Stats]),
     ok = file:write(FD, Out),
     %% not sure this is required.
     file:sync(FD).
@@ -529,15 +529,15 @@ report_vmstat(H) ->
     Result = os:cmd("vmstat 1 2"),
     Lines = string:tokens(Result, "\n"),
     Last = hd(lists:reverse(Lines)),
-    Report = 
-	case parse_vmstat(Last) of
-	    undefined ->
-		[];
-	    VM = #vmstat{} ->
-		[{cpu_utilization, 100 - VM#vmstat.cpu_id},
-		 {cpu_iowait, VM#vmstat.cpu_wa},
-		 {memory_swap_in, VM#vmstat.swap_si},
-		 {memory_swap_out, VM#vmstat.swap_so}]
+    Report =
+    case parse_vmstat(Last) of
+        undefined ->
+        [];
+        VM = #vmstat{} ->
+        [{cpu_utilization, 100 - VM#vmstat.cpu_id},
+         {cpu_iowait, VM#vmstat.cpu_wa},
+         {memory_swap_in, VM#vmstat.swap_si},
+         {memory_swap_out, VM#vmstat.swap_so}]
     end,
     {H, Report}.
 
@@ -550,4 +550,3 @@ parse_vmstat(Line) ->
         _:_ ->
             undefined
     end.
-

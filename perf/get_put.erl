@@ -13,14 +13,14 @@ confirm() ->
     Config = rtperf:standard_config(Count),
 
     ok = rtperf:build_cluster(Config),
-    
+
     SetSize = rtperf:target_size(rt_config:get(perf_target_pct),
                                  BinSize,
                                  rt_config:get(perf_ram_size),
                                  Count),
-    TestConfig = 
+    TestConfig =
         rt_bench:config(
-          max, 
+          max,
           rt_config:get(perf_duration),
           HostList,
           {int_to_bin_bigendian, {uniform_int, SetSize}},

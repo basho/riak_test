@@ -79,12 +79,11 @@ main(Args) ->
     application:load(ibrowse),
     application:start(ibrowse),
     %% Start Lager
-    application:load(lager), 
+    application:load(lager),
     lager:start(),
 
     Config = proplists:get_value(config, ParsedArgs),
     ConfigFile = proplists:get_value(file, ParsedArgs),
-
 
     %% Loads application defaults
     application:load(riak_test),
@@ -289,7 +288,7 @@ is_runnable_test({TestModule, _}) ->
 run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
     rt_cover:maybe_reset(),
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData,
-						HarnessArgs),
+                                                HarnessArgs),
     CoverDir = rt_config:get(cover_output, "coverage"),
     case NumTests of
         1 -> keep_them_up;
