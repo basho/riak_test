@@ -1,8 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% cause_bdp - helper module used by verify_busy_dist_port
-%%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2013-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -20,12 +18,19 @@
 %%
 %% -------------------------------------------------------------------
 
--module(cause_bdp).
--compile(export_all).
+-module(ensemble_basic2).
+-export([confirm/0]).
+-include_lib("eunit/include/eunit.hrl").
 
-spam_nodes(TargetNodes) ->
-        [[spawn(?MODULE, spam, [N]) || _ <- lists:seq(1,1000*1000)] || N <- TargetNodes].
-
-spam(Node) ->
-    timer:sleep(random:uniform(100)),
-    catch rpc:call(Node, erlang, whereis, [rex]).
+confirm() ->
+    NumNodes = 5,
+    NVal = 5,
+    Config = ensemble_util:fast_config(NVal),
+    lager:info("Building cluster and waiting for ensemble to stablize"),
+    Nodes = ensemble_util:build_cluster(NumNodes, Config, NVal),
+    Node = hd(Nodes),
+    Ensembles = ensemble_util:ensembles(Node),
+    lager:info("Killing all ensemble leaders"),
+    ok = ensemble_util:kill_leaders(Node, Ensembles),
+    ensemble_util:wait_until_stable(Node, NVal),
+    pass.

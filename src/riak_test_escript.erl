@@ -80,7 +80,6 @@ main(Args) ->
     application:start(ibrowse),
     %% Start Lager
     application:load(lager),
-    lager:start(),
 
     Config = proplists:get_value(config, ParsedArgs),
     ConfigFile = proplists:get_value(file, ParsedArgs),
@@ -111,7 +110,10 @@ main(Args) ->
             notice
     end,
 
-    application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel}]),
+    application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel},
+                                          {lager_file_backend, [{file, "log/test.log"},
+                                                                {level, ConsoleLagerLevel}]}]),
+    lager:start(),
 
     %% Report
     Report = case proplists:get_value(report, ParsedArgs, undefined) of

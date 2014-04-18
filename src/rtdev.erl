@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -84,6 +84,10 @@ run_riak_repl(N, Path, Cmd) ->
     %% they should already be setup at this point
 
 setup_harness(_Test, _Args) ->
+    %% make sure we stop any cover processes on any nodes
+    %% otherwise, if the next test boots a legacy node we'll end up with cover
+    %% incompatabilities and crash the cover server
+    rt_cover:maybe_stop_on_nodes(),
     Path = relpath(root),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
     rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
@@ -411,33 +415,96 @@ deploy_nodes(NodeConfig) ->
     lager:info("Deployed nodes: ~p", [Nodes]),
     Nodes.
 
+gen_stop_fun(Timeout) ->
+    fun({C,Node}) ->
+            net_kernel:hidden_connect_node(Node),
+            case rpc:call(Node, os, getpid, []) of
+                PidStr when is_list(PidStr) ->
+                    lager:info("Preparing to stop node ~p (process ID ~s) with init:stop/0...",
+                               [Node, PidStr]),
+                    rpc:call(Node, init, stop, []),
+                    %% If init:stop/0 fails here, the wait_for_pid/2 call
+                    %% below will timeout and the process will get cleaned
+                    %% up by the kill_stragglers/2 function
+                    wait_for_pid(PidStr, Timeout);
+                BadRpc ->
+                    Cmd = C ++ "/bin/riak stop",
+                    lager:info("RPC to node ~p returned ~p, will try stop anyway... ~s",
+                               [Node, BadRpc, Cmd]),
+                    Output = os:cmd(Cmd),
+                    Status = case Output of
+                                 "ok\n" ->
+                                     %% Telling the node to stop worked,
+                                     %% but now we must wait the full node
+                                     %% shutdown_time to allow it to
+                                     %% properly shut down, otherwise it
+                                     %% will get prematurely killed by
+                                     %% kill_stragglers/2 below.
+                                     timer:sleep(Timeout),
+                                     "ok";
+                                 _ ->
+                                     "wasn't running"
+                             end,
+                    lager:info("Stopped node ~p, stop status: ~s.", [Node, Status])
+            end
+    end.
+
+kill_stragglers(DevPath, Timeout) ->
+    {ok, Re} = re:compile("^\\s*\\S+\\s+(\\d+).+\\d+\\s+"++DevPath++"\\S+/beam"),
+    ReOpts = [{capture,all_but_first,list}],
+    Pids = tl(string:tokens(os:cmd("ps -ef"), "\n")),
+    Fold = fun(Proc, Acc) ->
+                   case re:run(Proc, Re, ReOpts) of
+                       nomatch ->
+                           Acc;
+                       {match,[Pid]} ->
+                           lager:info("Process ~s still running, killing...",
+                                      [Pid]),
+                           os:cmd("kill -15 "++Pid),
+                           case wait_for_pid(Pid, Timeout) of
+                               ok -> ok;
+                               fail ->
+                                   lager:info("Process ~s still hasn't stopped, "
+                                              "resorting to kill -9...", [Pid]),
+                                   os:cmd("kill -9 "++Pid)
+                           end,
+                           [Pid|Acc]
+                   end
+           end,
+    lists:foldl(Fold, [], Pids).
+
+wait_for_pid(PidStr, Timeout) ->
+    F = fun() ->
+                os:cmd("kill -0 "++PidStr) =/= []
+        end,
+    Retries = Timeout div 1000,
+    case rt:wait_until(F, Retries, 1000) of
+        {fail, _} -> fail;
+        _ -> ok
+    end.
+
 stop_all(DevPath) ->
     case filelib:is_dir(DevPath) of
         true ->
             Devs = filelib:wildcard(DevPath ++ "/dev*"),
-            %% Works, but I'd like it to brag a little more about it.
-            Stop = fun(C) ->
-                %% If getpid available, kill -9 with it, we're serious here
-                [MaybePid | _] = string:tokens(os:cmd(C ++ "/bin/riak getpid"),
-                                               "\n"),
-                try
-                    _ = list_to_integer(MaybePid),
-                    {0, Out} = cmd("kill -9 "++MaybePid),
-                    Out
-                catch
-                    _:_ -> ok
-                end,
-                Cmd = C ++ "/bin/riak stop",
-                {_, StopOut} = cmd(Cmd),
-                [Output | _Tail] = string:tokens(StopOut, "\n"),
-                Status = case Output of
-                    "ok" -> "ok";
-                    _ -> "wasn't running"
-                end,
-                lager:info("Stopped Node... ~s ~~ ~s.", [Cmd, Status])
+            Nodes = [?DEV(N) || N <- lists:seq(1, length(Devs))],
+            MyNode = 'riak_test@127.0.0.1',
+            case net_kernel:start([MyNode, longnames]) of
+                {ok, _} ->
+                    true = erlang:set_cookie(MyNode, riak);
+                {error,{already_started,_}} ->
+                    ok
             end,
-            rt:pmap(Stop, Devs);
-        _ -> lager:info("~s is not a directory.", [DevPath])
+            lager:info("Trying to obtain node shutdown_time via RPC..."),
+            Tmout = case rpc:call(hd(Nodes), init, get_argument, [shutdown_time]) of
+                        {ok,[[Tm]]} -> list_to_integer(Tm)+10000;
+                        _ -> 20000
+                    end,
+            lager:info("Using node shutdown_time of ~w", [Tmout]),
+            rt:pmap(gen_stop_fun(Tmout), lists:zip(Devs, Nodes)),
+            kill_stragglers(DevPath, Tmout);
+        _ ->
+	    lager:info("~s is not a directory.", [DevPath])
     end,
     ok.
 

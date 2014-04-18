@@ -34,9 +34,11 @@ confirm() ->
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     rt:update_app_config(all, [{riak_core,
                                 [{ring_creation_size, ?START_SIZE}]}]),
-    [ANode, AnotherNode, YetAnother, ReplacingNode] = AllNodes = rt:deploy_nodes(4),
-    Nodes = [ANode, AnotherNode, YetAnother],
-    NewNodes = [ANode, YetAnother, ReplacingNode],
+    [ANode, AnotherNode, YetAnother, _ReplacingNode] = _AllNodes = rt:deploy_nodes(4),
+    NewNodes = Nodes = [ANode, AnotherNode, YetAnother],
+    %% This assignment for `NewNodes' is commented until riak_core
+    %% issue #570 is resolved
+    %% NewNodes = [ANode, YetAnother, ReplacingNode],
     rt:join(AnotherNode, ANode),
     rt:join(YetAnother, ANode),
     rt:wait_until_nodes_agree_about_ownership(Nodes),
@@ -55,22 +57,32 @@ confirm() ->
     lager:info("verifying previously written data"),
     ?assertEqual([], rt:systest_read(ANode, 1, 500, ?BUCKET, ?R)),
 
-    lager:info("testing force-replace during resize"),
-    submit_resize(?EXPANDED_SIZE, ANode),
-    %% sleep for a second, yes i know this is nasty but we just care that the resize has
-    %% been submitted and started, we aren't really waiting on a condition    
-    timer:sleep(3000),
-    rpc:multicall(Nodes, riak_core_handoff_manager, kill_handoffs, []),
-    ok = rpc:call(ReplacingNode, riak_core, staged_join, [ANode]),
-    rt:wait_until_ring_converged(AllNodes),
-    ok = rpc:call(ANode, riak_core_claimant, force_replace, [AnotherNode, ReplacingNode]),
-    {ok, _, _} = rpc:call(ANode, riak_core_claimant, plan, []),
-    ok = rpc:call(ANode, riak_core_claimant, commit, []),
-    rpc:multicall(AllNodes, riak_core_handoff_manager, set_concurrency, [4]),
-    rt:wait_until_no_pending_changes(NewNodes),
-    assert_ring_size(?EXPANDED_SIZE, NewNodes),
-    lager:info("verifying written data"),
+    test_resize(?START_SIZE, ?EXPANDED_SIZE, ANode, Nodes),
+    lager:info("verifying previously written data"),
     ?assertEqual([], rt:systest_read(ANode, 1, 750, ?BUCKET, ?R)),
+
+    %% This following test code for force-replace is commented until
+    %% riak_core issue #570 is resolved. At that time the preceding 3
+    %% lines should also be removed
+
+    %% lager:info("testing force-replace during resize"),
+    %% submit_resize(?EXPANDED_SIZE, ANode),
+    %% %% sleep for a second, yes i know this is nasty but we just care that the resize has
+    %% %% been submitted and started, we aren't really waiting on a condition
+    %% timer:sleep(3000),
+    %% rpc:multicall(Nodes, riak_core_handoff_manager, kill_handoffs, []),
+    %% Statuses = rpc:multicall(Nodes, riak_core_handoff_manager, status, []),
+    %% lager:info("Handoff statuses: ~p", [Statuses]),
+    %% ok = rpc:call(ReplacingNode, riak_core, staged_join, [ANode]),
+    %% rt:wait_until_ring_converged(AllNodes),
+    %% ok = rpc:call(ANode, riak_core_claimant, force_replace, [AnotherNode, ReplacingNode]),
+    %% {ok, _, _} = rpc:call(ANode, riak_core_claimant, plan, []),
+    %% ok = rpc:call(ANode, riak_core_claimant, commit, []),
+    %% rpc:multicall(AllNodes, riak_core_handoff_manager, set_concurrency, [4]),
+    %% rt:wait_until_no_pending_changes(NewNodes),
+    %% assert_ring_size(?EXPANDED_SIZE, NewNodes),
+    %% lager:info("verifying written data"),
+    %% ?assertEqual([], rt:systest_read(ANode, 1, 750, ?BUCKET, ?R)),
 
     test_resize(?EXPANDED_SIZE, ?SHRUNK_SIZE, ANode, NewNodes),
     lager:info("verifying written data"),
@@ -124,19 +136,19 @@ write_during_resize(_, Start, End) when Start =:= undefined orelse End =:= undef
     ok;
 write_during_resize(Node, Start, End) ->
     Pid = self(),
-    spawn(fun() -> 
+    spawn(fun() ->
                   case rt:systest_write(Node, Start, End, ?BUCKET, ?W) of
                       [] ->
                           Pid ! done_writing;
                       Ers ->
                           Pid ! {errors_writing, Ers}
-                  end                  
+                  end
           end).
 
 verify_write_during_resize(_, Start, End) when Start =:= undefined orelse End =:= undefined ->
     ok;
 verify_write_during_resize(Node, Start, End) ->
-    receive 
+    receive
         done_writing ->
             lager:info("verifying data written during operation"),
             ?assertEqual([], rt:systest_read(Node, Start, End, ?BUCKET, ?R)),
@@ -144,7 +156,7 @@ verify_write_during_resize(Node, Start, End) ->
         {errors_writing, Ers} ->
             lager:error("errors were encountered while writing during operation: ~p", [Ers]),
             throw(writes_failed)
-    after 
+    after
         10000 ->
             lager:error("failed to complete writes during operation before timeout"),
             throw(writes_timedout)
@@ -169,7 +181,7 @@ assert_ring_size(Size, Node) ->
 wait_until_extra_vnodes_shutdown([]) ->
     ok;
 wait_until_extra_vnodes_shutdown([Node | Nodes]) ->
-    wait_until_extra_vnodes_shutdown(Node),    
+    wait_until_extra_vnodes_shutdown(Node),
     wait_until_extra_vnodes_shutdown(Nodes);
 wait_until_extra_vnodes_shutdown(Node) ->
     {ok, R} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
@@ -194,13 +206,8 @@ wait_until_extra_proxies_shutdown(Node) ->
                 StillRunning = [Idx || Idx <- Running, not lists:member(Idx, AllIndexes)],
                 length(StillRunning) =:= 0
          end,
-    ?assertEqual(ok, rt:wait_until(Node, F)).                                       
+    ?assertEqual(ok, rt:wait_until(Node, F)).
 
 running_vnode_proxies(Node) ->
     Children = rpc:call(Node, supervisor, which_children, [riak_core_vnode_proxy_sup]),
     [Idx || {{_,Idx},Pid,_,_} <- Children, is_pid(Pid)].
-
-
-
-
-

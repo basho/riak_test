@@ -63,14 +63,13 @@ setup_repl_clusters(Conf, SSL) ->
             ],
 
 
+    rt:set_advanced_conf(all, Conf),
+    Nodes = [ANodes, BNodes, CNodes] = rt:build_clusters([2, 2, 2]),
 
-    Nodes = deploy_nodes(NumNodes, Conf),
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
+    CFirst = hd(CNodes),
 
-    lager:info("Nodes = ~p", [Nodes]),
-    {[AFirst|_] = ANodes, Rest} = lists:split(2, Nodes),
-    {[BFirst|_] = BNodes, [CFirst|_] = CNodes} = lists:split(2, Rest),
-
-    %%AllNodes = ANodes ++ BNodes ++ CNodes,
     rt:log_to_nodes(Nodes, "Starting replication2_pg test"),
 
     lager:info("ANodes: ~p", [ANodes]),
@@ -92,15 +91,6 @@ setup_repl_clusters(Conf, SSL) ->
 
     rt:log_to_nodes(Nodes, "Building and connecting clusters"),
 
-    lager:info("Build cluster A"),
-    repl_util:make_cluster(ANodes),
-
-    lager:info("Build cluster B"),
-    repl_util:make_cluster(BNodes),
-
-    lager:info("Build cluster C"),
-    repl_util:make_cluster(CNodes),
-
     repl_util:name_cluster(AFirst, "A"),
     repl_util:name_cluster(BFirst, "B"),
     repl_util:name_cluster(CFirst, "C"),
@@ -112,19 +102,20 @@ setup_repl_clusters(Conf, SSL) ->
     repl_util:wait_until_leader(AFirst),
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
-    {ok, {_IP, BPort}} = rpc:call(BFirst, application, get_env,
+    {ok, {BIP, BPort}} = rpc:call(BFirst, application, get_env,
                                   [riak_core, cluster_mgr]),
-    repl_util:connect_cluster(LeaderA, "127.0.0.1", BPort),
+    repl_util:connect_cluster(LeaderA, BIP, BPort),
 
-    {ok, {_IP, CPort}} = rpc:call(CFirst, application, get_env,
+    {ok, {CIP, CPort}} = rpc:call(CFirst, application, get_env,
                                   [riak_core, cluster_mgr]),
-    repl_util:connect_cluster(LeaderA, "127.0.0.1", CPort),
+    repl_util:connect_cluster(LeaderA, CIP, CPort),
 
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
     rt:wait_until_ring_converged(ANodes),
 
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "C")),
     rt:wait_until_ring_converged(ANodes),
+
     {LeaderA, ANodes, BNodes, CNodes, Nodes}.
 
 
@@ -149,7 +140,7 @@ test_basic_pg(Mode, SSL) ->
               {fullsync_on_connect, false}
              ]}
            ],
-    {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
+    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
         setup_repl_clusters(Conf, SSL),
     rt:log_to_nodes(AllNodes, "Testing basic pg"),
 
@@ -182,7 +173,9 @@ test_basic_pg(Mode, SSL) ->
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
 
-    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
+    _FirstA = hd(ANodes),
+    FirstB = hd(BNodes),
+    FirstC = hd(CNodes),
     PidB = rt:pbc(FirstB),
     lager:info("Connected to cluster B"),
     {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
@@ -284,7 +277,9 @@ test_12_pg(Mode, SSL) ->
     {Bucket, KeyB, ValueB} = make_test_object("b"),
 
     rt:log_to_nodes(AllNodes, "Test 1.2 proxy_get"),
-    {_FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
+    _FirstA = hd(ANodes),
+    FirstB = hd(BNodes),
+    _FirstC = hd(CNodes),
     case Mode of
         mode_repl12 ->
             ModeRes = rpc:call(FirstB, riak_repl_console, modes, [["mode_repl12"]]),
@@ -369,7 +364,7 @@ test_pg_proxy(SSL) ->
               {fullsync_on_connect, false}
              ]}
            ],
-    {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
+    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
         setup_repl_clusters(Conf, SSL),
     rt:log_to_nodes(AllNodes, "Testing pg proxy"),
     rt:wait_until_ring_converged(ANodes),
@@ -399,11 +394,16 @@ test_pg_proxy(SSL) ->
     rt:pbc_write(PidA, Bucket, KeyD, ValueD),
     %% sanity check. You know, like the 10000 tests that autoconf runs 
     %% before it actually does any work.
-    {FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
+    FirstA = hd(ANodes),
+    FirstB = hd(BNodes),
+    _FirstC = hd(CNodes),
     PidB = rt:pbc(FirstB),
     lager:info("Connected to cluster B"),
     {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
     ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
+
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
 
     lager:info("Stopping leader on requester cluster"),
     PGLeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
@@ -439,10 +439,12 @@ test_cluster_mapping(SSL) ->
               {fullsync_on_connect, false}
              ]}
            ],
-    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
+    {LeaderA, ANodes, BNodes, CNodes, _AllNodes} =
         setup_repl_clusters(Conf, SSL),
 
-    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
+    _FirstA = hd(ANodes),
+    FirstB = hd(BNodes),
+    FirstC = hd(CNodes),
     LeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
     LeaderC = rpc:call(FirstC, riak_core_cluster_mgr, get_leader, []),
     
@@ -554,14 +556,16 @@ test_bidirectional_pg(SSL) ->
               {fullsync_on_connect, false}
              ]}
            ],
-    {LeaderA, ANodes, BNodes, _CNodes, AllNodes} =
+    {LeaderA, ANodes, BNodes, CNodes, AllNodes} =
         setup_repl_clusters(Conf, SSL),
     rt:log_to_nodes(AllNodes, "Testing bidirectional proxy-get"),
 
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
-    {FirstA, FirstB, _FirstC} = get_firsts(AllNodes),
+    FirstA = hd(ANodes),
+    FirstB = hd(BNodes),
+    _FirstC = hd(CNodes),
 
     LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
 
@@ -662,7 +666,9 @@ test_multiple_sink_pg(SSL) ->
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
 
-    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
+    _FirstA = hd(ANodes),
+    FirstB = hd(BNodes),
+    FirstC = hd(CNodes),
 
     PidB = rt:pbc(FirstB),
     PidC = rt:pbc(FirstC),
@@ -713,7 +719,9 @@ test_mixed_pg(SSL) ->
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
 
-    {_FirstA, FirstB, FirstC} = get_firsts(AllNodes),
+    _FirstA = hd(ANodes),
+    FirstB = hd(BNodes),
+    FirstC = hd(CNodes),
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
@@ -861,8 +869,7 @@ confirm() ->
         ],
     lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
     lager:error("The runnable tests in this module are: ~p", [AllTests]),
-    ?assert(false).
-
+    [?assertEqual(pass, erlang:apply(?MODULE, Test, [])) || Test <- AllTests].
 
 banner(T) ->
     banner(T, false).
@@ -873,13 +880,6 @@ banner(T, SSL) ->
     lager:info("~s, SSL ~s",[T, SSL]),
     lager:info("----------------------------------------------"),
     lager:info("----------------------------------------------").
-
-
-get_firsts(Nodes) ->
-    {[AFirst|_] = _ANodes, Rest} = lists:split(2, Nodes),
-    {[BFirst|_] = _BNodes, [CFirst|_] = _CNodes} = lists:split(2, Rest),
-    {AFirst, BFirst, CFirst}.
-
 
 wait_until_pg(Node, Pid, Bucket, Key, Cid) ->
     rt:wait_until(Node,

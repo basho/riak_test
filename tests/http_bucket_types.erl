@@ -127,6 +127,39 @@ confirm() ->
     ?assertEqual({ok, []}, rhc:list_buckets(RHC)),
     ?assertEqual({ok, [<<"bucket">>]}, rhc:list_buckets(RHC, <<"mytype">>)),
 
+    lager:info("UTF-8 type get/put test"),
+    %% こんにちは - konnichiwa (Japanese)
+    UnicodeTypeBin = unicode:characters_to_binary([12371,12435,12395,12385,12399], utf8),
+    %% سلام - Salam (Arabic)
+    UnicodeBucketBin = unicode:characters_to_binary([1587,1604,1575,1605], utf8),
+
+    UCBBin = {UnicodeTypeBin, UnicodeBucketBin},
+
+    ok = rt:create_and_activate_bucket_type(Node, UnicodeTypeBin, [{n_val,3}]),
+
+    lager:info("doing put"),
+    ok = rhc:put(RHC, riakc_obj:new(UCBBin,
+                                    <<"key">>, <<"unicode">>)),
+
+    lager:info("doing get"),
+    {ok, O6} = rhc:get(RHC, UCBBin, <<"key">>),
+
+    ?assertEqual(<<"unicode">>, riakc_obj:get_value(O6)),
+
+    lager:info("unicode type list_keys test"),
+    ?assertEqual({ok, [<<"key">>]}, rhc:list_keys(RHC, UCBBin)),
+
+    lager:info("unicode type list_buckets test"),
+    %% list buckets
+
+    %% This is a rather awkward representation, but it's what rhc is
+    %% currently giving us. Curl gives us
+    %% {"buckets":["\u0633\u0644\u0627\u0645"]} to illustrate where
+    %% the values are coming from, and those are indeed the correct
+    %% hexadecimal values for the UTF-8 representation of the bucket
+    %% name
+    ?assertEqual({ok, [<<"0633064406270645">>]}, rhc:list_buckets(RHC, UnicodeTypeBin)),
+
     lager:info("bucket properties tests"),
     rhc:set_bucket(RHC, {<<"default">>, <<"mybucket">>},
                    [{n_val, 5}]),

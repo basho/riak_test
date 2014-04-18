@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -27,6 +27,7 @@
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-compile(export_all).
 -export([
          admin/2,
          assert_nodes_agree_about_ownership/1,
@@ -38,6 +39,7 @@
          build_cluster/2,
          build_cluster/3,
          build_clusters/1,
+         join_cluster/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
@@ -81,6 +83,9 @@
          partition/2,
          pbc/1,
          pbc_read/3,
+         pbc_read/4,
+         pbc_read_check/4,
+         pbc_read_check/5,
          pbc_set_bucket_prop/3,
          pbc_write/4,
          pbc_put_dir/3,
@@ -809,7 +814,11 @@ brutal_kill(Node) ->
     rt_cover:maybe_stop_on_node(Node),
     lager:info("Killing node ~p", [Node]),
     OSPidToKill = rpc:call(Node, os, getpid, []),
-    rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+    %% try a normal kill first, but set a timer to
+    %% kill -9 after 5 seconds just in case
+    rpc:cast(Node, timer, apply_after,
+             [5000, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]]),
+    rpc:cast(Node, os, cmd, [io_lib:format("kill -15 ~s", [OSPidToKill])]),
     ok.
 
 capability(Node, all) ->
@@ -1151,6 +1160,56 @@ get_replica(Node, Bucket, Key, I, N) ->
     end.
 
 %%%===================================================================
+
+%% @doc PBC-based version of {@link systest_write/1}
+pbc_systest_write(Node, Size) ->
+    pbc_systest_write(Node, Size, 2).
+
+pbc_systest_write(Node, Size, W) ->
+    pbc_systest_write(Node, 1, Size, <<"systest">>, W).
+
+pbc_systest_write(Node, Start, End, Bucket, W) ->
+    rt:wait_for_service(Node, riak_kv),
+    Pid = pbc(Node),
+    F = fun(N, Acc) ->
+                Obj = riakc_obj:new(Bucket, <<N:32/integer>>, <<N:32/integer>>),
+                try riakc_pb_socket:put(Pid, Obj, W) of
+                    ok ->
+                        Acc;
+                    Other ->
+                        [{N, Other} | Acc]
+                catch
+                    What:Why ->
+                        [{N, {What, Why}} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
+
+pbc_systest_read(Node, Size) ->
+    pbc_systest_read(Node, Size, 2).
+
+pbc_systest_read(Node, Size, R) ->
+    pbc_systest_read(Node, 1, Size, <<"systest">>, R).
+
+pbc_systest_read(Node, Start, End, Bucket, R) ->
+    rt:wait_for_service(Node, riak_kv),
+    Pid = pbc(Node),
+    F = fun(N, Acc) ->
+                case riakc_pb_socket:get(Pid, Bucket, <<N:32/integer>>, R) of
+                    {ok, Obj} ->
+                        case riakc_obj:get_value(Obj) of
+                            <<N:32/integer>> ->
+                                Acc;
+                            WrongVal ->
+                                [{N, {wrong_val, WrongVal}} | Acc]
+                        end;
+                    Other ->
+                        [{N, Other} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
+
+%%%===================================================================
 %%% PBC & HTTPC Functions
 %%%===================================================================
 
@@ -1166,8 +1225,25 @@ pbc(Node) ->
 %% @doc does a read via the erlang protobuf client
 -spec pbc_read(pid(), binary(), binary()) -> binary().
 pbc_read(Pid, Bucket, Key) ->
-    {ok, Value} = riakc_pb_socket:get(Pid, Bucket, Key),
+    pbc_read(Pid, Bucket, Key, []).
+
+-spec pbc_read(pid(), binary(), binary(), [any()]) -> binary().
+pbc_read(Pid, Bucket, Key, Options) ->
+    {ok, Value} = riakc_pb_socket:get(Pid, Bucket, Key, Options),
     Value.
+
+-spec pbc_read_check(pid(), binary(), binary(), [any()]) -> boolean().
+pbc_read_check(Pid, Bucket, Key, Allowed) ->
+    pbc_read_check(Pid, Bucket, Key, Allowed, []).
+
+-spec pbc_read_check(pid(), binary(), binary(), [any()], [any()]) -> boolean().
+pbc_read_check(Pid, Bucket, Key, Allowed, Options) ->
+    case riakc_pb_socket:get(Pid, Bucket, Key, Options) of
+        {ok, _} ->
+            true = lists:member(ok, Allowed);
+        Other ->
+            lists:member(Other, Allowed) orelse throw({failed, Other, Allowed})
+    end.
 
 %% @doc does a write via the erlang protobuf client
 -spec pbc_write(pid(), binary(), binary(), binary()) -> atom().
@@ -1385,7 +1461,7 @@ log_to_nodes(Nodes, LFmt, LArgs) ->
                [] -> [info, Meta, "---riak_test--- " ++ LFmt];
                _  -> [info, Meta, "---riak_test--- " ++ LFmt, LArgs]
            end,
-    [rpc:call(Node, Module, Function, Args) || Node <- Nodes].
+    [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 
 %% @private utility function
 pmap(F, L) ->
