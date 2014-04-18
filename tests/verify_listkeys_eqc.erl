@@ -51,6 +51,7 @@
           cluster_nodes = [],
           ring_size = 0,
           num_keys = 0,
+          key_filter = undefined,
           preload_complete = false,
           setup_complete = false
          }).
@@ -82,6 +83,18 @@ g_uuid() ->
 
 g_bucket_type() ->
     oneof(bucket_types()).
+
+g_key_filter() ->
+    %% Create a key filter function.
+    %% There will always be at least 10 keys
+    %% due to the lower bound of object count
+    %% generator.
+    MatchKeys = [list_to_binary(integer_to_list(X)) || X <- lists:seq(1,10)],
+    KeyFilter =
+        fun(X) ->
+                lists:member(X, MatchKeys)
+        end,
+    frequency([{4, none}, {2, KeyFilter}]).
 
 %% ====================================================================
 %% EQC Properties
@@ -178,25 +191,23 @@ preload_pre(_) ->
     false.
 
 preload_args(S) ->
-    [g_bucket_type(), g_uuid(), S#state.nodes_up, num_keys()].
+    [g_bucket_type(), g_uuid(), S#state.nodes_up, num_keys(), g_key_filter()].
 
-preload({BucketType, _}, Bucket, Nodes, NumKeys) ->
+preload({BucketType, _}, Bucket, Nodes, NumKeys, _KeyFilter) ->
     Node = hd(Nodes),
     NodeName = Node#node.name,
     lager:info("*******************[CMD]  First node ~p", [NodeName]),
     lager:info("Writing to bucket ~p", [Bucket]),
     put_keys(NodeName, {BucketType, Bucket}, NumKeys).
 
-preload_next(S, _, [{BucketType, _}, Bucket, _, NumKeys]) ->
+preload_next(S, _, [{BucketType, _}, Bucket, _, NumKeys, KeyFilter]) ->
     S#state{bucket_type = BucketType,
             bucket = Bucket,
             num_keys = NumKeys,
+            key_filter = KeyFilter,
             preload_complete=true}.
 
-preload_post(_S, [_BucketType, _Bucket, _Nodes, _NumKeys], _R) ->
-    %% lager:info("In preload_post, Bucket:~p, Nodes:~p, NumKeys:~p", [Bucket, Nodes, NumKeys]),
-    %% KeyRes = [ list_keys(Node, Bucket, NumKeys, true) || {node, Node, _} <- Nodes ],
-    %% false == lists:member(false, KeyRes).
+preload_post(_S, [_BucketType, _Bucket, _Nodes, _NumKeys, _KeyFilter], _R) ->
     true.
 
 verify_pre(#state{preload_complete=true}) ->
@@ -205,10 +216,10 @@ verify_pre(_) ->
     false.
 
 verify_args(S) ->
-    [S#state.bucket_type, S#state.bucket, S#state.nodes_up, S#state.num_keys].
+    [S#state.bucket_type, S#state.bucket, S#state.nodes_up, S#state.num_keys, S#state.key_filter].
 
-verify(BucketType, Bucket, Nodes, NumKeys) ->
-    [list_keys(Node#node.name, {BucketType, Bucket}, NumKeys, true) || Node <- Nodes].
+verify(BucketType, Bucket, Nodes, NumKeys, KeyFilter) ->
+    [list_keys(Node#node.name, {BucketType, Bucket}, NumKeys, KeyFilter) || Node <- Nodes].
 
 verify_post(_S, _Args, R) ->
     false == lists:member(false, R).
@@ -239,25 +250,32 @@ put_buckets(Node, Num) ->
         catch(riakc_pb_socket:stop(Pid))
     end.
 
-list_keys(Node, Bucket, Num, ShouldPass) ->
+list_keys(Node, Bucket, Num, KeyFilter) ->
     %% Move client to state
-    Pid = rt:pbc(Node),
-    try
-        lager:info("Listing keys on node ~p.", [Node]),
-        Res = riakc_pb_socket:list_keys(Pid, Bucket),
-        lager:info("Result is ~p", [Res]),
-        case ShouldPass of
-            true ->
-                {ok, Keys} = Res,
-                ActualKeys = lists:usort(Keys),
-                ExpectedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)]),
-                assert_equal(ExpectedKeys, ActualKeys);
-            _ ->
-                {Status, Message} = Res,
-                Status == error andalso <<"insufficient_vnodes_available">> == Message
-        end
-    after
-        catch(riakc_pb_socket:stop(Pid))
+    {ok, C} = riak:client_connect(Node),
+    GeneratedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)]),
+    case KeyFilter of
+	none ->
+	    {ok, Keys} = riak_client:list_keys(Bucket, C),
+	    lager:info("Listing keys on node ~p wth no filter, result:~p", [Node, Keys]),
+	    ExpectedKeys = GeneratedKeys,
+	    ActualKeys = lists:usort(Keys),
+	    assert_equal(ExpectedKeys, ActualKeys);
+	_ ->
+	    {ok, Keys} = riak_client:list_keys(Bucket, KeyFilter, C),
+	    lager:info("Listing keys on node ~p, filter:~p, keys:~p", [Node, KeyFilter, Keys]),
+	    ExpectedKeyFilter =
+		fun(K, Acc) ->
+			case KeyFilter(K) of
+			    true ->
+				[K | Acc];
+			    false ->
+				Acc
+			end
+		end,
+	    ExpectedKeys = lists:foldl(ExpectedKeyFilter, [], GeneratedKeys),
+	    ActualKeys = lists:usort(Keys),
+	    assert_equal(ExpectedKeys, ActualKeys)
     end.
 
 assert_equal(Expected, Actual) ->
@@ -278,3 +296,4 @@ bucket_types() ->
      {<<"n_val_three">>, 3},
      {<<"n_val_four">>, 4},
      {<<"n_val_five">>, 5}].
+
