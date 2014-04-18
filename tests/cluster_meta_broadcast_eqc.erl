@@ -163,7 +163,8 @@ prop_test() ->
                     conjunction(
                     [ 
                      {consistent, prop_consistent(Views)},
-                     {valid_views, [] == [ bad || {_, View} <- Views, not is_list(View) ]}
+                     {valid_views, [] == [ bad || {_, View} <- Views, not is_list(View) ]},
+                     {termination, eq(R, ok)}
                 ])))
         end))).
 
