@@ -74,7 +74,6 @@ load_dot_config(ConfigName, ConfigFile) ->
             erlang:error("Failed to parse config file", [ConfigFile, Reason])
  end.
 
-%% @private
 set(Key, Value) ->
     ok = application:set_env(riak_test, Key, Value).
 

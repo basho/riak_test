@@ -837,7 +837,7 @@ wait_until_aae_trees_built(Nodes) ->
                 true ->
                     lager:debug("Check if really built by locking"),
                     %% Try to lock each partition. If you get not_built,
-                    %% the manager has not detected the built process has 
+                    %% the manager has not detected the built process has
                     %% died yet.
                     %% Notice that the process locking is spawned by the
                     %% pmap. That's important! as it should die eventually
@@ -859,7 +859,7 @@ wait_until_aae_trees_built(Nodes) ->
                     AllBuilt =
                     lists:all(fun(V) -> V == true end,
                               rt:pmap(IdxBuilt, Partitions)),
-                    lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),  
+                    lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),
                     AllBuilt
             end
     end,
@@ -1351,30 +1351,52 @@ set_backend(eleveldb, _) ->
     set_backend(riak_kv_eleveldb_backend);
 set_backend(memory, _) ->
     set_backend(riak_kv_memory_backend);
+set_backend(multi, Extras) ->
+    set_backend(riak_kv_multi_backend, Extras);
 set_backend(Backend, _) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
     lager:info("rt:set_backend(~p)", [Backend]),
-    ?HARNESS:set_backend(Backend);
-set_backend(Backend, Extras) when Backend == multi; Backend == riak_kv_multi_backend ->
+    update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
+    get_backends();
+set_backend(Backend, Extras) when Backend == riak_kv_multi_backend ->
     MultiConfig = proplists:get_value(multi_config, Extras, default),
-    set_multi_backend(MultiConfig);
+    Config = make_multi_backend_config(MultiConfig),
+    update_app_config(all, [{riak_kv, Config}]),
+    get_backends();
 set_backend(Other, _) ->
     lager:warning("rt:set_backend doesn't recognize ~p as a legit backend, using the default.", [Other]),
-    ?HARNESS:get_backends().
+    get_backends().
 
-set_multi_backend(default) ->
-    Config = [{multi_backend_default, <<"eleveldb1">>},
-              {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
-                               {<<"memory1">>, riak_kv_memory_backend, []},
-                               {<<"bitcask1">>, riak_kv_bitcask_backend, []}]}],
-    ?HARNESS:set_backend(riak_kv_multi_backend, Config);
-set_multi_backend(indexmix) ->
-    Config = [{multi_backend_default, <<"eleveldb1">>},
-              {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
-                               {<<"memory1">>, riak_kv_memory_backend, []}]}],
-    ?HARNESS:set_backend(riak_kv_multi_backend, Config);
-set_multi_backend(Other) ->
+make_multi_backend_config(default) ->
+    [{storage_backend, riak_kv_multi_backend},
+     {multi_backend_default, <<"eleveldb1">>},
+     {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                      {<<"memory1">>, riak_kv_memory_backend, []},
+                      {<<"bitcask1">>, riak_kv_bitcask_backend, []}]}];
+make_multi_backend_config(indexmix) ->
+    [{storage_backend, riak_kv_multi_backend},
+     {multi_backend_default, <<"eleveldb1">>},
+     {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                      {<<"memory1">>, riak_kv_memory_backend, []}]}];
+make_multi_backend_config(Other) ->
     lager:warning("rt:set_multi_backend doesn't recognize ~p as legit multi-backend config, using default", [Other]),
-    set_multi_backend(default).
+    make_multi_backend_config(default).
+
+get_backends() ->
+    Backends = ?HARNESS:get_backends(),
+    case Backends of
+        [riak_kv_bitcask_backend] -> bitcask;
+        [riak_kv_eleveldb_backend] -> eleveldb;
+        [riak_kv_memory_backend] -> memory;
+        [Other] -> Other;
+        MoreThanOne -> MoreThanOne
+    end.
+
+-spec get_backend([proplists:property()]) -> atom() | error.
+get_backend(AppConfigProplist) ->
+    case kvc:path('riak_kv.storage_backend', AppConfigProplist) of
+        [] -> error;
+        Backend -> Backend
+    end.
 
 %% @doc Gets the current version under test. In the case of an upgrade test
 %%      or something like that, it's the version you're upgrading to.
