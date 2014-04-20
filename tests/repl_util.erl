@@ -33,10 +33,13 @@
          maybe_reconnect_rt/3,
          connect_rt/3,
          connect_cluster_by_name/3,
+         connect_cluster_by_name/4,
          get_port/1,
          get_leader/1,
          write_to_cluster/4,
+         write_to_cluster/5,
          read_from_cluster/5,
+         read_from_cluster/6,
          check_fullsync/3,
          validate_completed_fullsync/6
         ]).
@@ -239,6 +242,7 @@ wait_for_connection(Node, Name) ->
                 case rpc:call(Node, riak_core_cluster_mgr,
                         get_connections, []) of
                     {ok, Connections} ->
+			lager:info("Connections: ~p", [Connections]),
                         Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
                         case Conn of
                             [] ->
@@ -359,6 +363,13 @@ connect_cluster_by_name(Source, Port, Name) ->
     repl_util:connect_cluster(Source, "127.0.0.1", Port),
     ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
 
+%% @doc Connect two clusters using a given name.
+connect_cluster_by_name(Source, Destination, Port, Name) ->
+    lager:info("Connecting ~p to ~p for cluster ~p.",
+               [Source, Port, Name]),
+    repl_util:connect_cluster(Source, Destination, Port),
+    ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
+
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.
 get_port(Node) ->
@@ -393,15 +404,24 @@ validate_completed_fullsync(ReplicationLeader,
 
 %% @doc Write a series of keys and ensure they are all written.
 write_to_cluster(Node, Start, End, Bucket) ->
+    write_to_cluster(Node, Start, End, Bucket, 1).
+
+%% @doc Write a series of keys and ensure they are all written.
+write_to_cluster(Node, Start, End, Bucket, Quorum) ->
     lager:info("Writing ~p keys to node ~p.", [End - Start, Node]),
     ?assertEqual([],
-                 repl_util:do_write(Node, Start, End, Bucket, 1)).
+                 repl_util:do_write(Node, Start, End, Bucket, Quorum)).
 
 %% @doc Read from cluster a series of keys, asserting a certain number
 %%      of errors.
 read_from_cluster(Node, Start, End, Bucket, Errors) ->
+    read_from_cluster(Node, Start, End, Bucket, Errors, 1).
+
+%% @doc Read from cluster a series of keys, asserting a certain number
+%%      of errors.
+read_from_cluster(Node, Start, End, Bucket, Errors, Quorum) ->
     lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
-    Res2 = rt:systest_read(Node, Start, End, Bucket, 1),
+    Res2 = rt:systest_read(Node, Start, End, Bucket, Quorum),
     ?assertEqual(Errors, length(Res2)).
 
 %% @doc Assert we can perform one fullsync cycle, and that the number of
