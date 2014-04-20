@@ -116,6 +116,10 @@ setup_repl_clusters(Conf, SSL) ->
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "C")),
     rt:wait_until_ring_converged(ANodes),
 
+    rt:wait_until_transfers_complete(ANodes),
+    rt:wait_until_transfers_complete(BNodes),
+    rt:wait_until_transfers_complete(CNodes),
+
     {LeaderA, ANodes, BNodes, CNodes, Nodes}.
 
 
