@@ -34,7 +34,7 @@
 -define(BUCKET, <<"BUCKET">>).
 -define(NUM_KEYS, 5).
 -define(NUM_BUCKETS, 2).
--define(NUM_TESTS, 4).
+-define(NUM_TESTS, 5).
 -define(LAZY_TIMER, 20).
 -define(PREFIX, {x, x}).
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
@@ -62,11 +62,7 @@
 %% riak_test callback
 %% ====================================================================
 confirm() ->
-%    lager:set_loglevel(lager_console_backend, warning),
-%    OutputFun = fun(Str, Args) -> lager:error(Str, Args) end,
-%    ?assert(eqc:quickcheck(eqc:on_output(OutputFun, eqc:numtests(?NUM_TESTS, ?MODULE:prop_test())))),
     ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
-
     pass.
 
 %% ====================================================================
@@ -76,7 +72,7 @@ gen_numnodes() ->
     oneof([2, 3, 4, 5]).
 
 num_keys() ->
-    elements([10, 100, 1000]).
+    choose(10, 1000).
 
 g_uuid() ->
     eqc_gen:bind(eqc_gen:bool(), fun(_) -> druuid:v4_str() end).
@@ -112,21 +108,20 @@ prop_test() ->
                end,
                ?TRAPEXIT(
                   begin
-                      %% rt:setup_harness(dummy, dummy),
                       lager:info("======================== Will run commands:"),
                       [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
                       {H, S, R} = run_commands(?MODULE, Cmds),
                       lager:info("======================== Ran commands"),
                       #state{nodes_up = NU, cluster_nodes=CN} = S,
-                      Destroy =
+                      Nodes = lists:usort(NU ++ CN),
+                      CleanupFun =
                           fun({node, N, _}) ->
                                   lager:info("Wiping out node ~p for good", [N]),
-                                  rt:clean_data_dir(N),
-                                  rt:stop(N)
+                                  rt:clean_data_dir(N)
                           end,
-                      Nodes = lists:usort(NU ++ CN),
                       lager:info("======================== Taking all nodes down ~p", [Nodes]),
-                      lists:foreach(Destroy, Nodes),
+                      rt:pmap(CleanupFun, Nodes),
+                      rt:teardown(),
                       eqc_gen:with_parameter(show_states,
                                              true,
                                              pretty_commands(?MODULE, Cmds, {H, S, R}, equals(ok, R)))
@@ -184,8 +179,7 @@ setup_next(S, _, _) ->
     S#state{setup_complete=true}.
 
 preload_pre(S) when S#state.nodes_up /= [],
-                    S#state.setup_complete == true,
-                    S#state.preload_complete == false ->
+                    S#state.setup_complete == true ->
     true;
 preload_pre(_) ->
     false.
@@ -218,15 +212,25 @@ verify_pre(_) ->
 verify_args(S) ->
     [S#state.bucket_type, S#state.bucket, S#state.nodes_up, S#state.num_keys, S#state.key_filter].
 
-verify(BucketType, Bucket, Nodes, NumKeys, KeyFilter) ->
-    [list_keys(Node#node.name, {BucketType, Bucket}, NumKeys, KeyFilter) || Node <- Nodes].
+verify(BucketType, Bucket, Nodes, _NumKeys, KeyFilter) ->
+    [list_filter_sort(Node#node.name, {BucketType, Bucket}, KeyFilter) || Node <- Nodes].
 
-verify_post(_S, _Args, R) ->
-    false == lists:member(false, R).
+verify_post(_S, _Args, {error, Reason}) ->
+    lager:info("Error: ~p", [Reason]),
+    false;
+verify_post(S, _Args, KeyLists) ->
+    ExpectedKeys = expected_keys(S#state.num_keys, S#state.key_filter),
+    lists:all(fun(true) -> true; (_) -> false end,
+              [assert_equal(ExpectedKeys, Keys) || Keys <- KeyLists]).
 
 %% ====================================================================
 %% Helpers
 %% ====================================================================
+
+expected_keys(NumKeys, FilterFun) ->
+    KeysPair = {ok, [list_to_binary(["", integer_to_list(Ki)]) ||
+                        Ki <- lists:seq(0, NumKeys - 1)]},
+    sort_keys(filter_keys(KeysPair, FilterFun)).
 
 put_keys(Node, Bucket, Num) ->
     lager:info("*******************[CMD]  Putting ~p keys into bucket ~p on node ~p", [Num, Bucket, Node]),
@@ -250,33 +254,22 @@ put_buckets(Node, Num) ->
         catch(riakc_pb_socket:stop(Pid))
     end.
 
-list_keys(Node, Bucket, Num, KeyFilter) ->
+list_filter_sort(Node, Bucket, KeyFilter) ->
     %% Move client to state
     {ok, C} = riak:client_connect(Node),
-    GeneratedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)]),
-    case KeyFilter of
-	none ->
-	    {ok, Keys} = riak_client:list_keys(Bucket, C),
-	    lager:info("Listing keys on node ~p wth no filter, result:~p", [Node, Keys]),
-	    ExpectedKeys = GeneratedKeys,
-	    ActualKeys = lists:usort(Keys),
-	    assert_equal(ExpectedKeys, ActualKeys);
-	_ ->
-	    {ok, Keys} = riak_client:list_keys(Bucket, KeyFilter, C),
-	    lager:info("Listing keys on node ~p, filter:~p, keys:~p", [Node, KeyFilter, Keys]),
-	    ExpectedKeyFilter =
-		fun(K, Acc) ->
-			case KeyFilter(K) of
-			    true ->
-				[K | Acc];
-			    false ->
-				Acc
-			end
-		end,
-	    ExpectedKeys = lists:foldl(ExpectedKeyFilter, [], GeneratedKeys),
-	    ActualKeys = lists:usort(Keys),
-	    assert_equal(ExpectedKeys, ActualKeys)
-    end.
+    sort_keys(filter_keys(riak_client:list_keys(Bucket, C), KeyFilter)).
+
+filter_keys({ok, Keys}, none) ->
+    Keys;
+filter_keys({ok, Keys}, FilterFun) ->
+    lists:filter(FilterFun, Keys);
+filter_keys({error, _}=Error, _) ->
+    Error.
+
+sort_keys({error, _}=Error) ->
+    Error;
+sort_keys(Keys) ->
+    lists:usort(Keys).
 
 assert_equal(Expected, Actual) ->
     case Expected -- Actual of
@@ -296,4 +289,3 @@ bucket_types() ->
      {<<"n_val_three">>, 3},
      {<<"n_val_four">>, 4},
      {<<"n_val_five">>, 5}].
-
