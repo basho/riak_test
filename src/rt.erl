@@ -666,15 +666,15 @@ wait_until_all_members(Nodes) ->
 
 %% @doc Wait until all nodes in the list `Nodes' believes all nodes in the
 %%      list `Members' are members of the cluster.
-wait_until_all_members(Nodes, Members) ->
-    lager:info("Wait until all members ~p ~p", [Nodes, Members]),
-    S1 = ordsets:from_list(Members),
+wait_until_all_members(Nodes, ExpectedMembers) ->
+    lager:info("Wait until all members ~p ~p", [Nodes, ExpectedMembers]),
+    S1 = ordsets:from_list(ExpectedMembers),
     F = fun(Node) ->
                 case members_according_to(Node) of
                     {badprc, _} ->
                         false;
-                    Members ->
-                        S2 = ordsets:from_list(Members),
+                    ReportedMembers ->
+                        S2 = ordsets:from_list(ReportedMembers),
                         ordsets:is_subset(S1, S2)
                 end
         end,
