@@ -21,6 +21,8 @@
 -module(ensemble_remove_node).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+-compile({parse_transform, rt_intercept_pt}).
+-define(M, riak_kv_ensemble_backend_orig).
 
 confirm() ->
     NumNodes = 3,
@@ -35,6 +37,22 @@ confirm() ->
         testvalue, 1000),
     lager:info("Read value from the root ensemble"),
     {ok, _} = riak_ensemble_client:kget(Node, root, testerooni, 1000),
+
+    EnsembleStatusPid = spawn(fun()-> ensemble_status_server([]) end),
+    rt_intercept:add(Node, {riak_kv_ensemble_backend, [{{maybe_async_update, 2},
+        {[EnsembleStatusPid], 
+        fun(Changes, State) ->
+            case lists:keyfind(del, 1, Changes) of
+                false ->
+                    ?M:maybe_async_update_orig(Changes, State);
+                {del, {_, Node}}-> 
+                    {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
+                    ExitingMembers = riak_core_ring:members(Ring, [exiting]),
+                    EnsembleStatusPid ! {exiting_members, Node, ExitingMembers},
+                    ?M:maybe_async_update_orig(Changes, State)
+            end
+    end}}]}),
+
     lager:info("Removing Nodes 2 and 3 from the cluster"),
     rt:leave(Node2),
     ok = ensemble_util:wait_until_stable(Node, NVal),
@@ -50,4 +68,23 @@ confirm() ->
     ?assertEqual(1, length(Members3)),
     Cluster = rpc:call(Node, riak_ensemble_manager, cluster, []),
     ?assertEqual(1, length(Cluster)),
+    EnsembleStatusPid ! {get_errors, self()},
+    ExitingErrors = receive E -> E end,
+    ?assertEqual(ExitingErrors, []),
     pass.
+
+ensemble_status_server(Errors) ->
+    receive
+        {exiting_members, Node, ExitingMembers} ->
+            case lists:member(Node, ExitingMembers) of
+                false -> 
+                    ensemble_status_server(Errors);
+                true ->
+                    E = {invalid_exiting_status, Node, ExitingMembers},
+                    ensemble_status_server([E | Errors])
+            end;
+        {get_errors, From} ->
+            From ! Errors
+    end.
+            
+
