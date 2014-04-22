@@ -58,10 +58,15 @@ maybe_start(Test) ->
     if_coverage(fun() -> start(Test) end).
 
 mod_src(Mod) ->
-    Src = proplists:get_value(source, Mod:module_info(compile), Mod),
-    case filelib:is_regular(Src) of
-        true -> Src;
-        false -> undefined
+    try Mod:module_info(compile) of
+        CompileInfo ->
+            Src = proplists:get_value(source, CompileInfo, Mod),
+            case filelib:is_regular(Src) of
+                true -> Src;
+                false -> undefined
+            end
+    catch
+        _:_ -> undefined
     end.
 
 has_src(Mod) ->
