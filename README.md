@@ -183,6 +183,7 @@ To enable this, you need to turn coverage in in your riak_test.config:
 ```erlang
    {cover_enabled, true}
 ```
+Tests that do not include coverage annotations will, if cover is enabled, honor {cover_modules, [..]} and {cover_apps, [..]} from the riak_test config file.
 
 #### Web hooks
 When reporting is enabled, each test result is posted to [Giddy Up](http://giddyup.basho.com). You can specify

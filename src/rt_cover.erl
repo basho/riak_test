@@ -116,7 +116,22 @@ find_cover_modules(Test) ->
     {Mod, _Fun} = riak_test_runner:function_name(Test),
     case proplists:get_value(cover_modules, Mod:module_info(attributes), []) of
         [] ->
-            Apps = proplists:get_value(cover_apps, Mod:module_info(attributes), []),
+            case proplists:get_value(cover_apps, Mod:module_info(attributes), []) of
+                [] ->
+                    %% fallback to what is in the config file
+                    read_cover_modules_from_config();
+                Apps ->
+                    AppMods = find_app_modules(Apps),
+                    AppMods
+            end;
+        ConfMods ->
+            ConfMods
+    end.
+
+read_cover_modules_from_config() ->
+    case rt_config:get(cover_modules, []) of
+        [] ->
+            Apps = rt_config:get(cover_apps, []),
             AppMods = find_app_modules(Apps),
             AppMods;
         ConfMods ->
