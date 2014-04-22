@@ -16,6 +16,7 @@
          wait_for_reads/5,
          start_and_wait_until_fullsync_complete/1,
          start_and_wait_until_fullsync_complete/2,
+         start_and_wait_until_fullsync_complete/3,
          connect_cluster/3,
          disconnect_cluster/2,
          wait_for_connection/2,
@@ -185,6 +186,9 @@ start_and_wait_until_fullsync_complete(Node) ->
     start_and_wait_until_fullsync_complete(Node, undefined).
 
 start_and_wait_until_fullsync_complete(Node, Cluster) ->
+    start_and_wait_until_fullsync_complete(Node, Cluster, undefined).
+
+start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
     Count0 = proplists:get_value(server_fullsyncs, Status0),
     Count = case Cluster of
@@ -208,6 +212,14 @@ start_and_wait_until_fullsync_complete(Node, Cluster) ->
     %% sleep because of the old bug where stats will crash if you call it too
     %% soon after starting a fullsync
     timer:sleep(500),
+
+    %% Send message to process and notify fullsync has began.
+    case NotifyPid of
+        undefined ->
+            ok;
+        NotifyPid ->
+            NotifyPid ! fullsync_started
+    end,
 
     Res = rt:wait_until(Node,
         fun(_) ->
