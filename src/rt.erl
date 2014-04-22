@@ -666,12 +666,17 @@ wait_until_all_members(Nodes) ->
 
 %% @doc Wait until all nodes in the list `Nodes' believes all nodes in the
 %%      list `Members' are members of the cluster.
-wait_until_all_members(Nodes, Members) ->
-    lager:info("Wait until all members ~p ~p", [Nodes, Members]),
-    S1 = ordsets:from_list(Members),
+wait_until_all_members(Nodes, ExpectedMembers) ->
+    lager:info("Wait until all members ~p ~p", [Nodes, ExpectedMembers]),
+    S1 = ordsets:from_list(ExpectedMembers),
     F = fun(Node) ->
-                S2 = ordsets:from_list(members_according_to(Node)),
-                ordsets:is_subset(S1, S2)
+                case members_according_to(Node) of
+                    {badrpc, _} ->
+                        false;
+                    ReportedMembers ->
+                        S2 = ordsets:from_list(ReportedMembers),
+                        ordsets:is_subset(S1, S2)
+                end
         end,
     [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
     ok.
@@ -821,51 +826,61 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
 wait_until_aae_trees_built(Nodes) ->
     lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
     %% Wait until all nodes report no undefined trees
-    AllBuiltFun =
-    fun(_, _AllBuilt = false) ->
+    wait_until(fun() ->
+                       lists:foldl(aae_tree_built_fun(), true, Nodes)
+               end).
+
+aae_tree_built_fun() ->
+    fun(_, false) ->
             false;
        (Node, _AllBuilt = true) ->
-            Info = rpc:call(Node,
-                            riak_kv_entropy_info,
-                            compute_tree_info,
-                            []),
-            lager:debug("Entropy table on node ~p : ~p", [Node, Info]),
-            AllHaveBuildTimes = not lists:keymember(undefined, 2, Info),
-            case AllHaveBuildTimes of
-                false ->
-                    false;
+            InfoRes = get_aae_tree_info(Node),
+            case all_trees_have_build_times(InfoRes) of
                 true ->
+                    {ok, Info} = InfoRes,
+                    Partitions = [I || {I, _} <- Info],
                     lager:debug("Check if really built by locking"),
+
                     %% Try to lock each partition. If you get not_built,
                     %% the manager has not detected the built process has
                     %% died yet.
                     %% Notice that the process locking is spawned by the
                     %% pmap. That's important! as it should die eventually
                     %% so the test can lock on the tree.
-                    IdxBuilt =
-                    fun(Idx) ->
-                            {ok, TreePid} = rpc:call(Node, riak_kv_vnode,
-                                                     hashtree_pid, [Idx]),
-                            TreeLocked =
-                            rpc:call(Node, riak_kv_index_hashtree, get_lock,
-                                     [TreePid, for_riak_test]),
-                            lager:debug("Partition ~p : ~p", [Idx, TreeLocked]),
-                            TreeLocked == ok
-                            orelse TreeLocked == already_locked
-                    end,
-
-                    Partitions = [I || {I, _} <- Info],
-
-                    AllBuilt =
-                    lists:all(fun(V) -> V == true end,
-                              rt:pmap(IdxBuilt, Partitions)),
+                    AllBuilt = lists:all(fun(V) -> V == true end,
+                                         rt:pmap(index_built_fun(Node), Partitions)),
                     lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),
-                    AllBuilt
+                    AllBuilt;
+                false ->
+                    false
             end
-    end,
-    wait_until(fun() ->
-                       lists:foldl(AllBuiltFun, true, Nodes)
-               end).
+    end.
+
+get_aae_tree_info(Node) ->
+    case rpc:call(Node, riak_kv_entropy_info, compute_tree_info, []) of
+        {badrpc, _} ->
+            {error, badrpc};
+        Info  ->
+            lager:debug("Entropy table on node ~p : ~p", [Node, Info]),
+            {ok, Info}
+    end.
+
+all_trees_have_build_times({badrpc, _}) ->
+    false;
+all_trees_have_build_times({ok, Info}) ->
+    not lists:keymember(undefined, 2, Info).
+
+index_built_fun(Node) ->
+    fun(Idx) ->
+            {ok, TreePid} = rpc:call(Node, riak_kv_vnode,
+                                     hashtree_pid, [Idx]),
+            TreeLocked =
+                rpc:call(Node, riak_kv_index_hashtree, get_lock,
+                         [TreePid, for_riak_test]),
+            lager:debug("Partition ~p : ~p", [Idx, TreeLocked]),
+            TreeLocked == ok
+                orelse TreeLocked == already_locked
+    end.
 
 %%%===================================================================
 %%% Ring Functions
@@ -893,30 +908,46 @@ assert_nodes_agree_about_ownership(Nodes) ->
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.
 owners_according_to(Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Owners = [Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)],
-    lists:usort(Owners).
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            Owners = [Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)],
+            lists:usort(Owners);
+        {badrpc, _}=BadRpc ->
+            BadRpc
+    end.
 
 %% @doc Return a list of cluster members according to the ring retrieved from
 %%      the specified node.
 members_according_to(Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Members = riak_core_ring:all_members(Ring),
-    Members.
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            Members = riak_core_ring:all_members(Ring),
+            Members;
+        {badrpc, _}=BadRpc ->
+            BadRpc
+    end.
 
 %% @doc Return the cluster status of `Member' according to the ring
 %%      retrieved from `Node'.
 status_of_according_to(Member, Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Status = riak_core_ring:member_status(Ring, Member),
-    Status.
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            Status = riak_core_ring:member_status(Ring, Member),
+            Status;
+        {badrpc, _}=BadRpc ->
+            BadRpc
+    end.
 
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.
 claimant_according_to(Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Claimant = riak_core_ring:claimant(Ring),
-    Claimant.
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            Claimant = riak_core_ring:claimant(Ring),
+            Claimant;
+        {badrpc, _}=BadRpc ->
+            BadRpc
+    end.
 
 %%%===================================================================
 %%% Cluster Utility Functions
@@ -1606,4 +1637,3 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
-
