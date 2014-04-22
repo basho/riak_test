@@ -671,7 +671,7 @@ wait_until_all_members(Nodes, ExpectedMembers) ->
     S1 = ordsets:from_list(ExpectedMembers),
     F = fun(Node) ->
                 case members_according_to(Node) of
-                    {badprc, _} ->
+                    {badrpc, _} ->
                         false;
                     ReportedMembers ->
                         S2 = ordsets:from_list(ReportedMembers),
