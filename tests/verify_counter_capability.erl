@@ -57,7 +57,11 @@ confirm() ->
     ?assertEqual({error,<<"\"Counters are not supported\"">>}, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
     ?assertEqual({error,<<"\"Counters are not supported\"">>}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
 
+    riakc_pb_socket:stop(PrevPB),
+
     rt:upgrade(Legacy, previous),
+
+    PrevPB2 = rt:pbc(Legacy),
 
     ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter])),
 
@@ -67,12 +71,12 @@ confirm() ->
     ?assertMatch(ok, rhc:counter_incr(Http, ?BUCKET, ?KEY, 1)),
     ?assertMatch({ok, 2}, rhc:counter_val(Http, ?BUCKET, ?KEY)),
 
-    ?assertEqual(ok, riakc_pb_socket:counter_incr(PrevPB, ?BUCKET, ?KEY, 1)),
-    ?assertEqual({ok, 3}, riakc_pb_socket:counter_val(PrevPB, ?BUCKET, ?KEY)),
+    ?assertEqual(ok, riakc_pb_socket:counter_incr(PrevPB2, ?BUCKET, ?KEY, 1)),
+    ?assertEqual({ok, 3}, riakc_pb_socket:counter_val(PrevPB2, ?BUCKET, ?KEY)),
     ?assertEqual(ok, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
     ?assertEqual({ok, 4}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
 
-    [riakc_pb_socket:stop(C) || C <- [PB, PrevPB]],
+    [riakc_pb_socket:stop(C) || C <- [PB, PrevPB2]],
 
     pass.
 
