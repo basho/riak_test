@@ -70,15 +70,20 @@ confirm() ->
 
     %% TODO: How do we wait indefinitely for nodes to never exit here? A 30s
     %% sleep?
+    timer:sleep(30000),
+
+    %% Nodes should still be in leaving state
+    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    Leaving = lists:usort(riak_core_ring:members(Ring, [leaving])),
+    ?assertEqual(Leaving, [Node2, Node3]),
 
     %% We should still be able to read from k/v ensembles, but the nodes should
     %% never exit
+    lager:info("Reading From SC Bucket"),
     Val2 = rt:pbc_read(PBC, Bucket, Key),
     ?assertEqual(element(1, Val2), riakc_obj),
+    
 
-
-    %%ok = rt:wait_until_unpingable(Node2),
-    %%ok = rt:wait_until_unpingable(Node3),
     lager:info("Read value from the root ensemble"),
     {ok, _Obj} = riak_ensemble_client:kget(Node, root, testerooni, 1000),
     Members3 = rpc:call(Node, riak_ensemble_manager, get_members, [root]),
