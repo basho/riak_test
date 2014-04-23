@@ -396,7 +396,7 @@ test_pg_proxy(SSL) ->
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
     rt:pbc_write(PidA, Bucket, KeyD, ValueD),
-    %% sanity check. You know, like the 10000 tests that autoconf runs 
+    %% sanity check. You know, like the 10000 tests that autoconf runs
     %% before it actually does any work.
     FirstA = hd(ANodes),
     FirstB = hd(BNodes),
@@ -415,8 +415,9 @@ test_pg_proxy(SSL) ->
     rt:stop(PGLeaderB),
     [RunningBNode | _ ] = BNodes -- [PGLeaderB],
     repl_util:wait_until_leader(RunningBNode),
+    PidB2 = rt:pbc(RunningBNode),
     lager:info("Now trying proxy_get"),
-    ?assertEqual(ok, wait_until_pg(RunningBNode, PidB, Bucket, KeyC, CidA)),
+    ?assertEqual(ok, wait_until_pg(RunningBNode, PidB2, Bucket, KeyC, CidA)),
     lager:info("If you got here, proxy_get worked after the pg block requesting leader was killed"),
 
     lager:info("Stopping leader on provider cluster"),
@@ -424,7 +425,7 @@ test_pg_proxy(SSL) ->
     rt:stop(PGLeaderA),
     [RunningANode | _ ] = ANodes -- [PGLeaderA],
     repl_util:wait_until_leader(RunningANode),
-    ?assertEqual(ok, wait_until_pg(RunningBNode, PidB, Bucket, KeyD, CidA)),
+    ?assertEqual(ok, wait_until_pg(RunningBNode, PidB2, Bucket, KeyD, CidA)),
     lager:info("If you got here, proxy_get worked after the pg block providing leader was killed"),
     lager:info("pg_proxy test complete. Time to obtain celebratory cheese sticks."),
 
@@ -451,7 +452,7 @@ test_cluster_mapping(SSL) ->
     FirstC = hd(CNodes),
     LeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
     LeaderC = rpc:call(FirstC, riak_core_cluster_mgr, get_leader, []),
-    
+
     % Cluser C-> connection must be set up for the proxy gets to work
     % with the cluster ID mapping
     {ok, {_IP, CPort}} = rpc:call(FirstC, application, get_env,
@@ -502,7 +503,7 @@ test_cluster_mapping(SSL) ->
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
     rt:pbc_write(PidA, Bucket, KeyD, ValueD),
-    
+
 
     {ok, PGResult} = riak_repl_pb_api:get(PidA,Bucket,KeyA,CidA),
     ?assertEqual(ValueA, riakc_obj:get_value(PGResult)),
@@ -516,7 +517,7 @@ test_cluster_mapping(SSL) ->
 
     % full sync from CS Block Provider A to CS Block Provider B
     repl_util:enable_fullsync(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),   
+    rt:wait_until_ring_converged(ANodes),
 
     {Time,_} = timer:tc(repl_util,start_and_wait_until_fullsync_complete,[LeaderA]),
     lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
@@ -539,11 +540,11 @@ test_cluster_mapping(SSL) ->
     % now delete the redirect and make sure it's gone
     rpc:call(LeaderC, riak_repl_console, delete_block_provider_redirect, [[CidA]]),
     case rpc:call(LeaderC, riak_core_metadata, get, [{<<"replication">>, <<"cluster-mapping">>}, CidA]) of
-        undefined -> 
+        undefined ->
             lager:info("cluster-mapping no longer found in meta data, after delete, which is expected");
         Match ->
             lager:info("cluster mapping ~p still in meta data after delete; problem!", [Match]),
-            ?assert(false)    
+            ?assert(false)
     end,
     pass.
 
@@ -580,8 +581,8 @@ test_bidirectional_pg(SSL) ->
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
 
-    PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),   
-    PGEnableResult = rpc:call(LeaderB, riak_repl_console, proxy_get, [["enable","A"]]),   
+    PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
+    PGEnableResult = rpc:call(LeaderB, riak_repl_console, proxy_get, [["enable","A"]]),
 
     lager:info("Enabled bidirectional pg ~p", [PGEnableResult]),
     StatusA = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
