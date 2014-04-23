@@ -36,7 +36,10 @@ confirm() ->
     verify_counter_converge:set_allow_mult_true(Nodes, ?COUNTER_BUCKET),
     populate_counters(Node1),
 
-    [upgrade(Node, current) || Node <- Nodes],
+    [begin
+         verify_counters(Node),
+         upgrade(Node, current)
+     end || Node <- Nodes],
 
     verify_counters(Node1),
     pass.
@@ -69,7 +72,12 @@ verify_counters(Node) ->
     ?assertEqual({ok, 2}, riakc_pb_socket:counter_val(PBC, ?COUNTER_BUCKET, <<"httpkey">>)),
 
     %% Check that 1.4 counters work with bucket types
-    ?assertEqual({ok, {counter, 4, 0}}, riakc_pb_socket:fetch_type(PBC, {<<"default">>, ?COUNTER_BUCKET}, <<"pbkey">>)),
+    case catch rt:capability(Node, {riak_core, bucket_types}) of
+        true ->
+            ?assertEqual({ok, {counter, 4, 0}}, riakc_pb_socket:fetch_type(PBC, {<<"default">>, ?COUNTER_BUCKET}, <<"pbkey">>));
+        _ ->
+            ok
+    end,
     ok.
 
 upgrade(Node, NewVsn) ->
