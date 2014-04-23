@@ -83,7 +83,7 @@ confirm() ->
     Val2 = rt:pbc_read(PBC, Bucket, Key),
     ?assertEqual(element(1, Val2), riakc_obj),
     
-
+    ok = ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Read value from the root ensemble"),
     {ok, _Obj} = riak_ensemble_client:kget(Node, root, testerooni, 1000),
     Members3 = rpc:call(Node, riak_ensemble_manager, get_members, [root]),
