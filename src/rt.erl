@@ -80,6 +80,7 @@
          members_according_to/1,
          owners_according_to/1,
          partition/2,
+         partitions_for_node/1,
          pbc/1,
          pbc_read/3,
          pbc_read/4,
@@ -894,6 +895,11 @@ check_singleton_node(Node) ->
     Owners = lists:usort([Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)]),
     ?assertEqual([Node], Owners),
     ok.
+
+% @doc Get list of partitions owned by node (primary).
+partitions_for_node(Node) ->
+    Ring = get_ring(Node),
+    [Idx || {Idx, Owner} <- riak_core_ring:all_owners(Ring), Owner == Node].
 
 %% @doc Get the raw ring for `Node'.
 get_ring(Node) ->
