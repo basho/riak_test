@@ -226,8 +226,10 @@ calls take a long time to finish.  You can even
 [turn a call into a noop][ring_noop] to really cause havoc on a
 cluster.  These are just some examples.  You should also be able to
 change any function you want, including dependency functions and even
-Erlang functions.  Furthermore, any state you can reach from a
-function call can be affected such as function arguments but also ETS
+Erlang functions.  You can also create intercepts using anonymous
+functions, either in compiled code or while debugging in an Erlang
+shell.  Furthermore, any state you can reach from a
+function call can be affected such as function arguments and also ETS
 tables.  This leads to the principle of intercepts.
 
 > If you can do it in Riak source code you can do it with an
@@ -242,25 +244,25 @@ tables.  This leads to the principle of intercepts.
 ### Writing Intercepts
 
 Writing an intercept is nearly identical to writing any other Erlang
-source with a few easy to remember conventions added.
+source with a few easy-to-remember conventions added.
 
 1. All intercepts must live under the `intercepts` dir.
 
 2. All intercept modules should be named the same as the module they
-  affect with the suffix `_intercepts` added.  E.g. `riak_kv_vnode` =>
-  `riak_kv_vnode_intercepts`.
+   affect with the suffix `_intercepts` added.  E.g. `riak_kv_vnode` =>
+   `riak_kv_vnode_intercepts`.
 
 3. All intercept modules should include the `intercept.hrl` file.
    This includes macros to properly log messages.  You **cannot** call
    lager.
 
-4. All intercept modules should declare the macro `M` who's value is
+4. All intercept modules should declare the macro `M` whose value is
    the affected module with the suffix `_orig` added.  E.g. for
    `riak_kv_vnode` add the line `-define(M, riak_kv_vnode_orig)`.
    This, along with the next convention is needed to call into the
    original function.
 
-5. To call the origin function use the `?M:` follow by the name of the
+5. To call the origin function use the `?M:` followed by the name of the
    function with the `_orig` suffix appended.  E.g. to call
    `riak_kv_vnode:put` you would type `?M:put_orig`.
 
@@ -313,11 +315,56 @@ them with.  The example above would result in all calls to
 
     {ModuleToIntercept, [{{FunctionToIntercept, Arity}, InterceptFunction}]}
 
+Note that anonymous functions may not be supplied as intercepts via config.
+
 #### Manual
 
 To add the `dropped_put` intercept manually you would do the following.
 
     rt_intercept:add(Node, {riak_kv_vnode, [{{put,7}, dropped_put}]})
+
+You could alternatively supply an anonymous function as an intercept here.
+This requires that your module include the following compilation directive:
+
+    -compile({parse_transform, rt_intercept_pt}).
+
+The general form for an anonymous function intercept is a 2-tuple:
+
+    {ListOfFreeVariables, AnonymousFunction}
+
+The first element of the tuple is a list of free variables the anonymous
+function uses from its surrounding context, and the second element is the
+anonymous function itself. For example, the previous example using an
+anonymous function intercept might look like this:
+
+    rt_intercept:add(Node,
+                     {riak_kv_vnode,
+                      [{{put,7},
+                        {[],
+                         fun(Preflist,BKey,Obj,ReqId,StartTime,Options,Sender) ->
+                             NewPreflist = lists:sublist(Preflist, length(Preflist)-1),
+                             error_logger:info_msg("Preflist modified from ~p to ~p",
+                                                   [Preflist, NewPreflist]),
+                             riak_kv_vnode_orig:put_orig(NewPreflist,BKey,Obj,ReqId,
+                                                         StartTime,Options,Sender)
+                         end}}]})
+
+Note how this version has no access to the `?I_INFO` and `?M` like in the
+original example. For this reason, for an actual test this code would be
+better written using a regular intercept rather than the anonymous function
+approach shown here.
+
+Since the anonymous function in this example uses no free variables from
+its surrounding context, the variable list in this example is empty. For
+cases like this where the list of free variables is empty, you can
+alternatively supply just the anonymous function in place of the 2-tuple.
+
+If you pass an anonymous function intercept to `rt_intercept:add/2` in an
+Erlang shell, a list of free variables is not needed regardless of whether
+the function uses such variables or not. This is because the shell tracks
+these variables and makes a list of them available as part of the
+function's context. Therefore you need supply only the function, not the
+2-tuple.
 
 ### How Does it Work?
 
@@ -347,9 +394,9 @@ will exist.
   you defined it.  No modification of the code is performed.
 
 * `riak_kv_vnode` - What once contained the original code is now a
-  proxy.  All functions passthru to `riak_kv_vnode_orig`.  Unless an
-  intercept is registered in the mapping passed to `intercept:add`.
-  In that case the call will forward to `riak_kv_vnode_intercepts`.
+  proxy.  All functions passthru to `riak_kv_vnode_orig` unless an
+  intercept is registered in the mapping passed to `intercept:add`,
+  in which case the call will forward to `riak_kv_vnode_intercepts`.
 
 The interceptor code also modifies the original module and proxy to
 export all functions.  This fact, along with the fact that all the
