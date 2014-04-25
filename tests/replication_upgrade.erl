@@ -64,12 +64,32 @@ confirm() ->
     rt:log_to_nodes(Nodes, "Upgrading nodes in order: ~p", [NodeUpgrades]),
     %% upgrade the nodes, one at a time
     lists:foreach(fun(Node) ->
-                lager:info("Upgrade node: ~p", [Node]),
-                rt:log_to_nodes(Nodes, "Upgrade node: ~p", [Node]),
-                rtdev:upgrade(Node, current),
-                rt:wait_until_pingable(Node),
-                timer:sleep(1000),
-                lager:info("Replication with upgraded node: ~p", [Node]),
-                rt:log_to_nodes(Nodes, "Replication with upgraded node: ~p", [Node]),
-                replication:replication(ANodes, BNodes, true)
+                          lager:info("Upgrade node: ~p", [Node]),
+                          rt:log_to_nodes(Nodes, "Upgrade node: ~p", [Node]),
+                          rtdev:upgrade(Node, current),
+                          rt:wait_until_pingable(Node),
+                          rt:wait_for_service(Node, [riak_kv, riak_pipe, riak_repl]),
+                          [rt:wait_until_ring_converged(N) || N <- [ANodes, BNodes]],
+                          %% Prior to 1.4.8 riak_repl registered
+                          %% as a service before completing all
+                          %% initialization including establishing
+                          %% realtime connections.
+                          %%
+                          %% @TODO Ideally the test would only wait
+                          %% for the connection in the case of the
+                          %% node version being < 1.4.8, but currently
+                          %% the rt API does not provide a
+                          %% harness-agnostic method do get the node
+                          %% version. For now the test waits for all
+                          %% source cluster nodes to establish a
+                          %% connection before proceeding.
+                          case lists:member(Node, ANodes) of
+                              true ->
+                                  repl_util:wait_for_connection(Node, "B");
+                              false ->
+                                  ok
+                          end,
+                          lager:info("Replication with upgraded node: ~p", [Node]),
+                          rt:log_to_nodes(Nodes, "Replication with upgraded node: ~p", [Node]),
+                          replication:replication(ANodes, BNodes, true)
         end, NodeUpgrades).
