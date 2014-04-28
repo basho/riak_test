@@ -63,14 +63,14 @@ watcher_loop(W=#watcher{probes=Probes,
     W2 = install_probes(Missing, W),
     Probes2 = W2#watcher.probes,
     receive
-        {'DOWN', MRef, process, _, _} ->
+        {'DOWN', MRef, process, _, Reason} ->
             case lists:keyfind(MRef, 2, Probes2) of
                 false ->
                     %% master died, exit
                     io:format("watcher exiting~n"),
                     ok;
                 {Node, MRef} ->
-                    io:format("Probe exit: ~p/~p~n", [Node, MRef]),
+                    io:format("Probe exit. ~p: ~p~n", [Node, Reason]),
                     Probes3 = lists:keyreplace(Node, 1, Probes2, {Node, undefined}),
                     W3 = W2#watcher{probes=Probes3},
                     ?MODULE:watcher_loop(W3)
@@ -129,7 +129,8 @@ start(Master, Rate, Collector, Nodes, Fun) ->
 init(Master, Rate, {Host, Port, _Dir}, Nodes, Fun) ->
     lager:info("In init: ~p ~p~n", [node(), Host]),
     {ok, Sock} = gen_tcp:connect(Host, Port,
-                                 [binary, {packet, 2}]),
+                                 [binary, {packet, 2},
+				 {send_timeout, 500}]),
     case application:get_env(riak_kv, storage_backend) of
         {ok, riak_kv_eleveldb_backend} ->
             LRef = get_leveldb_ref();
@@ -214,8 +215,13 @@ collect(H0) ->
     Stats0 = L ++ Q ++ P ++ N ++ D ++ V ++ M ++ C ++ R,
     Stats = term_to_binary(Stats0),
     %% catch TCP errors here
-    ok = gen_tcp:send(H3#history.collector_sock, Stats),
-    %% catch print_down(Nodes),
+    case gen_tcp:send(H3#history.collector_sock, Stats) of
+	ok -> ok;
+	%% die on any error, we'll get restarted soon.
+	{error, _} ->
+	    gen_tcp:close(H3#history.collector_sock),
+	    error(splode)
+    end,
     H3.
 
 %% this portion is meant to be run inside a VM instance running riak
@@ -312,7 +318,9 @@ report_memory(H) ->
      {memory_page_dirty, Dirty},
      {memory_page_writeback, Writeback}]}.
 
-report_leveldb(H = #history{ lvlref = LRef}) ->
+report_leveldb(H = #history{ lvlref = undefined }) ->
+    {H, []};
+report_leveldb(H = #history{ lvlref = LRef }) ->
     try case eleveldb:status(LRef, <<"leveldb.ThrottleGauge">>) of
             {ok, Result} ->
                 Value = list_to_integer(Result),

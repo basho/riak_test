@@ -32,8 +32,6 @@ harness_opts() ->
       "version to test"},
      {prepop, undefined, "prepop", {boolean, false},
       "prepopulate cluster"},
-     {test_type, undefined, "type", {atom, uniform},
-      "uniform | pareto"},
      {restart, undefined, "restart", {boolean, false},
       "stop running riak cluster and start new"},
      {force, undefined, "force", {boolean, false},
@@ -342,7 +340,6 @@ test_name() ->
     BinSize = rt_config:get(perf_bin_size),
     rt_config:get(perf_test_name)++"-"++Vsn++"-"++
     integer_to_list(rt_config:get(perf_target_pct))++"pct-"++
-        atom_to_list(rt_config:get(perf_test_type))++"-"++
         atom_to_list(rt_config:get(perf_bin_type))++"-"++
         integer_to_list(BinSize)++"b-"++date_string().
 

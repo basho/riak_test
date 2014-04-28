@@ -135,6 +135,10 @@ avg_items(L, Names) ->
                  (lists:sum(Vals)/length(Vals)) / 60;
              vnode_puts ->
                  (lists:sum(Vals)/length(Vals)) / 60;
+             node_gets ->
+                 (lists:sum(Vals)/length(Vals)) / 60;
+             node_puts ->
+                 (lists:sum(Vals)/length(Vals)) / 60;
              _ ->
                  lists:sum(Vals)/length(Vals)
          end
@@ -151,8 +155,8 @@ winnow(Data0) ->
 
 strip_stats(Glob) ->
     Filter = [
-          node_gets, node_puts,
-          vnode_gets, vnode_puts,
+	      node_gets, node_puts,
+	      vnode_gets, vnode_puts,
               node_get_fsm_time_median,
               node_get_fsm_time_95,
               node_get_fsm_time_99,
@@ -160,17 +164,17 @@ strip_stats(Glob) ->
               node_put_fsm_time_95,
               node_put_fsm_time_99,
               message_queue_max,
-          cpu_utilization,
-          cpu_iowait,
-          memory_utilization,
-          memory_page_dirty,
-          memory_page_writeback,
-          dropped_vnode_requests_total,
-          node_get_fsm_objsize_median,
-          node_get_fsm_objsize_95,
-          node_get_fsm_objsize_99,
-          disk_utilization
-         ],
+	      cpu_utilization,
+	      cpu_iowait,
+	      memory_utilization,
+	      memory_page_dirty,
+	      memory_page_writeback,
+	      dropped_vnode_requests_total,
+	      node_get_fsm_objsize_median,
+	      node_get_fsm_objsize_95,
+	      node_get_fsm_objsize_99,
+	      disk_utilization
+	     ],
     [begin
      {Name, Val}
      end
