@@ -140,8 +140,6 @@ deploy_nodes(NodeConfig, Hosts) ->
         orddict:from_list(
             orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
 
-    %% io:format("~p~n", [Nodes]),
-
     rt:pmap(fun({_, default}) ->
                     ok;
                ({Node, {cuttlefish, Config}}) ->
@@ -173,10 +171,10 @@ deploy_nodes(NodeConfig, Hosts) ->
             end, Nodes),
     timer:sleep(500),
 
-    %% rt:pmap(fun(Node) ->
-    %%                 update_vm_args(Node, [{"-name", Node}])
-    %%         end, Nodes),
-    %% timer:sleep(500),
+    rt:pmap(fun(Node) ->
+                update_nodename(Node)
+            end, Nodes),
+    timer:sleep(500),
 
     create_dirs(Nodes),
 
@@ -362,6 +360,8 @@ get_host(Node) when is_atom(Node) ->
     end;
 get_host(Host) -> Host.
 
+get_ip(Node) when is_atom(Node) ->
+    get_ip(get_host(Node));
 get_ip(Host) ->
     {ok, IP} = inet:getaddr(Host, inet),
     string:join([integer_to_list(X) || X <- tuple_to_list(IP)], ".").
@@ -417,6 +417,19 @@ remote_write_file(NodeOrHost, File, Data) ->
 
 format(Msg, Args) ->
     lists:flatten(io_lib:format(Msg, Args)).
+
+update_nodename(Node) ->
+    Etc = node_path(Node) ++ "/etc/",
+    Files = [filename:basename(File) || File <- wildcard(Node, Etc ++ "*")],
+    RiakConfExists = lists:member("riak.conf", Files),
+    VMArgsExists = lists:member("vm.args", Files),
+    case {RiakConfExists, VMArgsExists} of
+        {_, true} ->
+            do_update_vm_args(Node, [{"-name", Node}]);
+        {true, _} ->
+            set_conf(Node, [{"nodename", atom_to_list(Node)}])
+    end,
+    ok.
 
 update_vm_args(_Node, []) ->
     ok;
@@ -704,4 +717,3 @@ to_binary(X) when is_binary(X) ->
     X;
 to_binary(X) ->
     list_to_binary(to_list(X)).
-

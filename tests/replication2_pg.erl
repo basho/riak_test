@@ -308,14 +308,15 @@ test_12_pg(Mode, SSL) ->
                   riak_repl_pb_api:get(PidB, Bucket, KeyA, CidA)),
 
     rt:log_to_nodes([LeaderA], "Adding a listener"),
-    ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
+    LeaderAIP = rt:get_ip(LeaderA),
+    ListenerArgs = [[atom_to_list(LeaderA), LeaderAIP, "5666"]],
     Res = rpc:call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
     ?assertEqual(ok, Res),
 
     [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
 
     rt:log_to_nodes([FirstB], "Adding a site"),
-    SiteArgs = ["127.0.0.1", "5666", "rtmixed"],
+    SiteArgs = [LeaderAIP, "5666", "rtmixed"],
     Res = rpc:call(FirstB, riak_repl_console, add_site, [SiteArgs]),
     lager:info("Res = ~p", [Res]),
 
@@ -334,14 +335,14 @@ test_12_pg(Mode, SSL) ->
     lager:info("Disable repl and wait for clusters to disconnect"),
 
     rt:log_to_nodes([LeaderA], "Delete listener"),
-    DelListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
+    DelListenerArgs = [[atom_to_list(LeaderA), LeaderAIP, "5666"]],
     DelListenerRes = rpc:call(LeaderA, riak_repl_console, del_listener, DelListenerArgs),
     ?assertEqual(ok, DelListenerRes),
 
     [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
 
     rt:log_to_nodes([FirstB], "Delete site"),
-    DelSiteArgs = ["127.0.0.1", "5666", "rtmixed"],
+    DelSiteArgs = [LeaderAIP, "5666", "rtmixed"],
     DelSiteRes = rpc:call(FirstB, riak_repl_console, add_site, [DelSiteArgs]),
     lager:info("Res = ~p", [DelSiteRes]),
 
@@ -455,9 +456,9 @@ test_cluster_mapping(SSL) ->
 
     % Cluser C-> connection must be set up for the proxy gets to work
     % with the cluster ID mapping
-    {ok, {_IP, CPort}} = rpc:call(FirstC, application, get_env,
+    {ok, {CIP, CPort}} = rpc:call(FirstC, application, get_env,
                                   [riak_core, cluster_mgr]),
-    repl_util:connect_cluster(LeaderB, "127.0.0.1", CPort),
+    repl_util:connect_cluster(LeaderB, CIP, CPort),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderB, "C")),
 
     % enable A to serve blocks to C
@@ -574,9 +575,9 @@ test_bidirectional_pg(SSL) ->
 
     LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
 
-    {ok, {_IP, APort}} = rpc:call(FirstA, application, get_env,
+    {ok, {AIP, APort}} = rpc:call(FirstA, application, get_env,
                                   [riak_core, cluster_mgr]),
-    repl_util:connect_cluster(LeaderB, "127.0.0.1", APort),
+    repl_util:connect_cluster(LeaderB, AIP, APort),
 
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
@@ -706,7 +707,7 @@ test_mixed_pg(SSL) ->
     rt:wait_until_ring_converged(ANodes),
 
     PGEnableResult = rpc:call(LeaderA, riak_repl_console, proxy_get, [["enable","B"]]),
-    lager:info("Enabled pg ~p:", [PGEnableResult]),
+    lager:info("Enabled pg: ~p", [PGEnableResult]),
     Status = rpc:call(LeaderA, riak_repl_console, status, [quiet]),
 
     case proplists:get_value(proxy_get_enabled, Status) of
@@ -731,14 +732,15 @@ test_mixed_pg(SSL) ->
     rt:wait_until_ring_converged(BNodes),
 
     rt:log_to_nodes([LeaderA], "Adding a listener"),
-    ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "5666"]],
+    ListenerIP = rt:get_ip(LeaderA),
+    ListenerArgs = [[atom_to_list(LeaderA), ListenerIP, "5666"]],
     Res = rpc:call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
     ?assertEqual(ok, Res),
 
     [rt:wait_until_ring_converged(Ns) || Ns <- [ANodes, BNodes, CNodes]],
 
     rt:log_to_nodes([FirstC], "Adding a site"),
-    SiteArgs = ["127.0.0.1", "5666", "rtmixed"],
+    SiteArgs = [ListenerIP, "5666", "rtmixed"],
     Res = rpc:call(FirstC, riak_repl_console, add_site, [SiteArgs]),
     lager:info("Res = ~p", [Res]),
 
@@ -874,6 +876,8 @@ confirm() ->
         ],
     lager:error("run riak_test with -t Mod:test1 -t Mod:test2"),
     lager:error("The runnable tests in this module are: ~p", [AllTests]),
+    %% TODO: The problem with this LC is that it doesn't incorporate any
+    %% of riak_test's setup/teardown per test.
     [?assertEqual(pass, erlang:apply(?MODULE, Test, [])) || Test <- AllTests].
 
 banner(T) ->
@@ -924,6 +928,8 @@ verify_topology_change(SourceNodes, SinkNodes) ->
     %% Remove leader from the sink cluster.
     SinkLeader = rpc:call(SinkNode1,
                           riak_repl2_leader, leader_node, []),
+
+    %% Sad this takes 2.5 minutes
     lager:info("Removing current leader from the cluster: ~p.",
                [SinkLeader]),
     rt:leave(SinkLeader),
@@ -948,14 +954,13 @@ verify_topology_change(SourceNodes, SinkNodes) ->
     %% Before we join the nodes, install an intercept on all nodes for
     %% the leader election callback.
     lager:info("Installing set_leader_node intercept."),
-    Intercept = case SinkLeader of
-        SinkNode1 ->
-            {riak_repl2_leader, [{{set_leader,3}, set_leader_node3}]};
-        SinkNode2 ->
-            {riak_repl2_leader, [{{set_leader,3}, set_leader_node4}]}
-    end,
-    ok = rt_intercept:add(SinkNode1, Intercept),
-    ok = rt_intercept:add(SinkNode2, Intercept),
+    Result = riak_repl2_leader_intercepts:set_leader_node(SinkLeader),
+
+    lager:info("riak_repl2_leader_intercepts:set_leader_node(~p) = ~p", [SinkLeader, Result]),
+    [ begin
+        rt_intercept:load_code(N),
+        ok = rt_intercept:add(N, {riak_repl2_leader, [{{set_leader,3}, set_leader_node}]})
+    end || N <- SinkNodes ],
 
     %% Restart former leader and rejoin to the cluster.
     lager:info("Rejoining former leader."),
