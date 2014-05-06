@@ -76,6 +76,7 @@ prop_test() ->
                       [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
                       {H, S, R} = run_commands(?MODULE, Cmds),
                       lager:info("======================== Ran commands, State=~p", [S]),
+                      clean_nodes(S),
                       eqc_gen:with_parameter(show_states,
                                              true,
                                              pretty_commands(?MODULE, Cmds, {H, S, R}, equals(ok, R)))
@@ -115,7 +116,6 @@ stopped(_S) ->
 initial_state() ->
     building_cluster.
 
-
 initial_state_data() ->
     #state{}.
 
@@ -148,7 +148,10 @@ postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
 %% ====================================================================
 %% callback functions
 %% ====================================================================
-clean_nodes(Nodes) ->
+clean_nodes({stopped, _S}) ->
+    lager:info("Clean-up already completed, doing nothing");
+clean_nodes({_, S}) ->
+    Nodes = S#state.nodes_up,
     CleanupFun =
        fun(N) ->
            lager:info("Wiping out node ~p for good", [N]),
@@ -157,6 +160,7 @@ clean_nodes(Nodes) ->
     lager:info("======================== Taking all nodes down ~p", [Nodes]),
     rt:pmap(CleanupFun, Nodes),
     rt:teardown().
+    
 
 ensure_cluster_ready(Nodes) ->
     rt:wait_until_nodes_ready(Nodes),
