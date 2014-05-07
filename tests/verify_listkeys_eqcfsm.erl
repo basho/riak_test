@@ -8,8 +8,7 @@
 -behaviour(riak_test).
 -export([confirm/0]).
 
--define(NUM_BUCKETS, 2).
--define(NUM_TESTS, 2).
+-define(NUM_TESTS, 5).
 -define(PREFIX, {x, x}).
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
@@ -74,25 +73,27 @@ prop_test() ->
                   begin
                       lager:info("======================== Will run commands:"),
                       [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
-                      {H, S, R} = run_commands(?MODULE, Cmds),
-                      lager:info("======================== Ran commands, State=~p", [S]),
+                      {H, S, Res} = run_commands(?MODULE, Cmds),
+                      lager:info("======================== Ran commands"),
                       clean_nodes(S),
-                      eqc_gen:with_parameter(show_states,
-                                             true,
-                                             pretty_commands(?MODULE, Cmds, {H, S, R}, equals(ok, R)))
+                      aggregate(zip(state_names(H),command_names(Cmds)), 
+                          equals(Res, ok))
                   end))).
 
 %% ====================================================================
 %% EQC FSM state transitions
 %% ====================================================================
+initial_state() ->
+    building_cluster.
+
 building_cluster(_S) ->
     [
-     {setting_up_cluster, {call, ?MODULE, setup, [g_num_nodes()]}}
+     {setting_up_cluster, {call, ?MODULE, setup_cluster, [g_num_nodes()]}}
     ].
 
 setting_up_cluster(S) ->
     [
-     {preloading_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), S#state.nodes_up,
+     {preloading_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), hd(S#state.nodes_up),
                                                       g_num_keys(), g_key_filter()]}}
     ].
 
@@ -113,18 +114,15 @@ stopped(_S) ->
 %% ====================================================================
 %% EQC FSM State Data
 %% ====================================================================
-initial_state() ->
-    building_cluster.
-
 initial_state_data() ->
     #state{}.
 
-next_state_data(building_cluster, setting_up_cluster, S, Nodes, {call, _, setup, [_Nodes]}) ->
-    S#state{ setup_complete = true, cluster_nodes = Nodes, nodes_up = Nodes };
+next_state_data(building_cluster, setting_up_cluster, S, _, {call, _, setup_cluster, [NumNodes]}) ->
+    S#state{ setup_complete = true, nodes_up = node_list(NumNodes) };
 next_state_data(setting_up_cluster, preloading_data, S, _, {call, _, preload_data, 
                                                             [BucketType, Bucket, _Nodes, NumKeys, KeyFilter]}) ->
     S#state{ bucket_type = BucketType, bucket = Bucket, num_keys = NumKeys, key_filter = KeyFilter };
-next_state_data(preloading_data, tearing_down_nodes, S, _, {call, _, verify, [_]}) ->
+next_state_data(preloading_data, tearing_down_nodes, S, _, {call, _, verify, [_,_,_,_,_]}) ->
     S#state{ verify_complete = true };
 next_state_data(_From, _To, S, _R, _C) ->
     S.
@@ -132,9 +130,11 @@ next_state_data(_From, _To, S, _R, _C) ->
 %% ====================================================================
 %% EQC FSM preconditions
 %% ====================================================================
-precondition(_From,_To,S,{call,_,add_nodes,[_Nodes]}) ->
-    S#state.cluster_nodes == [];
-precondition(_From,_To,S,{call,clean_nodes,[_Nodes]}) ->
+precondition(_From,_To,S,{call,_,setup_cluster,[_]}) ->
+    [] == S#state.nodes_up;
+precondition(_From,_To,S,{call,_,preload_data,[_,_,_,_,_]}) ->
+    true == S#state.setup_complete;
+precondition(_From,_To,S,{call,_,clean_nodes,[_Nodes]}) ->
     true == S#state.verify_complete;
 precondition(_From,_To,_S,{call,_,_,_}) ->
     true.
@@ -151,7 +151,12 @@ postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
 clean_nodes({stopped, _S}) ->
     lager:info("Clean-up already completed, doing nothing");
 clean_nodes({_, S}) ->
-    Nodes = S#state.nodes_up,
+    lager:info("Running clean_nodes with S:~p", [S]),
+    clean_nodes(S#state.nodes_up);
+clean_nodes([]) ->
+    lager:info("clean_nodes: no cluster to clean");
+clean_nodes(Nodes) ->
+    lager:info("Running clean_nodes with Nodes:~p", [Nodes]),
     CleanupFun =
        fun(N) ->
            lager:info("Wiping out node ~p for good", [N]),
@@ -160,19 +165,18 @@ clean_nodes({_, S}) ->
     lager:info("======================== Taking all nodes down ~p", [Nodes]),
     rt:pmap(CleanupFun, Nodes),
     rt:teardown().
-    
 
 ensure_cluster_ready(Nodes) ->
     rt:wait_until_nodes_ready(Nodes),
     Nodes.
 
-preload_data({BucketType, _}, Bucket, Nodes, NumKeys, _KeyFilter) ->
-    Node = hd(Nodes),
+preload_data({BucketType, _}, Bucket, Node, NumKeys, _KeyFilter) ->
+%    Node = hd(Nodes),
     lager:info("*******************[CMD]  First node ~p", [Node]),
     lager:info("Writing to bucket ~p", [Bucket]),
     put_keys(Node, {BucketType, Bucket}, NumKeys).
 
-setup(NumNodes) ->
+setup_cluster(NumNodes) ->
     lager:info("Deploying cluster of size ~p", [NumNodes]),
     Nodes = rt:build_cluster(NumNodes),
     Node = hd(Nodes),
@@ -220,6 +224,7 @@ list_filter_sort(Node, Bucket, KeyFilter) ->
     %% Move client to state
     {ok, C} = riak:client_connect(Node),
     sort_keys(filter_keys(riak_client:list_keys(term_to_binary(Bucket), C), KeyFilter)).
+
 node_list(NumNodes) ->
     NodesN = lists:seq(1, NumNodes),
     [?DEV(N) || N <- NodesN].
