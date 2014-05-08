@@ -319,8 +319,9 @@ process_module(Mod, OutDir) ->
     #cover_info{module=Mod, output_file=OutFile, coverage=Coverage}.
 
 write_coverage(all, Dir) ->
-    write_coverage(cover:modules(), Dir);
+    write_coverage(cover:imported_modules(), Dir);
 write_coverage(CoverModules, CoverDir) ->
+    lager:info("analyzing modules ~p", [CoverModules]),
     % temporarily reassign the group leader, to suppress annoying io:format output
     {group_leader, GL} = erlang:process_info(whereis(cover_server), group_leader),
     %% tiny recursive fun that pretends to be a group leader$
@@ -411,11 +412,6 @@ write_module_coverage(CoverMod, CoverDir) ->
         {ok, Src} ->
             case filelib:is_regular(Src) andalso filename:extension(Src) == ".erl" of
                 true ->
-                    % Cover only finds source if alongside beam or in ../src from beam
-                    % so had to temporarily copy source next to each beam.
-                    {file, BeamFile} = cover:is_compiled(CoverMod),
-                    TmpSrc = filename:rootname(BeamFile) ++ ".erl",
-                    file:copy(Src, TmpSrc),
                     case cover:analyse_to_file(CoverMod, CoverFile, [html]) of
                         {ok, _Mod} -> ok;
                         {error, Err} ->
@@ -423,7 +419,6 @@ write_module_coverage(CoverMod, CoverDir) ->
                                           " for module ~p (source ~s): ~p",
                                           [CoverMod, Src, Err])
                     end,
-                    file:delete(TmpSrc),
                     {ok, CoverFile};
                 false ->
                     lager:warning("Source for module ~p is not an erl file : ~s",
