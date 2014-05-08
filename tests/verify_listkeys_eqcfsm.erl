@@ -88,16 +88,16 @@ initial_state() ->
 
 building_cluster(_S) ->
     [
-     {setting_up_cluster, {call, ?MODULE, setup_cluster, [g_num_nodes()]}}
-    ].
-
-setting_up_cluster(S) ->
-    [
-     {preloading_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), hd(S#state.nodes_up),
-                                                      g_num_keys(), g_key_filter()]}}
+     {preloading_data, {call, ?MODULE, setup_cluster, [g_num_nodes()]}}
     ].
 
 preloading_data(S) ->
+    [
+     {verifying_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), hd(S#state.nodes_up),
+                                                      g_num_keys(), g_key_filter()]}}
+    ].
+
+verifying_data(S) ->
     [
      {tearing_down_nodes, {call, ?MODULE, verify, [S#state.bucket_type, S#state.bucket, S#state.nodes_up,
                                                    S#state.num_keys, S#state.key_filter]}}
@@ -117,12 +117,12 @@ stopped(_S) ->
 initial_state_data() ->
     #state{}.
 
-next_state_data(building_cluster, setting_up_cluster, S, _, {call, _, setup_cluster, [NumNodes]}) ->
+next_state_data(building_cluster, preloading_data, S, _, {call, _, setup_cluster, [NumNodes]}) ->
     S#state{ setup_complete = true, nodes_up = node_list(NumNodes) };
-next_state_data(setting_up_cluster, preloading_data, S, _, {call, _, preload_data, 
+next_state_data(preloading_data, verifying_data, S, _, {call, _, preload_data, 
                                                             [BucketType, Bucket, _Nodes, NumKeys, KeyFilter]}) ->
     S#state{ bucket_type = BucketType, bucket = Bucket, num_keys = NumKeys, key_filter = KeyFilter };
-next_state_data(preloading_data, tearing_down_nodes, S, _, {call, _, verify, [_,_,_,_,_]}) ->
+next_state_data(verifying_data, tearing_down_nodes, S, _, {call, _, verify, [_,_,_,_,_]}) ->
     S#state{ verify_complete = true };
 next_state_data(_From, _To, S, _R, _C) ->
     S.
