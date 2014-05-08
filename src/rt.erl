@@ -317,7 +317,9 @@ deploy_clusters(Settings) ->
                           NumNodes when is_integer(NumNodes) ->
                               [{current, default} || _ <- lists:seq(1, NumNodes)];
                           {NumNodes, InitialConfig} when is_integer(NumNodes) ->
-                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)];
+                          {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
+                              [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
                       end || Setting <- Settings],
     ?HARNESS:deploy_clusters(ClusterConfigs).
 
@@ -1631,11 +1633,8 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                         lager:info("Error was ~p.", [Error]),
                         false;
                     Routes ->
-                        case lists:keyfind(GuiResource, 2,
-                                           Routes) of
+                        case lists:keyfind(GuiResource, 2, Routes) of
                             false ->
-                                lager:info("Control routes not found yet: ~p ~p.",
-                                           [Vsn, Routes]),
                                 false;
                             _ ->
                                 true
