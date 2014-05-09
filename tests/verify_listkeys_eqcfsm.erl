@@ -20,11 +20,8 @@
           nodes_down = [],
           cluster_nodes = [],
           num_keys = 0,
-          key_filter = undefined,
-          preload_complete = false,
-          setup_complete = false,
-          verify_complete = false
-         }).
+          key_filter = undefined
+       }).
 
 %% ====================================================================
 %% riak_test callback
@@ -118,12 +115,10 @@ initial_state_data() ->
     #state{}.
 
 next_state_data(building_cluster, preloading_data, S, _, {call, _, setup_cluster, [NumNodes]}) ->
-    S#state{ setup_complete = true, nodes_up = node_list(NumNodes) };
+    S#state{ nodes_up = node_list(NumNodes) };
 next_state_data(preloading_data, verifying_data, S, _, {call, _, preload_data, 
                                                             [{BucketType, _}, Bucket, _Nodes, NumKeys, KeyFilter]}) ->
     S#state{ bucket_type = BucketType, bucket = Bucket, num_keys = NumKeys, key_filter = KeyFilter };
-next_state_data(verifying_data, tearing_down_nodes, S, _, {call, _, verify, [_,_,_,_,_]}) ->
-    S#state{ verify_complete = true };
 next_state_data(_From, _To, S, _R, _C) ->
     S.
 
@@ -152,7 +147,7 @@ postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
 %% callback functions
 %% ====================================================================
 clean_nodes({stopped, _S}) ->
-    lager:info("Clean-up already completed, doing nothing");
+    lager:info("Clean-up already completed.");
 clean_nodes({_, S}) ->
     lager:info("Running clean_nodes with S:~p", [S]),
     clean_nodes(S#state.nodes_up);
