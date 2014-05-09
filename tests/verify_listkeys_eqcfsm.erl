@@ -90,7 +90,7 @@ building_cluster(_S) ->
 
 preloading_data(S) ->
     [
-     {verifying_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), hd(S#state.nodes_up),
+     {verifying_data, {call, ?MODULE, preload_data, [g_bucket_type(), noshrink(g_uuid()), hd(S#state.nodes_up),
                                                       g_num_keys(), g_key_filter()]}}
     ].
 
