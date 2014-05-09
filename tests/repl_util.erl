@@ -254,7 +254,6 @@ wait_for_connection(Node, Name) ->
                 case rpc:call(Node, riak_core_cluster_mgr,
                         get_connections, []) of
                     {ok, Connections} ->
-			lager:info("Connections: ~p", [Connections]),
                         Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
                         case Conn of
                             [] ->

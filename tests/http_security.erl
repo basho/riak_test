@@ -18,16 +18,23 @@ confirm() ->
     io:format("turning on tracing"),
     ibrowse:trace_on(),
 
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
+
+    %% make a bunch of crypto keys
+    make_certs:rootCA(CertDir, "rootCA"),
+    make_certs:endusers(CertDir, "rootCA", ["site3.basho.com", "site4.basho.com"]),
+
+
     lager:info("Deploy some nodes"),
     PrivDir = rt:priv_dir(),
     Conf = [
             {riak_core, [
                     {default_bucket_props, [{allow_mult, true}]},
                     {ssl, [
-                            {certfile, filename:join([PrivDir,
-                                                      "certs/selfsigned/site3-cert.pem"])},
-                            {keyfile, filename:join([PrivDir,
-                                                     "certs/selfsigned/site3-key.pem"])}
+                            {certfile, filename:join([CertDir,
+                                                      "site3.basho.com/cert.pem"])},
+                            {keyfile, filename:join([CertDir,
+                                                     "site3.basho.com/key.pem"])}
                             ]}
                     ]},
              {riak_search, [
@@ -128,8 +135,8 @@ confirm() ->
     C7 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true},
                                                 {credentials, Username, "password"},
                                                 {ssl_options, [
-                        {cacertfile, filename:join([PrivDir,
-                                                    "certs/selfsigned/ca/rootcert.pem"])},
+                        {cacertfile, filename:join([CertDir,
+                                                    "rootCA/cert.pem"])},
                         {verify, verify_peer},
                         {reuse_sessions, false}
                         ]}
@@ -423,8 +430,8 @@ confirm() ->
                        ibrowse:send_req(URL ++ "/riak/hb/first/_,_,_", [], get,
                      [], [{response_format, binary}, {is_ssl, true},
                           {ssl_options, [
-                                         {cacertfile, filename:join([PrivDir,
-                                                                     "certs/selfsigned/ca/rootcert.pem"])},
+                                         {cacertfile, filename:join([CertDir,
+                                                                     "rootCA/cert.pem"])},
                                          {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
 
@@ -435,8 +442,8 @@ confirm() ->
                        ibrowse:send_req(URL ++ "/solr/index/select?q=foo:bar&wt=json", [], get,
                      [], [{response_format, binary}, {is_ssl, true},
                           {ssl_options, [
-                                         {cacertfile, filename:join([PrivDir,
-                                                                     "certs/selfsigned/ca/rootcert.pem"])},
+                                         {cacertfile, filename:join([CertDir,
+                                                                     "rootCA/cert.pem"])},
                                          {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
     ok.
