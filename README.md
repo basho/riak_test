@@ -171,14 +171,19 @@ You can generate a coverage report for a test run through [Erlang Cover](http://
 Coverage information for all **current** code run on any Riak node started by any of the tests in the run will be output as HTML in the coverage directory.
 That is, legacy and previous nodes used in the test will not be included, as the tool can only work on one version of the code at a time.
 Also, cover starts running in the Riak nodes after the node is up, so it will not report coverage of application initialization or other early code paths. 
-You can specify a list of modules for which you want coverage generated like this:
+Each test module, via a module attribute, can specify what modules it wishes to cover compile:
 ```erlang
-    {cover_modules, [riak_kv_bitcask_backend, riak_core_ring]}
+    -cover_modules([riak_kv_bitcask_backend, riak_core_ring]).
 ```
 Or entire applications by using:
 ```erlang
-    {cover_apps, [riak_kv, riak_core]}
+    -cover_apps([riak_kv, riak_core]).
 ```
+To enable this, you need to turn coverage in in your riak_test.config:
+```erlang
+   {cover_enabled, true}
+```
+Tests that do not include coverage annotations will, if cover is enabled, honor {cover_modules, [..]} and {cover_apps, [..]} from the riak_test config file.
 
 #### Web hooks
 When reporting is enabled, each test result is posted to [Giddy Up](http://giddyup.basho.com). You can specify

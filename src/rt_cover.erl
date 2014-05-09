@@ -26,8 +26,8 @@
 %% Here we do it as html files for easy browsing.
 -module(rt_cover).
 -export([
-    maybe_start/0,
-    start/0,
+    maybe_start/1,
+    start/1,
     maybe_start_on_node/2,
     maybe_write_coverage/2,
     maybe_export_coverage/3,
@@ -47,27 +47,41 @@
                      output_file :: undefined | string()}).
 
 if_coverage(Fun) ->
-    case rt_config:get(cover_enabled, true) of
+    case rt_config:get(cover_enabled, false) of
         false ->
             cover_disabled;
         true ->
             Fun()
     end.
 
-maybe_start() ->
-    if_coverage(fun start/0).
+maybe_start(Test) ->
+    if_coverage(fun() -> start(Test) end).
 
 mod_src(Mod) ->
-    proplists:get_value(source, Mod:module_info(compile), Mod).
+    try Mod:module_info(compile) of
+        CompileInfo ->
+            Src = proplists:get_value(source, CompileInfo, Mod),
+            case filelib:is_regular(Src) of
+                true -> Src;
+                false -> undefined
+            end
+    catch
+        _:_ -> undefined
+    end.
 
-start() ->
-    start(find_cover_modules()).
+has_src(Mod) ->
+    case mod_src(Mod) of
+        undefined -> false;
+        _ -> true
+    end.
 
-start([]) ->
+start(Test) ->
+    start2(find_cover_modules(Test)).
+
+start2([]) ->
     lager:info("Skipping cover, no modules included"),
-    rt_config:set(cover_enabled, false),
     ok;
-start(CoverMods) ->
+start2(CoverMods) ->
     lager:info("Starting cover"),
     stop_on_nodes(),
     ok = cover:stop(),
@@ -90,7 +104,7 @@ start(CoverMods) ->
                                               [Mod, CErr]),
                                 {error, CErr}
                         end
-                    end || Mod <- CoverMods],
+                    end || Mod <- CoverMods, has_src(Mod)],
             SrcDict = dict:from_list([ModSrc || {ok, ModSrc} <- CMods]),
             rt_config:set(cover_mod_src, SrcDict),
             ok;
@@ -101,15 +115,29 @@ start(CoverMods) ->
     end.
 
 %% @doc Figure out which modules to include.
-%% You can use a list of specific modules in the application
-%% variable `cover_modules', or application names in `cover_apps',
-%% which may be the special token `all'.
-find_cover_modules() ->
+%% These are read, per test, from the test module attributes
+%% `cover_modules' or `cover_apps'.
+find_cover_modules(Test) ->
+    {Mod, _Fun} = riak_test_runner:function_name(Test),
+    case proplists:get_value(cover_modules, Mod:module_info(attributes), []) of
+        [] ->
+            case proplists:get_value(cover_apps, Mod:module_info(attributes), []) of
+                [] ->
+                    %% fallback to what is in the config file
+                    read_cover_modules_from_config();
+                Apps ->
+                    AppMods = find_app_modules(Apps),
+                    AppMods
+            end;
+        ConfMods ->
+            ConfMods
+    end.
+
+read_cover_modules_from_config() ->
     case rt_config:get(cover_modules, []) of
         [] ->
             Apps = rt_config:get(cover_apps, []),
             AppMods = find_app_modules(Apps),
-            rt_config:set(cover_modules, AppMods),
             AppMods;
         ConfMods ->
             ConfMods
@@ -153,7 +181,7 @@ maybe_start_on_node(Node, Version) ->
         _            -> false
     end,
     ShouldStart = IsCurrent andalso
-                  rt_config:get(cover_enabled, true) andalso
+                  cover:modules() /= [] andalso
                   erlang:whereis(?COVER_SERVER) /= undefined,
     case ShouldStart of
         false ->
@@ -291,8 +319,9 @@ process_module(Mod, OutDir) ->
     #cover_info{module=Mod, output_file=OutFile, coverage=Coverage}.
 
 write_coverage(all, Dir) ->
-    write_coverage(rt_config:get(cover_modules, []), Dir);
+    write_coverage(cover:imported_modules(), Dir);
 write_coverage(CoverModules, CoverDir) ->
+    lager:info("analyzing modules ~p", [CoverModules]),
     % temporarily reassign the group leader, to suppress annoying io:format output
     {group_leader, GL} = erlang:process_info(whereis(cover_server), group_leader),
     %% tiny recursive fun that pretends to be a group leader$
@@ -383,11 +412,6 @@ write_module_coverage(CoverMod, CoverDir) ->
         {ok, Src} ->
             case filelib:is_regular(Src) andalso filename:extension(Src) == ".erl" of
                 true ->
-                    % Cover only finds source if alongside beam or in ../src from beam
-                    % so had to temporarily copy source next to each beam.
-                    {file, BeamFile} = cover:is_compiled(CoverMod),
-                    TmpSrc = filename:rootname(BeamFile) ++ ".erl",
-                    file:copy(Src, TmpSrc),
                     case cover:analyse_to_file(CoverMod, CoverFile, [html]) of
                         {ok, _Mod} -> ok;
                         {error, Err} ->
@@ -395,7 +419,6 @@ write_module_coverage(CoverMod, CoverDir) ->
                                           " for module ~p (source ~s): ~p",
                                           [CoverMod, Src, Err])
                     end,
-                    file:delete(TmpSrc),
                     {ok, CoverFile};
                 false ->
                     lager:warning("Source for module ~p is not an erl file : ~s",
