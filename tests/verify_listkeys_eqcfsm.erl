@@ -120,7 +120,7 @@ initial_state_data() ->
 next_state_data(building_cluster, preloading_data, S, _, {call, _, setup_cluster, [NumNodes]}) ->
     S#state{ setup_complete = true, nodes_up = node_list(NumNodes) };
 next_state_data(preloading_data, verifying_data, S, _, {call, _, preload_data, 
-                                                            [BucketType, Bucket, _Nodes, NumKeys, KeyFilter]}) ->
+                                                            [{BucketType, _}, Bucket, _Nodes, NumKeys, KeyFilter]}) ->
     S#state{ bucket_type = BucketType, bucket = Bucket, num_keys = NumKeys, key_filter = KeyFilter };
 next_state_data(verifying_data, tearing_down_nodes, S, _, {call, _, verify, [_,_,_,_,_]}) ->
     S#state{ verify_complete = true };
@@ -130,18 +130,21 @@ next_state_data(_From, _To, S, _R, _C) ->
 %% ====================================================================
 %% EQC FSM preconditions
 %% ====================================================================
-precondition(_From,_To,S,{call,_,setup_cluster,[_]}) ->
-    [] == S#state.nodes_up;
-precondition(_From,_To,S,{call,_,preload_data,[_,_,_,_,_]}) ->
-    true == S#state.setup_complete;
-precondition(_From,_To,S,{call,_,clean_nodes,[_Nodes]}) ->
-    true == S#state.verify_complete;
 precondition(_From,_To,_S,{call,_,_,_}) ->
     true.
 
 %% ====================================================================
 %% EQC FSM postconditions
 %% ====================================================================
+postcondition(_From,_To,_S,{call,_,setup_cluster,_},Res) ->
+    ok == Res;
+postcondition(_From,_To,_S,{call,_,verify,_},{error, Reason}) ->
+    lager:info("Error: ~p", [Reason]),
+    false;
+postcondition(_From,_To,S,{call,_,verify,_},KeyLists) ->
+    ExpectedKeys = expected_keys(S#state.num_keys, S#state.key_filter),
+    lists:all(fun(true) -> true; (_) -> false end,
+              [assert_equal(ExpectedKeys, Keys) || Keys <- KeyLists]);
 postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
     true.
 
@@ -166,12 +169,7 @@ clean_nodes(Nodes) ->
     rt:pmap(CleanupFun, Nodes),
     rt:teardown().
 
-ensure_cluster_ready(Nodes) ->
-    rt:wait_until_nodes_ready(Nodes),
-    Nodes.
-
 preload_data({BucketType, _}, Bucket, Node, NumKeys, _KeyFilter) ->
-%    Node = hd(Nodes),
     lager:info("*******************[CMD]  First node ~p", [Node]),
     lager:info("Writing to bucket ~p", [Bucket]),
     put_keys(Node, {BucketType, Bucket}, NumKeys).
@@ -179,13 +177,14 @@ preload_data({BucketType, _}, Bucket, Node, NumKeys, _KeyFilter) ->
 setup_cluster(NumNodes) ->
     lager:info("Deploying cluster of size ~p", [NumNodes]),
     Nodes = rt:build_cluster(NumNodes),
+    rt:wait_until_nodes_ready(Nodes),
     Node = hd(Nodes),
     rt:wait_until_transfers_complete(Nodes),
     [begin
          rt:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
          rt:wait_until_bucket_type_status(BucketType, active, Nodes)
      end || {BucketType, NVal} <- bucket_types()],
-    Nodes.
+    ok.
 
 verify(BucketType, Bucket, Nodes, _NumKeys, KeyFilter) ->
     [list_filter_sort(Node, {BucketType, Bucket}, KeyFilter) || Node <- Nodes].
@@ -223,7 +222,7 @@ filter_keys({error, _}=Error, _) ->
 list_filter_sort(Node, Bucket, KeyFilter) ->
     %% Move client to state
     {ok, C} = riak:client_connect(Node),
-    sort_keys(filter_keys(riak_client:list_keys(term_to_binary(Bucket), C), KeyFilter)).
+    sort_keys(filter_keys(riak_client:list_keys(Bucket, C), KeyFilter)).
 
 node_list(NumNodes) ->
     NodesN = lists:seq(1, NumNodes),
@@ -235,7 +234,7 @@ put_keys(Node, Bucket, Num) ->
     try
         Keys = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
         Vals = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
-        [riakc_pb_socket:put(Pid, riakc_obj:new(term_to_binary(Bucket), Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)]
+        [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)]
     after
         catch(riakc_pb_socket:stop(Pid))
     end.
