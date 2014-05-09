@@ -39,7 +39,7 @@ g_num_keys() ->
     choose(10, 1000).
 
 g_uuid() ->
-    eqc_gen:bind(eqc_gen:bool(), fun(_) -> druuid:v4_str() end).
+    noshrink(eqc_gen:bind(eqc_gen:bool(), fun(_) -> druuid:v4_str() end)).
 
 g_bucket_type() ->
     oneof(bucket_types()).
@@ -90,7 +90,7 @@ building_cluster(_S) ->
 
 preloading_data(S) ->
     [
-     {verifying_data, {call, ?MODULE, preload_data, [g_bucket_type(), noshrink(g_uuid()), hd(S#state.nodes_up),
+     {verifying_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), hd(S#state.nodes_up),
                                                       g_num_keys(), g_key_filter()]}}
     ].
 
@@ -230,17 +230,6 @@ put_keys(Node, Bucket, Num) ->
         Keys = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
         Vals = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
         [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)]
-    after
-        catch(riakc_pb_socket:stop(Pid))
-    end.
-
-put_buckets(Node, Num) ->
-    lager:info("[CMD] Putting ~p buckets on ~p", [Num, Node]),
-    Pid = rt:pbc(Node),
-    try
-        Buckets = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
-        {Key, Val} = {<<"test_key">>, <<"test_value">>},
-        [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || Bucket <- Buckets]
     after
         catch(riakc_pb_socket:stop(Pid))
     end.
