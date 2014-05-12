@@ -91,8 +91,8 @@ simple_test() ->
     read_from_cluster(BFirst, 1, ?NUM_KEYS, ?NUM_KEYS),
 
     %% Wait for trees to compute.
-    repl_util:wait_until_aae_trees_built(ANodes),
-    repl_util:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     lager:info("Test fullsync from cluster A leader ~p to cluster B",
                [LeaderA]),
@@ -186,9 +186,9 @@ dual_test() ->
     rt:wait_until_ring_converged(ANodes),
 
     %% Wait for trees to compute.
-    repl_util:wait_until_aae_trees_built(ANodes),
-    repl_util:wait_until_aae_trees_built(BNodes),
-    repl_util:wait_until_aae_trees_built(CNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(CNodes),
 
     %% Flush AAE trees to disk.
     perform_sacrifice(AFirst),
@@ -278,7 +278,7 @@ bidirectional_test() ->
     perform_sacrifice(AFirst),
 
     %% Wait for trees to compute.
-    repl_util:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(ANodes),
 
     %% Verify A replicated to B.
     validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
@@ -291,7 +291,7 @@ bidirectional_test() ->
     perform_sacrifice(BFirst),
 
     %% Wait for trees to compute.
-    repl_util:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     %% Verify B replicated to A.
     validate_completed_fullsync(LeaderB, AFirst, "A", ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS),
@@ -350,8 +350,8 @@ difference_test() ->
                              [{timeout, 4000}]),
 
     %% Wait for trees to compute.
-    repl_util:wait_until_aae_trees_built(ANodes),
-    repl_util:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     lager:info("Test fullsync from cluster A leader ~p to cluster B",
                [LeaderA]),
@@ -436,8 +436,8 @@ deadlock_test() ->
     [ok = rt_intercept:add(Target, Intercept) || Target <- ANodes],
 
     %% Wait for trees to compute.
-    repl_util:wait_until_aae_trees_built(ANodes),
-    repl_util:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     lager:info("Test fullsync from cluster A leader ~p to cluster B",
                [LeaderA]),
@@ -579,7 +579,7 @@ validate_intercepted_fullsync(InterceptTarget,
     rt:wait_for_service(InterceptTarget, riak_repl),
 
     %% Wait until AAE trees are compueted on the rebooted node.
-    repl_util:wait_until_aae_trees_built([InterceptTarget]).
+    rt:wait_until_aae_trees_built([InterceptTarget]).
 
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.
