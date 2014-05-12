@@ -12,7 +12,6 @@
          wait_until_leader_converge/1,
          wait_until_connection/1,
          wait_until_no_connection/1,
-         wait_until_aae_trees_built/1,
          wait_for_reads/5,
          start_and_wait_until_fullsync_complete/1,
          start_and_wait_until_fullsync_complete/2,
@@ -329,20 +328,6 @@ nodes_with_version(Nodes, Version) ->
 
 nodes_all_have_version(Nodes, Version) ->
     Nodes == nodes_with_version(Nodes, Version).
-
-%% AAE support
-wait_until_aae_trees_built(Cluster) ->
-    lager:info("Check if all trees built for nodes ~p", [Cluster]),
-    F = fun(Node) ->
-            Info = rpc:call(Node,
-                            riak_kv_entropy_info,
-                            compute_tree_info,
-                            []),
-            NotBuilt = [X || {_,undefined}=X <- Info],
-            NotBuilt == []
-    end,
-    [rt:wait_until(Node, F) || Node <- Cluster],
-    ok.
 
 %% Return the number of partitions in the cluster where Node is a member.
 num_partitions(Node) ->
