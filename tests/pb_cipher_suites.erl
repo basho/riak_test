@@ -34,12 +34,13 @@ confirm() ->
                         {modules, [mod_get]}]),
 
     lager:info("Deploy some nodes"),
-    Conf = [
-            {riak_api, [
+    Conf = [{riak_core, [
+                {ssl, [
                     {certfile, filename:join([CertDir,"site3.basho.com/cert.pem"])},
                     {keyfile, filename:join([CertDir, "site3.basho.com/key.pem"])},
                     {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
-                    ]},
+                    ]}
+                ]},
             {riak_search, [
                            {enabled, true}
                           ]}
