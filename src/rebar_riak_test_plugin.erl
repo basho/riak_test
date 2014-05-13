@@ -95,5 +95,19 @@ compilation_config(Conf) ->
     ErlOpts = proplists:get_value(erl_opts, element(3, Conf)),
     ErlOpts1 = proplists:delete(src_dirs, ErlOpts),
     ErlOpts2 = [{parse_transform,lager_transform},{outdir, option(test_output, Conf)}, {src_dirs, option(test_paths, Conf)} | ErlOpts1],
-    io:format("erl_opts: ~p~n", [ErlOpts2]),
-    rebar_config:set(C2, erl_opts, ErlOpts2).
+    case eqc_present() of
+       true ->
+           ErlOpts3 = [{d, 'EQC'},{d, 'TEST'} | ErlOpts2];
+       false ->
+           ErlOpts3 = [{d, 'TEST'} | ErlOpts2]
+    end,
+    io:format("erl_opts: ~p~n", [ErlOpts3]),
+    rebar_config:set(C2, erl_opts, ErlOpts3).
+
+eqc_present() ->
+    case catch eqc:version() of
+        {'EXIT', {undef, _}} ->
+            false;
+        _ ->
+            true
+    end.

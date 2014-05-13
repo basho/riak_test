@@ -1,6 +1,7 @@
 -module(verify_listkeys_eqcfsm).
 -compile(export_all).
 
+-ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_fsm.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -239,3 +240,4 @@ sort_keys({error, _}=Error) ->
 sort_keys(Keys) ->
     lists:usort(Keys).
 
+-endif. % EQC
