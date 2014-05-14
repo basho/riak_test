@@ -36,9 +36,83 @@
         ]).
 
 confirm() ->
-    fullsync_enabled_and_started().
+    Nodes = [ANodes, _BNodes] = configure_and_start_replication(),
 
-fullsync_enabled_and_started() ->
+    AFirst = hd(ANodes),
+
+    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+
+    %% Check fullsync statistics.
+    Result = receive
+        fullsync_started ->
+            lager:info("Fullsync started!"),
+
+            case rpc:call(LeaderA, riak_repl_console, fs_remotes_status,
+                          []) of
+                {badrpc, _} ->
+                    fail;
+                FsStats ->
+                    ?assertEqual(FsStats,
+                                 [{fullsync_enabled, "B"},
+                                  {fullsync_running, "B"}]),
+                    pass
+            end
+    after 60000 ->
+            fail
+    end,
+
+    ?assertEqual(pass, Result),
+
+    %% Wait for socket to accumulate multiple statistics for histogram.
+    timer:sleep(5000),
+
+    %% Check socket statistics.
+    StatString = os:cmd(io_lib:format("curl -s -S ~s/riak-repl/stats",
+                                      [rt:http_url(LeaderA)])),
+    {struct, Stats} = mochijson2:decode(StatString),
+    {struct, FsCoordStats} = proplists:get_value(<<"fullsync_coordinator">>, Stats),
+    {struct, BStats} = proplists:get_value(<<"B">>, FsCoordStats),
+    {struct, BSocketStats} = proplists:get_value(<<"socket">>, BStats),
+
+    [verify_type(Attribute) || Attribute <- BSocketStats],
+
+    reset_clusters(Nodes),
+
+    pass.
+
+verify_type({Attribute, Value}) when is_binary(Attribute) ->
+    ListStats = [<<"recv_avg">>,
+                 <<"recv_cnt">>,
+                 <<"recv_dvi">>,
+                 <<"recv_kbps">>,
+                 <<"recv_max">>,
+                 <<"send_cnt">>,
+                 <<"send_kbps">>,
+                 <<"send_pend">>],
+
+    lager:info("Verifying ~p is correct type with value ~p.",
+               [Attribute, Value]),
+
+    Result = case lists:member(Attribute, ListStats) of
+        true ->
+            lager:info("Attribute ~p should be a list: ~p",
+                       [Attribute, Value]),
+            if
+                is_list(Value) ->
+                    pass;
+                true ->
+                    fail
+            end;
+        false ->
+            pass
+    end,
+
+    ?assertEqual(pass, Result).
+
+reset_clusters(Clusters) ->
+    [rt:clean_cluster(Nodes) || Nodes <- Clusters].
+
+configure_and_start_replication() ->
     rt:set_advanced_conf(all, ?CONF),
 
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
@@ -81,25 +155,4 @@ fullsync_enabled_and_started() ->
                 lager:info("Fullsync completed in ~p", [FullTime])
         end),
 
-    Result = receive
-        fullsync_started ->
-            lager:info("Fullsync started!"),
-
-            case rpc:call(LeaderA, riak_repl_console, fs_remotes_status,
-                          []) of
-                {badrpc, _} ->
-                    fail;
-                Stats ->
-                    ?assertEqual(Stats,
-                                 [{fullsync_enabled, "B"},
-                                  {fullsync_running, "B"}]),
-                    pass
-            end
-    after 60000 ->
-            fail
-    end,
-
-    rt:clean_cluster(ANodes),
-    rt:clean_cluster(BNodes),
-
-    Result.
+    [ANodes, BNodes].
