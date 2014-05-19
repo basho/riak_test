@@ -20,10 +20,7 @@ confirm() ->
                       _ -> true
                   end,
 
-    {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
-                                           [riak_api, pb]),
-
-    {ok, PB} = riakc_pb_socket:start_link("127.0.0.1", Port, []),
+    PB = rt:pbc(Node),
 
     lager:info("default type get/put test"),
     %% write explicitly to the default type
