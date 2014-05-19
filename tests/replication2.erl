@@ -12,9 +12,6 @@
 
 confirm() ->
 
-    %% test requires allow_mult=false
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
-
     NumNodes = rt_config:get(num_nodes, 6),
     ClusterASize = rt_config:get(cluster_a_size, 3),
 
