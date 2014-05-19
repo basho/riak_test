@@ -31,7 +31,8 @@ get_deps() ->
     lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
 
 riakcmd(Path, N, Cmd) ->
-    io_lib:format("~s/dev/dev~b/bin/riak ~s", [Path, N, Cmd]).
+    ExecName = rt_config:get(exec_name, "riak"),
+    io_lib:format("~s/dev/dev~b/bin/~s ~s", [Path, N, ExecName, Cmd]).
 
 riakreplcmd(Path, N, Cmd) ->
     io_lib:format("~s/dev/dev~b/bin/riak-repl ~s", [Path, N, Cmd]).
@@ -48,7 +49,8 @@ riak_admin_cmd(Path, N, Args) ->
                           erlang:error(badarg)
                   end, Args),
     ArgStr = string:join(Quoted, " "),
-    io_lib:format("~s/dev/dev~b/bin/riak-admin ~s", [Path, N, ArgStr]).
+    ExecName = rt_config:get(exec_name, "riak"),
+    io_lib:format("~s/dev/dev~b/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
