@@ -191,6 +191,18 @@ confirm() ->
 
     ?assertEqual(3, proplists:get_value(n_val, UBProps2)),
 
+    {error, NTGR} = riakc_pb_socket:get_bucket(PB, {<<"nonexistent">>, <<"mybucket">>}),
+
+    lager:info("GOT ERROR ~s", [NTGR]),
+
+    ?assertMatch(<<"No bucket-type named 'nonexistent'", _/binary>>, NTGR),
+
+    {error, NTSR} = riakc_pb_socket:set_bucket(PB, {<<"nonexistent">>, <<"mybucket">>}, [{n_val, 3}]),
+
+    lager:info("GOT ERROR ~s", [NTSR]),
+
+    ?assertMatch(<<"No bucket-type named 'nonexistent'", _/binary>>, NTSR),
+
     lager:info("bucket type properties test"),
 
     riakc_pb_socket:set_bucket_type(PB, Type,
