@@ -19,51 +19,70 @@
 %% -------------------------------------------------------------------
 -module(verify_2i_timeout).
 -behavior(riak_test).
+
 -export([confirm/0]).
+-export([confirm/2, setup/1, cleanup/1]).
+-import(secondary_index_tests, [put_an_object/3, put_an_object/5, int_to_key/1,
+                               stream_pb/4, url/2, http_query/4, http_stream/4]).
+
 -include_lib("eunit/include/eunit.hrl").
--import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
-                               stream_pb/3, url/2, http_query/3, http_stream/3]).
--define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
 
 confirm() ->
     inets:start(),
-    Config = [{riak_kv, [{secondary_index_timeout, 1}]}], %% ludicrously short, should fail always
-    Nodes = rt:build_cluster([{current, Config}, {current, Config}, {current, Config}]),
-    ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
+    Nodes = rt:build_cluster(3),
+    setup(Nodes),
+    confirm(<<"2i_timeout">>, Nodes).
 
+setup(Nodes) ->
+    lager:debug("Setting ridiculously low 2i timeout"),
+    OldVals = [{Node,
+                rt:rpc_get_env(Node, [{riak_kv, secondary_index_timeout}])}
+                || Node <- Nodes],
+    rt:rpc_set_env(Nodes, riak_kv, secondary_index_timeout, 1),
+    OldVals.
+
+cleanup(OldVals) ->
+    lager:debug("Restoring 2i timeouts"),
+    [case OldVal of
+         undefined -> rt:rpc_unset_env(Node, riak_kv, secondary_index_timeout);
+         _ -> rt:rpc_set_env(Node, riak_kv, secondary_index_timeout, OldVal)
+     end
+     || {Node, OldVal} <- OldVals].
+
+confirm(Bucket, Nodes) ->
     PBPid = rt:pbc(hd(Nodes)),
     Http = rt:http_url(hd(Nodes)),
 
-    [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],
-    [put_an_object(PBPid, int_to_key(N), N, ?FOO) || N <- lists:seq(101, 200)],
+    [put_an_object(PBPid, Bucket, N) || N <- lists:seq(0, 100)],
+    [put_an_object(PBPid, Bucket, int_to_key(N), N, ?FOO) || N <- lists:seq(101, 200)],
 
     ExpectedKeys = lists:sort([int_to_key(N) || N <- lists:seq(0, 200)]),
-    Query = {<<"$bucket">>, ?BUCKET},
+    Query = {<<"$bucket">>, Bucket},
     %% Verifies that the app.config param was used
-    ?assertEqual({error, timeout}, stream_pb(PBPid, Query, [])),
+    ?assertEqual({error, timeout}, stream_pb(PBPid, Bucket, Query, [])),
 
     %% Override app.config
-    {ok, Res} =  stream_pb(PBPid, Query, [{timeout, 5000}]),
+    {ok, Res} =  stream_pb(PBPid, Bucket, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, lists:sort(proplists:get_value(keys, Res, []))),
 
     {ok, {{_, ErrCode, _}, _, Body}} = httpc:request(url("~s/buckets/~s/index/~s/~s~s",
-                                                     [Http, ?BUCKET, <<"$bucket">>, ?BUCKET, []])),
+                                                     [Http, Bucket, <<"$bucket">>, Bucket, []])),
 
     ?assertEqual(true, ErrCode >= 500),
     ?assertMatch({match, _}, re:run(Body, "request timed out|{error,timeout}")), %% shows the app.config timeout
 
-    HttpRes = http_query(Http, Query, [{timeout, 5000}]),
+    HttpRes = http_query(Http, Bucket, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, lists:sort(proplists:get_value(<<"keys">>, HttpRes, []))),
 
-    stream_http(Http, Query, ExpectedKeys),
+    stream_http(Http, Bucket, Query, ExpectedKeys),
 
     riakc_pb_socket:stop(PBPid),
     pass.
 
-stream_http(Http, Query, ExpectedKeys) ->
-     Res = http_stream(Http, Query, []),
+stream_http(Http, Bucket, Query, ExpectedKeys) ->
+     Res = http_stream(Http, Bucket, Query, []),
      ?assert(lists:member({<<"error">>,<<"timeout">>}, Res)),
-     Res2 = http_stream(Http, Query, [{timeout, 5000}]),
+     Res2 = http_stream(Http, Bucket, Query, [{timeout, 5000}]),
      ?assertEqual(ExpectedKeys, lists:sort(proplists:get_value(<<"keys">>, Res2, []))).
 
