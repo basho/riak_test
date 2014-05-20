@@ -20,45 +20,46 @@
 -module(verify_2i_stream).
 -behavior(riak_test).
 -export([confirm/0]).
+-export([confirm/1]).
+-import(secondary_index_tests, [put_an_object/3, put_an_object/5, int_to_key/1,
+                               stream_pb/3, http_query/3, http_stream/4]).
+-include("include/rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
--import(secondary_index_tests, [put_an_object/2, put_an_object/4, int_to_key/1,
-                               stream_pb/2, http_query/2, http_stream/3]).
--define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
 
 confirm() ->
     inets:start(),
-
     Nodes = rt:build_cluster(3),
-    ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
+    confirm(#rt_test_context{buckets=[<<"2i_stream">>], nodes=Nodes}).
 
+confirm(#rt_test_context{buckets=[Bucket|_], nodes=Nodes}) ->
     RiakHttp = rt:http_url(hd(Nodes)),
     PBPid = rt:pbc(hd(Nodes)),
 
-    [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],
-    [put_an_object(PBPid, int_to_key(N), N, ?FOO) || N <- lists:seq(101, 200)],
+    [put_an_object(PBPid, Bucket, N) || N <- lists:seq(0, 100)],
+    [put_an_object(PBPid, Bucket, int_to_key(N), N, ?FOO) || N <- lists:seq(101, 200)],
 
     ExpectedKeys = lists:sort([int_to_key(N) || N <- lists:seq(0, 200)]),
-    assertEqual(RiakHttp, PBPid, ExpectedKeys, {<<"$key">>, int_to_key(0), int_to_key(999)}),
-    assertEqual(RiakHttp, PBPid, ExpectedKeys, { <<"$bucket">>, ?BUCKET}),
+    assertEqual(RiakHttp, PBPid, Bucket, ExpectedKeys, {<<"$key">>, int_to_key(0), int_to_key(999)}),
+    assertEqual(RiakHttp, PBPid, Bucket, ExpectedKeys, { <<"$bucket">>, Bucket}),
 
     ExpectedFooKeys = lists:sort([int_to_key(N) || N <- lists:seq(101, 200)]),
-    assertEqual(RiakHttp, PBPid, ExpectedFooKeys, {<<"field1_bin">>, ?FOO}),
+    assertEqual(RiakHttp, PBPid, Bucket, ExpectedFooKeys, {<<"field1_bin">>, ?FOO}),
 
     %% Note: not sorted by key, but by value (the int index)
     ExpectedRangeKeys = [int_to_key(N) || N <- lists:seq(1, 100)],
-    assertEqual(RiakHttp, PBPid, ExpectedRangeKeys, {<<"field2_int">>, "1", "100"}),
+    assertEqual(RiakHttp, PBPid, Bucket, ExpectedRangeKeys, {<<"field2_int">>, "1", "100"}),
 
     riakc_pb_socket:stop(PBPid),
     pass.
 
 %% Check the PB result against our expectations
 %% and the non-streamed HTTP
-assertEqual(Http, PB, Expected0, Query) ->
-    {ok, PBRes} = stream_pb(PB, Query),
+assertEqual(Http, PB, Bucket, Expected0, Query) ->
+    {ok, PBRes} = stream_pb(PB, Bucket, Query),
     PBKeys = proplists:get_value(keys, PBRes, []),
-    HTTPRes = http_query(Http, Query),
-    StreamHTTPRes = http_stream(Http, Query, []),
+    HTTPRes = http_query(Http, Bucket, Query),
+    StreamHTTPRes = http_stream(Http, Bucket, Query, []),
     HTTPKeys = proplists:get_value(<<"keys">>, HTTPRes, []),
     StreamHttpKeys = proplists:get_value(<<"keys">>, StreamHTTPRes, []),
     Expected = lists:sort(Expected0),

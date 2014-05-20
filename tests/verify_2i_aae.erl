@@ -20,6 +20,9 @@
 -module(verify_2i_aae).
 -behaviour(riak_test).
 -export([confirm/0]).
+-export([confirm/1, setup/1]).
+
+-include("include/rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
@@ -31,120 +34,126 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    [Node1] = rt:build_cluster(1,
+    Nodes = rt:build_cluster(1,
                                [{riak_kv,
                                  [{anti_entropy, {off, []}},
                                   {anti_entropy_build_limit, {100, 500}},
                                   {anti_entropy_concurrency, 100},
                                   {anti_entropy_tick, 200}]}]),
-    rt_intercept:load_code(Node1),
-    rt_intercept:add(Node1,
-                     {riak_object,
-                      [{{index_specs, 1}, skippable_index_specs},
-                       {{diff_index_specs, 2}, skippable_diff_index_specs}]}),
-    lager:info("Installed intercepts to corrupt index specs on node ~p", [Node1]),
+    Buckets = ?BUCKETS,
+    Ctx = #rt_test_context{buckets=Buckets, nodes=Nodes},
+    setup(Ctx),
+    confirm(Ctx).
+
+confirm(#rt_test_context{buckets=Buckets, nodes=Nodes}) ->
+    Node1 = hd(Nodes),
     %%rpc:call(Node1, lager, set_loglevel, [lager_console_backend, debug]),
     PBC = rt:pbc(Node1),
     NumItems = ?NUM_ITEMS,
     NumDel = ?NUM_DELETES,
-    pass = check_lost_objects(Node1, PBC, NumItems, NumDel),
-    pass = check_lost_indexes(Node1, PBC, NumItems),
+    pass = check_lost_objects(Nodes, Buckets, PBC, NumItems, NumDel),
+    pass = check_lost_indexes(Nodes, Buckets, PBC, NumItems),
     pass = check_kill_repair(Node1),
     lager:info("Et voila"),
     riakc_pb_socket:stop(PBC),
     pass.
 
+setup(#rt_test_context{buckets=_Buckets, nodes=Nodes}) ->
+    Intercepts = {riak_object,
+                  [{{index_specs, 1}, skippable_index_specs},
+                   {{diff_index_specs, 2}, skippable_diff_index_specs}]},
+    [begin
+         rt_intercept:load_code(Node),
+         rt_intercept:add(Node, Intercepts)
+     end || Node <- Nodes, rt_intercept:are_intercepts_loaded(Node)],
+    lager:info("Installed intercepts to corrupt index specs on nodes ~p", [Nodes]),
+    % Set backend in buckets
+    ok.
+
 %% Write objects with a 2i index. Modify/delete the objects without updating
 %% the 2i index. Test that running 2i repair corrects the 2i indexes.
-check_lost_objects(Node1, PBC, NumItems, NumDel) ->
+check_lost_objects(Nodes, Buckets, PBC, NumItems, NumDel) ->
     Index = {integer_index, "i"},
-    set_skip_index_specs(Node1, false),
+    set_skip_index_specs(Nodes, false),
     lager:info("Putting ~p objects with indexes", [NumItems]),
     HalfNumItems = NumItems div 2,
     [put_obj(PBC, Bucket, N, N+1, Index) || N <- lists:seq(1, HalfNumItems),
-                                            Bucket <- ?BUCKETS],
-    lager:info("Put half the objects, now enable AAE and build tress"),
+                                            Bucket <- Buckets],
+    lager:info("Put half the objects, now enable AAE and build trees"),
     %% Enable AAE and build trees.
-    ok = rpc:call(Node1, application, set_env,
-                  [riak_kv, anti_entropy, {on, [debug]}]),
-    ok = rpc:call(Node1, riak_kv_entropy_manager, enable, []),
-    rt:wait_until_aae_trees_built([Node1]),
+    rt:rpc_set_env(Nodes, riak_kv, anti_entropy, {on, [debug]}),
+    ?assertEqual({[ok || _ <- Nodes], []},
+                 rpc:multicall(Nodes, riak_kv_entropy_manager, enable, [])),
+    rt:wait_until_aae_trees_built(Nodes),
 
     lager:info("AAE trees built, now put the rest of the data"),
     [put_obj(PBC, Bucket, N, N+1, Index)
-     || N <- lists:seq(HalfNumItems+1, NumItems), Bucket <- ?BUCKETS],
+     || N <- lists:seq(HalfNumItems+1, NumItems), Bucket <- Buckets],
     %% Verify they are there.
     ExpectedInitial = [{to_key(N+1), to_key(N)} || N <- lists:seq(1, NumItems)],
     lager:info("Check objects are there as expected"),
     [assert_range_query(PBC, Bucket, ExpectedInitial, Index, 1, NumItems+1)
-     || Bucket <- ?BUCKETS],
+     || Bucket <- Buckets],
 
     lager:info("Now mess index spec code and change values"),
-    set_skip_index_specs(Node1, true),
+    set_skip_index_specs(Nodes, true),
     [put_obj(PBC, Bucket, N, N, Index) || N <- lists:seq(1, NumItems-NumDel),
-                                          Bucket <- ?BUCKETS],
+                                          Bucket <- Buckets],
     DelRange = lists:seq(NumItems-NumDel+1, NumItems),
     lager:info("Deleting ~b objects without updating indexes", [NumDel]),
-    [del_obj(PBC, Bucket, N) || N <- DelRange, Bucket <- ?BUCKETS],
+    [del_obj(PBC, Bucket, N) || N <- DelRange, Bucket <- Buckets],
     DelKeys = [to_key(N) || N <- DelRange], 
     [rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, DelKeys) end)
-     || Bucket <- ?BUCKETS],
+     || Bucket <- Buckets],
     %% Verify they are damaged
     lager:info("Verify change did not take, needs repair"),
     [assert_range_query(PBC, Bucket, ExpectedInitial, Index, 1, NumItems+1)
-     || Bucket <- ?BUCKETS],
-    set_skip_index_specs(Node1, false),
-    run_2i_repair(Node1),
+     || Bucket <- Buckets],
+    set_skip_index_specs(Nodes, false),
+    run_2i_repair(Nodes),
     lager:info("Now verify that previous changes are visible after repair"),
     ExpectedFinal = [{to_key(N), to_key(N)} || N <- lists:seq(1, NumItems-NumDel)],
     [assert_range_query(PBC, Bucket, ExpectedFinal, Index, 1, NumItems+1)
-     || Bucket <- ?BUCKETS],
+     || Bucket <- Buckets],
     pass.
 
-do_tree_rebuild(Node) ->
+do_tree_rebuild(Nodes) ->
     lager:info("Let's go through a tree rebuild right here"),
     %% Cheat by clearing build times from ETS directly, as the code doesn't
     %% ever clear them currently.
-    ?assertEqual(true, rpc:call(Node, ets, delete_all_objects, [ets_riak_kv_entropy])),
+    ?assertEqual({[true || _ <- Nodes], []},
+                 rpc:multicall(Nodes, ets, delete_all_objects, [ets_riak_kv_entropy])),
     %% Make it so it doesn't go wild rebuilding things when the expiration is
     %% tiny.
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
-                                                           anti_entropy_build_limit,
-                                                           {0, 5000}])),
+    rt:rpc_set_env(Nodes, riak_kv, anti_entropy_build_limit, {0, 5000}),
     %% Make any tree expire on tick.
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
-                                                           anti_entropy_expire,
-                                                           1])),
+    rt:rpc_set_env(Nodes, riak_kv, anti_entropy_expire, 1),
     %% Wait for a good number of ticks.
     timer:sleep(5000),
     %% Make sure things stop expiring on tick
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
-                                                           anti_entropy_expire,
-                                                           7 * 24 * 60 * 60 * 1000])),
+    rt:rpc_set_env(Nodes, riak_kv, anti_entropy_expire, 7*24*60*60*1000),
     %% And let the manager start allowing builds again.
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
-                                                           anti_entropy_build_limit,
-                                                           {100, 1000}])),
-    rt:wait_until_aae_trees_built([Node]),
+    rt:rpc_set_env(Nodes, riak_kv, anti_entropy_build_limit, {100, 1000}),
+    rt:wait_until_aae_trees_built(Nodes),
     ok.
 
 %% Write objects without a 2i index. Test that running 2i repair will generate
 %% the missing indexes.
-check_lost_indexes(Node1, PBC, NumItems) ->
-    set_skip_index_specs(Node1, true),
+check_lost_indexes(Nodes, Buckets, PBC, NumItems) ->
+    set_skip_index_specs(Nodes, true),
     Index = {integer_index, "ii"},
     lager:info("Writing ~b objects without index", [NumItems]),
-    [put_obj(PBC, Bucket, N, N+1, Index) || Bucket <- ?BUCKETS,
+    [put_obj(PBC, Bucket, N, N+1, Index) || Bucket <- Buckets,
                                             N <- lists:seq(1, NumItems)],
     lager:info("Verify that objects cannot be found via index"),
     [assert_range_query(PBC, Bucket, [], Index, 1, NumItems+1)
-     || Bucket <- ?BUCKETS],
-    do_tree_rebuild(Node1),
-    run_2i_repair(Node1),
+     || Bucket <- Buckets],
+    do_tree_rebuild(Nodes),
+    run_2i_repair(Nodes),
     lager:info("Check that objects can now be found via index"),
     Expected = [{to_key(N+1), to_key(N)} || N <- lists:seq(1, NumItems)],
     [assert_range_query(PBC, Bucket, Expected, Index, 1, NumItems+1)
-     || Bucket <- ?BUCKETS],
+     || Bucket <- Buckets],
     pass.
 
 check_kill_repair(Node1) ->
@@ -166,6 +175,8 @@ check_kill_repair(Node1) ->
     end,
     pass.
 
+run_2i_repair(Nodes) when is_list(Nodes) ->
+    [run_2i_repair(Node) || Node <- Nodes];
 run_2i_repair(Node1) ->
     lager:info("Run 2i AAE repair"),
     ?assertMatch({ok, _}, rt:admin(Node1, ["repair-2i"])),
@@ -183,9 +194,8 @@ run_2i_repair(Node1) ->
             ?assertEqual(aae_2i_repair_complete, aae_2i_repair_timeout)
     end.
 
-set_skip_index_specs(Node, Val) ->
-    ok = rpc:call(Node, application, set_env,
-                  [riak_kv, skip_index_specs, Val]).
+set_skip_index_specs(Nodes, Val) ->
+    rt:rpc_set_env(Nodes, riak_kv, skip_index_specs, Val).
 
 to_key(N) ->
     list_to_binary(integer_to_list(N)).
