@@ -1,7 +1,15 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # Stash the current directory before doing any work so we can return back to where we started ...
 CURRENT_DIR=`pwd`
+
+FULL_CLEAN=false
+while getopts c opt; do
+  case $opt in
+    c) FULL_CLEAN=true
+      ;;
+  esac
+done
 
 # Determine the location of script which will allow to determine the riak_test home ...
 # Borrowed liberally from http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
@@ -22,16 +30,24 @@ cd $RIAK_HOME
 echo "Removing previous devreal instance from $RIAK_HOME and rebuilding ..."
 
 # Clean out previous devrel build ...
-rm -rf dev/*
+if [ "$FULL_CLEAN" = true ] ; then
+  make devclean
+else
+  rm -rf dev
+fi
 
 # Rebuild Riak ...
-make clean ; make stagedevrel
+make stagedevrel
 
-$RT_HOME/bin/rt-current.sh
+$RT_HOME/bin/rtdev-current.sh
 
 echo "Rebuilding riak_test in $RT_HOME ..."
 cd $RT_HOME
-make clean ; make
+
+if [ "$FULL_CLEAN" = true ] ; then
+  make clean
+fi
+make
 
 # Return back to where we started ...
 cd $CURRENT_DIR
