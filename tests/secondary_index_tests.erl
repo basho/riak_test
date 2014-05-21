@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2012-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -47,29 +47,9 @@
 confirm() ->
     inets:start(),
     Nodes = rt:build_cluster(3, ?CONFIG),
-    run(?MODULE, <<"2i_basic">>, Nodes),
-    run(verify_2i_returnterms, <<"2i_returnterms">>, Nodes),
-    run(verify_2i_timeout, <<"2i_timeout">>, Nodes),
-    run(verify_2i_stream, <<"2i_stream">>, Nodes),
-    run(verify_2i_limit, <<"2i_limit">>, Nodes),
-    run(verify_2i_aae, <<"2i_aae">>, Nodes).
+    confirm(#rt_test_context{nodes=Nodes,
+                             buckets=[<<"2i_basic">>]}).
     
-run(Mod, BucketOrBuckets, Nodes) ->
-    Buckets = to_list(BucketOrBuckets),
-    lager:info("Running test in ~s", [Mod]),
-    Exports = Mod:module_info(exports),
-    HasSetup = lists:member({setup, 1}, Exports),
-    HasCleanup = lists:member({cleanup, 1}, Exports),
-    Ctx = #rt_test_context{buckets=Buckets, nodes=Nodes},
-    RollbackInfo = HasSetup andalso Mod:setup(Ctx),
-    Mod:confirm(Ctx),
-    HasCleanup andalso Mod:cleanup(RollbackInfo).
-
-to_list(L) when is_list(L) ->
-    L;
-to_list(L) ->
-    [L].
-
 confirm(#rt_test_context{buckets=[Bucket|_], nodes=Nodes}) ->
     %% First test with sorting non-paginated results off by default 
     SetResult = rpc:multicall(Nodes, application, set_env,
