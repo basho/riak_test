@@ -6,6 +6,7 @@
 -export([map_object_value/3, reduce_set_union/2, mapred_modfun_input/3]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("riakc/include/riakc.hrl").
 
 -define(assertDenied(Op), ?assertMatch({error, {forbidden, _}}, Op)).
 
@@ -53,7 +54,7 @@ confirm() ->
                                  [riak_api, https]),
 
     MD = riak_test_runner:metadata(),
-    _HaveIndexes = case proplists:get_value(backend, MD) of
+    HaveIndexes = case proplists:get_value(backend, MD) of
                       undefined -> false; %% default is da 'cask
                       bitcask -> false;
                       _ -> true
@@ -227,6 +228,17 @@ confirm() ->
     ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "on",
                                                     "default", "from", Username]]),
 
+    %% list keys with bucket type
+    rt:create_and_activate_bucket_type(Node, <<"list-keys-test">>, []),
+
+    lager:info("Checking that list keys on a bucket-type is disallowed"),
+    ?assertMatch({error, {"403", _}}, rhc:list_keys(C7, {<<"list-keys-test">>, <<"hello">>})),
+
+    lager:info("Granting riak_kv.list_keys on the bucket type, checking that list_keys succeeds"),
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_keys", "on",
+                                                    "list-keys-test", "to", Username]]),
+    ?assertMatch({ok, []}, rhc:list_keys(C7, {<<"list-keys-test">>, <<"hello">>})),
+
     lager:info("Checking that get_bucket is disallowed"),
     ?assertMatch({error, {ok, "403", _, _}}, rhc:get_bucket(C7, <<"hello">>)),
 
@@ -250,6 +262,45 @@ confirm() ->
 
     ?assertEqual(5, proplists:get_value(n_val, element(2, rhc:get_bucket(C7,
                                                                          <<"hello">>)))),
+
+    %% 2i
+    case HaveIndexes of
+        false -> ok;
+        true ->
+            %% 2i permission test
+            lager:info("Checking 2i is disallowed"),
+            ?assertMatch({error, {"403", _}},
+                         rhc:get_index(C7, <<"hello">>,
+                                                   {binary_index,
+                                                    "name"},
+                                                   <<"John">>)),
+
+            lager:info("Granting 2i permissions, checking that results come back"),
+            ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.index", "on",
+                                                            "default", "to", Username]]),
+
+            %% don't actually have any indexes
+            ?assertMatch({ok, ?INDEX_RESULTS{}},
+                         rhc:get_index(C7, <<"hello">>,
+                                                   {binary_index,
+                                                    "name"},
+                                                   <<"John">>)),
+
+            lager:info("Checking that 2i on a bucket-type is disallowed"),
+            ?assertMatch({error, {"403", _}}, 
+                         rhc:get_index(C7, {<<"list-keys-test">>, 
+                                            <<"hello">>}, {binary_index, "name"}, <<"John">>)),
+
+            lager:info("Granting riak_kv.index on the bucket type, checking that get_index succeeds"),
+            ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.index", "on",
+                                                    "list-keys-test", "to", Username]]),
+            ?assertMatch({ok, ?INDEX_RESULTS{}}, 
+                         rhc:get_index(C7, {<<"list-keys-test">>, 
+                                            <<"hello">>}, {binary_index, "name"}, <<"John">>)),
+
+            ok
+    end,
+
 
     %% counters
 
