@@ -21,20 +21,22 @@
 -behavior(riak_test).
 
 -export([confirm/0]).
--export([confirm/2, setup/1, cleanup/1]).
+-export([confirm/1, setup/1, cleanup/1]).
 -import(secondary_index_tests, [put_an_object/3, put_an_object/5, int_to_key/1,
                                stream_pb/4, url/2, http_query/4, http_stream/4]).
 
+-include("include/rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -define(FOO, <<"foo">>).
 
 confirm() ->
     inets:start(),
     Nodes = rt:build_cluster(3),
-    setup(Nodes),
-    confirm(<<"2i_timeout">>, Nodes).
+    Ctx = #rt_test_context{nodes=Nodes, buckets=[<<"2i_timeout">>]},
+    setup(Ctx),
+    confirm(Ctx).
 
-setup(Nodes) ->
+setup(#rt_test_context{nodes=Nodes}) ->
     lager:debug("Setting ridiculously low 2i timeout"),
     OldVals = [{Node,
                 rt:rpc_get_env(Node, [{riak_kv, secondary_index_timeout}])}
@@ -50,7 +52,7 @@ cleanup(OldVals) ->
      end
      || {Node, OldVal} <- OldVals].
 
-confirm(Bucket, Nodes) ->
+confirm(#rt_test_context{buckets=[Bucket], nodes=Nodes}) ->
     PBPid = rt:pbc(hd(Nodes)),
     Http = rt:http_url(hd(Nodes)),
 

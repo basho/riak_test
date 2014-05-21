@@ -21,11 +21,12 @@
 -behavior(riak_test).
 
 -export([confirm/0]).
--export([confirm/2]).
+-export([confirm/1]).
 
 -import(secondary_index_tests, [put_an_object/3, put_an_object/5, int_to_key/1,
                                stream_pb/4, http_query/4]).
 
+-include("include/rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(FOO, <<"foo">>).
@@ -34,9 +35,10 @@
 confirm() ->
     inets:start(),
     Nodes = rt:build_cluster(3),
-    confirm(<<"2ireturnterms">>, Nodes).
+    Ctx = #rt_test_context{buckets=[<<"2i_returnterms">>], nodes=Nodes},
+    confirm(Ctx).
 
-confirm(Bucket, Nodes) ->
+confirm(#rt_test_context{buckets=[Bucket|_], nodes=Nodes}) ->
     RiakHttp = rt:http_url(hd(Nodes)),
     PBPid = rt:pbc(hd(Nodes)),
 

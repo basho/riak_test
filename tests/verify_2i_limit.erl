@@ -20,7 +20,9 @@
 -module(verify_2i_limit).
 -behavior(riak_test).
 -export([confirm/0]).
--export([confirm/2]).
+-export([confirm/1]).
+
+-include("include/rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 -import(secondary_index_tests, [put_an_object/3, put_an_object/5, int_to_key/1,
@@ -32,9 +34,9 @@ confirm() ->
     inets:start(),
     Bucket = <<"2ilimits">>,
     Nodes = rt:build_cluster(3),
-    confirm(Bucket, Nodes).
+    confirm(#rt_test_context{buckets=[Bucket], nodes=Nodes}).
 
-confirm(Bucket, Nodes) ->
+confirm(#rt_test_context{buckets=[Bucket|_], nodes=Nodes}) ->
     RiakHttp = rt:httpc(hd(Nodes)),
     HttpUrl = rt:http_url(hd(Nodes)),
     PBPid = rt:pbc(hd(Nodes)),

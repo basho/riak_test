@@ -20,8 +20,10 @@
 -module(secondary_index_tests).
 -behavior(riak_test).
 
+-include("include/rt.hrl").
+
 -export([confirm/0]).
--export([confirm/2]).
+-export([confirm/1]).
 -export([put_an_object/3, put_an_object/5, int_to_key/1,
          stream_pb/3, stream_pb/4, pb_query/4, http_query/3,
          http_query/4, http_stream/4, int_to_field1_bin/1, url/2,
@@ -35,25 +37,40 @@
 -define(KEYS(A,B,C), [int_to_key(N) || N <- lists:seq(A,B), C]).
 -define(KEYS(A,B,G1,G2), [int_to_key(N) || N <- lists:seq(A,B), G1, G2]).
 
+-define(CONFIG,
+        [{riak_kv,
+          [{anti_entropy, {off, []}},
+           {anti_entropy_build_limit, {100, 500}},
+           {anti_entropy_concurrency, 100},
+           {anti_entropy_tick, 200}]}]).
+
 confirm() ->
     inets:start(),
-    Nodes = rt:build_cluster(3),
+    Nodes = rt:build_cluster(3, ?CONFIG),
     run(?MODULE, <<"2i_basic">>, Nodes),
     run(verify_2i_returnterms, <<"2i_returnterms">>, Nodes),
     run(verify_2i_timeout, <<"2i_timeout">>, Nodes),
     run(verify_2i_stream, <<"2i_stream">>, Nodes),
-    run(verify_2i_limit, <<"2i_limit">>, Nodes).
+    run(verify_2i_limit, <<"2i_limit">>, Nodes),
+    run(verify_2i_aae, <<"2i_aae">>, Nodes).
     
-run(Mod, Bucket, Nodes) ->
+run(Mod, BucketOrBuckets, Nodes) ->
+    Buckets = to_list(BucketOrBuckets),
     lager:info("Running test in ~s", [Mod]),
     Exports = Mod:module_info(exports),
     HasSetup = lists:member({setup, 1}, Exports),
     HasCleanup = lists:member({cleanup, 1}, Exports),
-    RollbackInfo = HasSetup andalso Mod:setup(Nodes),
-    Mod:confirm(Bucket, Nodes),
+    Ctx = #rt_test_context{buckets=Buckets, nodes=Nodes},
+    RollbackInfo = HasSetup andalso Mod:setup(Ctx),
+    Mod:confirm(Ctx),
     HasCleanup andalso Mod:cleanup(RollbackInfo).
 
-confirm(Bucket, Nodes) ->
+to_list(L) when is_list(L) ->
+    L;
+to_list(L) ->
+    [L].
+
+confirm(#rt_test_context{buckets=[Bucket|_], nodes=Nodes}) ->
     %% First test with sorting non-paginated results off by default 
     SetResult = rpc:multicall(Nodes, application, set_env,
                               [riak_kv, secondary_index_sort_default, false]),
