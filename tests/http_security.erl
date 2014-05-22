@@ -181,6 +181,10 @@ confirm() ->
     ?assertMatch({error, {ok, "403", _, _}}, rhc:delete(C7, <<"hello">>,
                                                         <<"world">>)),
 
+    lager:info("Checking that delete for non-existing key is disallowed"),
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:delete(C7, <<"hello">>,
+                                                        <<"_xxboguskey">>)),
+
     lager:info("Granting riak_kv.delete, checking that delete succeeds"),
     ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.delete", "on",
                                                     "default", "hello", "to", Username]]),
@@ -193,6 +197,11 @@ confirm() ->
 
     %% write it back for list_buckets later
     ?assertEqual(ok, rhc:put(C7, Object)),
+
+    lager:info("Checking that delete for non-existing key is allowed"),
+    ?assertMatch({error, {ok, "404", _, _}}, rhc:delete(C7, <<"hello">>,
+                                                        <<"_xxboguskey">>)),
+
 
     %% slam the door in the user's face
     lager:info("Revoking get/put/delete, checking that get/put/delete are disallowed"),
@@ -249,6 +258,9 @@ confirm() ->
     ?assertEqual(3, proplists:get_value(n_val, element(2, rhc:get_bucket(C7,
                                                                          <<"hello">>)))),
 
+    lager:info("Checking that reset_bucket is disallowed"),
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:reset_bucket(C7, <<"hello">>)),
+
     lager:info("Checking that set_bucket is disallowed"),
     ?assertMatch({error, {ok, "403", _, _}}, rhc:set_bucket(C7, <<"hello">>,
                                                             [{n_val, 5}])),
@@ -300,7 +312,6 @@ confirm() ->
 
             ok
     end,
-
 
     %% counters
 
