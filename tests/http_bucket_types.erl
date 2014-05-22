@@ -424,7 +424,7 @@ confirm() ->
                                         {reduce, {jsfun,
                                                   <<"Riak.reduceSum">>},
                                          undefined, true}])),
-    ok.
+    pass.
 
 mapred_modfun(Pipe, Args, _Timeout) ->
     lager:info("Args for mapred modfun are ~p", [Args]),

@@ -36,8 +36,4 @@ confirm() ->
 
     %% TODO Wait the remainder of the 5 minutes and make sure all the keys are
     %% gone
-    ok.
-
-
-
-
+    pass.

@@ -755,7 +755,7 @@ group_test(Node, Port, CertDir) ->
                            riakc_pb_socket:search(PB, <<"index">>, <<"foo:bar">>)),
 
     riakc_pb_socket:stop(PB),
-    ok.
+    pass.
 
 grant(Node, Args) ->
     ok = rpc:call(Node, riak_core_console, grant, [Args]).
