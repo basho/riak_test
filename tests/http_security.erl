@@ -299,15 +299,15 @@ confirm() ->
                                                    <<"John">>)),
 
             lager:info("Checking that 2i on a bucket-type is disallowed"),
-            ?assertMatch({error, {"403", _}}, 
-                         rhc:get_index(C7, {<<"list-keys-test">>, 
+            ?assertMatch({error, {"403", _}},
+                         rhc:get_index(C7, {<<"list-keys-test">>,
                                             <<"hello">>}, {binary_index, "name"}, <<"John">>)),
 
             lager:info("Granting riak_kv.index on the bucket type, checking that get_index succeeds"),
             ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.index", "on",
                                                     "list-keys-test", "to", Username]]),
-            ?assertMatch({ok, ?INDEX_RESULTS{}}, 
-                         rhc:get_index(C7, {<<"list-keys-test">>, 
+            ?assertMatch({ok, ?INDEX_RESULTS{}},
+                         rhc:get_index(C7, {<<"list-keys-test">>,
                                             <<"hello">>}, {binary_index, "name"}, <<"John">>)),
 
             ok
@@ -508,7 +508,7 @@ confirm() ->
                                                                      "rootCA/cert.pem"])},
                                          {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
-    ok.
+    pass.
 
 enable_ssl(Node) ->
     [{http, {_IP, Port}}|_] = rt:connection_info(Node),

@@ -53,7 +53,7 @@ confirm() ->
          lager:info("Ensuring keys still readable on ~p", [Node]),
          ?assertEqual([], rt:systest_read(Node, 100, ?N))
      end || Node <- Nodes],
-    ok.
+    pass.
 
 run_reformat(Node, KillHandoffs) ->
     {_Success, _Ignore, Error} = rpc:call(Node,

@@ -34,41 +34,42 @@ confirm() ->
     DefaultProps = get_current_bucket_props(Nodes, ?BUCKET),
 
     update_props(DefaultProps, Node1, Nodes),
-    lager:info("Resetting bucket properties for bucket ~p on node ~p via rpc", 
+    lager:info("Resetting bucket properties for bucket ~p on node ~p via rpc",
                [?BUCKET, Node2]),
     rpc:call(Node2, riak_core_bucket, reset_bucket, [?BUCKET]),
     rt:wait_until_ring_converged(Nodes),
-    
+
     [check_props_reset(Node, ?BUCKET, DefaultProps) || Node <- Nodes],
 
 
     update_props(DefaultProps, Node1, Nodes),
     C = rt:pbc(Node3),
-    lager:info("Resetting bucket properties for bucket ~p on node ~p via pbc", 
+    lager:info("Resetting bucket properties for bucket ~p on node ~p via pbc",
                [?BUCKET, Node3]),
     ok = riakc_pb_socket:reset_bucket(C, ?BUCKET),
     rt:wait_until_ring_converged(Nodes),
-    
-    [check_props_reset(Node, ?BUCKET, DefaultProps) || Node <- Nodes].
 
-update_props(DefaultProps, Node, Nodes) -> 
+    [check_props_reset(Node, ?BUCKET, DefaultProps) || Node <- Nodes],
+    pass.
+
+update_props(DefaultProps, Node, Nodes) ->
     Updates = [{n_val, 1}],
-    lager:info("Setting bucket properties ~p for bucket ~p on node ~p", 
+    lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
                [?BUCKET, Updates, Node]),
-    rpc:call(Node, riak_core_bucket, set_bucket, [?BUCKET, Updates]),    
+    rpc:call(Node, riak_core_bucket, set_bucket, [?BUCKET, Updates]),
     rt:wait_until_ring_converged(Nodes),
 
     UpdatedProps = get_current_bucket_props(Nodes, ?BUCKET),
     ?assertNotEqual(DefaultProps, UpdatedProps).
-   
 
-%% fetch bucket properties via rpc 
+
+%% fetch bucket properties via rpc
 %% from a node or a list of nodes (one node is chosen at random)
-get_current_bucket_props(Nodes, Bucket) when is_list(Nodes) ->    
+get_current_bucket_props(Nodes, Bucket) when is_list(Nodes) ->
     Node = lists:nth(length(Nodes), Nodes),
     get_current_bucket_props(Node, Bucket);
 get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
-    rpc:call(Node, 
+    rpc:call(Node,
              riak_core_bucket,
              get_bucket,
              [Bucket]).
@@ -76,6 +77,3 @@ get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
 check_props_reset(Node, Bucket, DefaultProps) ->
     Current = get_current_bucket_props(Node, Bucket),
     ?assertEqual(lists:usort(DefaultProps), lists:usort(Current)).
-
-
-

@@ -464,7 +464,7 @@ confirm() ->
                                          undefined, true}])),
 
     riakc_pb_socket:stop(PB),
-    ok.
+    pass.
 
 accumulate(ReqID) ->
     receive

@@ -29,7 +29,8 @@ confirm() ->
     lager:info("SEED: ~p", [Seed]),
     random:seed(Seed),
 %    run([10,20,40], 10, 50, 10).
-    run([5], 1, 5, 1).
+    run([5], 1, 5, 1),
+    pass.
 
 run(NumNodes, SuperRounds, NumRounds, StableRounds) when is_list(NumNodes) ->
     [begin
