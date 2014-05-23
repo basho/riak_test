@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# Bail out on error ...
+set -e
 
 # Stash the current directory before doing any work so we can return back to where we started ...
 CURRENT_DIR=`pwd`
