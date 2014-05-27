@@ -84,6 +84,7 @@ confirm() ->
 
     lager:info("Stopping fullsync."),
     rt:log_to_nodes(Nodes, "Stopping fullsync."),
+    rpc:call(LeaderA, riak_repl_console, fullsync, [["stop"]]),
 
     %% Sleep, give repl time to stop.
     timer:sleep(500),
@@ -106,6 +107,7 @@ confirm() ->
                 end
         end),
     ?assertEqual(ok, Res),
+    repl_util:read_from_cluster(BFirst, 1, ?NUM_KEYS, ?TEST_BUCKET, 0),
 
     rt:log_to_nodes(Nodes, "Test completed."),
     rt:clean_cluster(ANodes),
