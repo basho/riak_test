@@ -77,21 +77,29 @@ confirm() ->
 
     lager:info("Starting fullsync."),
     rt:log_to_nodes(Nodes, "Starting fullsync."),
-    rpc:call(LeaderA, riak_repl_console, fullsync, [["start"]]),
+    R1 = rpc:call(LeaderA, riak_repl_console, fullsync, [["start"]]),
+    ?assertEqual(ok, R1),
 
-    %% Sleep, give repl time to start and make progress.
-    timer:sleep(500),
+    repl_util:wait_until_fullsync_started(LeaderA),
+    lager:info("Fullsync Running"),
 
     lager:info("Stopping fullsync."),
     rt:log_to_nodes(Nodes, "Stopping fullsync."),
-    rpc:call(LeaderA, riak_repl_console, fullsync, [["stop"]]),
+    R2 = rpc:call(LeaderA, riak_repl_console, fullsync, [["stop"]]),
+    ?assertEqual(ok, R2),
+    repl_util:wait_until_fullsync_stopped(LeaderA),
+    lager:info("Fullsync Stopped"),
 
-    %% Sleep, give repl time to stop.
-    timer:sleep(500),
+    [{"B", S1}] = rpc:call(LeaderA, riak_repl2_fscoordinator, status, []),
+    ?assertEqual(true, lists:member({fullsyncs_completed, 0}, S1)),
+    lager:info("Fullsync not completed"),
 
     lager:info("Starting fullsync."),
     rt:log_to_nodes(Nodes, "Starting fullsync."),
-    rpc:call(LeaderA, riak_repl_console, fullsync, [["start"]]),
+    R3 = rpc:call(LeaderA, riak_repl_console, fullsync, [["start"]]),
+    ?assertEqual(ok, R3),
+    repl_util:wait_until_fullsync_started(LeaderA),
+    lager:info("Fullsync Running Again"),
 
     Res = rt:wait_until(LeaderA,
         fun(_) ->
@@ -108,6 +116,9 @@ confirm() ->
         end),
     ?assertEqual(ok, Res),
     repl_util:read_from_cluster(BFirst, 1, ?NUM_KEYS, ?TEST_BUCKET, 0),
+    [{"B", S2}] = rpc:call(LeaderA, riak_repl2_fscoordinator, status, []),
+    ?assertEqual(true, lists:member({fullsyncs_completed, 1}, S2)),
+    lager:info("Fullsync Complete"),
 
     rt:log_to_nodes(Nodes, "Test completed."),
     rt:clean_cluster(ANodes),
