@@ -51,8 +51,8 @@ confirm() ->
 
     ?assertEqual(<<"newvalue">>, riakc_obj:get_value(O3)),
 
-    lager:info("nonexistent bucket test"),
     %% check for https://github.com/basho/riak_api/issues/61
+    lager:info("nonexistent bucket test"),
     Res = riakc_pb_socket:get_bucket(PB, {<<"nonexistent_type">>, <<"nonexistent_bucket">>}),
     ?assertEqual(Res, {error,<<"No bucket-type named 'nonexistent_type'">>}),
 
