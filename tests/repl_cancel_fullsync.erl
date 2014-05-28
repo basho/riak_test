@@ -82,12 +82,26 @@ confirm() ->
     repl_util:wait_until_fullsync_started(LeaderA),
     lager:info("Fullsync running."),
 
+    %% Get all active keylist server pids
+    Coordinators = [Pid || {"B", Pid} <-
+        riak_repl2_fscoordinator_sup:started(LeaderA)],
+    States = [sys:get_state(P) || P <- Coordinators],
+    KeylistPids = lists:flatten([element(14, State) || State <- States]),
+    KLStates = [sys:get_state(Pid) || {Pid, _} <- KeylistPids],
+    [?assertEqual(state, element(1, State)) || State <- KLStates],
+
     lager:info("Stopping fullsync."),
     rt:log_to_nodes(Nodes, "Stopping fullsync."),
     R2 = rpc:call(LeaderA, riak_repl_console, fullsync, [["stop"]]),
     ?assertEqual(ok, R2),
     repl_util:wait_until_fullsync_stopped(LeaderA),
     lager:info("Fullsync stopped."),
+
+    %% Give keylist pids time to stop
+    timer:sleep(500),
+    %% Ensure keylist pids are actually gone
+    Exits = [catch sys:get_state(Pid) || {Pid, _} <- KeylistPids],
+    [?assertMatch({'EXIT', _}, Exit) || Exit <- Exits],
 
     [{"B", S1}] = rpc:call(LeaderA, riak_repl2_fscoordinator, status, []),
     ?assertEqual(true, lists:member({fullsyncs_completed, 0}, S1)),
