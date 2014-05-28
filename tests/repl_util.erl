@@ -13,6 +13,8 @@
          wait_until_connection/1,
          wait_until_no_connection/1,
          wait_for_reads/5,
+         wait_until_fullsync_started/1,
+         wait_until_fullsync_stopped/1,
          start_and_wait_until_fullsync_complete/1,
          start_and_wait_until_fullsync_complete/2,
          start_and_wait_until_fullsync_complete/3,
@@ -167,6 +169,24 @@ wait_until_no_connection(Node) ->
                         end
                 end
         end). %% 40 seconds is enough for repl
+
+wait_until_fullsync_started(SourceLeader) ->
+    rt:wait_until(fun() ->
+                     lager:info("Waiting for fullsync to start"),
+                     Coordinators = [Pid || {"B", Pid} <-
+                         riak_repl2_fscoordinator_sup:started(SourceLeader)],
+                     lists:any(fun riak_repl2_fscoordinator:is_running/1,
+                         Coordinators)
+                  end).
+
+wait_until_fullsync_stopped(SourceLeader) ->
+    rt:wait_until(fun() ->
+                     lager:info("Waiting for fullsync to stop"),
+                     Coordinators = [Pid || {"B", Pid} <-
+                         riak_repl2_fscoordinator_sup:started(SourceLeader)],
+                     not lists:any(fun riak_repl2_fscoordinator:is_running/1,
+                         Coordinators)
+                  end).
 
 wait_for_reads(Node, Start, End, Bucket, R) ->
     rt:wait_until(Node,

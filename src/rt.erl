@@ -1471,10 +1471,11 @@ log_to_nodes(Nodes, Fmt) ->
 %% @doc Log a message to the console of the specified test nodes.
 %%      Messages are prefixed by the string "---riak_test--- "
 %%      Uses lager:info/2 'LFmt' and 'LArgs' semantics
-log_to_nodes(Nodes, LFmt, LArgs) ->
+log_to_nodes(Nodes0, LFmt, LArgs) ->
     %% This logs to a node's info level, but if riak_test is running
     %% at debug level, we want to know when we send this and what
     %% we're saying
+    Nodes = lists:flatten(Nodes0),
     lager:debug("log_to_nodes: " ++ LFmt, LArgs),
     Module = lager,
     Function = log,
