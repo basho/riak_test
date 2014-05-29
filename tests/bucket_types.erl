@@ -20,10 +20,7 @@ confirm() ->
                       _ -> true
                   end,
 
-    {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
-                                           [riak_api, pb]),
-
-    {ok, PB} = riakc_pb_socket:start_link("127.0.0.1", Port, []),
+    PB = rt:pbc(Node),
 
     lager:info("default type get/put test"),
     %% write explicitly to the default type
@@ -193,6 +190,18 @@ confirm() ->
                                                      UnicodeBucket}),
 
     ?assertEqual(3, proplists:get_value(n_val, UBProps2)),
+
+    {error, NTGR} = riakc_pb_socket:get_bucket(PB, {<<"nonexistent">>, <<"mybucket">>}),
+
+    lager:info("GOT ERROR ~s", [NTGR]),
+
+    ?assertMatch(<<"No bucket-type named 'nonexistent'", _/binary>>, NTGR),
+
+    {error, NTSR} = riakc_pb_socket:set_bucket(PB, {<<"nonexistent">>, <<"mybucket">>}, [{n_val, 3}]),
+
+    lager:info("GOT ERROR ~s", [NTSR]),
+
+    ?assertMatch(<<"No bucket-type named 'nonexistent'", _/binary>>, NTSR),
 
     lager:info("bucket type properties test"),
 
