@@ -8,6 +8,14 @@ confirm() ->
     NumNodes = rt_config:get(num_nodes, 6),
     ClusterASize = rt_config:get(cluster_a_size, 3),
 
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
+
+    %% make a bunch of crypto keys
+    make_certs:rootCA(CertDir, "rootCA"),
+    make_certs:intermediateCA(CertDir, "intCA", "rootCA"),
+    make_certs:endusers(CertDir, "rootCA", ["site3.basho.com", "site4.basho.com"]),
+    make_certs:endusers(CertDir, "intCA", ["site1.basho.com", "site2.basho.com"]),
+
     lager:info("Deploy ~p nodes", [NumNodes]),
     BaseConf = [
             {riak_repl,
@@ -28,12 +36,12 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site1-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site1-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                {certfile, filename:join([CertDir,
+                            "site1/basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site1.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site1.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -43,12 +51,12 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site2-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site2-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                {certfile, filename:join([CertDir,
+                            "site2.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site2.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site2.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -58,12 +66,12 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site3-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site3-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                {certfile, filename:join([CertDir,
+                            "site3.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site3.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site3.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -75,12 +83,12 @@ confirm() ->
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
                 {ssl_depth, 0},
-                {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site3-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site3-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                {certfile, filename:join([CertDir,
+                            "site3.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site3.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site3.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -91,12 +99,12 @@ confirm() ->
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
                 {ssl_depth, 0},
-                {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site4-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site4-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                {certfile, filename:join([CertDir,
+                            "site4.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site4.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site4.basho.com/cacerts.pem"])}
             ]}
     ],
 

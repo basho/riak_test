@@ -20,19 +20,24 @@ setup_repl_clusters(Conf, SSL) ->
     NumNodes = 6,
     lager:info("Deploy ~p nodes", [NumNodes]),
 
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
 
-    PrivDir = rt:priv_dir(),
+    %% make a bunch of crypto keys
+    make_certs:rootCA(CertDir, "rootCA"),
+    make_certs:intermediateCA(CertDir, "intCA", "rootCA"),
+    make_certs:endusers(CertDir, "rootCA", ["site3.basho.com", "site4.basho.com"]),
+    make_certs:endusers(CertDir, "intCA", ["site1.basho.com", "site2.basho.com"]),
 
     SSLConfig1 = [
             {riak_core,
              [
                     {ssl_enabled, true},
-                    {certfile, filename:join([PrivDir,
-                                              "certs/selfsigned/site1-cert.pem"])},
-                    {keyfile, filename:join([PrivDir,
-                                             "certs/selfsigned/site1-key.pem"])},
-                    {cacertdir, filename:join([PrivDir,
-                                               "certs/selfsigned/ca"])}
+                    {certfile, filename:join([CertDir,
+                                              "site1.basho.com/cert.pem"])},
+                    {keyfile, filename:join([CertDir,
+                                             "site1.basho.com/key.pem"])},
+                    {cacertdir, filename:join([CertDir,
+                                               "site1.basho.com/cacerts.pem"])}
                     ]}
             ],
 
@@ -40,12 +45,12 @@ setup_repl_clusters(Conf, SSL) ->
             {riak_core,
              [
                     {ssl_enabled, true},
-                    {certfile, filename:join([PrivDir,
-                                              "certs/selfsigned/site2-cert.pem"])},
-                    {keyfile, filename:join([PrivDir,
-                                             "certs/selfsigned/site2-key.pem"])},
-                    {cacertdir, filename:join([PrivDir,
-                                               "certs/selfsigned/ca"])}
+                    {certfile, filename:join([CertDir,
+                                              "site2.basho.com/cert.pem"])},
+                    {keyfile, filename:join([CertDir,
+                                             "site2.basho.com/key.pem"])},
+                    {cacertdir, filename:join([CertDir,
+                                               "site2.basho.com/cacerts.pem"])}
                     ]}
             ],
 
@@ -53,12 +58,12 @@ setup_repl_clusters(Conf, SSL) ->
             {riak_core,
              [
                     {ssl_enabled, true},
-                    {certfile, filename:join([PrivDir,
-                                              "certs/selfsigned/site3-cert.pem"])},
-                    {keyfile, filename:join([PrivDir,
-                                             "certs/selfsigned/site3-key.pem"])},
-                    {cacertdir, filename:join([PrivDir,
-                                               "certs/selfsigned/ca"])}
+                    {certfile, filename:join([CertDir,
+                                              "site3.basho.com/cert.pem"])},
+                    {keyfile, filename:join([CertDir,
+                                             "site3.basho.com/key.pem"])},
+                    {cacertdir, filename:join([CertDir,
+                                               "site3.basho.com/cacerts.pem"])}
                     ]}
             ],
 
