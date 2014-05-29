@@ -19,7 +19,7 @@ confirm() ->
     io:format("turning on tracing"),
     ibrowse:trace_on(),
 
-    CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/http_certs",
 
     %% make a bunch of crypto keys
     make_certs:rootCA(CertDir, "rootCA"),
