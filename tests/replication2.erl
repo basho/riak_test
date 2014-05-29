@@ -34,7 +34,7 @@ confirm() ->
     ],
 
     Nodes = deploy_nodes(NumNodes, Conf),
- 
+
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
@@ -258,7 +258,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Starting Joe's Repl Test"),
 
     %% @todo add stuff
-    %% At this point, realtime sync should still work, but, it doesn't because of a bug in 1.2.1 
+    %% At this point, realtime sync should still work, but, it doesn't because of a bug in 1.2.1
     %% Check that repl leader is LeaderA
     %% Check that LeaderA2 has ceeded socket back to LeaderA
 
@@ -409,6 +409,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Starting realtime"),
     repl_util:start_realtime(LeaderA4, "B"),
     rt:wait_until_ring_converged(ANodes),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA4, "B")),
     timer:sleep(3000),
 
     lager:info("Reading keys written while repl was stopped"),
@@ -445,12 +446,9 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     lager:info("Starting realtime"),
     repl_util:start_realtime(LeaderA4, "B"),
-    timer:sleep(3000),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA4, "B")),
 
     lager:info("Verifying 100 keys are now available on ~p", [BSecond]),
-    repl_util:read_from_cluster(BSecond, 901, 1000, TestBucket, 0),
-
-    lager:info("Reading keys written while repl was stopped"),
     ?assertEqual(0, repl_util:wait_for_reads(BSecond, 901, 1000, TestBucket, 2)),
 
     lager:info("Restarting node ~p", [Target]),
@@ -663,4 +661,3 @@ collect_results(Workers, Acc) ->
         {'DOWN', _, _, Pid, _Reason} ->
             collect_results(lists:keydelete(Pid, 1, Workers), Acc)
     end.
-
