@@ -205,7 +205,7 @@ confirm() ->
                                      ]),
     ?assertEqual(pong, riakc_pb_socket:ping(PB)),
     riakc_pb_socket:stop(PB),
-    ok.
+    pass.
 
 pb_get_socket(PB) ->
     %% XXX this peeks into the pb_socket internal state and plucks out the
