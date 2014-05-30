@@ -43,7 +43,8 @@
          read_from_cluster/5,
          read_from_cluster/6,
          check_fullsync/3,
-         validate_completed_fullsync/6
+         validate_completed_fullsync/6,
+         validate_intercepted_fullsync/5
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -469,3 +470,33 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
     ?assert(RetryExits >= ExpectedFailures * 5),
 
     ok.
+
+%% @doc Add an intercept on a target node to simulate a given failure
+%%      mode, and then enable fullsync replication and verify completes
+%%      a full cycle.  Subsequently reboot the node.
+validate_intercepted_fullsync(InterceptTarget,
+                              Intercept,
+                              ReplicationLeader,
+                              ReplicationCluster,
+                              NumIndicies) ->
+    lager:info("Validating intercept ~p on ~p.",
+               [Intercept, InterceptTarget]),
+
+    %% Add intercept.
+    ok = rt_intercept:add(InterceptTarget, Intercept),
+
+    %% Verify fullsync.
+    ok = repl_util:check_fullsync(ReplicationLeader,
+                                  ReplicationCluster,
+                                  NumIndicies),
+
+    %% Reboot node.
+    rt:stop_and_wait(InterceptTarget),
+    rt:start_and_wait(InterceptTarget),
+
+    %% Wait for riak_kv and riak_repl to initialize.
+    rt:wait_for_service(InterceptTarget, riak_kv),
+    rt:wait_for_service(InterceptTarget, riak_repl),
+
+    %% Wait until AAE trees are compueted on the rebooted node.
+    rt:wait_until_aae_trees_built([InterceptTarget]).
