@@ -71,11 +71,6 @@ confirm() ->
     repl_util:read_from_cluster(BFirst, 1, ?NUM_KEYS, ?TEST_BUCKET,
                                 ?NUM_KEYS),
 
-    lager:info("Test fullsync from cluster A leader ~p to cluster B",
-               [LeaderA]),
-    repl_util:enable_fullsync(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),
-
     lager:info("Enabling realtime replication."),
     repl_util:enable_realtime(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
@@ -88,13 +83,19 @@ confirm() ->
 
     spawn(fun() ->
                 repl_util:write_to_cluster(AFirst,
-                                           10000, 20000, ?TEST_BUCKET),
+                                           100000, 200000, ?TEST_BUCKET),
                 Me ! complete
         end),
 
-    wait_for_keys(AFirst),
+    wait_for_keys(BFirst),
 
     rt:log_to_nodes(Nodes, "Test completed."),
+
+    WaitTime = 120000,
+    lager:info("Sleeping for ~p seconds", [WaitTime/1000]),
+    timer:sleep(WaitTime),
+    Result = rpc:call(BFirst, erlang, memory, [binary]),
+    lager:info("Result: ~p", [Result]),
 
     rt:clean_cluster(ANodes),
     rt:clean_cluster(BNodes),
