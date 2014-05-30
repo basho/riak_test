@@ -27,6 +27,7 @@
           {fullsync_strategy, keylist},
           {fullsync_on_connect, false},
           {fullsync_interval, disabled},
+          {realtime_cascades, never},
           {max_fssource_retries, Retries},
           {rt_heartbeat_interval, disabled}
          ]}
@@ -96,6 +97,11 @@ confirm() ->
     timer:sleep(WaitTime),
     Result = rpc:call(BFirst, erlang, memory, [binary]),
     lager:info("Result: ~p", [Result]),
+    Tabs = rpc:call(BFirst, ets, all, []),
+    EtsState = [rpc:call(BFirst, ets, info, [Tab, memory]) || Tab <- Tabs],
+    lager:info("ETS State is ~p", [EtsState]),
+    lager:info("Number of processes = ~p", [length(rpc:call(BFirst, erlang,
+                    processes, []))]),
 
     rt:clean_cluster(ANodes),
     rt:clean_cluster(BNodes),
@@ -106,8 +112,13 @@ wait_for_keys(Node) ->
     receive
         complete ->
             lager:info("Done!")
-    after 10 ->
+    after 500 ->
             Result = rpc:call(Node, erlang, memory, [binary]),
             lager:info("Result: ~p", [Result]),
+            Tabs = rpc:call(Node, ets, all, []),
+            EtsState = [rpc:call(Node, ets, info, [Tab, memory]) || Tab <- Tabs],
+            lager:info("ETS State is ~p", [EtsState]),
+            lager:info("Number of processes = ~p",
+                [length(rpc:call(Node, erlang, processes, []))]),
             wait_for_keys(Node)
     end.
