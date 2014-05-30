@@ -84,9 +84,13 @@ confirm() ->
     %% read from the default bucket explicitly
     {error, notfound} = riakc_pb_socket:get(PB, {<<"default">>, <<"bucket">>}, <<"key">>),
 
-    timer:sleep(5000), %% wait for delete_mode 3s to expire
+    ?assertEqual(ok, rt:wait_until(fun() ->
+                                           rt:pbc_really_deleted(PB,
+                                                                 <<"bucket">>,
+                                                                 [<<"key">>])
+                                   end)),
 
-    %% now there shoyld be no buckets or keys to be listed...
+    %% now there should be no buckets or keys to be listed...
     %%
     %% list keys
     ?assertEqual({ok, []}, riakc_pb_socket:list_keys(PB, <<"bucket">>)),
@@ -344,6 +348,11 @@ confirm() ->
                          {<<"bar">>, <<"3">>, <<"b">>, 7},
                          {<<"baz">>, <<"4">>, <<"a">>, 4},
                          {<<"bam">>, <<"5">>, <<"a">>, 3}]],
+
+    ?assertEqual({ok, [{0, [<<"2">>]}]},
+                 riakc_pb_socket:mapred(PB, {{Type, <<"MRbucket">>},
+                                             [[<<"starts_with">>, <<"f">>]]},
+                                        [{map, {modfun, riak_kv_mapreduce, map_object_value}, none, true}])),
 
     ?assertEqual({ok, [{1, [14]}]},
                  riakc_pb_socket:mapred_bucket(PB, {Type, <<"MRbucket">>},
