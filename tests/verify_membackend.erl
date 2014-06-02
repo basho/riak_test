@@ -110,7 +110,7 @@ check_eviction(Node) ->
     Size = 20000 * 8,
     Val = <<0:Size>>,
 
-    ?assertEqual([], rt:systest_write(Node, 1, 100, ?BUCKET, 2, Val)),
+    ?assertEqual([], rt:systest_write(Node, 1, 500, ?BUCKET, 2, Val)),
 
     Res = length(rt:systest_read(Node, 1, 100, ?BUCKET, 2, Val)),
 
@@ -118,7 +118,7 @@ check_eviction(Node) ->
     %% somewhat hard to predict.  Just trying to verify that some
     %% memory limit somewhere is being honored and that values are
     %% being evicted.
-    case Res >= 25 andalso Res =< 65 of
+    case Res == 100 of
         true ->
             ok;
         false ->
