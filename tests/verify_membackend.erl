@@ -273,7 +273,7 @@ get_used_space(VNode, Node) ->
                                          4, element(
                                               4, element(2, X))))))
                 end;
-            Else ->
+            _Else ->
                 lager:error("didn't understand version/mode tuple ~p",
                             [{Version, Mode}]),
                 throw(boom)
