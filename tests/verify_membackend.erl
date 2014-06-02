@@ -48,11 +48,11 @@ max_memory(Mode) ->
 
     rt:join(NodeB, NodeA),
 
-    ?assertEqual(ok, check_eviction(NodeA)),
-
     ?assertEqual(ok, check_put_delete(NodeA)),
 
     ?assertEqual(ok, check_put_consistent(NodeA)),
+
+    ?assertEqual(ok, check_eviction(NodeA)),
 
     rt:clean_cluster([NodeA, NodeB]),
 
@@ -69,11 +69,11 @@ combo(Mode) ->
     Pid = get_remote_vnode_pid(NodeA),
     0 = get_used_space(Pid, NodeA),
 
-    ?assertEqual(ok, check_eviction(NodeA)),
-
     ?assertEqual(ok, check_put_delete(NodeA)),
 
     ?assertEqual(ok, check_put_consistent(NodeA)),
+
+    ?assertEqual(ok, check_eviction(NodeA)),
 
     rt:clean_cluster([NodeA]),
 
@@ -131,7 +131,7 @@ check_eviction(Node) ->
          C:delete(?BUCKET, <<N:32/integer>>),
          timer:sleep(100)
      end
-     || N <- lists:seq(1, 100)],
+     || N <- lists:seq(1, 500)],
 
     %% make sure all deletes propagate?
     timer:sleep(timer:seconds(10)),
