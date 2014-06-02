@@ -258,21 +258,29 @@ get_used_space(VNode, Node) ->
     Mode = get(mode),
     Version = rt:get_version(),
     %% lager:info("version mode ~p", [{Version, Mode}]),
+    TwoOhReg =
+        fun(X) -> 
+                element(4, element(4, element(2, X)))
+        end,
+    TwoOhMulti =
+        fun(X) -> 
+                element(
+                  3, lists:nth(
+                       1, element(
+                            2, element(
+                                 4, element(
+                                      4, element(2, X))))))
+        end,
     Extract = 
         case {Version, Mode} of
             {<<"riak-2.0",_/binary>>, regular} ->
-                fun(X) -> 
-                        element(4, element(4, element(2, X)))
-                end;
+                TwoOhReg;
+            {<<"riak_ee-2.0",_/binary>>, regular} ->
+                TwoOhReg;
             {<<"riak-2.0",_/binary>>, multi} ->
-                fun(X) -> 
-                        element(
-                          3, lists:nth(
-                               1, element(
-                                    2, element(
-                                         4, element(
-                                              4, element(2, X))))))
-                end;
+                TwoOhMulti;
+            {<<"riak_ee-2.0",_/binary>>, multi} ->
+                TwoOhMulti;
             _Else ->
                 lager:error("didn't understand version/mode tuple ~p",
                             [{Version, Mode}]),
