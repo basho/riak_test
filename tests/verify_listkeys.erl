@@ -25,6 +25,8 @@
 -define(BUCKET, <<"listkeys_bucket">>).
 -define(NUM_BUCKETS, 1200).
 -define(NUM_KEYS, 1000).
+-define(UNDEFINED_BUCKET,  <<"880bf69d-5dab-44ee-8762-d24c6f759ce1">>).
+-define(UNDEFINED_BUCKET_TYPE,  <<"880bf69d-5dab-44ee-8762-d24c6f759ce1">>).
 
 confirm() ->
     [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4),
@@ -123,6 +125,31 @@ list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
         _ -> ok
     end.
 
+list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass) ->
+    case Interface of
+        pbc ->
+            Pid = rt:pbc(Node),
+            Mod = riakc_pb_socket;
+        http ->
+            Pid = rt:httpc(Node),
+            Mod = rhc
+    end,
+
+    lager:info("Listing keys using undefined bucket type ~p on ~p using ~p. Attempt #~p",
+               [?UNDEFINED_BUCKET_TYPE, Node, Interface, Attempt]),
+    case ShouldPass of
+	true -> ok;
+	_ ->
+	    {Status, Message} = Mod:list_keys(Pid, { ?UNDEFINED_BUCKET_TYPE, Bucket }),
+	    ?assertEqual(error, Status),
+	    ?assertEqual(<<"no_type">>, Message)
+    end,
+
+    case Interface of
+        pbc -> riakc_pb_socket:stop(Pid);
+        _ -> ok
+    end.
+
 put_buckets(Node, Num) ->
     Pid = rt:pbc(Node),
     Buckets = [list_to_binary(["", integer_to_list(Ki)])
@@ -166,6 +193,33 @@ list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
         _ -> ok
     end.
 
+list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass) ->
+    case Interface of
+	pbc ->
+	    Pid = rt:pbc(Node),
+	    Mod = riakc_pb_socket;
+	http ->
+	    Pid = rt:httpc(Node),
+	    Mod = rhc
+    end,
+
+    lager:info("Listing buckets on ~p for undefined bucket type ~p using ~p.  Attempt ~p.",
+	       [Node, ?UNDEFINED_BUCKET_TYPE, Interface, Attempt]),
+
+    case ShouldPass of
+	true -> ok;
+	_ ->
+	    {Status, Message} = Mod:list_buckets(Pid, ?UNDEFINED_BUCKET_TYPE, []),
+	    lager:info("Received status ~p and message ~p", [Status, Message]),
+	    ?assertEqual(error, Status),
+	    ?assertEqual(<<"no_type">>, Message)
+    end,
+
+    case Interface of
+	pbc ->
+	    riakc_pb_socket:stop(Pid);
+	_ -> ok
+    end.
 
 assert_equal(Expected, Actual) ->
     case Expected -- Actual of
@@ -187,5 +241,10 @@ check_it_all(Nodes, Interface, ShouldPass) ->
 check_a_node(Node, Interface, ShouldPass) ->
     [list_keys(Node, Interface, ?BUCKET, Attempt, ?NUM_KEYS, ShouldPass)
      || Attempt <- [1,2,3] ],
+    [list_keys_for_undefined_bucket_type(Node, Interface, ?BUCKET, Attempt, ShouldPass)
+     || Attempt <- [1,2,3] ],
     [list_buckets(Node, Interface, Attempt, ?NUM_BUCKETS, ShouldPass)
+     || Attempt <- [1,2,3] ], 
+    [list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass)
      || Attempt <- [1,2,3] ].
+
