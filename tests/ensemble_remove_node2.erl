@@ -90,4 +90,17 @@ confirm() ->
     ?assertEqual(3, length(Members3)),
     Cluster = rpc:call(Node, riak_ensemble_manager, cluster, []),
     ?assertEqual(3, length(Cluster)),
+
+    lager:info("Removing intercept and waiting until nodes 2/3 shutdown"),
+    rt_intercept:add(Node, {riak_kv_ensemble_backend, [{{maybe_async_update, 2},
+        {[], 
+        fun(Changes, State) ->
+            ?M:maybe_async_update_orig(Changes, State)
+        end}}]}),
+
+    ok = rt:wait_until_unpingable(Node2),
+    ok = rt:wait_until_unpingable(Node3),
+    rpc:call(Node, riak_core_console, member_status, [[]]),
+    rpc:call(Node, riak_core_console, ring_status, [[]]),
+
     pass.
