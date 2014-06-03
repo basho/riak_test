@@ -50,21 +50,21 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
     rt:wait_for_service(RootNode, riak_kv),
 
     case HandoffEncoding of
-        default -> lager:info("Using default encoding type."), true;   
+        default -> lager:info("Using default encoding type."), true;
 
         _       -> lager:info("Forcing encoding type to ~p.", [HandoffEncoding]),
-                   OverrideData = 
+                   OverrideData =
                     [
-                      { riak_core, 
-                            [ 
+                      { riak_core,
+                            [
                                 { override_capability,
-                                        [ 
+                                        [
                                           { handoff_data_encoding,
-                                                [ 
+                                                [
                                                   {    use, HandoffEncoding},
-                                                  { prefer, HandoffEncoding} 
+                                                  { prefer, HandoffEncoding}
                                                 ]
-                                          } 
+                                          }
                                         ]
                                 }
                             ]
@@ -74,7 +74,7 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
                    rt:update_app_config(RootNode, OverrideData),
 
                    %% Update all nodes (capabilities are not re-negotiated):
-                   lists:foreach(fun(TestNode) -> 
+                   lists:foreach(fun(TestNode) ->
                                     rt:update_app_config(TestNode, OverrideData),
                                     assert_using(RootNode, { riak_kv, handoff_data_encoding }, HandoffEncoding)
                                  end,
@@ -83,14 +83,20 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
 
     lager:info("Populating root node."),
     rt:systest_write(RootNode, NTestItems),
+
+    %% Create and activate bucket type
+    lager:info("Creating type"),
+    BType = <<"type">>,
+    rt:create_and_activate_bucket_type(RootNode, BType, []),
+    rt:wait_until_bucket_type_status(BType, active, [RootNode]),
+    rt:wait_until_bucket_type_visible([RootNode], BType),
+
     %% write one object with a bucket type
-    rt:create_and_activate_bucket_type(RootNode, <<"type">>, []),
-    %% allow cluster metadata some time to propogate
-    rt:systest_write(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
+    rt:systest_write(RootNode, 1, 2, {BType, <<"bucket">>}, 2),
 
     %% Test handoff on each node:
     lager:info("Testing handoff for cluster."),
-    lists:foreach(fun(TestNode) -> test_handoff(RootNode, TestNode, NTestItems) end, TestNodes),
+    lists:foreach(fun(TestNode) -> test_handoff(RootNode, TestNode, NTestItems, BType) end, TestNodes),
 
     %% Prepare for the next call to our test (we aren't polite about it, it's faster that way):
     lager:info("Bringing down test nodes."),
@@ -101,7 +107,7 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
     rt:brutal_kill(RootNode).
 
 %% See if we get the same data back from our new nodes as we put into the root node:
-test_handoff(RootNode, NewNode, NTestItems) ->
+test_handoff(RootNode, NewNode, NTestItems, BType) ->
 
     lager:info("Waiting for service on new node."),
     rt:wait_for_service(NewNode, riak_kv),
@@ -111,21 +117,24 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     ?assertEqual(ok, rt:wait_until_nodes_ready([RootNode, NewNode])),
     rt:wait_until_no_pending_changes([RootNode, NewNode]),
 
+    rt:wait_until_bucket_type_status(BType, active, [RootNode, NewNode]),
+    rt:wait_until_bucket_type_visible([RootNode, NewNode], BType),
+
     %% See if we get the same data back from the joined node that we added to the root node.
     %%  Note: systest_read() returns /non-matching/ items, so getting nothing back is good:
     lager:info("Validating data after handoff:"),
-    Results = rt:systest_read(NewNode, NTestItems), 
-    ?assertEqual(0, length(Results)), 
+    Results = rt:systest_read(NewNode, NTestItems),
+    ?assertEqual(0, length(Results)),
     Results2 = rt:systest_read(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
     ?assertEqual(0, length(Results2)),
-    lager:info("Data looks ok.").  
+    lager:info("Data looks ok.").
 
 assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName) ->
     lager:info("assert_using ~p =:= ~p", [ExpectedCapabilityName, CapabilityName]),
-    ExpectedCapabilityName =:= rt:capability(Node, {CapabilityCategory, CapabilityName}). 
+    ExpectedCapabilityName =:= rt:capability(Node, {CapabilityCategory, CapabilityName}).
 
 %% For some testing purposes, making these limits smaller is helpful:
-deploy_test_nodes(false, N) -> 
+deploy_test_nodes(false, N) ->
     rt:deploy_nodes(N);
 deploy_test_nodes(true,  N) ->
     lager:info("WARNING: Using turbo settings for testing."),
