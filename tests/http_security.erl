@@ -35,7 +35,8 @@ confirm() ->
                             {certfile, filename:join([CertDir,
                                                       "site3.basho.com/cert.pem"])},
                             {keyfile, filename:join([CertDir,
-                                                     "site3.basho.com/key.pem"])}
+                                                     "site3.basho.com/key.pem"])},
+                            {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
                             ]}
                     ]},
              {riak_search, [
