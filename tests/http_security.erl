@@ -47,11 +47,11 @@ confirm() ->
     %% enable security on the cluster
     ok = rpc:call(Node, riak_core_console, security_enable, [[]]),
     enable_ssl(Node),
-    %[enable_ssl(N) || N <- Nodes],
-    {ok, [{"127.0.0.1", Port0}]} = rpc:call(Node, application, get_env,
-                                 [riak_api, http]),
-    {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
-                                 [riak_api, https]),
+    %%[enable_ssl(N) || N <- Nodes],
+    {ok, [{IP0, Port0}]} = rpc:call(Node, application, get_env,
+                                    [riak_api, http]),
+    {ok, [{IP, Port}]} = rpc:call(Node, application, get_env,
+                                  [riak_api, https]),
 
     MD = riak_test_runner:metadata(),
     HaveIndexes = case proplists:get_value(backend, MD) of
@@ -62,17 +62,17 @@ confirm() ->
 
     lager:info("Checking non-SSL results in error"),
     %% connections over regular HTTP get told to go elsewhere
-    C0 = rhc:create("127.0.0.1", Port0, "riak", []),
+    C0 = rhc:create(IP0, Port0, "riak", []),
     ?assertMatch({error, {ok, "426", _, _}}, rhc:ping(C0)),
 
     lager:info("Checking SSL demands authentication"),
-    C1 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}]),
+    C1 = rhc:create(IP, Port, "riak", [{is_ssl, true}]),
     ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C1)),
 
     lager:info("Checking that unknown user demands reauth"),
-    C2 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
-                                                                "user",
-                                                                 "pass"}]),
+    C2 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
+                                                        "user",
+                                                        "pass"}]),
     ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C2)),
 
     %% Store this in a variable so once Riak supports utf-8 usernames
@@ -84,44 +84,51 @@ confirm() ->
     ok = rpc:call(Node, riak_core_console, add_user, [[Username, "password=password"]]),
 
     lager:info("Setting trust mode on user"),
-    %% trust anyone on localhost
+    %% trust anyone from this host
+    MyIP = case IP0 of
+               "127.0.0.1" -> IP0;
+               _ ->
+                   {ok,Hostname} = inet:gethostname(),
+                   {ok,A0} = inet:getaddr(Hostname, inet),
+                   inet:ntoa(A0)
+           end,
     ok = rpc:call(Node, riak_core_console, add_source, [[Username,
-                                                         "127.0.0.1/32",
+                                                         MyIP++"/32",
                                                          "trust"]]),
 
     lager:info("Checking that credentials are ignored in trust mode"),
     %% invalid credentials should be ignored in trust mode
-    C3 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
-                                                                Username,
-                                                                 "pass"}]),
+    C3 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
+                                                        Username,
+                                                        "pass"}]),
     ?assertEqual(ok, rhc:ping(C3)),
 
     lager:info("Setting password mode on user"),
-    %% require password on localhost
+    %% require password from our IP
     ok = rpc:call(Node, riak_core_console, add_source, [[Username,
-                                                         "127.0.0.1/32",
+                                                         MyIP++"/32",
                                                          "password"]]),
 
     lager:info("Checking that incorrect password demands reauth"),
     %% invalid credentials should be rejected in password mode
-    C4 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
-                                                                 Username,
-                                                                 "pass"}]),
+    C4 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
+                                                        Username,
+                                                        "pass"}]),
     ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C4)),
 
     lager:info("Checking that correct password is successful"),
     %% valid credentials should be accepted in password mode
-    C5 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
-                                                                 Username,
-                                                                 "password"}]),
+    C5 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
+                                                        Username,
+                                                        "password"}]),
 
     ?assertEqual(ok, rhc:ping(C5)),
 
     lager:info("verifying the peer certificate rejects mismatch with server cert"),
     %% verifying the peer certificate reject mismatch with server cert
-    C6 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true},
-                                                {credentials, Username, "password"},
-                                                {ssl_options, [
+    C6 = rhc:create(IP, Port, "riak", [{is_ssl, true},
+                                       {credentials, Username, "password"},
+                                       {ssl_options, [
                         {cacertfile, filename:join([PrivDir,
                                                     "certs/cacert.org/ca/root.crt"])},
                         {verify, verify_peer},
@@ -133,15 +140,15 @@ confirm() ->
 
     lager:info("verifying the peer certificate should work if the cert is valid"),
     %% verifying the peer certificate should work if the cert is valid
-    C7 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true},
-                                                {credentials, Username, "password"},
-                                                {ssl_options, [
+    C7 = rhc:create(IP, Port, "riak", [{is_ssl, true},
+                                       {credentials, Username, "password"},
+                                       {ssl_options, [
                         {cacertfile, filename:join([CertDir,
                                                     "rootCA/cert.pem"])},
                         {verify, verify_peer},
                         {reuse_sessions, false}
                         ]}
-                                               ]),
+                                      ]),
 
     ?assertEqual(ok, rhc:ping(C7)),
 
@@ -484,7 +491,7 @@ confirm() ->
 
     crdt_tests(Nodes, C7),
 
-    URL = lists:flatten(io_lib:format("https://127.0.0.1:~b", [Port])),
+    URL = lists:flatten(io_lib:format("https://~s:~b", [IP, Port])),
 
     lager:info("checking link walking fails because it is deprecated"),
 
@@ -511,9 +518,9 @@ confirm() ->
     pass.
 
 enable_ssl(Node) ->
-    [{http, {_IP, Port}}|_] = rt:connection_info(Node),
-    rt:update_app_config(Node, [{riak_api, [{https, [{"127.0.0.1",
-                                                     Port+1000}]}]}]),
+    [{http, {IP, Port}}|_] = rt:connection_info(Node),
+    rt:update_app_config(Node, [{riak_api, [{https, [{IP,
+                                                      Port+1000}]}]}]),
     rt:wait_until_pingable(Node),
     rt:wait_for_service(Node, riak_kv).
 
