@@ -31,12 +31,14 @@ confirm() ->
                                        BucketType,
                                        [{consistent, true}, {n_val, 5}]),
     rt:wait_until_bucket_type_status(BucketType, active, ANodes),
+    rt:wait_until_bucket_type_visible(ANodes, BucketType),
 
     %% Create consistent bucket type on cluster B
     rt:create_and_activate_bucket_type(LeaderB,
                                        BucketType,
                                        [{consistent, true}, {n_val, 5}]),
     rt:wait_until_bucket_type_status(BucketType, active, BNodes),
+    rt:wait_until_bucket_type_visible(BNodes, BucketType),
 
     connect_clusters(LeaderA, LeaderB),
 

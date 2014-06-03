@@ -543,7 +543,8 @@ crdt_tests([Node|_]=Nodes, RHC) ->
              {<<"maps">>, map, riakc_map:to_op(riakc_map:add({<<"bar">>, counter}, riakc_map:new()))}],
     [ begin
           rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
-          rt:wait_until_bucket_type_status(BType, active, Nodes)
+          rt:wait_until_bucket_type_status(BType, active, Nodes),
+          rt:wait_until_bucket_type_visible(Nodes, BType)
       end || {BType, DType, _Op} <- Types ],
 
     lager:info("Checking that CRDT fetch is denied"),
