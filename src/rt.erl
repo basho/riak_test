@@ -1572,11 +1572,9 @@ wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
 
 -spec bucket_type_visible([atom()], binary()|{binary(), binary()}) -> boolean().
 bucket_type_visible(Nodes, Type) ->
-    lager:info("See bucket type ~p", [Type]),
     MaxTime = rt_config:get(rt_max_wait_time),
-    IsVisible = fun(Res) -> is_list(Res) end,
+    IsVisible = fun erlang:is_list/1,
     {Res, NodesDown} = rpc:multicall(Nodes, riak_core_bucket_type, get, [Type], MaxTime),
-    lager:info("Got {~p, ~p}", [Res, NodesDown]),
     NodesDown == [] andalso lists:all(IsVisible, Res).
 
 wait_until_bucket_type_visible(Nodes, Type) ->
@@ -1586,7 +1584,6 @@ wait_until_bucket_type_visible(Nodes, Type) ->
 -spec see_bucket_props([atom()], binary()|{binary(), binary()},
                        proplists:proplist()) -> boolean().
 see_bucket_props(Nodes, Bucket, ExpectProps) ->
-    lager:info("See bucket props ~p ~p", [Bucket, ExpectProps]),
     MaxTime = rt_config:get(rt_max_wait_time),
     IsBad = fun({badrpc, _}) -> true;
                ({error, _}) -> true;
@@ -1598,19 +1595,14 @@ see_bucket_props(Nodes, Bucket, ExpectProps) ->
                end,
     case rpc:multicall(Nodes, riak_core_bucket, get_bucket, [Bucket], MaxTime) of
         {Res, []} ->
-            lager:info("Got ~p", [Res]),
             % No nodes down, check no errors
             case lists:any(IsBad, Res) of
                 true  ->
-                    lager:info("Some are bad"),
                     false;
                 false ->
-                    Ret = lists:all(HasProps, Res),
-                    lager:info("Has props ~p", [Ret]),
-                    Ret
+                    lists:all(HasProps, Res)
             end;
         {_, _NodesDown} ->
-            lager:info("Some nodes not reachable ~p", [_NodesDown]),
             false
     end.
 
