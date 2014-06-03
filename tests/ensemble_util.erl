@@ -95,7 +95,8 @@ wait_until_stable(Node, Count) ->
 
 wait_until_quorum(Node, Ensemble) ->
     F = fun() ->
-                case rpc:call(Node, riak_ensemble_manager, check_quorum, [Ensemble, 500]) of
+                case rpc:call(Node, riak_ensemble_manager, check_quorum,
+                        [Ensemble, 10000]) of
                     true ->
                         true;
                     false ->
@@ -107,7 +108,8 @@ wait_until_quorum(Node, Ensemble) ->
 
 wait_until_quorum_count(Node, Ensemble, Want) ->
     F = fun() ->
-                case rpc:call(Node, riak_ensemble_manager, count_quorum, [Ensemble, 1500]) of
+                case rpc:call(Node, riak_ensemble_manager, count_quorum,
+                        [Ensemble, 10000]) of
                     Count when Count >= Want ->
                         true;
                     Count ->

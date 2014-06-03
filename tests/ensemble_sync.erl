@@ -71,7 +71,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
 
     io:format("PL: ~p~n", [PL]),
     PBC = rt:pbc(Node),
-    Options = [{timeout, 500}],
+    Options = [{timeout, 2000}],
 
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [manual]),
     Part = rt:partition(Nodes -- Partitioned, Partitioned),
