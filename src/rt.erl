@@ -138,6 +138,8 @@
          wait_until_aae_trees_built/1,
          wait_until_all_members/1,
          wait_until_all_members/2,
+         wait_until_bucket_props/3,
+         wait_until_bucket_type_visible/2,
          wait_until_capability/3,
          wait_until_capability/4,
          wait_until_connected/1,
@@ -1567,6 +1569,57 @@ wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
                 ExpectedStatus =:= ActualStatus
         end,
     ?assertEqual(ok, rt:wait_until(F)).
+
+-spec bucket_type_visible([atom()], binary()|{binary(), binary()}) -> boolean().
+bucket_type_visible(Nodes, Type) ->
+    lager:info("See bucket type ~p", [Type]),
+    MaxTime = rt_config:get(rt_max_wait_time),
+    IsVisible = fun(Res) -> is_list(Res) end,
+    {Res, NodesDown} = rpc:multicall(Nodes, riak_core_bucket_type, get, [Type], MaxTime),
+    lager:info("Got {~p, ~p}", [Res, NodesDown]),
+    NodesDown == [] andalso lists:all(IsVisible, Res).
+
+wait_until_bucket_type_visible(Nodes, Type) ->
+    F = fun() -> bucket_type_visible(Nodes, Type) end,
+    ?assertEqual(ok, rt:wait_until(F)).
+
+-spec see_bucket_props([atom()], binary()|{binary(), binary()},
+                       proplists:proplist()) -> boolean().
+see_bucket_props(Nodes, Bucket, ExpectProps) ->
+    lager:info("See bucket props ~p ~p", [Bucket, ExpectProps]),
+    MaxTime = rt_config:get(rt_max_wait_time),
+    IsBad = fun({badrpc, _}) -> true;
+               ({error, _}) -> true;
+               (Res) when is_list(Res) -> false
+            end,
+    HasProps = fun(ResProps) ->
+                       lists:all(fun(P) -> lists:member(P, ResProps) end,
+                                 ExpectProps)
+               end,
+    case rpc:multicall(Nodes, riak_core_bucket, get_bucket, [Bucket], MaxTime) of
+        {Res, []} ->
+            lager:info("Got ~p", [Res]),
+            % No nodes down, check no errors
+            case lists:any(IsBad, Res) of
+                true  ->
+                    lager:info("Some are bad"),
+                    false;
+                false ->
+                    Ret = lists:all(HasProps, Res),
+                    lager:info("Has props ~p", [Ret]),
+                    Ret
+            end;
+        {_, _NodesDown} ->
+            lager:info("Some nodes not reachable ~p", [_NodesDown]),
+            false
+    end.
+
+wait_until_bucket_props(Nodes, Bucket, Props) ->
+    F = fun() ->
+                see_bucket_props(Nodes, Bucket, Props)
+        end,
+    ?assertEqual(ok, rt:wait_until(F)).
+
 
 %% @doc Set up in memory log capture to check contents in a test.
 setup_log_capture(Nodes) when is_list(Nodes) ->

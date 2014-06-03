@@ -100,13 +100,20 @@ confirm() ->
 
     lager:info("custom type get/put test"),
     Type = <<"mytype">>,
-    rt:create_and_activate_bucket_type(Node, Type, [{n_val, 3}]),
+    TypeProps = [{n_val, 3}],
+    lager:info("Create bucket type ~p, wait for propagation", [Type]),
+    rt:create_and_activate_bucket_type(Node, Type, TypeProps),
     rt:wait_until_bucket_type_status(Type, active, Nodes),
+    rt:wait_until_bucket_props(Nodes, {Type, <<"bucket">>}, TypeProps),
 
     lager:info("doing put"),
     riakc_pb_socket:put(PB, riakc_obj:new({Type, <<"bucket">>},
                                              <<"key">>, <<"newestvalue">>)),
 
+    lager:info("custom type list_keys test"),
+    ?assertEqual({ok, []}, riakc_pb_socket:list_keys(PB, <<"bucket">>)),
+    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB, {Type,
+                                                      <<"bucket">>})),
     lager:info("doing get"),
     {ok, O5} = riakc_pb_socket:get(PB, {Type, <<"bucket">>}, <<"key">>),
 
@@ -116,10 +123,6 @@ confirm() ->
     %% this type is NOT aliased to the default buckey
     {error, notfound} = riakc_pb_socket:get(PB, <<"bucket">>, <<"key">>),
 
-    lager:info("custom type list_keys test"),
-    ?assertEqual({ok, []}, riakc_pb_socket:list_keys(PB, <<"bucket">>)),
-    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB, {Type,
-                                                      <<"bucket">>})),
     lager:info("custom type list_buckets test"),
     %% list buckets
     ?assertEqual({ok, []}, riakc_pb_socket:list_buckets(PB)),
@@ -132,22 +135,24 @@ confirm() ->
     UnicodeType = unicode:characters_to_binary([12371,12435,12395,12385,12399], utf8),
     %% سلام - Salam (Arabic)
     UnicodeBucket = unicode:characters_to_binary([1587,1604,1575,1605], utf8),
-    rt:create_and_activate_bucket_type(Node, UnicodeType, [{n_val, 3}]),
+    lager:info("Create bucket type, wait for propagation"),
+    rt:create_and_activate_bucket_type(Node, UnicodeType, TypeProps),
     rt:wait_until_bucket_type_status(UnicodeType, active, Nodes),
+    rt:wait_until_bucket_props(Nodes, {UnicodeType, UnicodeBucket}, TypeProps),
 
     lager:info("doing put"),
     riakc_pb_socket:put(PB, riakc_obj:new({UnicodeType, UnicodeBucket},
                                              <<"key">>, <<"yetanothervalue">>)),
 
+    lager:info("custom type list_keys test"),
+    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB,
+                                                              {UnicodeType,
+                                                               UnicodeBucket})),
     lager:info("doing get"),
     {ok, O6} = riakc_pb_socket:get(PB, {UnicodeType, UnicodeBucket}, <<"key">>),
 
     ?assertEqual(<<"yetanothervalue">>, riakc_obj:get_value(O6)),
 
-    lager:info("custom type list_keys test"),
-    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB,
-                                                              {UnicodeType,
-                                                               UnicodeBucket})),
     lager:info("custom type list_buckets test"),
     %% list buckets
     ?assertEqual({ok, [UnicodeBucket]}, riakc_pb_socket:list_buckets(PB, UnicodeType)),

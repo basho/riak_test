@@ -546,6 +546,7 @@ confirm() ->
     %% create a new type
     rt:create_and_activate_bucket_type(Node, <<"mytype">>, [{n_val, 3}]),
     rt:wait_until_bucket_type_status(<<"mytype">>, active, Nodes),
+    rt:wait_until_bucket_type_visible(Nodes, <<"mytype">>),
 
     lager:info("Checking that get on a new bucket type is disallowed"),
     ?assertMatch({error, <<"Permission", _/binary>>}, riakc_pb_socket:get(PB,
@@ -622,6 +623,7 @@ confirm() ->
     %% create a new type
     rt:create_and_activate_bucket_type(Node, <<"mytype2">>, [{allow_mult, true}]),
     rt:wait_until_bucket_type_status(<<"mytype2">>, active, Nodes),
+    rt:wait_until_bucket_type_visible(Nodes, <<"mytype2">>),
 
     lager:info("Checking that get on the new type is disallowed"),
     ?assertMatch({error, <<"Permission", _/binary>>}, riakc_pb_socket:get(PB,
@@ -770,7 +772,8 @@ crdt_tests([Node|_]=Nodes, PB) ->
              {<<"maps">>, map, riakc_map:to_op(riakc_map:add({<<"bar">>, counter}, riakc_map:new()))}],
     [ begin
           rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
-          rt:wait_until_bucket_type_status(BType, active, Nodes)
+          rt:wait_until_bucket_type_status(BType, active, Nodes),
+          rt:wait_until_bucket_type_visible(Nodes, BType)
       end || {BType, DType, _Op} <- Types ],
 
     lager:info("Checking that CRDT fetch is denied"),

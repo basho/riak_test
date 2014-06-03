@@ -178,7 +178,8 @@ setup_cluster(NumNodes) ->
     rt:wait_until_transfers_complete(Nodes),
     [begin
          rt:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
-         rt:wait_until_bucket_type_status(BucketType, active, Nodes)
+         rt:wait_until_bucket_type_status(BucketType, active, Nodes),
+         rt:wait_until_bucket_type_visible(Nodes, BucketType)
      end || {BucketType, NVal} <- bucket_types()],
     ok.
 
