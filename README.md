@@ -118,6 +118,30 @@ or `make stagedevrel` before you run `rtdev-current.sh`. Like setting up
 releases you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-current.sh#L6)
 so all your riak builds are in one place.
 
+####  reset-current-env.sh
+
+`reset-current-env.sh` resets test environments setup using `rtdev-current.sh`
+using the following process:
+
+  1. Delete the current stagedevrel/devrel environment
+  1. `make stagedevrel` for the Riak release being tested (current default is 2.0,
+     overidden with the `-v` flag).  When the `-c` option is specified,
+     `make devclean` will be executed before rebuilding.
+  1. Execute `rtdev-current.sh` for the Riak release being tested
+  1. Rebuild the current riak_test branch.  When the `-c` option is specified,
+     'make clean' will be executed before rebuilding.
+
+This script is intended to provide to cover the common test environment
+reset method -- not cover all possible testing configurations/scenarios.
+As such, it makes the following assumptions regarding the environment and
+test operation:
+
+   * Riak source trees will be symlinked into the riak_test root directory
+     as `riak-<version>`.
+   * The script will be located in a sub-directory of <riak_test home>.  It
+     can be executed from any directory, but it uses the script location to
+     determine the riak_test home directory.
+
 ### Config file.
 
 Now that you've got your releases all ready and gitified, you'll need
