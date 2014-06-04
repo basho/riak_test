@@ -21,6 +21,10 @@
          connect_cluster/3,
          disconnect_cluster/2,
          wait_for_connection/2,
+         wait_for_disconnect/2,
+         wait_for_full_disconnect/1,
+         wait_until_connection_errors/2,
+         wait_until_connections_clear/1,
          enable_realtime/2,
          disable_realtime/2,
          enable_fullsync/2,
@@ -288,6 +292,106 @@ wait_for_connection(Node, Name) ->
                                 end
                         end;
                     _ ->
+                        false
+                end
+        end).
+
+%% @doc Wait for disconnect from this node to the
+%%      named cluster.
+wait_for_disconnect(Node, Name) ->
+    rt:wait_until(Node, fun(_) ->
+                lager:info("Attempting to verify disconnect on ~p from ~p.",
+                           [Node, Name]),
+                try
+                    {ok, Connections} = rpc:call(Node,
+                                                 riak_core_cluster_mgr,
+                                                 get_connections,
+                                                 []),
+                    lager:info("Waiting for sink disconnect on ~p: ~p.",
+                               [Node, Connections]),
+                    Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
+                    case Conn of
+                        [] ->
+                            true;
+                        _ ->
+                            false
+                    end
+                catch
+                    _:Error ->
+                        lager:info("Caught error: ~p.", [Error]),
+                        false
+                end
+        end).
+
+%% @doc Wait for full disconnect from all clusters and IP's
+wait_for_full_disconnect(Node) ->
+    rt:wait_until(Node, fun(_) ->
+                lager:info("Attempting to verify full disconnect on ~p.",
+                           [Node]),
+                try
+                    {ok, Connections} = rpc:call(Node,
+                                                 riak_core_cluster_mgr,
+                                                 get_connections,
+                                                 []),
+                    lager:info("Waiting for sink disconnect on ~p: ~p.",
+                               [Node, Connections]),
+                    case Connections of
+                        [] ->
+                            true;
+                        _ ->
+                            false
+                    end
+                catch
+                    _:Error ->
+                        lager:info("Caught error: ~p.", [Error]),
+                        false
+                end
+        end).
+
+%% @doc Wait until canceled connections are cleared
+wait_until_connections_clear(Node) ->
+    rt:wait_until(Node, fun(_) ->
+                try
+                    Status = rpc:call(Node,
+                                     riak_core_connection_mgr,
+                                     get_request_states,
+                                     []),
+                    lager:info("Waiting for cancelled connections to clear on ~p: ~p.",
+                               [Node, Status]),
+                    case Status of
+                        [] ->
+                            true;
+                        _ ->
+                            false
+                    end
+                catch
+                    _:Error ->
+                        lager:info("Caught error: ~p.", [Error]),
+                        false
+                end
+        end).
+
+%% @doc Wait until errors in connection
+wait_until_connection_errors(Node, BNode) ->
+    {ok, {_IP, Port}} = rpc:call(BNode, application, get_env,
+                                 [riak_core, cluster_mgr]),
+    rt:wait_until(Node, fun(_) ->
+                try
+                    Failures = rpc:call(Node,
+                                       riak_core_connection_mgr,
+                                       get_connection_errors,
+                                       [{"127.0.0.1",Port}]),
+                    lager:info("Waiting for endpoint connection failures on ~p: ~p.",
+                               [Node, Failures]),
+                    case orddict:size(Failures) of
+                        0 ->
+                            false;
+                        _ ->
+                            true
+                    end
+                catch
+                    _:Error ->
+                        lager:info("Caught error: ~p.", [Error]),
                         false
                 end
         end).
