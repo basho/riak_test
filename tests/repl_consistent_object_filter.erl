@@ -111,21 +111,14 @@ make_clusters() ->
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
 
-    ok = rpc:call(AFirst, riak_ensemble_manager, enable, []),
-    rpc:call(AFirst, riak_core_ring_manager, force_update, []),
-    ?assertEqual(true, rpc:call(AFirst, riak_ensemble_manager, enabled, [])),
-    ensemble_util:wait_until_stable(AFirst, NVal),
-
-    ok = rpc:call(BFirst, riak_ensemble_manager, enable, []),
-    rpc:call(BFirst, riak_core_ring_manager, force_update, []),
-    ?assertEqual(true, rpc:call(BFirst, riak_ensemble_manager, enabled, [])),
-    ensemble_util:wait_until_stable(BFirst, NVal),
-
     lager:info("Build cluster A"),
     repl_util:make_cluster(ANodes),
 
     lager:info("Build cluster B"),
     repl_util:make_cluster(BNodes),
+
+    ensemble_util:wait_until_stable(AFirst, NVal),
+    ensemble_util:wait_until_stable(BFirst, NVal),
 
     %% get the leader for the first cluster
     lager:info("waiting for leader to converge on cluster A"),
