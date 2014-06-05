@@ -19,7 +19,7 @@ confirm() ->
     io:format("turning on tracing"),
     ibrowse:trace_on(),
 
-    CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/http_certs",
 
     %% make a bunch of crypto keys
     make_certs:rootCA(CertDir, "rootCA"),
@@ -35,7 +35,8 @@ confirm() ->
                             {certfile, filename:join([CertDir,
                                                       "site3.basho.com/cert.pem"])},
                             {keyfile, filename:join([CertDir,
-                                                     "site3.basho.com/key.pem"])}
+                                                     "site3.basho.com/key.pem"])},
+                            {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
                             ]}
                     ]},
              {riak_search, [
@@ -539,8 +540,7 @@ crdt_tests([Node|_]=Nodes, RHC) ->
 
     lager:info("Creating bucket types for CRDTs"),
     Types = [{<<"counters">>, counter, riakc_counter:to_op(riakc_counter:increment(5, riakc_counter:new()))},
-             {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))},
-             {<<"maps">>, map, riakc_map:to_op(riakc_map:add({<<"bar">>, counter}, riakc_map:new()))}],
+             {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))}],
     [ begin
           rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
           rt:wait_until_bucket_type_status(BType, active, Nodes),
