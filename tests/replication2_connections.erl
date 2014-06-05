@@ -241,6 +241,17 @@ error_cleanup_test() ->
     lager:info("Verify disconnect from A to B"),
     [verify_full_disconnect(Node) || Node <- ANodes],
 
+    % Insert intercept to allow connections to occur
+    lager:info("Adding intercept to allow connections"),
+    Intercept2 = {riak_core_connection,[{{sync_connect, 2}, sync_connect}]},
+    [ok = rt_intercept:add(Target, Intercept2) || Target <- ANodes],
+
+    lager:info("Connecting A to B"),
+    connect_clusters(AFirst, BFirst),
+
+    lager:info("Verifying connection from A to B"),
+    [verify_connectivity(Node, "B") || Node <- ANodes],
+
     pass.
 
 %% @doc Verify connectivity between sources and sink.
