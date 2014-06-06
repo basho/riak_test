@@ -35,7 +35,7 @@ watcher(Master, Nodes, {_Host, Port, _Dir} = Collector) ->
     case gen_tcp:listen(Port, [{active, false}, binary,
                    {packet, 2}]) of
     {ok, LSock} ->
-        Acceptor = spawn_link(?MODULE, lloop, [self(), LSock]),
+        Acceptor = spawn(?MODULE, lloop, [self(), LSock]),
         monitor(process, Master),
         Probes = [{Node, undefined} || Node <- Nodes],
         W = #watcher{nodes=Nodes,
@@ -483,7 +483,9 @@ load_modules_on_nodes(Modules, Nodes) ->
     [case code:get_object_code(Module) of
          {Module, Bin, File} ->
              %% rpc:multicall(Nodes, code, purge, [Module]),
-             rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]);
+             {Ret, []} = rpc:multicall(Nodes, code, 
+				       load_binary, [Module, File, Bin]),
+	     [{module, observer}] = lists:usort(Ret);
          error ->
              error({no_object_code, Module})
      end || Module <- Modules].

@@ -29,7 +29,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
         _ -> ok
     end,
 
-    %% make a lxoocal config file, to be copied to a remote
+    %% make a local config file, to be copied to a remote
     %% loadgen. They're named separately because for simplicity, we
     %% use network operations even for local load generation
 
@@ -114,11 +114,16 @@ config(Rate, Duration, NodeList, KeyGen,
            <<"testbucket">>, riakc_pb).
 
 config(Rate, Duration, NodeList, KeyGen,
-       ValGen, Operations, Bucket, Driver) ->
-    DriverBucket = append_atoms(Driver, '_bucket'),
+       ValGen, Operations, Bucket, Driver0) ->
+    {Driver, DriverB} = 
+	case Driver0 of
+	    '2i' -> {pb, riakc_pb};
+	    _ -> {Driver0, Driver0}
+	end,
+    DriverBucket = append_atoms(DriverB, '_bucket'),
     DriverIps = append_atoms(Driver, '_ips'),
-    DriverReplies = append_atoms(Driver, '_replies'),
-    DriverName = append_atoms(basho_bench_driver_, Driver),
+    DriverReplies = append_atoms(DriverB, '_replies'),
+    DriverName = append_atoms(basho_bench_driver_, Driver0),
     [
      {mode, {rate, Rate}},
      {duration, Duration},

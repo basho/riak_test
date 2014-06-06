@@ -131,6 +131,10 @@ avg_items(L, Names) ->
                           Dicts),
          case Name of
              %% vnode gets and puts are a per-minute rolling window
+	     index_fsm_create ->
+                 (lists:sum(Vals)/length(Vals)) / 60;
+	     index_fsm_create_error ->
+                 (lists:sum(Vals)/length(Vals)) / 60;
              vnode_gets ->
                  (lists:sum(Vals)/length(Vals)) / 60;
              vnode_puts ->
@@ -155,6 +159,7 @@ winnow(Data0) ->
 
 strip_stats(Glob) ->
     Filter = [
+	      index_fsm_create, index_fsm_create_error,
 	      node_gets, node_puts,
 	      vnode_gets, vnode_puts,
               node_get_fsm_time_median,

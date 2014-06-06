@@ -81,7 +81,7 @@ run_test(HostList, TestBenchConfig, BaseBenchConfig) ->
 
     TestName = test_name(),
 
-    Base = maybe_start_base_load(BaseBenchConfig),
+    Base = maybe_start_base_load(BaseBenchConfig, HostList, TestName),
 
     rt_bench:bench(TestBenchConfig, HostList, TestName,
                    length(rt_config:get(perf_loadgens, [1]))),
@@ -322,16 +322,23 @@ start_data_collectors(Hosts) ->
     PrepDir = "/tmp/perf-"++OSPid,
     file:make_dir(PrepDir),
     {ok, Hostname} = inet:gethostname(),
-    observer:watch(Nodes, {Hostname, 65001, PrepDir}).
+    P = observer:watch(Nodes, {Hostname, 65001, PrepDir}),
+    lager:info("started data collector: ~p", [P]),
+    P.
 
 stop_data_collectors(Collector) ->
     Collector ! stop,
     ok.
 
-maybe_start_base_load([]) ->
-    none.
+maybe_start_base_load([], _, _) ->
+    none;
+maybe_start_base_load(Config, HostList, TestName) ->
+    spawn(fun() ->
+		  rt_bench:bench(Config, HostList, TestName++"_base",
+				 length(rt_config:get(perf_loadgens, [1])))
+	  end).
 
-maybe_stop_base_load(none) ->
+maybe_stop_base_load(_) -> %% should be none, but benches aren't stoppable rn.
     ok.
 
 %% need more sensible test names.
