@@ -899,6 +899,8 @@ index_built_fun(Node) ->
                             % in which case update this case please!
                             {error, {index_not_built, Node, Idx, Err}}
                     end;
+                {error, Reason} ->
+                    {error, Reason};
                 {badrpc, _} ->
                     {error, {badrpc, Node}}
             end
