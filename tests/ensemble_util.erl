@@ -21,6 +21,8 @@
 -module(ensemble_util).
 -compile(export_all).
 
+-define(DEFAULT_RING_SIZE, 16).
+
 -include_lib("eunit/include/eunit.hrl").
 
 build_cluster(Num, Config, NVal) ->
@@ -32,20 +34,44 @@ build_cluster(Num, Config, NVal) ->
     ensemble_util:wait_until_stable(Node, NVal),
     Nodes.
 
-fast_config(NVal) ->
-    fast_config(NVal, 16).
+build_cluster_without_quorum(Num, Config) ->
+    Nodes = rt:deploy_nodes(Num, Config),
+    SetupLogCaptureFun = fun(Node) ->
+       rt:setup_log_capture(Node)
+    end,
+    lists:map(SetupLogCaptureFun, Nodes),
+    Node = hd(Nodes),
+    ok = rpc:call(Node, riak_ensemble_manager, enable, []),
+    _ = rpc:call(Node, riak_core_ring_manager, force_update, []),
+    rt:join_cluster(Nodes),
+    ensemble_util:wait_until_cluster(Nodes),
+    ensemble_util:wait_for_membership(Node),
+    Nodes.
 
-fast_config(NVal, RingSize) ->
-    [{riak_kv, [{anti_entropy_build_limit, {100, 1000}},
-                {anti_entropy_concurrency, 100},
-                {anti_entropy_tick, 100},
-                {anti_entropy, {on, []}},
-                {anti_entropy_timeout, 5000},
-                {storage_backend, riak_kv_memory_backend}]},
+fast_config(NVal) ->
+    fast_config(NVal, ?DEFAULT_RING_SIZE).
+
+fast_config(Nval, RingSize) when is_integer(RingSize) ->
+    fast_config(Nval, RingSize, true);
+fast_config(Nval, EnableAAE) when is_boolean(EnableAAE) ->
+    fast_config(Nval, ?DEFAULT_RING_SIZE, EnableAAE).
+
+fast_config(NVal, RingSize, EnableAAE) ->
+    [config_aae(EnableAAE),
      {riak_core, [{default_bucket_props, [{n_val, NVal}]},
                   {vnode_management_timer, 1000},
                   {ring_creation_size, RingSize},
                   {enable_consensus, true}]}].
+
+config_aae(true) ->
+    {riak_kv, [{anti_entropy_build_limit, {100, 1000}},
+               {anti_entropy_concurrency, 100},
+               {anti_entropy_tick, 100},
+               {anti_entropy, {on, []}},
+               {anti_entropy_timeout, 5000},
+	       {storage_backend, riak_kv_memory_backend}]};
+config_aae(false) ->
+    {riak_kv, [{anti_entropy, {off, []}}]}.
 
 ensembles(Node) ->
     rpc:call(Node, riak_kv_ensembles, ensembles, []).
