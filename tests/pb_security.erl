@@ -767,9 +767,10 @@ crdt_tests([Node|_]=Nodes, PB) ->
 
     %% rt:create_and_activate
     lager:info("Creating bucket types for CRDTs"),
+
     Types = [{<<"counters">>, counter, riakc_counter:to_op(riakc_counter:increment(5, riakc_counter:new()))},
              {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))},
-             {<<"maps">>, map, riakc_map:to_op(riakc_map:add({<<"bar">>, counter}, riakc_map:new()))}],
+             {<<"maps">>, map, riakc_map:to_op(riakc_map:update({<<"bar">>, counter}, fun(In) -> riakc_counter:increment(In) end, riakc_map:new()))}],
     [ begin
           rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
           rt:wait_until_bucket_type_status(BType, active, Nodes),
