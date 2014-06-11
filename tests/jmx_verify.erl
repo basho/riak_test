@@ -50,7 +50,7 @@ confirm() ->
 
     lager:info("perform 5 x  PUT and a GET to increment the stats"),
     lager:info("as the stat system only does calcs for > 5 readings"),
-    
+
     C = rt:httpc(Node1),
     [rt:httpc_write(C, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
     [rt:httpc_read(C, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
@@ -126,32 +126,35 @@ test_supervision() ->
     rt:load_modules_on_nodes([riak_test_lager_backend], [Node]),
     ok = rpc:call(Node, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
     ok = rpc:call(Node, lager, set_loglevel, [riak_test_lager_backend, info]),
-  
+
     lager:info("Now we're capturing logs on the node, let's start jmx"),
     lager:info("calling riak_jmx:start() to get these retries started"),
     rpc:call(Node, riak_jmx, start, []),
 
-    timer:sleep(40000), %% wait 2000 millis per restart + fudge factor
-    Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
-
     lager:info("It can fail, it can fail 10 times"),
 
-    RetryCount = lists:foldl(
-        fun(Log, Sum) -> 
+    rt:wait_until(retry_check_fun(Node)),
+    rt:stop(Node),
+    ok_ok.
+
+retry_check_fun(Node) ->
+    fun() ->
+            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+             10 =:= lists:foldl(log_fold_fun(), 0, Logs)
+    end.
+
+log_fold_fun() ->
+    fun(Log, Sum) ->
             try case re:run(Log, "JMX server monitor .* exited with code .*\. Retry #.*", []) of
                     {match, _} -> 1 + Sum;
                     _ -> Sum
                 end
             catch
-            Err:Reason ->
-                lager:error("jmx supervision re:run failed w/ ~p: ~p", [Err, Reason]),
-                Sum
+                Err:Reason ->
+                    lager:error("jmx supervision re:run failed w/ ~p: ~p", [Err, Reason]),
+                    Sum
             end
-        end, 
-        0, Logs),
-    ?assertEqual({retry_count, RetryCount}, {retry_count, 10}),
-    rt:stop(Node),
-    ok_ok.
+    end.
 
 test_application_stop() ->
     lager:info("Testing application:stop()"),
@@ -174,7 +177,7 @@ test_application_stop() ->
             false
         end
     end),
-    
+
     rpc:call(Node, riak_jmx, stop, ["Stopping riak_jmx"]),
     timer:sleep(20000),
     case net_adm:ping(Node) of
@@ -211,7 +214,7 @@ jmx_jar_path() ->
     filename:join([DepsPath, RiakJMX, "priv", "riak_jmx.jar"]).
 
 jmx_dump_cmd(IP, Port) ->
-    io_lib:format("java -cp ~s com.basho.riak.jmx.Dump ~s ~p", 
+    io_lib:format("java -cp ~s com.basho.riak.jmx.Dump ~s ~p",
         [jmx_jar_path(), IP, Port]).
 
 jmx_dump(Cmd) ->
