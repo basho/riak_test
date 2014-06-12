@@ -528,7 +528,6 @@ start_and_wait_until_fullsync_complete(Node, Retries) ->
         _  when Retries > 0 ->
             ?assertEqual(ok, wait_until_connection(Node)),
             lager:warning("Node failed to fullsync, retrying"),
-            rpc:call(Node, riak_repl_console, cancel_fullsync, [[]]),
             start_and_wait_until_fullsync_complete(Node, Retries-1)
     end,
     lager:info("Fullsync on ~p complete", [Node]).
