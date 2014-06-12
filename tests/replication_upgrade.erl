@@ -85,7 +85,7 @@ confirm() ->
                                %% connection before proceeding.
                                case lists:member(Node, ANodes) of
                                    true ->
-                                       repl_util:wait_for_connection(Node, "B");
+                                       replication:wait_until_connection(Node);
                                    false ->
                                        ok
                                end,
