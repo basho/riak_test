@@ -40,11 +40,11 @@ confirm() ->
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
                 {certfile, filename:join([CertDir,
-                            "site1/basho.com/cert.pem"])},
+                            "site1.basho.com/cert.pem"])},
                 {keyfile, filename:join([CertDir,
                             "site1.basho.com/key.pem"])},
                 {cacertdir, filename:join([CertDir,
-                            "site1.basho.com/cacerts.pem"])}
+                            "site1.basho.com"])}
             ]}
     ],
 
@@ -59,7 +59,7 @@ confirm() ->
                 {keyfile, filename:join([CertDir,
                             "site2.basho.com/key.pem"])},
                 {cacertdir, filename:join([CertDir,
-                            "site2.basho.com/cacerts.pem"])}
+                            "site2.basho.com"])}
             ]}
     ],
 
@@ -74,7 +74,7 @@ confirm() ->
                 {keyfile, filename:join([CertDir,
                             "site3.basho.com/key.pem"])},
                 {cacertdir, filename:join([CertDir,
-                            "site3.basho.com/cacerts.pem"])}
+                            "site3.basho.com"])}
             ]}
     ],
 
@@ -91,7 +91,7 @@ confirm() ->
                 {keyfile, filename:join([CertDir,
                             "site3.basho.com/key.pem"])},
                 {cacertdir, filename:join([CertDir,
-                            "site3.basho.com/cacerts.pem"])}
+                            "site3.basho.com"])}
             ]}
     ],
 
@@ -107,7 +107,7 @@ confirm() ->
                 {keyfile, filename:join([CertDir,
                             "site4.basho.com/key.pem"])},
                 {cacertdir, filename:join([CertDir,
-                            "site4.basho.com/cacerts.pem"])}
+                            "site4.basho.com"])}
             ]}
     ],
 
@@ -260,7 +260,3 @@ test_connection({Node1, Config1}, {Node2, Config2}) ->
     rt:wait_for_service(Node2, riak_kv),
     timer:sleep(5000),
     replication:wait_until_connection(Node1).
-
-
-
-
