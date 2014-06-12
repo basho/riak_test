@@ -17,7 +17,7 @@ confirm() ->
     application:start(ssl),
     application:start(inets),
 
-    CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/pb_security_certs",
 
     %% make a bunch of crypto keys
     make_certs:rootCA(CertDir, "rootCA"),
