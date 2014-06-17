@@ -172,7 +172,6 @@ setup_cluster(NumNodes) ->
          rt:wait_until_bucket_type_status(BucketType, active, Nodes),
          rt:wait_until_bucket_type_visible(Nodes, BucketType)
      end || {BucketType, NVal} <- bucket_types()],
-     [disable_aae(DisableNode) || DisableNode <- Nodes ],
     Nodes.
 
 assert_equal(Expected, Actual) ->
@@ -189,9 +188,6 @@ bucket_types() ->
      {<<"n_val_three">>, 3},
      {<<"n_val_four">>, 4},
      {<<"n_val_five">>, 5}].
-
-disable_aae(Node) ->
-    rpc:call(Node, riak_kv_entropy_manager, disable, []).
 
 expected_keys(NumKeys, FilterFun) ->
     KeysPair = {ok, [list_to_binary(["", integer_to_list(Ki)]) ||
