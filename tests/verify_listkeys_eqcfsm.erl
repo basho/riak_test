@@ -13,7 +13,7 @@
 -define(PREFIX, {x, x}).
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
-
+-define(MAX_CLUSTER_SIZE, 5).
 -record(state, {
           bucket_type = undefined,
           bucket = undefined,
@@ -33,9 +33,6 @@ confirm() ->
 %% ====================================================================
 %% EQC generators
 %% ====================================================================
-g_num_nodes() ->
-    oneof([2, 3, 4, 5]).
-
 g_num_keys() ->
     choose(10, 1000).
 
@@ -69,41 +66,32 @@ prop_test() ->
                end,
                ?TRAPEXIT(
                   begin
-                      lager:info("======================== Will run commands:"),
+                      Nodes = setup_cluster(random:uniform(?MAX_CLUSTER_SIZE)),
+                      lager:info("======================== Will run commands with Nodes:~p:", [Nodes]),
                       [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
-                      {H, S, Res} = run_commands(?MODULE, Cmds),
+                      {H, _S, Res} = run_commands(?MODULE, Cmds, [{nodelist, Nodes}]),
                       lager:info("======================== Ran commands"),
-                      clean_nodes(S),
+                      rt:clean_cluster(Nodes),
                       aggregate(zip(state_names(H),command_names(Cmds)), 
                           equals(Res, ok))
-                  end))).
+                 end))).
 
 %% ====================================================================
 %% EQC FSM state transitions
 %% ====================================================================
 initial_state() ->
-    building_cluster.
+    preloading_data.
 
-building_cluster(_S) ->
+preloading_data(_S) ->
     [
-     {preloading_data, {call, ?MODULE, setup_cluster, [g_num_nodes()]}}
-    ].
-
-preloading_data(S) ->
-    [
-     {verifying_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), hd(S#state.nodes_up),
-                                                      g_num_keys(), g_key_filter()]}}
+     {verifying_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), {var, nodelist},
+                                                     g_num_keys(), g_key_filter()]}}
     ].
 
 verifying_data(S) ->
     [
-     {tearing_down_nodes, {call, ?MODULE, verify, [S#state.bucket_type, S#state.bucket, S#state.nodes_up,
+     {stopped, {call, ?MODULE, verify, [S#state.bucket_type, S#state.bucket, S#state.nodes_up,
                                                    S#state.num_keys, S#state.key_filter]}}
-    ].
-
-tearing_down_nodes(S) ->
-    [
-     {stopped, {call, ?MODULE, clean_nodes, [S#state.nodes_up]}}
     ].
 
 stopped(_S) ->
@@ -115,11 +103,10 @@ stopped(_S) ->
 initial_state_data() ->
     #state{}.
 
-next_state_data(building_cluster, preloading_data, S, _, {call, _, setup_cluster, [NumNodes]}) ->
-    S#state{ nodes_up = node_list(NumNodes) };
 next_state_data(preloading_data, verifying_data, S, _, {call, _, preload_data, 
-                                                            [{BucketType, _}, Bucket, _Nodes, NumKeys, KeyFilter]}) ->
-    S#state{ bucket_type = BucketType, bucket = Bucket, num_keys = NumKeys, key_filter = KeyFilter };
+                [{BucketType, _}, Bucket, Nodes, NumKeys, KeyFilter]}) ->
+    S#state{ bucket_type = BucketType, bucket = Bucket, num_keys = NumKeys, key_filter = KeyFilter,
+             nodes_up = Nodes };
 next_state_data(_From, _To, S, _R, _C) ->
     S.
 
@@ -132,8 +119,8 @@ precondition(_From,_To,_S,{call,_,_,_}) ->
 %% ====================================================================
 %% EQC FSM postconditions
 %% ====================================================================
-postcondition(_From,_To,_S,{call,_,setup_cluster,_},Res) ->
-    ok == Res;
+%postcondition(_From,_To,_S,{call,_,setup_cluster,_},Res) ->
+%    ok == Res;
 postcondition(_From,_To,_S,{call,_,verify,_},{error, Reason}) ->
     lager:info("Error: ~p", [Reason]),
     false;
@@ -147,11 +134,6 @@ postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
 %% ====================================================================
 %% callback functions
 %% ====================================================================
-clean_nodes({stopped, _S}) ->
-    lager:info("Clean-up already completed.");
-clean_nodes({_, S}) ->
-    lager:info("Running clean_nodes with S:~p", [S]),
-    clean_nodes(S#state.nodes_up);
 clean_nodes([]) ->
     lager:info("clean_nodes: no cluster to clean");
 clean_nodes(Nodes) ->
@@ -165,23 +147,12 @@ clean_nodes(Nodes) ->
     rt:pmap(CleanupFun, Nodes),
     rt:teardown().
 
-preload_data({BucketType, _}, Bucket, Node, NumKeys, _KeyFilter) ->
+preload_data({BucketType, _}, Bucket, Nodes, NumKeys, _KeyFilter) ->
+    lager:info("Nodes: ~p", [Nodes]),
+    Node = hd(Nodes),
     lager:info("*******************[CMD]  First node ~p", [Node]),
     lager:info("Writing to bucket ~p", [Bucket]),
     put_keys(Node, {BucketType, Bucket}, NumKeys).
-
-setup_cluster(NumNodes) ->
-    lager:info("Deploying cluster of size ~p", [NumNodes]),
-    Nodes = rt:build_cluster(NumNodes),
-    rt:wait_until_nodes_ready(Nodes),
-    Node = hd(Nodes),
-    rt:wait_until_transfers_complete(Nodes),
-    [begin
-         rt:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
-         rt:wait_until_bucket_type_status(BucketType, active, Nodes),
-         rt:wait_until_bucket_type_visible(Nodes, BucketType)
-     end || {BucketType, NVal} <- bucket_types()],
-    ok.
 
 verify(BucketType, Bucket, Nodes, _NumKeys, KeyFilter) ->
     [list_filter_sort(Node, {BucketType, Bucket}, KeyFilter) || Node <- Nodes].
@@ -189,6 +160,21 @@ verify(BucketType, Bucket, Nodes, _NumKeys, KeyFilter) ->
 %% ====================================================================
 %% Helpers
 %% ====================================================================
+setup_cluster(NumNodes) ->
+    lager:info("Deploying cluster of size ~p", [NumNodes]),
+    Nodes = rt:build_cluster(NumNodes),
+    lager:info("Deployed cluster of size ~p", [NumNodes]),
+    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, rt:wait_until_transfers_complete(Nodes)),
+    Node = hd(Nodes),
+    [begin
+         rt:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
+         rt:wait_until_bucket_type_status(BucketType, active, Nodes),
+         rt:wait_until_bucket_type_visible(Nodes, BucketType)
+     end || {BucketType, NVal} <- bucket_types()],
+     [disable_aae(DisableNode) || DisableNode <- Nodes ],
+    Nodes.
+
 assert_equal(Expected, Actual) ->
     case Expected -- Actual of
         [] -> ok;
@@ -203,6 +189,9 @@ bucket_types() ->
      {<<"n_val_three">>, 3},
      {<<"n_val_four">>, 4},
      {<<"n_val_five">>, 5}].
+
+disable_aae(Node) ->
+    rpc:call(Node, riak_kv_entropy_manager, disable, []).
 
 expected_keys(NumKeys, FilterFun) ->
     KeysPair = {ok, [list_to_binary(["", integer_to_list(Ki)]) ||
