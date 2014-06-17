@@ -134,19 +134,6 @@ postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
 %% ====================================================================
 %% callback functions
 %% ====================================================================
-clean_nodes([]) ->
-    lager:info("clean_nodes: no cluster to clean");
-clean_nodes(Nodes) ->
-    lager:info("Running clean_nodes with Nodes:~p", [Nodes]),
-    CleanupFun =
-       fun(N) ->
-           lager:info("Wiping out node ~p for good", [N]),
-                      rt:clean_data_dir(N)
-       end,
-    lager:info("======================== Taking all nodes down ~p", [Nodes]),
-    rt:pmap(CleanupFun, Nodes),
-    rt:teardown().
-
 preload_data({BucketType, _}, Bucket, Nodes, NumKeys, _KeyFilter) ->
     lager:info("Nodes: ~p", [Nodes]),
     Node = hd(Nodes),
