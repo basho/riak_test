@@ -196,10 +196,10 @@ wait_until_fullsync_stopped(SourceLeader) ->
 wait_for_reads(Node, Start, End, Bucket, R) ->
     rt:wait_until(Node,
         fun(_) ->
-                Reads = rt:systest_read(Node, Start, End, Bucket, R),
+                Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
                 Reads == []
         end),
-    Reads = rt:systest_read(Node, Start, End, Bucket, R),
+    Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
     lager:info("Reads: ~p", [Reads]),
     length(Reads).
 
@@ -542,7 +542,7 @@ read_from_cluster(Node, Start, End, Bucket, Errors) ->
 %%      of errors.
 read_from_cluster(Node, Start, End, Bucket, Errors, Quorum) ->
     lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
-    Res2 = rt:systest_read(Node, Start, End, Bucket, Quorum),
+    Res2 = rt:systest_read(Node, Start, End, Bucket, Quorum, <<>>, true),
     ?assertEqual(Errors, length(Res2)).
 
 %% @doc Assert we can perform one fullsync cycle, and that the number of
