@@ -1158,7 +1158,7 @@ object_value(_ValueCount, Obj, false) ->
 object_value(_ValueCount, Obj, true) ->
     lager:debug("Siblings detected for ~p:~p", [riak_object:bucket(Obj), riak_object:key(Obj)]),
     Contents = riak_object:get_contents(Obj),
-    case lists:foldl(sibling_compare_fun(), {true, undefined}, Contents) of
+    case lists:foldl(fun sibling_compare/2, {true, undefined}, Contents) of
         {true, {_, _, _, Value}} ->
             lager:debug("Siblings determined to be a single value"),
             Value;
@@ -1166,31 +1166,29 @@ object_value(_ValueCount, Obj, true) ->
             {error, siblings}
     end.
 
-sibling_compare_fun() ->
-    fun({MetaData, Value}, {true, undefined}) ->
-            Dot = case dict:find(<<"dot">>, MetaData) of
-                      {ok, DotVal} ->
-                          DotVal;
-                      error ->
-                          {error, no_dot}
-                  end,
-            VTag = dict:fetch(<<"X-Riak-VTag">>, MetaData),
-            LastMod = dict:fetch(<<"X-Riak-Last-Modified">>, MetaData),
-            {true, {element(2, Dot), VTag, LastMod, Value}};
-       (_, {false, _}=InvalidMatch) ->
-            InvalidMatch;
-       ({MetaData, Value}, {true, PreviousElements}) ->
-            Dot = case dict:find(<<"dot">>, MetaData) of
-                      {ok, DotVal} ->
-                          DotVal;
-                      error ->
-                          {error, no_dot}
-                  end,
-            VTag = dict:fetch(<<"X-Riak-VTag">>, MetaData),
-            LastMod = dict:fetch(<<"X-Riak-Last-Modified">>, MetaData),
-            ComparisonElements = {element(2, Dot), VTag, LastMod, Value},
-            {ComparisonElements =:= PreviousElements, ComparisonElements}
-    end.
+sibling_compare({MetaData, Value}, {true, undefined}) ->
+    Dot = case dict:find(<<"dot">>, MetaData) of
+              {ok, DotVal} ->
+                  DotVal;
+              error ->
+                  {error, no_dot}
+          end,
+    VTag = dict:fetch(<<"X-Riak-VTag">>, MetaData),
+    LastMod = dict:fetch(<<"X-Riak-Last-Modified">>, MetaData),
+    {true, {element(2, Dot), VTag, LastMod, Value}};
+sibling_compare(_, {false, _}=InvalidMatch) ->
+    InvalidMatch;
+sibling_compare({MetaData, Value}, {true, PreviousElements}) ->
+    Dot = case dict:find(<<"dot">>, MetaData) of
+              {ok, DotVal} ->
+                  DotVal;
+              error ->
+                  {error, no_dot}
+          end,
+    VTag = dict:fetch(<<"X-Riak-VTag">>, MetaData),
+    LastMod = dict:fetch(<<"X-Riak-Last-Modified">>, MetaData),
+    ComparisonElements = {element(2, Dot), VTag, LastMod, Value},
+    {ComparisonElements =:= PreviousElements, ComparisonElements}.
 
 value_matches(<<N:32/integer, CommonValBin/binary>>, N, CommonValBin) ->
     true;
