@@ -21,6 +21,8 @@
 -module(ensemble_vnode_crash).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+-compile({parse_transform, rt_intercept_pt}).
+-define(M, riak_kv_ensemble_backend_orig).
 
 confirm() ->
     NumNodes = 5,
@@ -52,11 +54,27 @@ confirm() ->
     lager:info("Read keys to verify they exist"),
     [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
+    %% Setting up intercept to ensure that
+    %% riak_kv_ensemble_backend:handle_down/4 gets called when a vnode or vnode
+    %% proxy crashes for a given key
+    lager:info("Adding Intercept for riak_kv_ensemble_backend:handle_down/4"),
+    Self = self(),
+    rt_intercept:add(Node, {riak_kv_ensemble_backend, [{{handle_down, 4},
+        {[Self],
+        fun(Ref, Pid, Reason, State) ->
+            Self ! {handle_down, Reason},
+            ?M:maybe_async_update_orig(Ref, Pid, Reason, State)
+        end}}]}),
+
     {ok, VnodePid} =rpc:call(Key1Node, riak_core_vnode_manager, get_vnode_pid,
         [Key1Idx, riak_kv_vnode]),
     lager:info("Killing Vnode ~p for Key1 {~p, ~p}", [VnodePid, Key1Node,
             Key1Idx]),
     true = rpc:call(Key1Node, erlang, exit, [VnodePid, testkill]),
+
+    lager:info("Waiting to receive msg indicating downed vnode"),
+    Count = wait_for_all_handle_downs(0),
+    ?assert(Count > 0),
 
     lager:info("Wait for stable ensembles"),
     ensemble_util:wait_until_stable(Node, NVal),
@@ -70,9 +88,21 @@ confirm() ->
     lager:info("Killing Vnode Proxy ~p", [Proxy]),
     true = rpc:call(Key1Node, erlang, exit, [ProxyPid, testkill]),
 
+    lager:info("Waiting to receive msg indicating downed vnode proxy:"),
+    Count2 = wait_for_all_handle_downs(0),
+    ?assert(Count2 > 0),
+
     lager:info("Wait for stable ensembles"),
     ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Re-reading keys"),
     [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     pass.
+
+wait_for_all_handle_downs(Count) ->
+    receive
+        {handle_down, _} ->
+            wait_for_all_handle_downs(Count+1)
+    after 5000 ->
+            Count
+    end.
