@@ -119,8 +119,6 @@ precondition(_From,_To,_S,{call,_,_,_}) ->
 %% ====================================================================
 %% EQC FSM postconditions
 %% ====================================================================
-%postcondition(_From,_To,_S,{call,_,setup_cluster,_},Res) ->
-%    ok == Res;
 postcondition(_From,_To,_S,{call,_,verify,_},{error, Reason}) ->
     lager:info("Error: ~p", [Reason]),
     false;
