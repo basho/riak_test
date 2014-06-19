@@ -18,6 +18,7 @@
          start_and_wait_until_fullsync_complete/1,
          start_and_wait_until_fullsync_complete/2,
          start_and_wait_until_fullsync_complete/3,
+         start_and_wait_until_fullsync_complete/4,
          connect_cluster/3,
          disconnect_cluster/2,
          wait_for_connection/2,
@@ -216,51 +217,67 @@ start_and_wait_until_fullsync_complete(Node, Cluster) ->
     start_and_wait_until_fullsync_complete(Node, Cluster, undefined).
 
 start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid) ->
+    start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, 20).
+
+start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
     Count0 = proplists:get_value(server_fullsyncs, Status0),
-    Count = case Cluster of
-                undefined ->
-                    %% count the # of fullsync enabled clusters
-                    Count0 + length(string:tokens(proplists:get_value(fullsync_enabled,
-                                                        Status0), ", "));
-                _ ->
-                    Count0 + 1
-            end,
+    Count = fullsync_count(Count0, Status0, Cluster),
+
     lager:info("Waiting for fullsync count to be ~p", [Count]),
 
     lager:info("Starting fullsync on: ~p", [Node]),
-    Args = case Cluster of
-               undefined ->
-                   ["start"];
-               _ ->
-                   ["start", Cluster]
-           end,
-    rpc:call(Node, riak_repl_console, fullsync, [Args]),
+    rpc:call(Node, riak_repl_console, fullsync, [fullsync_start_args(Cluster)]),
+
     %% sleep because of the old bug where stats will crash if you call it too
     %% soon after starting a fullsync
     timer:sleep(500),
 
     %% Send message to process and notify fullsync has began.
-    case NotifyPid of
-        undefined ->
+    fullsync_notify(NotifyPid),
+
+    case rt:wait_until(make_fullsync_wait_fun(Node, Count), 100, 1000) of
+        ok ->
             ok;
-        NotifyPid ->
-            NotifyPid ! fullsync_started
+        _  when Retries > 0 ->
+            ?assertEqual(ok, wait_until_connection(Node)),
+            lager:warning("Node failed to fullsync, retrying"),
+            start_and_wait_until_fullsync_complete(Node, Retries-1)
     end,
-
-    Res = rt:wait_until(Node,
-        fun(_) ->
-                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-                case proplists:get_value(server_fullsyncs, Status) of
-                    C when C >= Count ->
-                        true;
-                    _ ->
-                        false
-                end
-        end),
-    ?assertEqual(ok, Res),
-
     lager:info("Fullsync on ~p complete", [Node]).
+
+fullsync_count(Count, Status, undefined) ->
+    %% count the # of fullsync enabled clusters
+    FullSyncClusters = proplists:get_value(fullsync_enabled, Status),
+    Count + length(string:tokens(FullSyncClusters, ", "));
+fullsync_count(Count, _Status, _Cluster) ->
+      Count + 1.
+
+fullsync_start_args(undefined) ->
+    ["start"];
+fullsync_start_args(Cluster) ->
+    ["start", Cluster].
+
+fullsync_notify(NotifyPid) when is_pid(NotifyPid) ->
+            NotifyPid ! fullsync_started;
+fullsync_notify(_) ->
+    ok.
+
+make_fullsync_wait_fun(Node, Count) ->
+    fun() ->
+            Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+            case Status of
+                {badrpc, _} ->
+                    false;
+                _ ->
+                    case proplists:get_value(server_fullsyncs, Status) of
+                        C when C >= Count ->
+                            true;
+                        _ ->
+                            false
+                    end
+            end
+    end.
 
 connect_cluster(Node, IP, Port) ->
     Res = rpc:call(Node, riak_repl_console, connect,
