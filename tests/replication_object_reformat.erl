@@ -60,33 +60,33 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
     case Realtime of
         true ->
             spawn(fun() ->
-		    lager:info("Running kv_reformat to downgrade to v0 on ~p",
-			       [BFirst]),
-		    {_, _, Error} = rpc:call(BFirst,
-					     riak_kv_reformat,
-					     run,
-					     [v0, [{kill_handoffs, false}]]),
-		    ?assertEqual(0, Error),
+                          lager:info("Running kv_reformat to downgrade to v0 on ~p",
+                                     [BFirst]),
+                          {_, _, Error1} = rpc:call(BFirst,
+                                                    riak_kv_reformat,
+                                                    run,
+                                                    [v0, [{kill_handoffs, false}]]),
+                          ?assertEqual(0, Error1),
 
-		    lager:info("Waiting for all nodes to see the v0 capability."),
-		    [rt:wait_until_capability(N, {riak_kv, object_format}, v0, v0)
-		     || N <- BNodes],
+                          lager:info("Waiting for all nodes to see the v0 capability."),
+                          [rt:wait_until_capability(N, {riak_kv, object_format}, v0, v0)
+                           || N <- BNodes],
 
-		    lager:info("Allowing downgrade and writes to occurr concurrently."),
-                    Me ! continue,
+                          lager:info("Allowing downgrade and writes to occurr concurrently."),
+                          Me ! continue,
 
-		    lager:info("Downgrading node ~p to previous.",
-			       [BFirst]),
-		    rt:upgrade(BFirst, previous),
+                          lager:info("Downgrading node ~p to previous.",
+                                     [BFirst]),
+                          rt:upgrade(BFirst, previous),
 
-		    lager:info("Waiting for riak_kv to start on node ~p.",
-			       [BFirst]),
-		    rt:wait_for_service(BFirst, riak_kv)
-	    end),
+                          lager:info("Waiting for riak_kv to start on node ~p.",
+                                     [BFirst]),
+                          rt:wait_for_service(BFirst, [riak_kv])
+                  end),
             ok;
         _ ->
             ok
-    end, 
+    end,
 
     %% Pause and wait for rolling upgrade to begin, if it takes too
     %% long, proceed anyway and the test will fail when it attempts
@@ -94,7 +94,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
     receive
         continue ->
             ok
-        after 60000 ->
+    after 60000 ->
             ok
     end,
 
@@ -112,6 +112,12 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
 
     lager:info("Verify we can read the keys on the source."),
     repl_util:read_from_cluster(AFirst, Start, End, ?TEST_BUCKET, 0, ?N),
+
+    %% Wait until the sink cluster is in a steady state before
+    %% starting fullsync
+    rt:wait_until_nodes_ready(BNodes),
+    rt:wait_until_no_pending_changes(BNodes),
+    rt:wait_until_registered(BFirst, riak_repl2_fs_node_reserver),
 
     repl_util:validate_completed_fullsync(
         LeaderA, BFirst, "B", Start, End, ?TEST_BUCKET),
