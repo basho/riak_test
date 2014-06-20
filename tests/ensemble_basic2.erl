@@ -36,9 +36,10 @@ confirm() ->
     ensemble_util:wait_until_stable(Node, NVal),
     Peers = [PeerId || {PeerId, _PeerPid} <- ensemble_util:peers(Node)],
     lager:info("Verifying peers wait for riak_kv_service"),
-    rt_intercept:add_and_save(Node, {riak_kv_vnode, [{{init, 1}, {[],
+    Delay = rt_config:get(kv_vnode_delay, 5000),
+    rt_intercept:add_and_save(Node, {riak_kv_vnode, [{{init, 1}, {[Delay],
                               fun(Args) ->
-                                      timer:sleep(5000),
+                                      timer:sleep(Delay),
                                       riak_kv_vnode_orig:init_orig(Args)
                               end}}]}),
     rt:stop_and_wait(Node),
@@ -46,6 +47,9 @@ confirm() ->
     lager:info("Polling peers while riak_kv starts. We should see none"),
     UpNoPeersFun =
         fun() ->
+                PL = ensemble_util:peers(Node),
+                NodePeers = [P || {P, _} <- PL],
+                NonRootPeers = [P || P <- NodePeers, element(1, P) /= root],
                 S = rpc:call(Node, riak_core_node_watcher, services, [Node]),
                 case S of
                     L when is_list(L) ->
@@ -53,11 +57,6 @@ confirm() ->
                             true ->
                                 true;
                             false ->
-                                PL = ensemble_util:peers(Node),
-                                NodePeers = [P || {P, _} <- PL],
-                                NonRootPeers =
-                                    [P || P <- NodePeers,
-                                          element(1, P) /= root],
                                 ?assertEqual([], NonRootPeers)
                         end;
                     Err ->
