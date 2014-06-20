@@ -79,6 +79,9 @@ ensembles(Node) ->
 get_leader_pid(Node, Ensemble) ->
     rpc:call(Node, riak_ensemble_manager, get_leader_pid, [Ensemble]).
 
+peers(Node) ->
+    rpc:call(Node, riak_ensemble_peer_sup, peers, []).
+
 kill_leader(Node, Ensemble) ->
     case get_leader_pid(Node, Ensemble) of
         undefined ->
