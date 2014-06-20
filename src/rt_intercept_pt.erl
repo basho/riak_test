@@ -66,7 +66,8 @@ form({clause,L,H,G,B}) ->
     {clause,L,H,G,forms(B)};
 form({match,L,Lhs,Rhs}) ->
     {match,L,forms(Lhs),forms(Rhs)};
-form({call,L,{remote,_,{atom,_,rt_intercept},{atom,_,add}}=Fun,Args}) ->
+form({call,L,{remote,_,{atom,_,rt_intercept},{atom,_,AddFunction}}=Fun,Args})
+  when AddFunction == add; AddFunction == add_and_save ->
     [Node, Intercept] = Args,
     {call,L,Fun,[Node,intercept(Intercept)]};
 form(F) when is_tuple(F) ->

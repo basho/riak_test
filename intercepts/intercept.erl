@@ -1,8 +1,8 @@
 -module(intercept).
 %% Export explicit API but also send compile directive to export all
-%% becuase some of these private functions are useful in their own
+%% because some of these private functions are useful in their own
 %% right.
--export([add/3]).
+-export([add/3, add/4]).
 -compile(export_all).
 
 -type abstract_code() :: term().
@@ -35,7 +35,7 @@
 %%
 %%             E.g. `[{{update_perform,2}, sleep_update_perform}]'
 -spec add(module(), module(), mapping()) -> ok.
-add(Target, Intercept, Mapping) ->
+add(Target, Intercept, Mapping, OutDir) ->
     Original = ?ORIGINAL(Target),
     TargetAC = get_abstract_code(Target),
 
@@ -43,16 +43,22 @@ add(Target, Intercept, Mapping) ->
                                        Original, TargetAC),
     OrigAC = make_orig_abstract_code(Target, Original, TargetAC),
 
-    ok = compile_and_load(Original, OrigAC),
-    ok = compile_and_load(Target, ProxyAC).
+    ok = compile_and_load(Original, OrigAC, OutDir),
+    ok = compile_and_load(Target, ProxyAC, OutDir).
+
+add(Target, Intercept, Mapping) ->
+    add(Target, Intercept, Mapping, undefined).
 
 %% @private
 %%
 %% @doc Compile the abstract code `AC' and load it into the code server.
--spec compile_and_load(module(), abstract_code()) -> ok.
-compile_and_load(Module, AC) ->
+-spec compile_and_load(module(), abstract_code(), undefined | string()) -> ok.
+compile_and_load(Module, AC, OutDir) ->
     {ok, Module, Bin} = compile:forms(AC,[debug_info]),
-    {module, Module} = code:load_binary(Module, atom_to_list(Module), Bin),
+    ModStr = atom_to_list(Module),
+    _ = is_list(OutDir) andalso
+        file:write_file(filename:join(OutDir, ModStr ++ ".beam"), Bin),
+    {module, Module} = code:load_binary(Module, ModStr, Bin),
     ok.
 
 %% @private
