@@ -46,16 +46,24 @@ load_code(Node) ->
     [ok = remote_compile_and_load(Node, F) || F <- intercept_files()],
     ok.
 
-add(Node, Intercepts) when is_list(Intercepts) ->
-    [ok = add(Node, I) || I <- Intercepts],
+add_and_save(Node, Intercepts) ->
+    CodePaths = rpc:call(Node, code, get_path, []),
+    [PatchesDir] = [P || P <- CodePaths, lists:suffix("basho-patches", P)],
+    add(Node, Intercepts, PatchesDir).
+
+add(Node, Intercepts) ->
+    add(Node, Intercepts, undefined).
+
+add(Node, Intercepts, OutDir) when is_list(Intercepts) ->
+    [ok = add(Node, I, OutDir) || I <- Intercepts],
     ok;
 
-add(Node, {Target, Mapping}) ->
-    add(Node, {Target, ?DEFAULT_INTERCEPT(Target), Mapping});
+add(Node, {Target, Mapping}, OutDir) ->
+    add(Node, {Target, ?DEFAULT_INTERCEPT(Target), Mapping}, OutDir);
 
-add(Node, {Target, Intercept, Mapping}) ->
+add(Node, {Target, Intercept, Mapping}, OutDir) ->
     NMapping = [transform_anon_fun(M) || M <- Mapping],
-    ok = rpc:call(Node, intercept, add, [Target, Intercept, NMapping]).
+    ok = rpc:call(Node, intercept, add, [Target, Intercept, NMapping, OutDir]).
 
 %% The following function transforms anonymous function mappings passed
 %% from an Erlang shell. Anonymous intercept functions from compiled code
