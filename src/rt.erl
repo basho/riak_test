@@ -1319,6 +1319,12 @@ pbc_write(Pid, Bucket, Key, Value) ->
     Object = riakc_obj:new(Bucket, Key, Value),
     riakc_pb_socket:put(Pid, Object).
 
+%% @doc does a write via the erlang protobuf client plus content-type
+-spec pbc_write(pid(), binary(), binary(), binary(), list()) -> atom().
+pbc_write(Pid, Bucket, Key, Value, CT) ->
+    Object = riakc_obj:new(Bucket, Key, Value, CT),
+    riakc_pb_socket:put(Pid, Object).
+
 %% @doc sets a bucket property/properties via the erlang protobuf client
 -spec pbc_set_bucket_prop(pid(), binary(), [proplists:property()]) -> atom().
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
