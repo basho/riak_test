@@ -1741,7 +1741,7 @@ expect_in_log(Node, Pattern) ->
 %% Non-optimal check, because we're blocking for the gen_server to start
 %% to ensure that the routes have been added by the supervisor.
 %%
-wait_for_control(Vsn, Node) when is_atom(Node) ->
+wait_for_control(_Vsn, Node) when is_atom(Node) ->
     lager:info("Waiting for riak_control to start on node ~p.", [Node]),
 
     %% Wait for the gen_server.
@@ -1758,12 +1758,7 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                 end
         end),
 
-    GuiResource = case Vsn of
-        legacy ->
-            admin_gui;
-        _ ->
-            riak_control_wm_gui
-    end,
+    lager:info("Waiting for routes to be added to supervisor..."),
 
     %% Wait for routes to be added by supervisor.
     rt:wait_until(Node, fun(N) ->
@@ -1775,7 +1770,7 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                         lager:info("Error was ~p.", [Error]),
                         false;
                     Routes ->
-                        case lists:keyfind(GuiResource, 2, Routes) of
+                        case is_control_gui_route_loaded(Routes) of
                             false ->
                                 false;
                             _ ->
@@ -1783,6 +1778,10 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                         end
                 end
         end).
+
+%% @doc Is the riak_control GUI route loaded?
+is_control_gui_route_loaded(Routes) ->
+    lists:keymember(admin_gui, 2, Routes) orelse lists:keymember(riak_control_wm_gui, 2, Routes).
 
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
