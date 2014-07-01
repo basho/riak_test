@@ -15,12 +15,10 @@
 -define(DEV(N), list_to_atom(?DEVS(N))).
 -define(MAX_CLUSTER_SIZE, 5).
 -record(state, {
-          bucket_type = undefined,
-          bucket = undefined,
+          buckets = orddict:new(),
           nodes_up = [],
           nodes_down = [],
           cluster_nodes = [],
-          num_keys = 0,
           key_filter = undefined
        }).
 
@@ -82,16 +80,18 @@ prop_test() ->
 initial_state() ->
     preloading_data.
 
-preloading_data(_S) ->
+preloading_data(S) ->
     [
-     {verifying_data, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), {var, nodelist},
-                                                     g_num_keys(), g_key_filter()]}}
+     {history, {call, ?MODULE, preload_data, [g_bucket_type(), g_uuid(), {var, nodelist},
+                                              g_num_keys(), g_key_filter()]}},
+     {verifying_data, {call, ?MODULE, log_transition, [S]}}
     ].
 
 verifying_data(S) ->
     [
-     {stopped, {call, ?MODULE, verify, [S#state.bucket_type, S#state.bucket, S#state.nodes_up,
-                                                   S#state.num_keys, S#state.key_filter]}}
+     {stopped, {call, ?MODULE, verify, [S#state.buckets, 
+                                        S#state.nodes_up,
+                                        S#state.key_filter]}}
     ].
 
 stopped(_S) ->
@@ -103,12 +103,21 @@ stopped(_S) ->
 initial_state_data() ->
     #state{}.
 
-next_state_data(preloading_data, verifying_data, S, _, {call, _, preload_data, 
-                [{BucketType, _}, Bucket, Nodes, NumKeys, KeyFilter]}) ->
-    S#state{ bucket_type = BucketType, bucket = Bucket, num_keys = NumKeys, key_filter = KeyFilter,
-             nodes_up = Nodes };
+next_state_data(preloading_data, preloading_data, S, _, {call, _, preload_data, 
+                    [{BucketType, _}, Bucket, Nodes, NumKeys, KeyFilter]}) ->
+    S#state{ buckets = orddict:update_counter({Bucket, BucketType}, NumKeys, S#state.buckets), 
+             key_filter = KeyFilter,
+             nodes_up = Nodes 
+    };
 next_state_data(_From, _To, S, _R, _C) ->
     S.
+
+%% ====================================================================
+%% EQC FSM state transition weights
+%% ====================================================================
+weight(preloading_data,preloading_data,{call,verify_listkeys_eqcfsm,preload_data,[_,_,_,_,_]}) -> 80;
+weight(preloading_data,verifying_data,{call,verify_listkeys_eqcfsm,log_transition,[_]}) -> 10;
+weight(verifying_data,stopped,{call,verify_listkeys_eqcfsm,verify,[_,_,_]}) -> 10. 
 
 %% ====================================================================
 %% EQC FSM preconditions
@@ -122,13 +131,19 @@ precondition(_From,_To,_S,{call,_,_,_}) ->
 postcondition(_From,_To,_S,{call,_,verify,_},{error, Reason}) ->
     lager:info("Error: ~p", [Reason]),
     false;
-postcondition(_From,_To,S,{call,_,verify,_},KeyLists) ->
-    ExpectedKeys = expected_keys(S#state.num_keys, S#state.key_filter),
-    lists:all(fun(true) -> true; (_) -> false end,
-              [assert_equal(ExpectedKeys, Keys) || Keys <- KeyLists]);
+postcondition(_From,_To,S,{call,_,verify,_},KeyDict) ->
+    Res = audit_keys_per_node(S, KeyDict),
+    not lists:member(false, Res);
 postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
     true.
 
+audit_keys_per_node(S, KeyDict) ->
+    [ [ assert_equal(
+            expected_keys(orddict:fetch({Bucket, BucketType}, S#state.buckets), 
+                          S#state.key_filter), 
+            NodeKeyList)
+        || NodeKeyList <- orddict:fetch({Bucket, BucketType}, KeyDict)  ]
+     || {Bucket, BucketType} <- orddict:fetch_keys(S#state.buckets) ].
 %% ====================================================================
 %% callback functions
 %% ====================================================================
@@ -139,16 +154,31 @@ preload_data({BucketType, _}, Bucket, Nodes, NumKeys, _KeyFilter) ->
     lager:info("Writing to bucket ~p", [Bucket]),
     put_keys(Node, {BucketType, Bucket}, NumKeys).
 
-verify(BucketType, Bucket, Nodes, _NumKeys, KeyFilter) ->
-    [list_filter_sort(Node, {BucketType, Bucket}, KeyFilter) || Node <- Nodes].
+verify(undefined, _Nodes, _KeyFilter) ->
+    lager:info("Nothing to compare.");
+verify(Buckets, Nodes,  KeyFilter) ->
+    Keys = orddict:fold(fun({Bucket, BucketType}, _, Acc) ->
+                            ListVal = [ list_filter_sort(Node, {BucketType, Bucket}, KeyFilter) 
+                                        || Node <- Nodes ],
+                            orddict:append({Bucket, BucketType}, hd(ListVal), Acc)
+                        end,
+                        orddict:new(),
+                        Buckets),
+    Keys.
+    
+log_transition(S) ->
+    lager:debug("Buckets and key counts at transition:"),
+    orddict:fold(fun({Bucket, BucketType} = _Key, NumKeys, _Acc) -> 
+                     lager:debug("Bucket:~p, BucketType:~p, NumKeys:~p", [Bucket,BucketType,NumKeys])
+                 end,
+                 [],
+                 S#state.buckets).
 
 %% ====================================================================
 %% Helpers
 %% ====================================================================
 setup_cluster(NumNodes) ->
-    lager:info("Deploying cluster of size ~p", [NumNodes]),
     Nodes = rt:build_cluster(NumNodes),
-    lager:info("Deployed cluster of size ~p", [NumNodes]),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     ?assertEqual(ok, rt:wait_until_transfers_complete(Nodes)),
     Node = hd(Nodes),
@@ -161,8 +191,10 @@ setup_cluster(NumNodes) ->
 
 assert_equal(Expected, Actual) ->
     case Expected -- Actual of
-        [] -> ok;
-        Diff -> lager:info("Expected -- Actual: ~p", [Diff])
+        [] ->
+            ok;
+        Diff -> lager:info("Expected:~p~nActual:~p~nExpected -- Actual: ~p", 
+                            [length(Expected), length(Actual), length(Diff)])
     end,
     length(Actual) == length(Expected)
         andalso Actual == Expected.
