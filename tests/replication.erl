@@ -82,7 +82,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             wait_until_connection(LeaderA),
             %% check the listener IPs were all imported into the site
-            verify_site_ips(BFirst, "site1", Listeners);
+            wait_for_site_ips(BFirst, "site1", Listeners);
         _ ->
             lager:info("waiting for leader to converge on cluster A"),
             ?assertEqual(ok, wait_until_leader_converge(ANodes)),
@@ -491,15 +491,22 @@ get_listeners(Node) ->
 gen_ports(Start, Len) ->
     lists:seq(Start, Start + Len - 1).
 
-verify_site_ips(Leader, Site, Listeners) ->
-    Status = rpc:call(Leader, riak_repl_console, status, [quiet]),
-    Key = lists:flatten([Site, "_ips"]),
-    IPStr = proplists:get_value(Key, Status),
-    IPs = lists:sort(re:split(IPStr, ", ")),
-    ExpectedIPs = lists:sort(
-        [list_to_binary([IP, ":", integer_to_list(Port)]) || {IP, Port, _Node} <-
-            Listeners]),
-    ?assertEqual(ExpectedIPs, IPs).
+wait_for_site_ips(Leader, Site, Listeners) ->
+    rt:wait_until(verify_site_ips_fun(Leader, Site, Listeners)).
+
+verify_site_ips_fun(Leader, Site, Listeners) ->
+    fun() ->
+            Status = rpc:call(Leader, riak_repl_console, status, [quiet]),
+            Key = lists:flatten([Site, "_ips"]),
+            IPStr = proplists:get_value(Key, Status),
+            lager:info("IPSTR: ~p", [IPStr]),
+            IPs = lists:sort(re:split(IPStr, ", ")),
+            ExpectedIPs = lists:sort(
+                            [list_to_binary([IP, ":", integer_to_list(Port)]) || {IP, Port, _Node} <-
+                                                                                     Listeners]),
+            lager:info("ExpectedIPs: ~p IPs: ~p", [ExpectedIPs, IPs]),
+            ExpectedIPs =:= IPs
+    end.
 
 make_bucket([Node|_]=Nodes, Name, Args) ->
     Res = rpc:call(Node, riak_core_bucket, set_bucket, [Name, Args]),
