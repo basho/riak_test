@@ -32,7 +32,7 @@ confirm() ->
     Keys = populate_nodes(Node, Bucket, Index),
     %% Pause for 30 minutes, then validate the dataset over 5 hours
     PauseTime = 30 * 60 * 1000,
-    ?assertEqual(ok, validate_keys_exist(select_random(Nodes), Index, Keys, PauseTime, 10)),
+    ?assertEqual(ok, validate_keys_exist(Nodes, Index, Keys, PauseTime, 10)),
     pass.
 
 
@@ -61,14 +61,15 @@ populate_nodes(Node, Bucket, Index) ->
 
 validate_keys_exist(_Node, _Index, _Keys, _Pause, 0) ->
     ok;
-validate_keys_exist(Node, Index, Keys, Pause, LoopCount) ->
+validate_keys_exist(Nodes, Index, Keys, Pause, LoopCount) ->
+    Node = select_random(Nodes),
     lager:info("validate_keys_exist on Node ~p~n", [Node]),
     PBC = rt:pbc(Node),
     TotalFound = lists:sum([ validate_found_count(PBC, Index, Key) || Key <- Keys ]),
     lager:info(" found matching ~p~n", [TotalFound]),
-    lager:info(" pausing for ~p seconds~n", [ Pause / 1000 ]),
+    lager:info(" pausing for ~p mins~n", [ Pause / 1000 / 60 ]),
     timer:sleep(Pause),
-    validate_keys_exist(Node, Index, Keys, Pause, LoopCount - 1).
+    validate_keys_exist(Nodes, Index, Keys, Pause, LoopCount - 1).
 
 validate_found_count(PBC, Index, Key) ->
     case riakc_pb_socket:search(PBC, Index, query_value(Key)) of
