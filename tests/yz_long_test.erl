@@ -10,10 +10,9 @@
 ]).
 
 confirm() ->
-    NumNodes = 3,
+    NumNodes = 5,
     lager:info("Building cluster and waiting for yokozuna to start"),
     Nodes = rt:build_cluster(NumNodes, {cuttlefish, ?CFC}),
-    % Nodes = rt:deploy_nodes(NumNodes, {cuttlefish, ?CFC}),
     rt:wait_for_cluster_service(Nodes, yokozuna),
     Node = hd(Nodes),
 
