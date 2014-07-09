@@ -2,22 +2,18 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--define(CFG,
-        [
-         {riak_core,
-          [
-           {ring_creation_size, 8}
-          ]},
-         {yokozuna,
-          [
-           {enabled, true}
-          ]}
-        ]).
+-define(CFC, [
+    {"ring_size", "8"},
+    {"storage_backend", "leveldb"},
+    {"leveldb.maximum_memory.percent", "70"},
+    {"search", "on"}
+]).
 
 confirm() ->
     NumNodes = 3,
     lager:info("Building cluster and waiting for yokozuna to start"),
-    Nodes = rt:build_cluster(NumNodes, ?CFG),
+    Nodes = rt:build_cluster(NumNodes, {cuttlefish, ?CFC}),
+    % Nodes = rt:deploy_nodes(NumNodes, {cuttlefish, ?CFC}),
     rt:wait_for_cluster_service(Nodes, yokozuna),
     Node = hd(Nodes),
 
