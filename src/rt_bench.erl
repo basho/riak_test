@@ -65,7 +65,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                     %% specifying the remote testdir and the newly
                     %% copied remote config location
                     Cmd = ?ESCRIPT++" "++
-                        BBDir++"basho_bench -d "++
+                        BBDir++"/"++"basho_bench -d "++
                         BBDir++"/"++TestName++"_"++Num++" "++RemotePath,
                     lager:info("Spawning remote basho_bench w/ ~p on ~p",
                                [Cmd, LG]),

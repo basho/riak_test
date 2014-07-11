@@ -4,7 +4,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/file.hrl").
 
-
+update_app_config(Node, Config) ->
+    rtssh:update_app_config(Node, Config).
 
 get_version() ->
     unknown.
@@ -12,7 +13,7 @@ get_version() ->
 get_deps() ->
     case rt_config:get(rt_deps, undefined) of
         undefined ->
-            throw("Unable to determine Riak library path");
+            throw("Unable to determine Riak library path, rt_deps.");
         _ ->
             ok
     end,
@@ -28,7 +29,7 @@ harness_opts() ->
       "size of fixed binaries (median for non-fixed)"},
      {bin_type, undefined, "bin-type", {atom, fixed},
       "fixed | exponential"},
-     {version, undefined, "version", {string, "master"},
+     {version, undefined, "version", {string, "develop"},
       "version to test"},
      {prepop, undefined, "prepop", {boolean, false},
       "prepopulate cluster"},
@@ -38,15 +39,15 @@ harness_opts() ->
       "overwrite remote deployments"},
      {cuttle, undefined, "cuttle", {boolean, true},
       "use cuttlefish config system"},
-     {duration, undefined, "run-time", {integer, undefined},
+     {duration, undefined, "run-time", {integer, 1},
       "how long to run the test for"},
      {target_pct, undefined, "target-pct", {integer, 75},
       "target block cache to dataset size ratio"},
-     {ram_size, undefined, "ram-size", {integer, undefined},
+     {ram_size, undefined, "ram-size", {integer, 1024},
       "ram size of individual test nodes"}
     ].
 
-setup_harness(_Test, Args) ->
+setup_harness(Test, Args) ->
     lager:info("Harness setup with args: ~p", [Args]),
     case getopt:parse(harness_opts(), Args) of
     {ok, {Parsed, []}} ->
@@ -59,9 +60,11 @@ setup_harness(_Test, Args) ->
         halt(0)
     end,
 
-    Hosts = rtssh:load_hosts(),
-    rt_config:set(rt_hostnames, Hosts),
-    maybe_stop_all(Hosts),
+    rtssh:setup_harness(Test, Args),
+
+    % Hosts = rtssh:load_hosts(),
+    % rt_config:set(rt_hostnames, Hosts),
+    % maybe_stop_all(Hosts),
     ok.
 
 prefix(Atom) ->
@@ -96,193 +99,199 @@ teardown() ->
     %% no!
     ok.
 
-ensure_remote_build(Hosts, Version, _Force) ->
-    %% TODO: make force actually mean something, needs to be a command
-    %% line option.  the idea is a force will waste the remote dir
-    %% first, so it doesn't matter whether or it matches.
+%ensure_remote_build(Hosts, Version, _Force) ->
+%    %% TODO: make force actually mean something, needs to be a command
+%    %% line option.  the idea is a force will waste the remote dir
+%    %% first, so it doesn't matter whether or it matches.
+%
+%    lager:info("Ensuring remote build: ~p", [Version]),
+%    %%lager:info("~p ~n ~p", [Version, Hosts]),
+%    Base = rt_config:get(perf_builds),
+%    Dir = Base++"/"++Version++"/",
+%    lager:info("Using build at ~p", [Dir]),
+%    {ok, Info} = file:read_file_info(Dir),
+%    ?assertEqual(directory, Info#file_info.type),
+%    Sum =
+%        case os:cmd("dir_sum.sh "++Dir) of
+%            [] ->
+%                throw("error runing dir validator");
+%            S -> S
+%        end,
+%
+%    F = fun(Host) ->
+%                case rtssh:ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir) of
+%                    {0, Sum} -> ok;
+%                    {2, []} ->
+%                        {0, _} = deploy_build(Host, Dir),
+%                        {0, Sum} = rtssh:ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir);
+%                    {0, OtherSum} ->
+%                        error("Bad build on host "++Host++" with sum "++OtherSum)
+%                end,
+%                lager:info("Build OK on host: ~p", [Host]),
+%                {0, _} = rtssh:ssh_cmd(Host, "rm -rf "++Dir++"/data/*"),
+%                {0, _} = rtssh:ssh_cmd(Host, "mkdir -p "++Dir++"/data/snmp/agent/db/"),
+%        %% consider making this a separate step
+%                {0, _} = rtssh:ssh_cmd(Host, "rm -rf "++Dir++"/log/*"),
+%                lager:info("Cleaned up host ~p", [Host])
+%        end,
+%    rt:pmap(F, Hosts),
+%    %% if we get here, we need to reset rtdev path, because we're not
+%    %% using it as defined.
+%    rt_config:set(rtdev_path, [{root, Base}, {Version, Dir}]),
+%    ok.
+%
+%deploy_build(Host, Dir) ->
+%    rtssh:ssh_cmd(Host, "mkdir -p "++Dir),
+%    Base0 = filename:split(Dir),
+%    Base1 = lists:delete(lists:last(Base0), Base0),
+%    Base = filename:join(Base1),
+%    rtssh:scp_to(Host, Dir, Base).
 
-    lager:info("Ensuring remote build: ~p", [Version]),
-    %%lager:info("~p ~n ~p", [Version, Hosts]),
-    Base = rt_config:get(perf_builds),
-    Dir = Base++"/"++Version++"/",
-    lager:info("Using build at ~p", [Dir]),
-    {ok, Info} = file:read_file_info(Dir),
-    ?assertEqual(directory, Info#file_info.type),
-    Sum =
-        case os:cmd("dir_sum.sh "++Dir) of
-            [] ->
-                throw("error runing dir validator");
-            S -> S
-        end,
-
-    F = fun(Host) ->
-                case rtssh:ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir) of
-                    {0, Sum} -> ok;
-                    {2, []} ->
-                        {0, _} = deploy_build(Host, Dir),
-                        {0, Sum} = rtssh:ssh_cmd(Host, "~/bin/dir_sum.sh "++Dir);
-                    {0, OtherSum} ->
-                        error("Bad build on host "++Host++" with sum "++OtherSum)
-                end,
-                lager:info("Build OK on host: ~p", [Host]),
-                {0, _} = rtssh:ssh_cmd(Host, "rm -rf "++Dir++"/data/*"),
-                {0, _} = rtssh:ssh_cmd(Host, "mkdir -p "++Dir++"/data/snmp/agent/db/"),
-        %% consider making this a separate step
-                {0, _} = rtssh:ssh_cmd(Host, "rm -rf "++Dir++"/log/*"),
-                lager:info("Cleaned up host ~p", [Host])
-        end,
-    rt:pmap(F, Hosts),
-    %% if we get here, we need to reset rtdev path, because we're not
-    %% using it as defined.
-    rt_config:set(rtdev_path, [{root, Base}, {Version, Dir}]),
-    ok.
-
-deploy_build(Host, Dir) ->
-    rtssh:ssh_cmd(Host, "mkdir -p "++Dir),
-    Base0 = filename:split(Dir),
-    Base1 = lists:delete(lists:last(Base0), Base0),
-    Base = filename:join(Base1),
-    rtssh:scp_to(Host, Dir, Base).
-
-build_cluster(Config) ->
-    Vsn = rt_config:get(perf_version),
-    HostList = rt_config:get(rt_hostnames),
-    Count = length(HostList),
-
-    %% make sure that all of the remote nodes have a clean build at
-    %% the remote location
-    Force = rt_config:get(perf_force_build, false),
-    case rt_config:get(perf_restart, meh) of
-        true ->
-            case ensure_remote_build(HostList, Vsn, Force) of
-                ok -> ok;
-                Else ->
-                    lager:error("Got unexpected return ~p from deploy, stopping",
-                                [Else]),
-                    error(deploy_error)
-            end;
-        _ -> ok
-    end,
-
-    Nodes =
-        case rt_config:get(perf_restart) of
-            true ->
-                rt:build_cluster(Count,
-                                 lists:duplicate(Count, {Vsn, Config}),
-                                 whatever);
-            false ->
-                [list_to_atom("riak@" ++ Host) || Host <- HostList]
-        end,
-
-    Me = self(),
-    spawn(fun() ->
-                  ok = rt:wait_until_nodes_ready(Nodes),
-                  ok = rt:wait_until_ring_converged(Nodes),
-                  ok = rt:wait_until_transfers_complete(Nodes),
-                  Me ! done
-          end),
-    receive
-        done -> ok
-    after timer:minutes(10) ->
-            lager:error("Cluster setup is taking too long, stopping"),
-            error(cluster_setup_timeout)
-    end.
-
+%build_cluster(Config) ->
+%    Vsn = rt_config:get(perf_version),
+%    HostList = rt_config:get(rt_hostnames),
+%    lager:info("HostList: ~p", [HostList]),
+%    lager:info("perf_restart: ~p", [rt_config:get(perf_restart)]),
+%    Count = length(HostList),
+%
+%    %% make sure that all of the remote nodes have a clean build at
+%    %% the remote location
+%    Force = rt_config:get(perf_force_build, false),
+%    case rt_config:get(perf_restart, meh) of
+%        true ->
+%            case ensure_remote_build(HostList, Vsn, Force) of
+%                ok -> ok;
+%                Else ->
+%                    lager:error("Got unexpected return ~p from deploy, stopping",
+%                                [Else]),
+%                    error(deploy_error)
+%            end;
+%        _ -> ok
+%    end,
+%
+%    Nodes =
+%        case rt_config:get(perf_restart) of
+%            true ->
+%                rt:build_cluster(Count,
+%                                 lists:duplicate(Count, {Vsn, Config}),
+%                                 whatever);
+%            false ->
+%                [list_to_atom("riak@" ++ Host) || Host <- HostList]
+%        end,
+%
+%    lager:info("Ensuring nodes are started..."),
+%    [rtssh:start(Node) || Node <- Nodes],
+%
+%    Me = self(),
+%    spawn(fun() ->
+%                  ok = rt:wait_until_nodes_ready(Nodes),
+%                  ok = rt:wait_until_ring_converged(Nodes),
+%                  ok = rt:wait_until_transfers_complete(Nodes),
+%                  Me ! done
+%          end),
+%    receive
+%        done -> ok
+%    after timer:minutes(10) ->
+%            lager:error("Cluster setup is taking too long, stopping"),
+%            error(cluster_setup_timeout)
+%    end.
+%
 
 %% a lot of duplication here, would be nice to think of some more
 %% clever way to clean it up.
-deploy_nodes(NodeConfig) ->
-    Hosts = rt_config:get(rtssh_hosts),
-    NumNodes = length(NodeConfig),
-    NumHosts = length(Hosts),
-    case NumNodes > NumHosts of
-        true ->
-            erlang:error("Not enough hosts available to deploy nodes",
-                         [NumNodes, NumHosts]);
-        false ->
-            Hosts2 = lists:sublist(Hosts, NumNodes),
-            deploy_nodes(NodeConfig, Hosts2)
-    end.
-
-deploy_nodes(NodeConfig, Hosts) ->
-    Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
-
-    {Versions, Configs} = lists:unzip(NodeConfig),
-
-
-    rt_config:set(rt_hosts,
-    orddict:from_list(
-        orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ lists:zip(Nodes, Hosts))),
-    VersionMap = lists:zip(Nodes, Versions),
-    rt_config:set(rt_versions,
-          orddict:from_list(
-            orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
-
-    rt:pmap(fun({_, default}) ->
-                    ok;
-               ({{Node, Host}, {cuttlefish, Config0}}) ->
-            Config = Config0 ++
-            [{nodename, Node},
-             {"listener.protobuf.internal",
-              Host++":8087"},
-             {"listener.http.internal",
-              Host++":8098"}
-            ],
-                    rtssh:set_conf(Node, Config);
-               ({{Node, _}, Config}) ->
-                    rtssh:update_app_config(Node, Config)
-            end,
-            lists:zip(lists:zip(Nodes, Hosts), Configs)),
-    timer:sleep(500),
-
-    case rt_config:get(perf_cuttle, true) of
-        false ->
-            rt:pmap(fun({Node, Host}) ->
-                            Config = [{riak_api,
-                                       [{pb, fun([{_, Port}]) ->
-                                                     [{Host, Port}]
-                                             end},
-                                        {pb_ip, fun(_) ->
-                                                        Host
-                                                end}]},
-                                      {riak_core,
-                                       [{http, fun([{_, Port}]) ->
-                                                       [{Host, Port}]
-                                               end}]}],
-                            rtssh:update_app_config(Node, Config)
-                    end, lists:zip(Nodes, Hosts)),
-
-            timer:sleep(500),
-
-            rt:pmap(fun(Node) ->
-                            rtssh:update_vm_args(Node,
-                         [{"-name", Node},
-                          {"-zddbl", "32768"},
-                          {"-P", "256000"}])
-                    end, Nodes),
-
-            timer:sleep(500);
-        true -> ok
-    end,
-
-    rtssh:create_dirs(Nodes),
-
-    rt:pmap(fun(N) -> rtssh:start(N) end, Nodes),
-
-    %% Ensure nodes started
-    [ok = rt:wait_until_pingable(N) || N <- Nodes],
-
-    %% %% Enable debug logging
-    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
-
-    %% We have to make sure that riak_core_ring_manager is running before we can go on.
-    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
-
-    %% Ensure nodes are singleton clusters
-    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
-                                        Version /= "0.14.2"],
-
-    Nodes.
+%deploy_nodes(NodeConfig) ->
+%    Hosts = rt_config:get(rtssh_hosts),
+%    NumNodes = length(NodeConfig),
+%    NumHosts = length(Hosts),
+%    case NumNodes > NumHosts of
+%        true ->
+%            erlang:error("Not enough hosts available to deploy nodes",
+%                         [NumNodes, NumHosts]);
+%        false ->
+%            Hosts2 = lists:sublist(Hosts, NumNodes),
+%            deploy_nodes(NodeConfig, Hosts2)
+%    end.
+%
+%deploy_nodes(NodeConfig, Hosts) ->
+%    Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
+%
+%    {Versions, Configs} = lists:unzip(NodeConfig),
+%
+%
+%    rt_config:set(rt_hosts,
+%    orddict:from_list(
+%        orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ lists:zip(Nodes, Hosts))),
+%    VersionMap = lists:zip(Nodes, Versions),
+%    rt_config:set(rt_versions,
+%          orddict:from_list(
+%            orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
+%
+%    rt:pmap(fun({_, default}) ->
+%                    ok;
+%               ({{Node, Host}, {cuttlefish, Config0}}) ->
+%            Config = Config0 ++
+%            [{nodename, Node},
+%             {"listener.protobuf.internal",
+%              Host++":8087"},
+%             {"listener.http.internal",
+%              Host++":8098"}
+%            ],
+%                    rtssh:set_conf(Node, Config);
+%               ({{Node, _}, Config}) ->
+%                    rtssh:update_app_config(Node, Config)
+%            end,
+%            lists:zip(lists:zip(Nodes, Hosts), Configs)),
+%    timer:sleep(500),
+%
+%    case rt_config:get(perf_cuttle, true) of
+%        false ->
+%            rt:pmap(fun({Node, Host}) ->
+%                            Config = [{riak_api,
+%                                       [{pb, fun([{_, Port}]) ->
+%                                                     [{Host, Port}]
+%                                             end},
+%                                        {pb_ip, fun(_) ->
+%                                                        Host
+%                                                end}]},
+%                                      {riak_core,
+%                                       [{http, fun([{_, Port}]) ->
+%                                                       [{Host, Port}]
+%                                               end}]}],
+%                            rtssh:update_app_config(Node, Config)
+%                    end, lists:zip(Nodes, Hosts)),
+%
+%            timer:sleep(500),
+%
+%            rt:pmap(fun(Node) ->
+%                            rtssh:update_vm_args(Node,
+%                         [{"-name", Node},
+%                          {"-zddbl", "32768"},
+%                          {"-P", "256000"}])
+%                    end, Nodes),
+%
+%            timer:sleep(500);
+%        true -> ok
+%    end,
+%
+%    rtssh:create_dirs(Nodes),
+%
+%    rt:pmap(fun(N) -> rtssh:start(N) end, Nodes),
+%
+%    %% Ensure nodes started
+%    [ok = rt:wait_until_pingable(N) || N <- Nodes],
+%
+%    %% %% Enable debug logging
+%    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+%
+%    %% We have to make sure that riak_core_ring_manager is running before we can go on.
+%    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
+%
+%    %% Ensure nodes are singleton clusters
+%    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
+%                                        Version /= "0.14.2"],
+%
+%    Nodes.
+%
 
 cmd(Cmd) ->
     rtssh:cmd(Cmd).
@@ -361,6 +370,7 @@ collect_test_data(Hosts, TestName) ->
     %% collect node logs
     Vsn = rt_config:get(perf_version),
     Base = rt_config:get(perf_builds),
+    lager:info("Base: ~p Vsn: ~p", [Base, Vsn]),
     [begin
      rtssh:scp_from(Host, Base++"/"++Vsn++"/log",
             PrepDir++"/log-"++Host)
@@ -486,3 +496,125 @@ target_size(Percentage, BinSize, RamSize, NodeCount) ->
     BinPlus = (BinSize + 300) * 3,
     %% hacky way of rounding up to the nearest 10k
     trunc((CacheTarget/(BinPlus*10000))+1)*10000.
+
+deploy_clusters(ClusterConfigs) ->
+    Clusters = rt_config:get(rtssh_clusters, []),
+    NumConfig = length(ClusterConfigs),
+    case length(Clusters) < NumConfig of
+        true ->
+            erlang:error("Requested more clusters than available");
+        false ->
+            Both = lists:zip(lists:sublist(Clusters, NumConfig), ClusterConfigs),
+            Deploy =
+                [begin
+                     NumNodes = length(NodeConfig),
+                     NumHosts = length(Hosts),
+                     case NumNodes > NumHosts of
+                         true ->
+                             erlang:error("Not enough hosts available to deploy nodes",
+                                          [NumNodes, NumHosts]);
+                         false ->
+                             Hosts2 = lists:sublist(Hosts, NumNodes),
+                             {Hosts2, NodeConfig}
+                     end
+                 end || {{_,Hosts}, NodeConfig} <- Both],
+            [deploy_nodes(NodeConfig, Hosts) || {Hosts, NodeConfig} <- Deploy]
+    end.
+
+deploy_nodes(NodeConfig) ->
+    Hosts = rt_config:get(rtssh_hosts),
+    NumNodes = length(NodeConfig),
+    NumHosts = length(Hosts),
+    case NumNodes > NumHosts of
+        true ->
+            erlang:error("Not enough hosts available to deploy nodes",
+                         [NumNodes, NumHosts]);
+        false ->
+            Hosts2 = lists:sublist(Hosts, NumNodes),
+            deploy_nodes(NodeConfig, Hosts2)
+    end.
+
+deploy_nodes(NodeConfig, Hosts) ->
+    Path = rtssh:relpath(root),
+    lager:info("Riak path: ~p", [Path]),
+    %% NumNodes = length(NodeConfig),
+    %% NodesN = lists:seq(1, NumNodes),
+    %% Nodes = [?DEV(N) || N <- NodesN],
+    Nodes = [rtssh:host_to_node(Host) || Host <- Hosts],
+    HostMap = lists:zip(Nodes, Hosts),
+
+    %% NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
+    %% TODO: Add code to set initial app.config
+    {Versions, Configs} = lists:unzip(NodeConfig),
+    VersionMap = lists:zip(Nodes, Versions),
+
+    rt_config:set(rt_hosts,
+        orddict:from_list(
+            orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ HostMap)),
+    rt_config:set(rt_versions,
+        orddict:from_list(
+            orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
+
+    rt:pmap(fun({_, default}) ->
+                    ok;
+               ({Node, {cuttlefish, Config}}) ->
+                    rtssh:set_conf(Node, Config);
+               ({Node, Config}) ->
+                    rtssh:update_app_config(Node, Config)
+            end,
+            lists:zip(Nodes, Configs)),
+    timer:sleep(500),
+
+    case rt_config:get(cuttle, true) of
+        false ->
+            rt:pmap(fun(Node) ->
+                            Host = rtssh:get_host(Node),
+                            %%lager:info("ports ~p", [self()]),
+                            Config = [{riak_api,
+                                       [{pb, fun([{_, Port}]) ->
+                                                     [{Host, Port}]
+                                             end},
+                                        {pb_ip, fun(_) ->
+                                                        Host
+                                                end}]},
+                                      {riak_core,
+                                       [{http, fun([{_, Port}]) ->
+                                                       [{Host, Port}]
+                                               end}]}],
+                            rtssh:update_app_config(Node, Config)
+                    end, Nodes),
+
+            timer:sleep(500),
+
+            rt:pmap(fun(Node) ->
+                            rtssh:update_vm_args(Node,
+						 [{"-name", Node},
+						  {"-zddbl", "65535"},
+						  {"-P", "256000"}])
+                    end, Nodes),
+
+            timer:sleep(500);
+        true -> ok
+    end,
+
+    rtssh:create_dirs(Nodes),
+
+    rt:pmap(fun start/1, Nodes),
+
+    %% Ensure nodes started
+    [ok = rt:wait_until_pingable(N) || N <- Nodes],
+
+    %% %% Enable debug logging
+    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+
+    %% We have to make sure that riak_core_ring_manager is running before we can go on.
+    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
+
+    %% Ensure nodes are singleton clusters
+    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
+                                        Version /= "0.14.2"],
+
+    Nodes.
+
+start(Node) ->
+    rtssh:start(Node).

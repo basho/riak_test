@@ -50,10 +50,14 @@ watcher(Master, Nodes, {_Host, Port, _Dir} = Collector) ->
     end.
 
 lloop(Master, LSock) ->
-    {ok, Sock} = gen_tcp:accept(LSock),
-    ok = gen_tcp:controlling_process(Sock, Master),
-    inet:setopts(Sock, [{active, once}]),
-    lloop(Master, LSock).
+    case gen_tcp:accept(LSock) of
+        {ok, Sock} ->
+            ok = gen_tcp:controlling_process(Sock, Master),
+            inet:setopts(Sock, [{active, once}]),
+            lloop(Master, LSock);
+        _ ->
+            ok
+    end.
 
 watcher_loop(W=#watcher{probes=Probes,
             acceptor={Acceptor,LSock},
@@ -382,10 +386,10 @@ message_queues([Pid|Pids], Threshold, VNodeMap, Queues) ->
     end.
 
 get_network() ->
-    %% {ok, RX} = file:read_file("/sys/class/net/eth0/statistics/rx_bytes"),
-    %% {ok, TX} = file:read_file("/sys/class/net/eth0/statistics/tx_bytes"),
-    {ok, RX} = file:read_file("/sys/class/net/eth1/statistics/rx_bytes"),
-    {ok, TX} = file:read_file("/sys/class/net/eth1/statistics/tx_bytes"),
+    {ok, RX} = file:read_file("/sys/class/net/eth0/statistics/rx_bytes"),
+    {ok, TX} = file:read_file("/sys/class/net/eth0/statistics/tx_bytes"),
+    % {ok, RX} = file:read_file("/sys/class/net/eth1/statistics/rx_bytes"),
+    % {ok, TX} = file:read_file("/sys/class/net/eth1/statistics/tx_bytes"),
     {to_integer(RX), to_integer(TX)}.
 
 get_disk2() ->
