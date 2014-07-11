@@ -102,6 +102,7 @@ upgrade(Node, NewVersion) ->
     ok.
 
 all_the_app_configs(DevPath) ->
+    lager:error("The dev path is ~p", [DevPath]),
     case filelib:is_dir(DevPath) of
         true ->
             Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
@@ -117,14 +118,30 @@ update_app_config(all, Config) ->
 update_app_config(Node, Config) when is_atom(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
-    ConfigFile = io_lib:format("~s/dev/dev~b/etc/app.config", [Path, N]),
-    update_app_config_file(ConfigFile, Config);
+    FileFormatString = "~s/dev/dev~b/etc/~s.config",
+
+    AppConfigFile = io_lib:format(FileFormatString, [Path, N, "app"]),
+    AdvConfigFile = io_lib:format(FileFormatString, [Path, N, "advanced"]),
+    %% If there's an app.config, do it old style
+    %% if not, use cuttlefish's adavnced.config
+    case filelib:is_file(AppConfigFile) of
+        true -> 
+            update_app_config_file(AppConfigFile, Config);
+        _ ->
+            update_app_config_file(AdvConfigFile, Config)
+    end; 
 update_app_config(DevPath, Config) ->
     [update_app_config_file(AppConfig, Config) || AppConfig <- all_the_app_configs(DevPath)].
 
 update_app_config_file(ConfigFile, Config) ->
     lager:info("rtdev:update_app_config_file(~s, ~p)", [ConfigFile, Config]),
-    {ok, [BaseConfig]} = file:consult(ConfigFile),
+    
+    BaseConfig = case file:consult(ConfigFile) of
+        {ok, [ValidConfig]} ->
+            ValidConfig;
+        {error, enoent} ->
+            []
+    end, 
     MergeA = orddict:from_list(Config),
     MergeB = orddict:from_list(BaseConfig),
     NewConfig =
@@ -154,8 +171,41 @@ get_backends(DevPath) ->
     [get_backend(AppConfig) || AppConfig <- all_the_app_configs(DevPath)].
 
 get_backend(AppConfig) ->
-    {ok, [Config]} = file:consult(AppConfig),
-    kvc:path('riak_kv.storage_backend', Config).
+    lager:info("get_backend(~s)", [AppConfig]),
+    Tokens = lists:reverse(filename:split(AppConfig)),
+    ConfigFile = case Tokens of
+        ["app.config"| _ ] ->
+            AppConfig;
+        ["advanced.config" | T] ->
+            ["etc", [$d, $e, $v | N], "dev" | RPath] = T,
+            Path = filename:join(lists:reverse(RPath)),
+            %% Why chkconfig? It generates an app.config from cuttlefish
+            %% without starting riak.
+            ConfigFileOutputLine = lists:last(string:tokens(
+                rtdev:run_riak(list_to_integer(N), Path, "chkconfig"),
+                "\n"
+            )),
+
+            %% ConfigFileOutputLine looks like this:
+            %% -config /path/to/app.config -args_file /path/to/vm.args
+            Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"), 
+                                 ".config" == filename:extension(Filename) ],
+
+            File = hd(Files),
+            case filename:pathtype(Files) of
+                absolute -> File;
+                relative ->
+                    io_lib:format("~s/dev/dev~s/~s", [Path, N, tl(hd(Files))])
+            end
+    end,
+
+    case file:consult(ConfigFile) of
+        {ok, [Config]} ->  
+            kvc:path('riak_kv.storage_backend', Config);
+        E ->
+            lager:error("Error reading ~s, ~p", [ConfigFile, E]),
+            error
+    end.
 
 node_path(Node) ->
     N = node_id(Node),

@@ -31,12 +31,14 @@ confirm() ->
                                        BucketType,
                                        [{consistent, true}, {n_val, 5}]),
     rt:wait_until_bucket_type_status(BucketType, active, ANodes),
+    rt:wait_until_bucket_type_visible(ANodes, BucketType),
 
     %% Create consistent bucket type on cluster B
     rt:create_and_activate_bucket_type(LeaderB,
                                        BucketType,
                                        [{consistent, true}, {n_val, 5}]),
     rt:wait_until_bucket_type_status(BucketType, active, BNodes),
+    rt:wait_until_bucket_type_visible(BNodes, BucketType),
 
     connect_clusters(LeaderA, LeaderB),
 
@@ -109,21 +111,14 @@ make_clusters() ->
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
 
-    ok = rpc:call(AFirst, riak_ensemble_manager, enable, []),
-    rpc:call(AFirst, riak_core_ring_manager, force_update, []),
-    ?assertEqual(true, rpc:call(AFirst, riak_ensemble_manager, enabled, [])),
-    ensemble_util:wait_until_stable(AFirst, NVal),
-
-    ok = rpc:call(BFirst, riak_ensemble_manager, enable, []),
-    rpc:call(BFirst, riak_core_ring_manager, force_update, []),
-    ?assertEqual(true, rpc:call(BFirst, riak_ensemble_manager, enabled, [])),
-    ensemble_util:wait_until_stable(BFirst, NVal),
-
     lager:info("Build cluster A"),
     repl_util:make_cluster(ANodes),
 
     lager:info("Build cluster B"),
     repl_util:make_cluster(BNodes),
+
+    ensemble_util:wait_until_stable(AFirst, NVal),
+    ensemble_util:wait_until_stable(BFirst, NVal),
 
     %% get the leader for the first cluster
     lager:info("waiting for leader to converge on cluster A"),

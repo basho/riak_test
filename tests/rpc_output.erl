@@ -34,7 +34,7 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
-         
+
 confirm() ->
     gen_event:add_handler(lager_event, ?MODULE, []),
     io:put_chars("This is an io:put_chars/1 call"),
@@ -43,7 +43,8 @@ confirm() ->
     lager:info("This is a lager message"),
     {ok, {LogId, Failures}} = gen_event:delete_handler(lager_event, ?MODULE, []),
     ?assertEqual(5, LogId),
-    ?assertEqual([], Failures).
+    ?assertEqual([], Failures),
+    pass.
 
 -record(state, {level = debug, verbose = true, log_id = 1, failures = []}).
 
@@ -55,7 +56,7 @@ handle_event({log, _Level, {_Date, _Time}, [_LevelStr, _Location, Message]}, Sta
     check_log_message(lists:flatten(Message), State);
 handle_event(_, State) ->
     {ok, State}.
-    
+
 handle_call(_, State) ->
     {ok, State}.
 
@@ -67,7 +68,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, #state{log_id = LogId, failures = Failures}) ->
     {ok, {LogId, Failures}}.
-    
+
 check_log_message(Message, #state{log_id = LogId, failures = Failures} = State) ->
     try
         case LogId of
@@ -80,4 +81,4 @@ check_log_message(Message, #state{log_id = LogId, failures = Failures} = State) 
         {ok, State#state{log_id = LogId + 1}}
     catch
         _:Reason -> {ok, State#state{log_id = LogId + 1, failures = [Reason|Failures]}}
-    end.            
+    end.

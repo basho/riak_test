@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -35,6 +35,7 @@
         ]).
 -compile([export_all]). %% because we run tests as ?MODULE:T(Nodes)
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("riakc/include/riakc.hrl").
 
 %% name of the riak_kv appenv specifying which search provider to use
 -define(PROVIDER_KEY, mapred_search).
@@ -82,14 +83,13 @@ setup_test_env() ->
 
     setup_yz_index(Nodes, YZIndex),
     setup_yz_bucket(Nodes, YZBucket, YZIndex),
-
     load_test_data(Nodes, YZBucket, YZKeyAndUniques, YZCommon),
 
     %% give yokozuna time to auto-commit
     YZSleep_ms = 1000,
     lager:info("Giving Yokozuna ~bms to auto-commit", [YZSleep_ms]),
     timer:sleep(YZSleep_ms),
-    
+
     #env{ nodes=Nodes,
           rs_bucket=RSBucket,
           rs_keyuqs=RSKeyAndUniques,
@@ -120,14 +120,13 @@ confirm_config(#env{nodes=Nodes,
                     rs_common=RSCommon,
                     yz_bucket=YZBucket,
                     yz_keyuqs=YZKeyAndUniques,
-                    yz_common=YZCommon,
                     yz_index=YZIndex}=Env,
                     Config) ->
     lager:info("Running Config: ~p", [Config]),
     set_config(Env, Config),
 
     RSBResults = run_bucket_mr(Nodes, RSBucket, RSCommon),
-    YZBResults = run_bucket_mr(Nodes, YZIndex, YZCommon),
+    YZBResults = run_bucket_mr(Nodes, YZIndex, <<"*:*">>),
 
     lager:info("RS Bucket Results: ~p", [RSBResults]),
     lager:info("YZ Bucket Results: ~p", [YZBResults]),
@@ -182,7 +181,7 @@ setup_yz_index([Node|_]=Cluster, Index) ->
     wait_for_index(Cluster, Index).
 
 index_path(Index) ->
-    ["/yz/index/",Index].
+    ["/search/index/",Index].
 
 %% if we start writing data too soon, it won't be indexed, so wait
 %% until solr has created the index
@@ -264,11 +263,12 @@ got_riak_search(Results, Bucket, KeyAndUniques) ->
 got_yokozuna(Results, Bucket, KeyAndUniques) ->
     case Results of
         {ok, [{0, Matches}]} when Matches /= [] ->
-            IsYZ = fun({{B, K}, {struct, []}}) when B == Bucket ->
+            IsYZ = fun({{{<<"default">>, B}, K}, {struct, []}}) when B == Bucket ->
                            lists:keymember(K, 1, KeyAndUniques);
                       (_) ->
                            false
                    end,
+            lager:info("got_yokozuna: ~p ... ~p", [Matches, KeyAndUniques]),
             lists:all(IsYZ, Matches);
         _ ->
             false

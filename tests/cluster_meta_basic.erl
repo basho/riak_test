@@ -33,8 +33,8 @@ confirm() ->
     Nodes = rt:build_cluster(5),
     ok = test_fold_full_prefix(Nodes),
     ok = test_metadata_conflicts(Nodes),
-    ok = test_writes_after_partial_cluster_failure(Nodes).
-
+    ok = test_writes_after_partial_cluster_failure(Nodes),
+    pass.
 
 %% 1. write a key and waits til it propogates around the cluster
 %% 2. stop the immediate eager peers of the node that performed the write

@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -46,15 +46,40 @@ load_code(Node) ->
     [ok = remote_compile_and_load(Node, F) || F <- intercept_files()],
     ok.
 
-add(Node, Intercepts) when is_list(Intercepts) ->
-    [ok = add(Node, I) || I <- Intercepts],
+add_and_save(Node, Intercepts) ->
+    CodePaths = rpc:call(Node, code, get_path, []),
+    [PatchesDir] = [P || P <- CodePaths, lists:suffix("basho-patches", P)],
+    add(Node, Intercepts, PatchesDir).
+
+add(Node, Intercepts) ->
+    add(Node, Intercepts, undefined).
+
+add(Node, Intercepts, OutDir) when is_list(Intercepts) ->
+    [ok = add(Node, I, OutDir) || I <- Intercepts],
     ok;
 
-add(Node, {Target, Mapping}) ->
-    add(Node, {Target, ?DEFAULT_INTERCEPT(Target), Mapping});
+add(Node, {Target, Mapping}, OutDir) ->
+    add(Node, {Target, ?DEFAULT_INTERCEPT(Target), Mapping}, OutDir);
 
-add(Node, {Target, Intercept, Mapping}) ->
-    ok = rpc:call(Node, intercept, add, [Target, Intercept, Mapping]).
+add(Node, {Target, Intercept, Mapping}, OutDir) ->
+    NMapping = [transform_anon_fun(M) || M <- Mapping],
+    ok = rpc:call(Node, intercept, add, [Target, Intercept, NMapping, OutDir]).
+
+%% The following function transforms anonymous function mappings passed
+%% from an Erlang shell. Anonymous intercept functions from compiled code
+%% require the developer to supply free variables themselves, and also
+%% requires use of the rt_intercept_pt parse transform.
+transform_anon_fun({FunArity, Intercept}=Mapping) when is_function(Intercept) ->
+    {env, Env} = erlang:fun_info(Intercept, env),
+    case Env of
+        [] ->
+            error({badarg, Mapping});
+        [FreeVars,_,_,Clauses] ->
+            NewIntercept = {FreeVars, {'fun',1,{clauses,Clauses}}},
+            {FunArity, NewIntercept}
+    end;
+transform_anon_fun(Mapping) ->
+    Mapping.
 
 remote_compile_and_load(Node, F) ->
     lager:debug("Compiling and loading file ~s on node ~s", [F, Node]),

@@ -47,6 +47,7 @@ confirm() ->
     %% create a new type
     rt:create_and_activate_bucket_type(Node1, ?BUCKET_TYPE, [{n_val, 3}]),
     rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Nodes),
+    rt:wait_until_bucket_type_visible(Nodes, ?BUCKET_TYPE),
 
     load_test_data(Nodes),
     rt:load_modules_on_nodes([?MODULE], Nodes),

@@ -21,6 +21,8 @@
 %% @doc riak_test_runner runs a riak_test module's run/0 function.
 -module(riak_test_runner).
 -export([confirm/4, metadata/0, metadata/1, function_name/1]).
+%% Need to export to use with `spawn_link'.
+-export([return_to_exit/3]).
 -include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
@@ -95,7 +97,7 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     {0, UName} = rt:cmd("uname -a"),
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
-    Pid = spawn_link(Mod, Fun, []),
+    Pid = spawn_link(?MODULE, return_to_exit, [Mod, Fun, []]),
     Ref = case rt_config:get(test_timeout, undefined) of
         Timeout when is_integer(Timeout) ->
             erlang:send_after(Timeout, self(), test_took_too_long);
@@ -146,6 +148,20 @@ rec_loop(Pid, TestModule, TestMetaData) ->
         {'EXIT', Pid, Error} ->
             lager:warning("~s failed: ~p", [TestModule, Error]),
             {fail, Error}
+    end.
+
+%% A return of `fail' must be converted to a non normal exit since
+%% status is determined by `rec_loop'.
+%%
+%% @see rec_loop/3
+-spec return_to_exit(module(), atom(), list()) -> ok.
+return_to_exit(Mod, Fun, Args) ->
+    case apply(Mod, Fun, Args) of
+        pass ->
+            %% same as exit(normal)
+            ok;
+        fail ->
+            exit(fail)
     end.
 
 check_prereqs(Module) ->

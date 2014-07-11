@@ -31,7 +31,8 @@ get_deps() ->
     lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
 
 riakcmd(Path, N, Cmd) ->
-    io_lib:format("~s/dev/dev~b/bin/riak ~s", [Path, N, Cmd]).
+    ExecName = rt_config:get(exec_name, "riak"),
+    io_lib:format("~s/dev/dev~b/bin/~s ~s", [Path, N, ExecName, Cmd]).
 
 riakreplcmd(Path, N, Cmd) ->
     io_lib:format("~s/dev/dev~b/bin/riak-repl ~s", [Path, N, Cmd]).
@@ -48,7 +49,8 @@ riak_admin_cmd(Path, N, Args) ->
                           erlang:error(badarg)
                   end, Args),
     ArgStr = string:join(Quoted, " "),
-    io_lib:format("~s/dev/dev~b/bin/riak-admin ~s", [Path, N, ArgStr]).
+    ExecName = rt_config:get(exec_name, "riak"),
+    io_lib:format("~s/dev/dev~b/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
@@ -258,15 +260,8 @@ update_app_config_file(ConfigFile, Config) ->
     ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
     ok.
 get_backends() ->
-    Backends = lists:usort(
-        lists:flatten([ get_backends(DevPath) || DevPath <- devpaths()])),
-    case Backends of
-        [riak_kv_bitcask_backend] -> bitcask;
-        [riak_kv_eleveldb_backend] -> eleveldb;
-        [riak_kv_memory_backend] -> memory;
-        [Other] -> Other;
-        MoreThanOne -> MoreThanOne
-    end.
+    lists:usort(
+        lists:flatten([ get_backends(DevPath) || DevPath <- devpaths()])).
 
 get_backends(DevPath) ->
     rt:pmap(fun get_backend/1, all_the_app_configs(DevPath)).
@@ -310,7 +305,7 @@ get_backend(AppConfig) ->
 
     case file:consult(ConfigFile) of
         {ok, [Config]} ->
-            kvc:path('riak_kv.storage_backend', Config);
+            rt:get_backend(Config);
         E ->
             lager:error("Error reading ~s, ~p", [ConfigFile, E]),
             error
@@ -320,6 +315,10 @@ node_path(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
+
+get_ip(_Node) ->
+    %% localhost 4 lyfe
+    "127.0.0.1".
 
 create_dirs(Nodes) ->
     Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],

@@ -15,7 +15,7 @@ confirm() ->
     application:start(ssl),
     application:start(inets),
 
-    CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/pb_cipher_suites_certs",
 
     %% make a bunch of crypto keys
     make_certs:rootCA(CertDir, "rootCA"),
@@ -34,12 +34,13 @@ confirm() ->
                         {modules, [mod_get]}]),
 
     lager:info("Deploy some nodes"),
-    Conf = [
-            {riak_api, [
+    Conf = [{riak_core, [
+                {ssl, [
                     {certfile, filename:join([CertDir,"site3.basho.com/cert.pem"])},
                     {keyfile, filename:join([CertDir, "site3.basho.com/key.pem"])},
                     {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
-                    ]},
+                    ]}
+                ]},
             {riak_search, [
                            {enabled, true}
                           ]}
@@ -204,7 +205,7 @@ confirm() ->
                                      ]),
     ?assertEqual(pong, riakc_pb_socket:ping(PB)),
     riakc_pb_socket:stop(PB),
-    ok.
+    pass.
 
 pb_get_socket(PB) ->
     %% XXX this peeks into the pb_socket internal state and plucks out the

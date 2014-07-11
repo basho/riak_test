@@ -226,7 +226,10 @@ update_2a({BType, map}, Bucket, Client, CMod) ->
                                     fun(S) ->
                                             riakc_set:add_element(<<"Sam">>, S)
                                     end, M),
-                             riakc_map:add({<<"verified">>, flag}, M1)
+                             riakc_map:update({<<"verified">>, flag}, fun(F) ->
+                                                                              riakc_flag:disable(F)
+                                                                                  end,
+                                              M1)
                      end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
@@ -306,7 +309,7 @@ check_4({BType, map}, Bucket, Client, CMod) ->
                    {{<<"home">>, register}, <<"foo@bar.com">>}
                   ]},
                  {{<<"followers">>, counter}, 10},
-                 {{<<"friends">>, set}, [<<"Russell">>, <<"Sam">>]},
+                 {{<<"friends">>, set}, [<<"Sam">>]},
                  {{<<"verified">>, flag}, false}],
                 [{pr, 3}, {notfound_ok, false}]).
 

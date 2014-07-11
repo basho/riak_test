@@ -69,18 +69,23 @@ confirm() ->
     ?assertMatch(ok, rhc:counter_incr(Http, ?BUCKET, ?KEY, 1)),
     ?assertMatch({ok, 6}, rhc:counter_val(Http, ?BUCKET, ?KEY)),
 
-    ?assertEqual(ok, riakc_pb_socket:counter_incr(PrevPB, ?BUCKET, ?KEY, 1)),
-    ?assertEqual({ok, 7}, riakc_pb_socket:counter_val(PrevPB, ?BUCKET, ?KEY)),
+    %% Reconnect to the upgraded node.
+    riakc_pb_socket:stop(PrevPB),
+    {PrevPB1, _} = get_clients(Previous),
+
+    ?assertEqual(ok, riakc_pb_socket:counter_incr(PrevPB1, ?BUCKET, ?KEY, 1)),
+    ?assertEqual({ok, 7}, riakc_pb_socket:counter_val(PrevPB1, ?BUCKET, ?KEY)),
     ?assertEqual(ok, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
     ?assertEqual({ok, 8}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
 
-    %% And check that those 1.4 written values can be accessed / incremented over the 2.0 API
+    %% And check that those 1.4 written values can be accessed /
+    %% incremented over the 2.0 API
 
-    ?assertEqual({ok, {counter, 8, 0}}, riakc_pb_socket:fetch_type(PrevPB, {<<"default">>, ?BUCKET}, ?KEY)),
-    ?assertEqual(ok, riakc_pb_socket:update_type(PrevPB, {<<"default">>, ?BUCKET}, ?KEY, gen_counter_op())),
+    ?assertEqual({ok, 8}, riakc_pb_socket:counter_val(PrevPB1, {<<"default">>, ?BUCKET}, ?KEY)),
+    ?assertEqual(ok, riakc_pb_socket:update_type(PrevPB1, {<<"default">>, ?BUCKET}, ?KEY, gen_counter_op())),
     ?assertEqual({ok, 9}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
 
-    [riakc_pb_socket:stop(C) || C <- [PB, PrevPB]],
+    [riakc_pb_socket:stop(C) || C <- [PB, PrevPB1]],
 
     pass.
 

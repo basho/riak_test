@@ -24,7 +24,7 @@
 -compile(export_all).
 
 spam_nodes(TargetNodes) ->
-        [[spawn(?MODULE, spam, [N]) || _ <- lists:seq(1,1000*1000)] || N <- TargetNodes].
+        [[spawn(?MODULE, spam, [N]) || _ <- lists:seq(1,1000*200)] || N <- TargetNodes].
 
 spam(Node) ->
     timer:sleep(random:uniform(100)),

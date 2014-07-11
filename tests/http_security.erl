@@ -6,6 +6,7 @@
 -export([map_object_value/3, reduce_set_union/2, mapred_modfun_input/3]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("riakc/include/riakc.hrl").
 
 -define(assertDenied(Op), ?assertMatch({error, {forbidden, _}}, Op)).
 
@@ -18,16 +19,24 @@ confirm() ->
     io:format("turning on tracing"),
     ibrowse:trace_on(),
 
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/http_certs",
+
+    %% make a bunch of crypto keys
+    make_certs:rootCA(CertDir, "rootCA"),
+    make_certs:endusers(CertDir, "rootCA", ["site3.basho.com", "site4.basho.com"]),
+
+
     lager:info("Deploy some nodes"),
     PrivDir = rt:priv_dir(),
     Conf = [
             {riak_core, [
                     {default_bucket_props, [{allow_mult, true}]},
                     {ssl, [
-                            {certfile, filename:join([PrivDir,
-                                                      "certs/selfsigned/site3-cert.pem"])},
-                            {keyfile, filename:join([PrivDir,
-                                                     "certs/selfsigned/site3-key.pem"])}
+                            {certfile, filename:join([CertDir,
+                                                      "site3.basho.com/cert.pem"])},
+                            {keyfile, filename:join([CertDir,
+                                                     "site3.basho.com/key.pem"])},
+                            {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
                             ]}
                     ]},
              {riak_search, [
@@ -39,14 +48,14 @@ confirm() ->
     %% enable security on the cluster
     ok = rpc:call(Node, riak_core_console, security_enable, [[]]),
     enable_ssl(Node),
-    %[enable_ssl(N) || N <- Nodes],
-    {ok, [{"127.0.0.1", Port0}]} = rpc:call(Node, application, get_env,
-                                 [riak_api, http]),
-    {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
-                                 [riak_api, https]),
+    %%[enable_ssl(N) || N <- Nodes],
+    {ok, [{IP0, Port0}]} = rpc:call(Node, application, get_env,
+                                    [riak_api, http]),
+    {ok, [{IP, Port}]} = rpc:call(Node, application, get_env,
+                                  [riak_api, https]),
 
     MD = riak_test_runner:metadata(),
-    _HaveIndexes = case proplists:get_value(backend, MD) of
+    HaveIndexes = case proplists:get_value(backend, MD) of
                       undefined -> false; %% default is da 'cask
                       bitcask -> false;
                       _ -> true
@@ -54,17 +63,17 @@ confirm() ->
 
     lager:info("Checking non-SSL results in error"),
     %% connections over regular HTTP get told to go elsewhere
-    C0 = rhc:create("127.0.0.1", Port0, "riak", []),
+    C0 = rhc:create(IP0, Port0, "riak", []),
     ?assertMatch({error, {ok, "426", _, _}}, rhc:ping(C0)),
 
     lager:info("Checking SSL demands authentication"),
-    C1 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}]),
+    C1 = rhc:create(IP, Port, "riak", [{is_ssl, true}]),
     ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C1)),
 
     lager:info("Checking that unknown user demands reauth"),
-    C2 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
-                                                                "user",
-                                                                 "pass"}]),
+    C2 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
+                                                        "user",
+                                                        "pass"}]),
     ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C2)),
 
     %% Store this in a variable so once Riak supports utf-8 usernames
@@ -76,44 +85,51 @@ confirm() ->
     ok = rpc:call(Node, riak_core_console, add_user, [[Username, "password=password"]]),
 
     lager:info("Setting trust mode on user"),
-    %% trust anyone on localhost
+    %% trust anyone from this host
+    MyIP = case IP0 of
+               "127.0.0.1" -> IP0;
+               _ ->
+                   {ok,Hostname} = inet:gethostname(),
+                   {ok,A0} = inet:getaddr(Hostname, inet),
+                   inet:ntoa(A0)
+           end,
     ok = rpc:call(Node, riak_core_console, add_source, [[Username,
-                                                         "127.0.0.1/32",
+                                                         MyIP++"/32",
                                                          "trust"]]),
 
     lager:info("Checking that credentials are ignored in trust mode"),
     %% invalid credentials should be ignored in trust mode
-    C3 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
-                                                                Username,
-                                                                 "pass"}]),
+    C3 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
+                                                        Username,
+                                                        "pass"}]),
     ?assertEqual(ok, rhc:ping(C3)),
 
     lager:info("Setting password mode on user"),
-    %% require password on localhost
+    %% require password from our IP
     ok = rpc:call(Node, riak_core_console, add_source, [[Username,
-                                                         "127.0.0.1/32",
+                                                         MyIP++"/32",
                                                          "password"]]),
 
     lager:info("Checking that incorrect password demands reauth"),
     %% invalid credentials should be rejected in password mode
-    C4 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
-                                                                 Username,
-                                                                 "pass"}]),
+    C4 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
+                                                        Username,
+                                                        "pass"}]),
     ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C4)),
 
     lager:info("Checking that correct password is successful"),
     %% valid credentials should be accepted in password mode
-    C5 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true}, {credentials,
-                                                                 Username,
-                                                                 "password"}]),
+    C5 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
+                                                        Username,
+                                                        "password"}]),
 
     ?assertEqual(ok, rhc:ping(C5)),
 
     lager:info("verifying the peer certificate rejects mismatch with server cert"),
     %% verifying the peer certificate reject mismatch with server cert
-    C6 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true},
-                                                {credentials, Username, "password"},
-                                                {ssl_options, [
+    C6 = rhc:create(IP, Port, "riak", [{is_ssl, true},
+                                       {credentials, Username, "password"},
+                                       {ssl_options, [
                         {cacertfile, filename:join([PrivDir,
                                                     "certs/cacert.org/ca/root.crt"])},
                         {verify, verify_peer},
@@ -125,15 +141,15 @@ confirm() ->
 
     lager:info("verifying the peer certificate should work if the cert is valid"),
     %% verifying the peer certificate should work if the cert is valid
-    C7 = rhc:create("127.0.0.1", Port, "riak", [{is_ssl, true},
-                                                {credentials, Username, "password"},
-                                                {ssl_options, [
-                        {cacertfile, filename:join([PrivDir,
-                                                    "certs/selfsigned/ca/rootcert.pem"])},
+    C7 = rhc:create(IP, Port, "riak", [{is_ssl, true},
+                                       {credentials, Username, "password"},
+                                       {ssl_options, [
+                        {cacertfile, filename:join([CertDir,
+                                                    "rootCA/cert.pem"])},
                         {verify, verify_peer},
                         {reuse_sessions, false}
                         ]}
-                                               ]),
+                                      ]),
 
     ?assertEqual(ok, rhc:ping(C7)),
 
@@ -173,6 +189,10 @@ confirm() ->
     ?assertMatch({error, {ok, "403", _, _}}, rhc:delete(C7, <<"hello">>,
                                                         <<"world">>)),
 
+    lager:info("Checking that delete for non-existing key is disallowed"),
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:delete(C7, <<"hello">>,
+                                                        <<"_xxboguskey">>)),
+
     lager:info("Granting riak_kv.delete, checking that delete succeeds"),
     ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.delete", "on",
                                                     "default", "hello", "to", Username]]),
@@ -185,6 +205,11 @@ confirm() ->
 
     %% write it back for list_buckets later
     ?assertEqual(ok, rhc:put(C7, Object)),
+
+    lager:info("Checking that delete for non-existing key is allowed"),
+    ?assertMatch({error, {ok, "404", _, _}}, rhc:delete(C7, <<"hello">>,
+                                                        <<"_xxboguskey">>)),
+
 
     %% slam the door in the user's face
     lager:info("Revoking get/put/delete, checking that get/put/delete are disallowed"),
@@ -220,6 +245,17 @@ confirm() ->
     ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "on",
                                                     "default", "from", Username]]),
 
+    %% list keys with bucket type
+    rt:create_and_activate_bucket_type(Node, <<"list-keys-test">>, []),
+
+    lager:info("Checking that list keys on a bucket-type is disallowed"),
+    ?assertMatch({error, {"403", _}}, rhc:list_keys(C7, {<<"list-keys-test">>, <<"hello">>})),
+
+    lager:info("Granting riak_kv.list_keys on the bucket type, checking that list_keys succeeds"),
+    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_keys", "on",
+                                                    "list-keys-test", "to", Username]]),
+    ?assertMatch({ok, []}, rhc:list_keys(C7, {<<"list-keys-test">>, <<"hello">>})),
+
     lager:info("Checking that get_bucket is disallowed"),
     ?assertMatch({error, {ok, "403", _, _}}, rhc:get_bucket(C7, <<"hello">>)),
 
@@ -229,6 +265,9 @@ confirm() ->
 
     ?assertEqual(3, proplists:get_value(n_val, element(2, rhc:get_bucket(C7,
                                                                          <<"hello">>)))),
+
+    lager:info("Checking that reset_bucket is disallowed"),
+    ?assertMatch({error, {ok, "403", _, _}}, rhc:reset_bucket(C7, <<"hello">>)),
 
     lager:info("Checking that set_bucket is disallowed"),
     ?assertMatch({error, {ok, "403", _, _}}, rhc:set_bucket(C7, <<"hello">>,
@@ -243,6 +282,44 @@ confirm() ->
 
     ?assertEqual(5, proplists:get_value(n_val, element(2, rhc:get_bucket(C7,
                                                                          <<"hello">>)))),
+
+    %% 2i
+    case HaveIndexes of
+        false -> ok;
+        true ->
+            %% 2i permission test
+            lager:info("Checking 2i is disallowed"),
+            ?assertMatch({error, {"403", _}},
+                         rhc:get_index(C7, <<"hello">>,
+                                                   {binary_index,
+                                                    "name"},
+                                                   <<"John">>)),
+
+            lager:info("Granting 2i permissions, checking that results come back"),
+            ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.index", "on",
+                                                            "default", "to", Username]]),
+
+            %% don't actually have any indexes
+            ?assertMatch({ok, ?INDEX_RESULTS{}},
+                         rhc:get_index(C7, <<"hello">>,
+                                                   {binary_index,
+                                                    "name"},
+                                                   <<"John">>)),
+
+            lager:info("Checking that 2i on a bucket-type is disallowed"),
+            ?assertMatch({error, {"403", _}},
+                         rhc:get_index(C7, {<<"list-keys-test">>,
+                                            <<"hello">>}, {binary_index, "name"}, <<"John">>)),
+
+            lager:info("Granting riak_kv.index on the bucket type, checking that get_index succeeds"),
+            ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.index", "on",
+                                                    "list-keys-test", "to", Username]]),
+            ?assertMatch({ok, ?INDEX_RESULTS{}},
+                         rhc:get_index(C7, {<<"list-keys-test">>,
+                                            <<"hello">>}, {binary_index, "name"}, <<"John">>)),
+
+            ok
+    end,
 
     %% counters
 
@@ -415,7 +492,7 @@ confirm() ->
 
     crdt_tests(Nodes, C7),
 
-    URL = lists:flatten(io_lib:format("https://127.0.0.1:~b", [Port])),
+    URL = lists:flatten(io_lib:format("https://~s:~b", [IP, Port])),
 
     lager:info("checking link walking fails because it is deprecated"),
 
@@ -423,8 +500,8 @@ confirm() ->
                        ibrowse:send_req(URL ++ "/riak/hb/first/_,_,_", [], get,
                      [], [{response_format, binary}, {is_ssl, true},
                           {ssl_options, [
-                                         {cacertfile, filename:join([PrivDir,
-                                                                     "certs/selfsigned/ca/rootcert.pem"])},
+                                         {cacertfile, filename:join([CertDir,
+                                                                     "rootCA/cert.pem"])},
                                          {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
 
@@ -435,16 +512,16 @@ confirm() ->
                        ibrowse:send_req(URL ++ "/solr/index/select?q=foo:bar&wt=json", [], get,
                      [], [{response_format, binary}, {is_ssl, true},
                           {ssl_options, [
-                                         {cacertfile, filename:join([PrivDir,
-                                                                     "certs/selfsigned/ca/rootcert.pem"])},
+                                         {cacertfile, filename:join([CertDir,
+                                                                     "rootCA/cert.pem"])},
                                          {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
-    ok.
+    pass.
 
 enable_ssl(Node) ->
-    [{http, {_IP, Port}}|_] = rt:connection_info(Node),
-    rt:update_app_config(Node, [{riak_api, [{https, [{"127.0.0.1",
-                                                     Port+1000}]}]}]),
+    [{http, {IP, Port}}|_] = rt:connection_info(Node),
+    rt:update_app_config(Node, [{riak_api, [{https, [{IP,
+                                                      Port+1000}]}]}]),
     rt:wait_until_pingable(Node),
     rt:wait_for_service(Node, riak_kv).
 
@@ -463,11 +540,11 @@ crdt_tests([Node|_]=Nodes, RHC) ->
 
     lager:info("Creating bucket types for CRDTs"),
     Types = [{<<"counters">>, counter, riakc_counter:to_op(riakc_counter:increment(5, riakc_counter:new()))},
-             {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))},
-             {<<"maps">>, map, riakc_map:to_op(riakc_map:add({<<"bar">>, counter}, riakc_map:new()))}],
+             {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))}],
     [ begin
           rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
-          rt:wait_until_bucket_type_status(BType, active, Nodes)
+          rt:wait_until_bucket_type_status(BType, active, Nodes),
+          rt:wait_until_bucket_type_visible(Nodes, BType)
       end || {BType, DType, _Op} <- Types ],
 
     lager:info("Checking that CRDT fetch is denied"),

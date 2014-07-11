@@ -60,6 +60,7 @@
          enable_search_hook/2,
          expect_in_log/2,
          get_deps/0,
+         get_ip/1,
          get_node_logs/0,
          get_replica/5,
          get_ring/1,
@@ -81,6 +82,7 @@
          nearest_ringsize/1,
          owners_according_to/1,
          partition/2,
+         partitions_for_node/1,
          pbc/1,
          pbc_read/3,
          pbc_read/4,
@@ -139,6 +141,8 @@
          wait_until_aae_trees_built/1,
          wait_until_all_members/1,
          wait_until_all_members/2,
+         wait_until_bucket_props/3,
+         wait_until_bucket_type_visible/2,
          wait_until_capability/3,
          wait_until_capability/4,
          wait_until_connected/1,
@@ -319,7 +323,9 @@ deploy_clusters(Settings) ->
                           NumNodes when is_integer(NumNodes) ->
                               [{current, default} || _ <- lists:seq(1, NumNodes)];
                           {NumNodes, InitialConfig} when is_integer(NumNodes) ->
-                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)];
+                          {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
+                              [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
                       end || Setting <- Settings],
     ?HARNESS:deploy_clusters(ClusterConfigs).
 
@@ -710,12 +716,17 @@ wait_until_all_members(Nodes) ->
 
 %% @doc Wait until all nodes in the list `Nodes' believes all nodes in the
 %%      list `Members' are members of the cluster.
-wait_until_all_members(Nodes, Members) ->
-    lager:info("Wait until all members ~p ~p", [Nodes, Members]),
-    S1 = ordsets:from_list(Members),
+wait_until_all_members(Nodes, ExpectedMembers) ->
+    lager:info("Wait until all members ~p ~p", [Nodes, ExpectedMembers]),
+    S1 = ordsets:from_list(ExpectedMembers),
     F = fun(Node) ->
-                S2 = ordsets:from_list(members_according_to(Node)),
-                ordsets:is_subset(S1, S2)
+                case members_according_to(Node) of
+                    {badrpc, _} ->
+                        false;
+                    ReportedMembers ->
+                        S2 = ordsets:from_list(ReportedMembers),
+                        ordsets:is_subset(S1, S2)
+                end
         end,
     [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
     ok.
@@ -864,52 +875,80 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
 %% AAE support
 wait_until_aae_trees_built(Nodes) ->
     lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
-    %% Wait until all nodes report no undefined trees
-    AllBuiltFun =
-    fun(_, _AllBuilt = false) ->
-            false;
-       (Node, _AllBuilt = true) ->
-            Info = rpc:call(Node,
-                            riak_kv_entropy_info,
-                            compute_tree_info,
-                            []),
+    BuiltFun = fun() -> lists:foldl(aae_tree_built_fun(), true, Nodes) end,
+    ?assertEqual(ok, wait_until(BuiltFun)),
+    ok.
+
+aae_tree_built_fun() ->
+    fun(Node, _AllBuilt = true) ->
+            case get_aae_tree_info(Node) of
+                {ok, TreeInfos} ->
+                    case all_trees_have_build_times(TreeInfos) of
+                        true ->
+                            Partitions = [I || {I, _} <- TreeInfos],
+                            all_aae_trees_built(Node, Partitions);
+                        false ->
+                            some_trees_not_built
+                    end;
+                Err ->
+                    Err
+            end;
+       (_Node, Err) ->
+            Err
+    end.
+
+% It is unlikely but possible to get a tree built time from compute_tree_info
+% but an attempt to use the tree returns not_built. This is because the build
+% process has finished, but the lock on the tree won't be released until it
+% dies and the manager detects it. Yes, this is super freaking paranoid.
+all_aae_trees_built(Node, Partitions) ->
+    %% Notice that the process locking is spawned by the
+    %% pmap. That's important! as it should die eventually
+    %% so the lock is released and the test can lock the tree.
+    IndexBuilts = rt:pmap(index_built_fun(Node), Partitions),
+    BadOnes = [R || R <- IndexBuilts, R /= true],
+    case BadOnes of
+        [] ->
+            true;
+        _ ->
+            BadOnes
+    end.
+
+get_aae_tree_info(Node) ->
+    case rpc:call(Node, riak_kv_entropy_info, compute_tree_info, []) of
+        {badrpc, _} ->
+            {error, {badrpc, Node}};
+        Info  ->
             lager:debug("Entropy table on node ~p : ~p", [Node, Info]),
-            AllHaveBuildTimes = not lists:keymember(undefined, 2, Info),
-            case AllHaveBuildTimes of
-                false ->
-                    false;
-                true ->
-                    lager:debug("Check if really built by locking"),
-                    %% Try to lock each partition. If you get not_built,
-                    %% the manager has not detected the built process has 
-                    %% died yet.
-                    %% Notice that the process locking is spawned by the
-                    %% pmap. That's important! as it should die eventually
-                    %% so the test can lock on the tree.
-                    IdxBuilt =
-                    fun(Idx) ->
-                            {ok, TreePid} = rpc:call(Node, riak_kv_vnode,
-                                                     hashtree_pid, [Idx]),
-                            TreeLocked =
-                            rpc:call(Node, riak_kv_index_hashtree, get_lock,
-                                     [TreePid, for_riak_test]),
-                            lager:debug("Partition ~p : ~p", [Idx, TreeLocked]),
-                            TreeLocked == ok
-                            orelse TreeLocked == already_locked
-                    end,
+            {ok, Info}
+    end.
 
-                    Partitions = [I || {I, _} <- Info],
+all_trees_have_build_times(Info) ->
+    not lists:keymember(undefined, 2, Info).
 
-                    AllBuilt =
-                    lists:all(fun(V) -> V == true end,
-                              rt:pmap(IdxBuilt, Partitions)),
-                    lager:debug("For node ~p all built = ~p", [Node, AllBuilt]),  
-                    AllBuilt
+index_built_fun(Node) ->
+    fun(Idx) ->
+            case rpc:call(Node, riak_kv_vnode,
+                                     hashtree_pid, [Idx]) of
+                {ok, TreePid} ->
+                    case rpc:call(Node, riak_kv_index_hashtree,
+                                  get_lock, [TreePid, for_riak_test]) of
+                        {badrpc, _} ->
+                            {error, {badrpc, Node}};
+                        TreeLocked when TreeLocked == ok;
+                                        TreeLocked == already_locked ->
+                            true;
+                        Err ->
+                            % Either not_built or some unhandled result,
+                            % in which case update this case please!
+                            {error, {index_not_built, Node, Idx, Err}}
+                    end;
+                {error, _}=Err ->
+                    Err;
+                {badrpc, _} ->
+                    {error, {badrpc, Node}}
             end
-    end,
-    wait_until(fun() ->
-                       lists:foldl(AllBuiltFun, true, Nodes)
-               end).
+    end.
 
 %%%===================================================================
 %%% Ring Functions
@@ -924,6 +963,11 @@ check_singleton_node(Node) ->
     ?assertEqual([Node], Owners),
     ok.
 
+% @doc Get list of partitions owned by node (primary).
+partitions_for_node(Node) ->
+    Ring = get_ring(Node),
+    [Idx || {Idx, Owner} <- riak_core_ring:all_owners(Ring), Owner == Node].
+
 %% @doc Get the raw ring for `Node'.
 get_ring(Node) ->
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
@@ -937,16 +981,24 @@ assert_nodes_agree_about_ownership(Nodes) ->
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.
 owners_according_to(Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Owners = [Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)],
-    lists:usort(Owners).
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            Owners = [Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)],
+            lists:usort(Owners);
+        {badrpc, _}=BadRpc ->
+            BadRpc
+    end.
 
 %% @doc Return a list of cluster members according to the ring retrieved from
 %%      the specified node.
 members_according_to(Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Members = riak_core_ring:all_members(Ring),
-    Members.
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            Members = riak_core_ring:all_members(Ring),
+            Members;
+        {badrpc, _}=BadRpc ->
+            BadRpc
+    end.
 
 %% @doc Return an appropriate ringsize for the node count passed
 %%      in. 24 is the number of cores on the bigger intel machines, but this
@@ -965,16 +1017,24 @@ nearest_ringsize(Count, Power) ->
 %% @doc Return the cluster status of `Member' according to the ring
 %%      retrieved from `Node'.
 status_of_according_to(Member, Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Status = riak_core_ring:member_status(Ring, Member),
-    Status.
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            Status = riak_core_ring:member_status(Ring, Member),
+            Status;
+        {badrpc, _}=BadRpc ->
+            BadRpc
+    end.
 
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.
 claimant_according_to(Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Claimant = riak_core_ring:claimant(Ring),
-    Claimant.
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            Claimant = riak_core_ring:claimant(Ring),
+            Claimant;
+        {badrpc, _}=BadRpc ->
+            BadRpc
+    end.
 
 %%%===================================================================
 %%% Cluster Utility Functions
@@ -1119,22 +1179,88 @@ systest_read(Node, Start, End, Bucket, R) ->
 
 systest_read(Node, Start, End, Bucket, R, CommonValBin)
   when is_binary(CommonValBin) ->
+    systest_read(Node, Start, End, Bucket, R, CommonValBin, false).
+
+%% Read and verify the values of objects written with
+%% `systest_write'. The `SquashSiblings' parameter exists to
+%% optionally allow handling of siblings whose value and metadata are
+%% identical except for the dot. This goal is to facilitate testing
+%% with DVV enabled because siblings can be created internally by Riak
+%% in cases where testing with DVV disabled would not. Such cases
+%% include writes that happen during handoff when a vnode forwards
+%% writes, but also performs them locally or when a put coordinator
+%% fails to send an acknowledgment within the timeout window and
+%% another put request is issued.
+systest_read(Node, Start, End, Bucket, R, CommonValBin, SquashSiblings)
+  when is_binary(CommonValBin) ->
     rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
-    F = fun(N, Acc) ->
-                case C:get(Bucket, <<N:32/integer>>, R) of
-                    {ok, Obj} ->
-                        case riak_object:get_value(Obj) of
-                            <<N:32/integer, CommonValBin/binary>> ->
-                                Acc;
-                            WrongVal ->
-                                [{N, {wrong_val, WrongVal}} | Acc]
-                        end;
-                    Other ->
-                        [{N, Other} | Acc]
-                end
-        end,
-    lists:foldl(F, [], lists:seq(Start, End)).
+    lists:foldl(systest_read_fold_fun(C, Bucket, R, CommonValBin, SquashSiblings),
+                [],
+                lists:seq(Start, End)).
+
+systest_read_fold_fun(C, Bucket, R, CommonValBin, SquashSiblings) ->
+    fun(N, Acc) ->
+            GetRes = C:get(Bucket, <<N:32/integer>>, R),
+            Val = object_value(GetRes, SquashSiblings),
+            update_acc(value_matches(Val, N, CommonValBin), Val, N, Acc)
+    end.
+
+object_value({error, _}=Error, _) ->
+    Error;
+object_value({ok, Obj}, SquashSiblings) ->
+    object_value(riak_object:value_count(Obj), Obj, SquashSiblings).
+
+object_value(1, Obj, _SquashSiblings) ->
+    riak_object:get_value(Obj);
+object_value(_ValueCount, Obj, false) ->
+    riak_object:get_value(Obj);
+object_value(_ValueCount, Obj, true) ->
+    lager:debug("Siblings detected for ~p:~p", [riak_object:bucket(Obj), riak_object:key(Obj)]),
+    Contents = riak_object:get_contents(Obj),
+    case lists:foldl(fun sibling_compare/2, {true, undefined}, Contents) of
+        {true, {_, _, _, Value}} ->
+            lager:debug("Siblings determined to be a single value"),
+            Value;
+        {false, _} ->
+            {error, siblings}
+    end.
+
+sibling_compare({MetaData, Value}, {true, undefined}) ->
+    Dot = case dict:find(<<"dot">>, MetaData) of
+              {ok, DotVal} ->
+                  DotVal;
+              error ->
+                  {error, no_dot}
+          end,
+    VTag = dict:fetch(<<"X-Riak-VTag">>, MetaData),
+    LastMod = dict:fetch(<<"X-Riak-Last-Modified">>, MetaData),
+    {true, {element(2, Dot), VTag, LastMod, Value}};
+sibling_compare(_, {false, _}=InvalidMatch) ->
+    InvalidMatch;
+sibling_compare({MetaData, Value}, {true, PreviousElements}) ->
+    Dot = case dict:find(<<"dot">>, MetaData) of
+              {ok, DotVal} ->
+                  DotVal;
+              error ->
+                  {error, no_dot}
+          end,
+    VTag = dict:fetch(<<"X-Riak-VTag">>, MetaData),
+    LastMod = dict:fetch(<<"X-Riak-Last-Modified">>, MetaData),
+    ComparisonElements = {element(2, Dot), VTag, LastMod, Value},
+    {ComparisonElements =:= PreviousElements, ComparisonElements}.
+
+value_matches(<<N:32/integer, CommonValBin/binary>>, N, CommonValBin) ->
+    true;
+value_matches(_WrongVal, _N, _CommonValBin) ->
+    false.
+
+update_acc(true, _, _, Acc) ->
+    Acc;
+update_acc(false, {error, _}=Val, N, Acc) ->
+    [{N, Val} | Acc];
+update_acc(false, Val, N, Acc) ->
+    [{N, {wrong_val, Val}} | Acc].
 
 % @doc Reads a single replica of a value. This issues a get command directly
 % to the vnode handling the Nth primary partition of the object's preflist.
@@ -1249,6 +1375,12 @@ pbc_read_check(Pid, Bucket, Key, Allowed, Options) ->
 -spec pbc_write(pid(), binary(), binary(), binary()) -> atom().
 pbc_write(Pid, Bucket, Key, Value) ->
     Object = riakc_obj:new(Bucket, Key, Value),
+    riakc_pb_socket:put(Pid, Object).
+
+%% @doc does a write via the erlang protobuf client plus content-type
+-spec pbc_write(pid(), binary(), binary(), binary(), list()) -> atom().
+pbc_write(Pid, Bucket, Key, Value, CT) ->
+    Object = riakc_obj:new(Bucket, Key, Value, CT),
     riakc_pb_socket:put(Pid, Object).
 
 %% @doc sets a bucket property/properties via the erlang protobuf client
@@ -1409,30 +1541,52 @@ set_backend(eleveldb, _) ->
     set_backend(riak_kv_eleveldb_backend);
 set_backend(memory, _) ->
     set_backend(riak_kv_memory_backend);
+set_backend(multi, Extras) ->
+    set_backend(riak_kv_multi_backend, Extras);
 set_backend(Backend, _) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
     lager:info("rt:set_backend(~p)", [Backend]),
-    ?HARNESS:set_backend(Backend);
-set_backend(Backend, Extras) when Backend == multi; Backend == riak_kv_multi_backend ->
+    update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
+    get_backends();
+set_backend(Backend, Extras) when Backend == riak_kv_multi_backend ->
     MultiConfig = proplists:get_value(multi_config, Extras, default),
-    set_multi_backend(MultiConfig);
+    Config = make_multi_backend_config(MultiConfig),
+    update_app_config(all, [{riak_kv, Config}]),
+    get_backends();
 set_backend(Other, _) ->
     lager:warning("rt:set_backend doesn't recognize ~p as a legit backend, using the default.", [Other]),
-    ?HARNESS:get_backends().
+    get_backends().
 
-set_multi_backend(default) ->
-    Config = [{multi_backend_default, <<"eleveldb1">>},
-              {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
-                               {<<"memory1">>, riak_kv_memory_backend, []},
-                               {<<"bitcask1">>, riak_kv_bitcask_backend, []}]}],
-    ?HARNESS:set_backend(riak_kv_multi_backend, Config);
-set_multi_backend(indexmix) ->
-    Config = [{multi_backend_default, <<"eleveldb1">>},
-              {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
-                               {<<"memory1">>, riak_kv_memory_backend, []}]}],
-    ?HARNESS:set_backend(riak_kv_multi_backend, Config);
-set_multi_backend(Other) ->
+make_multi_backend_config(default) ->
+    [{storage_backend, riak_kv_multi_backend},
+     {multi_backend_default, <<"eleveldb1">>},
+     {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                      {<<"memory1">>, riak_kv_memory_backend, []},
+                      {<<"bitcask1">>, riak_kv_bitcask_backend, []}]}];
+make_multi_backend_config(indexmix) ->
+    [{storage_backend, riak_kv_multi_backend},
+     {multi_backend_default, <<"eleveldb1">>},
+     {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                      {<<"memory1">>, riak_kv_memory_backend, []}]}];
+make_multi_backend_config(Other) ->
     lager:warning("rt:set_multi_backend doesn't recognize ~p as legit multi-backend config, using default", [Other]),
-    set_multi_backend(default).
+    make_multi_backend_config(default).
+
+get_backends() ->
+    Backends = ?HARNESS:get_backends(),
+    case Backends of
+        [riak_kv_bitcask_backend] -> bitcask;
+        [riak_kv_eleveldb_backend] -> eleveldb;
+        [riak_kv_memory_backend] -> memory;
+        [Other] -> Other;
+        MoreThanOne -> MoreThanOne
+    end.
+
+-spec get_backend([proplists:property()]) -> atom() | error.
+get_backend(AppConfigProplist) ->
+    case kvc:path('riak_kv.storage_backend', AppConfigProplist) of
+        [] -> error;
+        Backend -> Backend
+    end.
 
 %% @doc Gets the current version under test. In the case of an upgrade test
 %%      or something like that, it's the version you're upgrading to.
@@ -1444,6 +1598,10 @@ get_version() ->
 whats_up() ->
     ?HARNESS:whats_up().
 
+-spec get_ip(node()) -> string().
+get_ip(Node) ->
+    ?HARNESS:get_ip(Node).
+
 %% @doc Log a message to the console of the specified test nodes.
 %%      Messages are prefixed by the string "---riak_test--- "
 %%      Uses lager:info/1 'Fmt' semantics
@@ -1453,7 +1611,12 @@ log_to_nodes(Nodes, Fmt) ->
 %% @doc Log a message to the console of the specified test nodes.
 %%      Messages are prefixed by the string "---riak_test--- "
 %%      Uses lager:info/2 'LFmt' and 'LArgs' semantics
-log_to_nodes(Nodes, LFmt, LArgs) ->
+log_to_nodes(Nodes0, LFmt, LArgs) ->
+    %% This logs to a node's info level, but if riak_test is running
+    %% at debug level, we want to know when we send this and what
+    %% we're saying
+    Nodes = lists:flatten(Nodes0),
+    lager:debug("log_to_nodes: " ++ LFmt, LArgs),
     Module = lager,
     Function = log,
     Meta = [],
@@ -1545,6 +1708,49 @@ wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
         end,
     ?assertEqual(ok, rt:wait_until(F)).
 
+-spec bucket_type_visible([atom()], binary()|{binary(), binary()}) -> boolean().
+bucket_type_visible(Nodes, Type) ->
+    MaxTime = rt_config:get(rt_max_wait_time),
+    IsVisible = fun erlang:is_list/1,
+    {Res, NodesDown} = rpc:multicall(Nodes, riak_core_bucket_type, get, [Type], MaxTime),
+    NodesDown == [] andalso lists:all(IsVisible, Res).
+
+wait_until_bucket_type_visible(Nodes, Type) ->
+    F = fun() -> bucket_type_visible(Nodes, Type) end,
+    ?assertEqual(ok, rt:wait_until(F)).
+
+-spec see_bucket_props([atom()], binary()|{binary(), binary()},
+                       proplists:proplist()) -> boolean().
+see_bucket_props(Nodes, Bucket, ExpectProps) ->
+    MaxTime = rt_config:get(rt_max_wait_time),
+    IsBad = fun({badrpc, _}) -> true;
+               ({error, _}) -> true;
+               (Res) when is_list(Res) -> false
+            end,
+    HasProps = fun(ResProps) ->
+                       lists:all(fun(P) -> lists:member(P, ResProps) end,
+                                 ExpectProps)
+               end,
+    case rpc:multicall(Nodes, riak_core_bucket, get_bucket, [Bucket], MaxTime) of
+        {Res, []} ->
+            % No nodes down, check no errors
+            case lists:any(IsBad, Res) of
+                true  ->
+                    false;
+                false ->
+                    lists:all(HasProps, Res)
+            end;
+        {_, _NodesDown} ->
+            false
+    end.
+
+wait_until_bucket_props(Nodes, Bucket, Props) ->
+    F = fun() ->
+                see_bucket_props(Nodes, Bucket, Props)
+        end,
+    ?assertEqual(ok, rt:wait_until(F)).
+
+
 %% @doc Set up in memory log capture to check contents in a test.
 setup_log_capture(Nodes) when is_list(Nodes) ->
     rt:load_modules_on_nodes([riak_test_lager_backend], Nodes),
@@ -1593,7 +1799,7 @@ expect_in_log(Node, Pattern) ->
 %% Non-optimal check, because we're blocking for the gen_server to start
 %% to ensure that the routes have been added by the supervisor.
 %%
-wait_for_control(Vsn, Node) when is_atom(Node) ->
+wait_for_control(_Vsn, Node) when is_atom(Node) ->
     lager:info("Waiting for riak_control to start on node ~p.", [Node]),
 
     %% Wait for the gen_server.
@@ -1610,12 +1816,7 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                 end
         end),
 
-    GuiResource = case Vsn of
-        legacy ->
-            admin_gui;
-        _ ->
-            riak_control_wm_gui
-    end,
+    lager:info("Waiting for routes to be added to supervisor..."),
 
     %% Wait for routes to be added by supervisor.
     rt:wait_until(Node, fun(N) ->
@@ -1627,11 +1828,8 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                         lager:info("Error was ~p.", [Error]),
                         false;
                     Routes ->
-                        case lists:keyfind(GuiResource, 2,
-                                           Routes) of
+                        case is_control_gui_route_loaded(Routes) of
                             false ->
-                                lager:info("Control routes not found yet: ~p ~p.",
-                                           [Vsn, Routes]),
                                 false;
                             _ ->
                                 true
@@ -1639,7 +1837,10 @@ wait_for_control(Vsn, Node) when is_atom(Node) ->
                 end
         end).
 
+%% @doc Is the riak_control GUI route loaded?
+is_control_gui_route_loaded(Routes) ->
+    lists:keymember(admin_gui, 2, Routes) orelse lists:keymember(riak_control_wm_gui, 2, Routes).
+
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
-

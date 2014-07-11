@@ -118,6 +118,30 @@ or `make stagedevrel` before you run `rtdev-current.sh`. Like setting up
 releases you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-current.sh#L6)
 so all your riak builds are in one place.
 
+####  reset-current-env.sh
+
+`reset-current-env.sh` resets test environments setup using `rtdev-current.sh`
+using the following process:
+
+  1. Delete the current stagedevrel/devrel environment
+  1. `make stagedevrel` for the Riak release being tested (current default is 2.0,
+     overidden with the `-v` flag).  When the `-c` option is specified,
+     `make devclean` will be executed before rebuilding.
+  1. Execute `rtdev-current.sh` for the Riak release being tested
+  1. Rebuild the current riak_test branch.  When the `-c` option is specified,
+     'make clean' will be executed before rebuilding.
+
+This script is intended to provide to cover the common test environment
+reset method -- not cover all possible testing configurations/scenarios.
+As such, it makes the following assumptions regarding the environment and
+test operation:
+
+   * Riak source trees will be symlinked into the riak_test root directory
+     as `riak-<version>`.
+   * The script will be located in a sub-directory of <riak_test home>.  It
+     can be executed from any directory, but it uses the script location to
+     determine the riak_test home directory.
+
 ### Config file.
 
 Now that you've got your releases all ready and gitified, you'll need
@@ -171,14 +195,19 @@ You can generate a coverage report for a test run through [Erlang Cover](http://
 Coverage information for all **current** code run on any Riak node started by any of the tests in the run will be output as HTML in the coverage directory.
 That is, legacy and previous nodes used in the test will not be included, as the tool can only work on one version of the code at a time.
 Also, cover starts running in the Riak nodes after the node is up, so it will not report coverage of application initialization or other early code paths. 
-You can specify a list of modules for which you want coverage generated like this:
+Each test module, via a module attribute, can specify what modules it wishes to cover compile:
 ```erlang
-    {cover_modules, [riak_kv_bitcask_backend, riak_core_ring]}
+    -cover_modules([riak_kv_bitcask_backend, riak_core_ring]).
 ```
 Or entire applications by using:
 ```erlang
-    {cover_apps, [riak_kv, riak_core]}
+    -cover_apps([riak_kv, riak_core]).
 ```
+To enable this, you need to turn coverage in in your riak_test.config:
+```erlang
+   {cover_enabled, true}
+```
+Tests that do not include coverage annotations will, if cover is enabled, honor {cover_modules, [..]} and {cover_apps, [..]} from the riak_test config file.
 
 #### Web hooks
 When reporting is enabled, each test result is posted to [Giddy Up](http://giddyup.basho.com). You can specify
@@ -226,8 +255,10 @@ calls take a long time to finish.  You can even
 [turn a call into a noop][ring_noop] to really cause havoc on a
 cluster.  These are just some examples.  You should also be able to
 change any function you want, including dependency functions and even
-Erlang functions.  Furthermore, any state you can reach from a
-function call can be affected such as function arguments but also ETS
+Erlang functions.  You can also create intercepts using anonymous
+functions, either in compiled code or while debugging in an Erlang
+shell.  Furthermore, any state you can reach from a
+function call can be affected such as function arguments and also ETS
 tables.  This leads to the principle of intercepts.
 
 > If you can do it in Riak source code you can do it with an
@@ -242,25 +273,25 @@ tables.  This leads to the principle of intercepts.
 ### Writing Intercepts
 
 Writing an intercept is nearly identical to writing any other Erlang
-source with a few easy to remember conventions added.
+source with a few easy-to-remember conventions added.
 
 1. All intercepts must live under the `intercepts` dir.
 
 2. All intercept modules should be named the same as the module they
-  affect with the suffix `_intercepts` added.  E.g. `riak_kv_vnode` =>
-  `riak_kv_vnode_intercepts`.
+   affect with the suffix `_intercepts` added.  E.g. `riak_kv_vnode` =>
+   `riak_kv_vnode_intercepts`.
 
 3. All intercept modules should include the `intercept.hrl` file.
    This includes macros to properly log messages.  You **cannot** call
    lager.
 
-4. All intercept modules should declare the macro `M` who's value is
+4. All intercept modules should declare the macro `M` whose value is
    the affected module with the suffix `_orig` added.  E.g. for
    `riak_kv_vnode` add the line `-define(M, riak_kv_vnode_orig)`.
    This, along with the next convention is needed to call into the
    original function.
 
-5. To call the origin function use the `?M:` follow by the name of the
+5. To call the origin function use the `?M:` followed by the name of the
    function with the `_orig` suffix appended.  E.g. to call
    `riak_kv_vnode:put` you would type `?M:put_orig`.
 
@@ -313,11 +344,56 @@ them with.  The example above would result in all calls to
 
     {ModuleToIntercept, [{{FunctionToIntercept, Arity}, InterceptFunction}]}
 
+Note that anonymous functions may not be supplied as intercepts via config.
+
 #### Manual
 
 To add the `dropped_put` intercept manually you would do the following.
 
     rt_intercept:add(Node, {riak_kv_vnode, [{{put,7}, dropped_put}]})
+
+You could alternatively supply an anonymous function as an intercept here.
+This requires that your module include the following compilation directive:
+
+    -compile({parse_transform, rt_intercept_pt}).
+
+The general form for an anonymous function intercept is a 2-tuple:
+
+    {ListOfFreeVariables, AnonymousFunction}
+
+The first element of the tuple is a list of free variables the anonymous
+function uses from its surrounding context, and the second element is the
+anonymous function itself. For example, the previous example using an
+anonymous function intercept might look like this:
+
+    rt_intercept:add(Node,
+                     {riak_kv_vnode,
+                      [{{put,7},
+                        {[],
+                         fun(Preflist,BKey,Obj,ReqId,StartTime,Options,Sender) ->
+                             NewPreflist = lists:sublist(Preflist, length(Preflist)-1),
+                             error_logger:info_msg("Preflist modified from ~p to ~p",
+                                                   [Preflist, NewPreflist]),
+                             riak_kv_vnode_orig:put_orig(NewPreflist,BKey,Obj,ReqId,
+                                                         StartTime,Options,Sender)
+                         end}}]})
+
+Note how this version has no access to the `?I_INFO` and `?M` like in the
+original example. For this reason, for an actual test this code would be
+better written using a regular intercept rather than the anonymous function
+approach shown here.
+
+Since the anonymous function in this example uses no free variables from
+its surrounding context, the variable list in this example is empty. For
+cases like this where the list of free variables is empty, you can
+alternatively supply just the anonymous function in place of the 2-tuple.
+
+If you pass an anonymous function intercept to `rt_intercept:add/2` in an
+Erlang shell, a list of free variables is not needed regardless of whether
+the function uses such variables or not. This is because the shell tracks
+these variables and makes a list of them available as part of the
+function's context. Therefore you need supply only the function, not the
+2-tuple.
 
 ### How Does it Work?
 
@@ -347,9 +423,9 @@ will exist.
   you defined it.  No modification of the code is performed.
 
 * `riak_kv_vnode` - What once contained the original code is now a
-  proxy.  All functions passthru to `riak_kv_vnode_orig`.  Unless an
-  intercept is registered in the mapping passed to `intercept:add`.
-  In that case the call will forward to `riak_kv_vnode_intercepts`.
+  proxy.  All functions passthru to `riak_kv_vnode_orig` unless an
+  intercept is registered in the mapping passed to `intercept:add`,
+  in which case the call will forward to `riak_kv_vnode_intercepts`.
 
 The interceptor code also modifies the original module and proxy to
 export all functions.  This fact, along with the fact that all the

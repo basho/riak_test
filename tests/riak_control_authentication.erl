@@ -201,7 +201,7 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
 
     %% Assert that we can access resource over the SSL port.
     lager:info("Verifying Control loads with credentials."),
-    AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null",
                                 [rt:http_url(Node), "/admin"]),
     ?assertEqual("200", os:cmd(AuthCommand)),
 
@@ -209,7 +209,7 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
 
 %% @doc Build a one node cluster.
 build_singleton_cluster(Vsn, Config) ->
-    Nodes = rt:build_cluster([{Vsn, Config}]),
+    [Nodes] = rt:build_clusters([{1, Vsn, Config}]),
 
     %% Start and stop, wait for riak_kv.
     %%

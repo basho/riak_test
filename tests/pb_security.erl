@@ -17,7 +17,7 @@ confirm() ->
     application:start(ssl),
     application:start(inets),
 
-    CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/pb_security_certs",
 
     %% make a bunch of crypto keys
     make_certs:rootCA(CertDir, "rootCA"),
@@ -50,13 +50,13 @@ confirm() ->
     PrivDir = rt:priv_dir(),
     Conf = [
             {riak_core, [
-                    {default_bucket_props, [{allow_mult, true}]}
-                    ]},
-            {riak_api, [
+                {default_bucket_props, [{allow_mult, true}]},
+                {ssl, [
                     {certfile, filename:join([CertDir,"site3.basho.com/cert.pem"])},
                     {keyfile, filename:join([CertDir, "site3.basho.com/key.pem"])},
                     {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
-                    ]},
+                    ]}
+                ]},
             {riak_search, [
                            {enabled, true}
                           ]}
@@ -546,6 +546,7 @@ confirm() ->
     %% create a new type
     rt:create_and_activate_bucket_type(Node, <<"mytype">>, [{n_val, 3}]),
     rt:wait_until_bucket_type_status(<<"mytype">>, active, Nodes),
+    rt:wait_until_bucket_type_visible(Nodes, <<"mytype">>),
 
     lager:info("Checking that get on a new bucket type is disallowed"),
     ?assertMatch({error, <<"Permission", _/binary>>}, riakc_pb_socket:get(PB,
@@ -622,6 +623,7 @@ confirm() ->
     %% create a new type
     rt:create_and_activate_bucket_type(Node, <<"mytype2">>, [{allow_mult, true}]),
     rt:wait_until_bucket_type_status(<<"mytype2">>, active, Nodes),
+    rt:wait_until_bucket_type_visible(Nodes, <<"mytype2">>),
 
     lager:info("Checking that get on the new type is disallowed"),
     ?assertMatch({error, <<"Permission", _/binary>>}, riakc_pb_socket:get(PB,
@@ -755,7 +757,7 @@ group_test(Node, Port, CertDir) ->
                            riakc_pb_socket:search(PB, <<"index">>, <<"foo:bar">>)),
 
     riakc_pb_socket:stop(PB),
-    ok.
+    pass.
 
 grant(Node, Args) ->
     ok = rpc:call(Node, riak_core_console, grant, [Args]).
@@ -765,12 +767,14 @@ crdt_tests([Node|_]=Nodes, PB) ->
 
     %% rt:create_and_activate
     lager:info("Creating bucket types for CRDTs"),
+
     Types = [{<<"counters">>, counter, riakc_counter:to_op(riakc_counter:increment(5, riakc_counter:new()))},
              {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))},
-             {<<"maps">>, map, riakc_map:to_op(riakc_map:add({<<"bar">>, counter}, riakc_map:new()))}],
+             {<<"maps">>, map, riakc_map:to_op(riakc_map:update({<<"bar">>, counter}, fun(In) -> riakc_counter:increment(In) end, riakc_map:new()))}],
     [ begin
           rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
-          rt:wait_until_bucket_type_status(BType, active, Nodes)
+          rt:wait_until_bucket_type_status(BType, active, Nodes),
+          rt:wait_until_bucket_type_visible(Nodes, BType)
       end || {BType, DType, _Op} <- Types ],
 
     lager:info("Checking that CRDT fetch is denied"),

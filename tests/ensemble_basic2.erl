@@ -20,6 +20,7 @@
 
 -module(ensemble_basic2).
 -export([confirm/0]).
+-compile({parse_transform, rt_intercept_pt}).
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
@@ -33,4 +34,43 @@ confirm() ->
     lager:info("Killing all ensemble leaders"),
     ok = ensemble_util:kill_leaders(Node, Ensembles),
     ensemble_util:wait_until_stable(Node, NVal),
+    Peers = [PeerId || {PeerId, _PeerPid} <- ensemble_util:peers(Node)],
+    lager:info("Verifying peers wait for riak_kv_service"),
+    Delay = rt_config:get(kv_vnode_delay, 5000),
+    rt_intercept:add_and_save(Node, {riak_kv_vnode, [{{init, 1}, {[Delay],
+                              fun(Args) ->
+                                      timer:sleep(Delay),
+                                      riak_kv_vnode_orig:init_orig(Args)
+                              end}}]}),
+    rt:stop_and_wait(Node),
+    rt:start(Node),
+    lager:info("Polling peers while riak_kv starts. We should see none"),
+    UpNoPeersFun =
+        fun() ->
+                PL = ensemble_util:peers(Node),
+                NodePeers = [P || {P, _} <- PL],
+                NonRootPeers = [P || P <- NodePeers, element(1, P) /= root],
+                S = rpc:call(Node, riak_core_node_watcher, services, [Node]),
+                case S of
+                    L when is_list(L) ->
+                        case lists:member(riak_kv, L) of
+                            true ->
+                                true;
+                            false ->
+                                ?assertEqual([], NonRootPeers)
+                        end;
+                    Err ->
+                        ?assertEqual(ok, {peer_get_error, Err})
+                end
+        end,
+    rt:wait_until(UpNoPeersFun),
+    lager:info("Perfect. riak_kv is now up and no peers started before that. "
+               "Now check they come back up"),
+    SPeers = lists:sort(Peers),
+    ?assertEqual(ok, rt:wait_until(fun() ->
+                                           L = ensemble_util:peers(Node),
+                                           L2 = lists:sort([P || {P, _} <- L]),
+                                           SPeers == L2
+                                   end)),
+    lager:info("All expected peers are back. Life is good"),
     pass.

@@ -31,7 +31,7 @@ confirm() ->
 
     true = rpc:block_call(node(Suspended), erlang, resume_process, [Suspended]),
 
-    ?assert(true).
+    pass.
 
 setup() ->
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
@@ -107,4 +107,3 @@ maybe_suspend_an_fs_source(Node, [{_Remote, Pid} | Tail]) ->
         true ->
             Pid
     end.
-
