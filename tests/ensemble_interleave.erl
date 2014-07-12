@@ -96,6 +96,6 @@ confirm() ->
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Re-reading keys to verify they exist"),
-    Expect = [ok, {error, timeout}, {error, <<"timeout">>}],
+    Expect = [ok, {error, timeout}, {error, <<"timeout">>}, {error, <<"failed">>}],
     [rt:pbc_read_check(PBC, Bucket, Key, Expect, Options) || Key <- Keys],
     pass.
