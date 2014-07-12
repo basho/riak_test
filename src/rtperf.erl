@@ -79,21 +79,21 @@ get_backends() ->
      riak_kv_eleveldb_backend,
      riak_kv_memory_backend].
 
-run_test(HostList, TestBenchConfig, BaseBenchConfig) ->
-    Collectors = start_data_collectors(HostList),
+run_test(Nodes, TestBenchConfig, BaseBenchConfig) ->
+    Collectors = start_data_collectors(Nodes),
 
     TestName = test_name(),
 
-    Base = maybe_start_base_load(BaseBenchConfig, HostList, TestName),
+    Base = maybe_start_base_load(BaseBenchConfig, Nodes, TestName),
 
-    rt_bench:bench(TestBenchConfig, HostList, TestName,
+    rt_bench:bench(TestBenchConfig, Nodes, TestName,
                    length(rt_config:get(perf_loadgens, [1]))),
 
     maybe_stop_base_load(Base),
 
     ok = stop_data_collectors(Collectors),
 
-    ok = collect_test_data(HostList, TestName).
+    ok = collect_test_data(Nodes, TestName).
 
 teardown() ->
     %% no!
@@ -324,9 +324,7 @@ maybe_stop_all(Hosts, Srs) ->
         _ -> ok
     end.
 
-start_data_collectors(Hosts) ->
-    Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
-
+start_data_collectors(Nodes) ->
     OSPid = os:getpid(),
     PrepDir = "/tmp/perf-"++OSPid,
     file:make_dir(PrepDir),
@@ -341,11 +339,11 @@ stop_data_collectors(Collector) ->
 
 maybe_start_base_load([], _, _) ->
     none;
-maybe_start_base_load(Config, HostList, TestName) ->
+maybe_start_base_load(Config, Nodes, TestName) ->
     spawn(fun() ->
-		  rt_bench:bench(Config, HostList, TestName++"_base",
-				 length(rt_config:get(perf_loadgens, [1])))
-	  end).
+                rt_bench:bench(Config, Nodes, TestName++"_base",
+                            length(rt_config:get(perf_loadgens, [1])))
+    end).
 
 maybe_stop_base_load(_) -> %% should be none, but benches aren't stoppable rn.
     ok.
@@ -359,7 +357,7 @@ test_name() ->
         atom_to_list(rt_config:get(perf_bin_type))++"-"++
         integer_to_list(BinSize)++"b-"++date_string().
 
-collect_test_data(Hosts, TestName) ->
+collect_test_data(Nodes, TestName) ->
     %% collect the files
     OSPid = os:getpid(),
     PrepDir = "/tmp/perf-"++OSPid,
@@ -368,14 +366,17 @@ collect_test_data(Hosts, TestName) ->
     ok = rt_bench:collect_bench_data(TestName, PrepDir),
 
     %% collect node logs
-    Vsn = rt_config:get(perf_version),
-    Base = rt_config:get(perf_builds),
-    lager:info("Base: ~p Vsn: ~p", [Base, Vsn]),
+    % Vsn = rt_config:get(perf_version),
+    % Base = rt_config:get(perf_builds),
+    % lager:info("Base: ~p Vsn: ~p", [Base, Vsn]),
     [begin
-     rtssh:scp_from(Host, Base++"/"++Vsn++"/log",
-            PrepDir++"/log-"++Host)
+            rtssh:scp_from(rtssh:node_to_host(Node),
+                           rtssh:node_path(Node) ++ "/log",
+                           PrepDir++"/"++rtssh:node_to_host(Node))
+                    % Base++"/"++Vsn++"/log",
+            % PrepDir++"/log-"++Host)
      end
-     || Host <- Hosts],
+     || Node <- Nodes],
 
     %% no need to collect stats output, it's already in the prepdir
 

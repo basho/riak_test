@@ -703,12 +703,16 @@ get_cmd_result(Port, Acc) ->
         {Port, {data, Bytes}} ->
             get_cmd_result(Port, [Bytes|Acc]);
         {Port, {exit_status, Status}} ->
+            Cmd = get(Port),
+            lager:info("~p returned exit status: ~p",
+                       [Cmd, Status]),
             case Status of
-                0 -> ok;
+                0 ->
+                    ok;
                 _ ->
-                    Cmd = get(Port),
-                    lager:info("~p returned exit status: ~p",
-                               [Cmd, Status])
+                    ok
+                    % lager:info("~p returned exit status: ~p",
+                    %            [Cmd, Status])
             end,
             erase(Port),
             Output = lists:flatten(lists:reverse(Acc)),

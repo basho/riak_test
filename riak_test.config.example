@@ -10,7 +10,7 @@
 	 {rt_harness, rtperf},
 	 {load_intercepts, false},
 	 {perf_builds, "/mnt/perf_builds"},
-	 {perf_loadgens, ["bench101"]},
+	 {perf_loadgens, ["bench101.aws"]},
 	 {rtdev_path, [{root, "/mnt/rt/riak_ee"},
 			{current, "/mnt/rt/riak_ee/riak-ee-2.0.0beta1"},
 			{previous, "/mnt/rt/riak_ee/riak-ee-1.4.8"},

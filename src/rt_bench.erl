@@ -72,7 +72,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                     {0, R} = rtssh:ssh_cmd(LG, Cmd, false),
                     lager:info("bench run finished, on ~p returned ~p",
                    [LG, R]),
-                    {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/"),
+                    % {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/"),
             Owner ! {done, ok}
                 catch
                     Class:Error ->
@@ -100,7 +100,7 @@ collect_bench_data(TestName, Dir) ->
     Len = length(Gens),
     [begin
      N = integer_to_list(N0),
-     rtssh:scp_from(Gen, BBDir++"/"++TestName++"_"++N++"/current", Dir)
+     rtssh:scp_from(Gen, BBDir++"/"++TestName++"_"++N++"/current", Dir ++ "/" ++ Gen)
      end
      || {Gen, N0} <- lists:zip(Gens, lists:seq(1, Len))],
     ok.
