@@ -12,5 +12,4 @@ fi
 D1=`basename "$1"`
 
 #generate our comparison graph
-echo gnuplot -e "dir1=\"$1\"; outfilename=\"${D1}-report.png\";" priv/reporting/summarize1.gpl
 gnuplot -e "dir1=\"$1\"; outfilename=\"${D1}-report.png\";" priv/reporting/summarize1.gpl

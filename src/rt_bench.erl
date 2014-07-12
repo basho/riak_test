@@ -72,7 +72,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                     {0, R} = rtssh:ssh_cmd(LG, Cmd, false),
                     lager:info("bench run finished, on ~p returned ~p",
                    [LG, R]),
-                    % {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/"),
+                    {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/"),
             Owner ! {done, ok}
                 catch
                     Class:Error ->

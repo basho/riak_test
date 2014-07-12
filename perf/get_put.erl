@@ -1,5 +1,5 @@
 -module(get_put).
--compile(export_all).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(HARNESS, (rt_config:get(rt_harness))).
@@ -9,7 +9,8 @@ confirm() ->
     HostList = rt_config:get(rt_hostnames),
     Count = length(HostList),
 
-    _Config = rtperf:standard_config(Count),
+    Config = rtperf:standard_config(Count),
+    lager:info("Generated configuration is: ~p", [Config]),
 
     [Nodes] = rt:build_clusters([Count]),
     lager:info("Built cluster: ~p", [Nodes]),

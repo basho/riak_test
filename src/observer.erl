@@ -388,8 +388,6 @@ message_queues([Pid|Pids], Threshold, VNodeMap, Queues) ->
 get_network() ->
     {ok, RX} = file:read_file("/sys/class/net/eth0/statistics/rx_bytes"),
     {ok, TX} = file:read_file("/sys/class/net/eth0/statistics/tx_bytes"),
-    % {ok, RX} = file:read_file("/sys/class/net/eth1/statistics/rx_bytes"),
-    % {ok, TX} = file:read_file("/sys/class/net/eth1/statistics/tx_bytes"),
     {to_integer(RX), to_integer(TX)}.
 
 get_disk2() ->
