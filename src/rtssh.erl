@@ -150,31 +150,37 @@ deploy_nodes(NodeConfig, Hosts) ->
             lists:zip(Nodes, Configs)),
     timer:sleep(500),
 
-    rt:pmap(fun(Node) ->
-                    Host = get_host(Node),
-                    IP = get_ip(Host),
-                    Config = [{riak_api, [{pb, [{IP, 10017}]},
-                                          {pb_ip, IP},
-                                          {http,[{IP, 10018}]}]},
-                              {riak_core, [{http, [{IP, 10018}]},
-                                           {cluster_mgr,{IP, 10016}}]}],
-                    %% Config = [{riak_api, [{pb, fun([{_, Port}]) ->
-                    %%                                    [{IP, Port}]
-                    %%                            end},
-                    %%                       {pb_ip, fun(_) ->
-                    %%                                       IP
-                    %%                               end}]},
-                    %%           {riak_core, [{http, fun([{_, Port}]) ->
-                    %%                                       [{IP, Port}]
-                    %%                               end}]}],
-                    update_app_config(Node, Config)
-            end, Nodes),
-    timer:sleep(500),
+    case rt_config:get(cuttle, true) of
+        false ->
+            rt:pmap(fun(Node) ->
+                            Host = get_host(Node),
+                            %%lager:info("ports ~p", [self()]),
+                            Config = [{riak_api,
+                                       [{pb, fun([{_, Port}]) ->
+                                                     [{Host, Port}]
+                                             end},
+                                        {pb_ip, fun(_) ->
+                                                        Host
+                                                end}]},
+                                      {riak_core,
+                                       [{http, fun([{_, Port}]) ->
+                                                       [{Host, Port}]
+                                               end}]}],
+                            update_app_config(Node, Config)
+                    end, Nodes),
 
-    rt:pmap(fun(Node) ->
-                update_nodename(Node)
-            end, Nodes),
-    timer:sleep(500),
+            timer:sleep(500),
+
+            rt:pmap(fun(Node) ->
+                            update_vm_args(Node,
+                                           [{"-name", Node},
+                                            {"-zddbl", "65535"},
+                                            {"-P", "256000"}])
+                    end, Nodes),
+
+            timer:sleep(500);
+        true -> ok
+    end,
 
     create_dirs(Nodes),
 
@@ -383,14 +389,33 @@ spawn_ssh_cmd(Node, Cmd) ->
     spawn_ssh_cmd(Node, Cmd, []).
 spawn_ssh_cmd(Node, Cmd, Opts) when is_atom(Node) ->
     Host = get_host(Node),
-    spawn_ssh_cmd(Host, Cmd, Opts);
+    spawn_ssh_cmd(Host, Cmd, Opts, true);
 spawn_ssh_cmd(Host, Cmd, Opts) ->
-    SSHCmd = format("ssh -o 'StrictHostKeyChecking no' ~s '~s'", [Host, Cmd]),
+    spawn_ssh_cmd(Host, Cmd, Opts, true).
+
+spawn_ssh_cmd(Node, Cmd, Opts, Return) when is_atom(Node) ->
+    Host = get_host(Node),
+    spawn_ssh_cmd(Host, Cmd, Opts, Return);
+spawn_ssh_cmd(Host, Cmd, Opts, Return) ->
+    Quiet =
+    case Return of
+        true -> "";
+        false -> " > /dev/null 2>&1"
+    end,
+    SSHCmd = format("ssh -q -o 'StrictHostKeyChecking no' ~s '~s'"++Quiet,
+            [Host, Cmd]),
     spawn_cmd(SSHCmd, Opts).
 
 ssh_cmd(Node, Cmd) ->
-    lager:info("Running: ~s :: ~s", [Node, Cmd]),
-    wait_for_cmd(spawn_ssh_cmd(Node, Cmd)).
+    ssh_cmd(Node, Cmd, true).
+
+ssh_cmd(Node, Cmd, Return) ->
+    case rt_config:get(rtssh_verbose, false) of
+        true ->
+            lager:info("Running: ~s :: ~s", [Node, Cmd]);
+        false -> ok
+    end,
+    wait_for_cmd(spawn_ssh_cmd(Node, Cmd, [stderr_to_stdout], Return)).
 
 remote_read_file(Node, File) ->
     timer:sleep(500),
@@ -456,9 +481,12 @@ do_update_vm_args(Node, Props) ->
         lists:foldl(fun({Config, Value}, Acc) ->
                             CBin = to_binary(Config),
                             VBin = to_binary(Value),
-                            re:replace(Acc,
-                                       <<"((^|\\n)", CBin/binary, ").+\\n">>,
-                                       <<"\\1 ", VBin/binary, $\n>>)
+                            case re:replace(Acc,
+                                            <<"((^|\\n)", CBin/binary, ").+\\n">>,
+                                            <<"\\1 ", VBin/binary, $\n>>) of
+                                CBin -> <<CBin/binary, VBin/binary, $\n>>;
+                                Mod -> Mod
+                            end
                     end, Bin, Props),
     %% io:format("~p~n", [iolist_to_binary(Output)]),
     remote_write_file(Node, VMArgs, Output),
@@ -492,7 +520,7 @@ update_app_config_file(Node, ConfigFile, Config, Current) ->
     lager:info("rtssh:update_app_config_file(~p, ~s, ~p)",
                [Node, ConfigFile, Config]),
     BaseConfig = current_config(Node, ConfigFile, Current),
-    %% io:format("BaseConfig: ~p~n", [BaseConfig]),
+
     MergeA = orddict:from_list(Config),
     MergeB = orddict:from_list(BaseConfig),
     NewConfig =
@@ -583,6 +611,18 @@ all_the_files(Host, DevPath, File) ->
             Files
     end.
 
+scp_to(Host, Path, RemotePath) ->
+    ssh_cmd(Host, "mkdir -p "++RemotePath),
+    SCP = format("scp -qr -o 'StrictHostKeyChecking no' ~s ~s:~s",
+                 [Path, Host, RemotePath]),
+    wait_for_cmd(spawn_cmd(SCP)).
+
+scp_from(Host, RemotePath, Path) ->
+    ssh_cmd(Host, "mkdir -p "++RemotePath),
+    SCP = format("scp -qr -o 'StrictHostKeyChecking no' ~s:~s ~s",
+                 [Host, RemotePath, Path]),
+    wait_for_cmd(spawn_cmd(SCP)).
+
 %%%===================================================================
 %%% Riak devrel path utilities
 %%%===================================================================
@@ -598,6 +638,9 @@ dev_bin_path(Path, N) ->
 dev_etc_path(Path, N) ->
     dev_path(Path, N) ++ "/etc".
 
+dev_data_path(Path, N) ->
+    dev_path(Path, N) ++ "/data".
+
 relpath(Vsn) ->
     Path = ?PATH,
     relpath(Vsn, Path).
@@ -611,7 +654,7 @@ relpath(root, Path) ->
 relpath(_, _) ->
     throw("Version requested but only one path provided").
 
-node_path(Node) ->
+node_path(Node) when is_atom(Node) ->
     node_path(Node, node_version(Node)).
 
 node_path(Node, Version) ->
@@ -635,6 +678,7 @@ spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
 spawn_cmd(Cmd, Opts) ->
     Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
+    put(Port, Cmd),
     Port.
 
 wait_for_cmd(Port) ->
@@ -648,9 +692,9 @@ wait_for_cmd(Port) ->
                                   catch port_close(Port),
                                   self() ! {Port, Msg},
                                   true
-                          after 0 ->
-                                  false
-                          end
+              after 0 ->
+                  false
+              end
                   end),
     get_cmd_result(Port, []).
 
@@ -659,10 +703,18 @@ get_cmd_result(Port, Acc) ->
         {Port, {data, Bytes}} ->
             get_cmd_result(Port, [Bytes|Acc]);
         {Port, {exit_status, Status}} ->
+            case Status of
+                0 ->
+                    ok;
+                _ ->
+                    Cmd = get(Port),
+                    lager:info("~p returned exit status: ~p",
+                               [Cmd, Status]),
+                    ok
+            end,
+            erase(Port),
             Output = lists:flatten(lists:reverse(Acc)),
             {Status, Output}
-    after 0 ->
-            timeout
     end.
 
 %%%===================================================================

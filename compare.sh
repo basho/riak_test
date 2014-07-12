@@ -1,0 +1,1 @@
+priv/reporting/compare.sh

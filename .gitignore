@@ -16,3 +16,5 @@ doc/
 coverage
 tags
 riak-*
+*.png
+.rebar/

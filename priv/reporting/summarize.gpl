@@ -1,0 +1,141 @@
+#clean up the environment for interactive use
+unset multiplot 
+reset
+
+set terminal png font "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf,9" size 850,1100
+set output outfilename
+
+#set term x11 size 850, 1100
+
+set multiplot
+set grid 
+
+#set key below
+set tics out 
+
+set lmargin 12
+set rmargin 10
+
+rd = dir1."/".'rstats-digest'
+
+## graph system stats
+set size .5, .315
+
+set xtics 60
+
+set yrange [0:100]
+set y2range [0:100000]
+set y2tics nomirror
+
+set xlabel "seconds"
+set ylabel "percentage"
+set y2label "fault rate"
+
+plot rd using "cpu_utilization" with lines, \
+     rd using "cpu_iowait" with lines, \
+     rd using "disk_utilization" with lines, \
+     rd using "memory_utilization" with lines, \
+     rd using "memory_page_dirty" with lines axes x1y2 smooth bezier
+
+unset y2tics
+unset y2range
+
+## graph latencies
+set origin 0, .315
+
+set xtics 10
+
+set yrange [500:150000]
+set y2range [1000:1100000]
+set y2tics nomirror
+
+set xlabel "minutes"
+set ylabel "usec"
+unset y2label
+
+plot rd using "node_get_fsm_time_median" with lines, \
+     rd using "node_put_fsm_time_median" with lines, \
+     rd using "node_put_fsm_time_95" with lines axes x1y2, \
+     rd using "node_put_fsm_time_95" with lines axes x1y2, \
+     rd using "node_put_fsm_time_99" with lines axes x1y2, \
+     rd using "node_get_fsm_time_95" with lines axes x1y2, \
+     rd using "node_get_fsm_time_99" with lines axes x1y2
+
+unset y2tics
+unset y2range
+
+## graph ops performance 
+set origin 0, .63
+
+#ymax = median(rd) + 1000
+
+set yrange [0:50000]
+set ylabel "operations per node" 
+
+plot rd using "vnode_gets" with lines, \
+     rd using "vnode_puts" with lines
+
+rd = dir2."/".'rstats-digest'
+
+## graph system stats
+set origin .48, 0
+
+set xtics 60
+
+set yrange [0:100]
+set y2range [0:100000]
+set y2tics nomirror
+
+set xlabel "seconds"
+set ylabel "percentage"
+set y2label "fault rate"
+
+plot rd using "cpu_utilization" with lines, \
+     rd using "cpu_iowait" with lines, \
+     rd using "disk_utilization" with lines, \
+     rd using "memory_utilization" with lines, \
+     rd using "memory_page_dirty" with lines axes x1y2 smooth bezier
+
+unset y2tics
+unset y2range
+
+## graph latencies
+set origin .48, .315
+set yrange [500:150000]
+set y2range [1000:1100000]
+set y2tics nomirror
+
+set xtics 10
+
+set xlabel "minutes"
+set ylabel "usec"
+unset y2label
+
+plot rd using "node_get_fsm_time_median" with lines, \
+     rd using "node_put_fsm_time_median" with lines, \
+     rd using "node_put_fsm_time_95" with lines axes x1y2, \
+     rd using "node_put_fsm_time_95" with lines axes x1y2, \
+     rd using "node_put_fsm_time_99" with lines axes x1y2, \
+     rd using "node_get_fsm_time_95" with lines axes x1y2, \
+     rd using "node_get_fsm_time_99" with lines axes x1y2
+
+unset y2tics
+unset y2range
+
+## graph ops performance 
+set origin .48, .63
+
+set yrange [0:50000]
+set ylabel "operations per node" 
+
+#hack to set the title for the whole graph
+set label dir1 at screen 0.5,0.98 center front
+set label "vs." at screen 0.5,0.97 center front
+set label dir2 at screen 0.5,0.96 center front
+
+
+plot rd using "vnode_gets" with lines, \
+     rd using "vnode_puts" with lines
+
+unset multiplot
+reset 

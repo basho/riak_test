@@ -80,6 +80,7 @@ main(Args) ->
     application:start(ibrowse),
     %% Start Lager
     application:load(lager),
+
     Config = proplists:get_value(config, ParsedArgs),
     ConfigFile = proplists:get_value(file, ParsedArgs),
 
@@ -96,7 +97,7 @@ main(Args) ->
     %% Ensure existance of scratch_dir
     case file:make_dir(rt_config:get(rt_scratch_dir)) of
         ok -> great;
-        {eexist, _} -> great;
+        {error, eexist} -> great;
         {ErrorType, ErrorReason} -> lager:error("Could not create scratch dir, {~p, ~p}", [ErrorType, ErrorReason])
     end,
 
@@ -110,8 +111,8 @@ main(Args) ->
     end,
 
     application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel},
-                                         {lager_file_backend, [{file, "log/test.log"},
-                                                               {level, ConsoleLagerLevel}]}]),
+                                          {lager_file_backend, [{file, "log/test.log"},
+                                                                {level, ConsoleLagerLevel}]}]),
     lager:start(),
 
     %% Report
@@ -285,9 +286,10 @@ is_runnable_test({TestModule, _}) ->
     code:ensure_loaded(Mod),
     erlang:function_exported(Mod, Fun, 0).
 
-run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
+run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
     rt_cover:maybe_start(Test),
-    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData),
+    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData,
+                                                HarnessArgs),
     CoverDir = rt_config:get(cover_output, "coverage"),
     case NumTests of
         1 -> keep_them_up;

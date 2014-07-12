@@ -1,0 +1,44 @@
+- to get the reporting stuff working, you'll need to have gnuplot
+  installed on your local machine, at at least version 4.6.3. If you
+  need to install from source, you'll need at least these two deps:
+
+- sudo apt-get install libgd2-xpm-dev libreadline6-dev
+
+- symlink the stuff in perf/reporting to ~/bin/, assuming that is on
+  your path.
+
+- drop_caches.sh needs to be visible on the remote machine.  the
+  initial version of these scripts assumes that everyone is on the
+  same filer.  This isn't going to be true everywhere.  drop is meant
+  to contain your username, and be in /etc/sudoers.d/.
+
+- ssh needs to be setup so that the user doesn't need to provide
+  credentials.  The current way is that I just generated a bos-local
+  key and use that.  This isn't a terrible idea, but should at least
+  be automated on setup.
+
+
+- ~/.riak_test.config should have a harness entry like this:
+
+{rtperf, 
+  [
+	 {rt_deps, ["/usr/local/basho/evan/riak2.0/deps"]},
+	 %% should be really long to allow full bitcasks to 
+	 %% come up
+	 {rt_max_wait_time, 600000000000000},
+	 {basho_bench, "/usr/local/basho/evan/basho_bench/"},
+	 {basho_bench_statedir, "/tmp/bb_seqstate/"},
+	 {rt_retry_delay, 500},
+	 {rt_harness, rtperf},
+	 {load_intercepts, false},
+	 {perf_builds, "/usr/local/basho/evan/"},
+	 {perf_loadgens, ["localhost", "r2s24"]},
+	 {rtdev_path, []}
+
+]}.
+
+  at least right now.  this will problably change as the configuration
+  stuff gets sorted out.  some of these may not be necessary.
+  rt_max_wait_time is (could maybe be set to infinity?  maybe by the
+  harness?), perf_* and basho_bench* are also critical.  rt_deps
+  should maybe be dynamic?

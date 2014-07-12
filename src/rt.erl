@@ -79,6 +79,7 @@
          log_to_nodes/2,
          log_to_nodes/3,
          members_according_to/1,
+         nearest_ringsize/1,
          owners_according_to/1,
          partition/2,
          partitions_for_node/1,
@@ -106,6 +107,7 @@
          setup_harness/2,
          setup_log_capture/1,
          slow_upgrade/3,
+         stream_cmd/1, stream_cmd/2,
          spawn_cmd/1,
          spawn_cmd/2,
          search_cmd/2,
@@ -307,11 +309,12 @@ deploy_nodes(Versions, Services) ->
     NodeConfig = [ version_to_config(Version) || Version <- Versions ],
     Nodes = ?HARNESS:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
-    [ ok = wait_for_service(Node, Service) || Node <- Nodes, Service <- Services ],
+    [ ok = wait_for_service(Node, Service) || Node <- Nodes,
+                                              Service <- Services ],
     Nodes.
 
-version_to_config({_, _}=Config) -> Config;
-version_to_config(Version) -> {Version, default}.
+version_to_config(Config) when is_tuple(Config)-> Config;
+version_to_config(Version) when is_list(Version) -> {Version, default}.
 
 deploy_clusters(Settings) ->
     ClusterConfigs = [case Setting of
@@ -499,6 +502,47 @@ cmd(Cmd) ->
 %%      the exit status and result
 cmd(Cmd, Opts) ->
     ?HARNESS:cmd(Cmd, Opts).
+
+%% @doc pretty much the same as os:cmd/1 but it will stream the output to lager.
+%%      If you're running a long running command, it will dump the output
+%%      once per second, as to not create the impression that nothing is happening.
+-spec stream_cmd(string()) -> {integer(), string()}.
+stream_cmd(Cmd) ->
+    Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr_to_stdout, exit_status]),
+    stream_cmd_loop(Port, "", "", now()).
+
+%% @doc same as rt:stream_cmd/1, but with options, like open_port/2
+-spec stream_cmd(string(), string()) -> {integer(), string()}.
+stream_cmd(Cmd, Opts) ->
+    Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr_to_stdout, exit_status] ++ Opts),
+    stream_cmd_loop(Port, "", "", now()).
+
+stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs}) ->
+    receive
+        {Port, {data, Data}} ->
+            {_, Now, _} = now(),
+            NewNewLineBuffer = case Now > Secs of
+                true ->
+                    lager:info(NewLineBuffer),
+                    "";
+                _ ->
+                    NewLineBuffer
+            end,
+            case rt:str(Data, "\n") of
+                true ->
+                    lager:info(NewNewLineBuffer),
+                    Tokens = string:tokens(Data, "\n"),
+                    [ lager:info(Token) || Token <- Tokens ],
+                    stream_cmd_loop(Port, Buffer ++ NewNewLineBuffer ++ Data, "", Time);
+                _ ->
+                    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, now())
+            end;
+        {Port, {exit_status, Status}} ->
+            catch port_close(Port),
+            {Status, Buffer}
+    after rt:config(rt_max_wait_time) ->
+            {-1, Buffer}
+    end.
 
 %%%===================================================================
 %%% Remote code management
@@ -954,6 +998,20 @@ members_according_to(Node) ->
             Members;
         {badrpc, _}=BadRpc ->
             BadRpc
+    end.
+
+%% @doc Return an appropriate ringsize for the node count passed
+%%      in. 24 is the number of cores on the bigger intel machines, but this
+%%      may be too large for the single-chip machines.
+nearest_ringsize(Count) ->
+    nearest_ringsize(Count * 24, 2).
+
+nearest_ringsize(Count, Power) ->
+    case Count < trunc(Power * 0.9) of
+        true ->
+            Power;
+        false ->
+            nearest_ringsize(Count, Power * 2)
     end.
 
 %% @doc Return the cluster status of `Member' according to the ring
