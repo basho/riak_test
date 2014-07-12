@@ -35,7 +35,8 @@ confirm() ->
     ensemble_util:wait_until_stable(Node, NVal),
 
     ExpectOkay    = [ok],
-    ExpectTimeout = [{error, timeout}, {error, <<"timeout">>} | ExpectOkay],
+    ExpectTimeout = [{error, timeout}, {error, <<"timeout">>},
+                     {error, <<"failed">>} | ExpectOkay],
     ExpectFail    = [{error, notfound} | ExpectTimeout],
 
     Scenarios = [%% corrupted, suspended, valid, empty, bucket, expect
