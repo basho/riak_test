@@ -65,7 +65,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                     %% specifying the remote testdir and the newly
                     %% copied remote config location
                     Cmd = ?ESCRIPT++" "++
-                        BBDir++"basho_bench -d "++
+                        BBDir++"/"++"basho_bench -d "++
                         BBDir++"/"++TestName++"_"++Num++" "++RemotePath,
                     lager:info("Spawning remote basho_bench w/ ~p on ~p",
                                [Cmd, LG]),
@@ -100,7 +100,7 @@ collect_bench_data(TestName, Dir) ->
     Len = length(Gens),
     [begin
      N = integer_to_list(N0),
-     rtssh:scp_from(Gen, BBDir++"/"++TestName++"_"++N++"/current", Dir)
+     rtssh:scp_from(Gen, BBDir++"/"++TestName++"_"++N++"/current", Dir ++ "/" ++ Gen)
      end
      || {Gen, N0} <- lists:zip(Gens, lists:seq(1, Len))],
     ok.

@@ -6,7 +6,7 @@ if [ ! -d "$1/" ]; then
     exit 1
 fi
 if [ "x$2" == "xtrue" ]; then
-    (cd $1; rm -f *-digest; escript ~/bin/riak-digest.escript)
+  (cd $1; rm -f *-digest; escript ../../priv/reporting/riak-digest.escript)
 fi
 
 D1=`basename "$1"`

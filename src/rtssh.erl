@@ -658,15 +658,9 @@ node_path(Node) when is_atom(Node) ->
     node_path(Node, node_version(Node)).
 
 node_path(Node, Version) ->
-    %% this is awful but I can't think of anything better
-    case rt_config:get(perf_version, undefined) of
-    undefined ->
-        N = node_id(Node),
-        Path = relpath(Version),
-        lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N]));
-    _ ->
-        relpath(Version)
-    end.
+    N = node_id(Node),
+    Path = relpath(Version),
+    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
 
 node_id(_Node) ->
     %% NodeMap = rt_config:get(rt_nodes),
@@ -710,11 +704,13 @@ get_cmd_result(Port, Acc) ->
             get_cmd_result(Port, [Bytes|Acc]);
         {Port, {exit_status, Status}} ->
             case Status of
-                0 -> ok;
+                0 ->
+                    ok;
                 _ ->
                     Cmd = get(Port),
                     lager:info("~p returned exit status: ~p",
-                               [Cmd, Status])
+                               [Cmd, Status]),
+                    ok
             end,
             erase(Port),
             Output = lists:flatten(lists:reverse(Acc)),
