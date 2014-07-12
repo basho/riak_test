@@ -556,12 +556,28 @@ deploy_nodes(NodeConfig, Hosts) ->
         orddict:from_list(
             orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
 
+    rt:pmap(fun({Node, _}) ->
+                {ok,
+                 {_, _, _, _, _, [IP0|_]}} = inet:gethostbyname(
+                        rtssh:node_to_host(Node)),
+                IP = inet:ntoa(IP0),
+                Config = [{"listener.protobuf.internal",
+                            IP++":10017"},
+                           {"listener.http.internal",
+                            IP++":10018"}],
+                rtssh:set_conf(Node, Config)
+        end, lists:zip(Nodes, Configs)),
+    timer:sleep(500),
+
     rt:pmap(fun({_, default}) ->
-                    ok;
+                lager:info("Default configuration detected!"),
+                ok;
                ({Node, {cuttlefish, Config}}) ->
-                    rtssh:set_conf(Node, Config);
+                lager:info("Cuttlefish configuration detected!"),
+                rtssh:set_conf(Node, Config);
                ({Node, Config}) ->
-                    rtssh:update_app_config(Node, Config)
+                lager:info("Legacy configuration detected!"),
+                rtssh:update_app_config(Node, Config)
             end,
             lists:zip(Nodes, Configs)),
     timer:sleep(500),

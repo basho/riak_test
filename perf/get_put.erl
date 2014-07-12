@@ -24,7 +24,7 @@ confirm() ->
         rt_bench:config(
           max,
           rt_config:get(perf_duration),
-          HostList,
+          [{Host, 10017} || Host <- HostList],
           {int_to_bin_bigendian, {truncated_pareto_int, SetSize}},
           rt_bench:valgen(rt_config:get(perf_bin_type), BinSize),
           %% 4:1 get/put

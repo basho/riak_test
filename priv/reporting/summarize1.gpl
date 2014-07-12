@@ -2,7 +2,7 @@
 unset multiplot 
 reset
 
-# set terminal png font "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf,9" size 850,1100
+set terminal png font "/Library/Fonts/Arial.ttf" 8
 set output outfilename
 
 #set term x11 size 850, 1100
