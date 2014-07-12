@@ -35,8 +35,6 @@ harness_opts() ->
       "prepopulate cluster"},
      {restart, undefined, "restart", {boolean, false},
       "stop running riak cluster and start new"},
-     {force, undefined, "force", {boolean, false},
-      "overwrite remote deployments"},
      {cuttle, undefined, "cuttle", {boolean, true},
       "use cuttlefish config system"},
      {duration, undefined, "run-time", {integer, 1},
@@ -54,24 +52,16 @@ setup_harness(Test, Args) ->
         _ = [rt_config:set(prefix(K), V)
          || {K, V} <- Parsed];
     _Huh ->
-        %% lager:info("huh: ~p", [Huh]),
-        getopt:usage(harness_opts(),
-             escript:script_name()),
-        halt(0)
+        getopt:usage(harness_opts(), escript:script_name()), halt(0)
     end,
 
     rtssh:setup_harness(Test, Args),
-
-    % Hosts = rtssh:load_hosts(),
-    % rt_config:set(rt_hostnames, Hosts),
-    % maybe_stop_all(Hosts),
     ok.
 
 prefix(Atom) ->
     list_to_atom("perf_"++atom_to_list(Atom)).
 
 set_backend(Backend) ->
-    %%lager:info("setting backend to ~p", [Backend]),
     rt_config:set(rt_backend, Backend).
 
 get_backends() ->
@@ -96,7 +86,6 @@ run_test(Nodes, TestBenchConfig, BaseBenchConfig) ->
     ok = collect_test_data(Nodes, TestName).
 
 teardown() ->
-    %% no!
     ok.
 
 %ensure_remote_build(Hosts, Version, _Force) ->
@@ -197,102 +186,6 @@ teardown() ->
 %    end.
 %
 
-%% a lot of duplication here, would be nice to think of some more
-%% clever way to clean it up.
-%deploy_nodes(NodeConfig) ->
-%    Hosts = rt_config:get(rtssh_hosts),
-%    NumNodes = length(NodeConfig),
-%    NumHosts = length(Hosts),
-%    case NumNodes > NumHosts of
-%        true ->
-%            erlang:error("Not enough hosts available to deploy nodes",
-%                         [NumNodes, NumHosts]);
-%        false ->
-%            Hosts2 = lists:sublist(Hosts, NumNodes),
-%            deploy_nodes(NodeConfig, Hosts2)
-%    end.
-%
-%deploy_nodes(NodeConfig, Hosts) ->
-%    Nodes = [list_to_atom("riak@" ++ Host) || Host <- Hosts],
-%
-%    {Versions, Configs} = lists:unzip(NodeConfig),
-%
-%
-%    rt_config:set(rt_hosts,
-%    orddict:from_list(
-%        orddict:to_list(rt_config:get(rt_hosts, orddict:new())) ++ lists:zip(Nodes, Hosts))),
-%    VersionMap = lists:zip(Nodes, Versions),
-%    rt_config:set(rt_versions,
-%          orddict:from_list(
-%            orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
-%
-%    rt:pmap(fun({_, default}) ->
-%                    ok;
-%               ({{Node, Host}, {cuttlefish, Config0}}) ->
-%            Config = Config0 ++
-%            [{nodename, Node},
-%             {"listener.protobuf.internal",
-%              Host++":8087"},
-%             {"listener.http.internal",
-%              Host++":8098"}
-%            ],
-%                    rtssh:set_conf(Node, Config);
-%               ({{Node, _}, Config}) ->
-%                    rtssh:update_app_config(Node, Config)
-%            end,
-%            lists:zip(lists:zip(Nodes, Hosts), Configs)),
-%    timer:sleep(500),
-%
-%    case rt_config:get(perf_cuttle, true) of
-%        false ->
-%            rt:pmap(fun({Node, Host}) ->
-%                            Config = [{riak_api,
-%                                       [{pb, fun([{_, Port}]) ->
-%                                                     [{Host, Port}]
-%                                             end},
-%                                        {pb_ip, fun(_) ->
-%                                                        Host
-%                                                end}]},
-%                                      {riak_core,
-%                                       [{http, fun([{_, Port}]) ->
-%                                                       [{Host, Port}]
-%                                               end}]}],
-%                            rtssh:update_app_config(Node, Config)
-%                    end, lists:zip(Nodes, Hosts)),
-%
-%            timer:sleep(500),
-%
-%            rt:pmap(fun(Node) ->
-%                            rtssh:update_vm_args(Node,
-%                         [{"-name", Node},
-%                          {"-zddbl", "32768"},
-%                          {"-P", "256000"}])
-%                    end, Nodes),
-%
-%            timer:sleep(500);
-%        true -> ok
-%    end,
-%
-%    rtssh:create_dirs(Nodes),
-%
-%    rt:pmap(fun(N) -> rtssh:start(N) end, Nodes),
-%
-%    %% Ensure nodes started
-%    [ok = rt:wait_until_pingable(N) || N <- Nodes],
-%
-%    %% %% Enable debug logging
-%    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
-%
-%    %% We have to make sure that riak_core_ring_manager is running before we can go on.
-%    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
-%
-%    %% Ensure nodes are singleton clusters
-%    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
-%                                        Version /= "0.14.2"],
-%
-%    Nodes.
-%
-
 cmd(Cmd) ->
     rtssh:cmd(Cmd).
 
@@ -366,20 +259,14 @@ collect_test_data(Nodes, TestName) ->
     ok = rt_bench:collect_bench_data(TestName, PrepDir),
 
     %% collect node logs
-    % Vsn = rt_config:get(perf_version),
-    % Base = rt_config:get(perf_builds),
-    % lager:info("Base: ~p Vsn: ~p", [Base, Vsn]),
     [begin
             rtssh:scp_from(rtssh:node_to_host(Node),
                            rtssh:node_path(Node) ++ "/log",
                            PrepDir++"/"++rtssh:node_to_host(Node))
-                    % Base++"/"++Vsn++"/log",
-            % PrepDir++"/log-"++Host)
      end
      || Node <- Nodes],
 
     %% no need to collect stats output, it's already in the prepdir
-
     rt:cmd("mv "++PrepDir++" results/"++TestName),
 
     %% really, really need to compress the results so they don't take
@@ -394,22 +281,21 @@ maybe_prepop(Hosts, BinSize, SetSize) ->
             PrepopName = rt_config:get(perf_test_name)++"-"++Vsn++
                 "-prepop"++integer_to_list(BinSize)++"b-"++date_string(),
 
-        lager:info("Target size = ~p", [SetSize]),
+            lager:info("Target size = ~p", [SetSize]),
 
             PrepopConfig =
-                rt_bench:config(
-                  max,
-                  infinity,
-                  Hosts,
-                  {int_to_bin_bigendian, {partitioned_sequential_int, SetSize}},
-                  rt_bench:valgen(rt_config:get(perf_bin_type), BinSize),
-                  [{put,1}]),
+                        rt_bench:config(
+                          max,
+                          infinity,
+                          Hosts,
+                          {int_to_bin_bigendian, {partitioned_sequential_int, SetSize}},
+                          rt_bench:valgen(rt_config:get(perf_bin_type), BinSize),
+                          [{put,1}]),
 
-        %% drop the cache
-            rt_bench:bench(PrepopConfig, Hosts, PrepopName,
-                           1, true),
+            %% drop the cache
+            rt_bench:bench(PrepopConfig, Hosts, PrepopName, 1, true),
 
-        stop_data_collectors(PPids),
+            stop_data_collectors(PPids),
             collect_test_data(Hosts, PrepopName),
             timer:sleep(timer:minutes(1)+timer:seconds(30));
         false ->
@@ -538,14 +424,9 @@ deploy_nodes(NodeConfig) ->
 deploy_nodes(NodeConfig, Hosts) ->
     Path = rtssh:relpath(root),
     lager:info("Riak path: ~p", [Path]),
-    %% NumNodes = length(NodeConfig),
-    %% NodesN = lists:seq(1, NumNodes),
-    %% Nodes = [?DEV(N) || N <- NodesN],
     Nodes = [rtssh:host_to_node(Host) || Host <- Hosts],
     HostMap = lists:zip(Nodes, Hosts),
 
-    %% NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
-    %% TODO: Add code to set initial app.config
     {Versions, Configs} = lists:unzip(NodeConfig),
     VersionMap = lists:zip(Nodes, Versions),
 
@@ -586,7 +467,6 @@ deploy_nodes(NodeConfig, Hosts) ->
         false ->
             rt:pmap(fun(Node) ->
                             Host = rtssh:get_host(Node),
-                            %%lager:info("ports ~p", [self()]),
                             Config = [{riak_api,
                                        [{pb, fun([{_, Port}]) ->
                                                      [{Host, Port}]
@@ -605,9 +485,9 @@ deploy_nodes(NodeConfig, Hosts) ->
 
             rt:pmap(fun(Node) ->
                             rtssh:update_vm_args(Node,
-						 [{"-name", Node},
-						  {"-zddbl", "65535"},
-						  {"-P", "256000"}])
+                                                [{"-name", Node},
+                                                 {"-zddbl", "65535"},
+                                                 {"-P", "256000"}])
                     end, Nodes),
 
             timer:sleep(500);
