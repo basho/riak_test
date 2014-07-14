@@ -74,7 +74,7 @@ verify_counters(Node) ->
     %% Check that 1.4 counters work with bucket types
     case catch rt:capability(Node, {riak_core, bucket_types}) of
         true ->
-            ?assertEqual({ok, {counter, 4, 0}}, riakc_pb_socket:fetch_type(PBC, {<<"default">>, ?COUNTER_BUCKET}, <<"pbkey">>));
+            ?assertEqual({ok, {counter, 4, undefined}}, riakc_pb_socket:fetch_type(PBC, {<<"default">>, ?COUNTER_BUCKET}, <<"pbkey">>));
         _ ->
             ok
     end,
