@@ -314,7 +314,7 @@ deploy_nodes(Versions, Services) ->
     Nodes.
 
 version_to_config(Config) when is_tuple(Config)-> Config;
-version_to_config(Version) when is_list(Version) -> {Version, default}.
+version_to_config(Version) -> {Version, default}.
 
 deploy_clusters(Settings) ->
     ClusterConfigs = [case Setting of
