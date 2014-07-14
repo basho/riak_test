@@ -168,7 +168,7 @@ confirm() ->
     {Ip, Port, _} = hd(Listeners),
     replication:add_site(Node2, {Ip, Port, "site1"}),
 
-    replication:verify_site_ips(Node2, "site1", Listeners),
+    replication:wait_for_site_ips(Node2, "site1", Listeners),
 
     lager:info("===testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
