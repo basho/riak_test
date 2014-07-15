@@ -115,11 +115,13 @@ config(Rate, Duration, NodeList, KeyGen,
 
 config(Rate, Duration, NodeList, KeyGen,
        ValGen, Operations, Bucket, Driver0) ->
-    {Driver, DriverB} = 
-	case Driver0 of
-	    '2i' -> {pb, riakc_pb};
-	    _ -> {Driver0, Driver0}
-	end,
+    lager:info("Bucket is: ~p", [Bucket]),
+    {Driver, DriverB} = case Driver0 of
+        '2i' ->
+            {pb, riakc_pb};
+        _ ->
+            {Driver0, Driver0}
+    end,
     DriverBucket = append_atoms(DriverB, '_bucket'),
     DriverIps = append_atoms(Driver, '_ips'),
     DriverReplies = append_atoms(DriverB, '_replies'),
