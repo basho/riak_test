@@ -33,8 +33,6 @@ harness_opts() ->
       "version to test"},
      {prepop, undefined, "prepop", {boolean, false},
       "prepopulate cluster"},
-     {restart, undefined, "restart", {boolean, false},
-      "stop running riak cluster and start new"},
      {cuttle, undefined, "cuttle", {boolean, true},
       "use cuttlefish config system"},
      {duration, undefined, "run-time", {integer, 1},
