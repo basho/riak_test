@@ -165,11 +165,13 @@ test_cover_queries_overload(Nodes, _, false) ->
     lager:info("Setting vnode check interval to 1"),
 
     Config = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
-                           {vnode_check_interval, 1}]}],
+                           {vnode_request_check_interval, 1},
+                           {vnode_check_interval, 2}]}],
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
 
+    [rt:wait_for_service(Node, riak_kv) || Node <- Nodes],
     rt:load_modules_on_nodes([?MODULE], Nodes),
 
     [Node1, Node2, Node3, Node4, Node5] = Nodes,
@@ -178,12 +180,15 @@ test_cover_queries_overload(Nodes, _, false) ->
                 suspend_and_overload_all_kv_vnodes(N)
             end || N <- [Node2, Node3, Node4, Node5]],
 
-    Res = list_keys(Node1),
-    ?assertEqual({error, <<"mailbox_overload">>}, Res),
+    wait_until_vnodes_suspended(Node1),
+
+    [?assertEqual({error, <<"mailbox_overload">>}, KeysRes) ||
+        KeysRes <- [list_keys(Node1) || _ <- lists:seq(1, 3)]],
+
     lager:info("list_keys correctly handled overload"),
 
-    Res2 = list_buckets(Node1),
-    ?assertEqual({error, mailbox_overload}, Res2),
+    [?assertEqual({error, mailbox_overload}, BucketsRes) ||
+        BucketsRes <- [list_buckets(Node1) || _ <- lists:seq(1, 3)]],
     lager:info("list_buckets correctly handled overload"),
 
     lager:info("Resuming all kv vnodes"),
@@ -191,11 +196,6 @@ test_cover_queries_overload(Nodes, _, false) ->
 
     lager:info("Waiting for vnode queues to empty"),
     wait_for_all_vnode_queues_empty(Node2).
-
-get_victim(ExcludeNode, {Bucket, Key, _}) ->
-    Hash = riak_core_util:chash_std_keyfun({Bucket, Key}),
-    PL = lists:sublist(riak_core_ring:preflist(Hash, rt:get_ring(ExcludeNode)), 5),
-    hd([IdxNode || {_, Node}=IdxNode <- PL, Node /= ExcludeNode]).
 
 run_test(Nodes, BKV) ->
     [Node1 | _RestNodes] = Nodes,
@@ -228,6 +228,11 @@ run_test(Nodes, BKV) ->
     kill_pids(Reads),
     {NumProcs2 - NumProcs1, QueueLen}.
 
+get_victim(ExcludeNode, {Bucket, Key, _}) ->
+    Hash = riak_core_util:chash_std_keyfun({Bucket, Key}),
+    PL = lists:sublist(riak_core_ring:preflist(Hash, rt:get_ring(ExcludeNode)), 5),
+    hd([IdxNode || {_, Node}=IdxNode <- PL, Node /= ExcludeNode]).
+
 ring_manager_check_fun(Node) ->
     fun() ->
             case rpc:call(Node, riak_core_ring_manager, get_chash_bin, []) of
@@ -245,9 +250,24 @@ create_bucket_type(Nodes, Type, Props) ->
     rt:wait_until_bucket_props(Nodes, {Type, <<"bucket">>}, Props),
     ok.
 
+wait_until_vnodes_suspended(Node) ->
+    rt:wait_until(list_keys_timeout_check(Node)).
+
+list_keys_timeout_check(Node) ->
+    fun() ->
+       case list_keys(Node) of
+           {error, <<"mailbox_overload">>} ->
+               true;
+           _ ->
+               false
+       end
+    end.
+
 list_keys(Node) ->
-    Pid = rt:pbc(Node),
-    riakc_pb_socket:list_keys(Pid, ?BUCKET, 30000).
+    Pid = rt:pbc(Node, [{auto_reconnect, true}, {queue_if_disconnected, true}]),
+    Res = riakc_pb_socket:list_keys(Pid, {<<"normal_type">>, ?BUCKET}, 30000),
+    riakc_pb_socket:stop(Pid),
+    Res.
 
 list_buckets(Node) ->
     {ok, C} = riak:client_connect(Node),
@@ -270,7 +290,7 @@ remote_vnode_queues_empty() ->
 
 write_once(Node, {Bucket, Key, Value}) ->
     lager:info("Writing to node ~p", [Node]),
-    PBC = rt:pbc(Node),
+    PBC = rt:pbc(Node, [{auto_reconnect, true}, {queue_if_disconnected, true}]),
     rt:pbc_write(PBC, Bucket, Key, Value),
     riakc_pb_socket:stop(PBC).
 
@@ -288,7 +308,9 @@ read_until_success(C, Count) ->
 
 spawn_reads(Node, {Bucket, Key, _}, Num) ->
     [spawn(fun() ->
-                   PBC = rt:pbc(Node),
+                   PBC = rt:pbc(Node,
+                                [{auto_reconnect, true},
+                                 {queue_if_disconnected, true}]),
                    _ = riakc_pb_socket:get(PBC, Bucket, Key),
                    riakc_pb_socket:stop(PBC)
            end) || _ <- lists:seq(1, Num)].
@@ -297,6 +319,7 @@ kill_pids(Pids) ->
     [exit(Pid, kill) || Pid <- Pids].
 
 suspend_and_overload_all_kv_vnodes(Node) ->
+    lager:info("Suspending vnodes on ~p", [Node]),
     Pid = rpc:call(Node, ?MODULE, remote_suspend_and_overload, []),
     Pid ! {overload, self()},
     receive overloaded ->
