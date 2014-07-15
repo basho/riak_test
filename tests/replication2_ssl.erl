@@ -34,7 +34,7 @@ confirm() ->
     ],
 
     PrivDir = rt:priv_dir(),
-    
+
     SSLConfig1 = [
         {riak_repl,
             [
@@ -138,13 +138,14 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["*.cataclysm-software.net"]},
-                {certfile, filename:join([PrivDir,
-                            "certs/cacert.org/ca-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/cacert.org/ca-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/cacert.org/ca"])}
+                {ssl_depth, 1},
+                {peer_common_name_acl, ["*.basho.com"]},
+                {certfile, filename:join([CertDir,
+                            "site1.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site1.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site1.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -157,13 +158,14 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["ca.cataclysm-software.net"]},
-                {certfile, filename:join([PrivDir,
-                            "certs/cacert.org/ny-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/cacert.org/ny-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/cacert.org/ca"])}
+                {ssl_depth, 1},
+                {peer_common_name_acl, ["site1.basho.com"]},
+                {certfile, filename:join([CertDir,
+                            "site2.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site2.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site2.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -186,6 +188,7 @@ confirm() ->
             ]}
     ],
 
+    lager:info("===testing basic connectivity"),
 
     [Node1, Node2] = rt:deploy_nodes(2, BaseConf),
 
@@ -196,13 +199,19 @@ confirm() ->
     rt:wait_until_ring_converged([Node1]),
     rt:wait_until_ring_converged([Node2]),
 
-    rt:wait_for_service(Node1, riak_repl),
-    rt:wait_for_service(Node2, riak_repl),
+    rt:wait_for_service(Node1, [riak_kv, riak_repl]),
+    rt:wait_for_service(Node2, [riak_kv, riak_repl]),
 
-
-    lager:info("===testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
-    ?assertEqual(ok, test_connection({Node1, BaseConf}, {Node2, BaseConf})),
+
+    {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
+        [riak_core, cluster_mgr]),
+    lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
+    rt:log_to_nodes([Node1, Node2], "connect A to B"),
+    repl_util:connect_cluster(Node1, "127.0.0.1", Port),
+    lager:info("Waiting for connection to B"),
+
+    ?assertEqual(ok, repl_util:wait_for_connection(Node1, "B")),
 
     lager:info("===testing you can't connect to a server with a cert with the same common name"),
     rt:log_to_nodes([Node1, Node2], "Testing identical cert is disallowed"),
@@ -239,7 +248,7 @@ confirm() ->
     ?assertMatch({fail, _}, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
-    lager:info("===testing wildcard and strict ACLs with cacert.org certs"),
+    lager:info("===testing wildcard and strict ACLs"),
     rt:log_to_nodes([Node1, Node2], "wildcard and strict ACL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),
@@ -287,19 +296,16 @@ merge_config(Mixin, Base) ->
 
 test_connection({Node1, Config1}, {Node2, Config2}) ->
     repl_util:disconnect_cluster(Node1, "B"),
+    repl_util:wait_for_disconnect(Node1, "B"),
     rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
     rt:update_app_config(Node1, Config1),
     rt:wait_until_pingable(Node1),
-    rt:wait_for_service(Node1, riak_repl),
-    rt:wait_for_service(Node2, riak_repl),
+    rt:wait_for_service(Node1, [riak_kv, riak_repl]),
+    rt:wait_for_service(Node2, [riak_kv, riak_repl]),
     {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
         [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
     rt:log_to_nodes([Node1, Node2], "connect A to B"),
     repl_util:connect_cluster(Node1, "127.0.0.1", Port),
     repl_util:wait_for_connection(Node1, "B").
-
-
-
-
