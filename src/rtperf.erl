@@ -319,10 +319,11 @@ deploy_nodes(NodeConfig, Hosts) ->
                  {_, _, _, _, _, [IP0|_]}} = inet:gethostbyname(
                         rtssh:node_to_host(Node)),
                 IP = inet:ntoa(IP0),
-                Config = [{"listener.protobuf.internal",
-                            IP++":10017"},
-                           {"listener.http.internal",
-                            IP++":10018"}],
+                Config = [{"strong_consistency", "on"},
+                          {"listener.protobuf.internal",
+                           IP++":10017"},
+                          {"listener.http.internal",
+                           IP++":10018"}],
                 rtssh:set_conf(Node, Config)
         end, lists:zip(Nodes, Configs)),
     timer:sleep(500),
