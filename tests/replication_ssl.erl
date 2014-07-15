@@ -117,13 +117,14 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["*.cataclysm-software.net"]},
-                {certfile, filename:join([PrivDir,
-                            "certs/cacert.org/ca-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/cacert.org/ca-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/cacert.org/ca"])}
+                {ssl_depth, 1},
+                {peer_common_name_acl, ["*.basho.com"]},
+                {certfile, filename:join([CertDir,
+                            "site1.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site1.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site1.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -133,13 +134,14 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["ca.cataclysm-software.net"]},
-                {certfile, filename:join([PrivDir,
-                            "certs/cacert.org/ny-cert.pem"])},
-                {keyfile, filename:join([PrivDir,
-                            "certs/cacert.org/ny-key.pem"])},
-                {cacertdir, filename:join([PrivDir,
-                            "certs/cacert.org/ca"])}
+                {ssl_depth, 1},
+                {peer_common_name_acl, ["site1.basho.com"]},
+                {certfile, filename:join([CertDir,
+                            "site2.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "site2.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "site2.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -159,6 +161,7 @@ confirm() ->
             ]}
     ],
 
+    lager:info("===testing basic connectivity"),
 
     [Node1, Node2] = rt:deploy_nodes(2, BaseConf),
 
@@ -168,11 +171,10 @@ confirm() ->
     {Ip, Port, _} = hd(Listeners),
     replication:add_site(Node2, {Ip, Port, "site1"}),
 
-    replication:verify_site_ips(Node2, "site1", Listeners),
+    replication:wait_for_site_ips(Node2, "site1", Listeners),
 
-    lager:info("===testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
-    ?assertEqual(ok, test_connection({Node1, BaseConf}, {Node2, BaseConf})),
+    ?assertEqual(ok, replication:wait_until_connection(Node1)),
 
     lager:info("===testing you can't connect to a server with a cert with the same common name"),
     rt:log_to_nodes([Node1, Node2], "Testing identical cert is disallowed"),
@@ -209,7 +211,7 @@ confirm() ->
     ?assertMatch({fail, _}, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
-    lager:info("===testing wildcard and strict ACLs with cacert.org certs"),
+    lager:info("===testing wildcard and strict ACLs"),
     rt:log_to_nodes([Node1, Node2], "wildcard and strict ACL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),
@@ -256,7 +258,6 @@ test_connection({Node1, Config1}, {Node2, Config2}) ->
     rt:wait_until_pingable(Node1),
     rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
-    rt:wait_for_service(Node1, riak_kv),
-    rt:wait_for_service(Node2, riak_kv),
-    timer:sleep(5000),
+    rt:wait_for_service(Node1, [riak_kv, riak_repl]),
+    rt:wait_for_service(Node2, [riak_kv, riak_repl]),
     replication:wait_until_connection(Node1).
