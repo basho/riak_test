@@ -166,7 +166,7 @@ EOF
     cd ../../../../../../..
 }
 
-build "riak-1.4.10" $R15B01 1.4.10
+build "riak-1.4.10" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.4/1.4.10/riak-1.4.10.tar.gz
 echo
 if [ -z "$RT_USE_EE" ]; then
 	build "riak-1.3.2" $R15B01 1.3.2
