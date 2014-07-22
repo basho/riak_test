@@ -67,7 +67,8 @@ setup() ->
                          {anti_entropy_concurrency, 100},
                          {anti_entropy_tick, 100},
                          {anti_entropy, {on, []}},
-                         {anti_entropy_timeout, 5000}]}],
+                         {anti_entropy_timeout, 5000}]},
+              {riak_api, [{pb_backlog, 1024}]}],
     ensemble_util:build_cluster(5, Config, 5).
 
 test_no_overload_protection(_Nodes, _BKV, true) ->
@@ -75,10 +76,12 @@ test_no_overload_protection(_Nodes, _BKV, true) ->
 test_no_overload_protection(Nodes, BKV, ConsistentType) ->
     lager:info("Testing with no overload protection"),
     ProcFun = fun(X) ->
-                      X >= (2*?NUM_REQUESTS * 0.9)
+                      lager:info("in test_no_overload_protection ProcFun, Procs:~p, Metric:~p", [X, ?NUM_REQUESTS]),
+                      X >= ?NUM_REQUESTS
               end,
     QueueFun = fun(X) ->
-                      X >= (?NUM_REQUESTS * 0.9)
+                      lager:info("in test_no_overload QueueFun, queue size:~p, Metric:~p", [X, ?NUM_REQUESTS]),
+                      X >= ?NUM_REQUESTS
               end,
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun).
 
@@ -103,23 +106,14 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
     ProcFun = fun(X) ->
+                      lager:info("in test_vnode_protection ProcFun, Procs:~p, Metric:~p", [X, (2*?NUM_REQUESTS * 1.5)]),
                       X =< (2*?THRESHOLD * 1.5)
               end,
     QueueFun = fun(X) ->
+                      lager:info("in test_vnode_protection QueueFun, QueueSize:~p, Metric:~p", [X, (?NUM_REQUESTS * 1.1)]),
                       X =< (?THRESHOLD * 1.1)
               end,
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
-
-    %% This stats check often fails. Manual testing shows stats
-    %% always incrementing properly. Plus, if I add code to Riak
-    %% to log when the dropped stat is incremented I see it called
-    %% the correct number of times. This looks like a stats bug
-    %% that is outside the scope of this test. Punting for now.
-    %%
-    %% ShouldDrop = ?NUM_REQUESTS - ?THRESHOLD,
-    %% ok = rt:wait_until(Node2, fun(Node) ->
-    %%                                   dropped_stat(Node) =:= ShouldDrop
-    %%                           end),
 
     [Node1 | _] = Nodes,
     CheckInterval = ?THRESHOLD div 2,
@@ -132,9 +126,12 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     lager:info("Suspending vnode proxy for ~p", [Victim]),
     Pid = suspend_vnode_proxy(Victim),
     ProcFun2 = fun(X) ->
-                      X >= (2*?NUM_REQUESTS * 0.9)
+                      lager:info("in test_vnode_protection after suspend ProcFun, Procs:~p, Metric:~p", [X, ?NUM_REQUESTS]),
+                      X >= ?NUM_REQUESTS
+
               end,
     QueueFun2 = fun(X) ->
+                      lager:info("in test_vnode_protection after suspend QueueFun, QueueSize:~p, Metric:~p", [X, (?THRESHOLD * 1.1)]),
                       X =< (?THRESHOLD * 1.1)
               end,
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun2, QueueFun2),
@@ -149,10 +146,12 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
     ProcFun = fun(X) ->
-                      X =< (?THRESHOLD * 1.1)
+                      lager:info("in test_fsm_protection ProcFun, Procs:~p, Metric:~p", [X, (?THRESHOLD * 1.1)]),
+                      X =< (?THRESHOLD * 1.2)
               end,
     QueueFun = fun(X) ->
-                      X =< (?THRESHOLD * 1.1)
+                      lager:info("in test_fsm_protection QueueFun, QueueSize:~p, Metric:~p", [X, (?THRESHOLD * 1.1)]),
+                      X =< (?THRESHOLD * 1.2)
               end,
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
     ok.
@@ -199,33 +198,44 @@ test_cover_queries_overload(Nodes, _, false) ->
 
 run_test(Nodes, BKV) ->
     [Node1 | _RestNodes] = Nodes,
+    PbBacklog = rpc:call(Node1, app_helper, get_env, ["riak_api.pb_backlog"]),
+    lager:info("riak_api.pb_backlog on ~p:~p", [Node1, PbBacklog]),
     rt:wait_for_cluster_service(Nodes, riak_kv),
-    lager:info("Sleeping for 10s to let process count stablize"),
-    timer:sleep(10000),
+    lager:info("Sleeping for 5s to let process count stablize"),
+    timer:sleep(5000),
     rt:load_modules_on_nodes([?MODULE], Nodes),
+    overload_proxy:start_link(),
+    rt_intercept:add(Node1, {riak_kv_get_fsm, [{{start_link, 4}, count_start_link_4}]}),
+
     Victim = get_victim(Node1, BKV),
     lager:info("Suspending vnode ~p/~p",
                [element(1, Victim), element(2, Victim)]),
     Suspended = suspend_vnode(Victim),
 
-    NumProcs1 = process_count(Node1),
+    NumProcs1 = overload_proxy:get_count(),
+
     lager:info("Initial process count on ~p: ~b", [Node1, NumProcs1]),
     lager:info("Sending ~b read requests", [?NUM_REQUESTS]),
     write_once(Node1, BKV),
     Reads = spawn_reads(Node1, BKV, ?NUM_REQUESTS),
     timer:sleep(5000),
 
-    NumProcs2 = process_count(Node1),
+    rt:wait_until(fun() -> 
+                       overload_proxy:is_settled(10)
+                  end, 5, 500),
+    NumProcs2 = overload_proxy:get_count(),
     lager:info("Final process count on ~p: ~b", [Node1, NumProcs2]),
 
     QueueLen = vnode_queue_len(Victim),
     lager:info("Final vnode queue length for ~p: ~b",
                [Victim, QueueLen]),
+
     resume_vnode(Suspended),
     rt:wait_until(fun() ->
-                          vnode_queue_len(Victim) =:= 0
+                      vnode_queue_len(Victim) =:= 0
                   end),
     kill_pids(Reads),
+    overload_proxy:stop(),
     {NumProcs2 - NumProcs1, QueueLen}.
 
 get_victim(ExcludeNode, {Bucket, Key, _}) ->
@@ -308,6 +318,9 @@ read_until_success(C, Count) ->
 
 spawn_reads(Node, {Bucket, Key, _}, Num) ->
     [spawn(fun() ->
+                   Sleep = random:uniform(Num*10),
+                   lager:info("sleeping ~p(ms)", [Sleep]),
+                   timer:sleep(Sleep),
                    PBC = rt:pbc(Node,
                                 [{auto_reconnect, true},
                                  {queue_if_disconnected, true}]),
@@ -403,6 +416,29 @@ dropped_stat(Node) ->
     Stats = rpc:call(Node, riak_core_stat, get_stats, []),
     proplists:get_value(dropped_vnode_requests_total, Stats).
 
+get_fsm_active_stat(Node) ->
+    Stats = rpc:call(Node, riak_kv_stat, get_stats, []),
+    proplists:get_value(node_get_fsm_active, Stats).
+
+run_count(Node) ->
+    timer:sleep(500),
+    lager:info("fsm count:~p", [get_num_running_gen_fsm(Node)]),
+    run_count(Node).
+
+run_queue_len({Idx, Node}) ->
+    timer:sleep(500), 
+    Len = vnode_queue_len(Node, Idx),
+    lager:info("queue len on ~p is:~p", [Node, Len]),
+    run_queue_len({Idx, Node}).
+
+get_num_running_gen_fsm(Node) ->
+    Procs = rpc:call(Node, erlang, processes, []),
+    ProcInfo = [ rpc:call(Node, erlang, process_info, [P]) || P <- Procs, P /= undefined ],
+
+    InitCalls = [ [ proplists:get_value(initial_call, Proc) ] || Proc <- ProcInfo, Proc /= undefined ],
+    FsmList = [ proplists:lookup(riak_kv_get_fsm, Call) || Call <- InitCalls ],
+    length(proplists:lookup_all(riak_kv_get_fsm, FsmList)).
+    
 remote_vnode_queue(Idx) ->
     {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Idx, riak_kv_vnode),
     {message_queue_len, Len} = process_info(Pid, message_queue_len),
