@@ -198,8 +198,6 @@ test_cover_queries_overload(Nodes, _, false) ->
 
 run_test(Nodes, BKV) ->
     [Node1 | _RestNodes] = Nodes,
-    PbBacklog = rpc:call(Node1, app_helper, get_env, ["riak_api.pb_backlog"]),
-    lager:info("riak_api.pb_backlog on ~p:~p", [Node1, PbBacklog]),
     rt:wait_for_cluster_service(Nodes, riak_kv),
     lager:info("Sleeping for 5s to let process count stablize"),
     timer:sleep(5000),
@@ -318,9 +316,6 @@ read_until_success(C, Count) ->
 
 spawn_reads(Node, {Bucket, Key, _}, Num) ->
     [spawn(fun() ->
-                   Sleep = random:uniform(Num*10),
-                   lager:info("sleeping ~p(ms)", [Sleep]),
-                   timer:sleep(Sleep),
                    PBC = rt:pbc(Node,
                                 [{auto_reconnect, true},
                                  {queue_if_disconnected, true}]),
