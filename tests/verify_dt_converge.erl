@@ -32,9 +32,12 @@
 -define(CTYPE, <<"counters">>).
 -define(STYPE, <<"sets">>).
 -define(MTYPE, <<"maps">>).
+-define(RREGTYPE, <<"rangeregs">>).
 -define(TYPES, [{?CTYPE, counter},
                 {?STYPE, set},
-                {?MTYPE, map}]).
+                {?MTYPE, map},
+                {?RREGTYPE, rangereg}
+               ]).
 
 -define(PB_BUCKET, <<"pbtest">>).
 -define(HTTP_BUCKET, <<"httptest">>).
@@ -58,17 +61,17 @@ confirm() ->
 
     %% Do some updates to each type
     [update_1(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
-        {Type, Client} <- lists:zip(?TYPES, [P1, P2, P3])],
+        {Type, Client} <- lists:zip(?TYPES, [P1, P2, P3, P1])],
 
     [update_1(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H1, H2, H3])],
+        {Type, Client} <- lists:zip(?TYPES, [H1, H2, H3, H1])],
 
     %% Check that the updates are stored
     [check_1(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
-        {Type, Client} <- lists:zip(?TYPES, [P4, P3, P2])],
+        {Type, Client} <- lists:zip(?TYPES, [P4, P3, P2, P4])],
 
     [check_1(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H4, H3, H2])],
+        {Type, Client} <- lists:zip(?TYPES, [H4, H3, H2, H4])],
 
     lager:info("Partition cluster in two."),
 
@@ -77,34 +80,34 @@ confirm() ->
     lager:info("Modify data on side 1"),
     %% Modify one side
     [update_2a(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
-        {Type, Client} <- lists:zip(?TYPES, [P1, P2, P1])],
+        {Type, Client} <- lists:zip(?TYPES, [P1, P2, P1, P2])],
 
     [update_2a(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H1, H2, H1])],
+        {Type, Client} <- lists:zip(?TYPES, [H1, H2, H1, H2])],
 
     lager:info("Check data is unmodified on side 2"),
     %% check value on one side is different from other
     [check_2b(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
-        {Type, Client} <- lists:zip(?TYPES, [P4, P3, P4])],
+        {Type, Client} <- lists:zip(?TYPES, [P4, P3, P4, P3])],
 
     [check_2b(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H4, H3, H4])],
+        {Type, Client} <- lists:zip(?TYPES, [H4, H3, H4, H3])],
 
     lager:info("Modify data on side 2"),
     %% Modify other side
     [update_3b(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
-        {Type, Client} <- lists:zip(?TYPES, [P3, P4, P3])],
+        {Type, Client} <- lists:zip(?TYPES, [P3, P4, P3, P4])],
 
     [update_3b(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H3, H4, H3])],
+        {Type, Client} <- lists:zip(?TYPES, [H3, H4, H3, H4])],
 
     lager:info("Check data is unmodified on side 1"),
     %% verify values differ
     [check_3a(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
-        {Type, Client} <- lists:zip(?TYPES, [P2, P2, P1])],
+        {Type, Client} <- lists:zip(?TYPES, [P2, P2, P1, P2])],
 
     [check_3a(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H2, H2, H1])],
+        {Type, Client} <- lists:zip(?TYPES, [H2, H2, H1, H2])],
 
     %% heal
     lager:info("Heal and check merged values"),
@@ -190,6 +193,13 @@ update_1({BType, map}, Bucket, Client, CMod) ->
                                        riakc_counter:increment(10, C)
                                end, M1)
                      end,
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
+update_1({BType, rangereg}, Bucket, Client, CMod) ->
+    lager:info("update_1: Updating rangereg"),
+    CMod:modify_type(Client,
+                     fun(RR) ->
+                             riakc_rangereg:assign(20, RR)
+                     end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
 check_1({BType, counter}, Bucket, Client, CMod) ->
@@ -202,7 +212,12 @@ check_1({BType, map}, Bucket, Client, CMod) ->
     lager:info("check_1: Checking map value is correct"),
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
-                 {{<<"friends">>, set}, [<<"Russell">>]}]).
+                 {{<<"friends">>, set}, [<<"Russell">>]}]);
+check_1({BType, rangereg}, Bucket, Client, CMod) ->
+    lager:info("check_1: Checking rangereg value is correct"),
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_rangereg,
+               [{max, 20},{min,20},{first,20},{last,20}]).
+
 
 update_2a({BType, counter}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
@@ -231,6 +246,12 @@ update_2a({BType, map}, Bucket, Client, CMod) ->
                                                                                   end,
                                               M1)
                      end,
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
+update_2a({BType, rangereg}, Bucket, Client, CMod) ->
+    CMod:modify_type(Client,
+                     fun(RR) ->
+                             riakc_rangereg:assign(40, RR)
+                     end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
 check_2b({BType, counter}, Bucket, Client, CMod) ->
@@ -243,7 +264,11 @@ check_2b({BType, map},Bucket,Client,CMod) ->
     lager:info("check_2b: Checking map value is unchanged"),
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
-                 {{<<"friends">>, set}, [<<"Russell">>]}]).
+                 {{<<"friends">>, set}, [<<"Russell">>]}]);
+check_2b({BType, rangereg},Bucket,Client,CMod) ->
+    lager:info("check_2b: Checking rangereg value is unchanged"),
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_rangereg,
+               [{max,20},{min,20},{first,20},{last,20}]).
 
 update_3b({BType, counter}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
@@ -273,7 +298,14 @@ update_3b({BType, map},Bucket,Client,CMod) ->
                                end,
                                M1)
                      end,
+                     {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
+update_3b({BType, rangereg},Bucket,Client,CMod) ->
+    CMod:modify_type(Client,
+                     fun(RR) ->
+                             riakc_rangereg:assign(-40, RR)
+                     end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
+
 
 check_3a({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_3a: Checking counter value is unchanged"),
@@ -287,7 +319,11 @@ check_3a({BType, map}, Bucket, Client, CMod) ->
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Russell">>, <<"Sam">>]},
-                 {{<<"verified">>, flag}, false}]).
+                 {{<<"verified">>, flag}, false}]);
+check_3a({BType, rangereg}, Bucket, Client, CMod) ->
+    lager:info("check_3a: Check rangereg value is unchanged"),
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_rangereg,
+               [{max, 40},{min,20},{first,20},{last,40}]).
 
 check_4({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_4: Checking final merged value of counter"),
@@ -311,6 +347,11 @@ check_4({BType, map}, Bucket, Client, CMod) ->
                  {{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Sam">>]},
                  {{<<"verified">>, flag}, false}],
+                [{pr, 3}, {notfound_ok, false}]);
+check_4({BType, rangereg}, Bucket, Client, CMod) ->
+    lager:info("check_4: Checking final merged value of rangereg"),
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_rangereg,
+                [{max,40},{min,-40},{first,20},{last,-40}],
                 [{pr, 3}, {notfound_ok, false}]).
 
 check_value(Client, CMod, Bucket, Key, DTMod, Expected) ->
