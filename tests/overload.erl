@@ -27,6 +27,8 @@
 
 -define(NUM_REQUESTS, 200).
 -define(THRESHOLD, 100).
+-define(LIST_KEYS_RETRIES, 1000).
+-define(GET_RETRIES, 1000).
 -define(BUCKET, <<"test">>).
 -define(KEY, <<"hotkey">>).
 
@@ -259,7 +261,7 @@ create_bucket_type(Nodes, Type, Props) ->
     ok.
 
 wait_until_vnodes_suspended(Node) ->
-    rt:wait_until(list_keys_timeout_check(Node)).
+    rt:wait_until(list_keys_timeout_check(Node), ?LIST_KEYS_RETRIES, ?LIST_KEYS_RETRIES).
 
 list_keys_timeout_check(Node) ->
     fun() ->
@@ -273,7 +275,7 @@ list_keys_timeout_check(Node) ->
 
 list_keys(Node) ->
     Pid = rt:pbc(Node, [{auto_reconnect, true}, {queue_if_disconnected, true}]),
-    Res = riakc_pb_socket:list_keys(Pid, {<<"normal_type">>, ?BUCKET}, 30000),
+    Res = riakc_pb_socket:list_keys(Pid, {<<"normal_type">>, ?BUCKET}, infinity),
     riakc_pb_socket:stop(Pid),
     Res.
 
@@ -316,12 +318,39 @@ read_until_success(C, Count) ->
 
 spawn_reads(Node, {Bucket, Key, _}, Num) ->
     [spawn(fun() ->
-                   PBC = rt:pbc(Node,
-                                [{auto_reconnect, true},
+                PBC = rt:pbc(Node,
+                                 [{auto_reconnect, true},
                                  {queue_if_disconnected, true}]),
-                   _ = riakc_pb_socket:get(PBC, Bucket, Key),
-                   riakc_pb_socket:stop(PBC)
+                rt:wait_until(pb_get_fun(PBC, Bucket, Key), ?GET_RETRIES, ?GET_RETRIES),   
+                %pb_get(PBC, Bucket, Key),
+                riakc_pb_socket:stop(PBC)
            end) || _ <- lists:seq(1, Num)].
+
+pb_get_fun(PBC, Bucket, Key) ->
+    fun() ->
+        case riakc_pb_socket:get(PBC, Bucket, Key) of
+            {error, <<"overload">>} ->
+%                lager:info("overload detected in pb_get, continuing..."),
+                true;
+            {error, Type} ->
+                lager:error("riakc_pb_socket failed with ~p, retrying...", [Type]),
+                false;
+            {ok, _Res} ->
+%                lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res]),
+                true
+	end
+    end.
+
+pb_get(PBC, Bucket, Key) ->
+    case riakc_pb_socket:get(PBC, Bucket, Key) of
+        {error, <<"overload">>} ->
+            lager:info("overload detected in pb_get, continuing...");
+        {error, Type} ->
+            lager:error("riakc_pb_socket failed with ~p, retrying...", [Type]),
+            pb_get(PBC, Bucket, Key);
+        {ok, Res} ->
+            lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res])
+    end.
 
 kill_pids(Pids) ->
     [exit(Pid, kill) || Pid <- Pids].
