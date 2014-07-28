@@ -187,7 +187,7 @@ strip_stats(Glob) ->
             node_get_fsm_map_time_99,
             node_put_fsm_map_time_median,
             node_put_fsm_map_time_95,
-            node_put_fsm_map_time_99
+            node_put_fsm_map_time_99,
             consistent_get_time_median,
             consistent_get_time_95,
             consistent_get_time_99,
