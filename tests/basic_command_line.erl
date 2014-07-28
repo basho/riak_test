@@ -19,16 +19,20 @@
 %% -------------------------------------------------------------------
 -module(basic_command_line).
 -include_lib("eunit/include/eunit.hrl").
+-include("rt.hrl").
 
--behavior(riak_test).
--export([confirm/0]).
+-export([properties/0, confirm/2]).
 
-confirm() ->
+properties() ->
+    DefaultProps = rt_cluster:properties(),
+    DefaultProps#rt_properties{node_count=1,
+                               rolling_upgrade=false,
+                               make_cluster=true}.
 
+confirm(#rt_properties{nodes=Nodes}, _MD) ->
+    Node = hd(Nodes),
     %% Deploy a node to test against
     lager:info("Deploy node to test command line"),
-    [Node] = rt:deploy_nodes(1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
 
     %% Verify node-up behavior
     ping_up_test(Node),
