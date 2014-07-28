@@ -1,17 +1,23 @@
 -module(bucket_types).
 
--behavior(riak_test).
--export([confirm/0, mapred_modfun/3, mapred_modfun_type/3]).
+-export([properties/0,confirm/2, mapred_modfun/3, mapred_modfun_type/3]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("rt.hrl").
 
-confirm() ->
-    application:start(inets),
-    lager:info("Deploy some nodes"),
-    Nodes = rt:build_cluster(4, [], [
-                                     {riak_core, [{default_bucket_props,
-                                                   [{n_val, 2}]}]}]),
+properties() ->
+    DefaultProps = rt_cluster:properties(),
+    CustomConfig = rt_cluster:augment_config(riak_core, 
+                                             {default_bucket_props, [{n_val, 2}]},
+                                             DefaultProps#rt_properties.config),
+    DefaultProps#rt_properties{node_count=4,
+                               rolling_upgrade=false,
+                               make_cluster=true,
+                               config=CustomConfig}.
+
+confirm(#rt_properties{nodes=Nodes}, _MD) ->
     Node = hd(Nodes),
+    application:start(inets),
 
     RMD = riak_test_runner:metadata(),
     HaveIndexes = case proplists:get_value(backend, RMD) of
@@ -20,7 +26,10 @@ confirm() ->
                       _ -> true
                   end,
 
-    PB = rt:pbc(Node),
+    {ok, [{"127.0.0.1", Port}]} = rpc:call(Node, application, get_env,
+                                           [riak_api, pb]),
+
+    {ok, PB} = riakc_pb_socket:start_link("127.0.0.1", Port, []),
 
     lager:info("default type get/put test"),
     %% write explicitly to the default type
@@ -42,7 +51,7 @@ confirm() ->
 
     %% write implicitly to the default bucket
     riakc_pb_socket:put(PB, riakc_obj:update_value(O1, <<"newvalue">>)),
-
+ 
     %% read from the default bucket explicitly
     {ok, O3} = riakc_pb_socket:get(PB, {<<"default">>, <<"bucket">>}, <<"key">>),
 
@@ -81,13 +90,9 @@ confirm() ->
     %% read from the default bucket explicitly
     {error, notfound} = riakc_pb_socket:get(PB, {<<"default">>, <<"bucket">>}, <<"key">>),
 
-    ?assertEqual(ok, rt:wait_until(fun() ->
-                                           rt:pbc_really_deleted(PB,
-                                                                 <<"bucket">>,
-                                                                 [<<"key">>])
-                                   end)),
+    timer:sleep(5000), %% wait for delete_mode 3s to expire
 
-    %% now there should be no buckets or keys to be listed...
+    %% now there shoyld be no buckets or keys to be listed...
     %%
     %% list keys
     ?assertEqual({ok, []}, riakc_pb_socket:list_keys(PB, <<"bucket">>)),
@@ -100,20 +105,13 @@ confirm() ->
 
     lager:info("custom type get/put test"),
     Type = <<"mytype">>,
-    TypeProps = [{n_val, 3}],
-    lager:info("Create bucket type ~p, wait for propagation", [Type]),
-    rt:create_and_activate_bucket_type(Node, Type, TypeProps),
+    rt:create_and_activate_bucket_type(Node, Type, [{n_val, 3}]),
     rt:wait_until_bucket_type_status(Type, active, Nodes),
-    rt:wait_until_bucket_props(Nodes, {Type, <<"bucket">>}, TypeProps),
 
     lager:info("doing put"),
     riakc_pb_socket:put(PB, riakc_obj:new({Type, <<"bucket">>},
                                              <<"key">>, <<"newestvalue">>)),
 
-    lager:info("custom type list_keys test"),
-    ?assertEqual({ok, []}, riakc_pb_socket:list_keys(PB, <<"bucket">>)),
-    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB, {Type,
-                                                      <<"bucket">>})),
     lager:info("doing get"),
     {ok, O5} = riakc_pb_socket:get(PB, {Type, <<"bucket">>}, <<"key">>),
 
@@ -123,41 +121,14 @@ confirm() ->
     %% this type is NOT aliased to the default buckey
     {error, notfound} = riakc_pb_socket:get(PB, <<"bucket">>, <<"key">>),
 
+    lager:info("custom type list_keys test"),
+    ?assertEqual({ok, []}, riakc_pb_socket:list_keys(PB, <<"bucket">>)),
+    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB, {Type,
+                                                      <<"bucket">>})),
     lager:info("custom type list_buckets test"),
     %% list buckets
     ?assertEqual({ok, []}, riakc_pb_socket:list_buckets(PB)),
     ?assertEqual({ok, [<<"bucket">>]}, riakc_pb_socket:list_buckets(PB, Type)),
-
-    %%% Beginning of UTF-8 test
-
-    lager:info("UTF-8 type get/put test"),
-    %% こんにちは - konnichiwa (Japanese)
-    UnicodeType = unicode:characters_to_binary([12371,12435,12395,12385,12399], utf8),
-    %% سلام - Salam (Arabic)
-    UnicodeBucket = unicode:characters_to_binary([1587,1604,1575,1605], utf8),
-    lager:info("Create bucket type, wait for propagation"),
-    rt:create_and_activate_bucket_type(Node, UnicodeType, TypeProps),
-    rt:wait_until_bucket_type_status(UnicodeType, active, Nodes),
-    rt:wait_until_bucket_props(Nodes, {UnicodeType, UnicodeBucket}, TypeProps),
-
-    lager:info("doing put"),
-    riakc_pb_socket:put(PB, riakc_obj:new({UnicodeType, UnicodeBucket},
-                                             <<"key">>, <<"yetanothervalue">>)),
-
-    lager:info("custom type list_keys test"),
-    ?assertEqual({ok, [<<"key">>]}, riakc_pb_socket:list_keys(PB,
-                                                              {UnicodeType,
-                                                               UnicodeBucket})),
-    lager:info("doing get"),
-    {ok, O6} = riakc_pb_socket:get(PB, {UnicodeType, UnicodeBucket}, <<"key">>),
-
-    ?assertEqual(<<"yetanothervalue">>, riakc_obj:get_value(O6)),
-
-    lager:info("custom type list_buckets test"),
-    %% list buckets
-    ?assertEqual({ok, [UnicodeBucket]}, riakc_pb_socket:list_buckets(PB, UnicodeType)),
-
-    %%% End of UTF-8 test
 
     lager:info("bucket properties tests"),
     riakc_pb_socket:set_bucket(PB, {<<"default">>, <<"mybucket">>},
@@ -180,37 +151,11 @@ confirm() ->
                                                     <<"mybucket">>}),
     ?assertEqual(5, proplists:get_value(n_val, BProps3)),
 
-    %% Check our unicode brethren
-    riakc_pb_socket:set_bucket(PB, {UnicodeType, UnicodeBucket},
-                               [{n_val, 4}]),
-    {ok, UBProps1} = riakc_pb_socket:get_bucket(PB, {UnicodeType,
-                                                     UnicodeBucket}),
-    ?assertEqual(4, proplists:get_value(n_val, UBProps1)),
-
     riakc_pb_socket:reset_bucket(PB, {Type, <<"mybucket">>}),
 
     {ok, BProps4} = riakc_pb_socket:get_bucket(PB, {Type,
                                                     <<"mybucket">>}),
     ?assertEqual(3, proplists:get_value(n_val, BProps4)),
-
-    riakc_pb_socket:reset_bucket(PB, {UnicodeType, UnicodeBucket}),
-
-    {ok, UBProps2} = riakc_pb_socket:get_bucket(PB, {UnicodeType,
-                                                     UnicodeBucket}),
-
-    ?assertEqual(3, proplists:get_value(n_val, UBProps2)),
-
-    {error, NTGR} = riakc_pb_socket:get_bucket(PB, {<<"nonexistent">>, <<"mybucket">>}),
-
-    lager:info("GOT ERROR ~s", [NTGR]),
-
-    ?assertMatch(<<"No bucket-type named 'nonexistent'", _/binary>>, NTGR),
-
-    {error, NTSR} = riakc_pb_socket:set_bucket(PB, {<<"nonexistent">>, <<"mybucket">>}, [{n_val, 3}]),
-
-    lager:info("GOT ERROR ~s", [NTSR]),
-
-    ?assertMatch(<<"No bucket-type named 'nonexistent'", _/binary>>, NTSR),
 
     lager:info("bucket type properties test"),
 
@@ -231,27 +176,6 @@ confirm() ->
     {ok, BProps7} = riakc_pb_socket:get_bucket_type(PB, Type),
 
     ?assertEqual(3, proplists:get_value(n_val, BProps7)),
-
-    %% Repeat type checks for unicode type/bucket
-
-    riakc_pb_socket:set_bucket_type(PB, UnicodeType,
-                                    [{n_val, 5}]),
-
-    {ok, UBProps3} = riakc_pb_socket:get_bucket_type(PB, UnicodeType),
-
-    ?assertEqual(5, proplists:get_value(n_val, UBProps3)),
-
-    %% check that the bucket inherits from its type
-    {ok, UBProps4} = riakc_pb_socket:get_bucket(PB, {UnicodeType,
-                                                     UnicodeBucket}),
-
-    ?assertEqual(5, proplists:get_value(n_val, UBProps4)),
-
-    riakc_pb_socket:set_bucket_type(PB, UnicodeType, [{n_val, 3}]),
-
-    {ok, UBProps5} = riakc_pb_socket:get_bucket_type(PB, UnicodeType),
-
-    ?assertEqual(3, proplists:get_value(n_val, UBProps5)),
 
     %% make sure a regular bucket under the default type reflects app.config
     {ok, BProps8} = riakc_pb_socket:get_bucket(PB, {<<"default">>,
@@ -362,11 +286,6 @@ confirm() ->
                          {<<"bar">>, <<"3">>, <<"b">>, 7},
                          {<<"baz">>, <<"4">>, <<"a">>, 4},
                          {<<"bam">>, <<"5">>, <<"a">>, 3}]],
-
-    ?assertEqual({ok, [{0, [<<"2">>]}]},
-                 riakc_pb_socket:mapred(PB, {{Type, <<"MRbucket">>},
-                                             [[<<"starts_with">>, <<"f">>]]},
-                                        [{map, {modfun, riak_kv_mapreduce, map_object_value}, none, true}])),
 
     ?assertEqual({ok, [{1, [14]}]},
                  riakc_pb_socket:mapred_bucket(PB, {Type, <<"MRbucket">>},
@@ -487,7 +406,7 @@ confirm() ->
                                          undefined, true}])),
 
     riakc_pb_socket:stop(PB),
-    pass.
+    ok.
 
 accumulate(ReqID) ->
     receive
