@@ -406,9 +406,9 @@ plan_and_commit(Node) ->
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
             timer:sleep(100),
-            maybe_wait_for_changes(Node),
             plan_and_commit(Node);
         {ok, _, _} ->
+            lager:info("plan: done"),
             do_commit(Node)
     end.
 
@@ -435,6 +435,8 @@ maybe_wait_for_changes(Node) ->
     Ring = get_ring(Node),
     Changes = riak_core_ring:pending_changes(Ring),
     Joining = riak_core_ring:members(Ring, [joining]),
+    lager:info("maybe_wait_for_changes, changes: ~p joining: ~p",
+               [Changes, Joining]),
     if Changes =:= [] ->
             ok;
        Joining =/= [] ->
