@@ -1,17 +1,17 @@
 #clean up the environment for interactive use
-unset multiplot 
+unset multiplot
 reset
 
-set terminal png font "/Library/Fonts/Arial.ttf" 8 size 1024,768
+set terminal png font "/Library/Fonts/Arial.ttf" 8 size 1280,1024
 set output outfilename
 
 #set term x11 size 850, 1100
 
 set multiplot
-set grid 
+set grid
 
 #set key below
-set tics out 
+set tics out
 
 set lmargin 12
 set rmargin 10
@@ -42,13 +42,13 @@ plot rd using "node_put_fsm_map_time_95" with lines, \
 unset y2tics
 unset y2range
 
-## graph ops performance 
+## graph ops performance
 set origin 0, .63
 
 #ymax = median(rd) + 1000
 
 #set yrange [0:50000]
-set ylabel "operations per node" 
+set ylabel "operations per node"
 
 plot rd using "vnode_gets" with lines, \
      rd using "vnode_puts" with lines
@@ -83,11 +83,11 @@ plot rd using "node_get_fsm_map_time_median" with lines, \
 unset y2tics
 unset y2range
 
-## graph ops performance 
+## graph ops performance
 set origin .48, .63
 
 #set yrange [0:50000]
-set ylabel "operations per node" 
+set ylabel "operations per node"
 
 #hack to set the title for the whole graph
 set label dir1 at screen 0.5,0.97 center front
@@ -113,4 +113,4 @@ unset yrange
 unset y2tics
 
 unset multiplot
-reset 
+reset
