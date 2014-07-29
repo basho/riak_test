@@ -38,7 +38,7 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
