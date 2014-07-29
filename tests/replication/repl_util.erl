@@ -469,7 +469,7 @@ do_write(Node, Start, End, Bucket, W) ->
 
 %% does the node meet the version requirement?
 node_has_version(Node, Version) ->
-    NodeVersion =  rtdev:node_version(rtdev:node_id(Node)),
+    NodeVersion =  rt:node_version(rt:node_id(Node)),
     case NodeVersion of
         current ->
             %% current always satisfies any version check
