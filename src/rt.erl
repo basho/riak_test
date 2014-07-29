@@ -1863,3 +1863,9 @@ is_control_gui_route_loaded(Routes) ->
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
+
+node_id(Node) ->
+    ?HARNESS:node_id(Node).
+
+node_version(Node) ->
+    ?HARNESS:node_version(Node).
