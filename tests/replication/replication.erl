@@ -519,7 +519,7 @@ start_and_wait_until_fullsync_complete(Node, Retries) ->
     lager:info("waiting for fullsync count to be ~p", [Count]),
 
     lager:info("Starting fullsync on ~p (~p)", [Node,
-            rtdev:node_version(rtdev:node_id(Node))]),
+            rt:node_version(rt:node_id(Node))]),
     rpc:call(Node, riak_repl_console, start_fullsync, [[]]),
 
     %% sleep because of the old bug where stats will crash if you call it too
