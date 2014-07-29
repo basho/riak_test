@@ -31,8 +31,7 @@
          set/2,
          set_conf/2,
          set_advanced_conf/2,
-         update_app_config/2,
-         version_to_config/1
+         update_app_config/2
 ]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
@@ -131,34 +130,31 @@ config_or_os_env(Config, Default) ->
 
 -spec set_conf(atom(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
-    rt_harness:set_conf(all, NameValuePairs);
+    ?HARNESS:set_conf(all, NameValuePairs);
 set_conf(Node, NameValuePairs) ->
-    rt_node:stop(Node),
+    rt:stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    rt_harness:set_conf(Node, NameValuePairs),
-    rt_node:start(Node).
+    ?HARNESS:set_conf(Node, NameValuePairs),
+    rt:start(Node).
 
 -spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
 set_advanced_conf(all, NameValuePairs) ->
-    rt_harness:set_advanced_conf(all, NameValuePairs);
+    ?HARNESS:set_advanced_conf(all, NameValuePairs);
 set_advanced_conf(Node, NameValuePairs) ->
-    rt_node:stop(Node),
+    rt:stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    rt_harness:set_advanced_conf(Node, NameValuePairs),
-    rt_node:start(Node).
+    ?HARNESS:set_advanced_conf(Node, NameValuePairs),
+    rt:start(Node).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in `Config'.
 update_app_config(all, Config) ->
-    rt_harness:update_app_config(all, Config);
+    ?HARNESS:update_app_config(all, Config);
 update_app_config(Node, Config) ->
-    rt_node:stop(Node),
+    rt:stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    rt_harness:update_app_config(Node, Config),
-    rt_node:start(Node).
-
-version_to_config(Config) when is_tuple(Config)-> Config;
-version_to_config(Version) -> {Version, default}.
+    ?HARNESS:update_app_config(Node, Config),
+    rt:start(Node).
 
 to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;

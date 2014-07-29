@@ -65,7 +65,7 @@ setup_repl_clusters(Conf, SSL) ->
 
 
     rt_config:set_advanced_conf(all, Conf),
-    Nodes = [ANodes, BNodes, CNodes] = rt_cluster:build_clusters([2, 2, 2]),
+    Nodes = [ANodes, BNodes, CNodes] = rt:build_clusters([2, 2, 2]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
     rt:wait_for_cluster_service(BNodes, riak_repl),

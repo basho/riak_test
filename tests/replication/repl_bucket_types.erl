@@ -18,6 +18,12 @@
 -define(ENSURE_READ_INTERVAL, 1000).
 
 %% Replication Bucket Types test
+%%
+
+setup(Type) ->
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+
+    {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(Type),
 
 -spec properties() -> rt_properties:properties().
 properties() ->
