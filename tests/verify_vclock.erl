@@ -113,7 +113,7 @@ force_encoding(Node, EncodingMethod) ->
                       }
                     ],
 
-                   rt:update_app_config(Node, OverrideData)
+                   rt_config:update_app_config(Node, OverrideData)
 
     end.
 

@@ -71,11 +71,11 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
                       }
                     ],
 
-                   rt:update_app_config(RootNode, OverrideData),
+                   rt_config:update_app_config(RootNode, OverrideData),
 
                    %% Update all nodes (capabilities are not re-negotiated):
                    lists:foreach(fun(TestNode) -> 
-                                    rt:update_app_config(TestNode, OverrideData),
+                                    rt_config:update_app_config(TestNode, OverrideData),
                                     assert_using(RootNode, { riak_kv, handoff_data_encoding }, HandoffEncoding)
                                  end,
                                  Nodes)

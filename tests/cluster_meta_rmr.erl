@@ -24,7 +24,7 @@
 -define(CM_PREFIX, {test, cm}).
 
 confirm() ->
-    rt:set_conf(all, [{"ring_size", "128"}]),
+    rt_config:set_conf(all, [{"ring_size", "128"}]),
     Seed = erlang:now(),
     lager:info("SEED: ~p", [Seed]),
     random:seed(Seed),

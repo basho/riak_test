@@ -70,7 +70,7 @@ test_vnode_protection(Nodes, Victim, RO) ->
     Config2 = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
                             {vnode_check_interval, 1}]}],
     rt:pmap(fun(Node) ->
-                    rt:update_app_config(Node, Config2)
+                    rt_config:update_app_config(Node, Config2)
             end, Nodes),
     {NumProcs2, QueueLen2} = run_test(Nodes, Victim, RO),
     ?assert(NumProcs2 =< (2*?THRESHOLD * 1.5)),
@@ -107,7 +107,7 @@ test_fsm_protection(Nodes, Victim, RO) ->
     lager:info("Setting FSM limit to ~b", [?THRESHOLD]),
     Config3 = [{riak_kv, [{fsm_limit, ?THRESHOLD}]}],
     rt:pmap(fun(Node) ->
-                    rt:update_app_config(Node, Config3)
+                    rt_config:update_app_config(Node, Config3)
             end, Nodes),
     {NumProcs4, QueueLen4} = run_test(Nodes, Victim, RO),
     ?assert(NumProcs4 =< (?THRESHOLD * 1.1)),

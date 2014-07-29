@@ -34,7 +34,7 @@ confirm() ->
 
     lager:info("Adding delayed start to app.config"),
     NewConfig = [{riak_core, [{delayed_start, 1000}]}],
-    rt:update_app_config(Node, NewConfig),
+    rt_config:update_app_config(Node, NewConfig),
 
     %% Restart node, add intercept that delay proxy startup, and issue gets.
     %% Gets will come in before proxies started, and should trigger crash.

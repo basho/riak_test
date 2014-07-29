@@ -6,7 +6,7 @@
 -define(TEST_BUCKET, <<"rt-cascading-rtq-systest-a">>).
 
 setup() ->
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     {SourceLeader, SinkLeaderA, SinkLeaderB, _, _, _} = ClusterNodes = make_clusters(),
 

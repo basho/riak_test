@@ -47,7 +47,7 @@ confirm() ->
     lager:info("Change ~p handoff_ip from ~p to ~p",
                [Node2, NodeIP, AlternateIP]),
     NewConfig = [{riak_core, [{handoff_ip, AlternateIP}]}],
-    rt:update_app_config(Node2, NewConfig),
+    rt_config:update_app_config(Node2, NewConfig),
     rt:wait_for_service(Node2, riak_kv),
 
     lager:info("Write data to the cluster"),
@@ -62,7 +62,7 @@ confirm() ->
     
     %% Check 0.0.0.0 address works
     lager:info("Change ~p handoff_ip to \"0.0.0.0\"", [Node3]),
-    rt:update_app_config(Node3,
+    rt_config:update_app_config(Node3,
                          [{riak_core, [{handoff_ip, "0.0.0.0"}]}]),
 
     lager:info("Join ~p to the cluster and wait for handoff to finish",

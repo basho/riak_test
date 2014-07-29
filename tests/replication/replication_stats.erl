@@ -39,7 +39,7 @@ confirm() ->
     fullsync_enabled_and_started().
 
 fullsync_enabled_and_started() ->
-    rt:set_advanced_conf(all, ?CONF),
+    rt_config:set_advanced_conf(all, ?CONF),
 
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
