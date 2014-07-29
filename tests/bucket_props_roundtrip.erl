@@ -18,9 +18,10 @@
 %%
 %% -------------------------------------------------------------------
 -module(bucket_props_roundtrip).
--behaviour(riak_test).
--export([confirm/0]).
+-export([properties/0, confirm/2]).
+
 -include_lib("eunit/include/eunit.hrl").
+-include("rt.hrl").
 
 -define(BUCKET, <<"pbc_props_verify">>).
 -define(COMMIT_HOOK, {struct, [{<<"mod">>, <<"foo">>}, {<<"fun">>, <<"bar">>}]}).
@@ -52,9 +53,14 @@
          {young_vclock, 0, 20}
         ]).
 
-confirm() ->
-    [Node] = Nodes = rt:build_cluster(1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+properties() ->
+    DefaultProps = rt_cluster:properties(),
+    DefaultProps#rt_properties{node_count=1,
+                               rolling_upgrade=false,
+                               make_cluster=true}.   
+
+confirm(#rt_properties{nodes=Nodes}, _MD) ->
+    [Node] = Nodes,
 
     [ check_prop_set_and_get(Node, Prop, FirstVal, SecondVal) ||
         {Prop, FirstVal, SecondVal} <- ?PROPS ],
