@@ -19,6 +19,9 @@ get_deps() ->
     end,
     "deps".
 
+clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    rtssh:clean_data_dir(Nodes, SubDir).
+
 harness_opts() ->
 
     %% Option Name, Short Code, Long Code, Argument Spec, Help Message
@@ -88,6 +91,9 @@ teardown() ->
 
 cmd(Cmd) ->
     rtssh:cmd(Cmd).
+
+stop(Node) ->
+    rtssh:stop(Node).
 
 stop_all(_Hosts) ->
     lager:info("called stop all, ignoring?").
