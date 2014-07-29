@@ -22,6 +22,11 @@ get_deps() ->
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
     rtssh:clean_data_dir(Nodes, SubDir).
 
+set_advanced_conf(all, NameValuePairs) ->
+    rtssh:set_advanced_conf(all, NameValuePairs);
+set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
+    rtssh:set_advanced_conf(Node, NameValuePairs).
+
 harness_opts() ->
 
     %% Option Name, Short Code, Long Code, Argument Spec, Help Message
