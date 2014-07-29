@@ -60,7 +60,7 @@ confirm() ->
 %% @doc Perform a fullsync, with given latency injected via intercept
 %%      and return times for each fullsync time.
 fullsync_test(Strategy, Latency) ->
-    rt:set_advanced_conf(all, ?CONF(Strategy)),
+    rt_config:set_advanced_conf(all, ?CONF(Strategy)),
 
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
 

@@ -164,7 +164,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
 %% @doc Configure two clusters and set up replication between them,
 %%      return the node list of each cluster.
 configure_clusters(AVersion, BVersion, Realtime) ->
-    rt:set_advanced_conf(all, ?CONF(infinity)),
+    rt_config:set_advanced_conf(all, ?CONF(infinity)),
 
     Nodes = [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
@@ -176,13 +176,13 @@ configure_clusters(AVersion, BVersion, Realtime) ->
 
     lager:info("Updating app config to force ~p on source cluster.",
                [AVersion]),
-    [rt:update_app_config(N, [{riak_kv,
+    [rt_config:update_app_config(N, [{riak_kv,
                                [{object_format, AVersion}]}])
      || N <- ANodes],
 
     lager:info("Updating app config to force ~p on sink cluster.",
                [BVersion]),
-    [rt:update_app_config(N, [{riak_kv,
+    [rt_config:update_app_config(N, [{riak_kv,
                                [{object_format, BVersion}]}])
      || N <- BNodes],
 

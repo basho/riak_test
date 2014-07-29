@@ -16,7 +16,7 @@ confirm() ->
                 {diff_batch_size, 10}
              ]}
     ],
-    rt:set_advanced_conf(all, Conf),
+    rt_config:set_advanced_conf(all, Conf),
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
     rt:wait_for_cluster_service(ANodes, riak_repl),
     rt:wait_for_cluster_service(BNodes, riak_repl),
