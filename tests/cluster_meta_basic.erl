@@ -18,10 +18,11 @@
 %%
 %% -------------------------------------------------------------------
 -module(cluster_meta_basic).
--behavior(riak_test).
--export([confirm/0, object_count/2]).
+-export([properties/0, confirm/2, object_count/2]).
+
 -include_lib("eunit/include/eunit.hrl").
 
+-include("rt.hrl").
 -define(PREFIX1, {a, b}).
 -define(PREFIX2, {fold, prefix}).
 -define(KEY1, key1).
@@ -29,8 +30,13 @@
 -define(VAL1, val1).
 -define(VAL2, val2).
 
-confirm() ->
-    Nodes = rt:build_cluster(5),
+properties() ->
+    DefaultProps = rt_cluster:properties(),
+    DefaultProps#rt_properties{node_count=5,
+                               rolling_upgrade=false,
+                               make_cluster=true}.
+
+confirm(#rt_properties{nodes=Nodes}, _MD) ->
     ok = test_fold_full_prefix(Nodes),
     ok = test_metadata_conflicts(Nodes),
     ok = test_writes_after_partial_cluster_failure(Nodes),
