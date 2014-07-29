@@ -31,8 +31,8 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
-    rt:update_app_config(all, [{riak_core,
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:update_app_config(all, [{riak_core,
                                 [{ring_creation_size, ?START_SIZE}]}]),
     [ANode, AnotherNode, YetAnother, _ReplacingNode] = _AllNodes = rt:deploy_nodes(4),
     NewNodes = Nodes = [ANode, AnotherNode, YetAnother],

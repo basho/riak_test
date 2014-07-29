@@ -34,7 +34,7 @@ confirm() ->
     pass.
 
 setup() ->
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     NodeCount = rt_config:get(num_nodes, 6),
 
     lager:info("Deploy ~p nodes", [NodeCount]),

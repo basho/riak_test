@@ -45,7 +45,7 @@ simple_test() ->
               {rt_heartbeat_timeout, ?HB_TIMEOUT}
              ]}],
 
-    rt:set_advanced_conf(all, Conf),
+    rt_config:set_advanced_conf(all, Conf),
 
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
@@ -114,7 +114,7 @@ disconnect_test() ->
               {rt_heartbeat_timeout, ?HB_TIMEOUT}
              ]}],
 
-    rt:set_advanced_conf(all, Conf),
+    rt_config:set_advanced_conf(all, Conf),
 
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
@@ -182,7 +182,7 @@ error_cleanup_test() ->
               {cm_cancellation_interval, 5 * 1000}
              ]}],
 
-    rt:set_advanced_conf(all, Conf),
+    rt_config:set_advanced_conf(all, Conf),
 
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
 

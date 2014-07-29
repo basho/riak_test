@@ -64,7 +64,7 @@ setup_repl_clusters(Conf, SSL) ->
             ],
 
 
-    rt:set_advanced_conf(all, Conf),
+    rt_config:set_advanced_conf(all, Conf),
     Nodes = [ANodes, BNodes, CNodes] = rt:build_clusters([2, 2, 2]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
@@ -84,11 +84,11 @@ setup_repl_clusters(Conf, SSL) ->
     case SSL of
         true ->
             lager:info("Enabling SSL for this test"),
-            [rt:update_app_config(N, merge_config(SSLConfig1, Conf)) ||
+            [rt_config:update_app_config(N, merge_config(SSLConfig1, Conf)) ||
                 N <- ANodes],
-            [rt:update_app_config(N, merge_config(SSLConfig2, Conf)) ||
+            [rt_config:update_app_config(N, merge_config(SSLConfig2, Conf)) ||
                 N <- BNodes],
-            [rt:update_app_config(N, merge_config(SSLConfig3, Conf)) ||
+            [rt_config:update_app_config(N, merge_config(SSLConfig3, Conf)) ||
                 N <- CNodes];
         _ ->
             lager:info("SSL not enabled for this test")

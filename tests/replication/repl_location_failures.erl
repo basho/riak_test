@@ -34,7 +34,7 @@
         ]).
 
 confirm() ->
-    rt:set_advanced_conf(all, ?CONF(5)),
+    rt_config:set_advanced_conf(all, ?CONF(5)),
 
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
 

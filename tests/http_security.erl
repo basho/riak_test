@@ -520,7 +520,7 @@ confirm() ->
 
 enable_ssl(Node) ->
     [{http, {IP, Port}}|_] = rt:connection_info(Node),
-    rt:update_app_config(Node, [{riak_api, [{https, [{IP,
+    rt_config:update_app_config(Node, [{riak_api, [{https, [{IP,
                                                       Port+1000}]}]}]),
     rt:wait_until_pingable(Node),
     rt:wait_for_service(Node, riak_kv).

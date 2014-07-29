@@ -31,7 +31,7 @@
 -define(N, 3).
 
 confirm() ->
-    rt:update_app_config(all, [{riak_kv, [{object_format, v1}]}]),
+    rt_config:update_app_config(all, [{riak_kv, [{object_format, v1}]}]),
     TestMetaData = riak_test_runner:metadata(),
     DowngradeVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
     Nodes = [Node1|_] = rt:build_cluster(?N),

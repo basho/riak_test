@@ -16,7 +16,7 @@
 %%
 
 setup(Type) ->
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(Type),
 
