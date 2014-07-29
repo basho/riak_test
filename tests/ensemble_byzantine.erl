@@ -201,7 +201,7 @@ start_nodes(PL) ->
     [rt:start_and_wait(Node) || {{_, Node}, _} <- PL].
 
 data_path(Node) ->
-    ?HARNESS:node_path(Node) ++ "/data/bitcask".
+    ?HARNESS:node_path(Node) ++ "/data/"++backend_dir().
 
 backup_path(Node, N) ->
     data_path(Node) ++ integer_to_list(N) ++ ".bak".
@@ -221,8 +221,9 @@ restore_data(N, PL) ->
 restore_node(Node, N) ->
     Path = data_path(Node),
     BackupPath = backup_path(Node, N),
-    Cmd = "rm -rf "++Path++" && mv "++BackupPath++" "++Path,
-    lager:info("~p", [os:cmd(Cmd)]).
+    rm_backend_dir(Node),
+    Cmd = "mv "++BackupPath++" "++Path,
+    ?assertEqual([], os:cmd(Cmd)).
 
 assert_lose_synctrees_and_recover(PBC, Bucket, Key, Val, PL, ToLose) ->
     {{Idx0, Node0}, primary} = hd(PL),
@@ -270,8 +271,28 @@ wipe_tree(Ensemble, Idx, Node) ->
     exit(Pid, kill).
 
 wipe_partition(Idx, Node) ->
-    rt:clean_data_dir([Node], "bitcask/"++integer_to_list(Idx)),
+    rm_partition_dir(Idx, Node),
     vnode_util:kill_vnode({Idx, Node}).
+
+rm_backend_dir(Node) ->
+    rt:clean_data_dir([Node], backend_dir()).
+
+rm_partition_dir(Idx, Node) ->
+    RelativePath = backend_dir() ++ "/" ++ integer_to_list(Idx),
+    rt:clean_data_dir([Node], RelativePath).
+
+backend_dir() ->
+    TestMetaData = riak_test_runner:metadata(),
+    KVBackend = proplists:get_value(backend, TestMetaData),
+    backend_dir(KVBackend).
+
+backend_dir(undefined) ->
+    %% riak_test defaults to bitcask when undefined
+    backend_dir(bitcask);
+backend_dir(bitcask) ->
+    "bitcask";
+backend_dir(eleveldb) ->
+    "leveldb".
 
 get_preflist(Node, Bucket, Key, NVal) ->
     DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key}]),
