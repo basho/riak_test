@@ -81,7 +81,7 @@ confirm() ->
     BIndicies = length(rpc:call(LeaderB,
                                 riak_core_ring,
                                 my_indices,
-                                [rt:get_ring(LeaderB)])),
+                                [rt_ring:get_ring(LeaderB)])),
 
     lager:warning("BIndicies: ~p", [BIndicies]),
 
