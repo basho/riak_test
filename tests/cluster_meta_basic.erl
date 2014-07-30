@@ -31,12 +31,10 @@
 -define(VAL2, val2).
 
 properties() ->
-    DefaultProps = rt_cluster:properties(),
-    DefaultProps#rt_properties{node_count=5,
-                               rolling_upgrade=false,
-                               make_cluster=true}.
+    rt_properties:new([{node_count, 5}]).
 
-confirm(#rt_properties{nodes=Nodes}, _MD) ->
+confirm(Properties, _MD) ->
+    Nodes = rt_properties:get(nodes, Properties),
     ok = test_fold_full_prefix(Nodes),
     ok = test_metadata_conflicts(Nodes),
     ok = test_writes_after_partial_cluster_failure(Nodes),

@@ -39,6 +39,7 @@
          try_nodes_ready/3,
          versions/0,
          teardown/0]).
+
 -export([maybe_wait_for_transfers/2]).
 
 -include("rt.hrl").
@@ -47,27 +48,29 @@
 
 %% @doc Default properties used if a riak_test module does not specify
 %% a custom properties function.
--spec properties() -> rt_properties().
+-spec properties() -> rt_properties:properties().
 properties() ->
-    #rt_properties{config=config()}.
+    rt_properties:new([{config, config()}]).
 
--spec setup(rt_properties(), proplists:proplist()) ->
-                   {ok, rt_properties()} | {error, term()}.
+-spec setup(rt_properties:properties(), proplists:proplist()) ->
+                   {ok, rt_properties:properties()} | {error, term()}.
 setup(Properties, MetaData) ->
     rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
-    RollingUpgrade = proplists:get_value(rolling_upgrade,
-                                         MetaData,
-                                         Properties#rt_properties.rolling_upgrade),
-    Version = Properties#rt_properties.start_version,
-    Versions = [{Version, Properties#rt_properties.config} ||
-                   _ <- lists:seq(1, Properties#rt_properties.node_count)],
-    Nodes = deploy_or_build_cluster(Versions, Properties#rt_properties.make_cluster),
-
-    maybe_wait_for_transfers(Nodes, Properties#rt_properties.wait_for_transfers),
-    UpdProperties = Properties#rt_properties{nodes=Nodes,
-                                             rolling_upgrade=RollingUpgrade},
-    {ok, UpdProperties}.
+    RollingUpgrade =
+        proplists:get_value(rolling_upgrade,
+                            MetaData,
+                            rt_properties:get(rolling_upgrade, Properties)),
+    Version = rt_properties:get(start_version, Properties),
+    Config = rt_properties:get(config, Properties),
+    Versions = [{Version, Config} ||
+                   _ <- lists:seq(1, rt_properties:get(node_count, Properties))],
+    Nodes = deploy_or_build_cluster(Versions,
+                                    rt_properties:get(make_cluster, Properties)),
+    maybe_wait_for_transfers(Nodes,
+                             rt_properties:get(wait_for_transfers, Properties)),
+    UpdPropertyList = [{nodes, Nodes}, {rolling_upgrade, RollingUpgrade}],
+    rt_properties:set(UpdPropertyList, Properties).
 
 deploy_or_build_cluster(Versions, true) ->
     build_cluster(Versions);
@@ -218,7 +221,9 @@ config() ->
      {riak_pipe, [{worker_limit, 200}]}].
 
 augment_config(Section, Property, Config) ->
-    UpdSectionConfig = update_section(Section, Property, lists:keyfind(Section, 1, Config)),
+    UpdSectionConfig = update_section(Section,
+                                      Property,
+                                      lists:keyfind(Section, 1, Config)),
     lists:keyreplace(Section, 1, Config, UpdSectionConfig).
 
 update_section(Section, Property, false) ->

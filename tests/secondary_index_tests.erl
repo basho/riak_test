@@ -34,19 +34,17 @@
 -define(KEYS(A,B,G1,G2), [int_to_key(N) || N <- lists:seq(A,B), G1, G2]).
 
 properties() ->
-    DefaultProps = rt_cluster:properties(),
-    DefaultProps#rt_properties{node_count=3,
-                               wait_for_transfers=true,
-                               rolling_upgrade=false,
-                               start_version=previous,
-                               config=config()}.
+    rt_properties:new([{node_count, 3},
+                       {wait_for_transfers, true},
+                       {start_version, previous},
+                       {config, config()}]).
 
 config() ->
-    [
-     {riak_kv, [{secondary_index_sort_default, false}]}
-    ].
+    [{riak_kv, [{secondary_index_sort_default, false}]},
+     {riak_core, [{handoff_concurrency, 11}]}].
 
-confirm(#rt_properties{nodes=Nodes}, _MD) ->
+confirm(Properties, _MD) ->
+    Nodes = rt_properties:get(nodes, Properties),
     Bucket = druuid:v4_str(),
     lager:info("Bucket: ~p", [Bucket]),
     PBC = rt_pb:pbc(hd(Nodes)),

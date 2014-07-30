@@ -7,16 +7,15 @@
 -include("rt.hrl").
 
 properties() ->
-    DefaultProps = rt_cluster:properties(),
-    CustomConfig = rt_cluster:augment_config(riak_core, 
+    CustomConfig = rt_cluster:augment_config(riak_core,
                                              {default_bucket_props, [{n_val, 2}]},
-                                             DefaultProps#rt_properties.config),
-    DefaultProps#rt_properties{node_count=1,
-                               rolling_upgrade=false,
-                               make_cluster=true,
-                               config=CustomConfig}.
+                                             rt_cluster:config()),
+    rt_properties:new([{node_count, 1},
+                       {config, CustomConfig}]).
 
-confirm(#rt_properties{nodes=Nodes}, _MD) ->
+
+confirm(Properties, _MD) ->
+    Nodes = rt_properties:get(nodes, Properties),
     Node = hd(Nodes),
 
     application:start(ibrowse),

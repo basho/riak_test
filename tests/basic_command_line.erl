@@ -24,12 +24,10 @@
 -export([properties/0, confirm/2]).
 
 properties() ->
-    DefaultProps = rt_cluster:properties(),
-    DefaultProps#rt_properties{node_count=1,
-                               rolling_upgrade=false,
-                               make_cluster=true}.
+    rt_properties:new([{node_count, 1}]).
 
-confirm(#rt_properties{nodes=Nodes}, _MD) ->
+confirm(Properties, _MD) ->
+    Nodes = rt_properties:get(nodes, Properties),
     Node = hd(Nodes),
     %% Deploy a node to test against
     lager:info("Deploy node to test command line"),
