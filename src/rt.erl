@@ -102,8 +102,6 @@
          rpc_get_env/2,
          set_backend/1,
          set_backend/2,
-         set_conf/2,
-         set_advanced_conf/2,
          setup_harness/2,
          setup_log_capture/1,
          slow_upgrade/3,
@@ -126,7 +124,6 @@
          systest_write/5,
          systest_write/6,
          teardown/0,
-         update_app_config/2,
          upgrade/2,
          upgrade/3,
          versions/0,
@@ -197,34 +194,6 @@ str(String, Substr) ->
         0 -> false;
         _ -> true
     end.
-
--spec set_conf(atom(), [{string(), string()}]) -> ok.
-set_conf(all, NameValuePairs) ->
-    ?HARNESS:set_conf(all, NameValuePairs);
-set_conf(Node, NameValuePairs) ->
-    stop(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    ?HARNESS:set_conf(Node, NameValuePairs),
-    start(Node).
-
--spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
-set_advanced_conf(all, NameValuePairs) ->
-    ?HARNESS:set_advanced_conf(all, NameValuePairs);
-set_advanced_conf(Node, NameValuePairs) ->
-    stop(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    ?HARNESS:set_advanced_conf(Node, NameValuePairs),
-    start(Node).
-
-%% @doc Rewrite the given node's app.config file, overriding the varialbes
-%%      in the existing app.config with those in `Config'.
-update_app_config(all, Config) ->
-    ?HARNESS:update_app_config(all, Config);
-update_app_config(Node, Config) ->
-    stop(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    ?HARNESS:update_app_config(Node, Config),
-    start(Node).
 
 %% @doc Helper that returns first successful application get_env result,
 %%      used when different versions of Riak use different app vars for
@@ -306,15 +275,12 @@ deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
     NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
     deploy_nodes(NodeConfig);
 deploy_nodes(Versions, Services) ->
-    NodeConfig = [ version_to_config(Version) || Version <- Versions ],
+    NodeConfig = [ rt_config:version_to_config(Version) || Version <- Versions ],
     Nodes = ?HARNESS:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
     [ ok = wait_for_service(Node, Service) || Node <- Nodes,
                                               Service <- Services ],
     Nodes.
-
-version_to_config(Config) when is_tuple(Config)-> Config;
-version_to_config(Version) -> {Version, default}.
 
 deploy_clusters(Settings) ->
     ClusterConfigs = [case Setting of
@@ -1562,12 +1528,12 @@ set_backend(multi, Extras) ->
     set_backend(riak_kv_multi_backend, Extras);
 set_backend(Backend, _) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
     lager:info("rt:set_backend(~p)", [Backend]),
-    update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
+    rt_config:update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
     get_backends();
 set_backend(Backend, Extras) when Backend == riak_kv_multi_backend ->
     MultiConfig = proplists:get_value(multi_config, Extras, default),
     Config = make_multi_backend_config(MultiConfig),
-    update_app_config(all, [{riak_kv, Config}]),
+    rt_config:update_app_config(all, [{riak_kv, Config}]),
     get_backends();
 set_backend(Other, _) ->
     lager:warning("rt:set_backend doesn't recognize ~p as a legit backend, using the default.", [Other]),

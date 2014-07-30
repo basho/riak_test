@@ -31,7 +31,8 @@
          set/2,
          set_conf/2,
          set_advanced_conf/2,
-         update_app_config/2
+         update_app_config/2,
+         version_to_config/1
 ]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
@@ -155,6 +156,9 @@ update_app_config(Node, Config) ->
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:update_app_config(Node, Config),
     rt:start(Node).
+
+version_to_config(Config) when is_tuple(Config)-> Config;
+version_to_config(Version) -> {Version, default}.
 
 to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
