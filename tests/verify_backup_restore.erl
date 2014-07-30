@@ -82,7 +82,7 @@ confirm() ->
 
     lager:info("Backing up the data to ~p", [BackupFile]),
     Cookie = "riak",
-    rt:admin(Node0, ["backup", atom_to_list(Node0), Cookie, BackupFile, "all"]),
+    rt_cmd_line:admin(Node0, ["backup", atom_to_list(Node0), Cookie, BackupFile, "all"]),
 
     lager:info("Modifying data on cluster"),
     ModF = fun(N) ->
@@ -114,7 +114,7 @@ confirm() ->
     verify_searches(PbcPid, Searches, 0),
 
     lager:info("Restoring from backup ~p", [BackupFile]),
-    rt:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
+    rt_cmd_line:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
     rt:wait_until_no_pending_changes(Nodes),
 
     %% When allow_mult=false, the mods overwrite the restored data.  When
@@ -150,7 +150,7 @@ confirm() ->
     verify_searches(PbcPid2, EmptySearches, 0),
 
     lager:info("Restoring from backup ~p again", [BackupFile]),
-    rt:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
+    rt_cmd_line:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
 
     lager:info("Verifying data is back to original backup"),
