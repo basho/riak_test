@@ -16,7 +16,6 @@
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
 -export([pbc/1,
          pbc_read/3,
          pbc_read/4,
@@ -24,9 +23,17 @@
          pbc_read_check/5,
          pbc_set_bucket_prop/3,
          pbc_write/4,
+         pbc_write/5,
          pbc_put_dir/3,
          pbc_put_file/4,
-         pbc_really_deleted/3]).
+         pbc_really_deleted/3,
+         pbc_systest_write/2,
+         pbc_systest_write/3,
+         pbc_systest_write/5,
+         pbc_systest_read/2,
+         pbc_systest_read/3,
+         pbc_systest_read/5,
+         get_pb_conn_info/1]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 
@@ -162,3 +169,18 @@ pbc_systest_read(Node, Start, End, Bucket, R) ->
                 end
         end,
     lists:foldl(F, [], lists:seq(Start, End)).
+
+-spec get_pb_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
+get_pb_conn_info(Node) ->
+    case rt:rpc_get_env(Node, [{riak_api, pb},
+                            {riak_api, pb_ip},
+                            {riak_kv, pb_ip}]) of
+        {ok, [{NewIP, NewPort}|_]} ->
+            {ok, [{NewIP, NewPort}]};
+        {ok, PB_IP} ->
+            {ok, PB_Port} = rt:rpc_get_env(Node, [{riak_api, pb_port},
+                                               {riak_kv, pb_port}]),
+            {ok, [{PB_IP, PB_Port}]};
+        _ ->
+            undefined
+    end.
