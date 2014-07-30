@@ -61,9 +61,9 @@ confirm() ->
         end}}]}),
 
     lager:info("Removing Nodes 2 and 3 from the cluster"),
-    rt:leave(Node2),
+    rt_node:leave(Node2),
     ok = ensemble_util:wait_until_stable(Node, NVal),
-    rt:leave(Node3),
+    rt_node:leave(Node3),
     ok = ensemble_util:wait_until_stable(Node, NVal),
     Remaining = Nodes -- [Node2, Node3],
     rt:wait_until_nodes_agree_about_ownership(Remaining), 

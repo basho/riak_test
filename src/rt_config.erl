@@ -133,29 +133,29 @@ config_or_os_env(Config, Default) ->
 set_conf(all, NameValuePairs) ->
     ?HARNESS:set_conf(all, NameValuePairs);
 set_conf(Node, NameValuePairs) ->
-    rt:stop(Node),
+    rt_node:stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_conf(Node, NameValuePairs),
-    rt:start(Node).
+    rt_node:start(Node).
 
 -spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
 set_advanced_conf(all, NameValuePairs) ->
     ?HARNESS:set_advanced_conf(all, NameValuePairs);
 set_advanced_conf(Node, NameValuePairs) ->
-    rt:stop(Node),
+    rt_node:stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_advanced_conf(Node, NameValuePairs),
-    rt:start(Node).
+    rt_node:start(Node).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in `Config'.
 update_app_config(all, Config) ->
     ?HARNESS:update_app_config(all, Config);
 update_app_config(Node, Config) ->
-    rt:stop(Node),
+    rt_node:stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:update_app_config(Node, Config),
-    rt:start(Node).
+    rt_node:start(Node).
 
 version_to_config(Config) when is_tuple(Config)-> Config;
 version_to_config(Version) -> {Version, default}.

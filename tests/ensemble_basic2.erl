@@ -43,7 +43,7 @@ confirm() ->
                                       riak_kv_vnode_orig:init_orig(Args)
                               end}}]}),
     rt:stop_and_wait(Node),
-    rt:start(Node),
+    rt_node:start(Node),
     lager:info("Polling peers while riak_kv starts. We should see none"),
     UpNoPeersFun =
         fun() ->

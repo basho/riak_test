@@ -57,17 +57,17 @@ confirm() ->
     check_it_all(Nodes, http),
 
     lager:info("Stopping Node1"),
-    rt:stop(Node1),
+    rt_node:stop(Node1),
     rt:wait_until_unpingable(Node1),
 
     %% Stop current node, restart previous node, verify
     lists:foldl(fun(Node, Prev) ->
             lager:info("Stopping Node ~p", [Node]),
-            rt:stop(Node),
+            rt_node:stop(Node),
             rt:wait_until_unpingable(Node),
 
             lager:info("Starting Node ~p", [Prev]),
-            rt:start(Prev),
+            rt_node:start(Prev),
             UpNodes = Nodes -- [Node],
             lager:info("Waiting for riak_kv service to be ready in ~p", [Prev]),
             rt:wait_for_cluster_service(UpNodes, riak_kv),
@@ -78,11 +78,11 @@ confirm() ->
         end, Node1, [Node2, Node3, Node4]),
 
     lager:info("Stopping Node2"),
-    rt:stop(Node2),
+    rt_node:stop(Node2),
     rt:wait_until_unpingable(Node2),
 
     lager:info("Stopping Node3"),
-    rt:stop(Node3),
+    rt_node:stop(Node3),
     rt:wait_until_unpingable(Node3),
 
     lager:info("Only Node1 is up, so test should fail!"),

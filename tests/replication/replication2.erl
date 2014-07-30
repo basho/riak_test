@@ -235,7 +235,7 @@ master_failover_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     log_to_nodes(ANodes ++ BNodes, "Testing master failover: stopping ~p", [LeaderA]),
     
     lager:info("Testing master failover: stopping ~p", [LeaderA]),
-    rt:stop(LeaderA),
+    rt_node:stop(LeaderA),
     rt:wait_until_unpingable(LeaderA),
     ASecond = hd(ANodes -- [LeaderA]),
     repl_util:wait_until_leader(ASecond),
@@ -259,7 +259,7 @@ master_failover_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     log_to_nodes(ANodes ++ BNodes, "Testing client failover: stopping ~p", [LeaderB]),
 
     lager:info("Testing client failover: stopping ~p", [LeaderB]),
-    rt:stop(LeaderB),
+    rt_node:stop(LeaderB),
     rt:wait_until_unpingable(LeaderB),
     BSecond = hd(BNodes -- [LeaderB]),
     repl_util:wait_until_leader(BSecond),
@@ -376,7 +376,7 @@ network_partition_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 %%        Verify that the original real time keys did not replicate
 %%        Verify that the No replication bucket didn't replicate.
 bucket_sync_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
-    
+
     TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     FullsyncOnly = <<TestHash/binary, "-fullsync_only">>,
     RealtimeOnly = <<TestHash/binary, "-realtime_only">>,
@@ -521,7 +521,7 @@ offline_queueing_tests([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 
     lager:info("Stopping node ~p", [Target]),
 
-    rt:stop(Target),
+    rt_node:stop(Target),
     rt:wait_until_unpingable(Target),
 
     lager:info("Starting realtime"),
@@ -584,7 +584,7 @@ pb_write_during_shutdown([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     lager:info("pb_write_during_shutdown: Ensure node ~p is down before restart", [Target]),
     ?assertEqual(ok, rt:wait_until_unpingable(Target)),
 
-    rt:start(Target),
+    rt_node:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
     ReadErrors2 = rt:systest_read(Target, 1000, 11000, TestBucket, 2),
@@ -658,7 +658,7 @@ http_write_during_shutdown([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     lager:info("HTTP: write_during_shutdown: Ensure node ~p is down before restart", [Target]),
     ?assertEqual(ok, rt:wait_until_unpingable(Target)),
 
-    rt:start(Target),
+    rt_node:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
     ReadErrors2 = http_read(C, 12000, 22000, TestBucket, 2),

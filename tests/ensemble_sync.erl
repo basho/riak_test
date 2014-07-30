@@ -111,7 +111,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
 
     lager:info("Read keys to verify they exist"),
     [rt_pb:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys],
-    rt:heal(Part),
+    rt_node:heal(Part),
 
     %% Suspend desired number of valid vnodes
     S1 = [vnode_util:suspend_vnode(VNode, VIdx) || {VIdx, VNode} <- SuspendVN],
