@@ -148,7 +148,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     rt:log_to_nodes(AllNodes, "Testing master failover: stopping ~p", [LeaderA]),
     lager:info("Testing master failover: stopping ~p", [LeaderA]),
-    rt:stop(LeaderA),
+    rt_node:stop(LeaderA),
     rt:wait_until_unpingable(LeaderA),
     wait_until_leader(ASecond),
 
@@ -171,7 +171,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     LeaderB = rpc:call(BFirst, riak_repl_leader, leader_node, []),
 
     lager:info("Testing client failover: stopping ~p", [LeaderB]),
-    rt:stop(LeaderB),
+    rt_node:stop(LeaderB),
     rt:wait_until_unpingable(LeaderB),
     BSecond = hd(BNodes -- [LeaderB]),
     wait_until_leader(BSecond),
@@ -202,7 +202,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     %%
 
     lager:info("Restarting down node ~p", [LeaderA]),
-    rt:start(LeaderA),
+    rt_node:start(LeaderA),
     rt:wait_until_pingable(LeaderA),
     wait_until_no_pending_changes(ANodes),
     wait_until_leader_converge(ANodes),
@@ -270,7 +270,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     end,
 
     lager:info("Restarting down node ~p", [LeaderB]),
-    rt:start(LeaderB),
+    rt_node:start(LeaderB),
     rt:wait_until_pingable(LeaderB),
 
     case nodes_all_have_version(ANodes, "1.1.0") of

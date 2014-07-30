@@ -53,37 +53,37 @@ confirm(#rt_properties{nodes=Nodes}, _MD) ->
     wait_and_validate(Nodes),
 
     lager:info("taking Node 1 down"),
-    rt:stop(Node1),
+    rt_node:stop(Node1),
     ?assertEqual(ok, rt:wait_until_unpingable(Node1)),
     wait_and_validate(Nodes, [Node2, Node3, Node4]),
 
     lager:info("taking Node 2 down"),
-    rt:stop(Node2),
+    rt_node:stop(Node2),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
     wait_and_validate(Nodes, [Node3, Node4]),
 
     lager:info("bringing Node 1 up"),
-    rt:start(Node1),
+    rt_node:start(Node1),
     ok = rt:wait_until_pingable(Node1),
     wait_and_validate(Nodes, [Node1, Node3, Node4]),
     lager:info("bringing Node 2 up"),
-    rt:start(Node2),
+    rt_node:start(Node2),
     ok = rt:wait_until_pingable(Node2),
     wait_and_validate(Nodes),
 
     % leave 1, 2, and 3
     lager:info("leaving Node 1"),
-    rt:leave(Node1),
+    rt_node:leave(Node1),
     ?assertEqual(ok, rt:wait_until_unpingable(Node1)),
     wait_and_validate([Node2, Node3, Node4]),
 
     lager:info("leaving Node 2"),
-    rt:leave(Node2),
+    rt_node:leave(Node2),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
     wait_and_validate([Node3, Node4]),
 
     lager:info("leaving Node 3"),
-    rt:leave(Node3),
+    rt_node:leave(Node3),
     ?assertEqual(ok, rt:wait_until_unpingable(Node3)),
 
     % verify 4

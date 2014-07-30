@@ -134,7 +134,7 @@ test_supervision() ->
     lager:info("It can fail, it can fail 10 times"),
 
     rt:wait_until(retry_check_fun(Node)),
-    rt:stop(Node),
+    rt_node:stop(Node),
     ok_ok.
 
 retry_check_fun(Node) ->
@@ -193,7 +193,7 @@ test_application_stop() ->
 
     ?assertEqual(nomatch, re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
 
-    rt:stop(Node).
+    rt_node:stop(Node).
 
 verify_inc(Prev, Props, Keys) ->
     [begin

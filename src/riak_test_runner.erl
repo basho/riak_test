@@ -174,7 +174,7 @@ compose_confirm_fun({ConfirmMod, ConfirmFun},
 
 ensure_all_nodes_running(Nodes) ->
     [begin
-         ok = rt:start_and_wait(Node),
+         ok = rt_node:start_and_wait(Node),
          ok = rt:wait_until_registered(Node, riak_core_ring_manager)
      end || Node <- Nodes].
 
