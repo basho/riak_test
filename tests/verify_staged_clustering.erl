@@ -117,28 +117,28 @@ n(Atom) ->
 
 stage_join(Node, OtherNode) ->
     %% rpc:call(Node, riak_kv_console, staged_join, [[n(OtherNode)]]).
-    rt:admin(Node, ["cluster", "join", n(OtherNode)]).
+    rt_cmd_line:admin(Node, ["cluster", "join", n(OtherNode)]).
 
 stage_leave(Node, OtherNode) ->
     %% rpc:call(Node, riak_core_console, stage_leave, [[n(OtherNode)]]).
-    rt:admin(Node, ["cluster", "leave", n(OtherNode)]).
+    rt_cmd_line:admin(Node, ["cluster", "leave", n(OtherNode)]).
 
 stage_remove(Node, OtherNode) ->
     %% rpc:call(Node, riak_core_console, stage_remove, [[n(OtherNode)]]).
-    rt:admin(Node, ["cluster", "force-remove", n(OtherNode)]).
+    rt_cmd_line:admin(Node, ["cluster", "force-remove", n(OtherNode)]).
 
 stage_replace(Node, Node1, Node2) ->
     %% rpc:call(Node, riak_core_console, stage_replace, [[n(Node1), n(Node2)]]).
-    rt:admin(Node, ["cluster", "replace", n(Node1), n(Node2)]).
+    rt_cmd_line:admin(Node, ["cluster", "replace", n(Node1), n(Node2)]).
 
 stage_force_replace(Node, Node1, Node2) ->
     %% rpc:call(Node, riak_core_console, stage_force_replace, [[n(Node1), n(Node2)]]).
-    rt:admin(Node, ["cluster", "force-replace", n(Node1), n(Node2)]).
+    rt_cmd_line:admin(Node, ["cluster", "force-replace", n(Node1), n(Node2)]).
 
 print_staged(Node) ->
     %% rpc:call(Node, riak_core_console, print_staged, [[]]).
     F = fun(_) ->
-                {ok, StdOut} = rt:admin(Node, ["cluster", "plan"]),
+                {ok, StdOut} = rt_cmd_line:admin(Node, ["cluster", "plan"]),
                 case StdOut of
                     "Cannot" ++ _X -> false;
                     _ -> true
@@ -148,11 +148,11 @@ print_staged(Node) ->
 
 commit_staged(Node) ->
     %% rpc:call(Node, riak_core_console, commit_staged, [[]]).
-    rt:admin(Node, ["cluster", "commit"]).
+    rt_cmd_line:admin(Node, ["cluster", "commit"]).
 
 clear_staged(Node) ->
     %% rpc:call(Node, riak_core_console, clear_staged, [[]]).
-    rt:admin(Node, ["cluster", "clear"]).
+    rt_cmd_line:admin(Node, ["cluster", "clear"]).
 
 stage_join_rpc(Node, OtherNode) ->
     rpc:call(Node, riak_core, staged_join, [OtherNode]).
