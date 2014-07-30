@@ -118,7 +118,7 @@ force_encoding(Node, EncodingMethod) ->
     end.
 
 stopall(Nodes) ->
-    lists:foreach(fun(N) -> rt:brutal_kill(N) end, Nodes).
+    lists:foreach(fun(N) -> rt_node:brutal_kill(N) end, Nodes).
 
 make_kv(N, VSuffix) -> 
     K = <<N:32/integer>>,
