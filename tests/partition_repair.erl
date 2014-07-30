@@ -94,7 +94,7 @@ confirm() ->
     ?assertCmd("rm -rf " ++ base_stash_path()),
     %% need to load the module so riak can see the fold fun
     rt:load_modules_on_nodes([?MODULE], Nodes),
-    Ring = rt:get_ring(hd(Nodes)),
+    Ring = rt_ring:get_ring(hd(Nodes)),
     Owners = riak_core_ring:all_owners(Ring),
     [stash_data(riak_search, Owner) || Owner <- Owners],
 

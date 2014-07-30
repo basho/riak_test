@@ -43,7 +43,7 @@ list_bitcask_files(Nodes) ->
 
 list_node_bitcask_files(Node) ->
     % Gather partitions owned, list *.bitcask.data on each.
-    Partitions = rt:partitions_for_node(Node),
+    Partitions = rt_ring:partitions_for_node(Node),
     {ok, DataDir} = rt:rpc_get_env(Node, [{bitcask, data_root}]),
     [begin
          IdxStr = integer_to_list(Idx),

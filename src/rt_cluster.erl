@@ -151,7 +151,7 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
 
 join_cluster(Nodes) ->
     %% Ensure each node owns 100% of it's own ring
-    [?assertEqual([Node], rt:owners_according_to(Node)) || Node <- Nodes],
+    [?assertEqual([Node], rt_ring:owners_according_to(Node)) || Node <- Nodes],
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
@@ -162,8 +162,8 @@ join_cluster(Nodes) ->
         _ ->
             %% ok do a staged join and then commit it, this eliminates the
             %% large amount of redundant handoff done in a sequential join
-            [rt:staged_join(Node, Node1) || Node <- OtherNodes],
-            rt:plan_and_commit(Node1),
+            [rt_node:staged_join(Node, Node1) || Node <- OtherNodes],
+            rt_node:plan_and_commit(Node1),
             try_nodes_ready(Nodes, 3, 500)
     end,
 
@@ -176,7 +176,7 @@ join_cluster(Nodes) ->
 
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
-    rt:plan_and_commit(Node1);
+    rt_node:plan_and_commit(Node1);
 try_nodes_ready(Nodes, N, SleepMs) ->
     ReadyNodes = [Node || Node <- Nodes, rt:is_ready(Node) =:= true],
     case ReadyNodes of
