@@ -237,12 +237,12 @@ assert_equal(Expected, Actual) ->
     Actual == Expected.
 
 pb_pid_recycler(undefined, Node) ->
-    rt:pbc(Node);
+    rt_pb:pbc(Node);
 pb_pid_recycler(Pid, Node) ->
     case riakc_pb_socket:is_connected(Pid) of
         true ->
             Pid;
         _ ->
             riakc_pb_socket:stop(Pid),
-            rt:pbc(Node)
+            rt_pb:pbc(Node)
     end.

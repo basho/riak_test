@@ -86,8 +86,8 @@ confirm() ->
     rt:enable_search_hook(hd(Nodes), Bucket),
 
     lager:info("Insert Scott's spam emails"),
-    Pbc = rt:pbc(hd(Nodes)),
-    rt:pbc_put_dir(Pbc, Bucket, SpamDir),
+    Pbc = rt_pb:pbc(hd(Nodes)),
+    rt_pb:pbc_put_dir(Pbc, Bucket, SpamDir),
 
     lager:info("Stash ITFs for each partition"),
     %% @todo Should riak_test guarantee that the scratch pad is clean instead?

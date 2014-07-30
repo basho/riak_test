@@ -32,7 +32,7 @@ confirm() ->
     Nodes = rt_cluster:build_cluster([{current, Config}, {current, Config}, {current, Config}]),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
-    PBPid = rt:pbc(hd(Nodes)),
+    PBPid = rt_pb:pbc(hd(Nodes)),
     Http = rt:http_url(hd(Nodes)),
 
     [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],

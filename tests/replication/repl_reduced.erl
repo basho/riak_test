@@ -103,7 +103,7 @@ data_push_test_() ->
 
         {"repl works", timeout, rt_cascading:timeout(1000), fun() ->
             #data_push_test{c123 = [N1 | _]} = State,
-            Client123 = rt:pbc(N1),
+            Client123 = rt_pb:pbc(N1),
             Bin = <<"data data data">>,
             Key = <<"derkey">>,
             Bucket = <<"kicked">>,
@@ -129,7 +129,7 @@ data_push_test_() ->
             end,
             [rt:wait_until(Node, WaitFun) || Node <- State#data_push_test.c456],
             lager:info("putting an object on ~p", [N1]),
-            Client123 = rt:pbc(N1),
+            Client123 = rt_pb:pbc(N1),
             Bin = <<"before repl reduction, this is a binary">>,
             Key = <<"the key">>,
             Bucket = <<"objects">>,
@@ -157,7 +157,7 @@ data_push_test_() ->
                 Got =:= never
             end,
             [rt:wait_until(Node, WaitFun) || Node <- State#data_push_test.c456],
-            Client123 = rt:pbc(N1),
+            Client123 = rt_pb:pbc(N1),
             Bin = <<"only carry reduced objects">>,
             Key = <<"ocro">>,
             Bucket = <<"objects">>,
@@ -181,7 +181,7 @@ data_push_test_() ->
                 Got =:= never
             end,
             [rt:wait_until(Node, WaitFun) || Node <- State#data_push_test.c456],
-            Client123 = rt:pbc(N1),
+            Client123 = rt_pb:pbc(N1),
             Bin = <<"only carry reduced objects">>,
             Key = <<"ocro2">>,
             Bucket = <<"objects">>,
@@ -249,7 +249,7 @@ read_repair_interaction_test_() ->
             end,
             [rt:wait_until(Node, WaitFun) || Node <- State#data_push_test.c456],
             lager:info("putting an object on ~p", [N1]),
-            Client123 = rt:pbc(N1),
+            Client123 = rt_pb:pbc(N1),
             Bin = <<"before repl reduction, this is a binary">>,
             Key = <<"rrit">>,
             Bucket = <<"rrit_objects">>,
@@ -280,7 +280,7 @@ read_repair_interaction_test_() ->
                 ]})
             end, State#data_push_test.c456),
             [N4 | _] = State#data_push_test.c456,
-            Client456 = rt:pbc(N4),
+            Client456 = rt_pb:pbc(N4),
 
             % set the nval higher, which make the below have read repair
             % end up being forced
@@ -421,7 +421,7 @@ read_repair_interaction_test_() ->
                     ?assertMatch({ok, _}, Error)
             end,
 
-            Client456 = rt:pbc(hd(State#data_push_test.c456)),
+            Client456 = rt_pb:pbc(hd(State#data_push_test.c456)),
             riakc_pb_socket:set_bucket(Client456, Bucket, [{n_val, 5}]),
             riakc_pb_socket:stop(Client456),
 
@@ -462,7 +462,7 @@ exists(Nodes, Bucket, Key) ->
 exists(Got, [], _Bucket, _Key) ->
     Got;
 exists({error, notfound}, [Node | Tail], Bucket, Key) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     Got = riakc_pb_socket:get(Pid, Bucket, Key, [{pr, 1}]),
     riakc_pb_socket:stop(Pid),
     exists(Got, Tail, Bucket, Key);
@@ -538,7 +538,7 @@ read(SocketQueue, N, Stop, Bucket, AssertFun) ->
 
 make_socket_queue(Nodes) ->
     Sockets = lists:map(fun(Node) ->
-        rt:pbc(Node)
+        rt_pb:pbc(Node)
     end, Nodes),
     queue:from_list(Sockets).
 

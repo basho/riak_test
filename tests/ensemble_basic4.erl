@@ -48,7 +48,7 @@ confirm() ->
     PartitionedVN = lists:sublist(Other, Minority),
     Partitioned = [VNode || {_, VNode} <- PartitionedVN],
 
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
 
     lager:info("Partitioning quorum minority: ~p", [Partitioned]),
     Part = rt:partition(Nodes -- Partitioned, Partitioned),
@@ -56,10 +56,10 @@ confirm() ->
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Writing ~p consistent keys", [1000]),
-    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
 
     lager:info("Read keys to verify they exist"),
-    [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
+    [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     lager:info("Healing partition"),
     rt:heal(Part),

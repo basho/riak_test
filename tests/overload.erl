@@ -277,10 +277,8 @@ node_overload_check(Pid) ->
     end.
 
 list_keys(Node) ->
-    Pid = rt:pbc(Node, [{auto_reconnect, true}, {queue_if_disconnected, true}]),
-    Res = riakc_pb_socket:list_keys(Pid, {<<"normal_type">>, ?BUCKET}, infinity),
-    riakc_pb_socket:stop(Pid),
-    Res.
+    Pid = rt_pb:pbc(Node),
+    riakc_pb_socket:list_keys(Pid, ?BUCKET, 30000).
 
 list_buckets(Node) ->
     {ok, C} = riak:client_connect(Node),

@@ -37,7 +37,7 @@ confirm() ->
     %% write key with index that old version of sext would encode improperly (not perserving
     %% sort order)
     lager:info("writing test key"),
-    Client0 = rt:pbc(Node),
+    Client0 = rt_pb:pbc(Node),
     Obj0 = riakc_obj:new(TestBucket, TestKey, <<"somevalue">>),
     ObjMD0 = riakc_obj:get_update_metadata(Obj0),
     ObjMD1 = riakc_obj:set_secondary_index(ObjMD0,
@@ -57,7 +57,7 @@ confirm() ->
     %% should rewrite 1 index (* n = 3), ignore 0 and have zero errors
     {3, 0, 0} = rpc:call(Node, riak_kv_util, fix_incorrect_index_entries, []),
 
-    Client1 = rt:pbc(Node),
+    Client1 = rt_pb:pbc(Node),
     Results = riakc_pb_socket:get_index(Client1, TestBucket,
                                         TestIndex, 1000000000000,
                                         TestIdxValue),

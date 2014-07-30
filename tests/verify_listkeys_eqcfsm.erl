@@ -229,7 +229,7 @@ node_list(NumNodes) ->
 
 put_keys(Node, Bucket, Num) ->
     lager:info("*******************[CMD]  Putting ~p keys into bucket ~p on node ~p", [Num, Bucket, Node]),
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     try
         Keys = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
         Vals = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],

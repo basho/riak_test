@@ -339,8 +339,8 @@ difference_test() ->
     connect_cluster(LeaderA, BPort, "B"),
 
     %% Get PBC connections.
-    APBC = rt:pbc(LeaderA),
-    BPBC = rt:pbc(LeaderB),
+    APBC = rt_pb:pbc(LeaderA),
+    BPBC = rt_pb:pbc(LeaderB),
 
     %% Write key.
     ok = riakc_pb_socket:put(APBC,

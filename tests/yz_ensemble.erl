@@ -47,10 +47,10 @@ verify_ensemble_delete_support(Node, Bucket, Index) ->
     Keys = [<<N:64/integer>> || N <- lists:seq(1,2000),
         not lists:any(fun(E) -> E > 127 end,binary_to_list(<<N:64/integer>>))],
 
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
 
     lager:info("Writing ~p keys", [length(Keys)]),
-    [ok = rt:pbc_write(PBC, Bucket, Key, Key, "text/plain") || Key <- Keys],
+    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key, "text/plain") || Key <- Keys],
 
     %% soft commit wait, then check that last key is indexed
     lager:info("Search for keys to verify they exist"),

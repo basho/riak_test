@@ -39,7 +39,7 @@ confirm() ->
     Bucket1 = {<<"type1">>, <<"test">>},
     Bucket2 = {<<"type2">>, <<"test">>},
     Keys = [<<N:64/integer>> || N <- lists:seq(1,1000)],
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
 
     lager:info("Writing keys as 'type1' and verifying hook is not triggered"),
     write_keys(Node, PBC, Bucket1, Keys, false), 
@@ -55,7 +55,7 @@ confirm() ->
 
 write_keys(Node, PBC, Bucket, Keys, ShouldHook) ->
     rpc:call(Node, application, set_env, [riak_kv, hook_count, 0]),
-    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
     {ok, Count} = rpc:call(Node, application, get_env, [riak_kv, hook_count]),
     case ShouldHook of
         true ->

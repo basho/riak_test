@@ -192,7 +192,7 @@ store_map(Client, Map) ->
 
 create_pb_clients(Nodes) ->
     [begin
-         C = rt:pbc(N),
+         C = rt_pb:pbc(N),
          riakc_pb_socket:set_options(C, [queue_if_disconnected]),
          C
      end || N <- Nodes].

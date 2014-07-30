@@ -36,7 +36,7 @@ confirm() ->
 
     RiakHttp = rt:httpc(hd(Nodes)),
     HttpUrl = rt:http_url(hd(Nodes)),
-    PBPid = rt:pbc(hd(Nodes)),
+    PBPid = rt_pb:pbc(hd(Nodes)),
 
     [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],
 
@@ -89,7 +89,7 @@ confirm() ->
 
     %% gh611 - equals query pagination
     riakc_pb_socket:delete(PBPid, ?BUCKET, <<"bob">>),
-    rt:wait_until(fun() -> rt:pbc_really_deleted(PBPid, ?BUCKET, [<<"bob">>]) end),
+    rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBPid, ?BUCKET, [<<"bob">>]) end),
 
     [put_an_object(PBPid, int_to_key(N), 1000, <<"myval">>) || N <- lists:seq(0, 100)],
 

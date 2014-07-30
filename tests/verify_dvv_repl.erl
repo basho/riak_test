@@ -110,7 +110,7 @@ make_cluster(Nodes, Name) ->
     repl_util:make_cluster(Nodes),
     repl_util:name_cluster(hd(Nodes), Name),
     repl_util:wait_until_leader_converge(Nodes),
-    C = rt:pbc(hd(Nodes)),
+    C = rt_pb:pbc(hd(Nodes)),
     riakc_pb_socket:set_options(C, [queue_if_disconnected]),
     {C, Nodes}.
 

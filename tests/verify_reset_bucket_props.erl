@@ -43,7 +43,7 @@ confirm() ->
 
 
     update_props(DefaultProps, Node1, Nodes),
-    C = rt:pbc(Node3),
+    C = rt_pb:pbc(Node3),
     lager:info("Resetting bucket properties for bucket ~p on node ~p via pbc",
                [?BUCKET, Node3]),
     ok = riakc_pb_socket:reset_bucket(C, ?BUCKET),
