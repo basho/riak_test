@@ -103,7 +103,7 @@ list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
             Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
-            Pid = rt:httpc(Node),
+            Pid = rt_http:httpc(Node),
             Mod = rhc
     end,
     lager:info("Listing keys on ~p using ~p. Attempt #~p",
@@ -131,7 +131,7 @@ list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass
             Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
-            Pid = rt:httpc(Node),
+            Pid = rt_http:httpc(Node),
             Mod = rhc
     end,
 
@@ -165,7 +165,7 @@ list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
             Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
-            Pid = rt:httpc(Node),
+            Pid = rt_http:httpc(Node),
             Mod = rhc
     end,
     lager:info("Listing buckets on ~p using ~p. Attempt #~p",
@@ -199,7 +199,7 @@ list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass) ->
 	    Pid = rt_pb:pbc(Node),
 	    Mod = riakc_pb_socket;
 	http ->
-	    Pid = rt:httpc(Node),
+	    Pid = rt_http:httpc(Node),
 	    Mod = rhc
     end,
 

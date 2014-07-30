@@ -38,7 +38,7 @@ confirm() ->
     
     PBC1 = rt_pb:pbc(CurrentNode),
     PBC2 = rt_pb:pbc(OldNode1),
-    HTTPC1 = rt:httpc(CurrentNode),
+    HTTPC1 = rt_http:httpc(CurrentNode),
 
     Clients = [{pb, PBC1}, {pb, PBC2}, {http, HTTPC1}],
     
