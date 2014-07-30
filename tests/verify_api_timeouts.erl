@@ -12,10 +12,10 @@ confirm() ->
     [Node] = rt_cluster:build_cluster(1),
     rt:wait_until_pingable(Node),
 
-    HC = rt:httpc(Node),
+    HC = rt_http:httpc(Node),
     lager:info("setting up initial data and loading remote code"),
-    rt:httpc_write(HC, <<"foo">>, <<"bar">>, <<"foobarbaz\n">>),
-    rt:httpc_write(HC, <<"foo">>, <<"bar2">>, <<"foobarbaz2\n">>),
+    rt_http:httpc_write(HC, <<"foo">>, <<"bar">>, <<"foobarbaz\n">>),
+    rt_http:httpc_write(HC, <<"foo">>, <<"bar2">>, <<"foobarbaz2\n">>),
 
     put_keys(Node, ?BUCKET, ?NUM_KEYS),
     put_buckets(Node, ?NUM_BUCKETS),
@@ -155,7 +155,7 @@ confirm() ->
 
 
     lager:info("Checking HTTP"),
-    LHC = rt:httpc(Node),
+    LHC = rt_http:httpc(Node),
     lager:info("Checking keys timeout"),
     ?assertMatch({error, <<"timeout">>},
                  rhc:list_keys(LHC, ?BUCKET, Short)),

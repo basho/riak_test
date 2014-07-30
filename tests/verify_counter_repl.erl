@@ -73,7 +73,7 @@ make_cluster(Nodes, Name) ->
     repl_util:make_cluster(Nodes),
     repl_util:name_cluster(hd(Nodes), Name),
     repl_util:wait_until_leader_converge(Nodes),
-    Clients = [ rt:httpc(Node) || Node <- Nodes ],
+    Clients = [ rt_http:httpc(Node) || Node <- Nodes ],
     lists:zip(Clients, Nodes).
 
 increment_cluster_counter(Cluster) ->

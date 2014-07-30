@@ -69,7 +69,7 @@ confirm(#rt_properties{nodes=Nodes}, _MD) ->
 
 check_prop_set_and_get(Node, Prop, One, Two) ->
     lager:info("-------- Testing roundtrip for property '~p' ---------", [Prop]),
-    HTTP = rt:httpc(Node),
+    HTTP = rt_http:httpc(Node),
     PBC = rt_pb:pbc(Node),
     lager:info("HTTP set = ~p", [One]),
     http_set_property(HTTP, Prop, One),

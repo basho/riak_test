@@ -23,8 +23,8 @@ confirm() ->
 
     %% 3. Repeat with HTTP, nodes reversed
     lager:info("Put new object in ~p via HTTP.", [Node2]),
-    HTTP1 = rt:httpc(Node1),
-    HTTP2 = rt:httpc(Node2),
+    HTTP1 = rt_http:httpc(Node1),
+    HTTP2 = rt_http:httpc(Node2),
     Obj2 = riakc_obj:new(<<"verify_asis_put">>, <<"2">>, <<"test">>, "text/plain"),
     %%    a. put in node 2
     %%    b. fetch from node 2 for vclock
