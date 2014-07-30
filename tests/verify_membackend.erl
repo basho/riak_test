@@ -214,7 +214,7 @@ mkconf(Test, Mode) ->
     case Mode of
         regular ->
             %% only memory supports TTL
-            rt:set_backend(memory),
+            rt_backend:set_backend(memory),
 
             [
              {riak_core, [
@@ -227,7 +227,7 @@ mkconf(Test, Mode) ->
                        ]}
             ];
         multi ->
-            rt:set_backend(multi),
+            rt_backend:set_backend(multi),
             [
              {riak_core, [
                           {ring_creation_size, 4}

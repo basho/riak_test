@@ -88,7 +88,7 @@ get_backend(Host, AppConfig) ->
     Str = binary_to_list(Bin),
     {ok, ErlTok, _} = erl_scan:string(Str),
     {ok, Term} = erl_parse:parse_term(ErlTok),
-    rt:get_backend(Term).
+    rt_backend:get_backend(Term).
 
 cmd(Cmd) ->
     cmd(Cmd, []).

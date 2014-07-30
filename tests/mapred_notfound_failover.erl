@@ -39,7 +39,7 @@
 confirm() ->
     %% we need the volatility of memory, so we can cause a replica
     %% notfound by killing a vnode
-    rt:set_backend(memory),
+    rt_backend:set_backend(memory),
 
     Nodes = rt_cluster:build_cluster(3),
 
