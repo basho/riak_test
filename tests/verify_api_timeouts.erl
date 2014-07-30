@@ -9,7 +9,7 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    [Node] = rt:build_cluster(1),
+    [Node] = rt_cluster:build_cluster(1),
     rt:wait_until_pingable(Node),
 
     HC = rt:httpc(Node),

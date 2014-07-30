@@ -4,7 +4,7 @@
 
 confirm() ->
     %% 1. Deploy two nodes
-    [Node1, Node2] = rt:deploy_nodes(2),
+    [Node1, Node2] = rt_cluster:deploy_nodes(2),
     %% 2. With PBC
     lager:info("Put new object in ~p via PBC.", [Node1]),
     PB1 = rt:pbc(Node1),

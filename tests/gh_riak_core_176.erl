@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    Nodes = rt:deploy_nodes(3),
+    Nodes = rt_cluster:deploy_nodes(3),
     [Node1, Node2, Node3] = Nodes,
     Nodes12 = [Node1, Node2],
     Nodes123 = Nodes,

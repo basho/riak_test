@@ -32,7 +32,7 @@ confirm() ->
 
     JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
-    Nodes = rt:deploy_nodes(1, Config),
+    Nodes = rt_cluster:deploy_nodes(1, Config),
     [Node1] = Nodes,
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
@@ -108,7 +108,7 @@ confirm() ->
 test_supervision() ->
     JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
-    [Node|[]] = rt:deploy_nodes(1, Config),
+    [Node|[]] = rt_cluster:deploy_nodes(1, Config),
     timer:sleep(20000),
     case net_adm:ping(Node) of
         pang ->
@@ -160,7 +160,7 @@ test_application_stop() ->
     lager:info("Testing application:stop()"),
     JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
-    Nodes = rt:deploy_nodes(1, Config),
+    Nodes = rt_cluster:deploy_nodes(1, Config),
     [Node] = Nodes,
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
 

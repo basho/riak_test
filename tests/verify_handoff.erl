@@ -129,11 +129,8 @@ assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName)
     ExpectedCapabilityName =:= rt:capability(Node, {CapabilityCategory, CapabilityName}).
 
 %% For some testing purposes, making these limits smaller is helpful:
-deploy_test_nodes(false, N) ->
-    Config = [{riak_core, [{ring_creation_size, 8},
-                           {handoff_acksync_threshold, 20},
-                           {handoff_receive_timeout, 2000}]}],
-    rt:deploy_nodes(N, Config);
+deploy_test_nodes(false, N) -> 
+    rt_cluster:deploy_nodes(N);
 deploy_test_nodes(true,  N) ->
     lager:info("WARNING: Using turbo settings for testing."),
     Config = [{riak_core, [{forced_ownership_handoff, 8},
@@ -143,4 +140,4 @@ deploy_test_nodes(true,  N) ->
                            {handoff_acksync_threshold, 20},
                            {handoff_receive_timeout, 2000},
                            {gossip_limit, {10000000, 60000}}]}],
-    rt:deploy_nodes(N, Config).
+    rt_cluster:deploy_nodes(N, Config).

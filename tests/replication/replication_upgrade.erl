@@ -25,7 +25,7 @@ confirm() ->
 
     NodeConfig = [{FromVersion, Conf} || _ <- lists:seq(1, NumNodes)],
 
-    Nodes = rt:deploy_nodes(NodeConfig, [riak_kv, riak_repl]),
+    Nodes = rt_cluster:deploy_nodes(NodeConfig),
 
     NodeUpgrades = case UpgradeOrder of
         "forwards" ->

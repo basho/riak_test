@@ -58,7 +58,7 @@ confirm() ->
     Versions = [{current, SearchEnabled},
                 {UpgradeVsn, SearchEnabled}],
     Services = [riak_kv, riak_search, riak_pipe],
-    [Current, Old] = Nodes = rt:deploy_nodes(Versions, Services),
+    [Current, Old] = Nodes = rt_cluster:deploy_nodes(Versions, Services),
 
     prepare_vnodes(Current),
 

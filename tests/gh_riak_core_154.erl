@@ -28,7 +28,7 @@
 confirm() ->
     %% Increase handoff concurrency on nodes
     NewConfig = [{riak_core, [{handoff_concurrency, 1024}]}],
-    Nodes = rt:build_cluster(2, NewConfig),
+    Nodes = rt_cluster:build_cluster(2, NewConfig),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     [Node1, Node2] = Nodes,
 

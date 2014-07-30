@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    Nodes = rt:deploy_nodes(3),
+    Nodes = rt_cluster:deploy_nodes(3),
     [Node1, Node2, Node3] = Nodes,
 
     %% Join node2 to node1 and wait for cluster convergence

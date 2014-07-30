@@ -70,7 +70,7 @@ confirm() ->
     lager:info("Start ~b nodes", [?NODE_COUNT]),
     NodeDefs = lists:duplicate(?NODE_COUNT, {current, default}),
     Services = [riak_pipe],
-    [Primary,Secondary] = Nodes = rt:deploy_nodes(NodeDefs, Services),
+    [Primary,Secondary] = Nodes = rt_cluster:deploy_nodes(NodeDefs, Services),
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], rt:owners_according_to(Node)) || Node <- Nodes],
 

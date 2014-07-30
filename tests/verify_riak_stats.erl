@@ -35,7 +35,7 @@
 
 %% You should have curl installed locally to do this.
 confirm() ->
-    Nodes = rt:deploy_nodes(1, ?CONF),
+    Nodes = rt_cluster:deploy_nodes(1),
     [Node1] = Nodes,
     verify_dt_converge:create_bucket_types(Nodes, ?TYPES),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),

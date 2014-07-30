@@ -49,7 +49,7 @@ confirm() ->
                {riak_core, [ {ring_creation_size, 16},
                              {vnode_management_timer, 1000} ]}],
 
-    [N1, N2, N3, N4]=Nodes = rt:build_cluster(4, Config),
+    [N1, N2, N3, N4]=Nodes = rt_cluster:build_cluster(4, Config),
 
     create_bucket_types(Nodes, ?TYPES),
 

@@ -41,7 +41,7 @@ confirm() ->
     %% notfound by killing a vnode
     rt:set_backend(memory),
 
-    Nodes = rt:build_cluster(3),
+    Nodes = rt_cluster:build_cluster(3),
 
     %% for our custom reduce phase
     rt:load_modules_on_nodes([?MODULE], Nodes),

@@ -27,7 +27,7 @@ confirm() ->
     ClusterSize = 4,
     rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     NewConfig = [],
-    Nodes = rt:build_cluster(ClusterSize, NewConfig),
+    Nodes = rt_cluster:build_cluster(ClusterSize, NewConfig),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     [Node1|_] = Nodes,
     Bucket = <<"systest">>,

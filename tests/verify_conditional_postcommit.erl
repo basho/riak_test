@@ -24,7 +24,7 @@
 confirm() ->
     Config = [{riak_core, [{vnode_management_timer, 1000},
                            {ring_creation_size, 4}]}],
-    Nodes = rt:deploy_nodes(1, Config),
+    Nodes = rt_cluster:deploy_nodes(1, Config),
     Node = hd(Nodes),
     ok = rt:load_modules_on_nodes([?MODULE], Nodes),
 

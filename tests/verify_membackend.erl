@@ -35,16 +35,16 @@ confirm() ->
 
 ttl(Mode) ->
     Conf = mkconf(ttl, Mode),
-    [NodeA, NodeB] = rt:deploy_nodes(2, Conf),
+    [NodeA, NodeB] = rt_cluster:deploy_nodes(2, Conf),
 
     ?assertEqual(ok, check_leave_and_expiry(NodeA, NodeB)),
 
-    rt:clean_cluster([NodeA]),
+    rt_cluster:clean_cluster([NodeA]),
     ok.
 
 max_memory(Mode) ->
     Conf = mkconf(max_memory, Mode),
-    [NodeA, NodeB] = rt:deploy_nodes(2, Conf),
+    [NodeA, NodeB] = rt_cluster:deploy_nodes(2, Conf),
 
     rt:join(NodeB, NodeA),
 
@@ -54,14 +54,14 @@ max_memory(Mode) ->
 
     ?assertEqual(ok, check_eviction(NodeA)),
 
-    rt:clean_cluster([NodeA, NodeB]),
+    rt_cluster:clean_cluster([NodeA, NodeB]),
 
     ok.
 
 combo(Mode) ->
     Conf = mkconf(combo, Mode),
     
-    [NodeA, NodeB] = rt:deploy_nodes(2, Conf),
+    [NodeA, NodeB] = rt_cluster:deploy_nodes(2, Conf),
 
     ?assertEqual(ok, check_leave_and_expiry(NodeA, NodeB)),
  
@@ -75,7 +75,7 @@ combo(Mode) ->
 
     ?assertEqual(ok, check_eviction(NodeA)),
 
-    rt:clean_cluster([NodeA]),
+    rt_cluster:clean_cluster([NodeA]),
 
     ok.
 

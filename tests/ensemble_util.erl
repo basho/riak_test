@@ -26,16 +26,16 @@
 -include_lib("eunit/include/eunit.hrl").
 
 build_cluster(Num, Config, NVal) ->
-    Nodes = rt:deploy_nodes(Num, Config),
+    Nodes = rt_cluster:deploy_nodes(Num, Config),
     Node = hd(Nodes),
-    rt:join_cluster(Nodes),
+    rt_cluster:join_cluster(Nodes),
     ensemble_util:wait_until_cluster(Nodes),
     ensemble_util:wait_for_membership(Node),
     ensemble_util:wait_until_stable(Node, NVal),
     Nodes.
 
 build_cluster_without_quorum(Num, Config) ->
-    Nodes = rt:deploy_nodes(Num, Config),
+    Nodes = rt_cluster:deploy_nodes(Num, Config),
     SetupLogCaptureFun = fun(Node) ->
        rt:setup_log_capture(Node)
     end,
@@ -43,7 +43,7 @@ build_cluster_without_quorum(Num, Config) ->
     Node = hd(Nodes),
     ok = rpc:call(Node, riak_ensemble_manager, enable, []),
     _ = rpc:call(Node, riak_core_ring_manager, force_update, []),
-    rt:join_cluster(Nodes),
+    rt_cluster:join_cluster(Nodes),
     ensemble_util:wait_until_cluster(Nodes),
     ensemble_util:wait_for_membership(Node),
     Nodes.

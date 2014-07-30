@@ -29,7 +29,7 @@
 -define(UNDEFINED_BUCKET_TYPE,  <<"880bf69d-5dab-44ee-8762-d24c6f759ce1">>).
 
 confirm() ->
-    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4),
+    [Node1, Node2, Node3, Node4] = Nodes = rt_cluster:deploy_nodes(4),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
 
     lager:info("Nodes deployed, but not joined."),

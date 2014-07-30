@@ -62,7 +62,7 @@ confirm() ->
 fullsync_test(Strategy, Latency) ->
     rt_config:set_advanced_conf(all, ?CONF(Strategy)),
 
-    [ANodes, BNodes] = rt:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
     rt:wait_for_cluster_service(BNodes, riak_repl),
@@ -150,7 +150,7 @@ fullsync_test(Strategy, Latency) ->
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
 
-    rt:clean_cluster(ANodes),
-    rt:clean_cluster(BNodes),
+    rt_cluster:clean_cluster(ANodes),
+    rt_cluster:clean_cluster(BNodes),
 
     {EmptyTime, FullTime, DiffTime, NoneTime}.

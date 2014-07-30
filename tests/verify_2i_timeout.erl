@@ -29,7 +29,7 @@
 confirm() ->
     inets:start(),
     Config = [{riak_kv, [{secondary_index_timeout, 1}]}], %% ludicrously short, should fail always
-    Nodes = rt:build_cluster([{current, Config}, {current, Config}, {current, Config}]),
+    Nodes = rt_cluster:build_cluster([{current, Config}, {current, Config}, {current, Config}]),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
     PBPid = rt:pbc(hd(Nodes)),

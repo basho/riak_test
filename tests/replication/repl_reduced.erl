@@ -19,12 +19,12 @@ confirm() ->
 
 toggle_enabled_test_() ->
     {setup, fun() ->
-        Nodes = rt:deploy_nodes(3, conf(), [riak_kv, riak_repl]),
+        Nodes = rt_cluster:deploy_nodes(3, conf()),
         repl_util:make_cluster(Nodes),
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
@@ -78,7 +78,7 @@ data_push() ->
 
 data_push_test_() ->
     {timeout, rt_cascading:timeout(1000000000000000), {setup, fun() ->
-        Nodes = rt:deploy_nodes(6, conf(), [riak_kv, riak_repl]),
+        Nodes = rt_cluster:deploy_nodes(6, conf()),
         {[N1 | _] = C123, [N4 | _] = C456} = lists:split(3, Nodes),
         repl_util:make_cluster(C123),
         repl_util:name_cluster(N1, "c123"),
@@ -92,9 +92,9 @@ data_push_test_() ->
     fun(State) ->
         case rt_config:config_or_os_env(skip_teardown, false) of
             "false" ->
-                rt:clean_cluster(State#data_push_test.nodes);
+                rt_cluster:clean_cluster(State#data_push_test.nodes);
             false ->
-                rt:clean_cluster(State#data_push_test.nodes);
+                rt_cluster:clean_cluster(State#data_push_test.nodes);
             _ ->
                 ok
         end
@@ -211,7 +211,7 @@ read_repair_interaction() ->
 
 read_repair_interaction_test_() ->
     {timeout, rt_cascading:timeout(100000), {setup, fun() ->
-        Nodes = rt:deploy_nodes(6, conf(), [riak_kv, riak_repl]),
+        Nodes = rt_cluster:deploy_nodes(6, conf()),
         {[N1 | _] = C123, [N4 | _] = C456} = lists:split(3, Nodes),
         repl_util:make_cluster(C123),
         repl_util:name_cluster(N1, "c123"),
@@ -225,9 +225,9 @@ read_repair_interaction_test_() ->
     fun(State) ->
         case rt_config:config_or_os_env(skip_teardown, false) of
             "false" ->
-                rt:clean_cluster(State#data_push_test.nodes);
+                rt_cluster:clean_cluster(State#data_push_test.nodes);
             false ->
-                rt:clean_cluster(State#data_push_test.nodes);
+                rt_cluster:clean_cluster(State#data_push_test.nodes);
             _ ->
                 ok
         end

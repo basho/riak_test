@@ -24,7 +24,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    [Node] = rt:build_cluster(1),
+    [Node] = rt_cluster:build_cluster(1),
 
     %% Generate a valid preflist for our get requests
     rpc:call(Node, riak_core, wait_for_service, [riak_kv]),
