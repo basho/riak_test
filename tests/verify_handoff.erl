@@ -70,11 +70,11 @@ run_test(TestMode, NTestItems, NTestNodes, Encoding) ->
 
     %% Prepare for the next call to our test (we aren't polite about it, it's faster that way):
     lager:info("Bringing down test nodes."),
-    lists:foreach(fun(N) -> rt:brutal_kill(N) end, TestNodes),
+    lists:foreach(fun(N) -> rt_node:brutal_kill(N) end, TestNodes),
 
     %% The "root" node can't leave() since it's the only node left:
     lager:info("Stopping root node."),
-    rt:brutal_kill(RootNode).
+    rt_node:brutal_kill(RootNode).
 
 set_handoff_encoding(default, _) ->
     lager:info("Using default encoding type."),

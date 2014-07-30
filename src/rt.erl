@@ -34,7 +34,6 @@
          assert_nodes_agree_about_ownership/1,
          attach/2,
          attach_direct/2,
-         brutal_kill/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
@@ -564,18 +563,6 @@ end || Node <- P2 ].
 is_partitioned(Node, Peers) ->
 AvailableNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
 lists:all(fun(Peer) -> not lists:member(Peer, AvailableNodes) end, Peers).
-
-% when you just can't wait
-brutal_kill(Node) ->
-rt_cover:maybe_stop_on_node(Node),
-lager:info("Killing node ~p", [Node]),
-OSPidToKill = rpc:call(Node, os, getpid, []),
-%% try a normal kill first, but set a timer to
-%% kill -9 after 5 seconds just in case
-rpc:cast(Node, timer, apply_after,
-     [5000, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]]),
-rpc:cast(Node, os, cmd, [io_lib:format("kill -15 ~s", [OSPidToKill])]),
-ok.
 
 capability(Node, all) ->
 rpc:call(Node, riak_core_capability, all, []);
