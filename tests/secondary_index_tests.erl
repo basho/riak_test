@@ -50,7 +50,7 @@ confirm(#rt_properties{nodes=Nodes}, _MD) ->
     Bucket = druuid:v4_str(),
     lager:info("Bucket: ~p", [Bucket]),
     PBC = rt_pb:pbc(hd(Nodes)),
-    HTTPC = rt:httpc(hd(Nodes)),
+    HTTPC = rt_http:httpc(hd(Nodes)),
     Clients = [{pb, PBC}, {http, HTTPC}],
 
     [put_an_object(PBC, Bucket, N) || N <- lists:seq(0, 20)],

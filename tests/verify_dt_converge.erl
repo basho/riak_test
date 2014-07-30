@@ -130,7 +130,7 @@ create_pb_clients(Nodes) ->
      end || N <- Nodes].
 
 create_http_clients(Nodes) ->
-    [ rt:httpc(N) || N <- Nodes ].
+    [ rt_http:httpc(N) || N <- Nodes ].
 
 create_bucket_types([N1|_]=Nodes, Types) ->
     lager:info("Creating bucket types with datatypes: ~p", [Types]),

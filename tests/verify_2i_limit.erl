@@ -34,7 +34,7 @@ confirm() ->
     Nodes = rt_cluster:build_cluster(3),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
-    RiakHttp = rt:httpc(hd(Nodes)),
+    RiakHttp = rt_http:httpc(hd(Nodes)),
     HttpUrl = rt:http_url(hd(Nodes)),
     PBPid = rt_pb:pbc(hd(Nodes)),
 

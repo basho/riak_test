@@ -81,4 +81,4 @@ confirm() ->
     pass.
 
 get_clients(Node) ->
-    {rt_pb:pbc(Node), rt:httpc(Node)}.
+    {rt_pb:pbc(Node), rt_http:httpc(Node)}.

@@ -162,7 +162,7 @@ generate_test_data(System) ->
 %% setup riak_search hook
 setup_rs_bucket([Node|_], Bucket) ->
     lager:info("Setting up riak_search hook"),
-    C = rt:httpc(Node),
+    C = rt_http:httpc(Node),
     ok = rhc:set_bucket(C, Bucket, [{search, true}]).
 
 %% setup yokozuna hook/index - bucket name == index name
@@ -205,7 +205,7 @@ iburl(Node, Path) ->
 %% value, and each of which has a unique term in its value
 load_test_data([Node|_], Bucket, KeyAndUniques, Common) ->
     lager:info("Loading test data"),
-    C = rt:httpc(Node),
+    C = rt_http:httpc(Node),
     [ begin
           Value = list_to_binary([Common, " ", Unique]),
           ok = rhc:put(C, riakc_obj:new(Bucket, Key, Value, "text/plain"))
