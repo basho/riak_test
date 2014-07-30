@@ -36,7 +36,7 @@ confirm() ->
     Nodes = rt_cluster:build_cluster(2, Config),
     [_Node1, Node2] = Nodes,
 
-    Ring = rt:get_ring(Node2),
+    Ring = rt_ring:get_ring(Node2),
     Hash = riak_core_util:chash_std_keyfun({?BUCKET, ?KEY}),
     PL = lists:sublist(riak_core_ring:preflist(Hash, Ring), 3),
     Victim = hd([Idx || {Idx, Node} <- PL,
