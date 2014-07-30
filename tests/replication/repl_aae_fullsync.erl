@@ -516,7 +516,7 @@ validate_intercepted_fullsync(InterceptTarget,
     NumIndicies = length(rpc:call(InterceptTarget,
                                   riak_core_ring,
                                   my_indices,
-                                  [rt:get_ring(InterceptTarget)])),
+                                  [rt_ring:get_ring(InterceptTarget)])),
     lager:info("~p owns ~p indices",
                [InterceptTarget, NumIndicies]),
 

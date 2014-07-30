@@ -30,14 +30,11 @@
 -compile(export_all).
 -export([
          admin/2,
-         assert_nodes_agree_about_ownership/1,
          attach/2,
          attach_direct/2,
          capability/2,
          capability/3,
-         check_singleton_node/1,
          check_ibrowse/0,
-         claimant_according_to/1,
          cmd/1,
          cmd/2,
          connection_info/1,
@@ -49,17 +46,12 @@
          get_ip/1,
          get_node_logs/0,
          get_replica/5,
-         get_ring/1,
          get_version/0,
          is_mixed_cluster/1,
          is_pingable/1,
          load_modules_on_nodes/2,
          log_to_nodes/2,
          log_to_nodes/3,
-         members_according_to/1,
-         nearest_ringsize/1,
-         owners_according_to/1,
-         partitions_for_node/1,
          pmap/2,
          post_result/2,
          priv_dir/0,
@@ -73,7 +65,6 @@
          spawn_cmd/1,
          spawn_cmd/2,
          search_cmd/2,
-         status_of_according_to/2,
          str/2,
          systest_read/2,
          systest_read/3,
@@ -182,18 +173,18 @@ connection_info(Nodes) when is_list(Nodes) ->
 [ {Node, connection_info(Node)} || Node <- Nodes].
 
 maybe_wait_for_changes(Node) ->
-Ring = get_ring(Node),
-Changes = riak_core_ring:pending_changes(Ring),
-Joining = riak_core_ring:members(Ring, [joining]),
-lager:info("maybe_wait_for_changes, changes: ~p joining: ~p",
-       [Changes, Joining]),
-if Changes =:= [] ->
-    ok;
-Joining =/= [] ->
-    ok;
-true ->
-    ok = wait_until_no_pending_changes([Node])
-end.
+    Ring = rt_ring:get_ring(Node),
+    Changes = riak_core_ring:pending_changes(Ring),
+    Joining = riak_core_ring:members(Ring, [joining]),
+    lager:info("maybe_wait_for_changes, changes: ~p joining: ~p",
+               [Changes, Joining]),
+    if Changes =:= [] ->
+            ok;
+       Joining =/= [] ->
+            ok;
+       true ->
+            ok = wait_until_no_pending_changes([Node])
+    end.
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd) ->
@@ -432,19 +423,19 @@ wait_until_all_members(Nodes, Nodes).
 %% @doc Wait until all nodes in the list `Nodes' believes all nodes in the
 %%      list `Members' are members of the cluster.
 wait_until_all_members(Nodes, ExpectedMembers) ->
-lager:info("Wait until all members ~p ~p", [Nodes, ExpectedMembers]),
-S1 = ordsets:from_list(ExpectedMembers),
-F = fun(Node) ->
-	case members_according_to(Node) of
-	    {badrpc, _} ->
-		false;
-	    ReportedMembers ->
-		S2 = ordsets:from_list(ReportedMembers),
-		ordsets:is_subset(S1, S2)
-	end
-end,
-[?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
-ok.
+    lager:info("Wait until all members ~p ~p", [Nodes, ExpectedMembers]),
+    S1 = ordsets:from_list(ExpectedMembers),
+    F = fun(Node) ->
+                case rt_ring:members_according_to(Node) of
+                    {badrpc, _} ->
+                        false;
+                    ReportedMembers ->
+                        S2 = ordsets:from_list(ReportedMembers),
+                        ordsets:is_subset(S1, S2)
+                end
+        end,
+    [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
+    ok.
 
 %% @doc Given a list of nodes, wait until all nodes believe the ring has
 %%      converged (ie. `riak_core_ring:is_ready' returns `true').
@@ -563,12 +554,12 @@ cap_equal(Val, Cap) ->
 Val == Cap.
 
 wait_until_owners_according_to(Node, Nodes) ->
-SortedNodes = lists:usort(Nodes),
-F = fun(N) ->
-owners_according_to(N) =:= SortedNodes
-end,
-?assertEqual(ok, wait_until(Node, F)),
-ok.
+    SortedNodes = lists:usort(Nodes),
+    F = fun(N) ->
+        rt_ring:owners_according_to(N) =:= SortedNodes
+    end,
+    ?assertEqual(ok, wait_until(Node, F)),
+    ok.
 
 wait_until_nodes_agree_about_ownership(Nodes) ->
 lager:info("Wait until nodes agree about ownership ~p", [Nodes]),
@@ -657,87 +648,6 @@ end.
 %%% Ring Functions
 %%%===================================================================
 
-%% @doc Ensure that the specified node is a singleton node/cluster -- a node
-%%      that owns 100% of the ring.
-check_singleton_node(Node) ->
-lager:info("Check ~p is a singleton", [Node]),
-{ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-Owners = lists:usort([Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)]),
-?assertEqual([Node], Owners),
-ok.
-
-% @doc Get list of partitions owned by node (primary).
-partitions_for_node(Node) ->
-Ring = get_ring(Node),
-[Idx || {Idx, Owner} <- riak_core_ring:all_owners(Ring), Owner == Node].
-
-%% @doc Get the raw ring for `Node'.
-get_ring(Node) ->
-{ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-Ring.
-
-assert_nodes_agree_about_ownership(Nodes) ->
-?assertEqual(ok, wait_until_ring_converged(Nodes)),
-?assertEqual(ok, wait_until_all_members(Nodes)),
-[ ?assertEqual({Node, Nodes}, {Node, owners_according_to(Node)}) || Node <- Nodes].
-
-%% @doc Return a list of nodes that own partitions according to the ring
-%%      retrieved from the specified node.
-owners_according_to(Node) ->
-case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
-{ok, Ring} ->
-    Owners = [Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)],
-    lists:usort(Owners);
-{badrpc, _}=BadRpc ->
-    BadRpc
-end.
-
-%% @doc Return a list of cluster members according to the ring retrieved from
-%%      the specified node.
-members_according_to(Node) ->
-case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
-{ok, Ring} ->
-    Members = riak_core_ring:all_members(Ring),
-    Members;
-{badrpc, _}=BadRpc ->
-    BadRpc
-end.
-
-%% @doc Return an appropriate ringsize for the node count passed
-%%      in. 24 is the number of cores on the bigger intel machines, but this
-%%      may be too large for the single-chip machines.
-nearest_ringsize(Count) ->
-nearest_ringsize(Count * 24, 2).
-
-nearest_ringsize(Count, Power) ->
-case Count < trunc(Power * 0.9) of
-true ->
-    Power;
-false ->
-    nearest_ringsize(Count, Power * 2)
-end.
-
-%% @doc Return the cluster status of `Member' according to the ring
-%%      retrieved from `Node'.
-status_of_according_to(Member, Node) ->
-case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
-{ok, Ring} ->
-    Status = riak_core_ring:member_status(Ring, Member),
-    Status;
-{badrpc, _}=BadRpc ->
-    BadRpc
-end.
-
-%% @doc Return a list of nodes that own partitions according to the ring
-%%      retrieved from the specified node.
-claimant_according_to(Node) ->
-case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
-{ok, Ring} ->
-    Claimant = riak_core_ring:claimant(Ring),
-    Claimant;
-{badrpc, _}=BadRpc ->
-    BadRpc
-end.
 
 %%%===================================================================
 %%% Basic Read/Write Functions

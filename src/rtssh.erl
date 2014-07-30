@@ -205,7 +205,7 @@ deploy_nodes(NodeConfig, Hosts) ->
     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
 
     %% Ensure nodes are singleton clusters
-    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
+    [ok = rt_ring:check_singleton_node(N) || {N, Version} <- VersionMap,
                                         Version /= "0.14.2"],
 
     Nodes.
