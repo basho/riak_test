@@ -52,7 +52,7 @@ populate_counters(Node) ->
     rt:wait_for_service(Node, riak_kv),
     ?assertEqual(ok, rt:wait_until_capability(Node, {riak_kv, crdt}, [pncounter])),
 
-    RHC = rt:httpc(Node),
+    RHC = rt_http:httpc(Node),
     ?assertMatch(ok, rhc:counter_incr(RHC, ?COUNTER_BUCKET, <<"httpkey">>, 2)),
     ?assertMatch({ok, 2}, rhc:counter_val(RHC, ?COUNTER_BUCKET, <<"httpkey">>)),
 
@@ -65,7 +65,7 @@ populate_counters(Node) ->
 %%      check that you can get via default bucket
 verify_counters(Node) ->
     lager:info("Verifying counters on ~p", [Node]),
-    RHC = rt:httpc(Node),
+    RHC = rt_http:httpc(Node),
     ?assertMatch({ok, 4}, rhc:counter_val(RHC, ?COUNTER_BUCKET, <<"pbkey">>)),
 
     PBC = rt_pb:pbc(Node),

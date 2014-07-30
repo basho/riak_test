@@ -527,7 +527,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     ConnInfo = proplists:get_value(Target, rt:connection_info([Target])),
     {IP, Port} = proplists:get_value(http, ConnInfo),
     lager:info("Connecting to http socket ~p:~p on ~p", [IP, Port, Target]),
-    C = rt:httpc(Target),
+    C = rt_http:httpc(Target),
 
     %% do the stop in the background while we're writing keys
     spawn(fun() ->
