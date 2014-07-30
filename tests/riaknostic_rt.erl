@@ -47,7 +47,7 @@ confirm() ->
 
 riaknostic_bootstrap(Node) ->
     lager:info("Check if riaknostic is installed"),
-    {ok, RiaknosticOut1} = rt:admin(Node, ["diag"]),
+    {ok, RiaknosticOut1} = rt_cmd_line:admin(Node, ["diag"]),
     riaknostic_install((rt:str(RiaknosticOut1, "is not present!")), Node).
 
 %% riaknostic is already installed, move along
@@ -69,7 +69,7 @@ riaknostic_install(true, Node) ->
 check_riaknostic_execute(Node) ->
     %% Execute
     lager:info("**  Check Riaknostic executes"),
-    {ok, RiaknosticOut} = rt:admin(Node, ["diag"]),
+    {ok, RiaknosticOut} = rt_cmd_line:admin(Node, ["diag"]),
     ?assertNot(rt:str(RiaknosticOut, "is not present!")),
     ?assertNot(rt:str(RiaknosticOut, "[debug]")),
     ok.
@@ -78,7 +78,7 @@ check_riaknostic_execute(Node) ->
 check_riaknostic_usage(Node) ->
     %% Check usage message
     lager:info("**  Run Riaknostic usage message"),
-    {ok, RiaknosticOut} = rt:admin(Node, ["diag", "--help"]),
+    {ok, RiaknosticOut} = rt_cmd_line:admin(Node, ["diag", "--help"]),
     ?assert(rt:str(RiaknosticOut, "Usage: riak-admin")),
     ok.
 
@@ -86,7 +86,7 @@ check_riaknostic_usage(Node) ->
 check_riaknostic_command_list(Node) ->
     %% Check commands list
     lager:info("**  Run Riaknostic commands list message"),
-    {ok, RiaknosticOut} = rt:admin(Node, ["diag", "--list"]),
+    {ok, RiaknosticOut} = rt_cmd_line:admin(Node, ["diag", "--list"]),
     ?assert(rt:str(RiaknosticOut, "Available diagnostic checks")),
     ?assert(rt:str(RiaknosticOut, "  disk           ")),
     ?assert(rt:str(RiaknosticOut, "  dumps          ")),
@@ -102,7 +102,7 @@ check_riaknostic_command_list(Node) ->
 check_riaknostic_log_levels(Node) ->
     %% Check log levels
     lager:info("**  Run Riaknostic with a different log level"),
-    {ok, RiaknosticOut} = rt:admin(Node, ["diag", "--level", "debug"]),
+    {ok, RiaknosticOut} = rt_cmd_line:admin(Node, ["diag", "--level", "debug"]),
     ?assert(rt:str(RiaknosticOut, "[debug]")),
     ok.
 

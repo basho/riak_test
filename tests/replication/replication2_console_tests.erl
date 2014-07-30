@@ -118,6 +118,6 @@ confirm() ->
 
 check_cmd(Node, Cmd) ->
     lager:info("Testing riak-repl ~s on ~s", [Cmd, Node]),
-    {ok, Out} = rt:riak_repl(Node, [Cmd]),
+    {ok, Out} = rt_cmd_line:riak_repl(Node, [Cmd]),
     ?assertEqual("pass", Out).
 

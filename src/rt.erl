@@ -40,7 +40,6 @@
          cmd/1,
          cmd/2,
          connection_info/1,
-         console/2,
          create_and_activate_bucket_type/3,
          deploy_nodes/1,
          deploy_nodes/2,
@@ -93,7 +92,6 @@
          stream_cmd/1, stream_cmd/2,
          spawn_cmd/1,
          spawn_cmd/2,
-         search_cmd/2,
          str/2,
          systest_read/2,
          systest_read/3,
@@ -980,64 +978,6 @@ after
 		[I, Bucket, Key]),
     ?assert(false)
 end.
-
-%%%===================================================================
-%%% PBC & HTTPC Functions
-%%%===================================================================
-
-
-%%%===================================================================
-%%% Command Line Functions
-%%%===================================================================
-
-%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'
-admin(Node, Args) ->
-admin(Node, Args, []).
-
-%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'.
-%% The third parameter is a list of options. Valid options are:
-%%    * `return_exit_code' - Return the exit code along with the command output
-admin(Node, Args, Options) ->
-?HARNESS:admin(Node, Args, Options).
-
-%% @doc Call 'bin/riak' command on `Node' with arguments `Args'
-riak(Node, Args) ->
-?HARNESS:riak(Node, Args).
-
-
-%% @doc Call 'bin/riak-repl' command on `Node' with arguments `Args'
-riak_repl(Node, Args) ->
-?HARNESS:riak_repl(Node, Args).
-
-search_cmd(Node, Args) ->
-{ok, Cwd} = file:get_cwd(),
-rpc:call(Node, riak_search_cmd, command, [[Cwd | Args]]).
-
-%% @doc Runs `riak attach' on a specific node, and tests for the expected behavoir.
-%%      Here's an example: ```
-%%      rt:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
-%%                       {send, "riak_core_ring_manager:get_my_ring()."},
-%%                       {expect, "dict,"},
-%%                       {send, [4]}]), %% 4 = Ctrl + D'''
-%%      `{expect, String}' scans the output for the existance of the String.
-%%         These tuples are processed in order.
-%%
-%%      `{send, String}' sends the string to the console.
-%%         Once a send is encountered, the buffer is discarded, and the next
-%%         expect will process based on the output following the sent data.
-%%
-attach(Node, Expected) ->
-?HARNESS:attach(Node, Expected).
-
-%% @doc Runs 'riak attach-direct' on a specific node
-%% @see rt:attach/2
-attach_direct(Node, Expected) ->
-?HARNESS:attach_direct(Node, Expected).
-
-%% @doc Runs `riak console' on a specific node
-%% @see rt:attach/2
-console(Node, Expected) ->
-?HARNESS:console(Node, Expected).
 
 %%%===================================================================
 %%% Search

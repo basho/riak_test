@@ -25,7 +25,7 @@ confirm() ->
     % status.
     {ok, Suspended} = suspend_an_fs_source(SrcCluster),
     lager:info("Suspended: ~p", [Suspended]),
-    {ok, Status} = rt:riak_repl(SrcLead, "status"),
+    {ok, Status} = rt_cmd_line:riak_repl(SrcLead, "status"),
     FailLine = "RPC to '" ++ atom_to_list(SrcLead) ++ "' failed: timeout\n",
     ?assertNotEqual(FailLine, Status),
 

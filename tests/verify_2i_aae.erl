@@ -151,7 +151,7 @@ check_kill_repair(Node1) ->
     lager:info("Test that killing 2i repair works as desired"),
     spawn(fun() ->
                   timer:sleep(1500),
-                  rt:admin(Node1, ["repair-2i", "kill"])
+                  rt_cmd_line:admin(Node1, ["repair-2i", "kill"])
           end),
     ExitStatus = run_2i_repair(Node1),
     case ExitStatus of
@@ -168,7 +168,7 @@ check_kill_repair(Node1) ->
 
 run_2i_repair(Node1) ->
     lager:info("Run 2i AAE repair"),
-    ?assertMatch({ok, _}, rt:admin(Node1, ["repair-2i"])),
+    ?assertMatch({ok, _}, rt_cmd_line:admin(Node1, ["repair-2i"])),
     RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae]),
     lager:info("Wait for repair process to finish"),
     Mon = monitor(process, RepairPid),
