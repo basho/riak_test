@@ -34,7 +34,7 @@ confirm() ->
     Key = <<"a">>,
 
     [N1, N2, N3, N4]=Nodes = rt_cluster:build_cluster(4),
-    [C1, C2, C3, C4]=Clients =  [ rt_http:httpc(N) || N <- Nodes ],
+    [C1, C2, C3, C4]=Clients =  [ rt:httpc(N) || N <- Nodes ],
 
     set_allow_mult_true(Nodes),
 

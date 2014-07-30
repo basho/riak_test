@@ -58,7 +58,7 @@ run(NumNodes, NumRounds, StableRounds) ->
     calc_stuff(AllNodes, NumNodes, NumRounds),
     exit(Pid, kill),
     %% start all the down nodes so we can clean them :(
-    [rt_node:start(Node) || Node <- DownNodes],
+    [rt:start(Node) || Node <- DownNodes],
     rt_cluster:clean_cluster(AllNodes).
 
 setup_nodes(NumNodes) ->

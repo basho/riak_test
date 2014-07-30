@@ -24,8 +24,8 @@
 confirm() ->
     lager:info("Deploying previous cluster"),
     [Prev, Current] = rt_cluster:build_cluster([previous,  current]),
-    PrevClient = rt_pb:pbc(Prev),
-    CurrentClient = rt_pb:pbc(Current),
+    PrevClient = rt:pbc(Prev),
+    CurrentClient = rt:pbc(Current),
     K = <<"key">>,
     B = <<"bucket">>,
     V = <<"value">>,

@@ -26,7 +26,7 @@
 
 confirm() ->
     Nodes = rt_cluster:build_cluster(1),
-    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     
     [Base|_] = rt:http_url(Nodes),
 

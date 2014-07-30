@@ -56,6 +56,19 @@ confirm(Properties) ->
 
     BucketTypes = {<<"working_type">>, <<"undefined_type">>},
 
+cleanup({ClusterNodes, _Types, PBA, PBB}, CleanCluster) ->
+    riakc_pb_socket:stop(PBA),
+    riakc_pb_socket:stop(PBB),
+    {_, _, ANodes, BNodes} = ClusterNodes,
+    case CleanCluster of
+        true ->
+            rt_cluster:clean_cluster(ANodes ++ BNodes);
+        false ->
+            ok
+    end.
+
+%% @doc riak_test entry point
+confirm() ->
     %% Test two clusters of the current version
     %% SetupData = setup(current),
     realtime_test(Clusters, NodeMap, BucketTypes),
@@ -361,11 +374,19 @@ cluster_conf() ->
       ]}
     ].
 
+<<<<<<< HEAD
 %% deploy_nodes(NumNodes, current) ->
 %%     rt_cluster:deploy_nodes(NumNodes, cluster_conf());
 %% deploy_nodes(_, mixed) ->
 %%     Conf = cluster_conf(),
 %%     rt_cluster:deploy_nodes([{current, Conf}, {previous, Conf}]).
+=======
+deploy_nodes(NumNodes, current) ->
+    rt_cluster:deploy_nodes(NumNodes, cluster_conf());
+deploy_nodes(_, mixed) ->
+    Conf = cluster_conf(),
+    rt_cluster:deploy_nodes([{current, Conf}, {previous, Conf}]).
+>>>>>>> Migrate several more functions into rt_cluster from rt.
 
 %% @doc Create two clusters of 1 node each and connect them for replication:
 %%      Cluster "A" -> cluster "B"

@@ -12,7 +12,7 @@ confirm() ->
     lager:info("Running with backend ~p", [Backend]),
     ?assertEqual(bitcask, Backend),
     [Node1 | _Rest] = _Nodes = rt_cluster:build_cluster(?NUM_NODES),
-    PBC = rt_pb:pbc(Node1),
+    PBC = rt:pbc(Node1),
     lager:info("Setting last write wins on bucket"),
     B = ?BUCKET,
     ?assertMatch(ok, rpc:call(Node1, riak_core_bucket, set_bucket, [B, [{last_write_wins, true}]])),

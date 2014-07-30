@@ -28,6 +28,11 @@ confirm(Properties) ->
     Node = hd(Nodes),
 
     application:start(ibrowse),
+    lager:info("Deploy some nodes"),
+    Nodes = rt_cluster:build_cluster(4, [], [
+                                     {riak_core, [{default_bucket_props,
+                                                   [{n_val, 2}]}]}]),
+    Node = hd(Nodes),
 
     RMD = rt_properties:get(metadata, Properties),
     HaveIndexes = case proplists:get_value(backend, RMD) of
