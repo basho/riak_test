@@ -101,7 +101,7 @@ prepare_vnodes(Node) ->
 prepare_kv_vnodes(Node) ->
     lager:info("Preparing KV vnodes with keys 1-~b in bucket ~s",
                [?KV_COUNT, ?KV_BUCKET]),
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     lists:foreach(
       fun(KV) ->
               ok = riakc_pb_socket:put(C, riakc_obj:new(?KV_BUCKET, KV, KV))
@@ -113,7 +113,7 @@ prepare_search_vnodes(Node) ->
     lager:info("Peparing Search vnodes with keys 1000-~b in bucket ~s",
                [1000+?SEARCH_COUNT, ?SEARCH_BUCKET]),
     rt:enable_search_hook(Node, ?SEARCH_BUCKET),
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     lists:foreach(
       fun(KV) ->
               O = riakc_obj:new(?SEARCH_BUCKET, KV, KV, "text/plain"),

@@ -134,10 +134,10 @@ our_pbc_write(Node, Size, Suffix) ->
     our_pbc_write(Node, 1, Size, <<"systest">>, Suffix).
 
 our_pbc_write(Node, Start, End, Bucket, VSuffix) ->
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
     F = fun(N, Acc) ->
                 {K, V} = make_kv(N, VSuffix),
-                try rt:pbc_write(PBC, Bucket, K, V) of
+                try rt_pb:pbc_write(PBC, Bucket, K, V) of
                     ok ->
                         Acc;
                     Other ->
@@ -156,7 +156,7 @@ our_pbc_read(Node, Size, Suffix) ->
     our_pbc_read(Node, 1, Size, <<"systest">>, Suffix).
 
 our_pbc_read(Node, Start, End, Bucket, VSuffix) ->
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
 
     %% Trundle along through the list, collecting mismatches:
     F = fun(N, Acc) ->

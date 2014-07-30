@@ -40,7 +40,7 @@ confirm() ->
                         {warn_object_size, ?WARN_SIZE},
                         {max_siblings, ?MAX_SIBLINGS},
                         {warn_siblings, ?WARN_SIBLINGS}]}]),
-    C = rt:pbc(Node1),
+    C = rt_pb:pbc(Node1),
 
     %% Set up to grep logs to verify messages
     rt:setup_log_capture(Node1),

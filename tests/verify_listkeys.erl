@@ -91,7 +91,7 @@ confirm() ->
     pass.
 
 put_keys(Node, Bucket, Num) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     Keys = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
     Vals = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
     [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)],
@@ -100,7 +100,7 @@ put_keys(Node, Bucket, Num) ->
 list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
     case Interface of
         pbc ->
-            Pid = rt:pbc(Node),
+            Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
             Pid = rt:httpc(Node),
@@ -128,7 +128,7 @@ list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
 list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass) ->
     case Interface of
         pbc ->
-            Pid = rt:pbc(Node),
+            Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
             Pid = rt:httpc(Node),
@@ -151,7 +151,7 @@ list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass
     end.
 
 put_buckets(Node, Num) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     Buckets = [list_to_binary(["", integer_to_list(Ki)])
                || Ki <- lists:seq(0, Num - 1)],
     {Key, Val} = {<<"test_key">>, <<"test_value">>},
@@ -162,7 +162,7 @@ put_buckets(Node, Num) ->
 list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
     case Interface of
         pbc ->
-            Pid = rt:pbc(Node),
+            Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
             Pid = rt:httpc(Node),
@@ -196,7 +196,7 @@ list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
 list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass) ->
     case Interface of
 	pbc ->
-	    Pid = rt:pbc(Node),
+	    Pid = rt_pb:pbc(Node),
 	    Mod = riakc_pb_socket;
 	http ->
 	    Pid = rt:httpc(Node),

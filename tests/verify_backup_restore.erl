@@ -42,7 +42,7 @@ confirm() ->
     [Node0 | _RestNodes] = Nodes = rt_cluster:build_cluster(?NUM_NODES, Config),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
     rt:wait_until_ring_converged(Nodes),
-    PbcPid = rt:pbc(Node0),
+    PbcPid = rt_pb:pbc(Node0),
     Searches =
         [
           {<<"ZiaSun">>, 1},
@@ -57,7 +57,7 @@ confirm() ->
     AllTerms = lists:foldl(ConcatBin, <<"">>, Searches),
 
     lager:info("Indexing data for search from ~p", [SpamDir]),
-    rt:pbc_put_dir(PbcPid, ?SEARCH_BUCKET, SpamDir),
+    rt_pb:pbc_put_dir(PbcPid, ?SEARCH_BUCKET, SpamDir),
     ExtraKey = <<"Extra1">>, 
     riakc_pb_socket:put(PbcPid, 
                         riakc_obj:new(?SEARCH_BUCKET, 
@@ -98,7 +98,7 @@ confirm() ->
                          {last, ?NUM_MOD+?NUM_DEL}]),
     lager:info("Deleting extra search doc"),
     riakc_pb_socket:delete(PbcPid, ?SEARCH_BUCKET, ExtraKey),
-    rt:wait_until(fun() -> rt:pbc_really_deleted(PbcPid,
+    rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PbcPid,
                                                  ?SEARCH_BUCKET,
                                                  [ExtraKey])
         end),
@@ -141,7 +141,7 @@ confirm() ->
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
     rt:wait_until_ring_converged(Nodes),
     rt:wait_until_no_pending_changes(Nodes),
-    PbcPid2 = rt:pbc(Node0),
+    PbcPid2 = rt_pb:pbc(Node0),
 
     lager:info("Verify no data in cluster"),
     [?assertEqual([], read_some(Node, [{last, ?NUM_KEYS},
@@ -198,7 +198,7 @@ write_some(PBC, Props) ->
                     end
                 end,
             ?assertEqual([], lists:foldl(DelFun, [], Keys)),
-            rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, Keys1) end);
+            rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, Keys1) end);
         _ ->
             ok
     end,
@@ -283,7 +283,7 @@ delete_some(PBC, Props) ->
             end
         end,
     lists:foldl(F, [], Keys),
-    rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, Keys) end),
+    rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, Keys) end),
     ok.
 
 verify_search_count(Pid, SearchQuery, Count) ->

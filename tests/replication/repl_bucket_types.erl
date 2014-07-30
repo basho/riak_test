@@ -20,8 +20,8 @@ setup(Type) ->
 
     {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(Type),
 
-    PBA = rt:pbc(LeaderA),
-    PBB = rt:pbc(LeaderB),
+    PBA = rt_pb:pbc(LeaderA),
+    PBB = rt_pb:pbc(LeaderB),
 
     {DefinedType, UndefType} = Types = {<<"working_type">>, <<"undefined_type">>},
 

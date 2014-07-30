@@ -61,7 +61,7 @@ confirm() ->
 
     rt:upgrade(Legacy, previous),
 
-    PrevPB2 = rt:pbc(Legacy),
+    PrevPB2 = rt_pb:pbc(Legacy),
 
     ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter])),
 
@@ -81,4 +81,4 @@ confirm() ->
     pass.
 
 get_clients(Node) ->
-    {rt:pbc(Node), rt:httpc(Node)}.
+    {rt_pb:pbc(Node), rt:httpc(Node)}.

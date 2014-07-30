@@ -282,7 +282,7 @@ got_error(_) ->
     false.
 
 run_bucket_mr([Node|_], Bucket, Common) ->
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     riakc_pb_socket:mapred(
       C,
       %% TODO: check {search, Bucket, Common, Filter}

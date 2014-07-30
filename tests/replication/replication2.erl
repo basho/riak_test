@@ -469,7 +469,7 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
     ConnInfo = proplists:get_value(Target, rt:connection_info([Target])),
     {IP, Port} = proplists:get_value(pb, ConnInfo),
     lager:info("Connecting to pb socket ~p:~p on ~p", [IP, Port, Target]),
-    PBSock = rt:pbc(Target),
+    PBSock = rt_pb:pbc(Target),
 
     %% do the stop in the background while we're writing keys
     spawn(fun() ->

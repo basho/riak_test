@@ -81,7 +81,7 @@ confirm() ->
                        
     
     lager:info("Make PBC Connection"),
-    Pid = rt:pbc(Node1),
+    Pid = rt_pb:pbc(Node1),
     
     Stats3 = get_stats(Node1),
 
@@ -94,14 +94,14 @@ confirm() ->
     
 
     lager:info("Force Read Repair"),
-    rt:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
+    rt_pb:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
     rt:pbc_set_bucket_prop(Pid, <<"testbucket">>, [{n_val, 4}]),
     
     Stats4 = get_stats(Node1),
     verify_inc(Stats3, Stats4, [{<<"read_repairs_total">>, 0},
                                 {<<"read_repairs">>, 0}]),
     
-    _Value = rt:pbc_read(Pid, <<"testbucket">>, <<"1">>),
+    _Value = rt_pb:pbc_read(Pid, <<"testbucket">>, <<"1">>),
 
     Stats5 = get_stats(Node1),
 
