@@ -189,7 +189,7 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 
 -spec connection_info(node() | [node()]) -> interfaces() | conn_info().
 connection_info(Node) when is_atom(Node) ->
-    {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
+    {ok, [{PB_IP, PB_Port}]} = rt_pb:get_pb_conn_info(Node),
     {ok, [{HTTP_IP, HTTP_Port}]} = get_http_conn_info(Node),
     case get_https_conn_info(Node) of
         undefined ->
@@ -200,20 +200,6 @@ connection_info(Node) when is_atom(Node) ->
 connection_info(Nodes) when is_list(Nodes) ->
     [ {Node, connection_info(Node)} || Node <- Nodes].
 
--spec get_pb_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
-get_pb_conn_info(Node) ->
-    case rpc_get_env(Node, [{riak_api, pb},
-                            {riak_api, pb_ip},
-                            {riak_kv, pb_ip}]) of
-        {ok, [{NewIP, NewPort}|_]} ->
-            {ok, [{NewIP, NewPort}]};
-        {ok, PB_IP} ->
-            {ok, PB_Port} = rpc_get_env(Node, [{riak_api, pb_port},
-                                               {riak_kv, pb_port}]),
-            {ok, [{PB_IP, PB_Port}]};
-        _ ->
-            undefined
-    end.
 
 -spec get_http_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
 get_http_conn_info(Node) ->
