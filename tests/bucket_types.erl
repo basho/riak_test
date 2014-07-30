@@ -6,16 +6,14 @@
 -include("rt.hrl").
 
 properties() ->
-    DefaultProps = rt_cluster:properties(),
-    CustomConfig = rt_cluster:augment_config(riak_core, 
+    CustomConfig = rt_cluster:augment_config(riak_core,
                                              {default_bucket_props, [{n_val, 2}]},
-                                             DefaultProps#rt_properties.config),
-    DefaultProps#rt_properties{node_count=4,
-                               rolling_upgrade=false,
-                               make_cluster=true,
-                               config=CustomConfig}.
+                                             rt_cluster:config()),
+    rt_properties:new([{node_count, 4},
+                       {config, CustomConfig}]).
 
-confirm(#rt_properties{nodes=Nodes}, _MD) ->
+confirm(Properties, _MD) ->
+    Nodes = rt_properties:get(nodes, Properties),
     Node = hd(Nodes),
     application:start(inets),
 
@@ -51,7 +49,7 @@ confirm(#rt_properties{nodes=Nodes}, _MD) ->
 
     %% write implicitly to the default bucket
     riakc_pb_socket:put(PB, riakc_obj:update_value(O1, <<"newvalue">>)),
- 
+
     %% read from the default bucket explicitly
     {ok, O3} = riakc_pb_socket:get(PB, {<<"default">>, <<"bucket">>}, <<"key">>),
 
