@@ -24,18 +24,17 @@
 -include_lib("eunit/include/eunit.hrl").
 
 properties() ->
-    DefaultProps = rt_cluster:properties(),
     UpdConfig = rt_cluster:augment_config(riak_core,
                                           {default_bucket_props, [{allow_mult, false}]},
-                                          DefaultProps#rt_properties.config),
-    DefaultProps#rt_properties{config=UpdConfig,
-                               node_count=4,
-                               rolling_upgrade=true,
-                               make_cluster=false,
-                               start_version=previous}.
+                                          rt_cluster:config()),
+    rt_properties:new([{config, UpdConfig},
+                       {node_count, 4},
+                       {rolling_upgrade, true},
+                       {make_cluster, false},
+                       {start_version, previous}]).
 
-confirm(#rt_properties{nodes=Nodes}, _MD) ->
-    [Node1, Node2, Node3, Node4] = Nodes,
+confirm(Properties, _MD) ->
+    [Node1, Node2, Node3, Node4] = Nodes = rt_properties:get(nodes, Properties),
 
     lager:info("Loading some data up in this cluster."),
     ?assertEqual([], rt_systest:write(Node1, 0, 1000, <<"verify_build_cluster">>, 2)),
