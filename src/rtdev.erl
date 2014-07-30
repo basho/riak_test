@@ -330,7 +330,7 @@ get_backend(AppConfig) ->
 
     case file:consult(ConfigFile) of
         {ok, [Config]} ->
-            rt:get_backend(Config);
+            rt_backend:get_backend(Config);
         E ->
             lager:error("Error reading ~s, ~p", [ConfigFile, E]),
             error

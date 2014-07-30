@@ -51,7 +51,8 @@ run(TestModule, Outdir, TestMetaData, HarnessArgs) ->
                         undefined -> [];
                         Value -> [{multi_config, Value}]
                     end,
-    Backend = rt:set_backend(proplists:get_value(backend, TestMetaData), BackendExtras),
+    Backend = rt_backend:set_backend(
+                 proplists:get_value(backend, TestMetaData), BackendExtras),
     {PropsMod, PropsFun} = function_name(properties, TestModule, 0, rt_cluster),
     {SetupMod, SetupFun} = function_name(setup, TestModule, 2, rt_cluster),
     {ConfirmMod, ConfirmFun} = function_name(confirm, TestModule),
