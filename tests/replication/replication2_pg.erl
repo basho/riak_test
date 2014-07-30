@@ -418,7 +418,7 @@ test_pg_proxy(SSL) ->
     lager:info("Stopping leader on requester cluster"),
     PGLeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
     rt:log_to_nodes(AllNodes, "Killing leader on requester cluster"),
-    rt:stop(PGLeaderB),
+    rt_node:stop(PGLeaderB),
     [RunningBNode | _ ] = BNodes -- [PGLeaderB],
     repl_util:wait_until_leader(RunningBNode),
     PidB2 = rt_pb:pbc(RunningBNode),
@@ -428,7 +428,7 @@ test_pg_proxy(SSL) ->
 
     lager:info("Stopping leader on provider cluster"),
     PGLeaderA = rpc:call(FirstA, riak_core_cluster_mgr, get_leader, []),
-    rt:stop(PGLeaderA),
+    rt_node:stop(PGLeaderA),
     [RunningANode | _ ] = ANodes -- [PGLeaderA],
     repl_util:wait_until_leader(RunningANode),
     ?assertEqual(ok, wait_until_pg(RunningBNode, PidB2, Bucket, KeyD, CidA)),
@@ -530,7 +530,7 @@ test_cluster_mapping(SSL) ->
 
     % shut down cluster A
     lager:info("Shutting down cluster A"),
-    [ rt:stop(Node)  || Node <- ANodes ],
+    [ rt_node:stop(Node)  || Node <- ANodes ],
     [ rt:wait_until_unpingable(Node)  || Node <- ANodes ],
 
     rt:wait_until_ring_converged(BNodes),
@@ -937,12 +937,12 @@ verify_topology_change(SourceNodes, SinkNodes) ->
     %% Sad this takes 2.5 minutes
     lager:info("Removing current leader from the cluster: ~p.",
                [SinkLeader]),
-    rt:leave(SinkLeader),
+    rt_node:leave(SinkLeader),
     ?assertEqual(ok, rt:wait_until_unpingable(SinkLeader)),
 
     %% Wait for everything to restart, and rings to converge.
     lager:info("Starting leader node back up and waiting for repl."),
-    rt:start(SinkLeader),
+    rt_node:start(SinkLeader),
     rt:wait_for_service(SinkLeader, riak_repl),
     rt:wait_until_ring_converged(SinkNodes),
 

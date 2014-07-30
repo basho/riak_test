@@ -74,7 +74,7 @@ confirm() ->
 
     lager:info("restarting node"),
     rt:stop_and_wait(Node),
-    rt:start(Node),
+    rt_node:start(Node),
     rt:wait_for_service(Node, riak_kv),
 
     check_fixed_index_statuses(Node, true),
@@ -85,7 +85,7 @@ confirm() ->
     check_fixed_index_statuses(Node, false),
 
     rt:stop_and_wait(Node),
-    rt:start(Node),
+    rt_node:start(Node),
     rt:wait_for_service(Node, riak_kv),
     check_fixed_index_statuses(Node, false),
 

@@ -105,7 +105,7 @@ ping_up_test(Node) ->
     lager:info("Testing riak ping on ~s", [Node]),
 
     %% ping / pong
-    %% rt:start_and_wait(Node),
+    %% rt_node:start_and_wait(Node),
     lager:info("Node up, should ping"),
     {ok, PongOut} = rt:riak(Node, ["ping"]),
     ?assert(rt:str(PongOut, "pong")),

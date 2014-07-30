@@ -230,7 +230,7 @@ confirm() ->
     lager:info("Verify vnode_routing == legacy"),
     assert_capability(CNode, {riak_core, vnode_routing}, legacy),
 
-    [rt:stop(Node) || Node <- Nodes],
+    [rt_node:stop(Node) || Node <- Nodes],
     pass.
 
 assert_capability(CNode, Capability, Value) ->

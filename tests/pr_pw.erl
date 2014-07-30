@@ -98,7 +98,7 @@ confirm() ->
     ?assertEqual({error, timeout}, C:put(Obj, [{pw, quorum}])),
 
     %% restart the node
-    rt:start_and_wait(Node),
+    rt_node:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
 
     %% we can make quorum again
@@ -111,7 +111,7 @@ confirm() ->
 
     %% reboot the node
     rt:stop_and_wait(Node2),
-    rt:start_and_wait(Node2),
+    rt_node:start_and_wait(Node2),
     rt:wait_for_service(Node2, riak_kv),
 
     %% everything is happy again

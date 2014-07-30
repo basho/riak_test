@@ -58,7 +58,7 @@ confirm() ->
     PBC = rt_pb:pbc(Node),
 
     lager:info("Partitioning quorum minority: ~p", [Partitioned]),
-    Part = rt:partition(Nodes -- Partitioned, Partitioned),
+    Part = rt_node:partition(Nodes -- Partitioned, Partitioned),
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Writing ~p consistent keys", [1000]),
@@ -68,7 +68,7 @@ confirm() ->
     [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     lager:info("Healing partition"),
-    rt:heal(Part),
+    rt_node:heal(Part),
 
     lager:info("Suspending majority vnodes"),
     L = [begin

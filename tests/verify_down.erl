@@ -34,7 +34,7 @@ confirm() ->
 
     %% Shutdown node2
     lager:info("Stopping ~p", [Node2]),
-    rt:stop(Node2),
+    rt_node:stop(Node2),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
     Remaining = Nodes -- [Node2],
 
@@ -49,7 +49,7 @@ confirm() ->
 
     %% Mark node2 as down and wait for ring convergence
     lager:info("Mark ~p as down", [Node2]),
-    rt:down(Node1, Node2),
+    rt_node:down(Node1, Node2),
     ?assertEqual(ok, rt:wait_until_ring_converged(Remaining)),
     [?assertEqual(down, rt:status_of_according_to(Node2, Node)) || Node <- Remaining],
 
@@ -58,7 +58,7 @@ confirm() ->
 
     %% Restart node2 and wait for ring convergence
     lager:info("Restart ~p and wait for ring convergence", [Node2]),
-    rt:start(Node2),
+    rt_node:start(Node2),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node2])),
     ?assertEqual(ok, rt:wait_until_ring_converged(Nodes)),
 

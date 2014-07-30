@@ -204,7 +204,7 @@ clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
 teardown() ->
     %% stop all connected nodes, 'cause it'll be faster that
     %%lager:info("RPC stopping these nodes ~p", [nodes()]),
-    %%[ rt:stop(Node) || Node <- nodes()],
+    %%[ rt_node:stop(Node) || Node <- nodes()],
     %% Then do the more exhaustive harness thing, in case something was up
     %% but not connected.
     ?HARNESS:teardown().
