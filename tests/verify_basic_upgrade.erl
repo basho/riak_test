@@ -26,7 +26,7 @@ confirm() ->
     TestMetaData = riak_test_runner:metadata(),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
-    Nodes = [Node1|_] = rt:build_cluster([OldVsn, OldVsn, OldVsn, OldVsn]),
+    Nodes = [Node1|_] = rt_cluster:build_cluster([OldVsn, OldVsn, OldVsn, OldVsn]),
 
     lager:info("Writing 100 keys to ~p", [Node1]),
     rt:systest_write(Node1, 100, 3),

@@ -159,14 +159,14 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
             ok
     end,
 
-    rt:clean_cluster(lists:flatten(Nodes)).
+    rt_cluster:clean_cluster(lists:flatten(Nodes)).
 
 %% @doc Configure two clusters and set up replication between them,
 %%      return the node list of each cluster.
 configure_clusters(AVersion, BVersion, Realtime) ->
     rt_config:set_advanced_conf(all, ?CONF(infinity)),
 
-    Nodes = [ANodes, BNodes] = rt:build_clusters([3, 3]),
+    Nodes = [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
     rt:wait_for_cluster_service(BNodes, riak_repl),

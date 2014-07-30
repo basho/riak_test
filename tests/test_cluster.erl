@@ -24,6 +24,6 @@
 
 confirm() ->
     Config = [{riak_search, [{enabled, true}]}],
-    rt:build_cluster(4, Config),
+    rt_cluster:build_cluster(4, Config),
     ?assert(false),
     fail.

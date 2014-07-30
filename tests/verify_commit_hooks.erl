@@ -23,7 +23,7 @@
 -export([confirm/0]).
 
 confirm() ->
-    [Node] = rt:deploy_nodes(1),
+    [Node] = rt_cluster:deploy_nodes(1),
     lager:info("Loading the hooks module into ~p", [Node]),
     rt:load_modules_on_nodes([hooks], [Node]),
 

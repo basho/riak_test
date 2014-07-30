@@ -44,7 +44,7 @@
                       }">>).
 
 confirm() ->
-    Nodes = rt:build_cluster(3),
+    Nodes = rt_cluster:build_cluster(3),
 
     %% to pick up fake_builder/1
     rt:load_modules_on_nodes([?MODULE], Nodes),

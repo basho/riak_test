@@ -31,7 +31,7 @@ confirm() ->
     TestMetaData = riak_test_runner:metadata(),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
-    Nodes = [Node1|_] = rt:build_cluster([OldVsn, OldVsn, OldVsn, OldVsn]),
+    Nodes = [Node1|_] = rt_cluster:build_cluster([OldVsn, OldVsn, OldVsn, OldVsn]),
 
     verify_counter_converge:set_allow_mult_true(Nodes, ?COUNTER_BUCKET),
     populate_counters(Node1),

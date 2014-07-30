@@ -69,7 +69,7 @@ prop_test() ->
                       [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
                       {H, _S, Res} = run_commands(?MODULE, Cmds, [{nodelist, Nodes}]),
                       lager:info("======================== Ran commands"),
-                      rt:clean_cluster(Nodes),
+                      rt_cluster:clean_cluster(Nodes),
                       aggregate(zip(state_names(H),command_names(Cmds)), 
                           equals(Res, ok))
                  end))).
@@ -178,7 +178,7 @@ log_transition(S) ->
 %% Helpers
 %% ====================================================================
 setup_cluster(NumNodes) ->
-    Nodes = rt:build_cluster(NumNodes),
+    Nodes = rt_cluster:build_cluster(NumNodes),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     ?assertEqual(ok, rt:wait_until_transfers_complete(Nodes)),
     Node = hd(Nodes),

@@ -41,7 +41,7 @@ confirm() ->
 check_empty_build() ->
     Config = [{riak_core, [{vnode_management_timer, 1000},
                            {ring_creation_size, 4}]}],
-    Nodes = rt:build_cluster(1, Config),
+    Nodes = rt_cluster:build_cluster(1, Config),
     Node = hd(Nodes),
     timer:sleep(2000),
     Self = self(),
@@ -56,7 +56,7 @@ check_empty_build() ->
                      lager:info("Failed. Empty AAE trees were not built instantly"),
                      fail
              end,
-    rt:clean_cluster(Nodes),
+    rt_cluster:clean_cluster(Nodes),
     Result.
 
 check_throttle_and_expiration() ->
@@ -66,7 +66,7 @@ check_throttle_and_expiration() ->
                          {anti_entropy, {off, []}}]},
               {riak_core, [{vnode_management_timer, 1000},
                            {ring_creation_size, 4}]}],
-    Nodes = rt:build_cluster(1, Config),
+    Nodes = rt_cluster:build_cluster(1, Config),
     Node = hd(Nodes),
     timer:sleep(2000),
 

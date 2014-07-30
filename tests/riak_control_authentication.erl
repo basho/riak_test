@@ -209,7 +209,7 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
 
 %% @doc Build a one node cluster.
 build_singleton_cluster(Vsn, Config) ->
-    [Nodes] = rt:build_clusters([{1, Vsn, Config}]),
+    [Nodes] = rt_cluster:build_clusters([{1, Vsn, Config}]),
 
     %% Start and stop, wait for riak_kv.
     %%

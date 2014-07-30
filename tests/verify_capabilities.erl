@@ -31,7 +31,7 @@ confirm() ->
         _ -> current
     end,
 
-    Nodes = rt:deploy_nodes([current, previous, Legacy]),
+    Nodes = rt_cluster:deploy_nodes([current, previous, Legacy]),
     [CNode, PNode, LNode] = Nodes,
 
     lager:info("Verifying known capabilities on a Current 1-node cluster"),

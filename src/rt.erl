@@ -36,19 +36,11 @@
          attach/2,
          attach_direct/2,
          brutal_kill/1,
-         build_cluster/1,
-         build_cluster/2,
-         build_cluster/3,
-         build_clusters/1,
-         join_cluster/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
          check_ibrowse/0,
          claimant_according_to/1,
-         clean_cluster/1,
-         clean_data_dir/1,
-         clean_data_dir/2,
          cmd/1,
          cmd/2,
          connection_info/1,
@@ -135,7 +127,6 @@
          update_app_config/2,
          upgrade/2,
          upgrade/3,
-         versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -268,48 +259,6 @@ case rpc_get_env(Node, [{riak_api, https},
 _ ->
     undefined
 end.
-
-%% @doc Deploy a set of freshly installed Riak nodes, returning a list of the
-%%      nodes deployed.
-%% @todo Re-add -spec after adding multi-version support
-deploy_nodes(Versions) when is_list(Versions) ->
-deploy_nodes(Versions, [riak_kv]);
-deploy_nodes(NumNodes) when is_integer(NumNodes) ->
-deploy_nodes([ current || _ <- lists:seq(1, NumNodes)]).
-
-%% @doc Deploy a set of freshly installed Riak nodes with the given
-%%      `InitialConfig', returning a list of the nodes deployed.
--spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
-deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
-deploy_nodes(NumNodes, InitialConfig, [riak_kv]);
-deploy_nodes(Versions, Services) ->
-    NodeConfig = [ rt_config:version_to_config(Version) || Version <- Versions ],
-    Nodes = ?HARNESS:deploy_nodes(NodeConfig),
-    lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
-    [ ok = wait_for_service(Node, Service) || Node <- Nodes,
-                                              Service <- Services ],
-    Nodes.
-
-deploy_clusters(Settings) ->
-ClusterConfigs = [case Setting of
-		  Configs when is_list(Configs) ->
-		      Configs;
-		  NumNodes when is_integer(NumNodes) ->
-		      [{current, default} || _ <- lists:seq(1, NumNodes)];
-		  {NumNodes, InitialConfig} when is_integer(NumNodes) ->
-		      [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)];
-		  {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
-		      [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
-	      end || Setting <- Settings],
-?HARNESS:deploy_clusters(ClusterConfigs).
-
-build_clusters(Settings) ->
-Clusters = deploy_clusters(Settings),
-[begin
- join_cluster(Nodes),
- lager:info("Cluster built: ~p", [Nodes])
-end || Nodes <- Clusters],
-Clusters.
 
 %% @doc Start the specified Riak node
 start(Node) ->

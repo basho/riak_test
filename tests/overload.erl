@@ -72,17 +72,24 @@ setup() ->
                            {vnode_overload_threshold, undefined}]},
               {riak_kv, [{fsm_limit, undefined},
                          {storage_backend, riak_kv_memory_backend},
-                         {anti_entropy_build_limit, {100, 1000}},
-                         {anti_entropy_concurrency, 100},
-                         {anti_entropy_tick, 100},
-                         {anti_entropy, {on, []}},
-                         {anti_entropy_timeout, 5000}]},
-              {riak_api, [{pb_backlog, 1024}]}],
-    ensemble_util:build_cluster(5, Config, 5).
+                         {anti_entropy, {off, []}}]}],
+    Nodes = rt_cluster:build_cluster(2, Config),
+    [_Node1, Node2] = Nodes,
 
-test_no_overload_protection(_Nodes, _BKV, true) ->
-    ok;
-test_no_overload_protection(Nodes, BKV, ConsistentType) ->
+    Ring = rt:get_ring(Node2),
+    Hash = riak_core_util:chash_std_keyfun({?BUCKET, ?KEY}),
+    PL = lists:sublist(riak_core_ring:preflist(Hash, Ring), 3),
+    Victim = hd([Idx || {Idx, Node} <- PL,
+                        Node =:= Node2]),
+    RO = riak_object:new(?BUCKET, ?KEY, <<"test">>),
+
+
+    ok = test_no_overload_protection(Nodes, Victim, RO),
+    ok = test_vnode_protection(Nodes, Victim, RO),
+    ok = test_fsm_protection(Nodes, Victim, RO),
+    pass.
+
+test_no_overload_protection(Nodes, Victim, RO) ->
     lager:info("Testing with no overload protection"),
     ProcFun = build_predicate_gte(test_no_overload_protection, ?NUM_REQUESTS,
                                   "ProcFun", "Procs"),

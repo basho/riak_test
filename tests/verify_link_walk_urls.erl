@@ -33,7 +33,7 @@
 
 
 confirm() ->
-    [Node0 | _] = rt:build_cluster(?NUM_NODES),
+    [Node0 | _] = rt_cluster:build_cluster(?NUM_NODES),
     Pbc = rt:pbc(Node0),
 
     lager:info("Inserting linked graph"),

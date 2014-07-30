@@ -163,7 +163,7 @@ confirm() ->
 
     lager:info("===testing basic connectivity"),
 
-    [Node1, Node2] = rt:deploy_nodes(2, BaseConf, [riak_kv, riak_repl]),
+    [Node1, Node2] = rt_cluster:deploy_nodes(2, BaseConf),
 
     Listeners = replication:add_listeners([Node1]),
     replication:verify_listeners(Listeners),
@@ -225,7 +225,7 @@ confirm() ->
 
     lager:info("Re-deploying 6 nodes"),
 
-    Nodes = rt:deploy_nodes(6, BaseConf, [riak_kv, riak_repl]),
+    Nodes = rt_cluster:deploy_nodes(6, BaseConf),
 
     [rt:wait_until_pingable(N) || N <- Nodes],
 

@@ -31,7 +31,7 @@ confirm() ->
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
     Nodes =
     [CurrentNode, OldNode1, _] =
-    rt:build_cluster([{current,
+    rt_cluster:build_cluster([{current,
                                [{riak_kv, [{anti_entropy, {off, []}}]}]},
                               OldVsn, OldVsn]),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),

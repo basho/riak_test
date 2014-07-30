@@ -22,7 +22,7 @@
 -export([confirm/0]).
 
 confirm() ->
-    [Node1, Node2, _Node3] = rt:build_cluster(3),
+    [Node1, Node2, _Node3] = rt_cluster:build_cluster(3),
 
     %% add intercept that delays handling of vnode commands
     %% on a single node (the "slow" node)

@@ -24,7 +24,7 @@
 -include_lib("riakc/include/riakc.hrl").
 
 confirm() ->
-    [Node] = rt:build_cluster([legacy]),
+    [Node] = rt_cluster:build_cluster([legacy]),
     rt:wait_until_nodes_ready([Node]),
 
     check_fixed_index_statuses(Node, undefined),

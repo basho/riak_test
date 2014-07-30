@@ -29,7 +29,7 @@
 
 confirm() ->
     lager:info("Staring a node"),
-    Nodes = [Node] = rt:deploy_nodes(1),
+    Nodes = [Node] = rt_cluster:deploy_nodes(1),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     
     lager:info("Stopping that node"),
