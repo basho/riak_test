@@ -94,11 +94,11 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
 
     %% Prepare for the next call to our test (we aren't polite about it, it's faster that way):
     lager:info("Bringing down test nodes."),
-    lists:foreach(fun(N) -> rt:brutal_kill(N) end, TestNodes),
+    lists:foreach(fun(N) -> rt_node:brutal_kill(N) end, TestNodes),
 
     %% The "root" node can't leave() since it's the only node left:
     lager:info("Stopping root node."),
-    rt:brutal_kill(RootNode).
+    rt_node:brutal_kill(RootNode).
 
 %% See if we get the same data back from our new nodes as we put into the root node:
 test_handoff(RootNode, NewNode, NTestItems) ->

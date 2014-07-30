@@ -37,7 +37,8 @@
          down/2,
          heal/1,
          partition/2,
-         remove/2]).
+         remove/2,
+         brutal_kill/1]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 
@@ -170,4 +171,16 @@ heal({_NewCookie, OldCookie, P1, P2}) ->
     [true = rpc:call(N, erlang, set_cookie, [N, OldCookie]) || N <- P1],
     rt:wait_until_connected(Cluster),
     {_GN, []} = rpc:sbcast(Cluster, riak_core_node_watcher, broadcast),
+    ok.
+
+% when you just can't wait
+brutal_kill(Node) ->
+    rt_cover:maybe_stop_on_node(Node),
+    lager:info("Killing node ~p", [Node]),
+    OSPidToKill = rpc:call(Node, os, getpid, []),
+    %% try a normal kill first, but set a timer to
+    %% kill -9 after 5 seconds just in case
+    rpc:cast(Node, timer, apply_after,
+             [5000, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]]),
+    rpc:cast(Node, os, cmd, [io_lib:format("kill -15 ~s", [OSPidToKill])]),
     ok.
