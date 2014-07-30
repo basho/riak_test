@@ -34,7 +34,7 @@ confirm() ->
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
     RiakHttp = rt:http_url(hd(Nodes)),
-    PBPid = rt:pbc(hd(Nodes)),
+    PBPid = rt_pb:pbc(hd(Nodes)),
 
     [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],
     [put_an_object(PBPid, int_to_key(N), N, ?FOO) || N <- lists:seq(101, 200)],

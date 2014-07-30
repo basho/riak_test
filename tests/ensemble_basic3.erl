@@ -55,17 +55,17 @@ confirm() ->
     Partitioned = [VNode || {_, VNode} <- PartitionedVN],
     MajorityVN = All -- PartitionedVN,
 
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
 
     lager:info("Partitioning quorum minority: ~p", [Partitioned]),
     Part = rt:partition(Nodes -- Partitioned, Partitioned),
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Writing ~p consistent keys", [1000]),
-    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
 
     lager:info("Read keys to verify they exist"),
-    [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
+    [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     lager:info("Healing partition"),
     rt:heal(Part),
@@ -83,7 +83,7 @@ confirm() ->
                         vnode_util:resume_vnode(Pid),
                         ensemble_util:wait_until_stable(Node, Quorum),
                         lager:info("Re-reading keys"),
-                        [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
+                        [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
                         lager:info("Suspending vnode: ~p", [VIdx]),
                         Pid2 = vnode_util:suspend_vnode(VNode, VIdx),
                         orddict:store(VN, Pid2, Suspended)
@@ -93,5 +93,5 @@ confirm() ->
     [vnode_util:resume_vnode(Pid) || {_, Pid} <- L3],
     ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Re-reading keys"),
-    [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
+    [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
     pass.

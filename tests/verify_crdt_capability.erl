@@ -98,4 +98,4 @@ gen_counter_op() ->
     riakc_counter:to_op(riakc_counter:increment(riakc_counter:new())).
 
 get_clients(Node) ->
-    {rt:pbc(Node), rt:httpc(Node)}.
+    {rt_pb:pbc(Node), rt:httpc(Node)}.

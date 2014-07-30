@@ -44,7 +44,7 @@ confirm() ->
                        {{diff_index_specs, 2}, skippable_diff_index_specs}]}),
     lager:info("Installed intercepts to corrupt index specs on node ~p", [Node1]),
     %%rpc:call(Node1, lager, set_loglevel, [lager_console_backend, debug]),
-    PBC = rt:pbc(Node1),
+    PBC = rt_pb:pbc(Node1),
     NumItems = ?NUM_ITEMS,
     NumDel = ?NUM_DELETES,
     pass = check_lost_objects(Node1, PBC, NumItems, NumDel),
@@ -87,7 +87,7 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     lager:info("Deleting ~b objects without updating indexes", [NumDel]),
     [del_obj(PBC, Bucket, N) || N <- DelRange, Bucket <- ?BUCKETS],
     DelKeys = [to_key(N) || N <- DelRange], 
-    [rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, DelKeys) end)
+    [rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, DelKeys) end)
      || Bucket <- ?BUCKETS],
     %% Verify they are damaged
     lager:info("Verify change did not take, needs repair"),

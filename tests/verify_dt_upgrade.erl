@@ -56,7 +56,7 @@ populate_counters(Node) ->
     ?assertMatch(ok, rhc:counter_incr(RHC, ?COUNTER_BUCKET, <<"httpkey">>, 2)),
     ?assertMatch({ok, 2}, rhc:counter_val(RHC, ?COUNTER_BUCKET, <<"httpkey">>)),
 
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
     ?assertEqual(ok, riakc_pb_socket:counter_incr(PBC, ?COUNTER_BUCKET, <<"pbkey">>, 4)),
     ?assertEqual({ok, 4}, riakc_pb_socket:counter_val(PBC, ?COUNTER_BUCKET, <<"pbkey">>)),
     ok.
@@ -68,7 +68,7 @@ verify_counters(Node) ->
     RHC = rt:httpc(Node),
     ?assertMatch({ok, 4}, rhc:counter_val(RHC, ?COUNTER_BUCKET, <<"pbkey">>)),
 
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
     ?assertEqual({ok, 2}, riakc_pb_socket:counter_val(PBC, ?COUNTER_BUCKET, <<"httpkey">>)),
 
     %% Check that 1.4 counters work with bucket types

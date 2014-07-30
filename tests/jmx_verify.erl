@@ -91,7 +91,7 @@ confirm() ->
                      <<"node_put_fsm_time_100">>]),
 
     lager:info("Make PBC Connection"),
-    Pid = rt:pbc(Node1),
+    Pid = rt_pb:pbc(Node1),
 
     JMX3 = jmx_dump(JMXDumpCmd),
     rt:systest_write(Node1, 1),
@@ -101,7 +101,7 @@ confirm() ->
                             {<<"pbc_active">>, 1}]),
 
     lager:info("Force Read Repair"),
-    rt:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
+    rt_pb:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
     rt:pbc_set_bucket_prop(Pid, <<"testbucket">>, [{n_val, 4}]),
 
     JMX4 = jmx_dump(JMXDumpCmd),
@@ -109,7 +109,7 @@ confirm() ->
     verify_inc(JMX3, JMX4, [{<<"read_repairs_total">>, 0},
                             {<<"read_repairs">>, 0}]),
 
-    _Value = rt:pbc_read(Pid, <<"testbucket">>, <<"1">>),
+    _Value = rt_pb:pbc_read(Pid, <<"testbucket">>, <<"1">>),
 
     %%Stats5 = get_stats(Node1),
     JMX5 = jmx_dump(JMXDumpCmd),
