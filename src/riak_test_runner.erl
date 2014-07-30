@@ -139,22 +139,22 @@ test_fun({PropsMod, PropsFun}, {SetupMod, SetupFun}, ConfirmModFun, MetaData) ->
             Properties = PropsMod:PropsFun(),
             case SetupMod:SetupFun(Properties, MetaData) of
                 {ok, SetupData} ->
-                    lager:info("Wait for transfers? ~p", [SetupData#rt_properties.wait_for_transfers]),
+                    RollingUpgradeTest = rt_properties:get(rolling_upgrade, SetupData),
                     ConfirmFun = compose_confirm_fun(ConfirmModFun,
                                                      SetupData,
-                                                     MetaData),
+                                                     MetaData,
+                                                     RollingUpgradeTest),
+
                     ConfirmFun();
                 _ ->
                     fail
             end
     end.
 
-compose_confirm_fun({ConfirmMod, ConfirmFun},
-                    SetupData=#rt_properties{rolling_upgrade=true},
-                    MetaData) ->
-    Nodes = SetupData#rt_properties.nodes,
-    WaitForTransfers = SetupData#rt_properties.wait_for_transfers,
-    UpgradeVersion = SetupData#rt_properties.upgrade_version,
+compose_confirm_fun({ConfirmMod, ConfirmFun}, SetupData, MetaData, true) ->
+    Nodes = rt_properties:get(nodes, SetupData),
+    WaitForTransfers = rt_properties:get(wait_for_transfers, SetupData),
+    UpgradeVersion = rt_properties:get(upgrade_version, SetupData),
     fun() ->
             InitialResult = ConfirmMod:ConfirmFun(SetupData, MetaData),
             OtherResults = [begin
@@ -165,9 +165,7 @@ compose_confirm_fun({ConfirmMod, ConfirmFun},
                             end || Node <- Nodes],
             lists:all(fun(R) -> R =:= pass end, [InitialResult | OtherResults])
     end;
-compose_confirm_fun({ConfirmMod, ConfirmFun},
-                    SetupData=#rt_properties{rolling_upgrade=false},
-                    MetaData) ->
+compose_confirm_fun({ConfirmMod, ConfirmFun}, SetupData, MetaData, false) ->
     fun() ->
             ConfirmMod:ConfirmFun(SetupData, MetaData)
     end.

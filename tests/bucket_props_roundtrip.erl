@@ -54,13 +54,10 @@
         ]).
 
 properties() ->
-    DefaultProps = rt_cluster:properties(),
-    DefaultProps#rt_properties{node_count=1,
-                               rolling_upgrade=false,
-                               make_cluster=true}.   
+    rt_properties:new([{node_count, 1}]).
 
-confirm(#rt_properties{nodes=Nodes}, _MD) ->
-    [Node] = Nodes,
+confirm(Properties, _MD) ->
+    [Node] = rt_properties:get(nodes, Properties),
 
     [ check_prop_set_and_get(Node, Prop, FirstVal, SecondVal) ||
         {Prop, FirstVal, SecondVal} <- ?PROPS ],
