@@ -43,7 +43,7 @@ confirm() ->
                      {enabled, true}
                     ]}
     ],
-    Nodes = rt:build_cluster(4, Conf),
+    Nodes = rt_cluster:build_cluster(4, Conf),
     Node = hd(Nodes),
     %% enable security on the cluster
     ok = rpc:call(Node, riak_core_console, security_enable, [[]]),

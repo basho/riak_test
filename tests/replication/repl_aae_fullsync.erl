@@ -114,7 +114,7 @@ simple_test() ->
     %% intercepts are removed.
     validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
 
-    rt:clean_cluster(Nodes),
+    rt_cluster:clean_cluster(Nodes),
 
     pass.
 
@@ -297,7 +297,7 @@ bidirectional_test() ->
     validate_completed_fullsync(LeaderB, AFirst, "A", ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS),
 
     %% Clean.
-    rt:clean_cluster(Nodes),
+    rt_cluster:clean_cluster(Nodes),
 
     pass.
 
@@ -389,7 +389,7 @@ difference_test() ->
                                   [{timeout, 4000}]),
     ?assertEqual([<<"baz">>, <<"baz2">>], lists:sort(riakc_obj:get_values(O2))),
 
-    rt:clean_cluster(Nodes),
+    rt_cluster:clean_cluster(Nodes),
 
     pass.
 
@@ -458,7 +458,7 @@ deadlock_test() ->
     lager:info("Status result: ~p", [Result]),
     ?assertNotEqual({badrpc, timeout}, Result),
 
-    rt:clean_cluster(Nodes),
+    rt_cluster:clean_cluster(Nodes),
 
     pass.
 

@@ -31,7 +31,7 @@
 
 confirm() ->
     Config = [{riak_search, [{enabled, true}]}],
-    [Node0 | _RestNodes] = Nodes = rt:build_cluster(3, Config),
+    [Node0 | _RestNodes] = Nodes = rt_cluster:build_cluster(3, Config),
     rt:wait_until_ring_converged(Nodes),
 
     Path = rt_config:get(rt_scratch_dir),

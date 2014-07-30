@@ -39,7 +39,7 @@ confirm() ->
     %% Upgrade nodes to previous
     %% Get put on all nodes
     Config = [],
-    [Legacy, Previous]=Nodes = rt:build_cluster([{legacy, Config}, {previous, Config}]),
+    [Legacy, Previous]=Nodes = rt_cluster:build_cluster([{legacy, Config}, {previous, Config}]),
     ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [])),
     verify_counter_converge:set_allow_mult_true(Nodes),
 

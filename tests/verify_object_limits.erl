@@ -34,7 +34,7 @@
 
 
 confirm() ->
-    [Node1] = rt:build_cluster(1, [{riak_kv, [
+    [Node1] = rt_cluster:build_cluster(1, [{riak_kv, [
                         {ring_creation_size, 8},
                         {max_object_size, ?MAX_SIZE},
                         {warn_object_size, ?WARN_SIZE},

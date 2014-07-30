@@ -34,7 +34,7 @@ confirm() ->
     rt_config:update_app_config(all, [{riak_kv, [{object_format, v1}]}]),
     TestMetaData = riak_test_runner:metadata(),
     DowngradeVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
-    Nodes = [Node1|_] = rt:build_cluster(?N),
+    Nodes = [Node1|_] = rt_cluster:build_cluster(?N),
 
     [rt:wait_until_capability(N, {riak_kv, object_format}, v1, v0) || N <- Nodes],
 

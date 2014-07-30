@@ -193,7 +193,7 @@ maybe_teardown(true, TestResults, Coverage, Verbose) ->
             so_kill_riak_maybe();
         _ ->
             lager:info("Multiple tests run or no failure"),
-            rt:teardown(),
+            rt_cluster:teardown(),
             print_summary(TestResults, Coverage, Verbose)
     end,
     ok.

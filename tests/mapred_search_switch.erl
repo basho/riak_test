@@ -67,7 +67,7 @@ setup_test_env() ->
     %% must enable both RS and YZ at startup to get test data indexed;
     %% nothing extra would be tested by using multiple nodes, so just
     %% deploy one to make the test run faster
-    Nodes = rt:deploy_nodes(1, [{riak_search, [{enabled, true}]},
+    Nodes = rt_cluster:deploy_nodes(1, [{riak_search, [{enabled, true}]},
                                 {yokozuna, [{enabled, true}]}]),
     ok = rt:wait_until_nodes_ready(Nodes),
     ok = rt:wait_for_cluster_service(Nodes, riak_search),

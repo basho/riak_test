@@ -103,7 +103,7 @@ make_clusters() ->
           ]}
         ],
 
-    Nodes = rt:deploy_nodes(NumNodes, Conf),
+    Nodes = rt_cluster:deploy_nodes(NumNodes, Conf),
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),

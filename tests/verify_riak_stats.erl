@@ -24,7 +24,7 @@
 
 %% You should have curl installed locally to do this.
 confirm() ->
-    Nodes = rt:deploy_nodes(1),
+    Nodes = rt_cluster:deploy_nodes(1),
     [Node1] = Nodes,
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
     Stats1 = get_stats(Node1),

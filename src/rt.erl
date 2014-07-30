@@ -35,27 +35,16 @@
          attach/2,
          attach_direct/2,
          brutal_kill/1,
-         build_cluster/1,
-         build_cluster/2,
-         build_cluster/3,
-         build_clusters/1,
-         join_cluster/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
          check_ibrowse/0,
          claimant_according_to/1,
-         clean_cluster/1,
-         clean_data_dir/1,
-         clean_data_dir/2,
          cmd/1,
          cmd/2,
          connection_info/1,
          console/2,
          create_and_activate_bucket_type/3,
-         deploy_nodes/1,
-         deploy_nodes/2,
-         deploy_clusters/1,
          down/2,
          enable_search_hook/2,
          expect_in_log/2,
@@ -123,10 +112,8 @@
          systest_write/3,
          systest_write/5,
          systest_write/6,
-         teardown/0,
          upgrade/2,
          upgrade/3,
-         versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -260,48 +247,6 @@ get_https_conn_info(Node) ->
             undefined
     end.
 
-%% @doc Deploy a set of freshly installed Riak nodes, returning a list of the
-%%      nodes deployed.
-%% @todo Re-add -spec after adding multi-version support
-deploy_nodes(Versions) when is_list(Versions) ->
-    deploy_nodes(Versions, [riak_kv]);
-deploy_nodes(NumNodes) when is_integer(NumNodes) ->
-    deploy_nodes([ current || _ <- lists:seq(1, NumNodes)]).
-
-%% @doc Deploy a set of freshly installed Riak nodes with the given
-%%      `InitialConfig', returning a list of the nodes deployed.
--spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
-deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
-    NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
-    deploy_nodes(NodeConfig);
-deploy_nodes(Versions, Services) ->
-    NodeConfig = [ rt_config:version_to_config(Version) || Version <- Versions ],
-    Nodes = ?HARNESS:deploy_nodes(NodeConfig),
-    lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
-    [ ok = wait_for_service(Node, Service) || Node <- Nodes,
-                                              Service <- Services ],
-    Nodes.
-
-deploy_clusters(Settings) ->
-    ClusterConfigs = [case Setting of
-                          Configs when is_list(Configs) ->
-                              Configs;
-                          NumNodes when is_integer(NumNodes) ->
-                              [{current, default} || _ <- lists:seq(1, NumNodes)];
-                          {NumNodes, InitialConfig} when is_integer(NumNodes) ->
-                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)];
-                          {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
-                              [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
-                      end || Setting <- Settings],
-    ?HARNESS:deploy_clusters(ClusterConfigs).
-
-build_clusters(Settings) ->
-    Clusters = deploy_clusters(Settings),
-    [begin
-         join_cluster(Nodes),
-         lager:info("Cluster built: ~p", [Nodes])
-     end || Nodes <- Clusters],
-    Clusters.
 
 %% @doc Start the specified Riak node
 start(Node) ->
@@ -1002,98 +947,7 @@ claimant_according_to(Node) ->
             BadRpc
     end.
 
-%%%===================================================================
-%%% Cluster Utility Functions
-%%%===================================================================
 
-%% @doc Safely construct a new cluster and return a list of the deployed nodes
-%% @todo Add -spec and update doc to reflect mult-version changes
-build_cluster(Versions) when is_list(Versions) ->
-    build_cluster(length(Versions), Versions, default);
-build_cluster(NumNodes) ->
-    build_cluster(NumNodes, default).
-
-%% @doc Safely construct a `NumNode' size cluster using
-%%      `InitialConfig'. Return a list of the deployed nodes.
-build_cluster(NumNodes, InitialConfig) ->
-    build_cluster(NumNodes, [], InitialConfig).
-
-build_cluster(NumNodes, Versions, InitialConfig) ->
-    %% Deploy a set of new nodes
-    Nodes =
-        case Versions of
-            [] ->
-                deploy_nodes(NumNodes, InitialConfig);
-            _ ->
-                deploy_nodes(Versions)
-        end,
-
-    join_cluster(Nodes),
-    lager:info("Cluster built: ~p", [Nodes]),
-    Nodes.
-
-join_cluster(Nodes) ->
-    %% Ensure each node owns 100% of it's own ring
-    [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
-
-    %% Join nodes
-    [Node1|OtherNodes] = Nodes,
-    case OtherNodes of
-        [] ->
-            %% no other nodes, nothing to join/plan/commit
-            ok;
-        _ ->
-            %% ok do a staged join and then commit it, this eliminates the
-            %% large amount of redundant handoff done in a sequential join
-            [staged_join(Node, Node1) || Node <- OtherNodes],
-            plan_and_commit(Node1),
-            try_nodes_ready(Nodes, 3, 500)
-    end,
-
-    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
-
-    %% Ensure each node owns a portion of the ring
-    wait_until_nodes_agree_about_ownership(Nodes),
-    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
-    ok.
-
-try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
-    lager:info("Nodes not ready after initial plan/commit, retrying"),
-    plan_and_commit(Node1);
-try_nodes_ready(Nodes, N, SleepMs) ->
-    ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
-    case ReadyNodes of
-        Nodes ->
-            ok;
-        _ ->
-            timer:sleep(SleepMs),
-            try_nodes_ready(Nodes, N-1, SleepMs)
-    end.
-
-%% @doc Stop nodes and wipe out their data directories
-clean_cluster(Nodes) when is_list(Nodes) ->
-    [stop_and_wait(Node) || Node <- Nodes],
-    clean_data_dir(Nodes).
-
-clean_data_dir(Nodes) ->
-    clean_data_dir(Nodes, "").
-
-clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
-    clean_data_dir([Nodes], SubDir);
-clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
-    ?HARNESS:clean_data_dir(Nodes, SubDir).
-
-%% @doc Shutdown every node, this is for after a test run is complete.
-teardown() ->
-    %% stop all connected nodes, 'cause it'll be faster that
-    %%lager:info("RPC stopping these nodes ~p", [nodes()]),
-    %%[ rt:stop(Node) || Node <- nodes()],
-    %% Then do the more exhaustive harness thing, in case something was up
-    %% but not connected.
-    ?HARNESS:teardown().
-
-versions() ->
-    ?HARNESS:versions().
 %%%===================================================================
 %%% Basic Read/Write Functions
 %%%===================================================================

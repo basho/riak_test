@@ -153,9 +153,9 @@ cluster_conf(_CascadingWrites) ->
     ].
 
 deploy_nodes(NumNodes, true) ->
-    rt:deploy_nodes(NumNodes, cluster_conf(always));
+    rt_cluster:deploy_nodes(NumNodes, cluster_conf(always));
 deploy_nodes(NumNodes, false) ->
-    rt:deploy_nodes(NumNodes, cluster_conf(never)).
+    rt_cluster:deploy_nodes(NumNodes, cluster_conf(never)).
 
 %% @doc Turn on Realtime replication on the cluster lead by LeaderA.
 %%      The clusters must already have been named and connected.

@@ -89,10 +89,10 @@ verify_ensemble_delete_support(Node, Bucket, Index) ->
 %% node when adding yokozuna and ensemble support. Waiting for yokozuna
 %% to load on each node allows join_cluster to complete consistently
 build_cluster_with_yz_support(Num, Config, NVal) ->
-    Nodes = rt:deploy_nodes(Num, Config),
+    Nodes = rt_cluster:deploy_nodes(Num, Config),
     [rt:wait_for_cluster_service([N], yokozuna) || N <- Nodes],
     Node = hd(Nodes),
-    rt:join_cluster(Nodes),
+    rt_cluster:join_cluster(Nodes),
     ensemble_util:wait_until_cluster(Nodes),
     ensemble_util:wait_for_membership(Node),
     ensemble_util:wait_until_stable(Node, NVal),

@@ -27,7 +27,7 @@
 
 confirm() ->
     %% Bring up a small cluster
-    [Node1] = rt:deploy_nodes(1),
+    [Node1] = rt_cluster:deploy_nodes(1),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
     Keys = [{vnodeGets,<<"vnode_gets">>},
