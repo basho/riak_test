@@ -163,7 +163,7 @@ test_cover_queries_overload(Nodes) ->
     wait_for_all_vnode_queues_empty(Node2).
 
 list_keys(Node) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     riakc_pb_socket:list_keys(Pid, ?BUCKET, 30000).
 
 list_buckets(Node) ->

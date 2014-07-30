@@ -25,7 +25,7 @@ confirm() ->
     N = 100,
 
     lager:info("Put new object in ~p via PBC.", [Node1]),
-    PB = rt:pbc(Node1),
+    PB = rt_pb:pbc(Node1),
 
     A0 = riakc_obj:new(<<"b">>, <<"k">>, sets:from_list([0])),
     B0 = riakc_obj:new(<<"b">>, <<"k">>, sets:from_list([1])),

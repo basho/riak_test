@@ -144,7 +144,7 @@ write_data(Node, KVs) ->
     write_data(Node, KVs, []).
 
 write_data(Node, KVs, Opts) ->
-    PB = rt:pbc(Node),
+    PB = rt_pb:pbc(Node),
     [begin
          O =
          case riakc_pb_socket:get(PB, ?BUCKET, K) of
@@ -161,7 +161,7 @@ write_data(Node, KVs, Opts) ->
 % @doc Verifies that the data is eventually restored to the expected set.
 verify_data(Node, KeyValues) ->
     lager:info("Verify all replicas are eventually correct"),
-    PB = rt:pbc(Node),
+    PB = rt_pb:pbc(Node),
     CheckFun =
     fun() ->
             Matches = [verify_replicas(Node, ?BUCKET, K, V, ?N_VAL)

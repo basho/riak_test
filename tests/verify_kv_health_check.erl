@@ -43,7 +43,7 @@ confirm() ->
     %% make DisableThreshold+5 requests and trigger the health check explicitly
     %% we only need to backup one vnode's msg queue on the node to fail the health check
     %% so we read the same key again and again
-    C = rt:pbc(Node2),
+    C = rt_pb:pbc(Node2),
     [riakc_pb_socket:get(C, <<"b">>, <<"k">>) || _ <- lists:seq(1,DisableThreshold+5)],
     ok = rpc:call(Node1, riak_core_node_watcher, check_health, [riak_kv]),
 

@@ -36,7 +36,7 @@ verify_bitcask_tombstone2_upgrade(Nodes) ->
     lager:info("And that is that").
 
 write_some_data([Node1 | _]) ->
-    rt:pbc_systest_write(Node1, 10000).
+    rt_pb:pbc_systest_write(Node1, 10000).
 
 list_bitcask_files(Nodes) ->
     [{Node, list_node_bitcask_files(Node)} || Node <- Nodes].

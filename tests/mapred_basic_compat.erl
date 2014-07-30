@@ -89,7 +89,7 @@ load_test_data([Node|_]) ->
            [{<<"link 1">>, [{?LINK_BUCKET, <<"nokey-1">>}]},
             {<<"link 2">>, [{?LINK_BUCKET, <<"nokey-2">>}]}]),
 
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     ok = riakc_pb_socket:put(C, riakc_obj:update_metadata(Obj, MD)),
 
     %% Some bucket type entries {mytype,foonum}/bar{1..10}

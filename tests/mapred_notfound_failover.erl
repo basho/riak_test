@@ -78,7 +78,7 @@ replica_notfound(Node, {HashMod, HashFun},
                  MissingBucket, MissingKey, MissingValue) ->
     %% create a value for the "missing" key
     Obj = riakc_obj:new(MissingBucket, MissingKey, MissingValue),
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     ok = riakc_pb_socket:put(C, Obj, [{w, 3}]),
     riakc_pb_socket:stop(C),
     %% and now kill the first replica; this will make the vnode local

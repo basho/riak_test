@@ -36,8 +36,8 @@ confirm() ->
                               OldVsn, OldVsn]),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     
-    PBC1 = rt:pbc(CurrentNode),
-    PBC2 = rt:pbc(OldNode1),
+    PBC1 = rt_pb:pbc(CurrentNode),
+    PBC2 = rt_pb:pbc(OldNode1),
     HTTPC1 = rt:httpc(CurrentNode),
 
     Clients = [{pb, PBC1}, {pb, PBC2}, {http, HTTPC1}],
@@ -57,7 +57,7 @@ confirm() ->
     ToDel = [<<"obj05">>, <<"obj11">>],
     [?assertMatch(ok, riakc_pb_socket:delete(PBC1, ?BUCKET, KD)) || KD <- ToDel],
     lager:info("Make sure the tombstone is reaped..."),
-    ?assertMatch(ok, rt:wait_until(fun() -> rt:pbc_really_deleted(PBC1, ?BUCKET, ToDel) end)),
+    ?assertMatch(ok, rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC1, ?BUCKET, ToDel) end)),
     
     assertExactQuery(Clients, [], <<"field1_bin">>, <<"val5">>),
     assertExactQuery(Clients, [], <<"field2_int">>, 5),

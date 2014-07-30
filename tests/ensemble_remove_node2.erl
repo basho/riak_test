@@ -44,9 +44,9 @@ confirm() ->
     ensemble_util:wait_until_stable(Node, NVal),
     Bucket = {<<"strong">>, <<"test">>},
     Key = <<"testkey">>,
-    PBC = rt:pbc(Node),
-    ok = rt:pbc_write(PBC, Bucket, Key, testval),
-    Val1 = rt:pbc_read(PBC, Bucket, Key),
+    PBC = rt_pb:pbc(Node),
+    ok = rt_pb:pbc_write(PBC, Bucket, Key, testval),
+    Val1 = rt_pb:pbc_read(PBC, Bucket, Key),
     ?assertEqual(element(1, Val1), riakc_obj),
 
     %% Don't allow node deletions in riak_ensemble. This should prevent the
@@ -80,7 +80,7 @@ confirm() ->
     %% We should still be able to read from k/v ensembles, but the nodes should
     %% never exit
     lager:info("Reading From SC Bucket"),
-    Val2 = rt:pbc_read(PBC, Bucket, Key),
+    Val2 = rt_pb:pbc_read(PBC, Bucket, Key),
     ?assertEqual(element(1, Val2), riakc_obj),
     
     ok = ensemble_util:wait_until_stable(Node, NVal),

@@ -7,8 +7,8 @@ confirm() ->
     [Node1, Node2] = rt_cluster:deploy_nodes(2),
     %% 2. With PBC
     lager:info("Put new object in ~p via PBC.", [Node1]),
-    PB1 = rt:pbc(Node1),
-    PB2 = rt:pbc(Node2),
+    PB1 = rt_pb:pbc(Node1),
+    PB2 = rt_pb:pbc(Node2),
     Obj1 = riakc_obj:new(<<"verify_asis_put">>, <<"1">>, <<"test">>, "text/plain"),
     %%    a. put in node 1
     %%    b. fetch from node 1 for vclock

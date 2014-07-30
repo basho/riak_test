@@ -56,7 +56,7 @@ confirm() ->
     [] = rt:systest_write(Primary, 1, ObjCount, Bucket, 3),
 
     %% run the query a bunch
-    C = rt:pbc(Primary),
+    C = rt_pb:pbc(Primary),
     TestCount = 100,
     lager:info("Running the MR query ~b times", [TestCount]),
     Runs = [ run_query(C, Bucket) || _ <- lists:seq(1, TestCount) ],
