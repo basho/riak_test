@@ -1022,6 +1022,7 @@ status_of_according_to(Member, Node) ->
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.
 claimant_according_to(Node) ->
+<<<<<<< HEAD
     case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
         {ok, Ring} ->
             Claimant = riak_core_ring:claimant(Ring),
@@ -1029,6 +1030,15 @@ claimant_according_to(Node) ->
         {badrpc, _}=BadRpc ->
             BadRpc
     end.
+=======
+case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+{ok, Ring} ->
+    Claimant = riak_core_ring:claimant(Ring),
+    Claimant;
+{badrpc, _}=BadRpc ->
+    BadRpc
+end.
+>>>>>>> Migrate several more functions into rt_cluster from rt.
 
 %%%===================================================================
 %%% Basic Read/Write Functions
