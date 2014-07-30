@@ -43,7 +43,7 @@ confirm() ->
     Config = [{riak_search, [{enabled, true}]}, {riak_pipe, [{worker_limit, 200}]}],
     NumNodes = 4,
     Vsns = [{OldVsn, Config} || _ <- lists:seq(1,NumNodes)],
-    Nodes = rt:build_cluster(Vsns),
+    Nodes = rt_cluster:build_cluster(Vsns),
 
     seed_cluster(Nodes),
 

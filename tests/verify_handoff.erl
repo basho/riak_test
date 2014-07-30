@@ -126,11 +126,11 @@ assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName)
 
 %% For some testing purposes, making these limits smaller is helpful:
 deploy_test_nodes(false, N) -> 
-    rt:deploy_nodes(N);
+    rt_cluster:deploy_nodes(N);
 deploy_test_nodes(true,  N) ->
     lager:info("WARNING: Using turbo settings for testing."),
     Config = [{riak_core, [{forced_ownership_handoff, 8},
                            {handoff_concurrency, 8},
                            {vnode_inactivity_timeout, 1000},
                            {gossip_limit, {10000000, 60000}}]}],
-    rt:deploy_nodes(N, Config).
+    rt_cluster:deploy_nodes(N, Config).

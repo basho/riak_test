@@ -36,7 +36,7 @@ map_never_notfound(Object, _, _) when Object /= {error, notfound} ->
     [ok].
 
 confirm() ->
-    Nodes = rt:build_cluster(1),
+    Nodes = rt_cluster:build_cluster(1),
 
     rt:load_modules_on_nodes([?MODULE], Nodes),
     

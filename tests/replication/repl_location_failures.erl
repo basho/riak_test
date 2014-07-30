@@ -36,7 +36,7 @@
 confirm() ->
     rt_config:set_advanced_conf(all, ?CONF(5)),
 
-    [ANodes, BNodes] = rt:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
@@ -99,7 +99,7 @@ confirm() ->
     repl_util:validate_completed_fullsync(LeaderA, BFirst, "B", 1,
                                           ?NUM_KEYS, ?TEST_BUCKET),
 
-    rt:clean_cluster(ANodes),
-    rt:clean_cluster(BNodes),
+    rt_cluster:clean_cluster(ANodes),
+    rt_cluster:clean_cluster(BNodes),
 
     pass.

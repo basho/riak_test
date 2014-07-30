@@ -57,7 +57,7 @@ cleanup({ClusterNodes, _Types, PBA, PBB}, CleanCluster) ->
     {_, _, ANodes, BNodes} = ClusterNodes,
     case CleanCluster of
         true ->
-            rt:clean_cluster(ANodes ++ BNodes);
+            rt_cluster:clean_cluster(ANodes ++ BNodes);
         false ->
             ok
     end.
@@ -339,10 +339,10 @@ cluster_conf() ->
     ].
 
 deploy_nodes(NumNodes, current) ->
-    rt:deploy_nodes(NumNodes, cluster_conf());
+    rt_cluster:deploy_nodes(NumNodes, cluster_conf());
 deploy_nodes(_, mixed) ->
     Conf = cluster_conf(),
-    rt:deploy_nodes([{current, Conf}, {previous, Conf}]).
+    rt_cluster:deploy_nodes([{current, Conf}, {previous, Conf}]).
 
 %% @doc Create two clusters of 1 node each and connect them for replication:
 %%      Cluster "A" -> cluster "B"

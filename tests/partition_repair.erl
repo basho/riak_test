@@ -72,7 +72,7 @@ confirm() ->
             %%      [{"./log/console.log",debug,10485760,"$D0",5}]}]}]}
            ],
 
-    Nodes = rt:build_cluster(NumNodes, Conf),
+    Nodes = rt_cluster:build_cluster(NumNodes, Conf),
 
     case NVal of
         undefined ->
@@ -120,7 +120,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     %% kill the partition data
     Path = DataSuffix ++ "/" ++ integer_to_list(Partition),
     lager:info("Killing data for ~p on ~p at ~s", [Partition, Node, Path]),
-    rt:clean_data_dir([Node], Path),
+    rt_cluster:clean_data_dir([Node], Path),
 
     %% force restart of vnode since some data is kept in memory
     lager:info("Restarting ~p vnode for ~p on ~p", [Service, Partition, Node]),

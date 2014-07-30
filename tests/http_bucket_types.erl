@@ -9,7 +9,7 @@
 confirm() ->
     application:start(ibrowse),
     lager:info("Deploy some nodes"),
-    Nodes = rt:build_cluster(4, [], [
+    Nodes = rt_cluster:build_cluster(4, [], [
                                      {riak_core, [{default_bucket_props,
                                                    [{n_val, 2}]}]}]),
     Node = hd(Nodes),

@@ -64,7 +64,7 @@ simple_test_() ->
     % +-----------+    +--------+    +-----+
     {timeout, timeout(90), {setup, fun() ->
         Conf = conf(),
-        [BeginNode, MiddleNode, EndNode] = Nodes = rt:deploy_nodes(3, Conf),
+        [BeginNode, MiddleNode, EndNode] = Nodes = rt_cluster:deploy_nodes(3, Conf),
         repl_util:make_cluster([BeginNode]),
         repl_util:make_cluster([MiddleNode]),
         repl_util:make_cluster([EndNode]),
@@ -78,7 +78,7 @@ simple_test_() ->
     fun(State) ->
         Nodes = [State#simple_state.beginning, State#simple_state.middle,
             State#simple_state.ending],
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(State) -> [
 
@@ -161,7 +161,7 @@ big_circle_test_() ->
     %     +---+
     {timeout, timeout(130), {setup, fun() ->
         Conf = conf(),
-        Nodes = rt:deploy_nodes(6, Conf),
+        Nodes = rt_cluster:deploy_nodes(6, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["1", "2", "3", "4", "5", "6"],
@@ -181,7 +181,7 @@ big_circle_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
@@ -262,7 +262,7 @@ circle_test_() ->
     % +-------+    +-----+
     {timeout, timeout(30), {setup, fun() ->
         Conf = conf(),
-        [One, Two, Three] = Nodes = rt:deploy_nodes(3, Conf),
+        [One, Two, Three] = Nodes = rt_cluster:deploy_nodes(3, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["one", "two", "three"],
@@ -280,7 +280,7 @@ circle_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
@@ -333,7 +333,7 @@ pyramid_test_() ->
 
     {timeout, timeout(70), {setup, fun() ->
         Conf = conf(),
-        [Top, Left, Left2, Right, Right2] = Nodes = rt:deploy_nodes(5, Conf),
+        [Top, Left, Left2, Right, Right2] = Nodes = rt_cluster:deploy_nodes(5, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["top", "left", "left2", "right", "right2"],
@@ -349,7 +349,7 @@ pyramid_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
@@ -387,7 +387,7 @@ diamond_test_() ->
     %                     +--------+
     {timeout, timeout(180), {setup, fun() ->
         Conf = conf(),
-        [Top, MidLeft, MidRight, Bottom] = Nodes = rt:deploy_nodes(4, Conf),
+        [Top, MidLeft, MidRight, Bottom] = Nodes = rt_cluster:deploy_nodes(4, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         Names = ["top", "midleft", "midright", "bottom"],
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
@@ -403,7 +403,7 @@ diamond_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
@@ -479,7 +479,7 @@ circle_and_spurs_test_() ->
     % +-----------+    +------+           +------+    +-----------+
     {timeout, timeout(170), {setup, fun() ->
         Conf = conf(),
-        [North, East, West, NorthSpur, EastSpur, WestSpur] = Nodes = rt:deploy_nodes(6, Conf),
+        [North, East, West, NorthSpur, EastSpur, WestSpur] = Nodes = rt_cluster:deploy_nodes(6, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         Names = ["north", "east", "west", "north_spur", "east_spur", "west_spur"],
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
@@ -493,7 +493,7 @@ circle_and_spurs_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
@@ -580,7 +580,7 @@ mixed_version_clusters_test_dep() ->
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
-        Nodes = rt:deploy_nodes(DeployConfs),
+        Nodes = rt_cluster:deploy_nodes(DeployConfs),
         [N1, N2, N3, N4, N5, N6] =  Nodes,
         case rpc:call(N1, application, get_key, [riak_core, vsn]) of
             % this is meant to test upgrading from early BNW aka
@@ -611,7 +611,7 @@ mixed_version_clusters_test_dep() ->
             {too_old, Ns} -> Ns;
             _ -> MaybeNodes
         end,
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun({too_old, _Nodes}) -> [];
        ([N1, N2, N3, N4, N5, N6] = Nodes) -> [
@@ -793,7 +793,7 @@ new_to_old_test_dep() ->
     {timeout, timeout(105), {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
-        [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
+        [New1, Old2, New3] = Nodes = rt_cluster:deploy_nodes(DeployConfs),
         case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
             % this is meant to test upgrading from early BNW aka
             % Brave New World aka Advanced Repl aka version 3 repl to
@@ -817,7 +817,7 @@ new_to_old_test_dep() ->
             {too_old, Ns} -> Ns;
             _ -> MaybeNodes
         end,
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun({too_old, _}) -> [];
        ([New1, Old2, New3]) -> [
@@ -873,7 +873,7 @@ new_to_old_test_dep() ->
 ensure_ack_test_() ->
     {timeout, timeout(130), {setup, fun() ->
         Conf = conf(),
-        [LeaderA, LeaderB] = Nodes = rt:deploy_nodes(2, Conf),
+        [LeaderA, LeaderB] = Nodes = rt_cluster:deploy_nodes(2, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["A", "B"],
@@ -888,7 +888,7 @@ ensure_ack_test_() ->
         [LeaderA, LeaderB]
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
 
     fun([LeaderA, LeaderB] = _Nodes) -> [
@@ -928,7 +928,7 @@ ensure_unacked_and_queue() ->
 
 ensure_unacked_and_queue_test_() ->
     {timeout, timeout(2300), {setup, fun() ->
-        Nodes = rt:deploy_nodes(6, conf()),
+        Nodes = rt_cluster:deploy_nodes(6, conf()),
         {N123, N456} = lists:split(3, Nodes),
         repl_util:make_cluster(N123),
         repl_util:make_cluster(N456),
@@ -943,8 +943,8 @@ ensure_unacked_and_queue_test_() ->
         {N123, N456}
     end,
     maybe_skip_teardown(fun({N123, N456}) ->
-        rt:clean_cluster(N123),
-        rt:clean_cluster(N456)
+        rt_cluster:clean_cluster(N123),
+        rt_cluster:clean_cluster(N456)
     end),
     fun({N123, N456}) -> [
 

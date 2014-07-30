@@ -22,7 +22,7 @@ confirm() ->
              ]}
     ],
     rt_config:set_advanced_conf(all, Conf),
-    [ANodes, BNodes] = rt:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
     replication(ANodes, BNodes, false),
     pass.
 

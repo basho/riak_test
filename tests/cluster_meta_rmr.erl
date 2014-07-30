@@ -59,10 +59,10 @@ run(NumNodes, NumRounds, StableRounds) ->
     exit(Pid, kill),
     %% start all the down nodes so we can clean them :(
     [rt:start(Node) || Node <- DownNodes],
-    rt:clean_cluster(AllNodes).
+    rt_cluster:clean_cluster(AllNodes).
 
 setup_nodes(NumNodes) ->
-    Nodes = rt:build_cluster(NumNodes),
+    Nodes = rt_cluster:build_cluster(NumNodes),
     [begin
          ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
          ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),

@@ -39,7 +39,7 @@
 %% @doc riak_test callback
 confirm() ->
     lager:info("Build ~b node cluster", [?NODE_COUNT]),
-    Nodes = rt:build_cluster(?NODE_COUNT),
+    Nodes = rt_cluster:build_cluster(?NODE_COUNT),
 
     verify_raw(Nodes),
     verify_fsm(Nodes),

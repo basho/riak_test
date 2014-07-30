@@ -31,7 +31,7 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    [Node1] = rt:build_cluster(1,
+    [Node1] = rt_cluster:build_cluster(1,
                                [{riak_kv,
                                  [{anti_entropy, {off, []}},
                                   {anti_entropy_build_limit, {100, 500}},

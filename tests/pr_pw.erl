@@ -8,7 +8,7 @@
 confirm() ->
     application:start(inets),
     lager:info("Deploy some nodes"),
-    Nodes = rt:build_cluster(4),
+    Nodes = rt_cluster:build_cluster(4),
 
     %% calculate the preflist for foo/bar
     {ok, Ring} = rpc:call(hd(Nodes), riak_core_ring_manager, get_my_ring, []),

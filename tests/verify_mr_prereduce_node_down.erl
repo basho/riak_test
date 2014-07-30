@@ -44,7 +44,7 @@
 confirm() ->
     NodeCount = 4,
     lager:info("Build ~b-node cluster", [NodeCount]),
-    [Primary,ToKill|_] = rt:build_cluster(NodeCount),
+    [Primary,ToKill|_] = rt_cluster:build_cluster(NodeCount),
 
     %% We need one node down for this test
     rt:stop(ToKill),

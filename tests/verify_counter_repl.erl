@@ -63,7 +63,7 @@ make_clusters() ->
     Conf = [{riak_repl, [{fullsync_on_connect, false},
                          {fullsync_interval, disabled}]},
            {riak_core, [{default_bucket_props, [{allow_mult, true}]}]}],
-    Nodes = rt:deploy_nodes(6, Conf),
+    Nodes = rt_cluster:deploy_nodes(6, Conf),
     {ClusterA, ClusterB} = lists:split(3, Nodes),
     A = make_cluster(ClusterA, "A"),
     B = make_cluster(ClusterB, "B"),

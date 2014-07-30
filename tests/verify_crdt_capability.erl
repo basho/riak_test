@@ -38,7 +38,7 @@ confirm() ->
     %% Upgrade nodes
     %% Get put on all nodes
     Config = [],
-    [Previous, Current]=Nodes = rt:build_cluster([{previous, Config}, {current, Config}]),
+    [Previous, Current]=Nodes = rt_cluster:build_cluster([{previous, Config}, {current, Config}]),
     ?assertEqual(ok, rt:wait_until_capability(Current, {riak_kv, crdt}, [pncounter])),
 
     verify_counter_converge:set_allow_mult_true(Nodes),

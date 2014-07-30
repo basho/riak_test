@@ -64,7 +64,7 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    Nodes = rt:build_cluster(?NUM_NODES, ?CFG),
+    Nodes = rt_cluster:build_cluster(?NUM_NODES, ?CFG),
     verify_aae(Nodes),
     pass.
 
@@ -242,12 +242,12 @@ test_less_than_n_mods(Node, KeyValues) ->
 
 wipe_out_partition(Node, Partition) ->
     lager:info("Wiping out partition ~p in node ~p", [Partition, Node]),
-    rt:clean_data_dir(Node, dir_for_partition(Partition)),
+    rt_cluster:clean_data_dir(Node, dir_for_partition(Partition)),
     ok.
 
 wipe_out_aae_data(Node, Partition) ->
     lager:info("Wiping out AAE data for partition ~p in node ~p", [Partition, Node]),
-    rt:clean_data_dir(Node, "anti_entropy/"++integer_to_list(Partition)),
+    rt_cluster:clean_data_dir(Node, "anti_entropy/"++integer_to_list(Partition)),
     ok.
 
 base_dir_for_backend(undefined) ->

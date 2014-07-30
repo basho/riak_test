@@ -33,7 +33,7 @@ confirm() ->
               {riak_kv, [{fsm_limit, undefined},
                          {storage_backend, riak_kv_memory_backend},
                          {anti_entropy, {off, []}}]}],
-    Nodes = rt:build_cluster(2, Config),
+    Nodes = rt_cluster:build_cluster(2, Config),
     [_Node1, Node2] = Nodes,
 
     Ring = rt:get_ring(Node2),

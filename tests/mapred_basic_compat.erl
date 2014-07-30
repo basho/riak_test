@@ -41,7 +41,7 @@
 -define(BUCKET_TYPE, <<"mytype">>).
 
 confirm() ->
-    Nodes = rt:build_cluster(3),
+    Nodes = rt_cluster:build_cluster(3),
 
     [Node1|_] = Nodes,
     %% create a new type

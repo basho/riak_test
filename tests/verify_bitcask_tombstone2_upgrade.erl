@@ -19,7 +19,7 @@ confirm() ->
     % Configure for fast merge checks
     Config = [{riak_kv, [{bitcask_merge_check_interval, 2000}]},
               {bitcask, [{max_file_size, 100}]}],
-    Nodes = rt:build_cluster([{OldVsn, Config}]),
+    Nodes = rt_cluster:build_cluster([{OldVsn, Config}]),
     verify_bitcask_tombstone2_upgrade(Nodes),
     pass.
 

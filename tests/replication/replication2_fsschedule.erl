@@ -99,7 +99,7 @@ test_multiple_schedules() ->
     lager:info("Waiting for fullsyncs"),
     wait_until_fullsyncs(LeaderA, "B", 5),
     wait_until_fullsyncs(LeaderA, "C", 5),
-    rt:clean_cluster(AllNodes),
+    rt_cluster:clean_cluster(AllNodes),
     pass.
 
 test_single_schedule() ->
@@ -118,7 +118,7 @@ test_single_schedule() ->
     lager:info("Waiting for fullsyncs"),
     wait_until_fullsyncs(LeaderA, "B", 10),
     wait_until_fullsyncs(LeaderA, "C", 10),
-    rt:clean_cluster(AllNodes),
+    rt_cluster:clean_cluster(AllNodes),
     pass.
 
 test_mixed_12_13() ->
@@ -152,7 +152,7 @@ test_mixed_12_13() ->
     wait_until_fullsyncs(LeaderA, "B", 3),
     wait_until_fullsyncs(LeaderA, "C", 3),
     wait_until_12_fs_complete(LeaderA, 9),
-    rt:clean_cluster(AllNodes),
+    rt_cluster:clean_cluster(AllNodes),
     pass.
 
 

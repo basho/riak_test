@@ -29,7 +29,7 @@
 
 confirm() ->
     %% Build a small cluster
-    [Node1, _Node2] = rt:build_cluster(2, []),
+    [Node1, _Node2] = rt_cluster:build_cluster(2, []),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
     %% Install riaknostic for Riak versions below 1.3.0

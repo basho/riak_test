@@ -29,7 +29,7 @@
 confirm() ->
     inets:start(),
 
-    Nodes = rt:build_cluster(3),
+    Nodes = rt_cluster:build_cluster(3),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
     RiakHttp = rt:http_url(hd(Nodes)),

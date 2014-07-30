@@ -55,7 +55,7 @@ confirm() ->
     end,
     
     lager:info("Deploying Riak ~p cluster", [OldVsn]),
-    Nodes = rt:build_cluster([OldVsn || _ <- lists:seq(1,Count)]),
+    Nodes = rt_cluster:build_cluster([OldVsn || _ <- lists:seq(1,Count)]),
     lists:foldl(fun(Node, Upgraded) ->
                         rt:upgrade(Node, current),
                         Upgraded2 = Upgraded ++ [Node],
