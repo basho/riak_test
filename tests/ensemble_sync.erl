@@ -75,7 +75,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     Options = [{timeout, 2000}],
 
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [manual]),
-    Part = rt:partition(Nodes -- Partitioned, Partitioned),
+    Part = rt_node:partition(Nodes -- Partitioned, Partitioned),
     ensemble_util:wait_until_stable(Node, Quorum),
 
     %% Write data while minority is partitioned
@@ -84,7 +84,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
 
     lager:info("Read keys to verify they exist"),
     [rt_pb:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys],
-    rt:heal(Part),
+    rt_node:heal(Part),
 
     %% Suspend desired number of valid vnodes
     S1 = [vnode_util:suspend_vnode(VNode, VIdx) || {VIdx, VNode} <- SuspendVN],

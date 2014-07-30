@@ -70,7 +70,7 @@ confirm() ->
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
 
     lager:info("Restart ~p and re-join to cluster", [Node2]),
-    rt:start(Node2),
+    rt_node:start(Node2),
     stage_join(Node2, Node1),
     ?assertEqual(ok, rt:wait_until_all_members(Nodes)),
 

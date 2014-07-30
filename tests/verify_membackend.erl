@@ -89,7 +89,7 @@ check_leave_and_expiry(NodeA, NodeB) ->
     ?assertEqual(ok, rt:wait_until_nodes_ready([NodeA, NodeB])),
     rt:wait_until_no_pending_changes([NodeA, NodeB]),
 
-    rt:leave(NodeB),
+    rt_node:leave(NodeB),
     rt:wait_until_unpingable(NodeB),
 
     ?assertEqual([], rt:systest_read(NodeA, 1, 100, ?BUCKET, 2)),

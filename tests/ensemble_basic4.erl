@@ -51,7 +51,7 @@ confirm() ->
     PBC = rt_pb:pbc(Node),
 
     lager:info("Partitioning quorum minority: ~p", [Partitioned]),
-    Part = rt:partition(Nodes -- Partitioned, Partitioned),
+    Part = rt_node:partition(Nodes -- Partitioned, Partitioned),
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [manual]),
     ensemble_util:wait_until_stable(Node, Quorum),
 
@@ -62,6 +62,6 @@ confirm() ->
     [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     lager:info("Healing partition"),
-    rt:heal(Part),
+    rt_node:heal(Part),
 
     pass.

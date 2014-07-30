@@ -191,7 +191,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     log_to_nodes(AllNodes, "Testing master failover: stopping ~p", [LeaderA]),
 
     lager:info("Testing master failover: stopping ~p", [LeaderA]),
-    rt:stop(LeaderA),
+    rt_node:stop(LeaderA),
     rt:wait_until_unpingable(LeaderA),
     ASecond = hd(ANodes -- [LeaderA]),
     repl_util:wait_until_leader(ASecond),
@@ -217,7 +217,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     log_to_nodes(AllNodes, "Testing client failover: stopping ~p", [LeaderB]),
 
     lager:info("Testing client failover: stopping ~p", [LeaderB]),
-    rt:stop(LeaderB),
+    rt_node:stop(LeaderB),
     rt:wait_until_unpingable(LeaderB),
     BSecond = hd(BNodes -- [LeaderB]),
     repl_util:wait_until_leader(BSecond),
@@ -250,7 +250,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     log_to_nodes(AllNodes, "Test fullsync after restarting ~p", [LeaderA]),
 
     lager:info("Restarting down node ~p", [LeaderA]),
-    rt:start(LeaderA),
+    rt_node:start(LeaderA),
     rt:wait_until_pingable(LeaderA),
     repl_util:start_and_wait_until_fullsync_complete(LeaderA2),
 
@@ -305,7 +305,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Finished Joe's Section"),
 
     lager:info("Restarting down node ~p", [LeaderB]),
-    rt:start(LeaderB),
+    rt_node:start(LeaderB),
     rt:wait_until_pingable(LeaderB),
 
     lager:info("Nodes restarted"),
@@ -441,7 +441,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     lager:info("Stopping node ~p", [Target]),
 
-    rt:stop(Target),
+    rt_node:stop(Target),
     rt:wait_until_unpingable(Target),
 
     lager:info("Starting realtime"),
@@ -453,7 +453,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     lager:info("Restarting node ~p", [Target]),
 
-    rt:start(Target),
+    rt_node:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
     timer:sleep(5000),
@@ -475,7 +475,7 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
     spawn(fun() ->
                 timer:sleep(500),
                 lager:info("Stopping node ~p again", [Target]),
-                rt:stop(Target),
+                rt_node:stop(Target),
                 lager:info("Node stopped")
            end),
 
@@ -498,7 +498,7 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("pb_write_during_shutdown: Ensure node ~p is down before restart", [Target]),
     ?assertEqual(ok, rt:wait_until_unpingable(Target)),
 
-    rt:start(Target),
+    rt_node:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
     ReadErrors2 = rt:systest_read(Target, 1000, 11000, TestBucket, 2),
@@ -533,7 +533,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     spawn(fun() ->
                 timer:sleep(500),
                 lager:info("Stopping node ~p again", [Target]),
-                rt:stop(Target),
+                rt_node:stop(Target),
                 lager:info("Node stopped")
            end),
 
@@ -558,7 +558,7 @@ http_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("http: write_during_shutdown: Ensure node ~p is down before restart", [Target]),
     ?assertEqual(ok, rt:wait_until_unpingable(Target)),
 
-    rt:start(Target),
+    rt_node:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
     ReadErrors2 = http_read(C, 12000, 22000, TestBucket, 2),

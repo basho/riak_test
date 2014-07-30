@@ -31,7 +31,6 @@
 -export([
          admin/2,
          assert_nodes_agree_about_ownership/1,
-         async_start/1,
          attach/2,
          attach_direct/2,
          brutal_kill/1,
@@ -45,7 +44,6 @@
          connection_info/1,
          console/2,
          create_and_activate_bucket_type/3,
-         down/2,
          enable_search_hook/2,
          expect_in_log/2,
          get_deps/0,
@@ -54,38 +52,28 @@
          get_replica/5,
          get_ring/1,
          get_version/0,
-         heal/1,
          is_mixed_cluster/1,
          is_pingable/1,
-         join/2,
-         leave/1,
          load_modules_on_nodes/2,
          log_to_nodes/2,
          log_to_nodes/3,
          members_according_to/1,
          nearest_ringsize/1,
          owners_according_to/1,
-         partition/2,
          partitions_for_node/1,
          pmap/2,
          post_result/2,
          priv_dir/0,
-         remove/2,
          riak/2,
          riak_repl/2,
          rpc_get_env/2,
          setup_harness/2,
          setup_log_capture/1,
-         slow_upgrade/3,
          stream_cmd/1, stream_cmd/2,
          spawn_cmd/1,
          spawn_cmd/2,
          search_cmd/2,
-         start/1,
-         start_and_wait/1,
          status_of_according_to/2,
-         stop/1,
-         stop_and_wait/1,
          str/2,
          systest_read/2,
          systest_read/3,
@@ -95,8 +83,6 @@
          systest_write/3,
          systest_write/5,
          systest_write/6,
-         upgrade/2,
-         upgrade/3,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -195,101 +181,6 @@ connection_info(Node) when is_atom(Node) ->
 connection_info(Nodes) when is_list(Nodes) ->
     [ {Node, connection_info(Node)} || Node <- Nodes].
 
-
-%% @doc Start the specified Riak node
-start(Node) ->
-    ?HARNESS:start(Node).
-
-%% @doc Start the specified Riak `Node' and wait for it to be pingable
-start_and_wait(Node) ->
-    start(Node),
-    ?assertEqual(ok, wait_until_pingable(Node)).
-
-async_start(Node) ->
-    spawn(fun() -> start(Node) end).
-
-%% @doc Stop the specified Riak `Node'.
-stop(Node) ->
-    lager:info("Stopping riak on ~p", [Node]),
-    timer:sleep(10000), %% I know, I know!
-    ?HARNESS:stop(Node).
-    %%rpc:call(Node, init, stop, []).
-
-%% @doc Stop the specified Riak `Node' and wait until it is not pingable
-stop_and_wait(Node) ->
-    stop(Node),
-    ?assertEqual(ok, wait_until_unpingable(Node)).
-
-%% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
-upgrade(Node, NewVersion) ->
-    ?HARNESS:upgrade(Node, NewVersion).
-
-%% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
-%% the config based on entries in `Config'.
-upgrade(Node, NewVersion, Config) ->
-    ?HARNESS:upgrade(Node, NewVersion, Config).
-
-%% @doc Upgrade a Riak node to a specific version using the alternate
-%%      leave/upgrade/rejoin approach
-slow_upgrade(Node, NewVersion, Nodes) ->
-    lager:info("Perform leave/upgrade/join upgrade on ~p", [Node]),
-    lager:info("Leaving ~p", [Node]),
-    leave(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    upgrade(Node, NewVersion),
-    lager:info("Rejoin ~p", [Node]),
-    join(Node, hd(Nodes -- [Node])),
-    lager:info("Wait until all nodes are ready and there are no pending changes"),
-    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
-    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
-    ok.
-
-%% @doc Have `Node' send a join request to `PNode'
-join(Node, PNode) ->
-    R = rpc:call(Node, riak_core, join, [PNode]),
-    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
-    ?assertEqual(ok, R),
-    ok.
-
-%% @doc Have `Node' send a join request to `PNode'
-staged_join(Node, PNode) ->
-    R = rpc:call(Node, riak_core, staged_join, [PNode]),
-    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
-    ?assertEqual(ok, R),
-    ok.
-
-plan_and_commit(Node) ->
-    timer:sleep(500),
-    lager:info("planning and commiting cluster join"),
-    case rpc:call(Node, riak_core_claimant, plan, []) of
-        {error, ring_not_ready} ->
-            lager:info("plan: ring not ready"),
-            timer:sleep(100),
-            plan_and_commit(Node);
-        {ok, _, _} ->
-            lager:info("plan: done"),
-            do_commit(Node)
-    end.
-
-do_commit(Node) ->
-    case rpc:call(Node, riak_core_claimant, commit, []) of
-        {error, plan_changed} ->
-            lager:info("commit: plan changed"),
-            timer:sleep(100),
-            maybe_wait_for_changes(Node),
-            plan_and_commit(Node);
-        {error, ring_not_ready} ->
-            lager:info("commit: ring not ready"),
-            timer:sleep(100),
-            maybe_wait_for_changes(Node),
-            do_commit(Node);
-        {error,nothing_planned} ->
-            %% Assume plan actually committed somehow
-            ok;
-        ok ->
-            ok
-    end.
-
 maybe_wait_for_changes(Node) ->
     Ring = get_ring(Node),
     Changes = riak_core_ring:pending_changes(Ring),
@@ -303,43 +194,6 @@ maybe_wait_for_changes(Node) ->
        true ->
             ok = wait_until_no_pending_changes([Node])
     end.
-
-%% @doc Have the `Node' leave the cluster
-leave(Node) ->
-    R = rpc:call(Node, riak_core, leave, []),
-    lager:info("[leave] ~p: ~p", [Node, R]),
-    ?assertEqual(ok, R),
-    ok.
-
-%% @doc Have `Node' remove `OtherNode' from the cluster
-remove(Node, OtherNode) ->
-    ?assertEqual(ok,
-                 rpc:call(Node, riak_kv_console, remove, [[atom_to_list(OtherNode)]])).
-
-%% @doc Have `Node' mark `OtherNode' as down
-down(Node, OtherNode) ->
-    rpc:call(Node, riak_kv_console, down, [[atom_to_list(OtherNode)]]).
-
-%% @doc partition the `P1' from `P2' nodes
-%%      note: the nodes remained connected to riak_test@local,
-%%      which is how `heal/1' can still work.
-partition(P1, P2) ->
-    OldCookie = rpc:call(hd(P1), erlang, get_cookie, []),
-    NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
-    [true = rpc:call(N, erlang, set_cookie, [N, NewCookie]) || N <- P1],
-    [[true = rpc:call(N, erlang, disconnect_node, [P2N]) || N <- P1] || P2N <- P2],
-    wait_until_partitioned(P1, P2),
-    {NewCookie, OldCookie, P1, P2}.
-
-%% @doc heal the partition created by call to `partition/2'
-%%      `OldCookie' is the original shared cookie
-heal({_NewCookie, OldCookie, P1, P2}) ->
-    Cluster = P1 ++ P2,
-    % set OldCookie on P1 Nodes
-    [true = rpc:call(N, erlang, set_cookie, [N, OldCookie]) || N <- P1],
-    wait_until_connected(Cluster),
-    {_GN, []} = rpc:sbcast(Cluster, riak_core_node_watcher, broadcast),
-    ok.
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd) ->

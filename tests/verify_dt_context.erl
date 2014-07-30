@@ -72,7 +72,7 @@ confirm() ->
 
     lager:info("Partition cluster in two."),
 
-    PartInfo = rt:partition([N1], [N2]),
+    PartInfo = rt_node:partition([N1], [N2]),
 
     lager:info("Modify data on side 1"),
     %% Modify one side
@@ -135,7 +135,7 @@ confirm() ->
     %% Check both sides
     %% heal
     lager:info("Heal and check merged values"),
-    ok = rt:heal(PartInfo),
+    ok = rt_node:heal(PartInfo),
     ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree

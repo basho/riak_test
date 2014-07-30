@@ -25,5 +25,5 @@ confirm() ->
     lager:info("Deploy some nodes"),
     Nodes = rt_cluster:deploy_nodes(2),
     lager:info("Stop the nodes"),
-    [rt:stop(Node) || Node <- Nodes],
+    [rt_node:stop(Node) || Node <- Nodes],
     pass.

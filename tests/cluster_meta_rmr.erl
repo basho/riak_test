@@ -58,7 +58,7 @@ run(NumNodes, NumRounds, StableRounds) ->
     calc_stuff(AllNodes, NumNodes, NumRounds),
     exit(Pid, kill),
     %% start all the down nodes so we can clean them :(
-    [rt:start(Node) || Node <- DownNodes],
+    [rt_node:start(Node) || Node <- DownNodes],
     rt_cluster:clean_cluster(AllNodes).
 
 setup_nodes(NumNodes) ->
@@ -108,7 +108,7 @@ run_rounds(Round, StableRound, SendFun, ConsistentFun, [SenderNode | _]=UpNodes,
 fail_node(Round, OtherNodes) ->
     Failed = lists:nth(random:uniform(length(OtherNodes)), OtherNodes),
     lager:info("round: ~p (unstable): shutting down ~p", [Round, Failed]),
-    rt:stop(Failed),
+    rt_node:stop(Failed),
     {Failed, lists:delete(Failed, OtherNodes)}.
 
 calc_stuff(AllNodes, NumNodes, NumRounds) ->
