@@ -612,5 +612,5 @@ write_to_cluster(Node, Start, End) ->
 %%      of errors.
 read_from_cluster(Node, Start, End, Errors) ->
     lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
-    Res2 = rt:systest_read(Node, Start, End, ?TEST_BUCKET, 1),
+    Res2 = rt_systest:read(Node, Start, End, ?TEST_BUCKET, 1),
     ?assertEqual(Errors, length(Res2)).

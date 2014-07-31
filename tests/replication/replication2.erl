@@ -131,7 +131,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             %% check that the keys we wrote initially aren't replicated yet, because
             %% we've disabled fullsync_on_connect
             lager:info("Check keys written before repl was connected are not present"),
-            Res2 = rt:systest_read(BFirst, 1, 100, TestBucket, 2),
+            Res2 = rt_systest:read(BFirst, 1, 100, TestBucket, 2),
             ?assertEqual(100, length(Res2)),
 
             log_to_nodes(AllNodes, "Test fullsync with leader ~p", [LeaderA]),
@@ -351,16 +351,16 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             FullsyncOnly, 2)),
 
     lager:info("Check the fullsync only bucket didn't replicate the writes"),
-    Res6 = rt:systest_read(BSecond, 1, 100, FullsyncOnly, 2),
+    Res6 = rt_systest:read(BSecond, 1, 100, FullsyncOnly, 2),
     ?assertEqual(100, length(Res6)),
 
     lager:info("Check the realtime only bucket that was written to offline "
         "isn't replicated"),
-    Res7 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
+    Res7 = rt_systest:read(BSecond, 1, 100, RealtimeOnly, 2),
     ?assertEqual(100, length(Res7)),
 
     lager:info("Check the {repl, false} bucket didn't replicate"),
-    Res8 = rt:systest_read(BSecond, 1, 100, NoRepl, 2),
+    Res8 = rt_systest:read(BSecond, 1, 100, NoRepl, 2),
     ?assertEqual(100, length(Res8)),
 
     %% do a fullsync, make sure that fullsync_only is replicated, but
@@ -372,7 +372,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             FullsyncOnly, 2)),
 
     lager:info("Check realtime only bucket didn't replicate"),
-    Res10 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
+    Res10 = rt_systest:read(BSecond, 1, 100, RealtimeOnly, 2),
     ?assertEqual(100, length(Res10)),
 
     lager:info("Write 100 more keys into realtime only bucket on ~p",
@@ -387,11 +387,11 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             RealtimeOnly, 2)),
 
     lager:info("Check the older keys in the realtime bucket did not replicate"),
-    Res12 = rt:systest_read(BSecond, 1, 100, RealtimeOnly, 2),
+    Res12 = rt_systest:read(BSecond, 1, 100, RealtimeOnly, 2),
     ?assertEqual(100, length(Res12)),
 
     lager:info("Check {repl, false} bucket didn't replicate"),
-    Res13 = rt:systest_read(BSecond, 1, 100, NoRepl, 2),
+    Res13 = rt_systest:read(BSecond, 1, 100, NoRepl, 2),
     ?assertEqual(100, length(Res13)),
 
     log_to_nodes(AllNodes, "Testing offline realtime queueing"),
@@ -491,7 +491,7 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
     lager:info("got ~p write failures", [length(WriteErrors)]),
     timer:sleep(3000),
     lager:info("checking number of read failures on secondary cluster"),
-    ReadErrors = rt:systest_read(BSecond, 1000, 11000, TestBucket, 2),
+    ReadErrors = rt_systest:read(BSecond, 1000, 11000, TestBucket, 2),
     lager:info("got ~p read failures", [length(ReadErrors)]),
 
     %% ensure node is down before we try to start it up again.
@@ -501,7 +501,7 @@ pb_write_during_shutdown(Target, BSecond, TestBucket) ->
     rt_node:start(Target),
     rt:wait_until_pingable(Target),
     rt:wait_for_service(Target, riak_repl),
-    ReadErrors2 = rt:systest_read(Target, 1000, 11000, TestBucket, 2),
+    ReadErrors2 = rt_systest:read(Target, 1000, 11000, TestBucket, 2),
     lager:info("got ~p read failures on ~p", [length(ReadErrors2), Target]),
     case length(WriteErrors) >= length(ReadErrors) of
         true ->

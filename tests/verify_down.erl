@@ -28,7 +28,7 @@ confirm() ->
 
     %% Join node2 to node1 and wait for cluster convergence
     lager:info("Join ~p to ~p", [Node2, Node1]),
-    rt:join(Node2, Node1),
+    rt_node:join(Node2, Node1),
     ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node1, Node2])),
     ?assertEqual(ok, rt:wait_until_no_pending_changes([Node1, Node2])),
 
@@ -40,7 +40,7 @@ confirm() ->
 
     %% Join node3 to node1
     lager:info("Join ~p to ~p", [Node3, Node1]),
-    rt:join(Node3, Node1),
+    rt_node:join(Node3, Node1),
     ?assertEqual(ok, rt:wait_until_all_members(Remaining, [Node3])),
 
     %% Ensure node3 remains in the joining state

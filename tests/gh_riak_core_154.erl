@@ -35,14 +35,14 @@ confirm() ->
     lager:info("Write data while ~p is offline", [Node2]),
     rt_node:stop(Node2),
     rt:wait_until_unpingable(Node2),
-    ?assertEqual([], rt:systest_write(Node1, 1000, 3)),
+    ?assertEqual([], rt_systest:write(Node1, 1000, 3)),
 
     lager:info("Verify that ~p is missing data", [Node2]),
     rt_node:start(Node2),
     rt_node:stop(Node1),
     rt:wait_until_unpingable(Node1),
     ?assertMatch([{_,{error,notfound}}|_],
-                 rt:systest_read(Node2, 1000, 3)),
+                 rt_systest:read(Node2, 1000, 3)),
 
     lager:info("Restart ~p and wait for handoff to occur", [Node1]),
     rt_node:start(Node1),
@@ -51,7 +51,7 @@ confirm() ->
 
     lager:info("Verify that ~p has all data", [Node2]),
     rt_node:stop(Node1),
-    ?assertEqual([], rt:systest_read(Node2, 1000, 3)),
+    ?assertEqual([], rt_systest:read(Node2, 1000, 3)),
 
     lager:info("gh_riak_core_154: passed"),
     pass.

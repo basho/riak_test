@@ -70,7 +70,7 @@ confirm() ->
 
     %% write some more data (make sure flag doesn't "roll back" on restart
     lager:info("writing some more data"),
-    rt:systest_write(Node, 10, 1),
+    rt_systest:write(Node, 10, 1),
 
     lager:info("restarting node"),
     rt_node:stop_and_wait(Node),
