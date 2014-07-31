@@ -57,7 +57,7 @@ make_cluster(Nodes) ->
     [First|Rest] = Nodes,
     ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
     [rt:wait_for_service(N, riak_kv) || N <- Nodes],
-    [rt:join(Node, First) || Node <- Rest],
+    [rt_node:join(Node, First) || Node <- Rest],
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)).
 
 name_cluster(Node, Name) ->
@@ -197,10 +197,10 @@ wait_until_fullsync_stopped(SourceLeader) ->
 wait_for_reads(Node, Start, End, Bucket, R) ->
     rt:wait_until(Node,
         fun(_) ->
-                Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
+                Reads = rt_systest:read(Node, Start, End, Bucket, R, <<>>, true),
                 Reads == []
         end),
-    Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
+    Reads = rt_systest:read(Node, Start, End, Bucket, R, <<>>, true),
     lager:info("Reads: ~p", [Reads]),
     length(Reads).
 
@@ -456,14 +456,14 @@ stop_realtime(Node, Cluster) ->
     ?assertEqual(ok, Res).
 
 do_write(Node, Start, End, Bucket, W) ->
-    case rt:systest_write(Node, Start, End, Bucket, W) of
+    case rt_systest:write(Node, Start, End, Bucket, W) of
         [] ->
             [];
         Errors ->
             lager:warning("~p errors while writing: ~p",
                 [length(Errors), Errors]),
             timer:sleep(1000),
-            lists:flatten([rt:systest_write(Node, S, S, Bucket, W) ||
+            lists:flatten([rt_systest:write(Node, S, S, Bucket, W) ||
                     {S, _Error} <- Errors])
     end.
 
@@ -573,7 +573,7 @@ read_from_cluster(Node, Start, End, Bucket, Errors) ->
 %%      of errors.
 read_from_cluster(Node, Start, End, Bucket, Errors, Quorum) ->
     lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
-    Res2 = rt:systest_read(Node, Start, End, Bucket, Quorum, <<>>, true),
+    Res2 = rt_systest:read(Node, Start, End, Bucket, Quorum, <<>>, true),
     ?assertEqual(Errors, length(Res2)).
 
 %% @doc Assert we can perform one fullsync cycle, and that the number of

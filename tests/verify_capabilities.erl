@@ -69,7 +69,7 @@ confirm() ->
     ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
     lager:info("Building current + ~s cluster", [Legacy]),
-    rt:join(LNode, CNode),
+    rt_node:join(LNode, CNode),
     ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode])),
     ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
@@ -102,7 +102,7 @@ confirm() ->
             restart_capability_server(CNode),
 
             lager:info("Adding previous node to cluster"),
-            rt:join(PNode, LNode),
+            rt_node:join(PNode, LNode),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
             ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
@@ -139,7 +139,7 @@ confirm() ->
         _ ->
             lager:info("Legacy Riak not available, skipping legacy tests"),
             lager:info("Adding previous node to cluster"),
-            rt:join(PNode, LNode),
+            rt_node:join(PNode, LNode),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
             ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode))
     end,

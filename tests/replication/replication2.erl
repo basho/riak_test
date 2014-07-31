@@ -148,7 +148,7 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) 
             %% Check that the keys we wrote initially aren't replicated yet as
             %% fullsync_on_connect is disabled.
             lager:info("Check keys written before repl was connected are not present"),
-            Res2 = rt:systest_read(BFirst, 1, 100, TestBucket, 2),
+            Res2 = rt_systest:read(BFirst, 1, 100, TestBucket, 2),
             ?assertEqual(100, length(Res2)),
 
             log_to_nodes(ANodes++BNodes, "Test fullsync with leader ~p", [LeaderA]),

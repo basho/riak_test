@@ -116,8 +116,8 @@ seed_cluster(Nodes=[Node1|_]) ->
 
     %% For List Keys
     lager:info("Writing 100 keys to ~p", [Node1]),
-    rt:systest_write(Node1, 100, 3),
-    ?assertEqual([], rt:systest_read(Node1, 100, 1)),
+    rt_systest:write(Node1, 100, 3),
+    ?assertEqual([], rt_systest:read(Node1, 100, 1)),
 
     seed(Node1, 0, 100, fun(Key) ->
                                 Bin = iolist_to_binary(io_lib:format("~p", [Key])),

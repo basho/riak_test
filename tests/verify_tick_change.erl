@@ -63,11 +63,11 @@ make_common() ->
 
 write_stuff(Nodes, Start, End, Bucket, W, Common) ->
     Nd = lists:nth(length(Nodes), Nodes),
-    [] = rt:systest_write(Nd, Start, End, Bucket, W, Common).
+    [] = rt_systest:write(Nd, Start, End, Bucket, W, Common).
 
 read_stuff(Nodes, Start, End, Bucket, W, Common) ->
     Nd = lists:nth(length(Nodes), Nodes),
-    [] = rt:systest_read(Nd, Start, End, Bucket, W, Common).
+    [] = rt_systest:read(Nd, Start, End, Bucket, W, Common).
 
 is_set_net_ticktime_done(Nodes, Time) ->
     case lists:usort([(catch rpc:call(Node, net_kernel, get_net_ticktime,[]))

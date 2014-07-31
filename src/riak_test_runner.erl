@@ -159,7 +159,7 @@ compose_confirm_fun({ConfirmMod, ConfirmFun},
             InitialResult = ConfirmMod:ConfirmFun(SetupData, MetaData),
             OtherResults = [begin
                                 ensure_all_nodes_running(Nodes),
-                                _ = rt:upgrade(Node, UpgradeVersion),
+                                _ = rt_node:upgrade(Node, UpgradeVersion),
                                 _ = rt_cluster:maybe_wait_for_transfers(Nodes, WaitForTransfers),
                                 ConfirmMod:ConfirmFun(SetupData, MetaData)
                             end || Node <- Nodes],

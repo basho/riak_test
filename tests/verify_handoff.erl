@@ -58,11 +58,11 @@ run_test(TestMode, NTestItems, NTestNodes, Encoding) ->
      || N <- Nodes],
 
     lager:info("Populating root node."),
-    rt:systest_write(RootNode, NTestItems),
+    rt_systest:write(RootNode, NTestItems),
     %% write one object with a bucket type
     rt_bucket_types:create_and_activate_bucket_type(RootNode, <<"type">>, []),
     %% allow cluster metadata some time to propogate
-    rt:systest_write(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
+    rt_systest:write(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
 
     %% Test handoff on each node:
     lager:info("Testing handoff for cluster."),
@@ -111,16 +111,16 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     rt:wait_for_service(NewNode, riak_kv),
 
     lager:info("Joining new node with cluster."),
-    rt:join(NewNode, RootNode),
+    rt_node:join(NewNode, RootNode),
     ?assertEqual(ok, rt_node:wait_until_nodes_ready([RootNode, NewNode])),
     rt:wait_until_no_pending_changes([RootNode, NewNode]),
 
     %% See if we get the same data back from the joined node that we added to the root node.
     %%  Note: systest_read() returns /non-matching/ items, so getting nothing back is good:
     lager:info("Validating data after handoff:"),
-    Results = rt:systest_read(NewNode, NTestItems),
-    ?assertEqual(0, length(Results)),
-    Results2 = rt:systest_read(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
+    Results = rt_systest:read(NewNode, NTestItems), 
+    ?assertEqual(0, length(Results)), 
+    Results2 = rt_systest:read(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
     ?assertEqual(0, length(Results2)),
     lager:info("Data looks ok.").
 

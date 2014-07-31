@@ -94,7 +94,7 @@ confirm() ->
     Pid = rt_pb:pbc(Node1),
 
     JMX3 = jmx_dump(JMXDumpCmd),
-    rt:systest_write(Node1, 1),
+    rt_systest:write(Node1, 1),
     %% make sure the stats that were supposed to increment did
     verify_inc(JMX2, JMX3, [{<<"pbc_connects_total">>, 1},
                             {<<"pbc_connects">>, 1},

@@ -51,11 +51,11 @@ confirm() ->
     rt:wait_for_service(Node2, riak_kv),
 
     lager:info("Write data to the cluster"),
-    rt:systest_write(Node1, 100),
+    rt_systest:write(Node1, 100),
 
     lager:info("Join ~p to the cluster and wait for handoff to finish",
                [Node2]),
-    rt:join(Node2, Node1),
+    rt_node:join(Node2, Node1),
     ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes12)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes12)),
     rt_node:wait_until_nodes_agree_about_ownership(Nodes12),
@@ -68,7 +68,7 @@ confirm() ->
     lager:info("Join ~p to the cluster and wait for handoff to finish",
                [Node3]),
     rt:wait_for_service(Node3, riak_kv),
-    rt:join(Node3, Node1),
+    rt_node:join(Node3, Node1),
     ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes123)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes123)),
     rt_node:wait_until_nodes_agree_about_ownership(Nodes123),
