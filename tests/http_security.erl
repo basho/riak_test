@@ -246,7 +246,7 @@ confirm() ->
                                                     "default", "from", Username]]),
 
     %% list keys with bucket type
-    rt:create_and_activate_bucket_type(Node, <<"list-keys-test">>, []),
+    rt_bucket_types:create_and_activate_bucket_type(Node, <<"list-keys-test">>, []),
 
     lager:info("Checking that list keys on a bucket-type is disallowed"),
     ?assertMatch({error, {"403", _}}, rhc:list_keys(C7, {<<"list-keys-test">>, <<"hello">>})),
@@ -542,9 +542,9 @@ crdt_tests([Node|_]=Nodes, RHC) ->
     Types = [{<<"counters">>, counter, riakc_counter:to_op(riakc_counter:increment(5, riakc_counter:new()))},
              {<<"sets">>, set, riakc_set:to_op(riakc_set:add_element(<<"foo">>, riakc_set:new()))}],
     [ begin
-          rt:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
-          rt:wait_until_bucket_type_status(BType, active, Nodes),
-          rt:wait_until_bucket_type_visible(Nodes, BType)
+          rt_bucket_types:create_and_activate_bucket_type(Node, BType, [{allow_mult, true}, {datatype, DType}]),
+          rt_bucket_types:wait_until_bucket_type_status(BType, active, Nodes),
+          rt_bucket_types:wait_until_bucket_type_visible(Nodes, BType)
       end || {BType, DType, _Op} <- Types ],
 
     lager:info("Checking that CRDT fetch is denied"),

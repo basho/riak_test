@@ -32,7 +32,7 @@ confirm() ->
     Node = hd(Nodes),
 
     lager:info("Creating/activating 'strong' bucket type"),
-    rt:create_and_activate_bucket_type(Node, <<"strong">>,
+    rt_bucket_types:create_and_activate_bucket_type(Node, <<"strong">>,
                                        [{consistent, true}, {n_val, NVal}]),
     ensemble_util:wait_until_stable(Node, NVal),
     Bucket = {<<"strong">>, <<"test">>},
