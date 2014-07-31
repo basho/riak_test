@@ -34,7 +34,7 @@ confirm() ->
     rt_cluster:build_cluster([{current,
                                [{riak_kv, [{anti_entropy, {off, []}}]}]},
                               OldVsn, OldVsn]),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
     
     PBC1 = rt_pb:pbc(CurrentNode),
     PBC2 = rt_pb:pbc(OldNode1),

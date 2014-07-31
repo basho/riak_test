@@ -115,7 +115,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
 
     %% Wait until the sink cluster is in a steady state before
     %% starting fullsync
-    rt:wait_until_nodes_ready(BNodes),
+    rt_node:wait_until_nodes_ready(BNodes),
     rt:wait_until_no_pending_changes(BNodes),
     rt:wait_until_registered(BFirst, riak_repl2_fs_node_reserver),
 

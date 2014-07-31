@@ -59,7 +59,7 @@ confirm() ->
     rt_node:leave(Node3),
     ok = ensemble_util:wait_until_stable(Node, NVal),
     Remaining = Nodes -- [Node2, Node3],
-    rt:wait_until_nodes_agree_about_ownership(Remaining), 
+    rt_node:wait_until_nodes_agree_about_ownership(Remaining), 
     ok = rt:wait_until_unpingable(Node2),
     ok = rt:wait_until_unpingable(Node3),
     lager:info("Read value from the root ensemble"),

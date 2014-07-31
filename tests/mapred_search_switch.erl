@@ -69,7 +69,7 @@ setup_test_env() ->
     %% deploy one to make the test run faster
     Nodes = rt_cluster:deploy_nodes(1, [{riak_search, [{enabled, true}]},
                                 {yokozuna, [{enabled, true}]}]),
-    ok = rt:wait_until_nodes_ready(Nodes),
+    ok = rt_node:wait_until_nodes_ready(Nodes),
     ok = rt:wait_for_cluster_service(Nodes, riak_search),
     ok = rt:wait_for_cluster_service(Nodes, yokozuna),
 

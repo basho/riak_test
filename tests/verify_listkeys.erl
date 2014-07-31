@@ -30,7 +30,7 @@
 
 confirm() ->
     [Node1, Node2, Node3, Node4] = Nodes = rt_cluster:deploy_nodes(4),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
 
     lager:info("Nodes deployed, but not joined."),
 

@@ -55,7 +55,7 @@
 
 make_cluster(Nodes) ->
     [First|Rest] = Nodes,
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
     [rt:wait_for_service(N, riak_kv) || N <- Nodes],
     [rt:join(Node, First) || Node <- Rest],
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)).

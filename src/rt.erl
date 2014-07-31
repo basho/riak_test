@@ -119,10 +119,7 @@
          wait_until_capability/4,
          wait_until_connected/1,
          wait_until_legacy_ringready/1,
-         wait_until_owners_according_to/2,
          wait_until_no_pending_changes/1,
-         wait_until_nodes_agree_about_ownership/1,
-         wait_until_nodes_ready/1,
          wait_until_pingable/1,
          wait_until_ready/1,
          wait_until_registered/2,
@@ -311,18 +308,6 @@ Nodes = rpc:call(Node, erlang, nodes, []),
 is_mixed_cluster(Nodes).
 
 %% @private
-is_ready(Node) ->
-case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
-{ok, Ring} ->
-    case lists:member(Node, riak_core_ring:ready_members(Ring)) of
-	true -> true;
-	false -> {not_ready, Node}
-    end;
-Other ->
-    Other
-end.
-
-%% @private
 is_ring_ready(Node) ->
 case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
 {ok, Ring} ->
@@ -367,9 +352,9 @@ end.
 %%      states. A ready node is guaranteed to have current preflist/ownership
 %%      information.
 wait_until_ready(Node) ->
-lager:info("Wait until ~p ready", [Node]),
-?assertEqual(ok, wait_until(Node, fun is_ready/1)),
-ok.
+    lager:info("Wait until ~p ready", [Node]),
+    ?assertEqual(ok, wait_until(Node, fun rt_node:is_ready/1)),
+    ok.
 
 %% @doc Wait until status can be read from riak_kv_console
 wait_until_status_ready(Node) ->
@@ -433,13 +418,6 @@ F = fun(N) ->
 	(Nodes -- UpNodes) == []
 end,
 [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
-ok.
-
-%% @doc Given a list of nodes, wait until all nodes are considered ready.
-%%      See {@link wait_until_ready/1} for definition of ready.
-wait_until_nodes_ready(Nodes) ->
-lager:info("Wait until nodes are ready : ~p", [Nodes]),
-[?assertEqual(ok, wait_until(Node, fun is_ready/1)) || Node <- Nodes],
 ok.
 
 %% @doc Wait until all nodes in the list `Nodes' believe each other to be

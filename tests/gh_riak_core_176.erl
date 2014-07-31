@@ -56,9 +56,9 @@ confirm() ->
     lager:info("Join ~p to the cluster and wait for handoff to finish",
                [Node2]),
     rt:join(Node2, Node1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes12)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes12)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes12)),
-    rt:wait_until_nodes_agree_about_ownership(Nodes12),
+    rt_node:wait_until_nodes_agree_about_ownership(Nodes12),
     
     %% Check 0.0.0.0 address works
     lager:info("Change ~p handoff_ip to \"0.0.0.0\"", [Node3]),
@@ -69,9 +69,9 @@ confirm() ->
                [Node3]),
     rt:wait_for_service(Node3, riak_kv),
     rt:join(Node3, Node1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes123)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes123)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes123)),
-    rt:wait_until_nodes_agree_about_ownership(Nodes123),
+    rt_node:wait_until_nodes_agree_about_ownership(Nodes123),
 
     lager:info("Test gh_riak_core_176 passed"),
     pass.

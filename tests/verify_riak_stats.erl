@@ -38,7 +38,7 @@ confirm() ->
     Nodes = rt_cluster:deploy_nodes(1),
     [Node1] = Nodes,
     verify_dt_converge:create_bucket_types(Nodes, ?TYPES),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node1])),
     Stats1 = get_stats(Node1),
 
     lager:info("Verifying that all expected stats keys are present from the HTTP endpoint"),
