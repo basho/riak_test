@@ -43,7 +43,6 @@
          get_replica/5,
          get_version/0,
          is_mixed_cluster/1,
-         is_pingable/1,
          load_modules_on_nodes/2,
          log_to_nodes/2,
          log_to_nodes/3,
@@ -255,10 +254,6 @@ load_modules_on_nodes(MoreModules, Nodes).
 %%%===================================================================
 %%% Status / Wait Functions
 %%%===================================================================
-
-%% @doc Is the `Node' up according to net_adm:ping
-is_pingable(Node) ->
-net_adm:ping(Node) =:= pong.
 
 is_mixed_cluster(Nodes) when is_list(Nodes) ->
 %% If the nodes are bad, we don't care what version they are

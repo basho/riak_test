@@ -621,7 +621,7 @@ validate_intercepted_fullsync(InterceptTarget,
                                   NumIndicies),
 
     %% Reboot node.
-    rt:stop_and_wait(InterceptTarget),
+    rt_node:stop_and_wait(InterceptTarget),
     rt_node:start_and_wait(InterceptTarget),
 
     %% Wait for riak_kv and riak_repl to initialize.

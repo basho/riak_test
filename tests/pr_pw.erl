@@ -68,7 +68,7 @@ confirm() ->
     ?assertMatch({ok, _},
         C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
 
-    rt:stop_and_wait(Node),
+    rt_node:stop_and_wait(Node),
 
     %% there's now a fallback in the preflist, so PR/PW won't be satisfied
     %% anymore
@@ -110,7 +110,7 @@ confirm() ->
     ?assertEqual({error, timeout}, C:put(Obj, [{pw, all}])),
 
     %% reboot the node
-    rt:stop_and_wait(Node2),
+    rt_node:stop_and_wait(Node2),
     rt_node:start_and_wait(Node2),
     rt:wait_for_service(Node2, riak_kv),
 
