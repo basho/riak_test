@@ -85,7 +85,7 @@ confirm() ->
     
     Stats3 = get_stats(Node1),
 
-    rt:systest_write(Node1, 1),
+    rt_systest:write(Node1, 1),
     %% make sure the stats that were supposed to increment did
     verify_inc(Stats2, Stats3, [{<<"pbc_connects_total">>, 1},
                                 {<<"pbc_connects">>, 1},

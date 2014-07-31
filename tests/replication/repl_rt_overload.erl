@@ -89,7 +89,7 @@ verify_overload_writes(LeaderA, LeaderB) ->
     ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)),
 
     lager:info("Reading ~p keys from ~p", [Last-First+1, LeaderB]),
-    NumReads = rt:systest_read(LeaderB, First, Last, TestBucket, 2),
+    NumReads = rt_systest:read(LeaderB, First, Last, TestBucket, 2),
 
     lager:info("systest_read saw ~p errors", [length(NumReads)]),
 

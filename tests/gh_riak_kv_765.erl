@@ -71,7 +71,7 @@ check_throttle_and_expiration() ->
     timer:sleep(2000),
 
     lager:info("Write 1000 keys"),
-    rt:systest_write(Node, 1000),
+    rt_systest:write(Node, 1000),
     enable_aae(Node),
     time_build(Node),
     Duration1 = rebuild(Node, 30000, 1000),

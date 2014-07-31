@@ -38,18 +38,18 @@ confirm(#rt_properties{nodes=Nodes}, _MD) ->
     [Node1, Node2, Node3, Node4] = Nodes,
 
     lager:info("Loading some data up in this cluster."),
-    ?assertEqual([], rt:systest_write(Node1, 0, 1000, <<"verify_build_cluster">>, 2)),
+    ?assertEqual([], rt_systest:write(Node1, 0, 1000, <<"verify_build_cluster">>, 2)),
 
     lager:info("joining Node 2 to the cluster... It takes two to make a thing go right"),
-    rt:join(Node2, Node1),
+    rt_node:join(Node2, Node1),
     wait_and_validate([Node1, Node2]),
 
     lager:info("joining Node 3 to the cluster"),
-    rt:join(Node3, Node1),
+    rt_node:join(Node3, Node1),
     wait_and_validate([Node1, Node2, Node3]),
 
     lager:info("joining Node 4 to the cluster"),
-    rt:join(Node4, Node1),
+    rt_node:join(Node4, Node1),
     wait_and_validate(Nodes),
 
     lager:info("taking Node 1 down"),
@@ -101,5 +101,5 @@ wait_and_validate(RingNodes, UpNodes) ->
     [rt_node:wait_until_owners_according_to(Node, RingNodes) || Node <- UpNodes],
     [rt:wait_for_service(Node, riak_kv) || Node <- UpNodes],
     lager:info("Verify that you got much data... (this is how we do it)"),
-    ?assertEqual([], rt:systest_read(hd(UpNodes), 0, 1000, <<"verify_build_cluster">>, 2)),
+    ?assertEqual([], rt_systest:read(hd(UpNodes), 0, 1000, <<"verify_build_cluster">>, 2)),
     done.

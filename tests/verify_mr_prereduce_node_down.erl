@@ -53,7 +53,7 @@ confirm() ->
     Bucket = <<"verify_mr_prereduce_node_down">>,
     ObjCount = 100,
     lager:info("Loading ~b objects of test data", [ObjCount]),
-    [] = rt:systest_write(Primary, 1, ObjCount, Bucket, 3),
+    [] = rt_systest:write(Primary, 1, ObjCount, Bucket, 3),
 
     %% run the query a bunch
     C = rt_pb:pbc(Primary),
