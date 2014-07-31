@@ -25,7 +25,7 @@
 
 confirm() ->
     [Node] = rt_cluster:build_cluster([legacy]),
-    rt:wait_until_nodes_ready([Node]),
+    rt_node:wait_until_nodes_ready([Node]),
 
     check_fixed_index_statuses(Node, undefined),
 

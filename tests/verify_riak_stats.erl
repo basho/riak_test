@@ -26,7 +26,7 @@
 confirm() ->
     Nodes = rt_cluster:deploy_nodes(1),
     [Node1] = Nodes,
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node1])),
     Stats1 = get_stats(Node1),
     %% make sure a set of stats have valid values
     verify_nz(Stats1,[<<"cpu_nprocs">>,

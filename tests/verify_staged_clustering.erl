@@ -45,7 +45,7 @@ confirm() ->
     commit_staged(Node1),
 
     lager:info("Ensure that ~p now own all partitions", [Nodes123]),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes123)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes123)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes123)),
     rt_ring:assert_nodes_agree_about_ownership(Nodes123),
 
@@ -62,7 +62,7 @@ confirm() ->
 
     Nodes134 = [Node1, Node3, Node4],
     lager:info("Ensure that ~p now own all partitions", [Nodes134]),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes134)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes134)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes134)),
     rt_ring:assert_nodes_agree_about_ownership(Nodes134),
     
@@ -83,7 +83,7 @@ confirm() ->
 
     Nodes124 = [Node1, Node2, Node4],
     lager:info("Ensure that ~p now own all partitions", [Nodes124]),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes124)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes124)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes124)),
     rt_ring:assert_nodes_agree_about_ownership(Nodes124),
 

@@ -167,10 +167,10 @@ join_cluster(Nodes) ->
             try_nodes_ready(Nodes, 3, 500)
     end,
 
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
 
     %% Ensure each node owns a portion of the ring
-    rt:wait_until_nodes_agree_about_ownership(Nodes),
+    rt_node:wait_until_nodes_agree_about_ownership(Nodes),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
     ok.
 
@@ -178,7 +178,7 @@ try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
     rt_node:plan_and_commit(Node1);
 try_nodes_ready(Nodes, N, SleepMs) ->
-    ReadyNodes = [Node || Node <- Nodes, rt:is_ready(Node) =:= true],
+    ReadyNodes = [Node || Node <- Nodes, rt_node:is_ready(Node) =:= true],
     case ReadyNodes of
         Nodes ->
             ok;

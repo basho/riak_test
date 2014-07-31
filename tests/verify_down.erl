@@ -29,7 +29,7 @@ confirm() ->
     %% Join node2 to node1 and wait for cluster convergence
     lager:info("Join ~p to ~p", [Node2, Node1]),
     rt:join(Node2, Node1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node1, Node2])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node1, Node2])),
     ?assertEqual(ok, rt:wait_until_no_pending_changes([Node1, Node2])),
 
     %% Shutdown node2
@@ -59,10 +59,10 @@ confirm() ->
     %% Restart node2 and wait for ring convergence
     lager:info("Restart ~p and wait for ring convergence", [Node2]),
     rt_node:start(Node2),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node2])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node2])),
     ?assertEqual(ok, rt:wait_until_ring_converged(Nodes)),
 
     %% Verify that all three nodes are ready
     lager:info("Ensure all nodes are ready"),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
     pass.

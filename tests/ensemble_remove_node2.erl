@@ -66,7 +66,7 @@ confirm() ->
     rt_node:leave(Node3),
     ok = ensemble_util:wait_until_stable(Node, NVal),
     Remaining = Nodes -- [Node2, Node3],
-    rt:wait_until_nodes_agree_about_ownership(Remaining), 
+    rt_node:wait_until_nodes_agree_about_ownership(Remaining), 
 
     %% TODO: How do we wait indefinitely for nodes to never exit here? A 30s
     %% sleep?

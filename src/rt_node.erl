@@ -28,6 +28,7 @@
          stop_and_wait/1,
          upgrade/2,
          upgrade/3,
+         is_ready/1,
          slow_upgrade/3,
          join/2,
          staged_join/2,
@@ -38,7 +39,10 @@
          heal/1,
          partition/2,
          remove/2,
-         brutal_kill/1]).
+         brutal_kill/1,
+         wait_until_nodes_ready/1,
+         wait_until_owners_according_to/2,
+         wait_until_nodes_agree_about_ownership/1]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 
@@ -184,3 +188,34 @@ brutal_kill(Node) ->
              [5000, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]]),
     rpc:cast(Node, os, cmd, [io_lib:format("kill -15 ~s", [OSPidToKill])]),
     ok.
+
+%% @doc Given a list of nodes, wait until all nodes are considered ready.
+%%      See {@link wait_until_ready/1} for definition of ready.
+wait_until_nodes_ready(Nodes) ->
+    lager:info("Wait until nodes are ready : ~p", [Nodes]),
+    [?assertEqual(ok, rt:wait_until(Node, fun is_ready/1)) || Node <- Nodes],
+    ok.
+
+is_ready(Node) ->
+    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+        {ok, Ring} ->
+            case lists:member(Node, riak_core_ring:ready_members(Ring)) of
+                true -> true;
+                false -> {not_ready, Node}
+            end;
+        Other ->
+            Other
+    end.
+
+wait_until_owners_according_to(Node, Nodes) ->
+    SortedNodes = lists:usort(Nodes),
+    F = fun(N) ->
+        rt_ring:owners_according_to(N) =:= SortedNodes
+    end,
+    ?assertEqual(ok, rt:wait_until(Node, F)),
+    ok.
+
+wait_until_nodes_agree_about_ownership(Nodes) ->
+    lager:info("Wait until nodes agree about ownership ~p", [Nodes]),
+    Results = [ wait_until_owners_according_to(Node, Nodes) || Node <- Nodes ],
+    ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
