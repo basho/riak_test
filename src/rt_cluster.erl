@@ -189,7 +189,7 @@ try_nodes_ready(Nodes, N, SleepMs) ->
 
 %% @doc Stop nodes and wipe out their data directories
 clean_cluster(Nodes) when is_list(Nodes) ->
-    [rt:stop_and_wait(Node) || Node <- Nodes],
+    [rt_node:stop_and_wait(Node) || Node <- Nodes],
     clean_data_dir(Nodes).
 
 clean_data_dir(Nodes) ->

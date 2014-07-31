@@ -87,15 +87,15 @@ start_test(Node) ->
 
     {ok, StartPass} = rt_cmd_line:riak(Node, ["start"]),
     ?assertMatch(StartPass, ""),
-    rt:stop_and_wait(Node),
+    rt_node:stop_and_wait(Node),
     ok.
 
 stop_test(Node) ->
-    ?assert(rt:is_pingable(Node)),
+    ?assert(rt_node:is_pingable(Node)),
 
     {ok, "ok\n"} = rt_cmd_line:riak(Node, "stop"),
 
-    ?assertNot(rt:is_pingable(Node)),
+    ?assertNot(rt_node:is_pingable(Node)),
     ok.
 
 ping_up_test(Node) ->
