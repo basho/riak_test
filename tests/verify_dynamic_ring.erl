@@ -31,17 +31,17 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
-    rt:update_app_config(all, [{riak_core,
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:update_app_config(all, [{riak_core,
                                 [{ring_creation_size, ?START_SIZE}]}]),
-    [ANode, AnotherNode, YetAnother, _ReplacingNode] = _AllNodes = rt:deploy_nodes(4),
+    [ANode, AnotherNode, YetAnother, _ReplacingNode] = _AllNodes = rt_cluster:deploy_nodes(4),
     NewNodes = Nodes = [ANode, AnotherNode, YetAnother],
     %% This assignment for `NewNodes' is commented until riak_core
     %% issue #570 is resolved
     %% NewNodes = [ANode, YetAnother, ReplacingNode],
-    rt:join(AnotherNode, ANode),
-    rt:join(YetAnother, ANode),
-    rt:wait_until_nodes_agree_about_ownership(Nodes),
+    rt_node:join(AnotherNode, ANode),
+    rt_node:join(YetAnother, ANode),
+    rt_node:wait_until_nodes_agree_about_ownership(Nodes),
     rt:wait_until_ring_converged(Nodes),
     rt:wait_until_no_pending_changes(Nodes),
 
@@ -52,14 +52,14 @@ confirm() ->
     wait_until_extra_proxies_shutdown(Nodes),
 
     lager:info("writing 500 keys"),
-    ?assertEqual([], rt:systest_write(ANode, 1, 500, ?BUCKET, ?W)),
+    ?assertEqual([], rt_systest:write(ANode, 1, 500, ?BUCKET, ?W)),
     test_resize(?SHRUNK_SIZE, ?START_SIZE, ANode, Nodes, {501, 750}),
     lager:info("verifying previously written data"),
-    ?assertEqual([], rt:systest_read(ANode, 1, 500, ?BUCKET, ?R)),
+    ?assertEqual([], rt_systest:read(ANode, 1, 500, ?BUCKET, ?R)),
 
     test_resize(?START_SIZE, ?EXPANDED_SIZE, ANode, Nodes),
     lager:info("verifying previously written data"),
-    ?assertEqual([], rt:systest_read(ANode, 1, 750, ?BUCKET, ?R)),
+    ?assertEqual([], rt_systest:read(ANode, 1, 750, ?BUCKET, ?R)),
 
     %% This following test code for force-replace is commented until
     %% riak_core issue #570 is resolved. At that time the preceding 3
@@ -82,11 +82,11 @@ confirm() ->
     %% rt:wait_until_no_pending_changes(NewNodes),
     %% assert_ring_size(?EXPANDED_SIZE, NewNodes),
     %% lager:info("verifying written data"),
-    %% ?assertEqual([], rt:systest_read(ANode, 1, 750, ?BUCKET, ?R)),
+    %% ?assertEqual([], rt_systest:read(ANode, 1, 750, ?BUCKET, ?R)),
 
     test_resize(?EXPANDED_SIZE, ?SHRUNK_SIZE, ANode, NewNodes),
     lager:info("verifying written data"),
-    ?assertEqual([], rt:systest_read(ANode, 1, 750, ?BUCKET, ?R)),
+    ?assertEqual([], rt_systest:read(ANode, 1, 750, ?BUCKET, ?R)),
     wait_until_extra_vnodes_shutdown(NewNodes),
     wait_until_extra_proxies_shutdown(NewNodes),
 
@@ -110,7 +110,7 @@ confirm() ->
     rt:wait_until_ring_converged(NewNodes),
     assert_ring_size(?SHRUNK_SIZE, NewNodes),
     lager:info("verifying written data"),
-    ?assertEqual([], rt:systest_read(ANode, 1, 750, ?BUCKET, ?R)),
+    ?assertEqual([], rt_systest:read(ANode, 1, 750, ?BUCKET, ?R)),
 
     pass.
 
@@ -137,7 +137,7 @@ write_during_resize(_, Start, End) when Start =:= undefined orelse End =:= undef
 write_during_resize(Node, Start, End) ->
     Pid = self(),
     spawn(fun() ->
-                  case rt:systest_write(Node, Start, End, ?BUCKET, ?W) of
+                  case rt_systest:write(Node, Start, End, ?BUCKET, ?W) of
                       [] ->
                           Pid ! done_writing;
                       Ers ->
@@ -151,7 +151,7 @@ verify_write_during_resize(Node, Start, End) ->
     receive
         done_writing ->
             lager:info("verifying data written during operation"),
-            ?assertEqual([], rt:systest_read(Node, Start, End, ?BUCKET, ?R)),
+            ?assertEqual([], rt_systest:read(Node, Start, End, ?BUCKET, ?R)),
             ok;
         {errors_writing, Ers} ->
             lager:error("errors were encountered while writing during operation: ~p", [Ers]),

@@ -39,9 +39,9 @@
 confirm() ->
     %% we need the volatility of memory, so we can cause a replica
     %% notfound by killing a vnode
-    rt:set_backend(memory),
+    rt_backend:set_backend(memory),
 
-    Nodes = rt:build_cluster(3),
+    Nodes = rt_cluster:build_cluster(3),
 
     %% for our custom reduce phase
     rt:load_modules_on_nodes([?MODULE], Nodes),
@@ -78,7 +78,7 @@ replica_notfound(Node, {HashMod, HashFun},
                  MissingBucket, MissingKey, MissingValue) ->
     %% create a value for the "missing" key
     Obj = riakc_obj:new(MissingBucket, MissingKey, MissingValue),
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     ok = riakc_pb_socket:put(C, Obj, [{w, 3}]),
     riakc_pb_socket:stop(C),
     %% and now kill the first replica; this will make the vnode local

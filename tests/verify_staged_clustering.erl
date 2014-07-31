@@ -24,7 +24,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    Nodes = rt:deploy_nodes(4),
+    Nodes = rt_cluster:deploy_nodes(4),
     [Node1, Node2, Node3, Node4] = Nodes,
     Nodes123 = [Node1, Node2, Node3],
     Nodes23 = [Node2, Node3],
@@ -45,9 +45,9 @@ confirm() ->
     commit_staged(Node1),
 
     lager:info("Ensure that ~p now own all partitions", [Nodes123]),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes123)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes123)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes123)),
-    rt:assert_nodes_agree_about_ownership(Nodes123),
+    rt_ring:assert_nodes_agree_about_ownership(Nodes123),
 
     lager:info("Join ~p to the cluster", [Node4]),
     stage_join(Node4, Node1),
@@ -62,15 +62,15 @@ confirm() ->
 
     Nodes134 = [Node1, Node3, Node4],
     lager:info("Ensure that ~p now own all partitions", [Nodes134]),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes134)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes134)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes134)),
-    rt:assert_nodes_agree_about_ownership(Nodes134),
+    rt_ring:assert_nodes_agree_about_ownership(Nodes134),
     
     lager:info("Verify that ~p shutdown after being replaced", [Node2]),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
 
     lager:info("Restart ~p and re-join to cluster", [Node2]),
-    rt:start(Node2),
+    rt_node:start(Node2),
     stage_join(Node2, Node1),
     ?assertEqual(ok, rt:wait_until_all_members(Nodes)),
 
@@ -83,9 +83,9 @@ confirm() ->
 
     Nodes124 = [Node1, Node2, Node4],
     lager:info("Ensure that ~p now own all partitions", [Nodes124]),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes124)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes124)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes124)),
-    rt:assert_nodes_agree_about_ownership(Nodes124),
+    rt_ring:assert_nodes_agree_about_ownership(Nodes124),
 
     lager:info("Stage leave of ~p", [Node2]),
     stage_leave(Node1, Node2),
@@ -117,28 +117,28 @@ n(Atom) ->
 
 stage_join(Node, OtherNode) ->
     %% rpc:call(Node, riak_kv_console, staged_join, [[n(OtherNode)]]).
-    rt:admin(Node, ["cluster", "join", n(OtherNode)]).
+    rt_cmd_line:admin(Node, ["cluster", "join", n(OtherNode)]).
 
 stage_leave(Node, OtherNode) ->
     %% rpc:call(Node, riak_core_console, stage_leave, [[n(OtherNode)]]).
-    rt:admin(Node, ["cluster", "leave", n(OtherNode)]).
+    rt_cmd_line:admin(Node, ["cluster", "leave", n(OtherNode)]).
 
 stage_remove(Node, OtherNode) ->
     %% rpc:call(Node, riak_core_console, stage_remove, [[n(OtherNode)]]).
-    rt:admin(Node, ["cluster", "force-remove", n(OtherNode)]).
+    rt_cmd_line:admin(Node, ["cluster", "force-remove", n(OtherNode)]).
 
 stage_replace(Node, Node1, Node2) ->
     %% rpc:call(Node, riak_core_console, stage_replace, [[n(Node1), n(Node2)]]).
-    rt:admin(Node, ["cluster", "replace", n(Node1), n(Node2)]).
+    rt_cmd_line:admin(Node, ["cluster", "replace", n(Node1), n(Node2)]).
 
 stage_force_replace(Node, Node1, Node2) ->
     %% rpc:call(Node, riak_core_console, stage_force_replace, [[n(Node1), n(Node2)]]).
-    rt:admin(Node, ["cluster", "force-replace", n(Node1), n(Node2)]).
+    rt_cmd_line:admin(Node, ["cluster", "force-replace", n(Node1), n(Node2)]).
 
 print_staged(Node) ->
     %% rpc:call(Node, riak_core_console, print_staged, [[]]).
     F = fun(_) ->
-                {ok, StdOut} = rt:admin(Node, ["cluster", "plan"]),
+                {ok, StdOut} = rt_cmd_line:admin(Node, ["cluster", "plan"]),
                 case StdOut of
                     "Cannot" ++ _X -> false;
                     _ -> true
@@ -148,11 +148,11 @@ print_staged(Node) ->
 
 commit_staged(Node) ->
     %% rpc:call(Node, riak_core_console, commit_staged, [[]]).
-    rt:admin(Node, ["cluster", "commit"]).
+    rt_cmd_line:admin(Node, ["cluster", "commit"]).
 
 clear_staged(Node) ->
     %% rpc:call(Node, riak_core_console, clear_staged, [[]]).
-    rt:admin(Node, ["cluster", "clear"]).
+    rt_cmd_line:admin(Node, ["cluster", "clear"]).
 
 stage_join_rpc(Node, OtherNode) ->
     rpc:call(Node, riak_core, staged_join, [OtherNode]).

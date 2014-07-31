@@ -31,16 +31,16 @@
 -define(N, 3).
 
 confirm() ->
-    rt:update_app_config(all, [{riak_kv, [{object_format, v1}]}]),
+    rt_config:update_app_config(all, [{riak_kv, [{object_format, v1}]}]),
     TestMetaData = riak_test_runner:metadata(),
     DowngradeVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
-    Nodes = [Node1|_] = rt:build_cluster(?N),
+    Nodes = [Node1|_] = rt_cluster:build_cluster(?N),
 
     [rt:wait_until_capability(N, {riak_kv, object_format}, v1, v0) || N <- Nodes],
 
     lager:info("Writing 100 keys in format v1 to ~p", [Node1]),
-    rt:systest_write(Node1, 100, ?N),
-    ?assertEqual([], rt:systest_read(Node1, 100, ?N)),
+    rt_systest:write(Node1, 100, ?N),
+    ?assertEqual([], rt_systest:read(Node1, 100, ?N)),
     lager:info("100 keys successfully written to ~p", [Node1]),
 
     %% TODO: introduce some handoff
@@ -51,7 +51,7 @@ confirm() ->
          rt:upgrade(Node, DowngradeVsn), %% use upgrade to downgrade
          rt:wait_for_service(Node, riak_kv),
          lager:info("Ensuring keys still readable on ~p", [Node]),
-         ?assertEqual([], rt:systest_read(Node, 100, ?N))
+         ?assertEqual([], rt_systest:read(Node, 100, ?N))
      end || Node <- Nodes],
     pass.
 

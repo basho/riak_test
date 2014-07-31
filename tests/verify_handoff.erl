@@ -71,22 +71,22 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
                       }
                     ],
 
-                   rt:update_app_config(RootNode, OverrideData),
+                   rt_config:update_app_config(RootNode, OverrideData),
 
                    %% Update all nodes (capabilities are not re-negotiated):
                    lists:foreach(fun(TestNode) -> 
-                                    rt:update_app_config(TestNode, OverrideData),
+                                    rt_config:update_app_config(TestNode, OverrideData),
                                     assert_using(RootNode, { riak_kv, handoff_data_encoding }, HandoffEncoding)
                                  end,
                                  Nodes)
     end,
 
     lager:info("Populating root node."),
-    rt:systest_write(RootNode, NTestItems),
+    rt_systest:write(RootNode, NTestItems),
     %% write one object with a bucket type
-    rt:create_and_activate_bucket_type(RootNode, <<"type">>, []),
+    rt_bucket_types:create_and_activate_bucket_type(RootNode, <<"type">>, []),
     %% allow cluster metadata some time to propogate
-    rt:systest_write(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
+    rt_systest:write(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
 
     %% Test handoff on each node:
     lager:info("Testing handoff for cluster."),
@@ -94,11 +94,11 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
 
     %% Prepare for the next call to our test (we aren't polite about it, it's faster that way):
     lager:info("Bringing down test nodes."),
-    lists:foreach(fun(N) -> rt:brutal_kill(N) end, TestNodes),
+    lists:foreach(fun(N) -> rt_node:brutal_kill(N) end, TestNodes),
 
     %% The "root" node can't leave() since it's the only node left:
     lager:info("Stopping root node."),
-    rt:brutal_kill(RootNode).
+    rt_node:brutal_kill(RootNode).
 
 %% See if we get the same data back from our new nodes as we put into the root node:
 test_handoff(RootNode, NewNode, NTestItems) ->
@@ -107,16 +107,16 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     rt:wait_for_service(NewNode, riak_kv),
 
     lager:info("Joining new node with cluster."),
-    rt:join(NewNode, RootNode),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([RootNode, NewNode])),
+    rt_node:join(NewNode, RootNode),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([RootNode, NewNode])),
     rt:wait_until_no_pending_changes([RootNode, NewNode]),
 
     %% See if we get the same data back from the joined node that we added to the root node.
     %%  Note: systest_read() returns /non-matching/ items, so getting nothing back is good:
     lager:info("Validating data after handoff:"),
-    Results = rt:systest_read(NewNode, NTestItems), 
+    Results = rt_systest:read(NewNode, NTestItems), 
     ?assertEqual(0, length(Results)), 
-    Results2 = rt:systest_read(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
+    Results2 = rt_systest:read(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
     ?assertEqual(0, length(Results2)),
     lager:info("Data looks ok.").  
 
@@ -126,11 +126,11 @@ assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName)
 
 %% For some testing purposes, making these limits smaller is helpful:
 deploy_test_nodes(false, N) -> 
-    rt:deploy_nodes(N);
+    rt_cluster:deploy_nodes(N);
 deploy_test_nodes(true,  N) ->
     lager:info("WARNING: Using turbo settings for testing."),
     Config = [{riak_core, [{forced_ownership_handoff, 8},
                            {handoff_concurrency, 8},
                            {vnode_inactivity_timeout, 1000},
                            {gossip_limit, {10000000, 60000}}]}],
-    rt:deploy_nodes(N, Config).
+    rt_cluster:deploy_nodes(N, Config).

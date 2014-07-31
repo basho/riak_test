@@ -22,7 +22,7 @@
 -export([confirm/0]).
 
 confirm() ->
-    [Node1, Node2, _Node3] = rt:build_cluster(3),
+    [Node1, Node2, _Node3] = rt_cluster:build_cluster(3),
 
     %% add intercept that delays handling of vnode commands
     %% on a single node (the "slow" node)
@@ -43,7 +43,7 @@ confirm() ->
     %% make DisableThreshold+5 requests and trigger the health check explicitly
     %% we only need to backup one vnode's msg queue on the node to fail the health check
     %% so we read the same key again and again
-    C = rt:pbc(Node2),
+    C = rt_pb:pbc(Node2),
     [riakc_pb_socket:get(C, <<"b">>, <<"k">>) || _ <- lists:seq(1,DisableThreshold+5)],
     ok = rpc:call(Node1, riak_core_node_watcher, check_health, [riak_kv]),
 

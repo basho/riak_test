@@ -46,7 +46,7 @@ verify_upgrade(Vsn) ->
     lager:info("Verify upgrade from ~p to current.", [Vsn]),
 
     lager:info("Building cluster."),
-    [Nodes] = rt:build_clusters([{3, Vsn, ?RC_ENABLE_CFG}]),
+    [Nodes] = rt_cluster:build_clusters([{3, Vsn, ?RC_ENABLE_CFG}]),
 
     lager:info("Verifying all nodes are alive."),
     verify_alive(Nodes),

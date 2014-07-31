@@ -31,7 +31,7 @@ confirm() ->
         _ -> current
     end,
 
-    Nodes = rt:deploy_nodes([current, previous, Legacy]),
+    Nodes = rt_cluster:deploy_nodes([current, previous, Legacy]),
     [CNode, PNode, LNode] = Nodes,
 
     lager:info("Verifying known capabilities on a Current 1-node cluster"),
@@ -69,7 +69,7 @@ confirm() ->
     ?assertEqual(ok, rt:wait_until_capability(CNode, {riak_core, staged_joins}, true)),
 
     lager:info("Building current + ~s cluster", [Legacy]),
-    rt:join(LNode, CNode),
+    rt_node:join(LNode, CNode),
     ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode])),
     ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
@@ -102,7 +102,7 @@ confirm() ->
             restart_capability_server(CNode),
 
             lager:info("Adding previous node to cluster"),
-            rt:join(PNode, LNode),
+            rt_node:join(PNode, LNode),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
             ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode)),
 
@@ -139,7 +139,7 @@ confirm() ->
         _ ->
             lager:info("Legacy Riak not available, skipping legacy tests"),
             lager:info("Adding previous node to cluster"),
-            rt:join(PNode, LNode),
+            rt_node:join(PNode, LNode),
             ?assertEqual(ok, rt:wait_until_all_members([CNode], [CNode, LNode, PNode])),
             ?assertEqual(ok, rt:wait_until_legacy_ringready(CNode))
     end,
@@ -213,24 +213,24 @@ confirm() ->
                end,
 
     lager:info("Override: (use: legacy), (prefer: proxy)"),
-    [rt:update_app_config(Node, Override(legacy, proxy)) || Node <- Nodes],
+    [rt_config:update_app_config(Node, Override(legacy, proxy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == legacy"),
     assert_capability(CNode, {riak_core, vnode_routing}, legacy),
 
     lager:info("Override: (use: proxy), (prefer: legacy)"),
-    [rt:update_app_config(Node, Override(proxy, legacy)) || Node <- Nodes],
+    [rt_config:update_app_config(Node, Override(proxy, legacy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == proxy"),
     assert_capability(CNode, {riak_core, vnode_routing}, proxy),
 
     lager:info("Override: (prefer: legacy)"),
-    [rt:update_app_config(Node, Override(undefined, legacy)) || Node <- Nodes],
+    [rt_config:update_app_config(Node, Override(undefined, legacy)) || Node <- Nodes],
 
     lager:info("Verify vnode_routing == legacy"),
     assert_capability(CNode, {riak_core, vnode_routing}, legacy),
 
-    [rt:stop(Node) || Node <- Nodes],
+    [rt_node:stop(Node) || Node <- Nodes],
     pass.
 
 assert_capability(CNode, Capability, Value) ->

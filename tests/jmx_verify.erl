@@ -32,9 +32,9 @@ confirm() ->
 
     JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
-    Nodes = rt:deploy_nodes(1, Config),
+    Nodes = rt_cluster:deploy_nodes(1, Config),
     [Node1] = Nodes,
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node1])),
 
     [{http, {IP, _Port}}|_] = rt:connection_info(Node1),
 
@@ -51,9 +51,9 @@ confirm() ->
     lager:info("perform 5 x  PUT and a GET to increment the stats"),
     lager:info("as the stat system only does calcs for > 5 readings"),
 
-    C = rt:httpc(Node1),
-    [rt:httpc_write(C, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
-    [rt:httpc_read(C, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
+    C = rt_http:httpc(Node1),
+    [rt_http:httpc_write(C, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
+    [rt_http:httpc_read(C, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
 
     JMX2 = jmx_dump(JMXDumpCmd),
     %% make sure the stats that were supposed to increment did
@@ -79,17 +79,17 @@ confirm() ->
                      <<"node_put_fsm_time_100">>]),
 
     lager:info("Make PBC Connection"),
-    Pid = rt:pbc(Node1),
+    Pid = rt_pb:pbc(Node1),
 
     JMX3 = jmx_dump(JMXDumpCmd),
-    rt:systest_write(Node1, 1),
+    rt_systest:write(Node1, 1),
     %% make sure the stats that were supposed to increment did
     verify_inc(JMX2, JMX3, [{<<"pbc_connects_total">>, 1},
                             {<<"pbc_connects">>, 1},
                             {<<"pbc_active">>, 1}]),
 
     lager:info("Force Read Repair"),
-    rt:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
+    rt_pb:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
     rt:pbc_set_bucket_prop(Pid, <<"testbucket">>, [{n_val, 4}]),
 
     JMX4 = jmx_dump(JMXDumpCmd),
@@ -97,7 +97,7 @@ confirm() ->
     verify_inc(JMX3, JMX4, [{<<"read_repairs_total">>, 0},
                             {<<"read_repairs">>, 0}]),
 
-    _Value = rt:pbc_read(Pid, <<"testbucket">>, <<"1">>),
+    _Value = rt_pb:pbc_read(Pid, <<"testbucket">>, <<"1">>),
 
     %%Stats5 = get_stats(Node1),
     JMX5 = jmx_dump(JMXDumpCmd),
@@ -108,7 +108,7 @@ confirm() ->
 test_supervision() ->
     JMXPort = 80,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
-    [Node|[]] = rt:deploy_nodes(1, Config),
+    [Node|[]] = rt_cluster:deploy_nodes(1, Config),
     timer:sleep(20000),
     case net_adm:ping(Node) of
         pang ->
@@ -134,7 +134,7 @@ test_supervision() ->
     lager:info("It can fail, it can fail 10 times"),
 
     rt:wait_until(retry_check_fun(Node)),
-    rt:stop(Node),
+    rt_node:stop(Node),
     ok_ok.
 
 retry_check_fun(Node) ->
@@ -160,9 +160,9 @@ test_application_stop() ->
     lager:info("Testing application:stop()"),
     JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
-    Nodes = rt:deploy_nodes(1, Config),
+    Nodes = rt_cluster:deploy_nodes(1, Config),
     [Node] = Nodes,
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node])),
 
     %% Let's make sure the java process is alive!
     lager:info("checking for riak_jmx.jar running."),
@@ -193,7 +193,7 @@ test_application_stop() ->
 
     ?assertEqual(nomatch, re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
 
-    rt:stop(Node).
+    rt_node:stop(Node).
 
 verify_inc(Prev, Props, Keys) ->
     [begin

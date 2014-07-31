@@ -16,37 +16,37 @@
 %%
 
 setup(Type) ->
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(Type),
 
-    PBA = rt:pbc(LeaderA),
-    PBB = rt:pbc(LeaderB),
+    PBA = rt_pb:pbc(LeaderA),
+    PBB = rt_pb:pbc(LeaderB),
 
     {DefinedType, UndefType} = Types = {<<"working_type">>, <<"undefined_type">>},
 
-    rt:create_and_activate_bucket_type(LeaderA,
+    rt_bucket_types:create_and_activate_bucket_type(LeaderA,
                                        DefinedType,
                                        [{n_val, 3}, {allow_mult, false}]),
-    rt:wait_until_bucket_type_status(DefinedType, active, ANodes),
-    rt:wait_until_bucket_type_visible(ANodes, DefinedType),
+    rt_bucket_types:wait_until_bucket_type_status(DefinedType, active, ANodes),
+    rt_bucket_types:wait_until_bucket_type_visible(ANodes, DefinedType),
 
     case Type of
         current ->
-            rt:create_and_activate_bucket_type(LeaderB,
+            rt_bucket_types:create_and_activate_bucket_type(LeaderB,
                                                DefinedType,
                                                [{n_val, 3}, {allow_mult, false}]),
-            rt:wait_until_bucket_type_status(DefinedType, active, BNodes),
-            rt:wait_until_bucket_type_visible(BNodes, DefinedType);
+            rt_bucket_types:wait_until_bucket_type_status(DefinedType, active, BNodes),
+            rt_bucket_types:wait_until_bucket_type_visible(BNodes, DefinedType);
         mixed ->
             ok
     end,
 
-    rt:create_and_activate_bucket_type(LeaderA,
+    rt_bucket_types:create_and_activate_bucket_type(LeaderA,
                                        UndefType,
                                        [{n_val, 3}, {allow_mult, false}]),
-    rt:wait_until_bucket_type_status(UndefType, active, ANodes),
-    rt:wait_until_bucket_type_visible(ANodes, UndefType),
+    rt_bucket_types:wait_until_bucket_type_status(UndefType, active, ANodes),
+    rt_bucket_types:wait_until_bucket_type_visible(ANodes, UndefType),
 
     connect_clusters(LeaderA, LeaderB),
     {ClusterNodes, Types, PBA, PBB}.
@@ -57,7 +57,7 @@ cleanup({ClusterNodes, _Types, PBA, PBB}, CleanCluster) ->
     {_, _, ANodes, BNodes} = ClusterNodes,
     case CleanCluster of
         true ->
-            rt:clean_cluster(ANodes ++ BNodes);
+            rt_cluster:clean_cluster(ANodes ++ BNodes);
         false ->
             ok
     end.
@@ -339,10 +339,10 @@ cluster_conf() ->
     ].
 
 deploy_nodes(NumNodes, current) ->
-    rt:deploy_nodes(NumNodes, cluster_conf());
+    rt_cluster:deploy_nodes(NumNodes, cluster_conf());
 deploy_nodes(_, mixed) ->
     Conf = cluster_conf(),
-    rt:deploy_nodes([{current, Conf}, {previous, Conf}]).
+    rt_cluster:deploy_nodes([{current, Conf}, {previous, Conf}]).
 
 %% @doc Create two clusters of 1 node each and connect them for replication:
 %%      Cluster "A" -> cluster "B"

@@ -88,7 +88,7 @@ get_backend(Host, AppConfig) ->
     Str = binary_to_list(Bin),
     {ok, ErlTok, _} = erl_scan:string(Str),
     {ok, Term} = erl_parse:parse_term(ErlTok),
-    rt:get_backend(Term).
+    rt_backend:get_backend(Term).
 
 cmd(Cmd) ->
     cmd(Cmd, []).
@@ -196,7 +196,7 @@ deploy_nodes(NodeConfig, Hosts) ->
     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
 
     %% Ensure nodes are singleton clusters
-    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
+    [ok = rt_ring:check_singleton_node(N) || {N, Version} <- VersionMap,
                                         Version /= "0.14.2"],
 
     Nodes.

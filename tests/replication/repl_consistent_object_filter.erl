@@ -27,18 +27,18 @@ confirm() ->
     BucketType = <<"consistent_type">>,
 
     %% Create consistent bucket type on cluster A
-    rt:create_and_activate_bucket_type(LeaderA,
+    rt_bucket_types:create_and_activate_bucket_type(LeaderA,
                                        BucketType,
                                        [{consistent, true}, {n_val, 5}]),
-    rt:wait_until_bucket_type_status(BucketType, active, ANodes),
-    rt:wait_until_bucket_type_visible(ANodes, BucketType),
+    rt_bucket_types:wait_until_bucket_type_status(BucketType, active, ANodes),
+    rt_bucket_types:wait_until_bucket_type_visible(ANodes, BucketType),
 
     %% Create consistent bucket type on cluster B
-    rt:create_and_activate_bucket_type(LeaderB,
+    rt_bucket_types:create_and_activate_bucket_type(LeaderB,
                                        BucketType,
                                        [{consistent, true}, {n_val, 5}]),
-    rt:wait_until_bucket_type_status(BucketType, active, BNodes),
-    rt:wait_until_bucket_type_visible(BNodes, BucketType),
+    rt_bucket_types:wait_until_bucket_type_status(BucketType, active, BNodes),
+    rt_bucket_types:wait_until_bucket_type_visible(BNodes, BucketType),
 
     connect_clusters(LeaderA, LeaderB),
 
@@ -103,7 +103,7 @@ make_clusters() ->
           ]}
         ],
 
-    Nodes = rt:deploy_nodes(NumNodes, Conf),
+    Nodes = rt_cluster:deploy_nodes(NumNodes, Conf),
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),

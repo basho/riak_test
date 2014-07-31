@@ -49,8 +49,8 @@ config() ->
 confirm(#rt_properties{nodes=Nodes}, _MD) ->
     Bucket = druuid:v4_str(),
     lager:info("Bucket: ~p", [Bucket]),
-    PBC = rt:pbc(hd(Nodes)),
-    HTTPC = rt:httpc(hd(Nodes)),
+    PBC = rt_pb:pbc(hd(Nodes)),
+    HTTPC = rt_http:httpc(hd(Nodes)),
     Clients = [{pb, PBC}, {http, HTTPC}],
 
     [put_an_object(PBC, Bucket, N) || N <- lists:seq(0, 20)],
@@ -70,7 +70,7 @@ confirm(#rt_properties{nodes=Nodes}, _MD) ->
     ToDel = [<<"obj05">>, <<"obj11">>],
     [?assertMatch(ok, riakc_pb_socket:delete(PBC, Bucket, KD)) || KD <- ToDel],
     lager:info("Make sure the tombstone is reaped..."),
-    ?assertMatch(ok, rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, ToDel) end)),
+    ?assertMatch(ok, rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, ToDel) end)),
 
     assertExactQuery(Clients, Bucket, [], <<"field1_bin">>, <<"val5">>),
     assertExactQuery(Clients, Bucket, [], <<"field2_int">>, 5),

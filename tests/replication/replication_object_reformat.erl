@@ -115,7 +115,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
 
     %% Wait until the sink cluster is in a steady state before
     %% starting fullsync
-    rt:wait_until_nodes_ready(BNodes),
+    rt_node:wait_until_nodes_ready(BNodes),
     rt:wait_until_no_pending_changes(BNodes),
     rt:wait_until_registered(BFirst, riak_repl2_fs_node_reserver),
 
@@ -159,27 +159,27 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
             ok
     end,
 
-    rt:clean_cluster(lists:flatten(Nodes)).
+    rt_cluster:clean_cluster(lists:flatten(Nodes)).
 
 %% @doc Configure two clusters and set up replication between them,
 %%      return the node list of each cluster.
 configure_clusters(AVersion, BVersion, Realtime) ->
-    rt:set_advanced_conf(all, ?CONF(infinity)),
+    rt_config:set_advanced_conf(all, ?CONF(infinity)),
 
-    Nodes = [ANodes, BNodes] = rt:build_clusters([3, 3]),
+    Nodes = [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
 
     lager:info("Updating app config to force ~p on source cluster.",
                [AVersion]),
-    [rt:update_app_config(N, [{riak_kv,
+    [rt_config:update_app_config(N, [{riak_kv,
                                [{object_format, AVersion}]}])
      || N <- ANodes],
 
     lager:info("Updating app config to force ~p on sink cluster.",
                [BVersion]),
-    [rt:update_app_config(N, [{riak_kv,
+    [rt_config:update_app_config(N, [{riak_kv,
                                [{object_format, BVersion}]}])
      || N <- BNodes],
 

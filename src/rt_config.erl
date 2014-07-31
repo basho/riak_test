@@ -28,8 +28,14 @@
          get_os_env/1,
          get_os_env/2,
          load/2,
-         set/2
+         set/2,
+         set_conf/2,
+         set_advanced_conf/2,
+         update_app_config/2,
+         version_to_config/1
 ]).
+
+-define(HARNESS, (rt_config:get(rt_harness))).
 
 %% @doc Get the value of an OS Environment variable. The arity 1 version of
 %%      this function will fail the test if it is undefined.
@@ -121,6 +127,38 @@ config_or_os_env(Config, Default) ->
             set(Config, V),
             V
     end.
+
+
+-spec set_conf(atom(), [{string(), string()}]) -> ok.
+set_conf(all, NameValuePairs) ->
+    ?HARNESS:set_conf(all, NameValuePairs);
+set_conf(Node, NameValuePairs) ->
+    rt_node:stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:set_conf(Node, NameValuePairs),
+    rt_node:start(Node).
+
+-spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
+set_advanced_conf(all, NameValuePairs) ->
+    ?HARNESS:set_advanced_conf(all, NameValuePairs);
+set_advanced_conf(Node, NameValuePairs) ->
+    rt_node:stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:set_advanced_conf(Node, NameValuePairs),
+    rt_node:start(Node).
+
+%% @doc Rewrite the given node's app.config file, overriding the varialbes
+%%      in the existing app.config with those in `Config'.
+update_app_config(all, Config) ->
+    ?HARNESS:update_app_config(all, Config);
+update_app_config(Node, Config) ->
+    rt_node:stop(Node),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    ?HARNESS:update_app_config(Node, Config),
+    rt_node:start(Node).
+
+version_to_config(Config) when is_tuple(Config)-> Config;
+version_to_config(Version) -> {Version, default}.
 
 to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;

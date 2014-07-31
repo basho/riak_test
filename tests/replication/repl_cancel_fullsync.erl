@@ -33,9 +33,9 @@
 
 %% @doc Ensure we can cancel a fullsync and restart it.
 confirm() ->
-    rt:set_advanced_conf(all, ?CONF(5)),
+    rt_config:set_advanced_conf(all, ?CONF(5)),
 
-    Nodes = [ANodes, BNodes] = rt:build_clusters([3, 3]),
+    Nodes = [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
@@ -138,7 +138,7 @@ confirm() ->
     lager:info("Fullsync Complete"),
 
     rt:log_to_nodes(Nodes, "Test completed."),
-    rt:clean_cluster(ANodes),
-    rt:clean_cluster(BNodes),
+    rt_cluster:clean_cluster(ANodes),
+    rt_cluster:clean_cluster(BNodes),
 
     pass.

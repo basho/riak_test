@@ -7,7 +7,7 @@
 confirm() ->
 
     %% test requires allow_mult=false
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     NumNodes = rt_config:get(num_nodes, 6),
     ClusterASize = rt_config:get(cluster_a_size, 3),
@@ -190,7 +190,7 @@ confirm() ->
 
     lager:info("===testing basic connectivity"),
 
-    [Node1, Node2] = rt:deploy_nodes(2, BaseConf),
+    [Node1, Node2] = rt_cluster:deploy_nodes(2, BaseConf),
 
     repl_util:name_cluster(Node1, "A"),
     repl_util:name_cluster(Node2, "B"),
@@ -264,17 +264,17 @@ confirm() ->
 
     lager:info("Re-deploying 6 nodes"),
 
-    Nodes = rt:deploy_nodes(6, BaseConf),
+    Nodes = rt_cluster:deploy_nodes(6, BaseConf),
 
     [rt:wait_until_pingable(N) || N <- Nodes],
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
 
     lager:info("Reconfiguring nodes with SSL options"),
-    [rt:update_app_config(N, merge_config(SSLConfig5, BaseConf)) || N <-
+    [rt_config:update_app_config(N, merge_config(SSLConfig5, BaseConf)) || N <-
         ANodes],
 
-    [rt:update_app_config(N, merge_config(SSLConfig6, BaseConf)) || N <-
+    [rt_config:update_app_config(N, merge_config(SSLConfig6, BaseConf)) || N <-
         BNodes],
 
     [rt:wait_until_pingable(N) || N <- Nodes],
@@ -297,9 +297,9 @@ merge_config(Mixin, Base) ->
 test_connection({Node1, Config1}, {Node2, Config2}) ->
     repl_util:disconnect_cluster(Node1, "B"),
     repl_util:wait_for_disconnect(Node1, "B"),
-    rt:update_app_config(Node2, Config2),
+    rt_config:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
-    rt:update_app_config(Node1, Config1),
+    rt_config:update_app_config(Node1, Config1),
     rt:wait_until_pingable(Node1),
     rt:wait_for_service(Node1, [riak_kv, riak_repl]),
     rt:wait_for_service(Node2, [riak_kv, riak_repl]),

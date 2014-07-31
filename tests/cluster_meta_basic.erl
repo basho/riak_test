@@ -56,13 +56,13 @@ test_writes_after_partial_cluster_failure([N1 | _]=Nodes) ->
     StopNodes = eager_peers(N1, N1),
     AliveNodes = Nodes -- StopNodes,
     lager:info("stopping nodes: ~p remaining nodes: ~p", [StopNodes, AliveNodes]),
-    [rt:stop(N) || N <- StopNodes],
+    [rt_node:stop(N) || N <- StopNodes],
 
     metadata_put(N1, ?PREFIX1, ?KEY1, ?VAL2),
     wait_until_metadata_value(AliveNodes, ?PREFIX1, ?KEY1, ?VAL2),
 
     lager:info("bring stopped nodes back up: ~p", [StopNodes]),
-    [rt:start(N) || N <- StopNodes],
+    [rt_node:start(N) || N <- StopNodes],
     wait_until_metadata_value(Nodes, ?PREFIX1, ?KEY1, ?VAL2),
     ok.
 

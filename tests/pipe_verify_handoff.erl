@@ -62,7 +62,7 @@ confirm() ->
     lager:info("Start ~b nodes", [?NODE_COUNT]),
     NodeDefs = lists:duplicate(?NODE_COUNT, {current, default}),
     Services = [riak_pipe],
-    [Primary,Secondary] = Nodes = rt:deploy_nodes(NodeDefs, Services),
+    [Primary,Secondary] = Nodes = rt_cluster:deploy_nodes(NodeDefs, Services),
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], rt:owners_according_to(Node)) || Node <- Nodes],
 
@@ -107,9 +107,9 @@ confirm() ->
 
     lager:info("Join Secondary to Primary"),
     %% Give slave a chance to start and master to notice it.
-    rt:join(Secondary, Primary),
+    rt_node:join(Secondary, Primary),
     rt:wait_until_no_pending_changes(Nodes),
-    rt:wait_until_nodes_agree_about_ownership(Nodes),
+    rt_node:wait_until_nodes_agree_about_ownership(Nodes),
 
     lager:info("Unpause workers"),
     Runner ! go,

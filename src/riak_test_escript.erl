@@ -193,7 +193,7 @@ maybe_teardown(true, TestResults, Coverage, Verbose) ->
             so_kill_riak_maybe();
         _ ->
             lager:info("Multiple tests run or no failure"),
-            rt:teardown(),
+            rt_cluster:teardown(),
             print_summary(TestResults, Coverage, Verbose)
     end,
     ok.
@@ -293,7 +293,7 @@ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
     CoverDir = rt_config:get(cover_output, "coverage"),
     case NumTests of
         1 -> keep_them_up;
-        _ -> rt:teardown()
+        _ -> rt_cluster:teardown()
     end,
     CoverageFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
     case Report of
@@ -422,8 +422,8 @@ so_kill_riak_maybe() ->
     io:format("Would you like to leave Riak running in order to debug?~n"),
     Input = io:get_chars("[Y/n] ", 1),
     case Input of
-        "n" -> rt:teardown();
-        "N" -> rt:teardown();
+        "n" -> rt_cluster:teardown();
+        "N" -> rt_cluster:teardown();
         _ ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()

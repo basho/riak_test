@@ -48,8 +48,8 @@
 confirm() ->
     %% Deploy a node to test against
     lager:info("Deploy node to test riak-repl command line"),
-    [Node] = rt:deploy_nodes(1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
+    [Node] = rt_cluster:deploy_nodes(1),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node])),
     rt_intercept:add(Node,
                      {riak_repl_console,
                       [
@@ -118,6 +118,6 @@ confirm() ->
 
 check_cmd(Node, Cmd) ->
     lager:info("Testing riak-repl ~s on ~s", [Cmd, Node]),
-    {ok, Out} = rt:riak_repl(Node, [Cmd]),
+    {ok, Out} = rt_cmd_line:riak_repl(Node, [Cmd]),
     ?assertEqual("pass", Out).
 

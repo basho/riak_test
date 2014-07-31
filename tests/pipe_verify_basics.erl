@@ -40,7 +40,7 @@
 
 confirm() ->
     lager:info("Build ~b node cluster", [?NODE_COUNT]),
-    Nodes = rt:build_cluster(?NODE_COUNT),
+    Nodes = rt_cluster:build_cluster(?NODE_COUNT),
 
     rt:load_modules_on_nodes([?MODULE], Nodes),
 

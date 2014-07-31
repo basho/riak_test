@@ -67,9 +67,9 @@ setup_test_env() ->
     %% must enable both RS and YZ at startup to get test data indexed;
     %% nothing extra would be tested by using multiple nodes, so just
     %% deploy one to make the test run faster
-    Nodes = rt:deploy_nodes(1, [{riak_search, [{enabled, true}]},
+    Nodes = rt_cluster:deploy_nodes(1, [{riak_search, [{enabled, true}]},
                                 {yokozuna, [{enabled, true}]}]),
-    ok = rt:wait_until_nodes_ready(Nodes),
+    ok = rt_node:wait_until_nodes_ready(Nodes),
     ok = rt:wait_for_cluster_service(Nodes, riak_search),
     ok = rt:wait_for_cluster_service(Nodes, yokozuna),
 
@@ -162,7 +162,7 @@ generate_test_data(System) ->
 %% setup riak_search hook
 setup_rs_bucket([Node|_], Bucket) ->
     lager:info("Setting up riak_search hook"),
-    C = rt:httpc(Node),
+    C = rt_http:httpc(Node),
     ok = rhc:set_bucket(C, Bucket, [{search, true}]).
 
 %% setup yokozuna hook/index - bucket name == index name
@@ -205,7 +205,7 @@ iburl(Node, Path) ->
 %% value, and each of which has a unique term in its value
 load_test_data([Node|_], Bucket, KeyAndUniques, Common) ->
     lager:info("Loading test data"),
-    C = rt:httpc(Node),
+    C = rt_http:httpc(Node),
     [ begin
           Value = list_to_binary([Common, " ", Unique]),
           ok = rhc:put(C, riakc_obj:new(Bucket, Key, Value, "text/plain"))
@@ -282,7 +282,7 @@ got_error(_) ->
     false.
 
 run_bucket_mr([Node|_], Bucket, Common) ->
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     riakc_pb_socket:mapred(
       C,
       %% TODO: check {search, Bucket, Common, Filter}

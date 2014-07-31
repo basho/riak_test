@@ -34,13 +34,13 @@
 
 
 confirm() ->
-    [Node1] = rt:build_cluster(1, [{riak_kv, [
+    [Node1] = rt_cluster:build_cluster(1, [{riak_kv, [
                         {ring_creation_size, 8},
                         {max_object_size, ?MAX_SIZE},
                         {warn_object_size, ?WARN_SIZE},
                         {max_siblings, ?MAX_SIBLINGS},
                         {warn_siblings, ?WARN_SIBLINGS}]}]),
-    C = rt:pbc(Node1),
+    C = rt_pb:pbc(Node1),
 
     %% Set up to grep logs to verify messages
     rt:setup_log_capture(Node1),

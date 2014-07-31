@@ -31,7 +31,7 @@ confirm() ->
     TestMetaData = riak_test_runner:metadata(),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
-    Nodes = [Node1|_] = rt:build_cluster([OldVsn, OldVsn, OldVsn, OldVsn]),
+    Nodes = [Node1|_] = rt_cluster:build_cluster([OldVsn, OldVsn, OldVsn, OldVsn]),
 
     verify_counter_converge:set_allow_mult_true(Nodes, ?COUNTER_BUCKET),
     populate_counters(Node1),
@@ -52,11 +52,11 @@ populate_counters(Node) ->
     rt:wait_for_service(Node, riak_kv),
     ?assertEqual(ok, rt:wait_until_capability(Node, {riak_kv, crdt}, [pncounter])),
 
-    RHC = rt:httpc(Node),
+    RHC = rt_http:httpc(Node),
     ?assertMatch(ok, rhc:counter_incr(RHC, ?COUNTER_BUCKET, <<"httpkey">>, 2)),
     ?assertMatch({ok, 2}, rhc:counter_val(RHC, ?COUNTER_BUCKET, <<"httpkey">>)),
 
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
     ?assertEqual(ok, riakc_pb_socket:counter_incr(PBC, ?COUNTER_BUCKET, <<"pbkey">>, 4)),
     ?assertEqual({ok, 4}, riakc_pb_socket:counter_val(PBC, ?COUNTER_BUCKET, <<"pbkey">>)),
     ok.
@@ -65,10 +65,10 @@ populate_counters(Node) ->
 %%      check that you can get via default bucket
 verify_counters(Node) ->
     lager:info("Verifying counters on ~p", [Node]),
-    RHC = rt:httpc(Node),
+    RHC = rt_http:httpc(Node),
     ?assertMatch({ok, 4}, rhc:counter_val(RHC, ?COUNTER_BUCKET, <<"pbkey">>)),
 
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
     ?assertEqual({ok, 2}, riakc_pb_socket:counter_val(PBC, ?COUNTER_BUCKET, <<"httpkey">>)),
 
     %% Check that 1.4 counters work with bucket types

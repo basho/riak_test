@@ -1,18 +1,25 @@
 -module(http_bucket_types).
 
--behavior(riak_test).
--export([confirm/0, mapred_modfun/3, mapred_modfun_type/3]).
+-export([properties/0, confirm/2, mapred_modfun/3, mapred_modfun_type/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
+-include("rt.hrl").
 
-confirm() ->
-    application:start(ibrowse),
-    lager:info("Deploy some nodes"),
-    Nodes = rt:build_cluster(4, [], [
-                                     {riak_core, [{default_bucket_props,
-                                                   [{n_val, 2}]}]}]),
+properties() ->
+    DefaultProps = rt_cluster:properties(),
+    CustomConfig = rt_cluster:augment_config(riak_core, 
+                                             {default_bucket_props, [{n_val, 2}]},
+                                             DefaultProps#rt_properties.config),
+    DefaultProps#rt_properties{node_count=1,
+                               rolling_upgrade=false,
+                               make_cluster=true,
+                               config=CustomConfig}.
+
+confirm(#rt_properties{nodes=Nodes}, _MD) ->
     Node = hd(Nodes),
+
+    application:start(ibrowse),
 
     RMD = riak_test_runner:metadata(),
     HaveIndexes = case proplists:get_value(backend, RMD) of
@@ -21,7 +28,7 @@ confirm() ->
                       _ -> true
                   end,
 
-    RHC = rt:httpc(Node),
+    RHC = rt_http:httpc(Node),
     lager:info("default type get/put test"),
     %% write explicitly to the default type
     ok = rhc:put(RHC, riakc_obj:new({<<"default">>, <<"bucket">>},
@@ -100,7 +107,7 @@ confirm() ->
 
     lager:info("custom type get/put test"),
     %% create a new type
-    ok = rt:create_and_activate_bucket_type(Node, <<"mytype">>, [{n_val,3}]),
+    ok = rt_bucket_types:create_and_activate_bucket_type(Node, <<"mytype">>, [{n_val,3}]),
 
     %% allow cluster metadata some time to propogate
     timer:sleep(1000),
@@ -135,7 +142,7 @@ confirm() ->
 
     UCBBin = {UnicodeTypeBin, UnicodeBucketBin},
 
-    ok = rt:create_and_activate_bucket_type(Node, UnicodeTypeBin, [{n_val,3}]),
+    ok = rt_bucket_types:create_and_activate_bucket_type(Node, UnicodeTypeBin, [{n_val,3}]),
 
     lager:info("doing put"),
     ok = rhc:put(RHC, riakc_obj:new(UCBBin,
@@ -224,7 +231,7 @@ confirm() ->
 
     %% make sure a newly created type is not affected either
     %% create a new type
-    ok = rt:create_and_activate_bucket_type(Node, <<"mynewtype">>, []),
+    ok = rt_bucket_types:create_and_activate_bucket_type(Node, <<"mynewtype">>, []),
     %% allow cluster metadata some time to propogate
     timer:sleep(1000),
 

@@ -29,8 +29,8 @@
 -define(UNDEFINED_BUCKET_TYPE,  <<"880bf69d-5dab-44ee-8762-d24c6f759ce1">>).
 
 confirm() ->
-    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    [Node1, Node2, Node3, Node4] = Nodes = rt_cluster:deploy_nodes(4),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
 
     lager:info("Nodes deployed, but not joined."),
 
@@ -42,7 +42,7 @@ confirm() ->
 
     lists:foldl(fun(Node, [N1|_] = Cluster) ->
             lager:info("An invitation to this party is cordially extended to ~p.", [Node]),
-            rt:join(Node, N1),
+            rt_node:join(Node, N1),
             lager:info("Wait until there are no pending changes"),
             Ns = lists:usort([Node|Cluster]),
             rt:wait_until_no_pending_changes(Ns),
@@ -57,17 +57,17 @@ confirm() ->
     check_it_all(Nodes, http),
 
     lager:info("Stopping Node1"),
-    rt:stop(Node1),
+    rt_node:stop(Node1),
     rt:wait_until_unpingable(Node1),
 
     %% Stop current node, restart previous node, verify
     lists:foldl(fun(Node, Prev) ->
             lager:info("Stopping Node ~p", [Node]),
-            rt:stop(Node),
+            rt_node:stop(Node),
             rt:wait_until_unpingable(Node),
 
             lager:info("Starting Node ~p", [Prev]),
-            rt:start(Prev),
+            rt_node:start(Prev),
             UpNodes = Nodes -- [Node],
             lager:info("Waiting for riak_kv service to be ready in ~p", [Prev]),
             rt:wait_for_cluster_service(UpNodes, riak_kv),
@@ -78,11 +78,11 @@ confirm() ->
         end, Node1, [Node2, Node3, Node4]),
 
     lager:info("Stopping Node2"),
-    rt:stop(Node2),
+    rt_node:stop(Node2),
     rt:wait_until_unpingable(Node2),
 
     lager:info("Stopping Node3"),
-    rt:stop(Node3),
+    rt_node:stop(Node3),
     rt:wait_until_unpingable(Node3),
 
     lager:info("Only Node1 is up, so test should fail!"),
@@ -91,7 +91,7 @@ confirm() ->
     pass.
 
 put_keys(Node, Bucket, Num) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     Keys = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
     Vals = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
     [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)],
@@ -100,10 +100,10 @@ put_keys(Node, Bucket, Num) ->
 list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
     case Interface of
         pbc ->
-            Pid = rt:pbc(Node),
+            Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
-            Pid = rt:httpc(Node),
+            Pid = rt_http:httpc(Node),
             Mod = rhc
     end,
     lager:info("Listing keys on ~p using ~p. Attempt #~p",
@@ -128,10 +128,10 @@ list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
 list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass) ->
     case Interface of
         pbc ->
-            Pid = rt:pbc(Node),
+            Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
-            Pid = rt:httpc(Node),
+            Pid = rt_http:httpc(Node),
             Mod = rhc
     end,
 
@@ -151,7 +151,7 @@ list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass
     end.
 
 put_buckets(Node, Num) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     Buckets = [list_to_binary(["", integer_to_list(Ki)])
                || Ki <- lists:seq(0, Num - 1)],
     {Key, Val} = {<<"test_key">>, <<"test_value">>},
@@ -162,10 +162,10 @@ put_buckets(Node, Num) ->
 list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
     case Interface of
         pbc ->
-            Pid = rt:pbc(Node),
+            Pid = rt_pb:pbc(Node),
             Mod = riakc_pb_socket;
         http ->
-            Pid = rt:httpc(Node),
+            Pid = rt_http:httpc(Node),
             Mod = rhc
     end,
     lager:info("Listing buckets on ~p using ~p. Attempt #~p",
@@ -196,10 +196,10 @@ list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
 list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass) ->
     case Interface of
 	pbc ->
-	    Pid = rt:pbc(Node),
+	    Pid = rt_pb:pbc(Node),
 	    Mod = riakc_pb_socket;
 	http ->
-	    Pid = rt:httpc(Node),
+	    Pid = rt_http:httpc(Node),
 	    Mod = rhc
     end,
 

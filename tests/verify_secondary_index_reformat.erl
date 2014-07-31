@@ -24,8 +24,8 @@
 -include_lib("riakc/include/riakc.hrl").
 
 confirm() ->
-    [Node] = rt:build_cluster([legacy]),
-    rt:wait_until_nodes_ready([Node]),
+    [Node] = rt_cluster:build_cluster([legacy]),
+    rt_node:wait_until_nodes_ready([Node]),
 
     check_fixed_index_statuses(Node, undefined),
 
@@ -37,7 +37,7 @@ confirm() ->
     %% write key with index that old version of sext would encode improperly (not perserving
     %% sort order)
     lager:info("writing test key"),
-    Client0 = rt:pbc(Node),
+    Client0 = rt_pb:pbc(Node),
     Obj0 = riakc_obj:new(TestBucket, TestKey, <<"somevalue">>),
     ObjMD0 = riakc_obj:get_update_metadata(Obj0),
     ObjMD1 = riakc_obj:set_secondary_index(ObjMD0,
@@ -57,7 +57,7 @@ confirm() ->
     %% should rewrite 1 index (* n = 3), ignore 0 and have zero errors
     {3, 0, 0} = rpc:call(Node, riak_kv_util, fix_incorrect_index_entries, []),
 
-    Client1 = rt:pbc(Node),
+    Client1 = rt_pb:pbc(Node),
     Results = riakc_pb_socket:get_index(Client1, TestBucket,
                                         TestIndex, 1000000000000,
                                         TestIdxValue),
@@ -70,11 +70,11 @@ confirm() ->
 
     %% write some more data (make sure flag doesn't "roll back" on restart
     lager:info("writing some more data"),
-    rt:systest_write(Node, 10, 1),
+    rt_systest:write(Node, 10, 1),
 
     lager:info("restarting node"),
-    rt:stop_and_wait(Node),
-    rt:start(Node),
+    rt_node:stop_and_wait(Node),
+    rt_node:start(Node),
     rt:wait_for_service(Node, riak_kv),
 
     check_fixed_index_statuses(Node, true),
@@ -84,8 +84,8 @@ confirm() ->
 
     check_fixed_index_statuses(Node, false),
 
-    rt:stop_and_wait(Node),
-    rt:start(Node),
+    rt_node:stop_and_wait(Node),
+    rt_node:start(Node),
     rt:wait_for_service(Node, riak_kv),
     check_fixed_index_statuses(Node, false),
 

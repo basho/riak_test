@@ -51,7 +51,8 @@ run(TestModule, Outdir, TestMetaData, HarnessArgs) ->
                         undefined -> [];
                         Value -> [{multi_config, Value}]
                     end,
-    Backend = rt:set_backend(proplists:get_value(backend, TestMetaData), BackendExtras),
+    Backend = rt_backend:set_backend(
+                 proplists:get_value(backend, TestMetaData), BackendExtras),
     {PropsMod, PropsFun} = function_name(properties, TestModule, 0, rt_cluster),
     {SetupMod, SetupFun} = function_name(setup, TestModule, 2, rt_cluster),
     {ConfirmMod, ConfirmFun} = function_name(confirm, TestModule),
@@ -158,7 +159,7 @@ compose_confirm_fun({ConfirmMod, ConfirmFun},
             InitialResult = ConfirmMod:ConfirmFun(SetupData, MetaData),
             OtherResults = [begin
                                 ensure_all_nodes_running(Nodes),
-                                _ = rt:upgrade(Node, UpgradeVersion),
+                                _ = rt_node:upgrade(Node, UpgradeVersion),
                                 _ = rt_cluster:maybe_wait_for_transfers(Nodes, WaitForTransfers),
                                 ConfirmMod:ConfirmFun(SetupData, MetaData)
                             end || Node <- Nodes],
@@ -173,7 +174,7 @@ compose_confirm_fun({ConfirmMod, ConfirmFun},
 
 ensure_all_nodes_running(Nodes) ->
     [begin
-         ok = rt:start_and_wait(Node),
+         ok = rt_node:start_and_wait(Node),
          ok = rt:wait_until_registered(Node, riak_core_ring_manager)
      end || Node <- Nodes].
 

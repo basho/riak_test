@@ -58,7 +58,7 @@ confirm() ->
     Versions = [{current, SearchEnabled},
                 {UpgradeVsn, SearchEnabled}],
     Services = [riak_kv, riak_search, riak_pipe],
-    [Current, Old] = Nodes = rt:deploy_nodes(Versions, Services),
+    [Current, Old] = Nodes = rt_cluster:deploy_nodes(Versions, Services),
 
     prepare_vnodes(Current),
 
@@ -67,7 +67,7 @@ confirm() ->
     OldFold = rt:capability(Old, ?FOLD_CAPABILITY, v1),
 
     %% now link the nodes together and wait for handoff to complete
-    ok = rt:join(Old, Current),
+    ok = rt_node:join(Old, Current),
     ok = rt:wait_until_all_members(Nodes),
     ok = rt:wait_until_ring_converged(Nodes),
 
@@ -101,7 +101,7 @@ prepare_vnodes(Node) ->
 prepare_kv_vnodes(Node) ->
     lager:info("Preparing KV vnodes with keys 1-~b in bucket ~s",
                [?KV_COUNT, ?KV_BUCKET]),
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     lists:foreach(
       fun(KV) ->
               ok = riakc_pb_socket:put(C, riakc_obj:new(?KV_BUCKET, KV, KV))
@@ -113,7 +113,7 @@ prepare_search_vnodes(Node) ->
     lager:info("Peparing Search vnodes with keys 1000-~b in bucket ~s",
                [1000+?SEARCH_COUNT, ?SEARCH_BUCKET]),
     rt:enable_search_hook(Node, ?SEARCH_BUCKET),
-    C = rt:pbc(Node),
+    C = rt_pb:pbc(Node),
     lists:foreach(
       fun(KV) ->
               O = riakc_obj:new(?SEARCH_BUCKET, KV, KV, "text/plain"),

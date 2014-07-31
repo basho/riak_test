@@ -29,13 +29,13 @@
 
 confirm() ->
     lager:info("Staring a node"),
-    Nodes = [Node] = rt:deploy_nodes(1),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    Nodes = [Node] = rt_cluster:deploy_nodes(1),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
     
     lager:info("Stopping that node"),
-    rt:stop(Node),
+    rt_node:stop(Node),
     
-    rt:start(Node),
+    rt_node:start(Node),
     lager:info("Checking for log files"),
     
     {ok, LagerHandlers} = rt:rpc_get_env(Node, [{lager, handlers}]),

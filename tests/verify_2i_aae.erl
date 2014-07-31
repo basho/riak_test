@@ -31,7 +31,7 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    [Node1] = rt:build_cluster(1,
+    [Node1] = rt_cluster:build_cluster(1,
                                [{riak_kv,
                                  [{anti_entropy, {off, []}},
                                   {anti_entropy_build_limit, {100, 500}},
@@ -44,7 +44,7 @@ confirm() ->
                        {{diff_index_specs, 2}, skippable_diff_index_specs}]}),
     lager:info("Installed intercepts to corrupt index specs on node ~p", [Node1]),
     %%rpc:call(Node1, lager, set_loglevel, [lager_console_backend, debug]),
-    PBC = rt:pbc(Node1),
+    PBC = rt_pb:pbc(Node1),
     NumItems = ?NUM_ITEMS,
     NumDel = ?NUM_DELETES,
     pass = check_lost_objects(Node1, PBC, NumItems, NumDel),
@@ -68,7 +68,7 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     ok = rpc:call(Node1, application, set_env,
                   [riak_kv, anti_entropy, {on, [debug]}]),
     ok = rpc:call(Node1, riak_kv_entropy_manager, enable, []),
-    rt:wait_until_aae_trees_built([Node1]),
+    rt_aae:wait_until_aae_trees_built([Node1]),
 
     lager:info("AAE trees built, now put the rest of the data"),
     [put_obj(PBC, Bucket, N, N+1, Index)
@@ -87,7 +87,7 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     lager:info("Deleting ~b objects without updating indexes", [NumDel]),
     [del_obj(PBC, Bucket, N) || N <- DelRange, Bucket <- ?BUCKETS],
     DelKeys = [to_key(N) || N <- DelRange], 
-    [rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, DelKeys) end)
+    [rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, DelKeys) end)
      || Bucket <- ?BUCKETS],
     %% Verify they are damaged
     lager:info("Verify change did not take, needs repair"),
@@ -125,7 +125,7 @@ do_tree_rebuild(Node) ->
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {100, 1000}])),
-    rt:wait_until_aae_trees_built([Node]),
+    rt_aae:wait_until_aae_trees_built([Node]),
     ok.
 
 %% Write objects without a 2i index. Test that running 2i repair will generate
@@ -151,7 +151,7 @@ check_kill_repair(Node1) ->
     lager:info("Test that killing 2i repair works as desired"),
     spawn(fun() ->
                   timer:sleep(1500),
-                  rt:admin(Node1, ["repair-2i", "kill"])
+                  rt_cmd_line:admin(Node1, ["repair-2i", "kill"])
           end),
     ExitStatus = run_2i_repair(Node1),
     case ExitStatus of
@@ -168,7 +168,7 @@ check_kill_repair(Node1) ->
 
 run_2i_repair(Node1) ->
     lager:info("Run 2i AAE repair"),
-    ?assertMatch({ok, _}, rt:admin(Node1, ["repair-2i"])),
+    ?assertMatch({ok, _}, rt_cmd_line:admin(Node1, ["repair-2i"])),
     RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae]),
     lager:info("Wait for repair process to finish"),
     Mon = monitor(process, RepairPid),

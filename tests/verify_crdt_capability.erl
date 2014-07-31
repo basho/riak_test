@@ -38,7 +38,7 @@ confirm() ->
     %% Upgrade nodes
     %% Get put on all nodes
     Config = [],
-    [Previous, Current]=Nodes = rt:build_cluster([{previous, Config}, {current, Config}]),
+    [Previous, Current]=Nodes = rt_cluster:build_cluster([{previous, Config}, {current, Config}]),
     ?assertEqual(ok, rt:wait_until_capability(Current, {riak_kv, crdt}, [pncounter])),
 
     verify_counter_converge:set_allow_mult_true(Nodes),
@@ -93,4 +93,4 @@ gen_counter_op() ->
     riakc_counter:to_op(riakc_counter:increment(riakc_counter:new())).
 
 get_clients(Node) ->
-    {rt:pbc(Node), rt:httpc(Node)}.
+    {rt_pb:pbc(Node), rt_http:httpc(Node)}.

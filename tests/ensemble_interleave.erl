@@ -46,7 +46,7 @@ confirm() ->
     vnode_util:load(Nodes),
 
     lager:info("Creating/activating 'strong' bucket type"),
-    rt:create_and_activate_bucket_type(Node, <<"strong">>,
+    rt_bucket_types:create_and_activate_bucket_type(Node, <<"strong">>,
                                        [{consistent, true}, {n_val, NVal}]),
     ensemble_util:wait_until_stable(Node, NVal),
     Bucket = {<<"strong">>, <<"test">>},
@@ -65,19 +65,19 @@ confirm() ->
     [KillFirst,KillSecond|Suspend] = All -- PartitionedVN,
 
     io:format("PL: ~p~n", [PL]),
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
     Options = [{timeout, 500}],
 
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [manual]),
-    Part = rt:partition(Nodes -- Partitioned, Partitioned),
+    Part = rt_node:partition(Nodes -- Partitioned, Partitioned),
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Writing ~p consistent keys", [1000]),
-    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
 
     lager:info("Read keys to verify they exist"),
-    [rt:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys],
-    rt:heal(Part),
+    [rt_pb:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys],
+    rt_node:heal(Part),
 
     [begin
          lager:info("Suspending vnode: ~p", [VIdx]),
@@ -97,5 +97,5 @@ confirm() ->
 
     lager:info("Re-reading keys to verify they exist"),
     Expect = [ok, {error, timeout}, {error, <<"timeout">>}, {error, <<"failed">>}],
-    [rt:pbc_read_check(PBC, Bucket, Key, Expect, Options) || Key <- Keys],
+    [rt_pb:pbc_read_check(PBC, Bucket, Key, Expect, Options) || Key <- Keys],
     pass.

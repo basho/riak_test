@@ -105,8 +105,8 @@ confirm(#rt_properties{nodes=Nodes}, _MD) ->
 
     lager:info("custom type get/put test"),
     Type = <<"mytype">>,
-    rt:create_and_activate_bucket_type(Node, Type, [{n_val, 3}]),
-    rt:wait_until_bucket_type_status(Type, active, Nodes),
+    rt_bucket_types:create_and_activate_bucket_type(Node, Type, [{n_val, 3}]),
+    rt_bucket_types:wait_until_bucket_type_status(Type, active, Nodes),
 
     lager:info("doing put"),
     riakc_pb_socket:put(PB, riakc_obj:new({Type, <<"bucket">>},
@@ -195,8 +195,8 @@ confirm(#rt_properties{nodes=Nodes}, _MD) ->
     %% make sure a newly created type is not affected either
     %% create a new type
     Type2 = <<"mynewtype">>,
-    rt:create_and_activate_bucket_type(Node, Type2, []),
-    rt:wait_until_bucket_type_status(Type2, active, Nodes),
+    rt_bucket_types:create_and_activate_bucket_type(Node, Type2, []),
+    rt_bucket_types:wait_until_bucket_type_status(Type2, active, Nodes),
 
     {ok, BProps11} = riakc_pb_socket:get_bucket_type(PB, Type2),
 

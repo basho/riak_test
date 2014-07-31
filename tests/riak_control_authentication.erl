@@ -209,7 +209,7 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
 
 %% @doc Build a one node cluster.
 build_singleton_cluster(Vsn, Config) ->
-    [Nodes] = rt:build_clusters([{1, Vsn, Config}]),
+    [Nodes] = rt_cluster:build_clusters([{1, Vsn, Config}]),
 
     %% Start and stop, wait for riak_kv.
     %%
@@ -217,8 +217,8 @@ build_singleton_cluster(Vsn, Config) ->
     %% the supervisor starts, we need to restart to ensure settings
     %% take effect.
     Node = lists:nth(1, Nodes),
-    rt:stop_and_wait(Node),
-    rt:start_and_wait(Node),
+    rt_node:stop_and_wait(Node),
+    rt_node:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
 
     %% Wait for control to start.

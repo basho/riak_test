@@ -43,7 +43,7 @@ confirm() ->
              ]}
     ],
 
-    Nodes = rt:deploy_nodes(NumNodes, Conf),
+    Nodes = rt_cluster:deploy_nodes(NumNodes, Conf),
     {ANodes, Rest} = lists:split(2, Nodes),
     {BNodes, CNodes} = lists:split(2, Rest),
 
@@ -88,7 +88,7 @@ confirm() ->
     enable_rt(AFirst, ANodes),
 
     lager:info("Adding 4th node to the A cluster"),
-    rt:join(CNode, AFirst),
+    rt_node:join(CNode, AFirst),
 
     [verify_connectivity(Node) || Node <- ANodes],
 

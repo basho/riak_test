@@ -19,7 +19,7 @@ confirm() ->
     % Configure for fast merge checks
     Config = [{riak_kv, [{bitcask_merge_check_interval, 2000}]},
               {bitcask, [{max_file_size, 100}]}],
-    Nodes = rt:build_cluster([{OldVsn, Config}]),
+    Nodes = rt_cluster:build_cluster([{OldVsn, Config}]),
     verify_bitcask_tombstone2_upgrade(Nodes),
     pass.
 
@@ -36,14 +36,14 @@ verify_bitcask_tombstone2_upgrade(Nodes) ->
     lager:info("And that is that").
 
 write_some_data([Node1 | _]) ->
-    rt:pbc_systest_write(Node1, 10000).
+    rt_pb:pbc_systest_write(Node1, 10000).
 
 list_bitcask_files(Nodes) ->
     [{Node, list_node_bitcask_files(Node)} || Node <- Nodes].
 
 list_node_bitcask_files(Node) ->
     % Gather partitions owned, list *.bitcask.data on each.
-    Partitions = rt:partitions_for_node(Node),
+    Partitions = rt_ring:partitions_for_node(Node),
     {ok, DataDir} = rt:rpc_get_env(Node, [{bitcask, data_root}]),
     [begin
          IdxStr = integer_to_list(Idx),

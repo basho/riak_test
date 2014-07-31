@@ -43,7 +43,7 @@ confirm() ->
     Config = [{riak_search, [{enabled, true}]}, {riak_pipe, [{worker_limit, 200}]}],
     NumNodes = 4,
     Vsns = [{OldVsn, Config} || _ <- lists:seq(1,NumNodes)],
-    Nodes = rt:build_cluster(Vsns),
+    Nodes = rt_cluster:build_cluster(Vsns),
 
     seed_cluster(Nodes),
 
@@ -116,8 +116,8 @@ seed_cluster(Nodes=[Node1|_]) ->
 
     %% For List Keys
     lager:info("Writing 100 keys to ~p", [Node1]),
-    rt:systest_write(Node1, 100, 3),
-    ?assertEqual([], rt:systest_read(Node1, 100, 1)),
+    rt_systest:write(Node1, 100, 3),
+    ?assertEqual([], rt_systest:read(Node1, 100, 1)),
 
     seed(Node1, 0, 100, fun(Key) ->
                                 Bin = iolist_to_binary(io_lib:format("~p", [Key])),
@@ -145,7 +145,7 @@ bucket(mapred) -> <<"bryanitbs">>;
 bucket(search) -> <<"scotts_spam">>.
 
 seed_search(Node) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     SpamDir = rt_config:get(spam_dir),
     Files = case SpamDir of
                 undefined -> undefined;
@@ -157,7 +157,7 @@ seed_search(Node) ->
 seed_search(_Pid, []) -> ok;
 seed_search(Pid, [File|Files]) ->
     Key = list_to_binary(filename:basename(File)),
-    rt:pbc_put_file(Pid, bucket(search), Key, File),
+    rt_pb:pbc_put_file(Pid, bucket(search), Key, File),
     seed_search(Pid, Files).
 
 kv_seed(Node) ->
@@ -201,7 +201,7 @@ mr_seed(Node) ->
     seed(Node, 0, 9999, ValFun).
 
 seed(Node, Start, End, ValFun) ->
-    PBC = rt:pbc(Node),
+    PBC = rt_pb:pbc(Node),
 
     [ begin
           Obj = ValFun(Key),

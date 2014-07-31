@@ -9,13 +9,13 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    [Node] = rt:build_cluster(1),
+    [Node] = rt_cluster:build_cluster(1),
     rt:wait_until_pingable(Node),
 
-    HC = rt:httpc(Node),
+    HC = rt_http:httpc(Node),
     lager:info("setting up initial data and loading remote code"),
-    rt:httpc_write(HC, <<"foo">>, <<"bar">>, <<"foobarbaz\n">>),
-    rt:httpc_write(HC, <<"foo">>, <<"bar2">>, <<"foobarbaz2\n">>),
+    rt_http:httpc_write(HC, <<"foo">>, <<"bar">>, <<"foobarbaz\n">>),
+    rt_http:httpc_write(HC, <<"foo">>, <<"bar2">>, <<"foobarbaz2\n">>),
 
     put_keys(Node, ?BUCKET, ?NUM_KEYS),
     put_buckets(Node, ?NUM_BUCKETS),
@@ -72,7 +72,7 @@ confirm() ->
     end,
 
 
-    PC = rt:pbc(Node),
+    PC = rt_pb:pbc(Node),
 
     lager:info("testing PBC API"),
 
@@ -126,7 +126,7 @@ confirm() ->
     lager:info("Checking List timeouts"),
 
     lager:info("Checking PBC"),
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     lager:info("Checking keys timeout"),
     ?assertMatch({error, <<"timeout">>},
                  riakc_pb_socket:list_keys(Pid, ?BUCKET, Short)),
@@ -155,7 +155,7 @@ confirm() ->
 
 
     lager:info("Checking HTTP"),
-    LHC = rt:httpc(Node),
+    LHC = rt_http:httpc(Node),
     lager:info("Checking keys timeout"),
     ?assertMatch({error, <<"timeout">>},
                  rhc:list_keys(LHC, ?BUCKET, Short)),
@@ -228,7 +228,7 @@ wait_for_end(ReqId) ->
 
 
 put_buckets(Node, Num) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     Buckets = [list_to_binary(["", integer_to_list(Ki)])
                || Ki <- lists:seq(0, Num - 1)],
     {Key, Val} = {<<"test_key">>, <<"test_value">>},
@@ -238,7 +238,7 @@ put_buckets(Node, Num) ->
 
 
 put_keys(Node, Bucket, Num) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     Keys = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
     Vals = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
     [riakc_pb_socket:put(Pid, riakc_obj:new(Bucket, Key, Val)) || {Key, Val} <- lists:zip(Keys, Vals)],

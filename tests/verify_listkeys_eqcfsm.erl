@@ -69,7 +69,7 @@ prop_test() ->
                       [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
                       {H, _S, Res} = run_commands(?MODULE, Cmds, [{nodelist, Nodes}]),
                       lager:info("======================== Ran commands"),
-                      rt:clean_cluster(Nodes),
+                      rt_cluster:clean_cluster(Nodes),
                       aggregate(zip(state_names(H),command_names(Cmds)), 
                           equals(Res, ok))
                  end))).
@@ -178,14 +178,14 @@ log_transition(S) ->
 %% Helpers
 %% ====================================================================
 setup_cluster(NumNodes) ->
-    Nodes = rt:build_cluster(NumNodes),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    Nodes = rt_cluster:build_cluster(NumNodes),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
     ?assertEqual(ok, rt:wait_until_transfers_complete(Nodes)),
     Node = hd(Nodes),
     [begin
-         rt:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
-         rt:wait_until_bucket_type_status(BucketType, active, Nodes),
-         rt:wait_until_bucket_type_visible(Nodes, BucketType)
+         rt_bucket_types:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
+         rt_bucket_types:wait_until_bucket_type_status(BucketType, active, Nodes),
+         rt_bucket_types:wait_until_bucket_type_visible(Nodes, BucketType)
      end || {BucketType, NVal} <- bucket_types()],
     Nodes.
 
@@ -229,7 +229,7 @@ node_list(NumNodes) ->
 
 put_keys(Node, Bucket, Num) ->
     lager:info("*******************[CMD]  Putting ~p keys into bucket ~p on node ~p", [Num, Bucket, Node]),
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     try
         Keys = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],
         Vals = [list_to_binary(["", integer_to_list(Ki)]) || Ki <- lists:seq(0, Num - 1)],

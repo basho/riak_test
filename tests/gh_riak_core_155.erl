@@ -24,7 +24,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    [Node] = rt:build_cluster(1),
+    [Node] = rt_cluster:build_cluster(1),
 
     %% Generate a valid preflist for our get requests
     rpc:call(Node, riak_core, wait_for_service, [riak_kv]),
@@ -34,12 +34,12 @@ confirm() ->
 
     lager:info("Adding delayed start to app.config"),
     NewConfig = [{riak_core, [{delayed_start, 1000}]}],
-    rt:update_app_config(Node, NewConfig),
+    rt_config:update_app_config(Node, NewConfig),
 
     %% Restart node, add intercept that delay proxy startup, and issue gets.
     %% Gets will come in before proxies started, and should trigger crash.
-    rt:stop_and_wait(Node),
-    rt:async_start(Node),
+    rt_node:stop_and_wait(Node),
+    rt_node:async_start(Node),
     rt:wait_until_pingable(Node),
     rt_intercept:load_intercepts([Node]),
     rt_intercept:add(Node, {riak_core_vnode_proxy_sup,

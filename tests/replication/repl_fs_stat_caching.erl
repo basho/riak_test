@@ -25,7 +25,7 @@ confirm() ->
     % status.
     {ok, Suspended} = suspend_an_fs_source(SrcCluster),
     lager:info("Suspended: ~p", [Suspended]),
-    {ok, Status} = rt:riak_repl(SrcLead, "status"),
+    {ok, Status} = rt_cmd_line:riak_repl(SrcLead, "status"),
     FailLine = "RPC to '" ++ atom_to_list(SrcLead) ++ "' failed: timeout\n",
     ?assertNotEqual(FailLine, Status),
 
@@ -34,11 +34,11 @@ confirm() ->
     pass.
 
 setup() ->
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     NodeCount = rt_config:get(num_nodes, 6),
 
     lager:info("Deploy ~p nodes", [NodeCount]),
-    Nodes = rt:deploy_nodes(NodeCount, cluster_conf()),
+    Nodes = rt_cluster:deploy_nodes(NodeCount, cluster_conf()),
     SplitSize = NodeCount div 2,
     {SourceNodes, SinkNodes} = lists:split(SplitSize, Nodes),
 

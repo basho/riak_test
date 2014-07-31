@@ -38,7 +38,7 @@
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -64,7 +64,7 @@ simple_test_() ->
     % +-----------+    +--------+    +-----+
     {timeout, timeout(90), {setup, fun() ->
         Conf = conf(),
-        [BeginNode, MiddleNode, EndNode] = Nodes = rt:deploy_nodes(3, Conf),
+        [BeginNode, MiddleNode, EndNode] = Nodes = rt_cluster:deploy_nodes(3, Conf),
         repl_util:make_cluster([BeginNode]),
         repl_util:make_cluster([MiddleNode]),
         repl_util:make_cluster([EndNode]),
@@ -78,7 +78,7 @@ simple_test_() ->
     fun(State) ->
         Nodes = [State#simple_state.beginning, State#simple_state.middle,
             State#simple_state.ending],
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(State) -> [
 
@@ -97,7 +97,7 @@ simple_test_() ->
         end},
 
         {"cascade a put from beginning down to ending", timeout, timeout(25), fun() ->
-            BeginningClient = rt:pbc(State#simple_state.beginning),
+            BeginningClient = rt_pb:pbc(State#simple_state.beginning),
             Bin = <<"cascading realtime">>,
             Obj = riakc_obj:new(<<"objects">>, Bin, Bin),
             riakc_pb_socket:put(BeginningClient, Obj, [{w,1}]),
@@ -110,7 +110,7 @@ simple_test_() ->
             rpc:call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["never"]]),
             Bin = <<"disabled cascading">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
-            Client = rt:pbc(State#simple_state.beginning),
+            Client = rt_pb:pbc(State#simple_state.beginning),
             riakc_pb_socket:put(Client, Obj, [{w,1}]),
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
@@ -122,7 +122,7 @@ simple_test_() ->
             rpc:call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["always"]]),
             Bin = <<"cascading re-enabled">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
-            Client = rt:pbc(State#simple_state.beginning),
+            Client = rt_pb:pbc(State#simple_state.beginning),
             riakc_pb_socket:put(Client, Obj, [{w,1}]),
             riakc_pb_socket:stop(Client),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
@@ -161,7 +161,7 @@ big_circle_test_() ->
     %     +---+
     {timeout, timeout(130), {setup, fun() ->
         Conf = conf(),
-        Nodes = rt:deploy_nodes(6, Conf),
+        Nodes = rt_cluster:deploy_nodes(6, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["1", "2", "3", "4", "5", "6"],
@@ -181,13 +181,13 @@ big_circle_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
         {"circle it", timeout, timeout(65), fun() ->
             [One | _] = Nodes,
-            C = rt:pbc(One),
+            C = rt_pb:pbc(One),
             Bin = <<"goober">>,
             Bucket = <<"objects">>,
             Obj = riakc_obj:new(Bucket, Bin, Bin),
@@ -208,7 +208,7 @@ big_circle_test_() ->
                 connect_rt(Node, Port, ConnectToName)
             end,
             lists:map(Connect, lists:zip(Nodes, ConnectTo)),
-            C = rt:pbc(hd(Nodes)),
+            C = rt_pb:pbc(hd(Nodes)),
             Bin = <<"2 way repl">>,
             Bucket = <<"objects">>,
             Obj = riakc_obj:new(Bucket, Bin, Bin),
@@ -262,7 +262,7 @@ circle_test_() ->
     % +-------+    +-----+
     {timeout, timeout(30), {setup, fun() ->
         Conf = conf(),
-        [One, Two, Three] = Nodes = rt:deploy_nodes(3, Conf),
+        [One, Two, Three] = Nodes = rt_cluster:deploy_nodes(3, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["one", "two", "three"],
@@ -280,12 +280,12 @@ circle_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
         {"cascade all the way to the other end, but no further", timeout, timeout(12), fun() ->
-            Client = rt:pbc(hd(Nodes)),
+            Client = rt_pb:pbc(hd(Nodes)),
             Bin = <<"cascading">>,
             Obj = riakc_obj:new(<<"objects">>, Bin, Bin),
             riakc_pb_socket:put(Client, Obj, [{w,1}]),
@@ -301,7 +301,7 @@ circle_test_() ->
 
         {"cascade starting at a different point", timeout, timeout(12), fun() ->
             [One, Two | _] = Nodes,
-            Client = rt:pbc(Two),
+            Client = rt_pb:pbc(Two),
             Bin = <<"start_at_two">>,
             Obj = riakc_obj:new(<<"objects">>, Bin, Bin),
             riakc_pb_socket:put(Client, Obj, [{w,1}]),
@@ -333,7 +333,7 @@ pyramid_test_() ->
 
     {timeout, timeout(70), {setup, fun() ->
         Conf = conf(),
-        [Top, Left, Left2, Right, Right2] = Nodes = rt:deploy_nodes(5, Conf),
+        [Top, Left, Left2, Right, Right2] = Nodes = rt_cluster:deploy_nodes(5, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["top", "left", "left2", "right", "right2"],
@@ -349,13 +349,13 @@ pyramid_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
         {"Cascade to both kids", timeout, timeout(65), fun() ->
             [Top | _] = Nodes,
-            Client = rt:pbc(Top),
+            Client = rt_pb:pbc(Top),
             Bucket = <<"objects">>,
             Bin = <<"pyramid_top">>,
             Obj = riakc_obj:new(Bucket, Bin, Bin),
@@ -387,7 +387,7 @@ diamond_test_() ->
     %                     +--------+
     {timeout, timeout(180), {setup, fun() ->
         Conf = conf(),
-        [Top, MidLeft, MidRight, Bottom] = Nodes = rt:deploy_nodes(4, Conf),
+        [Top, MidLeft, MidRight, Bottom] = Nodes = rt_cluster:deploy_nodes(4, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         Names = ["top", "midleft", "midright", "bottom"],
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
@@ -403,13 +403,13 @@ diamond_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
         {"unfortunate double write", timeout, timeout(135), fun() ->
             [Top, MidLeft, MidRight, Bottom] = Nodes,
-            Client = rt:pbc(Top),
+            Client = rt_pb:pbc(Top),
             Bin = <<"start_at_top">>,
             Obj = riakc_obj:new(<<"objects">>, Bin, Bin),
             riakc_pb_socket:put(Client, Obj, [{w,1}]),
@@ -444,7 +444,7 @@ diamond_test_() ->
             [Sink] = proplists:get_value(sinks, Status, [[]]),
             ExpectSeq = proplists:get_value(expect_seq, Sink),
 
-            Client = rt:pbc(MidRight),
+            Client = rt_pb:pbc(MidRight),
             Bin = <<"start at midright">>,
             Bucket = <<"objects">>,
             Obj = riakc_obj:new(Bucket, Bin, Bin),
@@ -479,7 +479,7 @@ circle_and_spurs_test_() ->
     % +-----------+    +------+           +------+    +-----------+
     {timeout, timeout(170), {setup, fun() ->
         Conf = conf(),
-        [North, East, West, NorthSpur, EastSpur, WestSpur] = Nodes = rt:deploy_nodes(6, Conf),
+        [North, East, West, NorthSpur, EastSpur, WestSpur] = Nodes = rt_cluster:deploy_nodes(6, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         Names = ["north", "east", "west", "north_spur", "east_spur", "west_spur"],
         [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
@@ -493,13 +493,13 @@ circle_and_spurs_test_() ->
         Nodes
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun(Nodes) -> [
 
         {"start at north", timeout, timeout(55), fun() ->
             [North | _Rest] = Nodes,
-            Client = rt:pbc(North),
+            Client = rt_pb:pbc(North),
             Bin = <<"start at north">>,
             Bucket = <<"objects">>,
             Obj = riakc_obj:new(Bucket, Bin, Bin),
@@ -512,7 +512,7 @@ circle_and_spurs_test_() ->
 
         {"Start at west", timeout, timeout(55), fun() ->
             [_North, _East, West | _Rest] = Nodes,
-            Client = rt:pbc(West),
+            Client = rt_pb:pbc(West),
             Bin = <<"start at west">>,
             Bucket = <<"objects">>,
             Obj = riakc_obj:new(Bucket, Bin, Bin),
@@ -525,7 +525,7 @@ circle_and_spurs_test_() ->
 
         {"spurs don't replicate back", timeout, timeout(55), fun() ->
             [_North, _East, _West, NorthSpur | _Rest] = Nodes,
-            Client = rt:pbc(NorthSpur),
+            Client = rt_pb:pbc(NorthSpur),
             Bin = <<"start at north_spur">>,
             Bucket = <<"objects">>,
             Obj = riakc_obj:new(Bucket, Bin, Bin),
@@ -580,7 +580,7 @@ mixed_version_clusters_test_dep() ->
     {timeout, 60000, {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
-        Nodes = rt:deploy_nodes(DeployConfs),
+        Nodes = rt_cluster:deploy_nodes(DeployConfs),
         [N1, N2, N3, N4, N5, N6] =  Nodes,
         case rpc:call(N1, application, get_key, [riak_core, vsn]) of
             % this is meant to test upgrading from early BNW aka
@@ -611,14 +611,14 @@ mixed_version_clusters_test_dep() ->
             {too_old, Ns} -> Ns;
             _ -> MaybeNodes
         end,
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun({too_old, _Nodes}) -> [];
        ([N1, N2, N3, N4, N5, N6] = Nodes) -> [
 
         {"no cascading at first", timeout, timeout(35), [
             {timeout, timeout(15), fun() ->
-                Client = rt:pbc(N1),
+                Client = rt_pb:pbc(N1),
                 Bin = <<"no cascade yet">>,
                 Obj = riakc_obj:new(?bucket, Bin, Bin),
                 riakc_pb_socket:put(Client, Obj, [{w, 2}]),
@@ -628,7 +628,7 @@ mixed_version_clusters_test_dep() ->
             end},
 
             {timeout, timeout(15), fun() ->
-                Client = rt:pbc(N2),
+                Client = rt_pb:pbc(N2),
                 Bin = <<"no cascade yet 2">>,
                 Obj = riakc_obj:new(?bucket, Bin, Bin),
                 riakc_pb_socket:put(Client, Obj, [{w, 2}]),
@@ -672,7 +672,7 @@ mixed_version_clusters_test_dep() ->
             fun(_) -> [
 
                 {"node1 put", timeout, timeout(205), fun() ->
-                    Client = rt:pbc(N1),
+                    Client = rt_pb:pbc(N1),
                     Bin = <<"rt after upgrade">>,
                     Obj = riakc_obj:new(?bucket, Bin, Bin),
                     riakc_pb_socket:put(Client, Obj, [{w, 2}]),
@@ -682,7 +682,7 @@ mixed_version_clusters_test_dep() ->
                 end},
 
                 {"node2 put", timeout, timeout(25), fun() ->
-                    Client = rt:pbc(N2),
+                    Client = rt_pb:pbc(N2),
                     Bin = <<"rt after upgrade 2">>,
                     Obj = riakc_obj:new(?bucket, Bin, Bin),
                     riakc_pb_socket:put(Client, Obj, [{w, 2}]),
@@ -735,7 +735,7 @@ Reses)]),
                     ExistsLookup = NewHead ++ NewTail,
                     Test = fun() ->
                         ?debugFmt("Running test ~p", [Name]),
-                        Client = rt:pbc(Node),
+                        Client = rt_pb:pbc(Node),
                         Key = <<(ToB(Node))/binary, "-write-", (ToB(N))/binary>>,
                         Obj = riakc_obj:new(?bucket, Key, Key),
                         riakc_pb_socket:put(Client, Obj, [{w, 2}]),
@@ -793,7 +793,7 @@ new_to_old_test_dep() ->
     {timeout, timeout(105), {setup, fun() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
-        [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
+        [New1, Old2, New3] = Nodes = rt_cluster:deploy_nodes(DeployConfs),
         case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
             % this is meant to test upgrading from early BNW aka
             % Brave New World aka Advanced Repl aka version 3 repl to
@@ -817,13 +817,13 @@ new_to_old_test_dep() ->
             {too_old, Ns} -> Ns;
             _ -> MaybeNodes
         end,
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
     fun({too_old, _}) -> [];
        ([New1, Old2, New3]) -> [
 
         {"From new1 to old2", timeout, timeout(25), fun() ->
-            Client = rt:pbc(New1),
+            Client = rt_pb:pbc(New1),
             Bin = <<"new1 to old2">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
             riakc_pb_socket:put(Client, Obj, [{w, 1}]),
@@ -833,7 +833,7 @@ new_to_old_test_dep() ->
         end},
 
         {"old2 does not cascade at all", timeout, timeout(25), fun() ->
-            Client = rt:pbc(New1),
+            Client = rt_pb:pbc(New1),
             Bin = <<"old2 no cascade">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
             riakc_pb_socket:put(Client, Obj, [{w, 1}]),
@@ -843,7 +843,7 @@ new_to_old_test_dep() ->
         end},
 
         {"from new3 to old2", timeout, timeout(25), fun() ->
-            Client = rt:pbc(New3),
+            Client = rt_pb:pbc(New3),
             Bin = <<"new3 to old2">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
             riakc_pb_socket:put(Client, Obj, [{w, 1}]),
@@ -857,7 +857,7 @@ new_to_old_test_dep() ->
             % from an older source cluster/node. It is prevented for now by
             % having no easy/good way to get the name of the source cluster,
             % thus preventing complete information on the routed clusters.
-            Client = rt:pbc(Old2),
+            Client = rt_pb:pbc(Old2),
             Bin = <<"old2 to new3">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
             riakc_pb_socket:put(Client, Obj, [{w,1}]),
@@ -873,7 +873,7 @@ new_to_old_test_dep() ->
 ensure_ack_test_() ->
     {timeout, timeout(130), {setup, fun() ->
         Conf = conf(),
-        [LeaderA, LeaderB] = Nodes = rt:deploy_nodes(2, Conf),
+        [LeaderA, LeaderB] = Nodes = rt_cluster:deploy_nodes(2, Conf),
         [repl_util:make_cluster([N]) || N <- Nodes],
         [repl_util:wait_until_is_leader(N) || N <- Nodes],
         Names = ["A", "B"],
@@ -888,7 +888,7 @@ ensure_ack_test_() ->
         [LeaderA, LeaderB]
     end,
     fun(Nodes) ->
-        rt:clean_cluster(Nodes)
+        rt_cluster:clean_cluster(Nodes)
     end,
 
     fun([LeaderA, LeaderB] = _Nodes) -> [
@@ -928,7 +928,7 @@ ensure_unacked_and_queue() ->
 
 ensure_unacked_and_queue_test_() ->
     {timeout, timeout(2300), {setup, fun() ->
-        Nodes = rt:deploy_nodes(6, conf()),
+        Nodes = rt_cluster:deploy_nodes(6, conf()),
         {N123, N456} = lists:split(3, Nodes),
         repl_util:make_cluster(N123),
         repl_util:make_cluster(N456),
@@ -943,8 +943,8 @@ ensure_unacked_and_queue_test_() ->
         {N123, N456}
     end,
     maybe_skip_teardown(fun({N123, N456}) ->
-        rt:clean_cluster(N123),
-        rt:clean_cluster(N456)
+        rt_cluster:clean_cluster(N123),
+        rt_cluster:clean_cluster(N456)
     end),
     fun({N123, N456}) -> [
 
@@ -1132,7 +1132,7 @@ exists(Nodes, Bucket, Key) ->
 exists(Got, [], _Bucket, _Key) ->
     Got;
 exists({error, notfound}, [Node | Tail], Bucket, Key) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     Got = riakc_pb_socket:get(Pid, Bucket, Key),
     riakc_pb_socket:stop(Pid),
     exists(Got, Tail, Bucket, Key);

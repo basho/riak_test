@@ -25,10 +25,10 @@
 
 confirm() ->
     ClusterSize = 4,
-    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     NewConfig = [],
-    Nodes = rt:build_cluster(ClusterSize, NewConfig),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    Nodes = rt_cluster:build_cluster(ClusterSize, NewConfig),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
     [Node1|_] = Nodes,
     Bucket = <<"systest">>,
     Start = 0, End = 100,
@@ -63,11 +63,11 @@ make_common() ->
 
 write_stuff(Nodes, Start, End, Bucket, W, Common) ->
     Nd = lists:nth(length(Nodes), Nodes),
-    [] = rt:systest_write(Nd, Start, End, Bucket, W, Common).
+    [] = rt_systest:write(Nd, Start, End, Bucket, W, Common).
 
 read_stuff(Nodes, Start, End, Bucket, W, Common) ->
     Nd = lists:nth(length(Nodes), Nodes),
-    [] = rt:systest_read(Nd, Start, End, Bucket, W, Common).
+    [] = rt_systest:read(Nd, Start, End, Bucket, W, Common).
 
 is_set_net_ticktime_done(Nodes, Time) ->
     case lists:usort([(catch rpc:call(Node, net_kernel, get_net_ticktime,[]))

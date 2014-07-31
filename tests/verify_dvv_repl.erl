@@ -61,7 +61,7 @@ make_clusters() ->
            {riak_core, [{default_bucket_props,
                          [{dvv_enabled, true},
                           {allow_mult, true}]}]}],
-    Nodes = rt:deploy_nodes(6, Conf),
+    Nodes = rt_cluster:deploy_nodes(6, Conf),
     {ClusterA, ClusterB} = lists:split(3, Nodes),
     A = make_cluster(ClusterA, "A"),
     B = make_cluster(ClusterB, "B"),
@@ -71,7 +71,7 @@ make_cluster(Nodes, Name) ->
     repl_util:make_cluster(Nodes),
     repl_util:name_cluster(hd(Nodes), Name),
     repl_util:wait_until_leader_converge(Nodes),
-    C = rt:pbc(hd(Nodes)),
+    C = rt_pb:pbc(hd(Nodes)),
     riakc_pb_socket:set_options(C, [queue_if_disconnected]),
     {C, Nodes}.
 

@@ -35,7 +35,7 @@
 -define(NUM_INTS, 1000).
 
 confirm() ->
-    Nodes = rt:build_cluster(3),
+    Nodes = rt_cluster:build_cluster(3),
 
     load_test_data(Nodes),
     

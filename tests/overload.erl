@@ -33,10 +33,10 @@ confirm() ->
               {riak_kv, [{fsm_limit, undefined},
                          {storage_backend, riak_kv_memory_backend},
                          {anti_entropy, {off, []}}]}],
-    Nodes = rt:build_cluster(2, Config),
+    Nodes = rt_cluster:build_cluster(2, Config),
     [_Node1, Node2] = Nodes,
 
-    Ring = rt:get_ring(Node2),
+    Ring = rt_ring:get_ring(Node2),
     Hash = riak_core_util:chash_std_keyfun({?BUCKET, ?KEY}),
     PL = lists:sublist(riak_core_ring:preflist(Hash, Ring), 3),
     Victim = hd([Idx || {Idx, Node} <- PL,
@@ -70,7 +70,7 @@ test_vnode_protection(Nodes, Victim, RO) ->
     Config2 = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
                             {vnode_check_interval, 1}]}],
     rt:pmap(fun(Node) ->
-                    rt:update_app_config(Node, Config2)
+                    rt_config:update_app_config(Node, Config2)
             end, Nodes),
     {NumProcs2, QueueLen2} = run_test(Nodes, Victim, RO),
     ?assert(NumProcs2 =< (2*?THRESHOLD * 1.5)),
@@ -107,7 +107,7 @@ test_fsm_protection(Nodes, Victim, RO) ->
     lager:info("Setting FSM limit to ~b", [?THRESHOLD]),
     Config3 = [{riak_kv, [{fsm_limit, ?THRESHOLD}]}],
     rt:pmap(fun(Node) ->
-                    rt:update_app_config(Node, Config3)
+                    rt_config:update_app_config(Node, Config3)
             end, Nodes),
     {NumProcs4, QueueLen4} = run_test(Nodes, Victim, RO),
     ?assert(NumProcs4 =< (?THRESHOLD * 1.1)),
@@ -163,7 +163,7 @@ test_cover_queries_overload(Nodes) ->
     wait_for_all_vnode_queues_empty(Node2).
 
 list_keys(Node) ->
-    Pid = rt:pbc(Node),
+    Pid = rt_pb:pbc(Node),
     riakc_pb_socket:list_keys(Pid, ?BUCKET, 30000).
 
 list_buckets(Node) ->

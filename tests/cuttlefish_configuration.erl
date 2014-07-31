@@ -12,7 +12,7 @@ confirm() ->
         {"leveldb.sync_on_write", "on"}
     ],
 
-    [Node] = rt:deploy_nodes(1, {cuttlefish, CuttlefishConf}),
+    [Node] = rt_cluster:deploy_nodes(1, {cuttlefish, CuttlefishConf}),
     {ok, RingSize} = rt:rpc_get_env(Node, [{riak_core, ring_creation_size}]),  
     ?assertEqual(8, RingSize),
 
