@@ -217,7 +217,7 @@ build_singleton_cluster(Vsn, Config) ->
     %% the supervisor starts, we need to restart to ensure settings
     %% take effect.
     Node = lists:nth(1, Nodes),
-    rt:stop_and_wait(Node),
+    rt_node:stop_and_wait(Node),
     rt_node:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
 
