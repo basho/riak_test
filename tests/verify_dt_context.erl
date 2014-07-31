@@ -199,7 +199,7 @@ create_pb_clients(Nodes) ->
 
 create_bucket_types([N1|_], Types) ->
     lager:info("Creating bucket types with datatypes: ~p", [Types]),
-    [rt:create_and_activate_bucket_type(N1, Name, [{datatype, Type}, {allow_mult, true}])
+    [rt_bucket_types:create_and_activate_bucket_type(N1, Name, [{datatype, Type}, {allow_mult, true}])
      || {Name, Type} <- Types ].
 
 bucket_type_ready_fun(Name) ->

@@ -29,8 +29,8 @@ confirm() ->
     ok = rt:load_modules_on_nodes([?MODULE], Nodes),
 
     lager:info("Creating bucket types 'type1' and 'type2'"),
-    rt:create_and_activate_bucket_type(Node, <<"type1">>, [{magic, false}]),
-    rt:create_and_activate_bucket_type(Node, <<"type2">>, [{magic, true}]),
+    rt_bucket_types:create_and_activate_bucket_type(Node, <<"type1">>, [{magic, false}]),
+    rt_bucket_types:create_and_activate_bucket_type(Node, <<"type2">>, [{magic, true}]),
 
     lager:info("Installing conditional hook"),
     CondHook = {?MODULE, conditional_hook},
