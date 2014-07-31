@@ -620,4 +620,4 @@ validate_intercepted_fullsync(InterceptTarget,
     rt:wait_for_service(InterceptTarget, riak_repl),
 
     %% Wait until AAE trees are compueted on the rebooted node.
-    rt:wait_until_aae_trees_built([InterceptTarget]).
+    rt_aae:wait_until_aae_trees_built([InterceptTarget]).
