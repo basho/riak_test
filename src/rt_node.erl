@@ -42,7 +42,8 @@
          brutal_kill/1,
          wait_until_nodes_ready/1,
          wait_until_owners_according_to/2,
-         wait_until_nodes_agree_about_ownership/1]).
+         wait_until_nodes_agree_about_ownership/1,
+         is_pingable/1]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 
@@ -219,3 +220,7 @@ wait_until_nodes_agree_about_ownership(Nodes) ->
     lager:info("Wait until nodes agree about ownership ~p", [Nodes]),
     Results = [ wait_until_owners_according_to(Node, Nodes) || Node <- Nodes ],
     ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
+
+%% @doc Is the `Node' up according to net_adm:ping
+is_pingable(Node) ->
+    net_adm:ping(Node) =:= pong.

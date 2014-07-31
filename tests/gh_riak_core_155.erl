@@ -38,7 +38,7 @@ confirm() ->
 
     %% Restart node, add intercept that delay proxy startup, and issue gets.
     %% Gets will come in before proxies started, and should trigger crash.
-    rt:stop_and_wait(Node),
+    rt_node:stop_and_wait(Node),
     rt_node:async_start(Node),
     rt:wait_until_pingable(Node),
     rt_intercept:load_intercepts([Node]),
