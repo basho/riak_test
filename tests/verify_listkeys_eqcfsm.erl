@@ -179,7 +179,7 @@ log_transition(S) ->
 %% ====================================================================
 setup_cluster(NumNodes) ->
     Nodes = rt_cluster:build_cluster(NumNodes),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
     ?assertEqual(ok, rt:wait_until_transfers_complete(Nodes)),
     Node = hd(Nodes),
     [begin

@@ -109,7 +109,7 @@ confirm() ->
     %% Give slave a chance to start and master to notice it.
     rt:join(Secondary, Primary),
     rt:wait_until_no_pending_changes(Nodes),
-    rt:wait_until_nodes_agree_about_ownership(Nodes),
+    rt_node:wait_until_nodes_agree_about_ownership(Nodes),
 
     lager:info("Unpause workers"),
     Runner ! go,
