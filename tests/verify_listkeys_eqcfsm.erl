@@ -183,9 +183,9 @@ setup_cluster(NumNodes) ->
     ?assertEqual(ok, rt:wait_until_transfers_complete(Nodes)),
     Node = hd(Nodes),
     [begin
-         rt:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
-         rt:wait_until_bucket_type_status(BucketType, active, Nodes),
-         rt:wait_until_bucket_type_visible(Nodes, BucketType)
+         rt_bucket_types:create_and_activate_bucket_type(Node, BucketType, [{n_val, NVal}]),
+         rt_bucket_types:wait_until_bucket_type_status(BucketType, active, Nodes),
+         rt_bucket_types:wait_until_bucket_type_visible(Nodes, BucketType)
      end || {BucketType, NVal} <- bucket_types()],
     Nodes.
 
