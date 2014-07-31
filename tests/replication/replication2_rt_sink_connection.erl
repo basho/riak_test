@@ -88,7 +88,7 @@ confirm() ->
     enable_rt(AFirst, ANodes),
 
     lager:info("Adding 4th node to the A cluster"),
-    rt:join(CNode, AFirst),
+    rt_node:join(CNode, AFirst),
 
     [verify_connectivity(Node) || Node <- ANodes],
 

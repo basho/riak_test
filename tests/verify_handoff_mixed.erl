@@ -67,7 +67,7 @@ confirm() ->
     OldFold = rt:capability(Old, ?FOLD_CAPABILITY, v1),
 
     %% now link the nodes together and wait for handoff to complete
-    ok = rt:join(Old, Current),
+    ok = rt_node:join(Old, Current),
     ok = rt:wait_until_all_members(Nodes),
     ok = rt:wait_until_ring_converged(Nodes),
 

@@ -971,9 +971,9 @@ verify_topology_change(SourceNodes, SinkNodes) ->
     lager:info("Rejoining former leader."),
     case SinkLeader of
         SinkNode1 ->
-            rt:join(SinkNode1, SinkNode2);
+            rt_node:join(SinkNode1, SinkNode2);
         SinkNode2 ->
-            rt:join(SinkNode2, SinkNode1)
+            rt_node:join(SinkNode2, SinkNode1)
     end,
     rt:wait_until_ring_converged(SinkNodes),
 

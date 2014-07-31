@@ -42,7 +42,7 @@ confirm() ->
 
     lists:foldl(fun(Node, [N1|_] = Cluster) ->
             lager:info("An invitation to this party is cordially extended to ~p.", [Node]),
-            rt:join(Node, N1),
+            rt_node:join(Node, N1),
             lager:info("Wait until there are no pending changes"),
             Ns = lists:usort([Node|Cluster]),
             rt:wait_until_no_pending_changes(Ns),

@@ -46,7 +46,7 @@ max_memory(Mode) ->
     Conf = mkconf(max_memory, Mode),
     [NodeA, NodeB] = rt_cluster:deploy_nodes(2, Conf),
 
-    rt:join(NodeB, NodeA),
+    rt_node:join(NodeB, NodeA),
 
     ?assertEqual(ok, check_put_delete(NodeA)),
 
@@ -81,10 +81,10 @@ combo(Mode) ->
 
 
 check_leave_and_expiry(NodeA, NodeB) ->
-    ?assertEqual([], rt:systest_write(NodeB, 1, 100, ?BUCKET, 2)),
-    ?assertEqual([], rt:systest_read(NodeB, 1, 100, ?BUCKET, 2)),
+    ?assertEqual([], rt_systest:write(NodeB, 1, 100, ?BUCKET, 2)),
+    ?assertEqual([], rt_systest:read(NodeB, 1, 100, ?BUCKET, 2)),
 
-    rt:join(NodeB, NodeA),
+    rt_node:join(NodeB, NodeA),
 
     ?assertEqual(ok, rt_node:wait_until_nodes_ready([NodeA, NodeB])),
     rt:wait_until_no_pending_changes([NodeA, NodeB]),
@@ -92,14 +92,14 @@ check_leave_and_expiry(NodeA, NodeB) ->
     rt_node:leave(NodeB),
     rt:wait_until_unpingable(NodeB),
 
-    ?assertEqual([], rt:systest_read(NodeA, 1, 100, ?BUCKET, 2)),
+    ?assertEqual([], rt_systest:read(NodeA, 1, 100, ?BUCKET, 2)),
     
     lager:info("waiting for keys to expire"),
     timer:sleep(timer:seconds(210)),
     
-    _ = rt:systest_read(NodeA, 1, 100, ?BUCKET, 2),
+    _ = rt_systest:read(NodeA, 1, 100, ?BUCKET, 2),
     timer:sleep(timer:seconds(5)),
-    Res = rt:systest_read(NodeA, 1, 100, ?BUCKET, 2),
+    Res = rt_systest:read(NodeA, 1, 100, ?BUCKET, 2),
     
     ?assertEqual(100, length(Res)),
     ok.
@@ -110,9 +110,9 @@ check_eviction(Node) ->
     Size = 20000 * 8,
     Val = <<0:Size>>,
 
-    ?assertEqual([], rt:systest_write(Node, 1, 500, ?BUCKET, 2, Val)),
+    ?assertEqual([], rt_systest:write(Node, 1, 500, ?BUCKET, 2, Val)),
 
-    Res = length(rt:systest_read(Node, 1, 100, ?BUCKET, 2, Val)),
+    Res = length(rt_systest:read(Node, 1, 100, ?BUCKET, 2, Val)),
 
     %% this is a wider range than I'd like but the final outcome is
     %% somewhat hard to predict.  Just trying to verify that some
