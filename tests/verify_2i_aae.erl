@@ -68,7 +68,7 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     ok = rpc:call(Node1, application, set_env,
                   [riak_kv, anti_entropy, {on, [debug]}]),
     ok = rpc:call(Node1, riak_kv_entropy_manager, enable, []),
-    rt:wait_until_aae_trees_built([Node1]),
+    rt_aae:wait_until_aae_trees_built([Node1]),
 
     lager:info("AAE trees built, now put the rest of the data"),
     [put_obj(PBC, Bucket, N, N+1, Index)
@@ -125,7 +125,7 @@ do_tree_rebuild(Node) ->
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {100, 1000}])),
-    rt:wait_until_aae_trees_built([Node]),
+    rt_aae:wait_until_aae_trees_built([Node]),
     ok.
 
 %% Write objects without a 2i index. Test that running 2i repair will generate
