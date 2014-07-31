@@ -30,7 +30,7 @@
 
 confirm() ->
     Nodes = rt_cluster:build_cluster(3),
-    ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
+    ?assertEqual(ok, (rt_node:wait_until_nodes_ready(Nodes))),
 
     PBPid = rt_pb:pbc(hd(Nodes)),
 

@@ -112,7 +112,7 @@ test_handoff(RootNode, NewNode, NTestItems) ->
 
     lager:info("Joining new node with cluster."),
     rt:join(NewNode, RootNode),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([RootNode, NewNode])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([RootNode, NewNode])),
     rt:wait_until_no_pending_changes([RootNode, NewNode]),
 
     %% See if we get the same data back from the joined node that we added to the root node.

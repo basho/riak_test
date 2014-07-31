@@ -34,7 +34,7 @@ confirm() ->
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
     Nodes = rt_cluster:deploy_nodes(1, Config),
     [Node1] = Nodes,
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node1])),
 
     [{http, {IP, _Port}}|_] = rt:connection_info(Node1),
 
@@ -162,7 +162,7 @@ test_application_stop() ->
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
     Nodes = rt_cluster:deploy_nodes(1, Config),
     [Node] = Nodes,
-    ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node])),
 
     %% Let's make sure the java process is alive!
     lager:info("checking for riak_jmx.jar running."),

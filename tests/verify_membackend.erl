@@ -86,7 +86,7 @@ check_leave_and_expiry(NodeA, NodeB) ->
 
     rt:join(NodeB, NodeA),
 
-    ?assertEqual(ok, rt:wait_until_nodes_ready([NodeA, NodeB])),
+    ?assertEqual(ok, rt_node:wait_until_nodes_ready([NodeA, NodeB])),
     rt:wait_until_no_pending_changes([NodeA, NodeB]),
 
     rt_node:leave(NodeB),
