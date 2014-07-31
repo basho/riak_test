@@ -25,28 +25,28 @@ setup(Type) ->
 
     {DefinedType, UndefType} = Types = {<<"working_type">>, <<"undefined_type">>},
 
-    rt:create_and_activate_bucket_type(LeaderA,
+    rt_bucket_types:create_and_activate_bucket_type(LeaderA,
                                        DefinedType,
                                        [{n_val, 3}, {allow_mult, false}]),
-    rt:wait_until_bucket_type_status(DefinedType, active, ANodes),
-    rt:wait_until_bucket_type_visible(ANodes, DefinedType),
+    rt_bucket_types:wait_until_bucket_type_status(DefinedType, active, ANodes),
+    rt_bucket_types:wait_until_bucket_type_visible(ANodes, DefinedType),
 
     case Type of
         current ->
-            rt:create_and_activate_bucket_type(LeaderB,
+            rt_bucket_types:create_and_activate_bucket_type(LeaderB,
                                                DefinedType,
                                                [{n_val, 3}, {allow_mult, false}]),
-            rt:wait_until_bucket_type_status(DefinedType, active, BNodes),
-            rt:wait_until_bucket_type_visible(BNodes, DefinedType);
+            rt_bucket_types:wait_until_bucket_type_status(DefinedType, active, BNodes),
+            rt_bucket_types:wait_until_bucket_type_visible(BNodes, DefinedType);
         mixed ->
             ok
     end,
 
-    rt:create_and_activate_bucket_type(LeaderA,
+    rt_bucket_types:create_and_activate_bucket_type(LeaderA,
                                        UndefType,
                                        [{n_val, 3}, {allow_mult, false}]),
-    rt:wait_until_bucket_type_status(UndefType, active, ANodes),
-    rt:wait_until_bucket_type_visible(ANodes, UndefType),
+    rt_bucket_types:wait_until_bucket_type_status(UndefType, active, ANodes),
+    rt_bucket_types:wait_until_bucket_type_visible(ANodes, UndefType),
 
     connect_clusters(LeaderA, LeaderB),
     {ClusterNodes, Types, PBA, PBB}.
