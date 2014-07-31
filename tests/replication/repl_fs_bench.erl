@@ -125,27 +125,27 @@ fullsync_test(Strategy, Latency) ->
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
 
     %% Perform fullsync of an empty cluster.
-    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
+    rt_aae:wait_until_aae_trees_built(ANodes ++ BNodes),
     {EmptyTime, _} = timer:tc(repl_util,
                               start_and_wait_until_fullsync_complete,
                               [LeaderA]),
 
     %% Write keys and perform fullsync.
     repl_util:write_to_cluster(AFirst, 0, ?FULL_NUM_KEYS, ?TEST_BUCKET),
-    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
+    rt_aae:wait_until_aae_trees_built(ANodes ++ BNodes),
     {FullTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
 
     %% Rewrite first 10% keys and perform fullsync.
     repl_util:write_to_cluster(AFirst, 0, ?DIFF_NUM_KEYS, ?TEST_BUCKET),
-    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
+    rt_aae:wait_until_aae_trees_built(ANodes ++ BNodes),
     {DiffTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
 
     %% Write no keys, and perform the fullsync.
-    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
+    rt_aae:wait_until_aae_trees_built(ANodes ++ BNodes),
     {NoneTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),

@@ -88,7 +88,7 @@ check_throttle_and_expiration() ->
 
 time_build(Node) ->
     T0 = erlang:now(),
-    rt:wait_until_aae_trees_built([Node]),
+    rt_aae:wait_until_aae_trees_built([Node]),
     Duration = timer:now_diff(erlang:now(), T0),
     lager:info("Build took ~b us", [Duration]),
     Duration.
