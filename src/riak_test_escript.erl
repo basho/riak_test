@@ -24,13 +24,43 @@
 -export([main/1]).
 -export([add_deps/1]).
 
-add_deps(Path) ->
-    {ok, Deps} = file:list_dir(Path),
-    [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
+main(Args) ->
+    {ParsedArgs, HarnessArgs, Tests} = prepare(Args),
+    OutDir = proplists:get_value(outdir, ParsedArgs),
+    Results = execute(Tests, OutDir, report(ParsedArgs), HarnessArgs),
+    finalize(Results, ParsedArgs).
+
+prepare(Args) ->
+    {ParsedArgs, _, Tests} = ParseResults = parse_args(Args),
+    io:format("Tests to run: ~p~n", [Tests]),
+    ok = erlang_setup(ParsedArgs),
+    ok = test_setup(ParsedArgs),
+    ParseResults.
+
+execute(Tests, Outdir, Report, HarnessArgs) ->
+    TestCount = length(Tests),
+    TestResults = [run_test(Test,
+                            Outdir,
+                            TestMetaData,
+                            Report,
+                            HarnessArgs,
+                            TestCount) ||
+                      {Test, TestMetaData} <- Tests],
+    lists:filter(fun results_filter/1, TestResults).
+
+finalize(TestResults, Args) ->
+    [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) ||
+        R <- TestResults],
+    CoverDir = rt_config:get(cover_output, "coverage"),
+    Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
+
+    Verbose = proplists:is_defined(verbose, Args),
+    Teardown = not proplists:get_value(keep, Args, false),
+    maybe_teardown(Teardown, TestResults, Coverage, Verbose),
     ok.
 
-cli_options() ->
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
+cli_options() ->
 [
  {help,               $h, "help",     undefined,  "Print this usage page"},
  {config,             $c, "conf",     string,     "specifies the project configuration"},
@@ -48,140 +78,142 @@ cli_options() ->
 ].
 
 print_help() ->
-    getopt:usage(cli_options(),
-                 escript:script_name()),
+    getopt:usage(cli_options(), escript:script_name()),
     halt(0).
 
-run_help([]) -> true;
-run_help(ParsedArgs) ->
-    lists:member(help, ParsedArgs).
+add_deps(Path) ->
+    {ok, Deps} = file:list_dir(Path),
+    [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
+    ok.
 
-main(Args) ->
-    case filelib:is_dir("./ebin") of
-        true ->
-            code:add_patha("./ebin");
-        _ ->
-            meh
+test_setup(ParsedArgs) ->
+    %% File output
+    OutDir = proplists:get_value(outdir, ParsedArgs),
+    ensure_dir(OutDir),
+
+    lager_setup(OutDir),
+
+    %% Ensure existence of scratch_dir
+    case ensure_dir(rt_config:get(rt_scratch_dir) ++ "/test.file") of
+        ok ->
+            great;
+        {error, ErrorReason} ->
+            lager:error("Could not create scratch dir, ~p",
+                        [ErrorReason])
     end,
+    ok.
 
-    register(riak_test, self()),
-    {ParsedArgs, HarnessArgs} = case getopt:parse(cli_options(), Args) of
-        {ok, {P, H}} -> {P, H};
-        _ -> print_help()
-    end,
+report(ParsedArgs) ->
+    case proplists:get_value(report, ParsedArgs, undefined) of
+        undefined ->
+            undefined;
+        "config" ->
+            rt_config:get(platform, undefined);
+        R ->
+            R
+    end.
 
-    case run_help(ParsedArgs) of
-        true -> print_help();
-        _ -> ok
-    end,
+parse_args(Args) ->
+    help_or_parse_args(getopt:parse(cli_options(), Args)).
 
-    %% ibrowse
-    application:load(ibrowse),
-    application:start(ibrowse),
-    %% Start Lager
-    application:load(lager),
+help_or_parse_args({ok, {[], _}}) ->
+    print_help();
+help_or_parse_args({ok, {ParsedArgs, HarnessArgs}}) ->
+    help_or_parse_tests(ParsedArgs, HarnessArgs, lists:member(help, ParsedArgs));
+help_or_parse_args(_) ->
+    print_help().
 
-    Config = proplists:get_value(config, ParsedArgs),
-    ConfigFile = proplists:get_value(file, ParsedArgs),
+help_or_parse_tests(_, _, true) ->
+    print_help();
+help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
+    %% Have to load the `riak_test' config prior to assembling the
+    %% test metadata
+    load_initial_config(ParsedArgs),
 
+    TestData = compose_test_data(ParsedArgs),
+    Tests = which_tests_to_run(report(ParsedArgs), TestData),
+    Offset = rt_config:get(offset, undefined),
+    Workers = rt_config:get(workers, undefined),
+    shuffle_tests(ParsedArgs, HarnessArgs, Tests, Offset, Workers).
+
+load_initial_config(ParsedArgs) ->
     %% Loads application defaults
     application:load(riak_test),
 
     %% Loads from ~/.riak_test.config
-    rt_config:load(Config, ConfigFile),
+    rt_config:load(proplists:get_value(config, ParsedArgs),
+                   proplists:get_value(file, ParsedArgs)).
+
+shuffle_tests(_, _, [], _, _) ->
+    lager:warning("No tests are scheduled to run"),
+    init:stop(1);
+shuffle_tests(ParsedArgs, HarnessArgs, Tests, undefined, _) ->
+    {ParsedArgs, HarnessArgs, Tests};
+shuffle_tests(ParsedArgs, HarnessArgs, Tests, _, undefined) ->
+    {ParsedArgs, HarnessArgs, Tests};
+shuffle_tests(ParsedArgs, HarnessArgs, Tests, Offset, Workers) ->
+    TestCount = length(Tests),
+    %% Avoid dividing by zero, computers hate that
+    Denominator = case Workers rem (TestCount+1) of
+                      0 -> 1;
+                      D -> D
+                  end,
+    ActualOffset = ((TestCount div Denominator) * Offset) rem (TestCount+1),
+    {TestA, TestB} = lists:split(ActualOffset, Tests),
+    lager:info("Offsetting ~b tests by ~b (~b workers, ~b offset)",
+               [TestCount, ActualOffset, Workers, Offset]),
+    {ParsedArgs, HarnessArgs, TestB ++ TestA}.
+
+erlang_setup(_ParsedArgs) ->
+    register(riak_test, self()),
+    maybe_add_code_path("./ebin"),
+
+    %% ibrowse
+    load_and_start(ibrowse),
 
     %% Sets up extra paths earlier so that tests can be loadable
     %% without needing the -d flag.
     code:add_paths(rt_config:get(test_paths, [])),
 
-    %% Ensure existance of scratch_dir
-    case file:make_dir(rt_config:get(rt_scratch_dir)) of
-        ok -> great;
-        {error, eexist} -> great;
-        {ErrorType, ErrorReason} -> lager:error("Could not create scratch dir, {~p, ~p}", [ErrorType, ErrorReason])
-    end,
-
-    %% Fileoutput
-    Outdir = proplists:get_value(outdir, ParsedArgs),
-    ConsoleLagerLevel = case Outdir of
-        undefined -> rt_config:get(lager_level, info);
-        _ ->
-            filelib:ensure_dir(Outdir),
-            notice
-    end,
-
-    application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel},
-                                          {lager_file_backend, [{file, "log/test.log"},
-                                                                {level, ConsoleLagerLevel}]}]),
-    lager:start(),
-
-    %% Report
-    Report = case proplists:get_value(report, ParsedArgs, undefined) of
-        undefined -> undefined;
-        "config" -> rt_config:get(platform, undefined);
-        R -> R
-    end,
-
-    Verbose = proplists:is_defined(verbose, ParsedArgs),
-
-    Suites = proplists:get_all_values(suites, ParsedArgs),
-    case Suites of
-        [] -> ok;
-        _ -> io:format("Suites are not currently supported.")
-    end,
-
-    CommandLineTests = parse_command_line_tests(ParsedArgs),
-    Tests0 = which_tests_to_run(Report, CommandLineTests),
-
-    case Tests0 of
-        [] ->
-            lager:warning("No tests are scheduled to run"),
-            init:stop(1);
-        _ -> keep_on_keepin_on
-    end,
-
-    Tests = case {rt_config:get(offset, undefined), rt_config:get(workers, undefined)} of
-                {undefined, undefined} ->
-                    Tests0;
-                {undefined, _} ->
-                    Tests0;
-                {_, undefined} ->
-                    Tests0;
-                {Offset, Workers} ->
-                    TestCount = length(Tests0),
-                    %% Avoid dividing by zero, computers hate that
-                    Denominator = case Workers rem (TestCount+1) of
-                                      0 -> 1;
-                                      D -> D
-                                  end,
-                    ActualOffset = ((TestCount div Denominator) * Offset) rem (TestCount+1),
-                    {TestA, TestB} = lists:split(ActualOffset, Tests0),
-                    lager:info("Offsetting ~b tests by ~b (~b workers, ~b"
-                               " offset)", [TestCount, ActualOffset, Workers,
-                                            Offset]),
-                    TestB ++ TestA
-            end,
-
-    io:format("Tests to run: ~p~n", [Tests]),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
     add_deps("deps"),
 
     [add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
-    ENode = rt_config:get(rt_nodename, 'riak_test@127.0.0.1'),
-    Cookie = rt_config:get(rt_cookie, riak),
-    CoverDir = rt_config:get(cover_output, "coverage"),
     [] = os:cmd("epmd -daemon"),
-    net_kernel:start([ENode]),
-    erlang:set_cookie(node(), Cookie),
-
-    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
-    [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) || R <- TestResults],
-    Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
-
-    Teardown = not proplists:get_value(keep, ParsedArgs, false),
-    maybe_teardown(Teardown, TestResults, Coverage, Verbose),
+    net_kernel:start([rt_config:get(rt_nodename, 'riak_test@127.0.0.1')]),
+    erlang:set_cookie(node(), rt_config:get(rt_cookie, riak)),
     ok.
+
+maybe_add_code_path(Path) ->
+    maybe_add_code_path(Path, filelib:is_dir(Path)).
+
+maybe_add_code_path(Path, true) ->
+    code:add_patha(Path);
+maybe_add_code_path(_, false) ->
+    meh.
+
+load_and_start(Application) ->
+    application:load(Application),
+    application:start(Application).
+
+ensure_dir(undefined) ->
+    ok;
+ensure_dir(Dir) ->
+    filelib:ensure_dir(Dir).
+
+lager_setup(undefined) ->
+    set_lager_env(rt_config:get(lager_level, info)),
+    load_and_start(lager);
+lager_setup(_) ->
+    set_lager_env(notice),
+    load_and_start(lager).
+
+set_lager_env(LagerLevel) ->
+    HandlerConfig = [{lager_console_backend, LagerLevel},
+                     {lager_file_backend, [{file, "log/test.log"},
+                                           {level, LagerLevel}]}],
+    application:set_env(lager, handlers, HandlerConfig).
 
 maybe_teardown(false, TestResults, Coverage, Verbose) ->
     print_summary(TestResults, Coverage, Verbose),
@@ -198,7 +230,23 @@ maybe_teardown(true, TestResults, Coverage, Verbose) ->
     end,
     ok.
 
-parse_command_line_tests(ParsedArgs) ->
+compose_test_data(ParsedArgs) ->
+    RawTestList = proplists:get_all_values(tests, ParsedArgs),
+    TestList = lists:foldl(fun(X, Acc) -> string:tokens(X, ", ") ++ Acc end, [], RawTestList),
+    %% Parse Command Line Tests
+    {CodePaths, SpecificTests} =
+        lists:foldl(fun extract_test_names/2,
+                    {[], []},
+                    TestList),
+
+    [code:add_patha(CodePath) || CodePath <- CodePaths,
+                                 CodePath /= "."],
+
+    Dirs = proplists:get_all_values(dir, ParsedArgs),
+    SkipTests = string:tokens(proplists:get_value(skip, ParsedArgs, []), [$,]),
+    DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
+    Project = list_to_binary(rt_config:get(rt_project, "undefined")),
+
     Backends = case proplists:get_all_values(backend, ParsedArgs) of
         [] -> [undefined];
         Other -> Other
@@ -207,30 +255,30 @@ parse_command_line_tests(ParsedArgs) ->
                    [] -> [undefined];
                    UpgradeList -> UpgradeList
                end,
-    %% Parse Command Line Tests
-    {CodePaths, SpecificTests} =
-        lists:foldl(fun extract_test_names/2,
-                    {[], []},
-                    proplists:get_all_values(tests, ParsedArgs)),
-    [code:add_patha(CodePath) || CodePath <- CodePaths,
-                                 CodePath /= "."],
-    Dirs = proplists:get_all_values(dir, ParsedArgs),
-    SkipTests = string:tokens(proplists:get_value(skip, ParsedArgs, []), [$,]),
-    DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
-    lists:foldl(fun(Test, Tests) ->
-            [{
-              list_to_atom(Test),
-              [
-                  {id, -1},
-                  {platform, <<"local">>},
-                  {version, rt:get_version()},
-                  {project, list_to_binary(rt_config:get(rt_project, "undefined"))}
-              ] ++
-              [ {backend, Backend} || Backend =/= undefined ] ++
-              [ {upgrade_version, Upgrade} || Upgrade =/= undefined ]}
-             || Backend <- Backends,
-                Upgrade <- Upgrades ] ++ Tests
-        end, [], lists:usort(DirTests ++ SpecificTests)).
+    TestFoldFun = test_data_fun(rt:get_version(), Project, Backends, Upgrades),
+    lists:foldl(TestFoldFun, [], lists:usort(DirTests ++ SpecificTests)).
+
+test_data_fun(Version, Project, Backends, Upgrades) ->
+    fun(Test, Tests) ->
+            [{list_to_atom(Test),
+              compose_test_datum(Version, Project, Backend, Upgrade)}
+             || Backend <- Backends, Upgrade <- Upgrades ] ++ Tests
+    end.
+
+compose_test_datum(Version, Project, undefined, undefined) ->
+    [{id, -1},
+     {platform, <<"local">>},
+     {version, Version},
+     {project, Project}];
+compose_test_datum(Version, Project, undefined, Upgrade) ->
+    compose_test_datum(Version, Project, undefined, undefined) ++
+        [{upgrade_version, Upgrade}];
+compose_test_datum(Version, Project, Backend, undefined) ->
+    compose_test_datum(Version, Project, undefined, undefined) ++
+        [{backend, Backend}];
+compose_test_datum(Version, Project, Backend, Upgrade) ->
+    compose_test_datum(Version, Project, undefined, undefined) ++
+        [{backend, Backend}, {upgrade_version, Upgrade}].
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
     {[filename:dirname(Test) | CodePaths],
@@ -242,7 +290,8 @@ which_tests_to_run(undefined, CommandLineTests) ->
     lager:info("These modules are not runnable tests: ~p",
                [[NTMod || {NTMod, _} <- NonTests]]),
     Tests;
-which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
+which_tests_to_run(Platform, []) ->
+    giddyup:get_suite(Platform);
 which_tests_to_run(Platform, CommandLineTests) ->
     Suite = filter_zip_suite(Platform, CommandLineTests),
     {Tests, NonTests} =
@@ -295,25 +344,36 @@ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
         1 -> keep_them_up;
         _ -> rt_cluster:teardown()
     end,
-    CoverageFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
-    case Report of
-        undefined -> ok;
-        _ ->
-            {value, {log, L}, TestResult} = lists:keytake(log, 1, SingleTestResult),
-            case giddyup:post_result(TestResult) of
-                error -> woops;
-                {ok, Base} ->
-                    %% Now push up the artifacts, starting with the test log
-                    giddyup:post_artifact(Base, {"riak_test.log", L}),
-                    [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ],
-                    [giddyup:post_artifact(Base, {filename:basename(CoverageFile) ++ ".gz",
-                                                  zlib:gzip(element(2,file:read_file(CoverageFile)))}) || CoverageFile /= cover_disabled ],
-                    ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
-                    [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ]
-            end
-    end,
+    CoverFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
+    publish_report(SingleTestResult, CoverFile, Report),
     rt_cover:stop(),
-    [{coverdata, CoverageFile} | SingleTestResult].
+    [{coverdata, CoverFile} | SingleTestResult].
+
+publish_report(_SingleTestResult, _CoverFile, undefined) ->
+    ok;
+publish_report(SingleTestResult, CoverFile, _Report) ->
+    {value, {log, Log}, TestResult} = lists:keytake(log, 1, SingleTestResult),
+    publish_artifacts(TestResult,
+                      Log,
+                      CoverFile,
+                      giddyup:post_result(TestResult)).
+
+publish_artifacts(_TestResult, _Log, _CoverFile, error) ->
+    whoomp; %% there it is
+publish_artifacts(TestResult, Log, CoverFile, {ok, Base}) ->
+            %% Now push up the artifacts, starting with the test log
+            giddyup:post_artifact(Base, {"riak_test.log", Log}),
+            [giddyup:post_artifact(Base, File) || File <- rt:get_node_logs()],
+            post_cover_artifact(Base, CoverFile),
+            ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
+            [rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks()].
+
+post_cover_artifact(_Base, cover_disabled) ->
+    ok;
+post_cover_artifact(Base, CoverFile) ->
+    CoverArchiveName = filename:basename(CoverFile) ++ ".gz",
+    CoverArchive = zlib:gzip(element(2, file:read_file(CoverFile))),
+    giddyup:post_artifact(Base, {CoverArchiveName, CoverArchive}).
 
 get_webhooks() ->
     Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
@@ -402,7 +462,8 @@ load_tests_in_dir(Dir, SkipTests) ->
               lists:foldl(load_tests_folder(SkipTests),
                           [],
                           filelib:wildcard("*.beam", Dir)));
-        _ -> io:format("~s is not a dir!~n", [Dir])
+        _ ->
+            io:format("~s is not a dir!~n", [Dir])
     end.
 
 load_tests_folder(SkipTests) ->
@@ -422,8 +483,10 @@ so_kill_riak_maybe() ->
     io:format("Would you like to leave Riak running in order to debug?~n"),
     Input = io:get_chars("[Y/n] ", 1),
     case Input of
-        "n" -> rt_cluster:teardown();
-        "N" -> rt_cluster:teardown();
+        "n" ->
+            rt_cluster:teardown();
+        "N" ->
+            rt_cluster:teardown();
         _ ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
