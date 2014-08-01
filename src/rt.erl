@@ -156,7 +156,7 @@ PrivDir.
 
 %% @doc gets riak deps from the appropriate harness
 -spec get_deps() -> list().
-get_deps() -> ?HARNESS:get_deps().
+get_deps() -> rt_harness:get_deps().
 
 %% @doc if String contains Substr, return true.
 -spec str(string(), string()) -> boolean().
@@ -212,26 +212,26 @@ maybe_wait_for_changes(Node) ->
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd) ->
-?HARNESS:spawn_cmd(Cmd).
+    rt_harness:spawn_cmd(Cmd).
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd, Opts) ->
-?HARNESS:spawn_cmd(Cmd, Opts).
+    rt_harness:spawn_cmd(Cmd, Opts).
 
 %% @doc Wait for a command spawned by `spawn_cmd', returning
 %%      the exit status and result
 wait_for_cmd(CmdHandle) ->
-?HARNESS:wait_for_cmd(CmdHandle).
+    rt_harness:wait_for_cmd(CmdHandle).
 
 %% @doc Spawn `Cmd' on the machine running the test harness, returning
 %%      the exit status and result
 cmd(Cmd) ->
-?HARNESS:cmd(Cmd).
+    rt_harness:cmd(Cmd).
 
 %% @doc Spawn `Cmd' on the machine running the test harness, returning
 %%      the exit status and result
 cmd(Cmd, Opts) ->
-?HARNESS:cmd(Cmd, Opts).
+    rt_harness:cmd(Cmd, Opts).
 
 %% @doc pretty much the same as os:cmd/1 but it will stream the output to lager.
 %%      If you're running a long running command, it will dump the output
@@ -886,15 +886,15 @@ lager:info("Installing search hook for bucket ~p", [Bucket]),
 %%      or something like that, it's the version you're upgrading to.
 -spec get_version() -> binary().
 get_version() ->
-?HARNESS:get_version().
+    rt_harness:get_version().
 
 %% @doc outputs some useful information about nodes that are up
 whats_up() ->
-?HARNESS:whats_up().
+    rt_harness:whats_up().
 
 -spec get_ip(node()) -> string().
 get_ip(Node) ->
-?HARNESS:get_ip(Node).
+    rt_harness:get_ip(Node).
 
 %% @doc Log a message to the console of the specified test nodes.
 %%      Messages are prefixed by the string "---riak_test--- "
@@ -936,12 +936,12 @@ L3.
 
 %% @private
 setup_harness(Test, Args) ->
-?HARNESS:setup_harness(Test, Args).
+    rt_harness:setup_harness(Test, Args).
 
 %% @doc Downloads any extant log files from the harness's running
 %%   nodes.
 get_node_logs() ->
-?HARNESS:get_node_logs().
+    rt_harness:get_node_logs().
 
 check_ibrowse() ->
 try sys:get_status(ibrowse) of
@@ -1101,6 +1101,7 @@ random_sublist(List, N) ->
     % Remove the random numbers.
     [ E || {_,E} <- List3].
 
+%% TODO: Is this the right location for this?
 -ifdef(TEST).
 
 verify_product(Applications, ExpectedApplication) ->
