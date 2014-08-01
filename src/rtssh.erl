@@ -707,14 +707,17 @@ whats_up() ->
     Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
 
-node_version(_Node) -> ok.
+node_version(Node) -> 
+    rt_harness_util:node_version(Node).
 
-attach(_Node, _Expected) -> ok.
+attach(Node, Expected) -> 
+    rt_harness_util:attach(Node, Expected).
 
-attach_direct(_Node, _Expected) -> ok.
+attach_direct(Node, Expected) ->
+    rt_harness_util:attach_direct(Node, Expected).
 
-console(_Node, _Expected) -> ok.
-
+console(Node, Expected) ->
+    rt_harness_util:console(Node, Expected).
 
 %%%===================================================================
 %%% Local command spawning
