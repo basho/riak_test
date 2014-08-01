@@ -49,7 +49,7 @@
 
 %% @doc Start the specified Riak node
 start(Node) ->
-    ?HARNESS:start(Node).
+    rt_harness:start(Node).
 
 %% @doc Start the specified Riak `Node' and wait for it to be pingable
 start_and_wait(Node) ->
@@ -63,7 +63,7 @@ async_start(Node) ->
 stop(Node) ->
     lager:info("Stopping riak on ~p", [Node]),
     timer:sleep(10000), %% I know, I know!
-    ?HARNESS:stop(Node).
+    rt_harness:stop(Node).
     %%rpc:call(Node, init, stop, []).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
@@ -73,12 +73,12 @@ stop_and_wait(Node) ->
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
 upgrade(Node, NewVersion) ->
-    ?HARNESS:upgrade(Node, NewVersion).
+    rt_harness:upgrade(Node, NewVersion).
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
 %% the config based on entries in `Config'.
 upgrade(Node, NewVersion, Config) ->
-    ?HARNESS:upgrade(Node, NewVersion, Config).
+    rt_harness:upgrade(Node, NewVersion, Config).
 
 %% @doc Upgrade a Riak node to a specific version using the alternate
 %%      leave/upgrade/rejoin approach

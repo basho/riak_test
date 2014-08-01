@@ -78,7 +78,7 @@ make_multi_backend_config(Other) ->
     make_multi_backend_config(default).
 
 get_backends() ->
-    Backends = ?HARNESS:get_backends(),
+    Backends = rt_harness:get_backends(),
     case Backends of
         [riak_kv_bitcask_backend] -> bitcask;
         [riak_kv_eleveldb_backend] -> eleveldb;
