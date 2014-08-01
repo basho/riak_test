@@ -1,9 +1,67 @@
 -module(rtperf).
+-behaviour(test_harness).
+
+-export([start/1,
+         stop/1,
+         deploy_clusters/1,
+         clean_data_dir/2,
+         spawn_cmd/1,
+	 spawn_cmd/2,
+	 cmd/1,
+	 cmd/2,
+	 setup_harness/2,
+	 get_version/0,
+	 get_backends/0,
+	 set_backend/1,
+	 whats_up/0,
+	 get_ip/1,
+	 node_id/1,
+	 node_version/1,
+	 admin/2,
+	 riak/2,
+	 attach/2,
+	 attach_direct/2,
+	 console/2,
+	 update_app_config/2,
+	 teardown/0,
+	 set_conf/2,
+	 set_advanced_conf/2]).
+
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/file.hrl").
 
+admin(Node, Args) ->
+    rt_harness_util:admin(Node, Args).
+
+attach(Node, Expected) ->
+    rt_harness_util:attach(Node, Expected).
+
+attach_direct(Node, Expected) ->
+    rt_harness_util:attach_direct(Node, Expected).
+
+cmd(Cmd, Opts) ->
+    rt_harness_util:cmd(Cmd, Opts).
+
+console(Node, Expected) ->
+    rt_harness_util:console(Node, Expected).
+
+get_ip(Node) ->
+    rt_harness_util:get_ip(Node).
+
+node_id(Node) ->
+    rt_harness_util:get_ip(Node).
+
+node_version(N) ->
+    rt_harness_util:node_version(N).
+
+riak(Node, Args) ->
+    rt_harness_util:riak(Node, Args).
+
+set_conf(Node, NameValuePairs) ->
+    rt_harness_util:set_conf(Node, NameValuePairs).
+    
 update_app_config(Node, Config) ->
     rtssh:update_app_config(Node, Config).
 
@@ -401,3 +459,13 @@ deploy_nodes(NodeConfig, Hosts) ->
 
 start(Node) ->
     rtssh:start(Node).
+
+spawn_cmd(Cmd) ->
+    rt_harness_util:spawn_cmd(Cmd).
+
+spawn_cmd(Cmd, Opts) ->
+    rt_harness_util:spawn_cmd(Cmd, Opts).    
+
+whats_up() ->
+    rt_harness_util:whats_up().
+    

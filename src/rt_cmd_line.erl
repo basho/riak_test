@@ -36,16 +36,16 @@
 
 %% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'
 admin(Node, Args) ->
-    ?HARNESS:admin(Node, Args).
+    rt_harness:admin(Node, Args).
 
 %% @doc Call 'bin/riak' command on `Node' with arguments `Args'
 riak(Node, Args) ->
-    ?HARNESS:riak(Node, Args).
+    rt_harness:riak(Node, Args).
 
 
 %% @doc Call 'bin/riak-repl' command on `Node' with arguments `Args'
 riak_repl(Node, Args) ->
-    ?HARNESS:riak_repl(Node, Args).
+    rt_harness:riak_repl(Node, Args).
 
 search_cmd(Node, Args) ->
     {ok, Cwd} = file:get_cwd(),
@@ -65,14 +65,14 @@ search_cmd(Node, Args) ->
 %%         expect will process based on the output following the sent data.
 %%
 attach(Node, Expected) ->
-    ?HARNESS:attach(Node, Expected).
+    rt_harness:attach(Node, Expected).
 
 %% @doc Runs 'riak attach-direct' on a specific node
 %% @see rt_cmd_line:attach/2
 attach_direct(Node, Expected) ->
-    ?HARNESS:attach_direct(Node, Expected).
+    rt_harness:attach_direct(Node, Expected).
 
 %% @doc Runs `riak console' on a specific node
 %% @see rt_cmd_line:attach/2
 console(Node, Expected) ->
-    ?HARNESS:console(Node, Expected).
+    rt_harness:console(Node, Expected).
