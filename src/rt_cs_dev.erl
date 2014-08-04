@@ -20,7 +20,7 @@
 
 %% @private
 -module(rt_cs_dev).
--behavious(test_harness).
+-behaviour(test_harness).
 
 -export([start/1,
          stop/1,
