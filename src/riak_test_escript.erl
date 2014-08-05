@@ -204,12 +204,13 @@ ensure_dir(Dir) ->
 
 lager_setup(undefined) ->
     set_lager_env(rt_config:get(lager_level, info)),
-    load_and_start(lager);
+    lager:start();
 lager_setup(_) ->
     set_lager_env(notice),
-    load_and_start(lager).
+    lager:start().
 
 set_lager_env(LagerLevel) ->
+    application:load(lager),
     HandlerConfig = [{lager_console_backend, LagerLevel},
                      {lager_file_backend, [{file, "log/test.log"},
                                            {level, LagerLevel}]}],
