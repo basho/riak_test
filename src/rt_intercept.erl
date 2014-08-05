@@ -25,25 +25,38 @@
 files_to_mods(Files) ->
     [list_to_atom(filename:basename(F, ".erl")) || F <- Files].
 
+default_intercept_path_glob() ->
+    filename:join([rt_local:home_dir(), "intercepts", "*.erl"]).
+
 intercept_files() ->
-    filelib:wildcard(filename:join([rt_local:home_dir(), "intercepts", "*.erl"])).
+    intercept_files([default_intercept_path_glob()]).
+
+intercept_files(Globs) ->
+    lists:concat([filelib:wildcard(Glob) || Glob <- Globs]).
 
 %% @doc Load the intercepts on the nodes under test.
 -spec load_intercepts([node()]) -> ok.
 load_intercepts(Nodes) ->
+    load_intercepts(Nodes, [default_intercept_path_glob()]).
+
+-spec load_intercepts([node()], [string()]) -> ok.
+load_intercepts(Nodes, Globs) ->
     case rt_config:get(load_intercepts, true) of
         false ->
             ok;
         true ->
             Intercepts = rt_config:get(intercepts, []),
-            rt:pmap(fun(N) -> load_code(N) end, Nodes),
+            rt:pmap(fun(N) -> load_code(N, Globs) end, Nodes),
             rt:pmap(fun(N) -> add(N, Intercepts) end, Nodes),
             ok
     end.
 
 load_code(Node) ->
+    load_code(Node, [default_intercept_path_glob()]).
+
+load_code(Node, Globs) ->
     rt:wait_until_pingable(Node),
-    [ok = remote_compile_and_load(Node, F) || F <- intercept_files()],
+    [ok = remote_compile_and_load(Node, F) || F <- intercept_files(Globs)],
     ok.
 
 add_and_save(Node, Intercepts) ->
@@ -109,8 +122,11 @@ wait_until_loaded(Node, Tries) ->
     end.
 
 are_intercepts_loaded(Node) ->
+    are_intercepts_loaded(Node, [default_intercept_path_glob()]).
+
+are_intercepts_loaded(Node, Globs) ->
     Results = [rpc:call(Node, code, is_loaded, [Mod])
-               || Mod <- files_to_mods(intercept_files())],
+               || Mod <- files_to_mods(intercept_files(Globs))],
     lists:all(fun is_loaded/1, Results).
 
 is_loaded({file,_}) -> true;
