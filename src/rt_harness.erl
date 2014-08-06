@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 %% @doc rt_harness provides a level of indirection between the modules
 %% calling into the harness and the configured harness, resolving the call
-%% to the configured harness. Calls such as 'rt_harness:start(Node)' will
+%% to the configured harness. Calls such as `rt_harness:start(Node)' will
 %% be resolved to the configured harness.
 -module(rt_harness).
 
