@@ -17,7 +17,8 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-
+%% @doc The purpose of rt_harness_util is to provide common functions
+%% to harness modules implementing the test_harness behaviour.
 -module(rt_harness_util).
 
 -include_lib("eunit/include/eunit.hrl").
