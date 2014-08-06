@@ -42,8 +42,9 @@ metadata(Pid) ->
     end.
 
 -spec(run(integer(), atom(), [{atom(), term()}], list()) -> [tuple()]).
-%% @doc Runs a module's run/0 function after setting up a log capturing backend for lager.
-%%      It then cleans up that backend and returns the logs as part of the return proplist.
+%% @doc Runs a module's run/0 function after setting up a log
+%%      capturing backend for lager.  It then cleans up that backend
+%%      and returns the logs as part of the return proplist.
 run(TestModule, Outdir, TestMetaData, HarnessArgs) ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, HarnessArgs),
