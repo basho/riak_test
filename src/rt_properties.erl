@@ -37,7 +37,7 @@
           wait_for_transfers=false :: boolean(),
           valid_backends=all :: all | [atom()],
           make_cluster=true :: boolean(),
-          config :: term()
+          config=default_config() :: term()
          }).
 -type properties() :: #rt_properties_v1{}.
 
@@ -50,7 +50,8 @@
          new/1,
          get/2,
          set/2,
-         set/3]).
+         set/3,
+         default_config/0]).
 
 %% @doc Create a new properties record with all fields initialized to
 %% the default values.
@@ -160,6 +161,12 @@ validate_property(Property, ok) ->
     end;
 validate_property(_Property, {error, _}=Error) ->
     Error.
+
+-spec default_config() -> [term()].
+default_config() ->
+    [{riak_core, [{handoff_concurrency, 11}]},
+     {riak_search, [{enabled, true}]},
+     {riak_pipe, [{worker_limit, 200}]}].
 
 -spec is_valid_record(term()) -> boolean().
 is_valid_record(Record) ->
