@@ -9,7 +9,7 @@
 properties() ->
     CustomConfig = rt_cluster:augment_config(riak_core,
                                              {default_bucket_props, [{n_val, 2}]},
-                                             rt_cluster:config()),
+                                             rt_properties:default_config()),
     rt_properties:new([{node_count, 1},
                        {config, CustomConfig}]).
 
