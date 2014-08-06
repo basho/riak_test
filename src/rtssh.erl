@@ -1,6 +1,38 @@
 -module(rtssh).
+-behaviour(test_harness).
+
+-export([start/1,
+         stop/1,
+         deploy_clusters/1,
+         clean_data_dir/2,
+         spawn_cmd/1,
+         spawn_cmd/2,
+         cmd/1,
+         cmd/2,
+         setup_harness/2,
+         get_deps/0,
+         get_version/0,
+         get_backends/0,
+         set_backend/1,
+         whats_up/0,
+         get_ip/1,
+         node_id/1,
+         node_version/1,
+         admin/2,
+         riak/2,
+         attach/2,
+         attach_direct/2,
+         console/2,
+         update_app_config/2,
+         teardown/0,
+         set_conf/2,
+         set_advanced_conf/2]).
+
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
+
+admin(Node, Args) ->
+    rt_harness_util:admin(Node, Args).
 
 get_version() ->
     unknown.
@@ -289,13 +321,6 @@ run_git(Host, Path, Cmd) ->
 remote_cmd(Node, Cmd) ->
     lager:info("Running: ~s :: ~s", [get_host(Node), Cmd]),
     {0, Result} = ssh_cmd(Node, Cmd),
-    {ok, Result}.
-
-admin(Node, Args) ->
-    Cmd = riak_admin_cmd(Node, Args),
-    lager:info("Running: ~s :: ~s", [get_host(Node), Cmd]),
-    {0, Result} = ssh_cmd(Node, Cmd),
-    lager:info("~s", [Result]),
     {ok, Result}.
 
 riak(Node, Args) ->
@@ -667,8 +692,32 @@ node_id(_Node) ->
     %% orddict:fetch(Node, NodeMap).
     1.
 
-node_version(Node) ->
-    orddict:fetch(Node, rt_config:get(rt_versions)).
+set_backend(Backend) ->
+    set_backend(Backend, []).
+
+set_backend(Backend, OtherOpts) ->
+    lager:info("rtssh:set_backend(~p, ~p)", [Backend, OtherOpts]),
+    Opts = [{storage_backend, Backend} | OtherOpts],
+    update_app_config(all, [{riak_kv, Opts}]),
+    get_backends().
+
+whats_up() ->
+    io:format("Here's what's running...~n"),
+
+    Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
+    [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
+
+node_version(Node) -> 
+    rt_harness_util:node_version(Node).
+
+attach(Node, Expected) -> 
+    rt_harness_util:attach(Node, Expected).
+
+attach_direct(Node, Expected) ->
+    rt_harness_util:attach_direct(Node, Expected).
+
+console(Node, Expected) ->
+    rt_harness_util:console(Node, Expected).
 
 %%%===================================================================
 %%% Local command spawning

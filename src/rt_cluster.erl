@@ -92,7 +92,7 @@ deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
     deploy_nodes(NodeConfig);
 deploy_nodes(Versions, Services) ->
     NodeConfig = [ rt_config:version_to_config(Version) || Version <- Versions ],
-    Nodes = ?HARNESS:deploy_nodes(NodeConfig),
+    Nodes = rt_harness:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
     [ ok = rt:wait_for_service(Node, Service) || Node <- Nodes,
                                               Service <- Services ],
@@ -109,7 +109,7 @@ deploy_clusters(Settings) ->
                           {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
                               [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
                       end || Setting <- Settings],
-    ?HARNESS:deploy_clusters(ClusterConfigs).
+    rt_harness:deploy_clusters(ClusterConfigs).
 
 build_clusters(Settings) ->
     Clusters = deploy_clusters(Settings),
@@ -200,7 +200,7 @@ clean_data_dir(Nodes) ->
 clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
     clean_data_dir([Nodes], SubDir);
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
-    ?HARNESS:clean_data_dir(Nodes, SubDir).
+    rt_harness:clean_data_dir(Nodes, SubDir).
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
@@ -209,10 +209,10 @@ teardown() ->
     %%[ rt_node:stop(Node) || Node <- nodes()],
     %% Then do the more exhaustive harness thing, in case something was up
     %% but not connected.
-    ?HARNESS:teardown().
+    rt_harness:teardown().
 
 versions() ->
-    ?HARNESS:versions().
+    rt_harness:versions().
 
 augment_config(Section, Property, Config) ->
     UpdSectionConfig = update_section(Section,

@@ -18,8 +18,34 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @private
 -module(rtdev).
+-behaviour(test_harness).
+-export([start/1,
+         stop/1,
+         deploy_clusters/1,
+         clean_data_dir/2,
+         spawn_cmd/1,
+         spawn_cmd/2,
+         cmd/1,
+         cmd/2,
+         setup_harness/2,
+         get_version/0,
+         get_backends/0,
+         set_backend/1,
+         whats_up/0,
+         get_ip/1,
+         node_id/1,
+         node_version/1,
+         admin/2,
+         riak/2,
+         attach/2,
+         attach_direct/2,
+         console/2,
+         update_app_config/2,
+         teardown/0,
+         set_conf/2,
+         set_advanced_conf/2]).
+
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
