@@ -17,6 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
+%% @doc behaviour for all test harnesses. 
 -module(test_harness).     
 
 -callback start(Node :: node()) -> 'ok'.
