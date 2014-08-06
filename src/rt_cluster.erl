@@ -23,7 +23,6 @@
 
 -export([properties/0,
          setup/2,
-         config/0,
          augment_config/3,
          deploy_nodes/1,
          deploy_nodes/2,
@@ -50,7 +49,7 @@
 %% a custom properties function.
 -spec properties() -> rt_properties:properties().
 properties() ->
-    rt_properties:new([{config, config()}]).
+    rt_properties:new().
 
 -spec setup(rt_properties:properties(), proplists:proplist()) ->
                    {ok, rt_properties:properties()} | {error, term()}.
@@ -214,11 +213,6 @@ teardown() ->
 
 versions() ->
     rt_harness:versions().
-
-config() ->
-    [{riak_core, [{handoff_concurrency, 11}]},
-     {riak_search, [{enabled, true}]},
-     {riak_pipe, [{worker_limit, 200}]}].
 
 augment_config(Section, Property, Config) ->
     UpdSectionConfig = update_section(Section,

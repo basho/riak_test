@@ -26,7 +26,7 @@
 properties() ->
     UpdConfig = rt_cluster:augment_config(riak_core,
                                           {default_bucket_props, [{allow_mult, false}]},
-                                          rt_cluster:config()),
+                                          rt_properties:default_config()),
     rt_properties:new([{config, UpdConfig},
                        {node_count, 4},
                        {rolling_upgrade, true},
