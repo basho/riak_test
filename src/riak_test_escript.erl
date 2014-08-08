@@ -129,13 +129,18 @@ parse_args(Args) ->
 help_or_parse_args({ok, {[], _}}) ->
     print_help();
 help_or_parse_args({ok, {ParsedArgs, HarnessArgs}}) ->
-    help_or_parse_tests(ParsedArgs, HarnessArgs, lists:member(help, ParsedArgs));
+    help_or_parse_tests(ParsedArgs, 
+                        HarnessArgs, 
+                        lists:member(help, ParsedArgs),
+                        args_invalid(ParsedArgs));
 help_or_parse_args(_) ->
     print_help().
 
-help_or_parse_tests(_, _, true) ->
+help_or_parse_tests(_, _, true, _) ->
     print_help();
-help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
+help_or_parse_tests(_, _, false, true) ->
+    print_help();
+help_or_parse_tests(ParsedArgs, HarnessArgs, false, false) ->
     %% Have to load the `riak_test' config prior to assembling the
     %% test metadata
     load_initial_config(ParsedArgs),
@@ -148,6 +153,16 @@ help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
     Workers = rt_config:get(workers, undefined),
     shuffle_tests(ParsedArgs, HarnessArgs, Tests, Offset, Workers).
 
+args_invalid(ParsedArgs) ->
+    case { proplists:is_defined(groups, ParsedArgs), 
+           proplists:is_defined(tests, ParsedArgs) } of
+        {true, true} ->
+            io:format("--groups and --tests are currently mutually exclusive.~n~n"),
+	    true;
+	{_, _} ->
+            false
+    end.
+    
 load_initial_config(ParsedArgs) ->
     %% Loads application defaults
     application:load(riak_test),
@@ -245,7 +260,9 @@ maybe_teardown(true, TestResults, Coverage, Verbose) ->
 
 load_tests([], ParsedArgs) ->
     RawTestList = proplists:get_all_values(tests, ParsedArgs),
-    TestList = lists:foldl(fun(X, Acc) -> string:tokens(X, ", ") ++ Acc end, [], RawTestList),
+    TestList = lists:foldl(fun(X, Acc) -> 
+                               string:tokens(X, ", ") ++ Acc 
+                           end, [], RawTestList),
     %% Parse Command Line Tests
     {CodePaths, SpecificTests} =
         lists:foldl(fun extract_test_names/2,
@@ -260,7 +277,9 @@ load_tests([], ParsedArgs) ->
     DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
     compose_test_data(DirTests, SpecificTests, ParsedArgs);
 load_tests(RawGroupList, ParsedArgs) ->
-    Groups = lists:foldl(fun(X, Acc) -> string:tokens(X, ", ") ++ Acc end, [], RawGroupList),
+    Groups = lists:foldl(fun(X, Acc) -> 
+                             string:tokens(X, ", ") ++ Acc 
+                         end, [], RawGroupList),
     Dirs = proplists:get_value(dir, ParsedArgs, ["./ebin"]),
     AllDirTests = lists:append([load_tests_in_dir(Dir, []) || Dir <- Dirs]),
     DirTests = get_group_tests(AllDirTests, Groups),
