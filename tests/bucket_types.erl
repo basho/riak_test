@@ -5,7 +5,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("rt.hrl").
 
--test_type(bucket_types).
+-test_type([bucket_types]).
 
 properties() ->
     CustomConfig = rt_cluster:augment_config(riak_core,
