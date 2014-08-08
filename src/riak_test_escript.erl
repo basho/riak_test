@@ -274,12 +274,12 @@ get_group_tests(Tests, Groups) ->
                  end, Tests).
 
 match_group_attributes(Attributes, Groups) ->
-    case proplists:get_all_values(test_type, Attributes) of
+    case proplists:get_value(test_type, Attributes) of
 	undefined ->
 	    false;
 	TestTypes ->
 	    lists:member(true, 
-			 [ hd(TestType) == list_to_atom(Group) 
+			 [ TestType == list_to_atom(Group) 
 			   || Group <- Groups, TestType <- TestTypes ])
     end.
 
