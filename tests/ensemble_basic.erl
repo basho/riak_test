@@ -22,6 +22,8 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+-test_type([ensemble]).
+
 confirm() ->
     NumNodes = 5,
     NVal = 5,
