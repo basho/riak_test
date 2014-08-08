@@ -25,17 +25,26 @@
 -export([add_deps/1]).
 
 main(Args) ->
-    {ParsedArgs, HarnessArgs, Tests} = prepare(Args),
-    OutDir = proplists:get_value(outdir, ParsedArgs),
-    Results = execute(Tests, OutDir, report(ParsedArgs), HarnessArgs),
-    finalize(Results, ParsedArgs).
+    case prepare(Args) of 
+        ok -> 
+            ok;
+        {ParsedArgs, HarnessArgs, Tests} ->
+            OutDir = proplists:get_value(outdir, ParsedArgs),
+            Results = execute(Tests, OutDir, report(ParsedArgs), HarnessArgs),
+            finalize(Results, ParsedArgs)
+    end.
 
 prepare(Args) ->
-    {ParsedArgs, _, Tests} = ParseResults = parse_args(Args),
-    io:format("Tests to run: ~p~n", [Tests]),
-    ok = erlang_setup(ParsedArgs),
-    ok = test_setup(ParsedArgs),
-    ParseResults.
+    case parse_args(Args) of
+        {ParsedArgs, _, Tests} = ParseResults ->
+            io:format("Tests to run: ~p~n", [Tests]),
+            ok = erlang_setup(ParsedArgs),
+            ok = test_setup(ParsedArgs),
+            ParseResults;
+        ok ->
+            io:format("No tests to run.~n"),
+	    ok
+    end.
 
 execute(Tests, Outdir, Report, HarnessArgs) ->
     TestCount = length(Tests),
@@ -66,6 +75,7 @@ cli_options() ->
  {config,             $c, "conf",     string,     "specifies the project configuration"},
  {tests,              $t, "tests",    string,     "specifies which tests to run"},
  {suites,             $s, "suites",   string,     "which suites to run"},
+ {groups,             $g, "groups",   string,     "specifiy a list of test groups to run"},
  {dir,                $d, "dir",      string,     "run all tests in the specified directory"},
  {skip,               $x, "skip",     string,     "list of tests to skip in a directory"},
  {verbose,            $v, "verbose",  undefined,  "verbose output"},
@@ -130,7 +140,9 @@ help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
     %% test metadata
     load_initial_config(ParsedArgs),
 
-    TestData = compose_test_data(ParsedArgs),
+    Groups = proplists:get_all_values(groups, ParsedArgs),
+    TestData = load_tests(Groups, ParsedArgs),
+    
     Tests = which_tests_to_run(report(ParsedArgs), TestData),
     Offset = rt_config:get(offset, undefined),
     Workers = rt_config:get(workers, undefined),
@@ -231,7 +243,7 @@ maybe_teardown(true, TestResults, Coverage, Verbose) ->
     end,
     ok.
 
-compose_test_data(ParsedArgs) ->
+load_tests([], ParsedArgs) ->
     RawTestList = proplists:get_all_values(tests, ParsedArgs),
     TestList = lists:foldl(fun(X, Acc) -> string:tokens(X, ", ") ++ Acc end, [], RawTestList),
     %% Parse Command Line Tests
@@ -246,8 +258,33 @@ compose_test_data(ParsedArgs) ->
     Dirs = proplists:get_all_values(dir, ParsedArgs),
     SkipTests = string:tokens(proplists:get_value(skip, ParsedArgs, []), [$,]),
     DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
-    Project = list_to_binary(rt_config:get(rt_project, "undefined")),
+    compose_test_data(DirTests, SpecificTests, ParsedArgs);
+load_tests(RawGroupList, ParsedArgs) ->
+    Groups = lists:foldl(fun(X, Acc) -> string:tokens(X, ", ") ++ Acc end, [], RawGroupList),
+    Dirs = proplists:get_value(dir, ParsedArgs, ["./ebin"]),
+    AllDirTests = lists:append([load_tests_in_dir(Dir, []) || Dir <- Dirs]),
+    DirTests = get_group_tests(AllDirTests, Groups),
+    compose_test_data(DirTests, [], ParsedArgs).
 
+get_group_tests(Tests, Groups) ->
+    lists:filter(fun(Test) ->
+                     Mod = list_to_atom(Test),
+                     Attrs = Mod:module_info(attributes),
+                     match_group_attributes(Attrs, Groups)
+                 end, Tests).
+
+match_group_attributes(Attributes, Groups) ->
+    case proplists:get_all_values(test_type, Attributes) of
+	undefined ->
+	    false;
+	TestTypes ->
+	    lists:member(true, 
+			 [ hd(TestType) == list_to_atom(Group) 
+			   || Group <- Groups, TestType <- TestTypes ])
+    end.
+
+compose_test_data(DirTests, SpecificTests, ParsedArgs) ->
+    Project = list_to_binary(rt_config:get(rt_project, "undefined")),
     Backends = case proplists:get_all_values(backend, ParsedArgs) of
         [] -> [undefined];
         Other -> Other
@@ -258,6 +295,7 @@ compose_test_data(ParsedArgs) ->
                end,
     TestFoldFun = test_data_fun(rt:get_version(), Project, Backends, Upgrades),
     lists:foldl(TestFoldFun, [], lists:usort(DirTests ++ SpecificTests)).
+
 
 test_data_fun(Version, Project, Backends, Upgrades) ->
     fun(Test, Tests) ->
@@ -492,3 +530,4 @@ so_kill_riak_maybe() ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
     end.
+
