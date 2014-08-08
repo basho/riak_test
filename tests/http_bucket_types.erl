@@ -6,6 +6,8 @@
 -include_lib("riakc/include/riakc.hrl").
 -include("rt.hrl").
 
+-test_type([bucket_types, http]).
+
 properties() ->
     CustomConfig = rt_cluster:augment_config(riak_core,
                                              {default_bucket_props, [{n_val, 2}]},
