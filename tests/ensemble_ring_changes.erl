@@ -24,11 +24,12 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(NVAL, 3).
+-define(RING_SIZE, 16).
 
 config() ->
     [{riak_core, [{default_bucket_props, [{n_val, 5}]},
                   {vnode_management_timer, 1000},
-                  {ring_creation_size, 16},
+                  {ring_creation_size, ?RING_SIZE},
                   {enable_consensus, true},
                   {target_n_val, 8}]}].
 
@@ -43,29 +44,28 @@ confirm() ->
     {ok, PL} = get_preflist(Node, Bucket, Key, ?NVAL),
     ?assertEqual(?NVAL, length(PL)),
     lager:info("PREFERENCE LIST: ~n  ~p", [PL]),
-
     {{Idx0, _Node0}, primary} = hd(PL),
-    Ensemble = {kv, Idx0, 3},
-    lager:info("Sleeping for 60 seconds to allow consensus groups to come up for
-        strong bucket type"),
-    timer:sleep(60000),
-    Leader = rpc:call(Node, riak_ensemble_manager, get_leader, [Ensemble]),
-    lager:info("Leader = ~p~n", [Leader]),
+    _Ensemble = {kv, Idx0, 3},
     PBC = rt:pbc(Node),
-    %% maps to a riak_ensemble put_once since there is no vclock
     {ok, Obj} = initial_write(PBC, Bucket, Key, Val),
+    {ok, Obj2} = assert_update(PBC, Bucket, Key, Obj, <<"test-val2">>),
     expand_cluster(Joined, NotJoined),
-    NewVal = <<"test-val2">>,
+    _ = assert_update(PBC, Bucket, Key, Obj2, <<"test-val3">>),
+    pass.
+
+assert_update(PBC, Bucket, Key, Obj, NewVal) ->
     ok = update(PBC, Obj, NewVal),
     Obj2 = rt:pbc_read(PBC, Bucket, Key),
     ?assertEqual(NewVal, riakc_obj:get_value(Obj2)),
-    pass.
+    {ok, Obj2}.
 
 update(PBC, Obj0, NewVal) ->
+    lager:info("Updating Key with ~p", [NewVal]),
     Obj = riakc_obj:update_value(Obj0, NewVal),
     riakc_pb_socket:put(PBC, Obj).
 
 initial_write(PBC, Bucket, Key, Val) ->
+    %% maps to a riak_ensemble put_once since there is no vclock
     lager:info("Writing a consistent key"),
     ok = rt:pbc_write(PBC, Bucket, Key, Val),
     lager:info("Read key to verify it exists"),
@@ -85,6 +85,8 @@ create_strong_bucket_type(Node, NVal) ->
     ensemble_util:wait_until_stable(Node, NVal).
 
 expand_cluster(OldNodes, NewNodes) ->
+    lager:info("Expanding Cluster from ~p to ~p nodes", [length(OldNodes),
+            length(OldNodes) + length(NewNodes)]),
     PNode = hd(OldNodes),
     [rt:join(Node, PNode) || Node <- NewNodes],
     ensemble_util:wait_until_cluster(OldNodes ++ NewNodes),
