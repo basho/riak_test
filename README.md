@@ -275,15 +275,22 @@ tables.  This leads to the principle of intercepts.
 Writing an intercept is nearly identical to writing any other Erlang
 source with a few easy-to-remember conventions added.
 
-1. All intercepts must live under the `intercepts` dir.
+1. Intercepts used by tests living in this repository must live in the
+   `intercepts` directory. Projects that keep their tests in the
+   project repository (separate from `riak_test`) must have a
+   directory that contains only intercept modules. These modules
+   *should not* be compiled by the project.
 
 2. All intercept modules should be named the same as the module they
    affect with the suffix `_intercepts` added.  E.g. `riak_kv_vnode` =>
    `riak_kv_vnode_intercepts`.
 
-3. All intercept modules should include the `intercept.hrl` file.
-   This includes macros to properly log messages.  You **cannot** call
-   lager.
+3. You **cannot** call lager (the modules are not compiled with the
+   parse transform). The `intercept.hrl` module includes macros to
+   properly log messages. All intercept modules in this repository
+   should include `intercept.hrl`. All intercept modules that live
+   outside this repository cannot include it because it is not
+   accessible.
 
 4. All intercept modules should declare the macro `M` whose value is
    the affected module with the suffix `_orig` added.  E.g. for
@@ -296,7 +303,7 @@ source with a few easy-to-remember conventions added.
    `riak_kv_vnode:put` you would type `?M:put_orig`.
 
 6. To log a message use the `I_` macros.  E.g. to log an info message
-   use `?I_INFO`.
+   use `?I_INFO` -- see 3.
 
 The easiest way to understand the above conventions is to see them all
 at work in an example.
