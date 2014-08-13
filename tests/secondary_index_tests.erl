@@ -33,18 +33,24 @@
 -define(KEYS(A,B,C), [int_to_key(N) || N <- lists:seq(A,B), C]).
 -define(KEYS(A,B,G1,G2), [int_to_key(N) || N <- lists:seq(A,B), G1, G2]).
 
+-define(DEVS(N), lists:concat([N, "@127.0.0.1"])).
+-define(DEV(N), list_to_atom(?DEVS(N))).
+
 properties() ->
     rt_properties:new([{node_count, 3},
                        {wait_for_transfers, true},
-                       {start_version, previous},
+                       {valid_backends, [eleveldb, memory]},
                        {config, config()}]).
 
 config() ->
     [{riak_kv, [{secondary_index_sort_default, false}]},
      {riak_core, [{handoff_concurrency, 11}]}].
 
+-spec confirm(rt_properties:properties(), proplists:proplist()) -> pass | fail.
 confirm(Properties, _MD) ->
-    Nodes = rt_properties:get(nodes, Properties),
+    NodeMap= rt_properties:get(node_map, Properties),
+    Nodes = [rt_node:node_name(NodeId, NodeMap)
+             || NodeId <- rt_properties:get(node_ids, Properties)],
     Bucket = druuid:v4_str(),
     lager:info("Bucket: ~p", [Bucket]),
     PBC = rt_pb:pbc(hd(Nodes)),
@@ -110,7 +116,7 @@ confirm(Properties, _MD) ->
                      <<"field2_int">>,
                      1000000000000,
                      TestIdxVal),
-
+    rt_pb:stop(PBC),
     pass.
 
 assertExactQuery(Clients, Bucket, Expected, Index, Value) ->

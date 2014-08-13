@@ -1,10 +1,5 @@
 .PHONY: deps
 
-APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
-	xmerl webtool eunit syntax_tools compiler hipe mnesia public_key \
-	observer wx gs
-PLT = $(HOME)/.riak-test_dialyzer_plt
-
 all: deps compile
 	./rebar skip_deps=true escriptize
 	SMOKE_TEST=1 ./rebar skip_deps=true escriptize

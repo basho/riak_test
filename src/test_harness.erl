@@ -17,18 +17,18 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc behaviour for all test harnesses. 
--module(test_harness).     
+%% @doc behaviour for all test harnesses.
+-module(test_harness).
 
--callback start(Node :: node()) -> 'ok'.
--callback stop(Node :: node()) -> 'ok'.
--callback deploy_clusters(ClusterConfigs :: list()) -> list().
+%% -callback start(Node :: node(), Version :: string()) -> 'ok'.
+%% -callback stop(Node :: node()) -> 'ok'.
+%% -callback deploy_clusters(ClusterConfigs :: list()) -> list().
 -callback clean_data_dir(Nodes :: list(), SubDir :: string()) -> 'ok'.
 -callback spawn_cmd(Cmd :: string()) -> Port :: pos_integer().
 -callback spawn_cmd(Cmd :: string(), Opts :: list()) -> Port :: pos_integer().
 -callback cmd(Cmd :: string()) -> term()|timeout.
 -callback cmd(Cmd :: string(), Opts :: [atom()]) -> term()|timeout.
--callback setup_harness(Test :: string(), Args :: list()) -> 'ok'.
+%% -callback setup_harness(Test :: string(), Args :: list()) -> 'ok'.
 -callback get_version() -> term().
 -callback get_backends() -> [atom()].
 -callback set_backend(Backend :: atom()) -> [atom()].
@@ -41,9 +41,7 @@
 -callback attach(Node :: node(), Expected:: list()) -> 'ok'.
 -callback attach_direct(Node :: node(), Expected:: list()) -> 'ok'.
 -callback console(Node :: node(), Expected:: list()) -> 'ok'.
--callback update_app_config(atom()|node(), Config :: term()) -> 'ok'.
+%% -callback update_app_config(atom()|node(), Config :: term()) -> 'ok'.
 -callback teardown() -> list().
 -callback set_conf(atom()|node(), NameValuePairs :: [{string(), string()}]) -> 'ok'.
 -callback set_advanced_conf(atom()|node(), NameValuePairs :: [{string(), string()}]) -> 'ok'.
-
-

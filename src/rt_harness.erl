@@ -25,46 +25,46 @@
 
 -define(HARNESS_MODULE, (rt_config:get(rt_harness))).
 
--export([
-        start/1,
-        stop/1,
-        deploy_clusters/1,
-        clean_data_dir/2,
-        deploy_nodes/1,
-        spawn_cmd/1,
-        spawn_cmd/2,
-        cmd/1,
-        cmd/2,
-        setup_harness/2,
-        get_deps/0,
-        get_version/0,
-        get_backends/0,
-        set_backend/1,
-        whats_up/0,
-        get_ip/1,
-        node_id/1,
-        node_version/1,
-        admin/2,
-        riak/2,
-        attach/2,
-        attach_direct/2,
-        console/2,
-        update_app_config/2,
-        teardown/0,
-        set_conf/2,
-        set_advanced_conf/2]).
+-export([start/2,
+         stop/2,
+         deploy_clusters/1,
+         clean_data_dir/3,
+         deploy_nodes/1,
+         spawn_cmd/1,
+         spawn_cmd/2,
+         cmd/1,
+         cmd/2,
+         setup/0,
+         get_deps/0,
+         get_version/0,
+         get_backends/0,
+         set_backend/1,
+         whats_up/0,
+         get_ip/1,
+         node_id/1,
+         node_version/1,
+         admin/2,
+         riak/2,
+         run_riak/3,
+         attach/2,
+         attach_direct/2,
+         console/2,
+         update_app_config/3,
+         teardown/0,
+         set_conf/2,
+         set_advanced_conf/2]).
 
-start(Node) ->
-    ?HARNESS_MODULE:start(Node).
+start(Node, Version) ->
+    ?HARNESS_MODULE:start(Node, Version).
 
-stop(Node) ->
-    ?HARNESS_MODULE:stop(Node).
-       
+stop(Node, Version) ->
+    ?HARNESS_MODULE:stop(Node, Version).
+
 deploy_clusters(ClusterConfigs) ->
     ?HARNESS_MODULE:deploy_clusters(ClusterConfigs).
-   
-clean_data_dir(Nodes, SubDir) ->
-    ?HARNESS_MODULE:clean_data_dir(Nodes, SubDir).
+
+clean_data_dir(Node, Version, SubDir) ->
+    ?HARNESS_MODULE:clean_data_dir(Node, Version, SubDir).
 
 spawn_cmd(Cmd) ->
     ?HARNESS_MODULE:spawn_cmd(Cmd).
@@ -81,11 +81,12 @@ cmd(Cmd, Opts) ->
 deploy_nodes(NodeConfig) ->
     ?HARNESS_MODULE:deploy_nodes(NodeConfig).
 
-setup_harness(Test, Args) ->
-    ?HARNESS_MODULE:setup_harness(Test, Args).
+setup() ->
+    ?HARNESS_MODULE:setup_harness().
 
 get_deps() ->
     ?HARNESS_MODULE:get_deps().
+
 get_version() ->
     ?HARNESS_MODULE:get_version().
 
@@ -113,6 +114,9 @@ admin(Node, Args) ->
 riak(Node, Args) ->
     ?HARNESS_MODULE:riak(Node, Args).
 
+run_riak(Node, Version, Command) ->
+    ?HARNESS_MODULE:run_riak(Node, Version, Command).
+
 attach(Node, Expected) ->
     ?HARNESS_MODULE:attach(Node, Expected).
 
@@ -122,8 +126,8 @@ attach_direct(Node, Expected) ->
 console(Node, Expected) ->
     ?HARNESS_MODULE:console(Node, Expected).
 
-update_app_config(Node, Config) ->
-    ?HARNESS_MODULE:update_app_config(Node, Config).
+update_app_config(Node, Version, Config) ->
+    ?HARNESS_MODULE:update_app_config(Node, Version, Config).
 
 teardown() ->
     ?HARNESS_MODULE:teardown().

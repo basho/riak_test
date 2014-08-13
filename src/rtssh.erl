@@ -151,6 +151,22 @@ node_to_host(Node) ->
             throw(io_lib:format("rtssh:node_to_host couldn't figure out the host of ~p", [Node]))
     end.
 
+
+nodes(Count) ->
+    Hosts = rt_config:get(rtssh_hosts),
+    %% NumNodes = length(NodeConfig),
+    NodeConfig = busted_stuff,
+    NumNodes = Count,
+    NumHosts = length(Hosts),
+    case NumNodes > NumHosts of
+        true ->
+            erlang:error("Not enough hosts available to deploy nodes",
+                         [NumNodes, NumHosts]);
+        false ->
+            Hosts2 = lists:sublist(Hosts, NumNodes),
+            deploy_nodes(NodeConfig, Hosts2)
+    end.
+
 deploy_nodes(NodeConfig, Hosts) ->
     Path = relpath(root),
     lager:info("Riak path: ~p", [Path]),
@@ -359,6 +375,7 @@ load_hosts() ->
     Hosts = lists:sort(HostsIn),
     rt_config:set(rtssh_hosts, Hosts),
     rt_config:set(rtssh_aliases, Aliases),
+    rt_config:set(rtssh_nodes, length(Hosts)),
     Hosts.
 
 read_hosts_file(File) ->
@@ -716,10 +733,10 @@ whats_up() ->
     Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
 
-node_version(Node) -> 
+node_version(Node) ->
     rt_harness_util:node_version(Node).
 
-attach(Node, Expected) -> 
+attach(Node, Expected) ->
     rt_harness_util:attach(Node, Expected).
 
 attach_direct(Node, Expected) ->

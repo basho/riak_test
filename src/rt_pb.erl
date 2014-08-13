@@ -22,6 +22,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([pbc/1,
+         stop/1,
          pbc_read/3,
          pbc_read/4,
          pbc_read_check/4,
@@ -45,11 +46,15 @@
 %% @doc get me a protobuf client process and hold the mayo!
 -spec pbc(node()) -> pid().
 pbc(Node) ->
-    rt:wait_for_service(Node, riak_kv),
-    ConnInfo = proplists:get_value(Node, rt:connection_info([Node])),
-    {IP, PBPort} = proplists:get_value(pb, ConnInfo),
+    %% rt:wait_for_service(Node, riak_kv),
+    %% ConnInfo = proplists:get_value(Node, rt:connection_info([Node])),
+    %% {IP, PBPortz} = proplists:get_value(pb, ConnInfo),
+    {ok, [{IP, PBPort}]} = get_pb_conn_info(Node),
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, [{auto_reconnect, true}]),
     Pid.
+
+stop(Pid) ->
+    riakc_pb_socket:stop(Pid).
 
 %% @doc does a read via the erlang protobuf client
 -spec pbc_read(pid(), binary(), binary()) -> binary().
