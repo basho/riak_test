@@ -45,13 +45,24 @@ confirm() ->
     ?assertEqual(?NVAL, length(PL)),
     lager:info("PREFERENCE LIST: ~n  ~p", [PL]),
     {{Idx0, _Node0}, primary} = hd(PL),
-    _Ensemble = {kv, Idx0, 3},
+    Ensemble = {kv, Idx0, 3},
+    lager:info("Ensemble = ~p", [Ensemble]),
     PBC = rt:pbc(Node),
     {ok, Obj} = initial_write(PBC, Bucket, Key, Val),
-    {ok, Obj2} = assert_update(PBC, Bucket, Key, Obj, <<"test-val2">>),
-    expand_cluster(Joined, NotJoined),
-    _ = assert_update(PBC, Bucket, Key, Obj2, <<"test-val3">>),
+    {ok, _Obj2} = assert_update(PBC, Bucket, Key, Obj, <<"test-val2">>),
+    Replacements = expand_cluster(Joined, NotJoined),
+    {_Vsn, [View]} = rpc:call(Node, riak_ensemble_manager, get_views, [Ensemble]),
+    {_, Follower} = hd(lists:reverse(View)),
+    lager:info("Follower = ~p~n", [Follower]),
+    read_modify_write(PBC, Bucket, Key, <<"test-val2">>, <<"test-val3">>),
+    replace_node(Node, Follower, hd(Replacements)),
+    read_modify_write(PBC, Bucket, Key, <<"test-val3">>, <<"test-val4">>),
     pass.
+
+read_modify_write(PBC, Bucket, Key, Expected, NewVal) ->
+    Obj = rt:pbc_read(PBC, Bucket, Key),
+    ?assertEqual(Expected, riakc_obj:get_value(Obj)),
+    assert_update(PBC, Bucket, Key, Obj, NewVal).
 
 assert_update(PBC, Bucket, Key, Obj, NewVal) ->
     ok = update(PBC, Obj, NewVal),
@@ -84,18 +95,37 @@ create_strong_bucket_type(Node, NVal) ->
                                        [{consistent, true}, {n_val, NVal}]),
     ensemble_util:wait_until_stable(Node, NVal).
 
-expand_cluster(OldNodes, NewNodes) ->
+replace_node(Node, OldNode, NewNode) ->
+    lager:info("Replacing ~p with ~p", [OldNode, NewNode]),
+    Nodes = [OldNode, NewNode],
+    rt:staged_join(NewNode, Node),
+    ?assertEqual(ok, rt:wait_until_ring_converged(Nodes)),
+    ok = rpc:call(Node, riak_core_claimant, replace, Nodes),
+    rt:plan_and_commit(Node),
+    rt:try_nodes_ready(Nodes, 3, 500),
+    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
+
+expand_cluster(OldNodes, NewNodes0) ->
+    %% Always have 2 replacement nodes
+    {NewNodes, Replacements} = lists:split(length(NewNodes0)-2, NewNodes0),
     lager:info("Expanding Cluster from ~p to ~p nodes", [length(OldNodes),
             length(OldNodes) + length(NewNodes)]),
     PNode = hd(OldNodes),
-    [rt:join(Node, PNode) || Node <- NewNodes],
-    ensemble_util:wait_until_cluster(OldNodes ++ NewNodes),
+    Nodes = OldNodes ++ NewNodes,
+    [rt:staged_join(Node, PNode) || Node <- NewNodes],
+    rt:plan_and_commit(PNode),
+    rt:try_nodes_ready(Nodes, 3, 500),
+    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    %% Ensure each node owns a portion of the ring
+    rt:wait_until_nodes_agree_about_ownership(Nodes),
+    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
+    ensemble_util:wait_until_cluster(Nodes),
     ensemble_util:wait_for_membership(PNode),
-    ensemble_util:wait_until_stable(PNode, ?NVAL).
-
+    ensemble_util:wait_until_stable(PNode, ?NVAL),
+    Replacements.
 
 build_initial_cluster(Config) ->
-    TotalNodes = 7,
+    TotalNodes = 9,
     InitialNodes = 3,
     Nodes = rt:deploy_nodes(TotalNodes, Config),
     Node = hd(Nodes),
