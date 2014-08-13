@@ -19,24 +19,38 @@
 %% -------------------------------------------------------------------
 
 %% @doc Implements a set of functions for accessing and manipulating
-%% an `rt_properties' record.-module(rt_properties).
+%% an `rt_properties' record.
 
 -module(rt_properties).
 
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+%% A quick note on the distinction between `node_ids' and
+%% `node_map'. `node_ids' are short identifers (e.g. dev1) and the
+%% `node_map' maps each node_id to a full erlang node names. Both are
+%% necessary because the different existing helper functions make use
+%% of each one to either compose shell commands or execute rpc calls.
+%% The `node_map' is used to make the details of the actual node
+%% names, which are harness-specific, opaque to the helper functions
+%% and ensure that the helpers are valid for use with any harness.
 -record(rt_properties_v1, {
-          nodes :: [node()],
-          node_count=6 :: non_neg_integer(),
+          node_ids :: [string()],
+          node_map :: [{string(), node()}],
+          node_count=3 :: non_neg_integer(),
           metadata=[] :: proplists:proplist(),
           properties=[] :: proplists:proplist(),
           rolling_upgrade=false :: boolean(),
-          start_version=current :: atom(),
-          upgrade_version=current :: atom(),
+          start_version="head" :: string(),
+          current_version :: string(),
+          upgrade_path :: [string()],
           wait_for_transfers=false :: boolean(),
           valid_backends=all :: all | [atom()],
           make_cluster=true :: boolean(),
+          cluster_count=1 :: pos_integer(),
+          cluster_weights :: [float()],
+          clusters :: proplists:proplist(),
+          required_services=[riak_kv] :: [atom()],
           config=default_config() :: term()
          }).
 -type properties() :: #rt_properties_v1{}.
@@ -81,7 +95,7 @@ get(Property, Properties) ->
 %% or if any of the properties to be set are not a valid property. In
 %% the case that invalid properties are specified the error returned
 %% contains a list of erroneous properties.
--spec set([{atom(), term()}], properties()) -> {ok, properties()} | {error, atom()}.
+-spec set([{atom(), term()}], properties()) -> properties() | {error, atom()}.
 set(PropertyList, Properties) when is_list(PropertyList) ->
     set_properties(PropertyList, Properties, validate_record(Properties)).
 
@@ -178,8 +192,10 @@ is_valid_property(Property) ->
     lists:member(Property, Fields).
 
 -spec field_index(atom()) -> non_neg_integer().
-field_index(nodes) ->
-    ?RT_PROPERTIES.nodes;
+field_index(node_ids) ->
+    ?RT_PROPERTIES.node_ids;
+field_index(node_map) ->
+    ?RT_PROPERTIES.node_map;
 field_index(node_count) ->
     ?RT_PROPERTIES.node_count;
 field_index(metadata) ->
@@ -190,13 +206,23 @@ field_index(rolling_upgrade) ->
     ?RT_PROPERTIES.rolling_upgrade;
 field_index(start_version) ->
     ?RT_PROPERTIES.start_version;
-field_index(upgrade_version) ->
-    ?RT_PROPERTIES.upgrade_version;
+field_index(current_version) ->
+    ?RT_PROPERTIES.current_version;
+field_index(upgrade_path) ->
+    ?RT_PROPERTIES.upgrade_path;
 field_index(wait_for_transfers) ->
     ?RT_PROPERTIES.wait_for_transfers;
 field_index(valid_backends) ->
     ?RT_PROPERTIES.valid_backends;
 field_index(make_cluster) ->
     ?RT_PROPERTIES.make_cluster;
+field_index(cluster_count) ->
+    ?RT_PROPERTIES.cluster_count;
+field_index(cluster_weights) ->
+    ?RT_PROPERTIES.cluster_weights;
+field_index(clusters) ->
+    ?RT_PROPERTIES.clusters;
+field_index(required_services) ->
+    ?RT_PROPERTIES.required_services;
 field_index(config) ->
     ?RT_PROPERTIES.config.

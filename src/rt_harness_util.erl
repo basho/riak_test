@@ -22,9 +22,9 @@
 -module(rt_harness_util).
 
 -include_lib("eunit/include/eunit.hrl").
--define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
+-define(DEVS(N), lists:concat([N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
--define(PATH, (rt_config:get(rtdev_path))).
+-define(PATH, (rt_config:get(root_path))).
 
 -export([admin/2,
          attach/2,
@@ -32,13 +32,14 @@
          cmd/1,
          cmd/2,
          console/2,
-         deploy_clusters/1,
+         deploy_nodes/5,
          get_ip/1,
          node_id/1,
          node_version/1,
          riak/2,
          set_conf/2,
          set_advanced_conf/2,
+         setup_harness/3,
          get_advanced_riak_conf/1,
          update_app_config_file/2,
          spawn_cmd/1,
@@ -63,73 +64,75 @@ attach_direct(Node, Expected) ->
 console(Node, Expected) ->
     interactive(Node, "console", Expected).
 
-deploy_clusters(ClusterConfigs) ->
-    NumNodes = rt_config:get(num_nodes, 6),
-    RequestedNodes = lists:flatten(ClusterConfigs),
+%% deploy_clusters(ClusterConfigs) ->
+%%     NumNodes = rt_config:get(num_nodes, 6),
+%%     RequestedNodes = lists:flatten(ClusterConfigs),
 
-    case length(RequestedNodes) > NumNodes of
-        true ->
-            erlang:error("Requested more nodes than available");
-        false ->
-            Nodes = deploy_nodes(RequestedNodes),
-            {DeployedClusters, _} = lists:foldl(
-                    fun(Cluster, {Clusters, RemNodes}) ->
-                        {A, B} = lists:split(length(Cluster), RemNodes),
-                        {Clusters ++ [A], B}
-                end, {[], Nodes}, ClusterConfigs),
-            DeployedClusters
-    end.
+%%     case length(RequestedNodes) > NumNodes of
+%%         true ->
+%%             erlang:error("Requested more nodes than available");
+%%         false ->
+%%             Nodes = deploy_nodes(RequestedNodes),
+%%             {DeployedClusters, _} = lists:foldl(
+%%                     fun(Cluster, {Clusters, RemNodes}) ->
+%%                         {A, B} = lists:split(length(Cluster), RemNodes),
+%%                         {Clusters ++ [A], B}
+%%                 end, {[], Nodes}, ClusterConfigs),
+%%             DeployedClusters
+%%     end.
 
-deploy_nodes(NodeConfig) ->
-    Path = relpath(root),
-    lager:info("Riak path: ~p", [Path]),
-    NumNodes = length(NodeConfig),
-    NodesN = lists:seq(1, NumNodes),
-    Nodes = [?DEV(N) || N <- NodesN],
-    NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
-    {Versions, Configs} = lists:unzip(NodeConfig),
-    VersionMap = lists:zip(NodesN, Versions),
-
-    %% Check that you have the right versions available
-    [ check_node(Version) || Version <- VersionMap ],
-    rt_config:set(rt_nodes, NodeMap),
-    rt_config:set(rt_versions, VersionMap),
-
-    create_dirs(Nodes),
+%% deploy_nodes(NodeConfig) ->
+deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
+    %% create snmp dirs, for EE
+    create_dirs(Version, NodeIds),
 
     %% Set initial config
-    add_default_node_config(Nodes),
-    rt:pmap(fun({_, default}) ->
-                    ok;
-               ({Node, {cuttlefish, Config}}) ->
-                    set_conf(Node, Config);
-               ({Node, Config}) ->
-                    rt_config:update_app_config(Node, Config)
-            end,
-            lists:zip(Nodes, Configs)),
-
-    %% create snmp dirs, for EE
-    create_dirs(Nodes),
+    ConfigUpdateFun =
+        fun(Node) ->
+                rt_harness:update_app_config(Node, Version, Config)
+        end,
+    rt:pmap(ConfigUpdateFun, NodeIds),
 
     %% Start nodes
-    %%[run_riak(N, relpath(node_version(N)), "start") || N <- Nodes],
-    rt:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
+    RunRiakFun =
+        fun(Node) ->
+                rt_harness:run_riak(Node, Version, "start")
+        end,
+    rt:pmap(RunRiakFun, NodeIds),
 
     %% Ensure nodes started
-    [ok = rt:wait_until_pingable(N) || N <- Nodes],
+    lager:debug("Wait until pingable: ~p", [NodeIds]),
+    [ok = rt:wait_until_pingable(rt_node:node_name(NodeId, NodeMap))
+                                 || NodeId <- NodeIds],
 
+    %% TODO Rubbish! Fix this.
     %% %% Enable debug logging
-    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug])
+    %% || N <- Nodes],
 
-    %% We have to make sure that riak_core_ring_manager is running before we can go on.
-    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
+    %% We have to make sure that riak_core_ring_manager is running
+    %% before we can go on.
+    [ok = rt:wait_until_registered(rt_node:node_name(NodeId, NodeMap),
+                                   riak_core_ring_manager)
+     || NodeId <- NodeIds],
 
     %% Ensure nodes are singleton clusters
-    [ok = rt_ring:check_singleton_node(?DEV(N)) || {N, Version} <- VersionMap,
-                                              Version /= "0.14.2"],
+    case Version =/= "0.14.2" of
+        true ->
+            [ok = rt_ring:check_singleton_node(rt_node:node_name(NodeId, NodeMap))
+             || NodeId <- NodeIds];
+        false ->
+            ok
+    end,
 
-    lager:info("Deployed nodes: ~p", [Nodes]),
-    Nodes.
+    %% Wait for services to start
+    lager:debug("Waiting for services ~p to start on ~p.", [Services, NodeIds]),
+    [ ok = rt:wait_for_service(rt_node:node_name(NodeId, NodeMap), Service)
+      || NodeId <- NodeIds,
+         Service <- Services ],
+
+    lager:debug("Deployed nodes: ~p", [NodeIds]),
+    NodeIds.
 
 interactive(Node, Command, Exp) ->
     N = node_id(Node),
@@ -374,35 +377,37 @@ all_the_files(DevPath, File) ->
 devpaths() ->
     lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt_config:get(rtdev_path))]).
 
-create_dirs(Nodes) ->
-    Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],
+create_dirs(Version, NodeIds) ->
+    VersionPath = filename:join(?PATH, Version),
+    Snmp = [filename:join([VersionPath, NodeId, "data/snmp/agent/db"]) ||
+               NodeId <- NodeIds],
     [?assertCmd("mkdir -p " ++ Dir) || Dir <- Snmp].
 
-check_node({_N, Version}) ->
-    case proplists:is_defined(Version, rt_config:get(rtdev_path)) of
-        true -> ok;
-        _ ->
-            lager:error("You don't have Riak ~s installed or configured", [Version]),
-            erlang:error("You don't have Riak " ++ atom_to_list(Version) ++ " installed or configured")
-    end.
+%% check_node({_N, Version}) ->
+%%     case proplists:is_defined(Version, rt_config:get(rtdev_path)) of
+%%         true -> ok;
+%%         _ ->
+%%             lager:error("You don't have Riak ~s installed or configured", [Version]),
+%%             erlang:error("You don't have Riak " ++ atom_to_list(Version) ++ " installed or configured")
+%%     end.
 
-add_default_node_config(Nodes) ->
-    case rt_config:get(rt_default_config, undefined) of
-        undefined -> ok;
-        Defaults when is_list(Defaults) ->
-            rt:pmap(fun(Node) ->
-                            rt_config:update_app_config(Node, Defaults)
-                    end, Nodes),
-            ok;
-        BadValue ->
-            lager:error("Invalid value for rt_default_config : ~p", [BadValue]),
-            throw({invalid_config, {rt_default_config, BadValue}})
-    end.
+%% add_default_node_config(Nodes) ->
+%%     case rt_config:get(rt_default_config, undefined) of
+%%         undefined -> ok;
+%%         Defaults when is_list(Defaults) ->
+%%             rt:pmap(fun(Node) ->
+%%                             rt_config:update_app_config(Node, Defaults)
+%%                     end, Nodes),
+%%             ok;
+%%         BadValue ->
+%%             lager:error("Invalid value for rt_default_config : ~p", [BadValue]),
+%%             throw({invalid_config, {rt_default_config, BadValue}})
+%%     end.
 
-node_path(Node) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
+%% node_path(Node) ->
+%%     N = node_id(Node),
+%%     Path = relpath(node_version(N)),
+%%     lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
 
 set_advanced_conf(all, NameValuePairs) ->
     lager:info("rtdev:set_advanced_conf(all, ~p)", [NameValuePairs]),
@@ -442,3 +447,27 @@ update_app_config_file(ConfigFile, Config) ->
     NewConfigOut = io_lib:format("~p.", [NewConfig]),
     ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
     ok.
+
+%% TODO: This made sense in an earlier iteration, but probably is no
+%% longer needed. Original idea was to provide a place for setup that
+%% was general to all harnesses to happen.
+setup_harness(VersionMap, NodeIds, NodeMap) ->
+    %% rt_config:set(rt_nodes, Nodes),
+    %% rt_config:set(rt_nodes_available, Nodes),
+    %% rt_config:set(rt_version_map, VersionMap),
+    %% rt_config:set(rt_versions, VersionMap),
+    %% [create_dirs(Version, VersionNodes) || {Version, VersionNodes} <- VersionMap],
+    {NodeIds, NodeMap, VersionMap}.
+
+%% %% @doc Stop nodes and wipe out their data directories
+%% stop_and_clean_nodes(Nodes, Version) when is_list(Nodes) ->
+%%     [rt_node:stop_and_wait(Node) || Node <- Nodes],
+%%     clean_data_dir(Nodes).
+
+%% clean_data_dir(Nodes) ->
+%%     clean_data_dir(Nodes, "").
+
+%% clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
+%%     clean_data_dir([Nodes], SubDir);
+%% clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+%%     rt_harness:clean_data_dir(Nodes, SubDir).
