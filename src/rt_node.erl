@@ -21,15 +21,14 @@
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([start/1,
-         start_and_wait/1,
-         async_start/1,
-         stop/1,
-         stop_and_wait/1,
-         upgrade/2,
-         upgrade/3,
+-export([start/2,
+         start_and_wait/3,
+         async_start/2,
+         stop/2,
+         stop_and_wait/3,
+         upgrade/4,
          is_ready/1,
-         slow_upgrade/3,
+         %% slow_upgrade/3,
          join/2,
          staged_join/2,
          plan_and_commit/1,
@@ -43,57 +42,75 @@
          wait_until_nodes_ready/1,
          wait_until_owners_according_to/2,
          wait_until_nodes_agree_about_ownership/1,
-         is_pingable/1]).
+         is_pingable/1,
+         clean_data_dir/2,
+         node_name/2]).
 
--define(HARNESS, (rt_config:get(rt_harness))).
+-spec node_name(string(), [{string(), node()}]) -> node() | undefined.
+%% @doc Hide the details of underlying data structure of the node map
+%% in case it needs to change at some point.
+node_name(NodeId, NodeMap) ->
+    case lists:keyfind(NodeId, 1, NodeMap) of
+        {NodeId, NodeName} ->
+            NodeName;
+        false ->
+            undefined
+    end.
+
+clean_data_dir(Node, Version) ->
+    clean_data_dir(Node, Version, "").
+
+clean_data_dir(Node, Version, SubDir) ->
+    rt_harness:clean_data_dir(Node, Version, SubDir).
 
 %% @doc Start the specified Riak node
-start(Node) ->
-    rt_harness:start(Node).
+start(Node, Version) ->
+    rt_harness:start(Node, Version).
 
 %% @doc Start the specified Riak `Node' and wait for it to be pingable
-start_and_wait(Node) ->
-    start(Node),
-    ?assertEqual(ok, rt:wait_until_pingable(Node)).
+start_and_wait(NodeId, NodeName, Version) ->
+    start(NodeId, Version),
+    ?assertEqual(ok, rt:wait_until_pingable(NodeName)).
 
-async_start(Node) ->
-    spawn(fun() -> start(Node) end).
+async_start(Node, Version) ->
+    spawn(fun() -> start(Node, Version) end).
 
 %% @doc Stop the specified Riak `Node'.
-stop(Node) ->
+stop(Node, Version) ->
     lager:info("Stopping riak on ~p", [Node]),
-    timer:sleep(10000), %% I know, I know!
-    rt_harness:stop(Node).
+    %% timer:sleep(10000), %% I know, I know!
+    rt_harness:stop(Node, Version).
     %%rpc:call(Node, init, stop, []).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
-stop_and_wait(Node) ->
-    stop(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)).
+-spec stop_and_wait(string(), node(), string()) -> ok.
+stop_and_wait(NodeId, NodeName, Version) ->
+    stop(NodeId, Version),
+    ?assertEqual(ok, rt:wait_until_unpingable(NodeName)).
 
-%% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
-upgrade(Node, NewVersion) ->
-    rt_harness:upgrade(Node, NewVersion).
+%% %% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
+%% upgrade(Node, NewVersion) ->
+%%     rt_harness:upgrade(Node, NewVersion).
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
 %% the config based on entries in `Config'.
-upgrade(Node, NewVersion, Config) ->
-    rt_harness:upgrade(Node, NewVersion, Config).
+upgrade(Node, CurrentVersion, NewVersion, Config) ->
+    rt_harness:upgrade(Node, CurrentVersion, NewVersion, Config).
 
 %% @doc Upgrade a Riak node to a specific version using the alternate
 %%      leave/upgrade/rejoin approach
-slow_upgrade(Node, NewVersion, Nodes) ->
-    lager:info("Perform leave/upgrade/join upgrade on ~p", [Node]),
-    lager:info("Leaving ~p", [Node]),
-    leave(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    upgrade(Node, NewVersion),
-    lager:info("Rejoin ~p", [Node]),
-    join(Node, hd(Nodes -- [Node])),
-    lager:info("Wait until all nodes are ready and there are no pending changes"),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
-    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
-    ok.
+%% slow_upgrade(Node, NewVersion, Nodes) ->
+%%     lager:info("Perform leave/upgrade/join upgrade on ~p", [Node]),
+%%     lager:info("Leaving ~p", [Node]),
+%%     leave(Node),
+%%     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+%%     upgrade(Node, NewVersion),
+%%     lager:info("Rejoin ~p", [Node]),
+%%     join(Node, hd(Nodes -- [Node])),
+%%     lager:info("Wait until all nodes are ready and there are no pending changes"),
+%%     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+%%     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
+%%     ok.
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
@@ -114,7 +131,11 @@ plan_and_commit(Node) ->
     lager:info("planning and commiting cluster join"),
     case rpc:call(Node, riak_core_claimant, plan, []) of
         {error, ring_not_ready} ->
-            lager:info("plan: ring not ready"),
+            lager:info("plan: ring not ready on ~p", [Node]),
+            timer:sleep(100),
+            plan_and_commit(Node);
+        {badrpc, _} ->
+            lager:info("plan: ring not ready on ~p", [Node]),
             timer:sleep(100),
             plan_and_commit(Node);
         {ok, _, _} ->

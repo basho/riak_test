@@ -18,8 +18,9 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_listkeys).
--behavior(riak_test).
--export([confirm/0]).
+%% -behavior(riak_test).
+-export([properties/0,
+         confirm/2]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"listkeys_bucket">>).
@@ -28,11 +29,17 @@
 -define(UNDEFINED_BUCKET,  <<"880bf69d-5dab-44ee-8762-d24c6f759ce1">>).
 -define(UNDEFINED_BUCKET_TYPE,  <<"880bf69d-5dab-44ee-8762-d24c6f759ce1">>).
 
-confirm() ->
-    [Node1, Node2, Node3, Node4] = Nodes = rt_cluster:deploy_nodes(4),
-    ?assertEqual(ok, rt_node:wait_until_nodes_ready(Nodes)),
+properties() ->
+    rt_properties:new([{node_count, 4},
+                       {make_cluster, false}]).
 
-    lager:info("Nodes deployed, but not joined."),
+-spec confirm(rt_properties:properties(), proplists:proplist()) -> pass | fail.
+confirm(Properties, _MD) ->
+    [NodeId1, NodeId2, NodeId3 | _] = NodeIds = rt_properties:get(node_ids, Properties),
+    NodeMap = rt_properties:get(node_map, Properties),
+    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+
+    [Node1, Node2, Node3 | _] = Nodes,
 
     lager:info("Writing some known data to Node 1"),
     put_keys(Node1, ?BUCKET, ?NUM_KEYS),
@@ -40,55 +47,62 @@ confirm() ->
     timer:sleep(2000),
     check_it_all([Node1]),
 
-    lists:foldl(fun(Node, [N1|_] = Cluster) ->
-            lager:info("An invitation to this party is cordially extended to ~p.", [Node]),
-            rt_node:join(Node, N1),
-            lager:info("Wait until there are no pending changes"),
-            Ns = lists:usort([Node|Cluster]),
-            rt:wait_until_no_pending_changes(Ns),
-            rt:wait_for_cluster_service(Ns, riak_kv),
-            ok = rt:wait_until_transfers_complete(Ns),
-            lager:info("Check keys and buckets after transfer"),
-            check_it_all(Ns),
-            Ns
-        end, [Node1], [Node2, Node3, Node4]),
+    lists:foldl(fun growing_cluster_check/2, [Node1], tl(Nodes)),
 
     lager:info("Checking basic HTTP"),
     check_it_all(Nodes, http),
 
+    Version = rt_properties:get(current_version, Properties),
+
     lager:info("Stopping Node1"),
-    rt_node:stop(Node1),
+    rt_node:stop(NodeId1, Version),
+
     rt:wait_until_unpingable(Node1),
 
     %% Stop current node, restart previous node, verify
-    lists:foldl(fun(Node, Prev) ->
-            lager:info("Stopping Node ~p", [Node]),
-            rt_node:stop(Node),
-            rt:wait_until_unpingable(Node),
-
-            lager:info("Starting Node ~p", [Prev]),
-            rt_node:start(Prev),
-            UpNodes = Nodes -- [Node],
-            lager:info("Waiting for riak_kv service to be ready in ~p", [Prev]),
-            rt:wait_for_cluster_service(UpNodes, riak_kv),
-
-            lager:info("Check keys and buckets"),
-            check_it_all(UpNodes),
-            Node
-        end, Node1, [Node2, Node3, Node4]),
+    lists:foldl(fun shrinking_cluster_check/2,
+                {{hd(NodeIds), Node1}, Nodes, Version},
+                lists:zip(tl(NodeIds), tl(Nodes))),
 
     lager:info("Stopping Node2"),
-    rt_node:stop(Node2),
+    rt_node:stop(NodeId2, Version),
     rt:wait_until_unpingable(Node2),
 
     lager:info("Stopping Node3"),
-    rt_node:stop(Node3),
+    rt_node:stop(NodeId3, Version),
     rt:wait_until_unpingable(Node3),
 
     lager:info("Only Node1 is up, so test should fail!"),
 
     check_it_all([Node1], pbc, false),
     pass.
+
+growing_cluster_check(JoiningNode, [ClusterNode|_] = Cluster) ->
+    lager:info("An invitation to this party is cordially extended to ~p.", [JoiningNode]),
+    rt_node:join(JoiningNode, ClusterNode),
+    lager:info("Wait until there are no pending changes"),
+    Ns = lists:usort([JoiningNode|Cluster]),
+    rt:wait_until_no_pending_changes(Ns),
+    rt:wait_for_cluster_service(Ns, riak_kv),
+    ok = rt:wait_until_transfers_complete(Ns),
+    lager:info("Check keys and buckets after transfer"),
+    check_it_all(Ns),
+    Ns.
+
+shrinking_cluster_check({NodeId, Node}, {{PrevId, PrevNode}, Nodes, Version}) ->
+    lager:info("Stopping Node ~p", [Node]),
+    rt_node:stop(NodeId, Version),
+    rt:wait_until_unpingable(Node),
+
+    lager:info("Starting Node ~p", [PrevId]),
+    rt_node:start(PrevId, Version),
+    UpNodes = Nodes -- [Node],
+    lager:info("Waiting for riak_kv service to be ready in ~p", [PrevNode]),
+    rt:wait_for_cluster_service(UpNodes, riak_kv),
+
+    lager:info("Check keys and buckets"),
+    check_it_all(UpNodes),
+    {{NodeId, Node}, Nodes, Version}.
 
 put_keys(Node, Bucket, Num) ->
     Pid = rt_pb:pbc(Node),
@@ -138,11 +152,11 @@ list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass
     lager:info("Listing keys using undefined bucket type ~p on ~p using ~p. Attempt #~p",
                [?UNDEFINED_BUCKET_TYPE, Node, Interface, Attempt]),
     case ShouldPass of
-	true -> ok;
-	_ ->
-	    {Status, Message} = Mod:list_keys(Pid, { ?UNDEFINED_BUCKET_TYPE, Bucket }),
-	    ?assertEqual(error, Status),
-	    ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
+        true -> ok;
+        _ ->
+            {Status, Message} = Mod:list_keys(Pid, { ?UNDEFINED_BUCKET_TYPE, Bucket }),
+            ?assertEqual(error, Status),
+            ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
     end,
 
     case Interface of
@@ -195,30 +209,30 @@ list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
 
 list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass) ->
     case Interface of
-	pbc ->
-	    Pid = rt_pb:pbc(Node),
-	    Mod = riakc_pb_socket;
-	http ->
-	    Pid = rt_http:httpc(Node),
-	    Mod = rhc
+        pbc ->
+            Pid = rt_pb:pbc(Node),
+            Mod = riakc_pb_socket;
+        http ->
+            Pid = rt_http:httpc(Node),
+            Mod = rhc
     end,
 
     lager:info("Listing buckets on ~p for undefined bucket type ~p using ~p.  Attempt ~p.",
-	       [Node, ?UNDEFINED_BUCKET_TYPE, Interface, Attempt]),
+               [Node, ?UNDEFINED_BUCKET_TYPE, Interface, Attempt]),
 
     case ShouldPass of
-	true -> ok;
-	_ ->
-	    {Status, Message} = Mod:list_buckets(Pid, ?UNDEFINED_BUCKET_TYPE, []),
-	    lager:info("Received status ~p and message ~p", [Status, Message]),
-	    ?assertEqual(error, Status),
-	    ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
+        true -> ok;
+        _ ->
+            {Status, Message} = Mod:list_buckets(Pid, ?UNDEFINED_BUCKET_TYPE, []),
+            lager:info("Received status ~p and message ~p", [Status, Message]),
+            ?assertEqual(error, Status),
+            ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
     end,
 
     case Interface of
-	pbc ->
-	    riakc_pb_socket:stop(Pid);
-	_ -> ok
+        pbc ->
+            riakc_pb_socket:stop(Pid);
+        _ -> ok
     end.
 
 assert_equal(Expected, Actual) ->
@@ -244,7 +258,6 @@ check_a_node(Node, Interface, ShouldPass) ->
     [list_keys_for_undefined_bucket_type(Node, Interface, ?BUCKET, Attempt, ShouldPass)
      || Attempt <- [1,2,3] ],
     [list_buckets(Node, Interface, Attempt, ?NUM_BUCKETS, ShouldPass)
-     || Attempt <- [1,2,3] ], 
+     || Attempt <- [1,2,3] ],
     [list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass)
      || Attempt <- [1,2,3] ].
-

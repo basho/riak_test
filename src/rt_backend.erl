@@ -22,12 +22,57 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
-
--define(HARNESS, (rt_config:get(rt_harness))).
+-export([set/2]).
 
 %%%===================================================================
 %%% Test harness setup, configuration, and internal utilities
 %%%===================================================================
+
+replace_backend(Backend, false) ->
+    [{storage_backend, Backend}];
+replace_backend(Backend, {riak_kv, KVSection}) ->
+    lists:keystore(storage_backend, 1, KVSection, {storage_backend, Backend}).
+
+%% TODO: Probably should abstract this into the rt_config module and
+%% make a sensible API to hide the ugliness of dealing with the lists
+%% module funs.
+%%
+%% TODO: Add support for Riak CS backend and arbitrary multi backend
+%% configurations
+set(eleveldb, Config) ->
+    UpdKVSection = replace_backend(riak_kv_eleveldb_backend,
+                                   lists:keyfind(riak_kv, 1, Config)),
+    lists:keystore(riak_kv, 1, Config, {riak_kv, UpdKVSection});
+set(memory, Config) ->
+    UpdKVSection = replace_backend(riak_kv_eleveldb_backend,
+                                   lists:keyfind(riak_kv, 1, Config)),
+    lists:keystore(riak_kv, 1, Config, {riak_kv, UpdKVSection});
+set(multi, Config) ->
+    UpdKVSection =
+        replace_backend(riak_kv_multi_backend,
+                        lists:keyfind(riak_kv, 1, Config)) ++
+        multi_backend_config(default),
+    lists:keystore(riak_kv, 1, Config, {riak_kv, UpdKVSection});
+set({multi, indexmix}, Config) ->
+    UpdKVSection =
+        replace_backend(riak_kv_multi_backend,
+                        lists:keyfind(riak_kv, 1, Config)) ++
+        multi_backend_config(indexmix),
+    lists:keystore(riak_kv, 1, Config, {riak_kv, UpdKVSection});
+set(_, Config) ->
+    UpdKVSection = replace_backend(riak_kv_bitcask_backend,
+                                   lists:keyfind(riak_kv, 1, Config)),
+    lists:keystore(riak_kv, 1, Config, {riak_kv, UpdKVSection}).
+
+multi_backend_config(default) ->
+    [{multi_backend_default, <<"eleveldb1">>},
+     {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                      {<<"memory1">>, riak_kv_memory_backend, []},
+                      {<<"bitcask1">>, riak_kv_bitcask_backend, []}]}];
+multi_backend_config(indexmix) ->
+    [{multi_backend_default, <<"eleveldb1">>},
+     {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
+                      {<<"memory1">>, riak_kv_memory_backend, []}]}].
 
 %% @doc Sets the backend of ALL nodes that could be available to riak_test.
 %%      this is not limited to the nodes under test, but any node that

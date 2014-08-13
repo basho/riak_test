@@ -53,7 +53,7 @@
          rpc_get_env/2,
          setup_harness/2,
          setup_log_capture/1,
-         stream_cmd/1, 
+         stream_cmd/1,
          stream_cmd/2,
          spawn_cmd/1,
          spawn_cmd/2,
