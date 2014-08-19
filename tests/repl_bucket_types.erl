@@ -118,6 +118,15 @@ realtime_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     ErrorResult = riakc_pb_socket:get(PBB, UndefBucketTyped, UndefKeyTyped),
     ?assertEqual({error, <<"no_type">>}, ErrorResult),
 
+    % checking the rtq had drained on the source cluster
+    lager:info("making sure the rtq has drained"),
+    Got = lists:map(fun(Node) ->
+                        rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+            end, ANodes),
+    Expected = [true || _ <- lists:seq(1, length(ANodes))],
+    ?assertEqual(Expected, Got),
+
+
     DefaultProps = get_current_bucket_props(BNodes, DefinedType),
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, DefaultProps)),
 
@@ -143,6 +152,7 @@ realtime_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
                                  BNodes),
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, UpdatedProps2)),
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, UpdatedProps2)),
+
     disable_rt(LeaderA, ANodes).
 
 realtime_mixed_version_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
