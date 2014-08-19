@@ -52,11 +52,15 @@ confirm() ->
     {ok, _Obj2} = assert_update(PBC, Bucket, Key, Obj, <<"test-val2">>),
     Replacements = expand_cluster(Joined, NotJoined),
     {_Vsn, [View]} = rpc:call(Node, riak_ensemble_manager, get_views, [Ensemble]),
-    {_, Follower} = hd(lists:reverse(View)),
-    lager:info("Follower = ~p~n", [Follower]),
+    {_, F1} = hd(lists:reverse(View)),
+    {_, F2} = hd(tl(lists:reverse(View))),
+    lager:info("F1= ~p, F2=~p", [F1, F2]),
     read_modify_write(PBC, Bucket, Key, <<"test-val2">>, <<"test-val3">>),
-    replace_node(Node, Follower, hd(Replacements)),
+    [R1, R2] = Replacements,
+    replace_node(Node, F1, R1),
     read_modify_write(PBC, Bucket, Key, <<"test-val3">>, <<"test-val4">>),
+    force_replace_node(Node, F2, R2),
+    read_modify_write(PBC, Bucket, Key, <<"test-val4">>, <<"test-val5">>),
     pass.
 
 read_modify_write(PBC, Bucket, Key, Expected, NewVal) ->
@@ -101,6 +105,16 @@ replace_node(Node, OldNode, NewNode) ->
     rt:staged_join(NewNode, Node),
     ?assertEqual(ok, rt:wait_until_ring_converged(Nodes)),
     ok = rpc:call(Node, riak_core_claimant, replace, Nodes),
+    rt:plan_and_commit(Node),
+    rt:try_nodes_ready(Nodes, 3, 500),
+    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
+
+force_replace_node(Node, OldNode, NewNode) ->
+    lager:info("Force Replacing ~p with ~p", [OldNode, NewNode]),
+    Nodes = [OldNode, NewNode],
+    rt:staged_join(NewNode, Node),
+    ?assertEqual(ok, rt:wait_until_ring_converged(Nodes)),
+    ok = rpc:call(Node, riak_core_claimant, force_replace, Nodes),
     rt:plan_and_commit(Node),
     rt:try_nodes_ready(Nodes, 3, 500),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
