@@ -22,10 +22,18 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(CTYPE, <<"counters">>).
+-define(STYPE, <<"sets">>).
+-define(MTYPE, <<"maps">>).
+-define(TYPES, [{?CTYPE, counter},
+                {?STYPE, set},
+                {?MTYPE, map}]).
+
 %% You should have curl installed locally to do this.
 confirm() ->
     Nodes = rt:deploy_nodes(1),
     [Node1] = Nodes,
+    verify_dt_converge:create_bucket_types(Nodes, ?TYPES),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
     Stats1 = get_stats(Node1),
     %% make sure a set of stats have valid values
@@ -47,16 +55,16 @@ confirm() ->
                       <<"memory_binary">>,
                       <<"memory_code">>,
                       <<"memory_ets">>]),
-    
+
     lager:info("perform 5 x  PUT and a GET to increment the stats"),
     lager:info("as the stat system only does calcs for > 5 readings"),
-    
+
     C = rt:httpc(Node1),
     [rt:httpc_write(C, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
     [rt:httpc_read(C, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
-    
+
     Stats2 = get_stats(Node1),
-    
+
     %% make sure the stats that were supposed to increment did
     verify_inc(Stats1, Stats2, [{<<"node_gets">>, 10},
                                 {<<"node_puts">>, 5},
@@ -78,11 +86,11 @@ confirm() ->
                        <<"node_put_fsm_time_95">>,
                        <<"node_put_fsm_time_99">>,
                        <<"node_put_fsm_time_100">>]),
-                       
-    
+
+
     lager:info("Make PBC Connection"),
     Pid = rt:pbc(Node1),
-    
+
     Stats3 = get_stats(Node1),
 
     rt:systest_write(Node1, 1),
@@ -90,17 +98,17 @@ confirm() ->
     verify_inc(Stats2, Stats3, [{<<"pbc_connects_total">>, 1},
                                 {<<"pbc_connects">>, 1},
                                 {<<"pbc_active">>, 1}]),
-    
-    
+
+
 
     lager:info("Force Read Repair"),
     rt:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
     rt:pbc_set_bucket_prop(Pid, <<"testbucket">>, [{n_val, 4}]),
-    
+
     Stats4 = get_stats(Node1),
     verify_inc(Stats3, Stats4, [{<<"read_repairs_total">>, 0},
                                 {<<"read_repairs">>, 0}]),
-    
+
     _Value = rt:pbc_read(Pid, <<"testbucket">>, <<"1">>),
 
     Stats5 = get_stats(Node1),
@@ -108,6 +116,16 @@ confirm() ->
     verify_inc(Stats3, Stats5, [{<<"read_repairs_total">>, 1},
                                 {<<"read_repairs">>, 1}]),
 
+    _ = do_datatypes(Pid),
+
+    lager:info("Verifying datatype stats are non-zero."),
+
+    Stats6 = get_stats(Node1),
+    [
+     begin
+         lager:info("~s: ~p (expected non-zero)", [S, proplists:get_value(S, Stats6)]),
+         verify_nz(Stats6, [S])
+     end || S <- datatype_stats() ],
     pass.
 
 verify_inc(Prev, Props, Keys) ->
@@ -127,3 +145,178 @@ get_stats(Node) ->
     {struct, Stats} = mochijson2:decode(StatString),
     %%lager:debug(StatString),
     Stats.
+
+
+
+datatype_stats() ->
+    %% Merge stats are excluded because we likely never merge disjoint
+    %% copies on a single node after a single write each.
+    [ list_to_binary(Stat) || 
+        Stat <- [
+                 %%  "object_counter_merge"
+                 %% ,"object_counter_merge_total"
+                 %% ,"object_counter_merge_time_mean"
+                 %% ,"object_counter_merge_time_median"
+                 %% ,"object_counter_merge_time_95"
+                 %% ,"object_counter_merge_time_99"
+                 %% ,"object_counter_merge_time_100"
+                 %% ,
+                 "vnode_counter_update"
+                ,"vnode_counter_update_total"
+                ,"vnode_counter_update_time_mean"
+                ,"vnode_counter_update_time_median"
+                ,"vnode_counter_update_time_95"
+                ,"vnode_counter_update_time_99"
+                ,"vnode_counter_update_time_100"
+                 %% ,"object_set_merge"
+                 %% ,"object_set_merge_total"
+                 %% ,"object_set_merge_time_mean"
+                 %% ,"object_set_merge_time_median"
+                 %% ,"object_set_merge_time_95"
+                 %% ,"object_set_merge_time_99"
+                 %% ,"object_set_merge_time_100"
+                ,"vnode_set_update"
+                ,"vnode_set_update_total"
+                ,"vnode_set_update_time_mean"
+                ,"vnode_set_update_time_median"
+                ,"vnode_set_update_time_95"
+                ,"vnode_set_update_time_99"
+                ,"vnode_set_update_time_100"
+                 %% ,"object_map_merge"
+                 %% ,"object_map_merge_total"
+                 %% ,"object_map_merge_time_mean"
+                 %% ,"object_map_merge_time_median"
+                 %% ,"object_map_merge_time_95"
+                 %% ,"object_map_merge_time_99"
+                 %% ,"object_map_merge_time_100"
+                ,"vnode_map_update"
+                ,"vnode_map_update_total"
+                ,"vnode_map_update_time_mean"
+                ,"vnode_map_update_time_median"
+                ,"vnode_map_update_time_95"
+                ,"vnode_map_update_time_99"
+                ,"vnode_map_update_time_100"
+                ,"node_gets_counter"
+                ,"node_gets_counter_total"
+                ,"node_get_fsm_counter_siblings_mean"
+                ,"node_get_fsm_counter_siblings_median"
+                ,"node_get_fsm_counter_siblings_95"
+                ,"node_get_fsm_counter_siblings_99"
+                ,"node_get_fsm_counter_siblings_100"
+                ,"node_get_fsm_counter_objsize_mean"
+                ,"node_get_fsm_counter_objsize_median"
+                ,"node_get_fsm_counter_objsize_95"
+                ,"node_get_fsm_counter_objsize_99"
+                ,"node_get_fsm_counter_objsize_100"
+                ,"node_get_fsm_counter_time_mean"
+                ,"node_get_fsm_counter_time_median"
+                ,"node_get_fsm_counter_time_95"
+                ,"node_get_fsm_counter_time_99"
+                ,"node_get_fsm_counter_time_100"
+                ,"node_gets_set"
+                ,"node_gets_set_total"
+                ,"node_get_fsm_set_siblings_mean"
+                ,"node_get_fsm_set_siblings_median"
+                ,"node_get_fsm_set_siblings_95"
+                ,"node_get_fsm_set_siblings_99"
+                ,"node_get_fsm_set_siblings_100"
+                ,"node_get_fsm_set_objsize_mean"
+                ,"node_get_fsm_set_objsize_median"
+                ,"node_get_fsm_set_objsize_95"
+                ,"node_get_fsm_set_objsize_99"
+                ,"node_get_fsm_set_objsize_100"
+                ,"node_get_fsm_set_time_mean"
+                ,"node_get_fsm_set_time_median"
+                ,"node_get_fsm_set_time_95"
+                ,"node_get_fsm_set_time_99"
+                ,"node_get_fsm_set_time_100"
+                ,"node_gets_map"
+                ,"node_gets_map_total"
+                ,"node_get_fsm_map_siblings_mean"
+                ,"node_get_fsm_map_siblings_median"
+                ,"node_get_fsm_map_siblings_95"
+                ,"node_get_fsm_map_siblings_99"
+                ,"node_get_fsm_map_siblings_100"
+                ,"node_get_fsm_map_objsize_mean"
+                ,"node_get_fsm_map_objsize_median"
+                ,"node_get_fsm_map_objsize_95"
+                ,"node_get_fsm_map_objsize_99"
+                ,"node_get_fsm_map_objsize_100"
+                ,"node_get_fsm_map_time_mean"
+                ,"node_get_fsm_map_time_median"
+                ,"node_get_fsm_map_time_95"
+                ,"node_get_fsm_map_time_99"
+                ,"node_get_fsm_map_time_100"
+                ,"node_puts_counter"
+                ,"node_puts_counter_total"
+                ,"node_put_fsm_counter_time_mean"
+                ,"node_put_fsm_counter_time_median"
+                ,"node_put_fsm_counter_time_95"
+                ,"node_put_fsm_counter_time_99"
+                ,"node_put_fsm_counter_time_100"
+                ,"node_puts_set"
+                ,"node_puts_set_total"
+                ,"node_put_fsm_set_time_mean"
+                ,"node_put_fsm_set_time_median"
+                ,"node_put_fsm_set_time_95"
+                ,"node_put_fsm_set_time_99"
+                ,"node_put_fsm_set_time_100"
+                ,"node_puts_map"
+                ,"node_puts_map_total"
+                ,"node_put_fsm_map_time_mean"
+                ,"node_put_fsm_map_time_median"
+                ,"node_put_fsm_map_time_95"
+                ,"node_put_fsm_map_time_99"
+                ,"node_put_fsm_map_time_100"
+                ,"counter_actor_counts_mean"
+                ,"counter_actor_counts_median"
+                ,"counter_actor_counts_95"
+                ,"counter_actor_counts_99"
+                ,"counter_actor_counts_100"
+                ,"set_actor_counts_mean"
+                ,"set_actor_counts_median"
+                ,"set_actor_counts_95"
+                ,"set_actor_counts_99"
+                ,"set_actor_counts_100"
+                ,"map_actor_counts_mean"
+                ,"map_actor_counts_median"
+                ,"map_actor_counts_95"
+                ,"map_actor_counts_99"
+                ,"map_actor_counts_100"
+                ]
+    ].
+
+do_datatypes(Pid) ->
+    _ = [ get_and_update(Pid, Type) || Type <- [counter, set, map]].
+
+get_and_update(Pid, counter) ->
+
+    _ = [ riakc_pb_socket:update_type(Pid, {?CTYPE, <<"pb">>}, <<I>>,
+                                      {counter, {increment, 5},
+                                       undefined})
+          || I <- lists:seq(1, 10) ],
+
+    _ = [ riakc_pb_socket:fetch_type(Pid, {?CTYPE, <<"pb">>}, <<I>>)
+          || I <- lists:seq(1, 10) ];
+
+get_and_update(Pid, set) ->
+
+    _ = [ riakc_pb_socket:update_type(Pid, {?STYPE, <<"pb">>}, <<I>>,
+                                      {set, {add_all, [<<"a">>, <<"b">>]}, undefined})
+          || I <- lists:seq(1, 10) ],
+
+    _ = [ riakc_pb_socket:fetch_type(Pid, {?STYPE, <<"pb">>}, <<I>>)
+          || I <- lists:seq(1, 10) ];
+
+get_and_update(Pid, map) ->
+
+    _ = [ riakc_pb_socket:update_type(Pid, {?MTYPE, <<"pb">>}, <<I>>,
+                                      {map,
+                                       {update,[
+                                                {update, {<<"a">>, counter}, {increment, 5}}
+                                               ]},
+                                       undefined})
+          || I <- lists:seq(1, 10) ],
+
+    _ = [ riakc_pb_socket:fetch_type(Pid, {?MTYPE, <<"pb">>}, <<I>>)
+          || I <- lists:seq(1, 10) ].
