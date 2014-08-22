@@ -109,14 +109,19 @@ realtime_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     UndefBucketTyped = {UndefType, <<"badtype">>},
     UndefKeyTyped = <<"badkeytyped">>,
     UndefObjTyped = riakc_obj:new(UndefBucketTyped, UndefKeyTyped, Bin),
+    UndefObjTyped2 = riakc_obj:new(UndefBucketTyped, UndefKeyTyped, <<"data1">>),
 
     lager:info("doing typed put on A where type is not defined on B, bucket:~p", [UndefBucketTyped]),
     riakc_pb_socket:put(PBA, UndefObjTyped, [{w,3}]),
+    riakc_pb_socket:put(PBA, UndefObjTyped2, [{w,3}]),
 
     lager:info("waiting for undefined type pb get on B, should get error <<\"no_type\">>"),
 
     ErrorResult = riakc_pb_socket:get(PBB, UndefBucketTyped, UndefKeyTyped),
     ?assertEqual({error, <<"no_type">>}, ErrorResult),
+
+    % checking the rtq had drained on the source cluster
+    ensure_rtq_drained(ANodes),
 
     DefaultProps = get_current_bucket_props(BNodes, DefinedType),
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, DefaultProps)),
@@ -143,6 +148,7 @@ realtime_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
                                  BNodes),
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, UpdatedProps2)),
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, UpdatedProps2)),
+
     disable_rt(LeaderA, ANodes).
 
 realtime_mixed_version_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
@@ -449,3 +455,14 @@ get_current_bucket_props(Node, Type) when is_atom(Node) ->
              riak_core_bucket_type,
              get,
              [Type]).
+
+ensure_rtq_drained(ANodes) ->
+    lager:info("making sure the rtq has drained"),
+    Got = lists:map(fun(Node) ->
+                        case rpc:call(Node, riak_repl2_rtq, dumpq, []) of
+                            [] -> true;
+			    _ -> false
+                        end
+                    end, ANodes),
+    Expected = [true || _ <- lists:seq(1, length(ANodes))],
+    ?assertEqual(Expected, Got).
