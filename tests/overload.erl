@@ -166,8 +166,8 @@ test_cover_queries_overload(Nodes, _, false) ->
     lager:info("Setting vnode check interval to 1"),
 
     Config = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
-                           {vnode_request_check_interval, 1},
-                           {vnode_check_interval, 2}]}],
+                           {vnode_request_check_interval, 2},
+                           {vnode_check_interval, 1}]}],
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
@@ -180,8 +180,6 @@ test_cover_queries_overload(Nodes, _, false) ->
                 lager:info("Suspending all kv vnodes on ~p", [N]),
                 suspend_and_overload_all_kv_vnodes(N)
             end || N <- [Node2, Node3, Node4, Node5]],
-
-    wait_until_vnodes_suspended(Node1),
 
     [?assertEqual({error, <<"mailbox_overload">>}, KeysRes) ||
         KeysRes <- [list_keys(Node1) || _ <- lists:seq(1, 3)]],
@@ -220,7 +218,7 @@ run_test(Nodes, BKV) ->
     Reads = spawn_reads(Node1, BKV, ?NUM_REQUESTS),
     timer:sleep(5000),
 
-    rt:wait_until(fun() -> 
+    rt:wait_until(fun() ->
                        overload_proxy:is_settled(10)
                   end, 5, 500),
     NumProcs2 = overload_proxy:get_count(),
@@ -260,17 +258,15 @@ create_bucket_type(Nodes, Type, Props) ->
     rt:wait_until_bucket_props(Nodes, {Type, <<"bucket">>}, Props),
     ok.
 
-wait_until_vnodes_suspended(Node) ->
-    rt:wait_until(list_keys_timeout_check(Node), ?LIST_KEYS_RETRIES, ?LIST_KEYS_RETRIES).
-
-list_keys_timeout_check(Node) ->
+node_overload_check(Pid) ->
     fun() ->
-       case list_keys(Node) of
-           {error, <<"mailbox_overload">>} ->
-               true;
-           _ ->
-               false
-       end
+            Pid ! {verify_overload, self()},
+            receive
+                true ->
+                    true;
+                _ ->
+                    false
+            end
     end.
 
 list_keys(Node) ->
@@ -321,7 +317,7 @@ spawn_reads(Node, {Bucket, Key, _}, Num) ->
                 PBC = rt:pbc(Node,
                                  [{auto_reconnect, true},
                                  {queue_if_disconnected, true}]),
-                rt:wait_until(pb_get_fun(PBC, Bucket, Key), ?GET_RETRIES, ?GET_RETRIES),   
+                rt:wait_until(pb_get_fun(PBC, Bucket, Key), ?GET_RETRIES, ?GET_RETRIES),
                 %pb_get(PBC, Bucket, Key),
                 riakc_pb_socket:stop(PBC)
            end) || _ <- lists:seq(1, Num)].
@@ -338,7 +334,7 @@ pb_get_fun(PBC, Bucket, Key) ->
             {ok, _Res} ->
 %                lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res]),
                 true
-	end
+        end
     end.
 
 pb_get(PBC, Bucket, Key) ->
@@ -361,27 +357,54 @@ suspend_and_overload_all_kv_vnodes(Node) ->
     Pid ! {overload, self()},
     receive overloaded ->
             Pid
-    end.
+    end,
+    rt:wait_until(node_overload_check(Pid)),
+    Pid.
 
 remote_suspend_and_overload() ->
     spawn(fun() ->
                   Vnodes = riak_core_vnode_manager:all_vnodes(),
                   [begin
-                       lager:info("Suspending vnode pid: ~p", [Pid]),
-                       erlang:suspend_process(Pid, []) end || {riak_kv_vnode, _, Pid}
-                                                                  <- Vnodes],
-                  receive {overload, From} ->
-                          io:format("Overloading vnodes ~n"),
-                          [?MODULE:overload(Pid) ||
-                              {riak_kv_vnode, _, Pid} <- Vnodes],
-                          From ! overloaded
-                  end,
-                  receive resume ->
-                          io:format("Resuming vnodes~n"),
-                          [erlang:resume_process(Pid) || {riak_kv_vnode, _, Pid}
-                                                             <- Vnodes]
-                  end
+                       lager:info("Suspending vnode pid: ~p~n", [Pid]),
+                       erlang:suspend_process(Pid, [])
+                   end || {riak_kv_vnode, _, Pid} <- Vnodes],
+                  ?MODULE:wait_for_input(Vnodes)
           end).
+
+wait_for_input(Vnodes) ->
+    receive
+        {overload, From} ->
+            [?MODULE:overload(Pid) ||
+                {riak_kv_vnode, _, Pid} <- Vnodes],
+            From ! overloaded,
+            wait_for_input(Vnodes);
+        {verify_overload, From} ->
+            OverloadCheck = ?MODULE:verify_overload(Vnodes),
+            From ! OverloadCheck,
+            wait_for_input(Vnodes);
+        resume ->
+            lager:info("Resuming vnodes~n"),
+            [erlang:resume_process(Pid) || {riak_kv_vnode, _, Pid}
+                                               <- Vnodes]
+    end.
+
+verify_overload(Vnodes) ->
+    MessageLists = [element(2, process_info(Pid, messages)) ||
+                       {riak_kv_vnode, _, Pid} <- Vnodes],
+    OverloadMsgCounts = lists:foldl(fun overload_msg_counter/2, [], MessageLists),
+    lists:all(fun(X) -> X >= ?NUM_REQUESTS end, OverloadMsgCounts).
+
+overload_msg_counter(Messages, Acc) ->
+    Count = lists:foldl(fun count_overload_messages/2, 0, Messages),
+    [Count | Acc].
+
+count_overload_messages(Message, Count) ->
+    case Message of
+        {set_concurrency_limit, some_lock, 1} ->
+            Count + 1;
+        _ ->
+            Count
+    end.
 
 overload(Pid) ->
     %% The actual message doesn't matter. This one just has the least
@@ -450,7 +473,7 @@ run_count(Node) ->
     run_count(Node).
 
 run_queue_len({Idx, Node}) ->
-    timer:sleep(500), 
+    timer:sleep(500),
     Len = vnode_queue_len(Node, Idx),
     lager:info("queue len on ~p is:~p", [Node, Len]),
     run_queue_len({Idx, Node}).
@@ -462,7 +485,7 @@ get_num_running_gen_fsm(Node) ->
     InitCalls = [ [ proplists:get_value(initial_call, Proc) ] || Proc <- ProcInfo, Proc /= undefined ],
     FsmList = [ proplists:lookup(riak_kv_get_fsm, Call) || Call <- InitCalls ],
     length(proplists:lookup_all(riak_kv_get_fsm, FsmList)).
-    
+
 remote_vnode_queue(Idx) ->
     {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Idx, riak_kv_vnode),
     {message_queue_len, Len} = process_info(Pid, message_queue_len),
