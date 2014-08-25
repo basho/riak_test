@@ -139,7 +139,7 @@ expand_cluster(OldNodes, NewNodes0) ->
     Replacements.
 
 build_initial_cluster(Config) ->
-    TotalNodes = 9,
+    TotalNodes = 8,
     InitialNodes = 3,
     Nodes = rt:deploy_nodes(TotalNodes, Config),
     Node = hd(Nodes),
