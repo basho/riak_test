@@ -179,7 +179,16 @@ deploy_nodes(NodeConfig, Hosts) ->
                     end, Nodes),
 
             timer:sleep(500);
-        true -> ok
+        true ->
+            rt:pmap(fun(Node) ->
+                            IP = get_ip(Node),
+                            set_conf(Node,
+                                     [{"listener.protobuf.internal",
+                                       IP ++ ":10017"},
+                                      {"listener.http.internal",
+                                       IP ++ ":10018"}])
+                    end, Nodes),
+            timer:sleep(500)
     end,
 
     create_dirs(Nodes),
