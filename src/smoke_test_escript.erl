@@ -9,21 +9,28 @@ get_version() ->
 cli_options() ->
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
 [
- {project,            $p, "project",     string,  "specifices which project"},
- {debug,              $v, "debug",         undefined,  "debug?"},
- {directory,          $d, "directory", string,  "source tree directory"},
- {jobs,               $j, "jobs",         integer,  "jobs?"},
- {tasks,               $T, "tasks",         string,  "What task(s) to run (eunit|dialyzer|xref)"}
+ {project,   $p, "project",   string,    "specifies which project"},
+ {debug,     $v, "debug",     undefined, "debug?"},
+ {directory, $d, "directory", string,    "source tree directory"},
+ {jobs,      $j, "jobs",      integer,   "jobs?"},
+ {tasks,     $T, "tasks",     string,     "What task(s) to run (eunit|dialyzer|xref)"}
 ].
 
 
 main(Args) ->
-    {ok, {Parsed, _Other}} = getopt:parse(cli_options(), Args),
+    Parsed = case getopt:parse(cli_options(), Args) of
+                 {ok, {Parsed0, _Other}} -> Parsed0;
+                 _ ->
+                     getopt:usage(cli_options(), escript:script_name()),
+                     halt(1),
+                     []
+             end,
     application:start(ibrowse),
     lager:start(),
     rt_config:load("default", filename:join([os:getenv("HOME"), ".riak_test.config"])),
     case lists:keyfind(project, 1, Parsed) of
         false ->
+            getopt:usage(cli_options(), escript:script_name()),
             lager:error("Must specify project!"),
             application:stop(lager),
             halt(1);
