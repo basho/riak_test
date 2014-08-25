@@ -84,6 +84,7 @@
          partition/2,
          partitions_for_node/1,
          pbc/1,
+         pbc/2,
          pbc_read/3,
          pbc_read/4,
          pbc_read_check/4,
@@ -1344,10 +1345,14 @@ pbc_systest_read(Node, Start, End, Bucket, R) ->
 %% @doc get me a protobuf client process and hold the mayo!
 -spec pbc(node()) -> pid().
 pbc(Node) ->
+    pbc(Node, [{auto_reconnect, true}]).
+
+-spec pbc(node(), proplists:proplist()) -> pid().
+pbc(Node, Options) ->
     rt:wait_for_service(Node, riak_kv),
     ConnInfo = proplists:get_value(Node, connection_info([Node])),
     {IP, PBPort} = proplists:get_value(pb, ConnInfo),
-    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, [{auto_reconnect, true}]),
+    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, Options),
     Pid.
 
 %% @doc does a read via the erlang protobuf client
