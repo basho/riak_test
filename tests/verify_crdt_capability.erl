@@ -81,7 +81,10 @@ confirm() ->
     %% And check that those 1.4 written values can be accessed /
     %% incremented over the 2.0 API
 
-    ?assertEqual({ok, 8}, riakc_pb_socket:counter_val(PrevPB1, {<<"default">>, ?BUCKET}, ?KEY)),
+    ?assertEqual(8, begin
+                        {ok, Counter} = riakc_pb_socket:fetch_type(PrevPB1, {<<"default">>, ?BUCKET}, ?KEY),
+                        riakc_counter:value(Counter)
+                    end),    
     ?assertEqual(ok, riakc_pb_socket:update_type(PrevPB1, {<<"default">>, ?BUCKET}, ?KEY, gen_counter_op())),
     ?assertEqual({ok, 9}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
 
