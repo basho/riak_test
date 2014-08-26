@@ -9,21 +9,28 @@ get_version() ->
 cli_options() ->
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
 [
- {project,            $p, "project",     string,  "specifices which project"},
- {debug,              $v, "debug",         undefined,  "debug?"},
- {directory,          $d, "directory", string,  "source tree directory"},
- {jobs,               $j, "jobs",         integer,  "jobs?"},
- {tasks,               $T, "tasks",         string,  "What task(s) to run (eunit|dialyzer|xref)"}
+ {project,   $p, "project",   string,    "specifies which project"},
+ {debug,     $v, "debug",     undefined, "debug?"},
+ {directory, $d, "directory", string,    "source tree directory"},
+ {jobs,      $j, "jobs",      integer,   "jobs?"},
+ {tasks,     $T, "tasks",     string,     "What task(s) to run (eunit|dialyzer|xref)"}
 ].
 
 
 main(Args) ->
-    {ok, {Parsed, _Other}} = getopt:parse(cli_options(), Args),
+    Parsed = case getopt:parse(cli_options(), Args) of
+                 {ok, {Parsed0, _Other}} -> Parsed0;
+                 _ ->
+                     getopt:usage(cli_options(), escript:script_name()),
+                     halt(1),
+                     []
+             end,
     application:start(ibrowse),
     lager:start(),
     rt_config:load("default", filename:join([os:getenv("HOME"), ".riak_test.config"])),
     case lists:keyfind(project, 1, Parsed) of
         false ->
+            getopt:usage(cli_options(), escript:script_name()),
             lager:error("Must specify project!"),
             application:stop(lager),
             halt(1);
@@ -100,9 +107,8 @@ worker(Rebar, PWD, Suites, Tasks) ->
                                                       {cd, FDep}, exit_status,
                                                       {line, 1024}, stderr_to_stdout, binary]),
                                 {Res, Log} = accumulate(P, []),
-                                CleanedLog = cleanup_logs(Log),
-                                {ok, Base} = giddyup:post_result([{test, Suite}, {status, get_status(Res)},
-                                                                  {log, CleanedLog} | Config]),
+                                {ok, Base} = giddyup:post_result([{test, Suite}, {status, get_status(Res)} | Config]),
+                                giddyup:post_artifact(Base, {"eunit.log", Log}),
                                 CoverFile = filename:join(FDep, ".eunit/eunit.coverdata"),
                                 case filelib:is_regular(CoverFile) of
                                     true ->
@@ -117,9 +123,8 @@ worker(Rebar, PWD, Suites, Tasks) ->
                                                       {line, 1024}, stderr_to_stdout, binary]),
                                 {Res, Log} = accumulate(P, []),
                                 %% TODO split the logs so that the PLT stuff is elided
-                                CleanedLog = cleanup_logs(Log),
-                                giddyup:post_result([{test, Suite}, {status, get_status(Res)},
-                                                     {log, CleanedLog} | Config]),
+                                {ok, Base} = giddyup:post_result([{test, Suite}, {status, get_status(Res)}| Config]),
+                                giddyup:post_artifact(Base, {"dialyzer.log", Log}),
                                 Res;
                             {"xref", true} ->
                                 P = erlang:open_port({spawn_executable, Rebar},
@@ -127,9 +132,8 @@ worker(Rebar, PWD, Suites, Tasks) ->
                                                       {cd, FDep}, exit_status,
                                                       {line, 1024}, stderr_to_stdout, binary]),
                                 {Res, Log} = accumulate(P, []),
-                                CleanedLog = cleanup_logs(Log),
-                                giddyup:post_result([{test, Suite}, {status, get_status(Res)},
-                                                     {log, CleanedLog} | Config]),
+                                {ok, Base} = giddyup:post_result([{test, Suite}, {status, get_status(Res)}| Config]),
+                                giddyup:post_artifact(Base, {"xref.log", Log}),
                                 Res;
                             _ ->
                                 lager:info("Skipping suite ~p", [Suite]),
@@ -214,18 +218,6 @@ wait_for_workers(Workers) ->
             lager:info("Worker ~p exited abnormally: ~p, ~p left", [Pid, Reason,
                                                                  length(Workers)-1]),
             wait_for_workers(Workers -- [Pid])
-    end.
-
-cleanup_logs(Logs) ->
-    case unicode:characters_to_binary(Logs, latin1, unicode) of
-        {error, Bin, Rest} ->
-            lager:error("Bad binary ~p", [Rest]),
-            Bin;
-        {incomplete, Bin, Rest} ->
-            lager:error("Bad binary ~p", [Rest]),
-            Bin;
-        Bin ->
-            Bin
     end.
 
 maybe_eol(eol) ->
