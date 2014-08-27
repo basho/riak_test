@@ -31,22 +31,27 @@
 
 -define(BUCKET, <<"dvv-repl-bucket">>).
 -define(KEY, <<"dvv-repl-key">>).
+-define(KEY2, <<"dvv-repl-key2">>).
 
 confirm() ->
     inets:start(),
 
     {{ClientA, ClusterA}, {ClientB, ClusterB}} = make_clusters(),
 
-    %% Write data to both clusters
-    write_object([ClientA, ClientB]),
+    %% Write data to B
+    write_object(ClientB),
 
     %% Connect for real time repl A->B
     connect_realtime(ClusterA, ClusterB),
 
+    IsReplicating = make_replicate_test_fun(ClientA, ClientB),
+
+    rt:wait_until(IsReplicating),
+
     %% Update ClusterA 100 times
     [write_object(ClientA) || _ <- lists:seq(1, 100)],
 
-    %% Get the object, and see it has 100 siblings (not the two it should have)
+    %% Get the object, and see if it has 100 siblings (not the two it should have)
     AObj = get_object(ClientA),
     BObj = get_object(ClientB),
 
@@ -54,6 +59,19 @@ confirm() ->
     ?assertEqual(2, riakc_obj:value_count(BObj)),
 
     pass.
+
+
+make_replicate_test_fun(From, To) ->
+    fun() ->
+            Obj = riakc_obj:new(?BUCKET, ?KEY2, <<"am I replicated yet?">>),
+            ok = riakc_pb_socket:put(From, Obj),
+            case riakc_pb_socket:get(To, ?BUCKET, ?KEY2) of
+                {ok, _} ->
+                    true;
+                {error, notfound} ->
+                    false
+            end
+    end.
 
 make_clusters() ->
     Conf = [{riak_repl, [{fullsync_on_connect, false},
