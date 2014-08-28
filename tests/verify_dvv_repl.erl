@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -18,10 +18,13 @@
 %%
 %% -------------------------------------------------------------------
 
-%%% @copyright (C) 2013, Basho Technologies
+%%% @copyright (C) 2014, Basho Technologies
 %%% @doc
-%%% riak_test repl caused sibling explosion
-%%% Encodes scenario as described to me in hipchat.
+%%% riak_test repl caused sibling explosion Encodes scenario as
+%%% described to me in hipchat.  Write something to cluster B, enable
+%%% realtime repl from A to B, read and write object, with resolution
+%%% to A 100 times. Without DVV you have 100 siblings on B, with, you
+%%% have 2 (the original B write, and the converged A writes)
 %%% @end
 
 -module(verify_dvv_repl).
@@ -31,36 +34,64 @@
 
 -define(BUCKET, <<"dvv-repl-bucket">>).
 -define(KEY, <<"dvv-repl-key">>).
+-define(KEY2, <<"dvv-repl-key2">>).
 
 confirm() ->
     inets:start(),
 
     {{ClientA, ClusterA}, {ClientB, ClusterB}} = make_clusters(),
 
-    %% Write data to both clusters
-    write_object([ClientA, ClientB]),
+    %% Write data to B
+    write_object(ClientB),
 
     %% Connect for real time repl A->B
     connect_realtime(ClusterA, ClusterB),
 
+    IsReplicating = make_replicate_test_fun(ClientA, ClientB),
+
+    rt:wait_until(IsReplicating),
+
     %% Update ClusterA 100 times
     [write_object(ClientA) || _ <- lists:seq(1, 100)],
 
-    %% Get the object, and see it has 100 siblings (not the two it should have)
+    %% Get the object, and see if it has 100 siblings (not the two it
+    %% should have.) Turn off DVV in `make_cluster` and see the
+    %% siblings explode!
     AObj = get_object(ClientA),
     BObj = get_object(ClientB),
 
+    Expected  = lists:seq(1, 100),
+
     ?assertEqual(1, riakc_obj:value_count(AObj)),
-    ?assertEqual(2, riakc_obj:value_count(BObj)),
+    rt:wait_until(fun() ->
+                          ?assertEqual(2, riakc_obj:value_count(BObj)),
+                          Resolved = resolve(riakc_obj:get_values(BObj)),
+                          %% Better check final value, no?
+                          ?assertEqual(Expected, lists:sort(sets:to_list(Resolved))),
+                          true
+                  end),
 
     pass.
+
+
+make_replicate_test_fun(From, To) ->
+    fun() ->
+            Obj = riakc_obj:new(?BUCKET, ?KEY2, <<"am I replicated yet?">>),
+            ok = riakc_pb_socket:put(From, Obj),
+            case riakc_pb_socket:get(To, ?BUCKET, ?KEY2) of
+                {ok, _} ->
+                    true;
+                {error, notfound} ->
+                    false
+            end
+    end.
 
 make_clusters() ->
     Conf = [{riak_repl, [{fullsync_on_connect, false},
                          {fullsync_interval, disabled}]},
-           {riak_core, [{default_bucket_props,
-                         [{dvv_enabled, true},
-                          {allow_mult, true}]}]}],
+            {riak_core, [{default_bucket_props,
+                          [{dvv_enabled, true},
+                           {allow_mult, true}]}]}],
     Nodes = rt:deploy_nodes(6, Conf),
     {ClusterA, ClusterB} = lists:split(3, Nodes),
     A = make_cluster(ClusterA, "A"),
@@ -97,16 +128,19 @@ fetch_resolve_write(Client) ->
     Obj3 = riakc_obj:update_metadata(riakc_obj:update_value(Obj, Value), dict:new()),
     ok = riakc_pb_socket:put(Client, Obj3).
 
-resolve_update([]) ->
-    sets:add_element(1, sets:new());
-resolve_update(Values) ->
-    Resolved = lists:foldl(fun(V0, Acc) ->
+resolve(Values) ->
+    lists:foldl(fun(V0, Acc) ->
                         V = binary_to_term(V0),
                         sets:union(V, Acc)
                 end,
                 sets:new(),
-                Values),
-    NewValue = lists:max(sets:to_list(Resolved)),
+                Values).
+
+resolve_update([]) ->
+    sets:add_element(1, sets:new());
+resolve_update(Values) ->
+    Resolved = resolve(Values),
+    NewValue = lists:max(sets:to_list(Resolved)) + 1,
     sets:add_element(NewValue, Resolved).
 
 %% Set up one way RT repl
