@@ -32,11 +32,11 @@
 -define(CTYPE, <<"counters">>).
 -define(STYPE, <<"sets">>).
 -define(MTYPE, <<"maps">>).
--define(RREGTYPE, <<"rangeregs">>).
+-define(RTYPE, <<"ranges">>).
 -define(TYPES, [{?CTYPE, counter},
                 {?STYPE, set},
                 {?MTYPE, map},
-                {?RREGTYPE, rangereg}
+                {?RTYPE, range}
                ]).
 
 -define(PB_BUCKET, <<"pbtest">>).
@@ -194,11 +194,11 @@ update_1({BType, map}, Bucket, Client, CMod) ->
                                end, M1)
                      end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
-update_1({BType, rangereg}, Bucket, Client, CMod) ->
-    lager:info("update_1: Updating rangereg"),
+update_1({BType, range}, Bucket, Client, CMod) ->
+    lager:info("update_1: Updating range"),
     CMod:modify_type(Client,
                      fun(RR) ->
-                             riakc_rangereg:assign(20, RR)
+                             riakc_range:add(20, RR)
                      end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
@@ -213,9 +213,9 @@ check_1({BType, map}, Bucket, Client, CMod) ->
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Russell">>]}]);
-check_1({BType, rangereg}, Bucket, Client, CMod) ->
-    lager:info("check_1: Checking rangereg value is correct"),
-    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_rangereg,
+check_1({BType, range}, Bucket, Client, CMod) ->
+    lager:info("check_1: Checking range value is correct"),
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_range,
                [{max, 20},{min,20},{first,20},{last,20}]).
 
 
@@ -247,10 +247,10 @@ update_2a({BType, map}, Bucket, Client, CMod) ->
                                               M1)
                      end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
-update_2a({BType, rangereg}, Bucket, Client, CMod) ->
+update_2a({BType, range}, Bucket, Client, CMod) ->
     CMod:modify_type(Client,
                      fun(RR) ->
-                             riakc_rangereg:assign(40, RR)
+                             riakc_range:add(40, RR)
                      end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
@@ -265,9 +265,9 @@ check_2b({BType, map},Bucket,Client,CMod) ->
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Russell">>]}]);
-check_2b({BType, rangereg},Bucket,Client,CMod) ->
-    lager:info("check_2b: Checking rangereg value is unchanged"),
-    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_rangereg,
+check_2b({BType, range},Bucket,Client,CMod) ->
+    lager:info("check_2b: Checking range value is unchanged"),
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_range,
                [{max,20},{min,20},{first,20},{last,20}]).
 
 update_3b({BType, counter}, Bucket, Client, CMod) ->
@@ -299,10 +299,10 @@ update_3b({BType, map},Bucket,Client,CMod) ->
                                M1)
                      end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
-update_3b({BType, rangereg},Bucket,Client,CMod) ->
+update_3b({BType, range},Bucket,Client,CMod) ->
     CMod:modify_type(Client,
                      fun(RR) ->
-                             riakc_rangereg:assign(-40, RR)
+                             riakc_range:add(-40, RR)
                      end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS).
 
@@ -320,9 +320,9 @@ check_3a({BType, map}, Bucket, Client, CMod) ->
                 [{{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Russell">>, <<"Sam">>]},
                  {{<<"verified">>, flag}, false}]);
-check_3a({BType, rangereg}, Bucket, Client, CMod) ->
-    lager:info("check_3a: Check rangereg value is unchanged"),
-    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_rangereg,
+check_3a({BType, range}, Bucket, Client, CMod) ->
+    lager:info("check_3a: Check range value is unchanged"),
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_range,
                [{max, 40},{min,20},{first,20},{last,40}]).
 
 check_4({BType, counter}, Bucket, Client, CMod) ->
@@ -348,9 +348,9 @@ check_4({BType, map}, Bucket, Client, CMod) ->
                  {{<<"friends">>, set}, [<<"Sam">>]},
                  {{<<"verified">>, flag}, false}],
                 [{pr, 3}, {notfound_ok, false}]);
-check_4({BType, rangereg}, Bucket, Client, CMod) ->
-    lager:info("check_4: Checking final merged value of rangereg"),
-    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_rangereg,
+check_4({BType, range}, Bucket, Client, CMod) ->
+    lager:info("check_4: Checking final merged value of range"),
+    check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_range,
                 [{max,40},{min,-40},{first,20},{last,-40}],
                 [{pr, 3}, {notfound_ok, false}]).
 
