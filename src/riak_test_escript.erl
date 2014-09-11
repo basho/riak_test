@@ -42,6 +42,7 @@ cli_options() ->
  {outdir,             $o, "outdir",   string,     "output directory"},
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
+ {define,             $D, "define",   string,     "Define a variable"},
  {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
  {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
@@ -123,6 +124,16 @@ main(Args) ->
     end,
 
     Verbose = proplists:is_defined(verbose, ParsedArgs),
+
+    %% Handle defined variable
+    _ = [case string:tokens(Define, "=") of
+             [Key] ->
+                 io:format("CONFIG: ~p=true~n", [Key]),
+                 rt_config:set(list_to_atom(Key), true);
+             [Key, Val] ->
+                 io:format("CONFIG: ~p=~p~n", [Key, Val]),
+                 rt_config:set(list_to_atom(Key), Val)
+         end || {define, Define} <- ParsedArgs],
 
     Suites = proplists:get_all_values(suites, ParsedArgs),
     case Suites of

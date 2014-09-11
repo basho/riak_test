@@ -236,7 +236,8 @@ start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries) ->
     %% Send message to process and notify fullsync has began.
     fullsync_notify(NotifyPid),
 
-    case rt:wait_until(make_fullsync_wait_fun(Node, Count), 100, 1000) of
+    %% case rt:wait_until(make_fullsync_wait_fun(Node, Count), 100, 1000) of
+    case rt:wait_until(make_fullsync_wait_fun(Node, Count)) of
         ok ->
             ok;
         _  when Retries > 0 ->
