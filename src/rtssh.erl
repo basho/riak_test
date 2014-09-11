@@ -23,6 +23,7 @@ get_deps() ->
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
     Hosts = load_hosts(),
+    load_addresses(),
     rt_config:set(rt_hostnames, Hosts),
     %% [io:format("R: ~p~n", [wildcard(Host, "/tmp/*")]) || Host <- Hosts],
 
@@ -150,6 +151,12 @@ deploy_nodes(NodeConfig, Hosts) ->
             lists:zip(Nodes, Configs)),
     timer:sleep(500),
 
+    rt:pmap(fun(Node) ->
+                    update_app_config(Node,
+                                      [{riak_core, [{cluster_mgr, {get_private_ip(Node), 10016}}]}])
+            end, Nodes),
+    timer:sleep(500),
+
     case rt_config:get(cuttle, true) of
         false ->
             rt:pmap(fun(Node) ->
@@ -181,12 +188,13 @@ deploy_nodes(NodeConfig, Hosts) ->
             timer:sleep(500);
         true ->
             rt:pmap(fun(Node) ->
-                            IP = get_ip(Node),
+                            IP = get_private_ip(Node),
                             set_conf(Node,
                                      [{"listener.protobuf.internal",
                                        IP ++ ":10017"},
                                       {"listener.http.internal",
-                                       IP ++ ":10018"}])
+                                       IP ++ ":10018"},
+                                      {"nodename", Node}])
                     end, Nodes),
             timer:sleep(500)
     end,
@@ -336,6 +344,15 @@ load_hosts() ->
     rt_config:set(rtssh_aliases, Aliases),
     Hosts.
 
+load_addresses() ->
+    case file:consult("addresses") of
+        {ok, [IPs]} ->
+            rt_config:set(rtssh_ips, IPs),
+            ok;
+        _ ->
+            erlang:error({"Missing or invalid rtssh addresses file", file:get_cwd()})
+    end.
+
 read_hosts_file(File) ->
     case file:consult(File) of
         {ok, Terms} ->
@@ -380,6 +397,21 @@ get_ip(Node) when is_atom(Node) ->
 get_ip(Host) ->
     {ok, IP} = inet:getaddr(Host, inet),
     string:join([integer_to_list(X) || X <- tuple_to_list(IP)], ".").
+
+get_public_ip(Node) when is_atom(Node) ->
+    get_public_ip(get_host(Node));
+get_public_ip(Host) ->
+    IPs = rt_config:get(rtssh_ips),
+    lager:info("Yo: ~p :: ~p", [IPs, Host]),
+    {_, Public, _} = lists:keyfind(Host, 1, IPs),
+    Public.
+
+get_private_ip(Node) when is_atom(Node) ->
+    get_private_ip(get_host(Node));
+get_private_ip(Host) ->
+    IPs = rt_config:get(rtssh_ips),
+    {_, _, Private} = lists:keyfind(Host, 1, IPs),
+    Private.
 
 %%%===================================================================
 %%% Remote file operations

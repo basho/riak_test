@@ -14,14 +14,15 @@
         {Fun, {Args, Intercept}}).
 
 confirm() ->
-    Modes = [{keylist, false, 0},
-             {aae, false, 0},
-             {aae, true, 0},
-             {aae, true, 100},
-             {aae, true, 1000}],
-    %% Modes = [{aae, true, 0},
+    %% Modes = [{keylist, false, 0},
+    %%          {aae, false, 0},
+    %%          {aae, true, 0},
     %%          {aae, true, 100},
     %%          {aae, true, 1000}],
+    %% Modes = [{aae, true, 0}],
+    Modes = [{aae, true, 0},
+             {aae, true, 100},
+             {aae, true, 1000}],
     Delays = [0, 10, 50, 100, 200],
     %% Delays = [0],
     Results = [{Strategy, Delay, bench(Strategy, Delay)} || Strategy <- Modes,

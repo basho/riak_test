@@ -1,0 +1,7 @@
+./riak_test -c riak_ee_dev -t repl_fs_bench3 -D'fs_num_keys=1000000' -D'fs_strategy=keylist' -D'fs_direct=0'
+./riak_test -c riak_ee_dev -t repl_fs_bench3 -D'fs_num_keys=1000000' -D'fs_strategy=aae' -D'fs_direct=0'
+./riak_test -c riak_ee_dev -t repl_fs_bench3 -D'fs_num_keys=1000000' -D'fs_strategy=aae' -D'fs_direct=1000'
+./riak_test -c riak_ee_dev -t repl_fs_bench3 -D'fs_num_keys=10000000' -D'fs_strategy=aae' -D'fs_direct=0'
+./riak_test -c riak_ee_dev -t repl_fs_bench3 -D'fs_num_keys=10000000' -D'fs_strategy=aae' -D'fs_direct=1000'
+./riak_test -c riak_ee_dev -t repl_fs_bench3 -D'fs_num_keys=100000000' -D'fs_strategy=aae' -D'fs_direct=0'
+./riak_test -c riak_ee_dev -t repl_fs_bench3 -D'fs_num_keys=100000000' -D'fs_strategy=aae' -D'fs_direct=1000'
