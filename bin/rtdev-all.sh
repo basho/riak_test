@@ -4,7 +4,9 @@ ORIGDIR=`pwd`
 pushd `dirname $0` > /dev/null
 SCRIPT_DIR=`pwd`
 popd > /dev/null
-CURRENT_OTP=${CURRENT_OTP:-$HOME/erlang-R16B02}
+: ${CURRENT_OTP:=$HOME/erlang-R16B02}
+: ${RT_CURRENT_TAG:=""}
+
 
 if [ -n "$DEBUG_RTDEV" ]; then
     echo "= Configuration ================================================="
@@ -43,7 +45,7 @@ echo "= Building and Installing Riak from Git ========================="
 echo
 
 cd $ORIGDIR
-build "current" $CURRENT_OTP "" "git://github.com/basho/riak.git"
+build "current" $CURRENT_OTP $RT_CURRENT_TAG
 echo
 cd current
 source $SCRIPT_DIR/rtdev-current.sh

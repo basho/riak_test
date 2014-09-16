@@ -14,7 +14,7 @@ contents of `$HOME/rt/riak` might look something like this:
 
 ```
 $ ls $HOME/rt/riak
-current riak-1.1.4 riak-1.2.1 riak-1.3.2
+current riak-1.2.1 riak-1.3.2 riak-1.4.10
 ```
 
 Inside each of these directories is a `dev` folder, typically
@@ -73,7 +73,7 @@ The first one that we want to look at is `rtdev-build-releases.sh`. If
 left unchanged, this script is going to do the following:
 
 1. Download the source for the past three major Riak versions (e.g.
-   1.1.4, 1.2.1 and 1.3.2)
+   1.3.2, 1.4.10 and 2.0.0)
 1. Build the proper version of Erlang that release was built with,
    using kerl (which it will also download)
 1. Build those releases of Riak.
@@ -84,12 +84,12 @@ erlang. Great! You can crack open the script and set the paths to your
 installation or set them from the command-line:
 
 ```bash
-R14B04=${R14B04:-$HOME/erlang-R14B04}
 R15B01=${R15B01:-$HOME/erlang-R15B01}
+R16B02=${R16B02:-$HOME/erlang-R16B02}
 ```
 
 **Kerlveat**: If you want kerl to build erlangs with serious 64-bit
-macintosh action, you'll need a `~/.kerlrc` file that looks like this:
+Macintosh action, you'll need a `~/.kerlrc` file that looks like this:
 
 ```
 KERL_CONFIGURE_OPTIONS="--disable-hipe --enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit"
@@ -109,6 +109,14 @@ same directory that you just built all of your releases into.
 By default this script initializes the repository into `$HOME/rt/riak` but
 you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-setup-releases.sh#L11).
 
+**Note**: There is a bug in 1.3.x `leveldb` which does not properly resolve
+the location of `pthread.h` when building on Macintosh OS X 10.9, aka
+Mavericks.  This has been fixed in subsequent releases, but for now a fix
+is to manually add `#include <pthread.h>` to the top of
+`deps/eleveldb/c_src/leveldb/include/leveldb/env.h`.  Also the version
+of `meck` needs to be updated, too.  This is handled autmatically by
+the script.
+
 ### rtdev-current.sh
 
 `rtdev-current.sh` is where it gets interesting. You need to run that
@@ -116,7 +124,11 @@ from the Riak source folder you're wanting to test as the current
 version of Riak. Also, make sure that you've already run `make devrel`
 or `make stagedevrel` before you run `rtdev-current.sh`. Like setting up
 releases you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-current.sh#L6)
-so all your riak builds are in one place.
+so all your riak builds are in one place.  Also you can override the tag
+of the current version pulled by setting [`$RT_CURRENT_TAG`](https://github.com/basho/riak_test/blob/master/bin/rtdev-current.sh#L7)
+to a release number, e.g. `2.0.0`.  It will automatically be prefixed with
+the repo name, e.g. `riak_ee-2.0.0`.  To use `riak_ee` instead of `riak` set [`$RT_USE_EE`](https://github.com/basho/riak_test/blob/master/bin/rtdev-setup-releases.sh#L23)
+to any non-empty string.
 
 ####  reset-current-env.sh
 
@@ -166,8 +178,8 @@ to tell riak_test about them. The method of choice is to create a
     {rt_project, "riak"},
     {rtdev_path, [{root,     "/home/you/rt/riak"},
                   {current,  "/home/you/rt/riak/current"},
-                  {previous, "/home/you/rt/riak/riak-1.3.2"},
-                  {legacy,   "/home/you/rt/riak/riak-1.2.1"}
+                  {previous, "/home/you/rt/riak/riak-1.4.10"},
+                  {legacy,   "/home/you/rt/riak/riak-1.3.2"}
                  ]}
 ]}.
 ```
@@ -237,10 +249,12 @@ This is an example test result JSON message posted to a webhook:
 Notice that the giddyup URL is not the page for the test result, but a resource from which you can GET information about the test in JSON.
 ### Running riak_test for the first time
 
-Run a test! `./riak_test -c rtdev -t verify_build_cluster`
+Run a test! After running `make` from the root of your `riak_test`
+clone just `./riak_test -c rtdev -t verify_build_cluster`
 
 Did that work? Great, try something harder: `./riak_test -c
-rtdev_mixed -t upgrade`
+rtdev -t loaded_upgrade`
+
 
 
 Intercepts
