@@ -4,8 +4,10 @@
 -compile({parse_transform, rt_intercept_pt}).
 
 %% -define(NUM_KEYS, 100000).
--define(NUM_KEYS, 1000).
+-define(NUM_KEYS, 100000).
 -define(TEST_BUCKET, <<"repl_bench">>).
+-define(N_VALUE, 3).
+-define(Q_VALUE, 8).
 
 -define(INT(Nodes, Mod, Intercepts),
         [rt_intercept:add(Node, {Mod, Intercepts}) || Node <- Nodes]).
@@ -20,11 +22,11 @@ confirm() ->
     %%          {aae, true, 100},
     %%          {aae, true, 1000}],
     %% Modes = [{aae, true, 0}],
-    Modes = [{aae, true, 0},
-             {aae, true, 100},
-             {aae, true, 1000}],
-    Delays = [0, 10, 50, 100, 200],
-    %% Delays = [0],
+    Modes = [{aae, true, buffered, 1000, 5},
+             {aae, true, inline,   1000, 5}
+             ],
+%%    Delays = [0, 10, 50, 100, 200],
+    Delays = [0],
     Results = [{Strategy, Delay, bench(Strategy, Delay)} || Strategy <- Modes,
                                                             Delay <- Delays],
     io:format("==================================================~n"
@@ -32,16 +34,18 @@ confirm() ->
               "==================================================~n", [Results]),
     pass.
 
-bench({Strategy, Pipeline, Direct}, Delay) ->
-    Config = [{riak_core, [{ring_creation_size, 8},
-                           {default_bucket_props, [{n_val, 1},
+bench({Strategy, Pipeline, DirectMode, DirectLimit, DiffPercent}, Delay) ->
+    Config = [{riak_core, [{ring_creation_size, ?Q_VALUE},
+                           {default_bucket_props, [{n_val, ?N_VALUE},
                                                    {allow_mult, false}]}]},
               {riak_kv, [{anti_entropy, {on, []}},
                          {anti_entropy_build_limit, {100, 1000}},
                          {anti_entropy_concurrency, 100}]},
               {riak_repl, [{fullsync_strategy, Strategy},
                            {fullsync_pipeline, Pipeline},
-                           {fullsync_direct, Direct},
+                           {fullsync_direct_limit, DirectLimit},
+                           {fullsync_direct_mode, DirectMode},
+                           {fullsync_direct_percentage_limit, DiffPercent},
                            {fullsync_on_connect, false},
                            {fullsync_interval, disabled},
                            {max_fssource_retries, infinity},
@@ -131,33 +135,56 @@ bench({Strategy, Pipeline, Direct}, Delay) ->
                               [LeaderA]),
 
     %% Write keys and perform fullsync.
-    repl_util:write_to_cluster(AFirst, 0, ?NUM_KEYS, ?TEST_BUCKET),
+    Start100 = erlang:now(),
+    repl_util:write_to_cluster(AFirst, 1, ?NUM_KEYS, ?TEST_BUCKET),
     rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     {FullTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
+    End100 = erlang:now(),
+    repl_util:validate_aae_fullsync(Start100, End100, ?N_VALUE, ?Q_VALUE, ?NUM_KEYS, ?NUM_KEYS div 1),
 
     %% Rewrite first 10% keys and perform fullsync.
-    repl_util:write_to_cluster(AFirst, 0, ?NUM_KEYS div 10, ?TEST_BUCKET),
+    Start10 = erlang:now(),
+    repl_util:write_to_cluster(AFirst, 1, ?NUM_KEYS div 10, ?TEST_BUCKET),
     rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     {DiffTime1, _} = timer:tc(repl_util,
                               start_and_wait_until_fullsync_complete,
                               [LeaderA]),
+    End10 = erlang:now(),
+    repl_util:validate_aae_fullsync(Start10, End10, ?N_VALUE, ?Q_VALUE, ?NUM_KEYS, ?NUM_KEYS div 10),
 
     %% Rewrite first 1% keys and perform fullsync.
-    repl_util:write_to_cluster(AFirst, 0, ?NUM_KEYS div 100, ?TEST_BUCKET),
+    Start1 = erlang:now(),
+    repl_util:write_to_cluster(AFirst, 1, ?NUM_KEYS div 100, ?TEST_BUCKET),
     rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     {DiffTime2, _} = timer:tc(repl_util,
                               start_and_wait_until_fullsync_complete,
                               [LeaderA]),
+    End1 = erlang:now(),
+    repl_util:validate_aae_fullsync(Start1, End1, ?N_VALUE, ?Q_VALUE, ?NUM_KEYS, ?NUM_KEYS div 100),
+
+    %% Rewrite first 0.1% keys and perform fullsync.
+    Start01 = erlang:now(),
+    repl_util:write_to_cluster(AFirst, 1, max(1,?NUM_KEYS div 1000), ?TEST_BUCKET),
+    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
+    {DiffTime3, _} = timer:tc(repl_util,
+                              start_and_wait_until_fullsync_complete,
+                              [LeaderA]),
+    End01 = erlang:now(),
+    repl_util:validate_aae_fullsync(Start01, End01, ?N_VALUE, ?Q_VALUE, ?NUM_KEYS, ?NUM_KEYS div 1000),
+
 
     %% Write no keys, and perform the fullsync.
+    Start0 = erlang:now(),
     rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     {NoneTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
+    End0 = erlang:now(),
+    repl_util:validate_aae_fullsync(Start0, End0, ?N_VALUE, ?Q_VALUE, ?NUM_KEYS, 0),
 
     rt:clean_cluster(ANodes),
     rt:clean_cluster(BNodes),
 
-    {EmptyTime, FullTime, DiffTime1, DiffTime2, NoneTime}.
+    {EmptyTime, FullTime, DiffTime1, DiffTime2, DiffTime3, NoneTime}.

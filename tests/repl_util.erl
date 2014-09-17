@@ -49,7 +49,9 @@
          read_from_cluster/6,
          check_fullsync/3,
          validate_completed_fullsync/6,
-         validate_intercepted_fullsync/5
+         validate_intercepted_fullsync/5,
+         get_aae_fullsync_activity/0,
+         validate_aae_fullsync/6
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -556,7 +558,7 @@ write_to_cluster(Node, Start, End, Bucket) ->
 
 %% @doc Write a series of keys and ensure they are all written.
 write_to_cluster(Node, Start, End, Bucket, Quorum) ->
-    lager:info("Writing ~p keys to node ~p.", [End - Start, Node]),
+    lager:info("Writing ~p keys to node ~p.", [End - Start + 1, Node]),
     ?assertEqual([],
                  repl_util:do_write(Node, Start, End, Bucket, Quorum)).
 
@@ -568,7 +570,7 @@ read_from_cluster(Node, Start, End, Bucket, Errors) ->
 %% @doc Read from cluster a series of keys, asserting a certain number
 %%      of errors.
 read_from_cluster(Node, Start, End, Bucket, Errors, Quorum) ->
-    lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
+    lager:info("Reading ~p keys from node ~p.", [End - Start + 1, Node]),
     Res2 = rt:systest_read(Node, Start, End, Bucket, Quorum, <<>>, true),
     ?assertEqual(Errors, length(Res2)).
 
@@ -631,3 +633,288 @@ validate_intercepted_fullsync(InterceptTarget,
 
     %% Wait until AAE trees are compueted on the rebooted node.
     rt:wait_until_aae_trees_built([InterceptTarget]).
+
+
+%%
+%% emit list of
+%%
+%%   {TimeStamp, {PartitionIndex, aae_fullsync_started}}
+%%   {TimeStamp, {PartitionIndex, estimated_number_of_keys, EstimatedNymberOfKeys}}
+%%   {TimeStamp, {PartitionIndex, finish_sending, BloomOrNot, BloomCount, DiffCount}}
+%%   {TimeStamp, {PartitionIndex, aae_fullsync_completed}}
+%%
+
+-record(aae_stat, {
+          start_time        :: erlang:timestamp(),
+          estimate_time     :: erlang:timestamp(),
+          direct_time       :: erlang:timestamp(),
+          bloom_time        :: erlang:timestamp(),
+          end_time          :: erlang:timestamp(),
+          key_estimate = 0  :: non_neg_integer(),
+          diff_count   = 0  :: non_neg_integer(),
+          direct_count = 0  :: non_neg_integer(),
+          bloom_count  = 0  :: non_neg_integer(),
+          use_bloom = false :: boolean(),
+          direct_mode       :: undefined | inline | buffered
+         }).
+
+
+get_aae_fullsync_activity() ->
+    lager:info("Combing aae logs"),
+    timer:sleep(2000),
+    Logs = lists:append([ find_repl_logs(Log) || Log <- rt:get_node_logs() ]),
+    Logs.
+
+select_logs_in_time_interval(From,To,Logs) ->
+    Duration = timer:now_diff(To,From),
+
+    lager:info("Extracting logs from ~p to ~p", [From, To]),
+
+    RelevantLogs = lists:foldl(fun(Entry={Time, _}, Acc) ->
+                                       case timer:now_diff(Time,From) of
+                                           T when T >= 0, T =< Duration ->
+                                               [Entry|Acc];
+                                           _ ->
+                                               Acc
+                                       end
+                               end,
+                               [],
+                               Logs),
+    RelevantLogs.
+
+validate_aae_fullsync(From, _To, NVal, QVal, TotalKeys, KeysChanged) ->
+    Logs = get_aae_fullsync_activity(),
+
+    RelevantLogs = select_logs_in_time_interval(From, {14110000,38604,655676}, Logs),
+
+%    lists:foreach(fun(Log) ->
+%                          lager:info("SELECTED: ~p", [Log])
+%                  end,
+%                  lists:sort(RelevantLogs)),
+
+    Partitions =
+        lists:foldl(fun({Time, {PI, aae_fullsync_started}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{ start_time=Time } end,
+                                            Dict2);
+                       ({Time, {PI, aae_fullsync_completed}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{ end_time=Time } end,
+                                            Dict2);
+                       ({Time, {PI, estimated_number_of_keys, Estimate}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{ key_estimate=Estimate, estimate_time=Time } end,
+                                            Dict2);
+                       ({Time, {PI, finish_sending, Bloom, BloomCount, PartDiffs}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{
+                                                           use_bloom=Bloom,
+                                                           bloom_count=BloomCount,
+                                                           diff_count=PartDiffs,
+                                                           bloom_time=Time
+                                                         } end,
+                                            Dict2);
+                       ({Time, {PI, aae_direct, Mode, Count}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{ direct_count=Count, direct_mode=Mode, direct_time=Time } end,
+                                            Dict2);
+                       (_, Acc) ->
+                            Acc
+                    end,
+                    orddict:new(),
+                    lists:sort(RelevantLogs)),
+
+    Diffs         = orddict:fold(fun(_, #aae_stat{ diff_count=N }, Acc) -> N+Acc end, 0, Partitions),
+    TotalEstimate = orddict:fold(fun(_, #aae_stat{ key_estimate=N }, Acc) -> N+Acc end, 0, Partitions),
+    BloomCount    = orddict:size( orddict:filter( fun(_, #aae_stat{ use_bloom=UseBloom }) -> UseBloom end, Partitions )),
+
+    lager:info("AAE expected fullsync stats: partitions:~p, total_estimate:~p, diffs:~p", [QVal, TotalKeys * NVal, KeysChanged]),
+    lager:info("AAE found    fullsync stats: partitions:~p, total_estimate:~p, diffs:~p", [length(Partitions), TotalEstimate, Diffs]),
+    lager:info("AAE ~p partitions used bloom filter / fold", [BloomCount]),
+
+    case QVal == orddict:size(Partitions) of
+        true ->
+            lager:info("OK - number of partitions: ~p", [QVal]);
+        false ->
+            lager:error("BAD - Wrong number of partitions in fullsync: ~p vs ~p", [QVal, ordsets:size(Partitions)])
+    end,
+
+    EstimateSkew = TotalEstimate - (TotalKeys * NVal) ,
+    EstPercentage = EstimateSkew / TotalEstimate,
+
+    case abs(EstPercentage) =< 0.15 of
+        true ->
+            lager:info("OK - Estimate is ~p% off", [ EstPercentage*100 ]);
+        false ->
+            lager:error("BAD - Estimate is ~p% off", [ EstPercentage*100 ])
+    end,
+
+
+    DiffSkew = Diffs - KeysChanged,
+    case KeysChanged of
+        0 ->
+            case DiffSkew of
+                0 ->
+                    lager:info("OK - diff count is 0");
+                _ ->
+                    lager:info("BAD - diff count is ~p; should be 0", [Diffs])
+            end;
+        _ ->
+            DiffPercentage = DiffSkew / KeysChanged,
+            case abs(DiffPercentage) =< 0.05 of
+                true ->
+                    lager:info("OK - Diff count is ~p% off", [ DiffPercentage*100 ]);
+                false ->
+                    lager:error("BAD - Diff count is ~p% off", [ DiffPercentage*100 ])
+            end
+    end,
+
+    validate_partitions(Partitions, NVal, QVal, TotalKeys),
+
+    ok.
+
+
+validate_partitions(Partitions, NVal, QVal, TotalKeys) ->
+
+    ExpectedKeys = (TotalKeys * NVal div QVal),
+
+    orddict:fold(fun(PI, #aae_stat{
+                       key_estimate=KeyEst,
+
+                       start_time=StartTime,
+                       estimate_time=EstimateTime,
+                       direct_time=DirectTime,
+                       bloom_time=BloomTime,
+                       end_time=EndTime,
+
+                       diff_count=DiffCount,
+                       direct_count=DirectCount,
+                       direct_mode=DirectMode
+
+                      }, ok) ->
+                         lager:info("== AAE validating partition ~p ==", [PI]),
+
+                         KeysOff = ((KeyEst - ExpectedKeys) / ExpectedKeys),
+                         lager:info("key count is ~p% off", [KeysOff * 100]),
+
+                         EstimateUSec = timer:now_diff(EstimateTime, StartTime),
+                         ExchangeUSec = timer:now_diff(DirectTime, EstimateTime),
+                         BufferedUSec = timer:now_diff(BloomTime, DirectTime),
+                         BloomUSec    = timer:now_diff(EndTime,BloomTime),
+
+                         (EstimateUSec == undefined) orelse
+                             lager:info(" prepare time ~psec", [EstimateUSec / 1000000]),
+
+                         case DirectMode of
+                             buffered ->
+                                 ((ExchangeUSec == undefined)) orelse
+                                     lager:info("exchange time ~psec", [(ExchangeUSec) / 1000000]),
+                                 ((BufferedUSec == undefined) or (DirectCount == 0)) orelse
+                                     lager:info("buffered time ~pusec/diff", [(BufferedUSec) / DirectCount]);
+                             direct ->
+                                 ((ExchangeUSec == undefined) or (BufferedUSec == undefined)) orelse
+                                     lager:info("exchange time ~psec", [(ExchangeUSec+BufferedUSec) / 1000000])
+                         end,
+
+                         ((BloomTime == undefined) or (BloomUSec == undefined)) orelse
+                             lager:info("   bloom time ~psec", [BloomUSec / 1000000]),
+
+                         (DirectCount == 0) orelse
+                             lager:info("exchange time ~pusec/diff for ~p diffs (~p sent ~p)",
+                                        [(ExchangeUSec+BufferedUSec) div DiffCount, DiffCount, DirectCount, DirectMode]),
+
+                         ((BloomUSec == undefined) or ((DiffCount-DirectCount) == 0)) orelse
+                             lager:info("   bloom time ~pusec/diff for ~p objects", [BloomUSec div (DiffCount-DirectCount), (DiffCount-DirectCount)]),
+
+                         ok
+                 end,
+                 ok,
+                 Partitions).
+
+
+find_repl_logs({Path, Port}) ->
+    case re:run(Path, "console\.log$") of
+        {match, _} ->
+            match_loop(Port, file:read_line(Port), aae_fullsync_patterns(), []);
+        nomatch ->
+            %% save time not looking through other logs
+            []
+    end.
+
+match_loop(Port, {ok, Data}, Matchers, Acc) ->
+    case lists:foldl(fun({Patt,Fun}, {next, Data2}) ->
+                             case re:run(Data2, Patt, [{capture, all_but_first, list}]) of
+                                 {match, Match} ->
+                                     {done, Fun(Match)};
+                                 nomatch ->
+                                     {next, Data2}
+                             end;
+                        (_, {done, Value}) ->
+                             {done, Value}
+                     end,
+                     {next, Data},
+                     Matchers) of
+        {done, Value} ->
+            {ok, TimeStamp} = extract_timestamp(Data),
+            match_loop(Port, file:read_line(Port), Matchers, [{TimeStamp, Value}|Acc]);
+        {next, _} ->
+            match_loop(Port, file:read_line(Port), Matchers, Acc)
+    end;
+match_loop(_, _, _, Acc) ->
+    lists:reverse(Acc).
+
+extract_timestamp(Data) ->
+    Re = "^([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2}).([0-9]{3})",
+    case re:run(Data, Re, [{capture, all_but_first, list}]) of
+        {match, DateMatch} ->
+            [Y,M,D, Hr,Min,Sec, Millis] = [ list_to_integer(E) || E <- DateMatch ],
+            [UTC] = calendar:local_time_to_universal_time_dst({{Y,M,D}, {Hr,Min,Sec}}),
+            GregorianSeconds = calendar:datetime_to_gregorian_seconds(UTC) - 62167219200,
+            TimeStamp = {GregorianSeconds div 1000000, GregorianSeconds rem 1000000, Millis * 1000},
+            {ok, TimeStamp};
+        nomatch ->
+            error
+    end.
+
+aae_fullsync_patterns() ->
+    [ { "EstimatedNrKeys ([0-9]*) for partition ([0-9]+)",
+        fun([NumKeys, PartIndex]) ->
+                {list_to_integer(PartIndex), estimated_number_of_keys, list_to_integer(NumKeys)}
+        end },
+
+      { "No Bloom folding over ([0-9]+)/([0-9]+) differences for partition ([0-9]+) with EstimatedNrKeys",
+        fun([BloomCount, DiffCount, PartIndex]) ->
+                {list_to_integer(PartIndex), finish_sending, false, list_to_integer(BloomCount), list_to_integer(DiffCount)}
+        end },
+
+      { "Bloom folding over ([0-9]+)/([0-9]+) differences for partition ([0-9]+) with EstimatedNrKeys",
+        fun([BloomCount, DiffCount, PartIndex]) ->
+                { list_to_integer(PartIndex), finish_sending, true, list_to_integer(BloomCount), list_to_integer(DiffCount)}
+        end },
+
+      { "AAE fullsync source completed partition ([0-9]+)",
+        fun([PartIndex]) ->
+                {list_to_integer(PartIndex), aae_fullsync_completed }
+        end },
+
+      { "AAE fullsync source worker started for partition ([0-9]+)",
+        fun([PartIndex]) ->
+                { list_to_integer(PartIndex), aae_fullsync_started }
+        end },
+
+      { "Directly sent ([0-9]+) differences inline for partition ([0-9]+)",
+        fun([DirectCount,PartIndex]) ->
+                { list_to_integer(PartIndex), aae_direct, inline, list_to_integer(DirectCount) }
+        end },
+
+      { "Directly sending ([0-9]+) differences for partition ([0-9]+)",
+        fun([DirectCount,PartIndex]) ->
+                { list_to_integer(PartIndex), aae_direct, buffered, list_to_integer(DirectCount) }
+        end }
+
+      ].
