@@ -26,19 +26,19 @@
 %% straightforward: get a list of different versions of nodes and join them into a cluster, making sure that
 %% each time our data has been replicated:
 confirm() ->
-    NTestItems    = 10,                                     %% How many test items to write/verify?
+    NTestItems    = 1000,                                   %% How many test items to write/verify?
     NTestNodes    = 3,                                      %% How many nodes to spin up for tests?
     TestMode      = false,                                  %% Set to false for "production tests", true if too slow.
     EncodingTypes = [default, encode_raw, encode_zlib],     %% Usually, you won't want to fiddle with these.
 
-    lists:foreach(fun(EncodingType) -> run_test(TestMode, NTestItems, NTestNodes, EncodingType) end, EncodingTypes),
+    [run_test(TestMode, NTestItems, NTestNodes, EncodingType) ||
+        EncodingType <- EncodingTypes],
 
     lager:info("Test verify_handoff passed."),
     pass.
 
-run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
-
-    lager:info("Testing handoff (items ~p, encoding: ~p)", [NTestItems, HandoffEncoding]),
+run_test(TestMode, NTestItems, NTestNodes, Encoding) ->
+    lager:info("Testing handoff (items ~p, encoding: ~p)", [NTestItems, Encoding]),
 
     %% This resets nodes, cleans up stale directories, etc.:
     lager:info("Cleaning up..."),
@@ -49,37 +49,13 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
 
     rt:wait_for_service(RootNode, riak_kv),
 
-    case HandoffEncoding of
-        default -> lager:info("Using default encoding type."), true;   
+    set_handoff_encoding(Encoding, Nodes),
 
-        _       -> lager:info("Forcing encoding type to ~p.", [HandoffEncoding]),
-                   OverrideData = 
-                    [
-                      { riak_core, 
-                            [ 
-                                { override_capability,
-                                        [ 
-                                          { handoff_data_encoding,
-                                                [ 
-                                                  {    use, HandoffEncoding},
-                                                  { prefer, HandoffEncoding} 
-                                                ]
-                                          } 
-                                        ]
-                                }
-                            ]
-                      }
-                    ],
-
-                   rt:update_app_config(RootNode, OverrideData),
-
-                   %% Update all nodes (capabilities are not re-negotiated):
-                   lists:foreach(fun(TestNode) -> 
-                                    rt:update_app_config(TestNode, OverrideData),
-                                    assert_using(RootNode, { riak_kv, handoff_data_encoding }, HandoffEncoding)
-                                 end,
-                                 Nodes)
-    end,
+    %% Insert delay into handoff folding to test the efficacy of the
+    %% handoff heartbeat addition
+    [rt_intercept:add(N, {riak_core_handoff_sender,
+                          [{{visit_item, 3}, delayed_visit_item_3}]})
+     || N <- Nodes],
 
     lager:info("Populating root node."),
     rt:systest_write(RootNode, NTestItems),
@@ -100,6 +76,34 @@ run_test(TestMode, NTestItems, NTestNodes, HandoffEncoding) ->
     lager:info("Stopping root node."),
     rt:brutal_kill(RootNode).
 
+set_handoff_encoding(default, _) ->
+    lager:info("Using default encoding type."),
+    true;
+set_handoff_encoding(Encoding, Nodes) ->
+    lager:info("Forcing encoding type to ~p.", [Encoding]),
+
+    %% Update all nodes (capabilities are not re-negotiated):
+    [begin
+         rt:update_app_config(Node, override_data(Encoding)),
+         assert_using(Node, {riak_kv, handoff_data_encoding}, Encoding)
+     end || Node <- Nodes].
+
+override_data(Encoding) ->
+    [
+     { riak_core,
+       [
+        { override_capability,
+          [
+           { handoff_data_encoding,
+             [
+              {    use, Encoding},
+              { prefer, Encoding}
+             ]
+           }
+          ]
+        }
+       ]}].
+
 %% See if we get the same data back from our new nodes as we put into the root node:
 test_handoff(RootNode, NewNode, NTestItems) ->
 
@@ -114,23 +118,29 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     %% See if we get the same data back from the joined node that we added to the root node.
     %%  Note: systest_read() returns /non-matching/ items, so getting nothing back is good:
     lager:info("Validating data after handoff:"),
-    Results = rt:systest_read(NewNode, NTestItems), 
-    ?assertEqual(0, length(Results)), 
+    Results = rt:systest_read(NewNode, NTestItems),
+    ?assertEqual(0, length(Results)),
     Results2 = rt:systest_read(RootNode, 1, 2, {<<"type">>, <<"bucket">>}, 2),
     ?assertEqual(0, length(Results2)),
-    lager:info("Data looks ok.").  
+    lager:info("Data looks ok.").
 
 assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName) ->
     lager:info("assert_using ~p =:= ~p", [ExpectedCapabilityName, CapabilityName]),
-    ExpectedCapabilityName =:= rt:capability(Node, {CapabilityCategory, CapabilityName}). 
+    ExpectedCapabilityName =:= rt:capability(Node, {CapabilityCategory, CapabilityName}).
 
 %% For some testing purposes, making these limits smaller is helpful:
-deploy_test_nodes(false, N) -> 
-    rt:deploy_nodes(N);
+deploy_test_nodes(false, N) ->
+    Config = [{riak_core, [{ring_creation_size, 8},
+                           {handoff_acksync_threshold, 20},
+                           {handoff_receive_timeout, 2000}]}],
+    rt:deploy_nodes(N, Config);
 deploy_test_nodes(true,  N) ->
     lager:info("WARNING: Using turbo settings for testing."),
     Config = [{riak_core, [{forced_ownership_handoff, 8},
+                           {ring_creation_size, 8},
                            {handoff_concurrency, 8},
                            {vnode_inactivity_timeout, 1000},
+                           {handoff_acksync_threshold, 20},
+                           {handoff_receive_timeout, 2000},
                            {gossip_limit, {10000000, 60000}}]}],
     rt:deploy_nodes(N, Config).
