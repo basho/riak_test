@@ -43,7 +43,8 @@
 confirm() ->
     Config = [{riak_core, [{ring_creation_size, 8},
                            {vnode_management_timer, 1000},
-                           {handoff_concurrency, 100}]}],
+                           {handoff_concurrency, 100},
+                           {vnode_inactivity_timeout, 1000}]}],
 
     Nodes = rt:build_cluster(4, Config),
 
@@ -72,7 +73,7 @@ confirm() ->
     lager:info("deleted key, and have tombstone response"),
 
     %% %% Take down the fallback
-    {NewPL2, DeadFallback, DeadPartition} = kill_fallback(NewPL),
+    {NewPL2, DeadFallback, _DeadPartition} = kill_fallback(NewPL),
 
     %% %% Bring the primary back up
     _PL3 = start_node(DeadPrimary, NewPL2),
@@ -92,7 +93,7 @@ confirm() ->
     write_key(CoordClient, [<<"jon">>]),
 
     %% %% bring up that fallback, and wait for it to hand off
-    start_fallback_and_wait_for_handoff(DeadFallback, DeadPartition),
+    start_fallback_and_wait_for_handoff(DeadFallback),
 
     read_it_and_reap(UpClient),
 
@@ -207,14 +208,11 @@ wait_for_new_pl(PL, Node) ->
 contains_fallback(PL) ->
     lists:keymember(fallback, 2, PL).
 
-start_fallback_and_wait_for_handoff(DeadFallback, Partition) ->
+start_fallback_and_wait_for_handoff(DeadFallback) ->
     %% Below is random voodoo shit as I have no idea how to _KNOW_ that handoff has happened
     %% whatver, it takes 2 minutes, force_handoff? 2 minutes son!
     rt:start_and_wait(DeadFallback),
-    N = rpc:call(DeadFallback, riak_core_node_watcher, nodes, [riak_kv]),
-    lager:info("nodes ~p", [N]),
-    _ = vnode_util:vnode_pid(DeadFallback, Partition),
-    [rpc:call(DeadFallback, riak_core_vnode_manager, force_handoffs, []) || _ <- lists:seq(1, 16)],
+    rpc:call(DeadFallback, riak_core_vnode_manager, force_handoffs, []),
     rt:wait_until_transfers_complete([DeadFallback]).
 
 
