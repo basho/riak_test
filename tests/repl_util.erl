@@ -43,6 +43,7 @@
          connect_cluster_by_name/4,
          get_port/1,
          get_leader/1,
+         verify_connectivity/1,
          write_to_cluster/4,
          write_to_cluster/5,
          read_from_cluster/5,
@@ -53,7 +54,9 @@
          get_aae_fullsync_activity/0,
          validate_aae_fullsync/6,
          update_props/5,
-         get_current_bucket_props/2
+         get_current_bucket_props/2,
+         create_clusters_with_rt/1,
+         verify_correct_connection/2
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -454,6 +457,18 @@ start_realtime(Node, Cluster) ->
 stop_realtime(Node, Cluster) ->
     Res = rpc:call(Node, riak_repl_console, realtime, [["stop", Cluster]]),
     ?assertEqual(ok, Res).
+
+%% @doc Verify connectivity between sources and sink.
+verify_connectivity(Node) ->
+    rt:wait_until(Node, fun(N) ->
+                {ok, Connections} = rpc:call(N,
+                                             riak_core_cluster_mgr,
+                                             get_connections,
+                                             []),
+                lager:info("Waiting for sink connections on ~p: ~p.",
+                           [Node, Connections]),
+                Connections =/= []
+        end).
 
 do_write(Node, Start, End, Bucket, W) ->
     case rt:systest_write(Node, Start, End, Bucket, W) of
@@ -950,3 +965,88 @@ get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
              riak_core_bucket,
              get_bucket,
              [Bucket]).
+
+create_clusters_with_rt(ClusterSetup) ->
+    [ANodes, BNodes] = rt:build_clusters(ClusterSetup),
+
+    ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
+    AFirst = hd(ANodes),
+
+    ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
+    BFirst = hd(BNodes),
+
+    repl_util:name_cluster(AFirst, "A"),
+    repl_util:name_cluster(BFirst, "B"),
+    ?assertEqual(ok, rt:wait_until_ring_converged(ANodes)),
+    ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
+
+    %% A -> B
+    connect_clusters(AFirst, BFirst),
+    repl_util:enable_realtime(AFirst, "B"),
+    ?assertEqual(ok, rt:wait_until_ring_converged(ANodes)),
+    repl_util:start_realtime(AFirst, "B"),
+    ?assertEqual(ok, rt:wait_until_ring_converged(ANodes)),
+
+    %% B -> A
+    connect_clusters(BFirst, AFirst),
+    repl_util:enable_realtime(BFirst, "A"),
+    ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
+    repl_util:start_realtime(BFirst, "A"),
+    ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
+    {ANodes, BNodes}.
+
+
+
+verify_correct_connection(ANodes, BNodes) when length(ANodes) == length(BNodes) ->
+    verify_correct_connection(ANodes),
+    verify_correct_connection(BNodes),
+    lager:info("verify_correct_connection ok", []);
+
+verify_correct_connection(ANodes, BNodes) when length(ANodes) > length(BNodes) ->
+    verify_correct_connection(BNodes),
+    NumOfBNodes = length(BNodes),
+    verify_for_smaller_sink_cluster(ANodes, NumOfBNodes),
+    lager:info("verify_correct_connection ok", []);
+
+verify_correct_connection(ANodes, BNodes) when length(ANodes) < length(BNodes) ->
+    verify_correct_connection(ANodes),
+    NumOfANodes = length(ANodes),
+    verify_for_smaller_sink_cluster(BNodes, NumOfANodes),
+    lager:info("verify_correct_connection ok", []).
+
+%% Can be used for replications with same number of nodes in both clusters
+%% or if local cluster have less number of nodes
+verify_correct_connection(Nodes) ->
+    ConnectionList = lists:sort([rt_source_connected_to(Node) || Node <- Nodes]),
+    ?assertEqual([], ConnectionList -- lists:sort(sets:to_list(sets:from_list(ConnectionList)))).
+
+verify_for_smaller_sink_cluster(Nodes, SinkNodes) ->
+    %% Get IP port of remote nodes
+    ConnectionList = lists:sort([rt_source_connected_to(Node) || Node <- Nodes]),
+    %% Get unique IP port list
+    RemoteUsed = lists:sort(sets:to_list(sets:from_list(ConnectionList))),
+    %% Verify that all remote nodes are used.
+    ?assertEqual(SinkNodes, length(RemoteUsed)),
+
+
+    %% Get list with use count of remote IP port.
+    ConnectionsNrUsed =
+        [length([ok || Connection <- ConnectionList, Connection == Remote]) || Remote  <- RemoteUsed],
+    %% Verify that it's not uneven.
+    ?assert((lists:max(ConnectionsNrUsed) - lists:min(ConnectionsNrUsed)) =< 1).
+
+rt_source_connected_to(Node) ->
+    %%[{sources,[{source_stats,[{socket,[{peername,"127.0.0.1:10066"},{sockname,"127.0.0.1:53307"}]}
+    [{sources, List1}] = rpc:call(Node, riak_repl_console, server_stats, []),
+    {source_stats, List2} = lists:keyfind(source_stats, 1, List1),
+    {rt_source_connected_to, List3} = lists:keyfind(rt_source_connected_to, 1, List2),
+    {socket, List4} = lists:keyfind(socket, 1, List3),
+    {peername, List5} = lists:keyfind(peername, 1, List4),
+    List5.
+
+%% @doc Connect two clusters for replication using their respective
+%%      leader nodes.
+connect_clusters(LeaderA, LeaderB) ->
+    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+                                 [riak_core, cluster_mgr]),
+    repl_util:connect_cluster(LeaderA, "127.0.0.1", Port).

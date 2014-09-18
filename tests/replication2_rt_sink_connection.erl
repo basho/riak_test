@@ -90,23 +90,11 @@ confirm() ->
     lager:info("Adding 4th node to the A cluster"),
     rt:join(CNode, AFirst),
 
-    [verify_connectivity(Node) || Node <- ANodes],
+    [repl_util:verify_connectivity(Node) || Node <- ANodes],
 
-    verify_connectivity(CNode),
+    repl_util:verify_connectivity(CNode),
 
     pass.
-
-%% @doc Verify connectivity between sources and sink.
-verify_connectivity(Node) ->
-    rt:wait_until(Node, fun(N) ->
-                {ok, Connections} = rpc:call(N,
-                                             riak_core_cluster_mgr,
-                                             get_connections,
-                                             []),
-                lager:info("Waiting for sink connections on ~p: ~p.",
-                           [Node, Connections]),
-                Connections =/= []
-        end).
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
