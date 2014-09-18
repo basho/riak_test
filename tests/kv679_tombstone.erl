@@ -95,13 +95,17 @@ confirm() ->
     %% %% bring up that fallback, and wait for it to hand off
     start_fallback_and_wait_for_handoff(DeadFallback),
 
-    read_it_and_reap(UpClient),
-
+    %% Read twice, just in case (repair, then reap)
     Res1 = read_key(P1),
 
-    lager:info("res ~p", [Res1]),
+    lager:info("TS? ~p~n", [Res1]),
+    Res2 = read_key(P1),
 
-    %% ?assertEqual(bob, Res1),
+    lager:info("res ~p", [Res2]),
+
+    ?assertMatch({ok, _}, Res2),
+    {ok, Obj} = Res2,
+    ?assertEqual(<<"jon">>, riakc_obj:get_value(Obj)),
 
     pass.
 
