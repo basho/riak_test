@@ -33,6 +33,14 @@ confirm() ->
                         {document_root, CertDir},
                         {modules, [mod_get]}]),
 
+    %% Create an alternative directory for mirrored certs that Riak
+    %% will not know about
+    BogusCertDir = rt_config:get(rt_scratch_dir) ++ "/pb_cipher_suites_certs_bogus",
+    make_certs:rootCA(BogusCertDir, "rootCA"),
+    make_certs:intermediateCA(BogusCertDir, "intCA", "rootCA"),
+    make_certs:endusers(BogusCertDir, "intCA", ["site1.basho.com", "site2.basho.com"]),
+    make_certs:endusers(BogusCertDir, "rootCA", ["site3.basho.com", "site4.basho.com", "site5.basho.com"]),
+
     lager:info("Deploy some nodes"),
     Conf = [{riak_core, [
                 {ssl, [
@@ -175,12 +183,26 @@ confirm() ->
     lager:info("checking CRLs are checked for client certificates by"
               " default"),
 
+    ok = rpc:call(Node, riak_core_console, add_user, [["site4.basho.com"]]),
     ok = rpc:call(Node, riak_core_console, add_user, [["site5.basho.com"]]),
 
     %% require certificate auth on localhost
     ok = rpc:call(Node, riak_core_console, add_source, [["site5.basho.com",
                                                          "127.0.0.1/32",
                                                          "certificate"]]),
+
+    ok = rpc:call(Node, riak_core_console, add_source, [["site4.basho.com",
+                                                         "127.0.0.1/32",
+                                                         "certificate"]]),
+
+    lager:info("Checking legit certificates are allowed"),
+    {ok, PB} = riakc_pb_socket:start("127.0.0.1", Port,
+                                     [{credentials, "site4.basho.com",
+                                       ""},
+                                      {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
+                                      {certfile, filename:join([CertDir, "site4.basho.com/cert.pem"])},
+                                      {keyfile, filename:join([CertDir, "site4.basho.com/key.pem"])}
+                                     ]),
 
     lager:info("Checking revoked certificates are denied"),
     ?assertMatch({error, {tcp, _Reason}}, riakc_pb_socket:start("127.0.0.1", Port,
@@ -189,6 +211,15 @@ confirm() ->
                                        {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
                                        {certfile, filename:join([CertDir, "site5.basho.com/cert.pem"])},
                                        {keyfile, filename:join([CertDir, "site5.basho.com/key.pem"])}
+                                      ])),
+
+    lager:info("Checking bogus certificates are denied"),
+    ?assertMatch({error, {tcp, _Reason}}, riakc_pb_socket:start("127.0.0.1", Port,
+                                      [{credentials, "site5.basho.com",
+                                        ""},
+                                       {cacertfile, filename:join([BogusCertDir, "rootCA/cert.pem"])},
+                                       {certfile, filename:join([BogusCertDir, "site5.basho.com/cert.pem"])},
+                                       {keyfile, filename:join([BogusCertDir, "site5.basho.com/key.pem"])}
                                       ])),
 
     lager:info("Disable CRL checking"),
@@ -203,6 +234,17 @@ confirm() ->
                                       {certfile, filename:join([CertDir, "site5.basho.com/cert.pem"])},
                                       {keyfile, filename:join([CertDir, "site5.basho.com/key.pem"])}
                                      ]),
+
+    lager:info("Checking bogus certificates are denied with CRL off"),
+    ?assertMatch({error, {tcp, _Reason}}, riakc_pb_socket:start("127.0.0.1", Port,
+                                      [{credentials, "site5.basho.com",
+                                        ""},
+                                       {cacertfile, filename:join([BogusCertDir, "rootCA/cert.pem"])},
+                                       {certfile, filename:join([BogusCertDir, "site5.basho.com/cert.pem"])},
+                                       {keyfile, filename:join([BogusCertDir, "site5.basho.com/key.pem"])}
+                                      ])),
+
+
     ?assertEqual(pong, riakc_pb_socket:ping(PB)),
     riakc_pb_socket:stop(PB),
     pass.
@@ -220,5 +262,3 @@ pb_connection_info(Port, Config) ->
 
     riakc_pb_socket:stop(PB),
     ConnInfo.
-
-
