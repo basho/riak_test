@@ -4,7 +4,7 @@
 -compile({parse_transform, rt_intercept_pt}).
 
 %% -define(NUM_KEYS, 100000).
--define(NUM_KEYS, 100000).
+-define(NUM_KEYS, 10000).
 -define(TEST_BUCKET, <<"repl_bench">>).
 -define(N_VALUE, 3).
 -define(Q_VALUE, 8).
@@ -47,7 +47,6 @@ bench({Strategy, Pipeline, DirectMode, DirectLimit, DiffPercent}, Delay) ->
                            {fullsync_direct_mode, DirectMode},
                            {fullsync_direct_percentage_limit, DiffPercent},
                            {fullsync_on_connect, false},
-                           {fullsync_interval, disabled},
                            {max_fssource_retries, infinity},
                            {max_fssource_cluster, 1},
                            {max_fssource_node, 1},
@@ -101,32 +100,9 @@ bench({Strategy, Pipeline, DirectMode, DirectLimit, DiffPercent}, Delay) ->
           ]),
 
     io:format("~p~n", [{ANodes, BNodes}]),
-
     AFirst = hd(ANodes),
-    BFirst = hd(BNodes),
-
-    repl_util:name_cluster(AFirst, "A"),
-    repl_util:name_cluster(BFirst, "B"),
-
-    rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
-
-    ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
-    ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
-
-    LeaderA = rpc:call(AFirst,
-                       riak_core_cluster_mgr, get_leader, []),
-
-    {ok, {IP, Port}} = rpc:call(BFirst,
-                                application, get_env, [riak_core, cluster_mgr]),
-
-    repl_util:connect_cluster(LeaderA, IP, Port),
-    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
-
-    repl_util:enable_fullsync(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),
-
-    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
+    
+    LeaderA = repl_aae_fullsync_util:prepare_cluster(ANodes, BNodes),
 
     %% Perform fullsync of an empty cluster.
     rt:wait_until_aae_trees_built(ANodes ++ BNodes),

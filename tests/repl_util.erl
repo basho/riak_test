@@ -51,7 +51,9 @@
          validate_completed_fullsync/6,
          validate_intercepted_fullsync/5,
          get_aae_fullsync_activity/0,
-         validate_aae_fullsync/6
+         validate_aae_fullsync/6,
+         update_props/5,
+         get_current_bucket_props/2
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -558,7 +560,7 @@ write_to_cluster(Node, Start, End, Bucket) ->
 
 %% @doc Write a series of keys and ensure they are all written.
 write_to_cluster(Node, Start, End, Bucket, Quorum) ->
-    lager:info("Writing ~p keys to node ~p.", [End - Start + 1, Node]),
+    lager:info("Writing ~p keys to node ~p in bucket ~p.", [End - Start + 1, Node, Bucket]),
     ?assertEqual([],
                  repl_util:do_write(Node, Start, End, Bucket, Quorum)).
 
@@ -683,57 +685,14 @@ select_logs_in_time_interval(From,To,Logs) ->
     RelevantLogs.
 
 validate_aae_fullsync(From, _To, NVal, QVal, TotalKeys, KeysChanged) ->
-    Logs = get_aae_fullsync_activity(),
-
-    RelevantLogs = select_logs_in_time_interval(From, {14110000,38604,655676}, Logs),
-
-%    lists:foreach(fun(Log) ->
-%                          lager:info("SELECTED: ~p", [Log])
-%                  end,
-%                  lists:sort(RelevantLogs)),
-
-    Partitions =
-        lists:foldl(fun({Time, {PI, aae_fullsync_started}}, Dict) ->
-                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
-                            orddict:update( PI,
-                                            fun(Stat) -> Stat#aae_stat{ start_time=Time } end,
-                                            Dict2);
-                       ({Time, {PI, aae_fullsync_completed}}, Dict) ->
-                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
-                            orddict:update( PI,
-                                            fun(Stat) -> Stat#aae_stat{ end_time=Time } end,
-                                            Dict2);
-                       ({Time, {PI, estimated_number_of_keys, Estimate}}, Dict) ->
-                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
-                            orddict:update( PI,
-                                            fun(Stat) -> Stat#aae_stat{ key_estimate=Estimate, estimate_time=Time } end,
-                                            Dict2);
-                       ({Time, {PI, finish_sending, Bloom, BloomCount, PartDiffs}}, Dict) ->
-                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
-                            orddict:update( PI,
-                                            fun(Stat) -> Stat#aae_stat{
-                                                           use_bloom=Bloom,
-                                                           bloom_count=BloomCount,
-                                                           diff_count=PartDiffs,
-                                                           bloom_time=Time
-                                                         } end,
-                                            Dict2);
-                       ({Time, {PI, aae_direct, Mode, Count}}, Dict) ->
-                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
-                            orddict:update( PI,
-                                            fun(Stat) -> Stat#aae_stat{ direct_count=Count, direct_mode=Mode, direct_time=Time } end,
-                                            Dict2);
-                       (_, Acc) ->
-                            Acc
-                    end,
-                    orddict:new(),
-                    lists:sort(RelevantLogs)),
+    
+    Partitions = get_partitions(From),
 
     Diffs         = orddict:fold(fun(_, #aae_stat{ diff_count=N }, Acc) -> N+Acc end, 0, Partitions),
     TotalEstimate = orddict:fold(fun(_, #aae_stat{ key_estimate=N }, Acc) -> N+Acc end, 0, Partitions),
     BloomCount    = orddict:size( orddict:filter( fun(_, #aae_stat{ use_bloom=UseBloom }) -> UseBloom end, Partitions )),
 
-    lager:info("AAE expected fullsync stats: partitions:~p, total_estimate:~p, diffs:~p", [QVal, TotalKeys * NVal, KeysChanged]),
+    lager:info("AAE expected fullsync stats: partitions:~p, total_estimate:~p, diffs:~p", [QVal, trunc(TotalKeys * NVal), KeysChanged]),
     lager:info("AAE found    fullsync stats: partitions:~p, total_estimate:~p, diffs:~p", [length(Partitions), TotalEstimate, Diffs]),
     lager:info("AAE ~p partitions used bloom filter / fold", [BloomCount]),
 
@@ -775,13 +734,55 @@ validate_aae_fullsync(From, _To, NVal, QVal, TotalKeys, KeysChanged) ->
     end,
 
     validate_partitions(Partitions, NVal, QVal, TotalKeys),
-
     ok.
+
+get_partitions(From) ->
+
+    Logs = get_aae_fullsync_activity(),
+    RelevantLogs = select_logs_in_time_interval(From, {14110000,38604,655676}, Logs),
+
+    Partitions =
+        lists:foldl(fun({Time, {PI, aae_fullsync_started}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{ start_time=Time } end,
+                                            Dict2);
+                       ({Time, {PI, aae_fullsync_completed}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{ end_time=Time } end,
+                                            Dict2);
+                       ({Time, {PI, estimated_number_of_keys, Estimate}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{ key_estimate=Estimate, estimate_time=Time } end,
+                                            Dict2);
+                       ({Time, {PI, finish_sending, Bloom, BloomCount, PartDiffs}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{
+                                                                       use_bloom=Bloom,
+                                                                       bloom_count=BloomCount,
+                                                                       diff_count=PartDiffs,
+                                                                       bloom_time=Time
+                                                                      } end,
+                                            Dict2);
+                       ({Time, {PI, aae_direct, Mode, Count}}, Dict) ->
+                            Dict2 = orddict:update( PI, fun(E)->E end, #aae_stat{}, Dict ),
+                            orddict:update( PI,
+                                            fun(Stat) -> Stat#aae_stat{ direct_count=Count, direct_mode=Mode, direct_time=Time } end,
+                                            Dict2);
+                       (_, Acc) ->
+                            Acc
+                    end,
+                    orddict:new(),
+                    lists:sort(RelevantLogs)),
+    Partitions.
 
 
 validate_partitions(Partitions, NVal, QVal, TotalKeys) ->
 
-    ExpectedKeys = (TotalKeys * NVal div QVal),
+    ExpectedKeys = (trunc(TotalKeys * NVal) div QVal),
 
     orddict:fold(fun(PI, #aae_stat{
                        key_estimate=KeyEst,
@@ -816,7 +817,7 @@ validate_partitions(Partitions, NVal, QVal, TotalKeys) ->
                                      lager:info("exchange time ~psec", [(ExchangeUSec) / 1000000]),
                                  ((BufferedUSec == undefined) or (DirectCount == 0)) orelse
                                      lager:info("buffered time ~pusec/diff", [(BufferedUSec) / DirectCount]);
-                             direct ->
+                             inline ->
                                  ((ExchangeUSec == undefined) or (BufferedUSec == undefined)) orelse
                                      lager:info("exchange time ~psec", [(ExchangeUSec+BufferedUSec) / 1000000])
                          end,
@@ -918,3 +919,24 @@ aae_fullsync_patterns() ->
         end }
 
       ].
+
+
+update_props(DefaultProps, NewProps, Node, Nodes, Bucket) ->
+    lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
+               [NewProps, Bucket, Node]),
+    rpc:call(Node, riak_core_bucket, set_bucket, [Bucket, NewProps]),
+    rt:wait_until_ring_converged(Nodes),
+
+    UpdatedProps = get_current_bucket_props(Nodes, Bucket),
+    ?assertNotEqual(DefaultProps, UpdatedProps).
+
+%% fetch bucket properties via rpc
+%% from a node or a list of nodes (one node is chosen at random)
+get_current_bucket_props(Nodes, Bucket) when is_list(Nodes) ->
+    Node = lists:nth(length(Nodes), Nodes),
+    get_current_bucket_props(Node, Bucket);
+get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
+    rpc:call(Node,
+             riak_core_bucket,
+             get_bucket,
+             [Bucket]).
