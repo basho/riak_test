@@ -56,7 +56,7 @@ aae_fs_test_diff_n_buckets() ->
     repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 
 
-    %% N, NumKeys, Div
+    %% Setup some buckets with different n-val (N), Total number of keys (NumKeys), and fraction of keys that are changed (Div). Div=10 means 1/10th of all keys are changed and must be FS'ed over.
     Tests = [{1, 30000, 10}, {3, 20000, 10}, {5 ,10000, 2}],
     
     TestsAndBuckets =
@@ -80,6 +80,8 @@ aae_fs_test_diff_n_buckets() ->
                 end,Tests),
     
     NumTotalKeys = lists:sum([NumKeys || {_N, NumKeys, _Div} <- Tests]),
+
+    %% Calculate the average N-val for all keys in the source cluster. I.e. average of each buckets n-val weighed by the number of keys in the bucket.
     MeanN = lists:sum([N * NumKeys || {N, NumKeys, _Div} <- Tests]) / NumTotalKeys,
 
     %% Write keys and perform fullsync.

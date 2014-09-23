@@ -684,17 +684,23 @@ select_logs_in_time_interval(From,To,Logs) ->
                                Logs),
     RelevantLogs.
 
-validate_aae_fullsync(From, _To, NVal, QVal, TotalKeys, KeysChanged) ->
+%% From: Start timestamp used for pulling logs for analysis.
+%% _To: End timestamp used for pulling logs for analysis. Currently not used because we look at every log statement after From.
+%% NVal: The n-val fo the fullsync. When syncing with muliple n-vals, use the mean across all synced bucket weighed by NumKeys in the bucket.
+%% QVal: Number of partitions synced
+%% TotalKeys: The correct total number of keys in the source cluster. Used for checking if Riak's estimate is precise enough.
+%% KeysChanged: The correct number of keys that differ between the clusters. Used for checking if AAE finds them all.
+validate_aae_fullsync(FromTimestamp, _ToTimstamp, NVal, QVal, TotalKeys, KeysChanged) ->
     
-    Partitions = get_partitions(From),
+    Partitions = get_partitions(FromTimestamp),
 
-    Diffs         = orddict:fold(fun(_, #aae_stat{ diff_count=N }, Acc) -> N+Acc end, 0, Partitions),
-    TotalEstimate = orddict:fold(fun(_, #aae_stat{ key_estimate=N }, Acc) -> N+Acc end, 0, Partitions),
-    BloomCount    = orddict:size( orddict:filter( fun(_, #aae_stat{ use_bloom=UseBloom }) -> UseBloom end, Partitions )),
+    FoundDiffs         = orddict:fold(fun(_, #aae_stat{ diff_count=N }, Acc) -> N+Acc end, 0, Partitions),
+    TotalKeysEstimatedByRiak = orddict:fold(fun(_, #aae_stat{ key_estimate=N }, Acc) -> N+Acc end, 0, Partitions),
+    PartitionsUsingBloomStrategyCount    = orddict:size( orddict:filter( fun(_, #aae_stat{ use_bloom=UseBloom }) -> UseBloom end, Partitions )),
 
-    lager:info("AAE expected fullsync stats: partitions:~p, total_estimate:~p, diffs:~p", [QVal, trunc(TotalKeys * NVal), KeysChanged]),
-    lager:info("AAE found    fullsync stats: partitions:~p, total_estimate:~p, diffs:~p", [length(Partitions), TotalEstimate, Diffs]),
-    lager:info("AAE ~p partitions used bloom filter / fold", [BloomCount]),
+    lager:info("AAE expected fullsync stats: partitions:~p, real number of keys:~p, diffs expected:~p", [QVal, trunc(TotalKeys * NVal), KeysChanged]),
+    lager:info("AAE found    fullsync stats: partitions:~p, estimated number of keys :~p, diffs found:~p", [length(Partitions), TotalKeysEstimatedByRiak, FoundDiffs]),
+    lager:info("AAE ~p partitions used bloom filter / fold", [PartitionsUsingBloomStrategyCount]),
 
     case QVal == orddict:size(Partitions) of
         true ->
@@ -703,33 +709,37 @@ validate_aae_fullsync(From, _To, NVal, QVal, TotalKeys, KeysChanged) ->
             lager:error("BAD - Wrong number of partitions in fullsync: ~p vs ~p", [QVal, ordsets:size(Partitions)])
     end,
 
-    EstimateSkew = TotalEstimate - (TotalKeys * NVal) ,
-    EstPercentage = EstimateSkew / TotalEstimate,
+    %% Calculate how far off the estimate is from the real value.
+    EstimateSkew = TotalKeysEstimatedByRiak - (TotalKeys * NVal) ,
+    EstSkewPercentage = EstimateSkew / TotalKeysEstimatedByRiak,
 
-    case abs(EstPercentage) =< 0.15 of
+    case abs(EstSkewPercentage) =< 0.15 of
         true ->
-            lager:info("OK - Estimate is ~p% off", [ EstPercentage*100 ]);
+            lager:info("OK - Estimate is ~p% off", [ EstSkewPercentage*100 ]);
         false ->
-            lager:error("BAD - Estimate is ~p% off", [ EstPercentage*100 ])
+            lager:error("BAD - Estimate is ~p% off", [ EstSkewPercentage*100 ]),
+            ?assert(false)
     end,
 
 
-    DiffSkew = Diffs - KeysChanged,
+    DiffSkew = FoundDiffs - KeysChanged,
     case KeysChanged of
         0 ->
             case DiffSkew of
                 0 ->
                     lager:info("OK - diff count is 0");
                 _ ->
-                    lager:info("BAD - diff count is ~p; should be 0", [Diffs])
+                    lager:info("BAD - diff count is ~p; should be 0", [FoundDiffs]),
+                    ?assert(false)
             end;
         _ ->
-            DiffPercentage = DiffSkew / KeysChanged,
-            case abs(DiffPercentage) =< 0.05 of
+            DiffSkewPercentage = DiffSkew / KeysChanged,
+            case abs(DiffSkewPercentage) =< 0.05 of
                 true ->
-                    lager:info("OK - Diff count is ~p% off", [ DiffPercentage*100 ]);
+                    lager:info("OK - Diff count is ~p% off", [ DiffSkewPercentage*100 ]);
                 false ->
-                    lager:error("BAD - Diff count is ~p% off", [ DiffPercentage*100 ])
+                    lager:error("BAD - Diff count is ~p% off", [ DiffSkewPercentage*100 ]),
+                    ?assert(false)
             end
     end,
 
