@@ -95,7 +95,7 @@ confirm() ->
     %% %% bring up that fallback, and wait for it to hand off
     start_fallback_and_wait_for_handoff(DeadFallback),
 
-    %% Read twice, just in case (repair, then reap)
+    %% Read twice, just in case (repair, reap.)
     Res1 = read_key(P1),
 
     lager:info("TS? ~p~n", [Res1]),
@@ -108,8 +108,6 @@ confirm() ->
     ?assertEqual(<<"jon">>, riakc_obj:get_value(Obj)),
 
     pass.
-
-
 
 %%% Client/Key ops
 create_pb_clients(Nodes) ->
@@ -127,19 +125,24 @@ up_client(DeadNode, Clients) ->
     {value, _, LiveClients} = lists:keytake(DeadNode, 1, Clients),
     hd(LiveClients).
 
-write_key(_, []) ->
+write_key(Client, Vals) ->
+    write_key(Client, Vals, []).
+
+write_key(_, [], _Opts) ->
     ok;
-write_key(Client, [Val | Rest]) ->
-    ok = write_key(Client, Val),
-    ok = write_key(Client, Rest);
-write_key({_, Client}, Val) when is_binary(Val) ->
+write_key(Client, [Val | Rest], Opts) ->
+    ok = write_key(Client, Val, Opts),
+    ok = write_key(Client, Rest, Opts);
+write_key({_, Client}, Val, Opts) when is_binary(Val) ->
     Object = case riakc_pb_socket:get(Client, ?BUCKET, ?KEY, []) of
                  {ok, O1} ->
+                     lager:info("writing existing!"),
                      riakc_obj:update_value(O1, Val);
                  _ ->
+                     lager:info("writing new!"),
                      riakc_obj:new(?BUCKET, ?KEY, Val)
              end,
-    riakc_pb_socket:put(Client, Object).
+    riakc_pb_socket:put(Client, Object, Opts).
 
 read_key({_, Client}) ->
     riakc_pb_socket:get(Client, ?BUCKET, ?KEY, []).
