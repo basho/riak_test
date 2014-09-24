@@ -43,14 +43,14 @@
 -define(KEY, <<"test">>).
 
 confirm() ->
-    Config = [{riak_kv, [{delete_mode, 30000}]}, %% 30 seconds to reap.
+    Config = [{riak_kv, [{delete_mode, 10000}]}, %% 20 seconds to reap.
               {riak_core, [{ring_creation_size, 8},
                            {vnode_management_timer, 1000},
                            {handoff_concurrency, 100},
                            {vnode_inactivity_timeout, 1000}]}],
 
-    %% 5 'cos I want a perfect preflist
-    Nodes = rt:build_cluster(5, Config),
+    %% 4 'cos I want a perfect preflist
+    Nodes = rt:build_cluster(4, Config),
 
     Clients =  kv679_tombstone:create_pb_clients(Nodes),
 
@@ -67,6 +67,8 @@ confirm() ->
     %% Write key some times
     kv679_tombstone:write_key(CoordClient, [<<"bob">>, <<"phil">>, <<"pete">>]),
 
+    dump_clock(CoordClient),
+
     lager:info("wrote key thrice"),
 
     delete_key(CoordClient),
@@ -74,61 +76,54 @@ confirm() ->
     lager:info("deleted key"),
 
     %% kill the patsy, must happen before the reap
-    %% @TODO make deterministic
-
-    timer:sleep(10000),
+    %%
+    %% @TODO make deterministic (would be nice without all these
+    %% timers)
+    timer:sleep(500),
 
     rt:brutal_kill(Patsy),
 
     lager:info("killed the patsy"),
 
-    dump_clock(CoordClient),
+    %% A time to reap
+    %% %% wait for the up  nodes to reap
+    timer:sleep(15000),
 
-    %% wait for the other nodes to reap
-    kv679_tombstone:read_it_and_reap(CoordClient),
+    lager:info("tombstone (should be) reaped"),
 
-    lager:info("tombstone reaped"),
-
-    dump_clock(CoordClient),
-
-    timer:sleep(30000),
-
-    [rt:stop_and_wait(N) || N <- Nodes, N /= Patsy],
-
-
-    %% %% Bring the patsy back up
-    rt:start_and_wait(Patsy),
-
-    PatsyClient = lists:keyfind(Patsy, 1, Clients),
-
-    lager:info("Patsy val = ~p~n", [begin
-                                        {_, C} = PatsyClient,
-                                        riakc_pb_socket:get(C, ?BUCKET, ?KEY,
-                                                            [deletedvclock, {r,1}])
-                                    end]),
-
-    [rt:start_and_wait(N) || N <- Nodes, N /= Patsy],
-
-
-    rt:wait_until(fun() ->
-                          PL2 = kv679_tombstone:get_preflist(Patsy),
-                          lager:info("new ~p~nold ~p~n", [PL2, PL]),
-                          PL == PL2
-                  end),
     %% %% write the key again, this will start a new clock, a clock
     %% that is in the past of that un-reaped primary tombstone. We use the
     %% same node to get the same clock.
-    kv679_tombstone:write_key(CoordClient, [<<"jon">>]),
+    kv679_tombstone:write_key(CoordClient, [<<"jon">>],
+                              [{pw, 2},
+                               {sloppy_quorum, false},
+                               {n_val, 2}]),
 
     dump_clock(CoordClient),
 
-    %% Read twice, just in case (repair, then reap)
-    Res1 = kv679_tombstone:read_key(CoordClient),
+    %% %% Bring the patsy back up, and wait until the preflists are as
+    %% before
+    rt:start_and_wait(Patsy),
 
-    lager:info("TS? ~p~n", [Res1]),
-    Res2 = kv679_tombstone:read_key(CoordClient),
+    rt:wait_until(fun() ->
+                          PL2 = kv679_tombstone:get_preflist(Patsy),
+                          PL == PL2
+                  end),
 
-    lager:info("res ~p", [Res2]),
+    %% Read a few times, just in case (repair, then reap, etc)
+    Res = [begin
+               timer:sleep(100),
+               {I, kv679_tombstone:read_key(CoordClient)}
+           end || I <- lists:seq(1, 5)],
+
+    First = hd(lists:dropwhile(fun({_I, {ok, _}}) -> true;
+                                  (_) -> false end,
+                               Res)),
+
+    lager:info("res ~p", [First]),
+
+    %% The last result
+    {_, Res2} = hd(lists:reverse(Res)),
 
     ?assertMatch({ok, _}, Res2),
     {ok, Obj} = Res2,
@@ -147,7 +142,7 @@ get_coord_client_and_patsy(Clients, PL) ->
     PL2 = [Node || {{_Idx, Node}, Type} <- PL,
                    Type == primary,
                    Node /= CoordNode],
-    {CoordClient, hd(PL2)}.
+    {CoordClient, hd(lists:reverse(PL2))}.
 
 delete_key({_, Client}) ->
     {ok, Obj} = riakc_pb_socket:get(Client, ?BUCKET, ?KEY),
