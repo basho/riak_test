@@ -242,7 +242,7 @@ start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries) ->
         _  when Retries > 0 ->
             ?assertEqual(ok, wait_until_connection(Node)),
             lager:warning("Node failed to fullsync, retrying"),
-            start_and_wait_until_fullsync_complete(Node, Retries-1)
+            start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries-1)
     end,
     lager:info("Fullsync on ~p complete", [Node]).
 
@@ -254,8 +254,10 @@ fullsync_count(Count, _Status, _Cluster) ->
       Count + 1.
 
 fullsync_start_args(undefined) ->
+    lager:info("No cluster for fullsync start"),
     ["start"];
 fullsync_start_args(Cluster) ->
+    lager:info("Cluster for fullsync start: ~p", [Cluster]),
     ["start", Cluster].
 
 fullsync_notify(NotifyPid) when is_pid(NotifyPid) ->
@@ -300,12 +302,19 @@ wait_for_connection(Node, Name) ->
                             [] ->
                                 false;
                             [Pid] ->
-                                Pid ! {self(), status},
-                                receive
-                                    {Pid, status, _} ->
+                                try riak_core_cluster_conn:status(Pid, 2) of                                    {Pid, status, _} ->
                                         true;
-                                    {Pid, connecting, _} ->
+                                    _ ->
                                         false
+                                catch
+                                    _W:_Y ->
+                                        Pid ! {self(), status},
+                                        receive
+                                            {Pid, status, _} ->
+                                                true;
+                                            {Pid, connecting, _} ->
+                                                false
+                                        end
                                 end
                         end;
                     _ ->
