@@ -8,6 +8,7 @@
 -define(N_Value, 3).
 
 confirm() ->
+    aae_fs_test_onoff_buckets(),
     aae_fs_test_diff_n_buckets(),
     pass.
 
@@ -103,4 +104,59 @@ aae_fs_test_diff_n_buckets() ->
 
                           EndTime = erlang:now(),
                           repl_util:validate_aae_fullsync(StartTime, EndTime, MeanN, ?Q_VALUE, NumTotalKeys, ChangedKeys)
+                  end, TestsAndBuckets).
+
+
+aae_fs_test_onoff_buckets() ->
+    NumNodesWanted = 2,         %% total number of nodes needed
+    ClusterASize = 1,           %% how many to allocate to cluster A
+    NumKeys = 1000,
+
+    {ANodes, BNodes} = prepare_test(NumNodesWanted, NumNodesWanted, ClusterASize),
+    LeaderA = repl_aae_fullsync_util:prepare_cluster(ANodes, BNodes),
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
+
+
+    %% Setup buckets with different settings on repl and if they are
+    %% expected to be replicated or not.
+    Tests = [{[], true},
+             {[{repl, false}],    false},
+             {[{repl, true}],      true},
+             {[{repl, both}],      true},
+             {[{repl, realtime}], false},
+             {[{repl, fullsync}],  true}],
+
+
+    %% Create buckets and write to cluster A and run full sync
+    TestsAndBuckets =
+        lists:map(fun({NewProps, ShouldBeSynced}) ->
+                          TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                                                        <<X>> <= erlang:md5(term_to_binary(now()))]),
+                          TestBucket = <<TestHash/binary, "-systest_a">>,
+                          case NewProps of
+                              [] ->
+                                  ok;
+                              _ ->
+                                  DefaultProps = repl_util:get_current_bucket_props(ANodes, <<"test">>),
+                                  repl_util:update_props(DefaultProps, NewProps, AFirst, ANodes, TestBucket),
+                                  repl_util:update_props(DefaultProps, NewProps, BFirst, BNodes, TestBucket)
+                          end,
+                          %% populate them with data
+                          repl_util:write_to_cluster(AFirst, 1, NumKeys, TestBucket),
+                          repl_util:write_to_cluster(BFirst, 10000, 10000, TestBucket),
+                          rt:wait_until_aae_trees_built(ANodes ++ BNodes),
+                          repl_util:start_and_wait_until_fullsync_complete(LeaderA),
+                          {TestBucket, NewProps, ShouldBeSynced}
+                  end,
+                  Tests),
+
+    %% Check that buckets expected to full sync have all keys
+    lists:foreach(fun({TestBucket, _NewProps, ShouldBeSynced}) ->
+                          case ShouldBeSynced of
+                              true ->
+                                  ?assertEqual(0, length(rt:systest_read(BFirst, 1, NumKeys, TestBucket, 1, <<>>, true)));
+                              false ->
+                                  ?assertEqual(NumKeys, length(rt:systest_read(BFirst, 1, NumKeys, TestBucket, 1, <<>>, true)))
+                          end
                   end, TestsAndBuckets).
