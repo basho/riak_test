@@ -35,9 +35,7 @@
 
 confirm() ->
     [Node] = rt:deploy_nodes(1),
-
-    %% Get preflist for key
-    PL = get_preflist(Node),
+    PL = kv679_tombstone:get_preflist(Node),
 
     %% Get vnodeids for each primary
     PartitionIdMap = get_vnodeids(PL, Node),
@@ -55,8 +53,3 @@ get_vnodeids(PLAnn, Node) ->
                          Type == primary],
     Statuses = rpc:call(Node, riak_kv_vnode, vnode_status, [PL]),
     [{Idx, proplists:get_value(vnodeid, Status)} || {Idx, Status} <- Statuses].
-
-get_preflist(Node) ->
-    Chash = rpc:call(Node, riak_core_util, chash_key, [{?BUCKET, ?KEY}]),
-    UpNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
-    rpc:call(Node, riak_core_apl, get_apl_ann, [Chash, 3, UpNodes]).
