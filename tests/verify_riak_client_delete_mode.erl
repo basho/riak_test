@@ -82,7 +82,8 @@ confirm() ->
     %% assume mechanism works).
     ?assertEqual(<<>>, verify_delete(Node1, <<"fromclient">>, <<"after500">>, 500)),
     timer:sleep(500), % wait for the delete time to expire, then check
-    ?assert(object_really_removed(Node1, <<"fromclient">>, <<"after500">>, 5000)),
+    ?assertEqual(ok, object_really_removed(Node1, <<"fromclient">>, <<"after500">>)),
+
     lager:info("...checked delayed"),
 
     %%
@@ -111,7 +112,7 @@ confirm() ->
     %% assume mechanism works).
     ?assertEqual(<<>>, verify_delete(Node1, <<"afterbucket">>, <<"after500">>, 500)),
     timer:sleep(500), % wait for the delete time, then start looking
-    ?assert(object_really_removed(Node1, <<"afterbucket">>, <<"after500">>, 5000)),
+    ?assertEqual(ok, object_really_removed(Node1, <<"afterbucket">>, <<"after500">>)),
     lager:info("...checked delayed"),
 
 
@@ -125,16 +126,17 @@ confirm() ->
 %%
 %% -------------------------------------------------------------------
 
-object_really_removed(_Node, _Bucket, _Key, Remaining) when Remaining < 0 ->
-    false;
-object_really_removed(Node, Bucket, Key, Remaining) ->
-    case vnode_get_value(Node, Bucket, Key) of
-        {error, notfound} ->
-            true;
-        _ ->
-            timer:sleep(100),
-            object_really_removed(Node, Bucket, Key, Remaining - 100)
-    end.
+%% Wait until the object is really removed - 50 retries, 100ms interval = 5s
+object_really_removed(Node, Bucket, Key) ->
+    rt:wait_until(
+      fun() ->
+              case vnode_get_value(Node, Bucket, Key) of
+                  {error, notfound} ->
+                      true;
+                  _ ->
+                      false
+              end
+      end, 50, 100).
 
 verify_delete(Node, Bucket, Key, Mode) ->
     %% Delete - triggers async get, so do not know if object has been reaped
