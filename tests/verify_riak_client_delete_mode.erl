@@ -81,8 +81,8 @@ confirm() ->
     %% Check that keep is still kept (does overlap with vnode delete mode, but
     %% assume mechanism works).
     ?assertEqual(<<>>, verify_delete(Node1, <<"fromclient">>, <<"after500">>, 500)),
-    timer:sleep(600), % wait for the delete time and a little extra
-    ?assertEqual({error, notfound}, vnode_get_value(Node1, <<"fromclient">>, <<"after500">>)),
+    timer:sleep(500), % wait for the delete time to expire, then check
+    ?assert(object_really_removed(Node1, <<"fromclient">>, <<"after500">>, 5000)),
     lager:info("...checked delayed"),
 
     %%
@@ -110,13 +110,31 @@ confirm() ->
     %% Check that keep is still kept (does overlap with vnode delete mode, but
     %% assume mechanism works).
     ?assertEqual(<<>>, verify_delete(Node1, <<"afterbucket">>, <<"after500">>, 500)),
-    timer:sleep(600), % wait for the delete time and a little extra
-    ?assertEqual({error, notfound}, vnode_get_value(Node1, <<"afterbucket">>, <<"after500">>)),
+    timer:sleep(500), % wait for the delete time, then start looking
+    ?assert(object_really_removed(Node1, <<"afterbucket">>, <<"after500">>, 5000)),
     lager:info("...checked delayed"),
 
 
     lager:info("Test verify_riak_client_delete_mode: Passed"),
     pass.
+
+%% -------------------------------------------------------------------
+%%
+%% Test helpers - anything with a 'do_' prefix is being run inside the node
+%%                by an RPC call.
+%%
+%% -------------------------------------------------------------------
+
+object_really_removed(_Node, _Bucket, _Key, Remaining) when Remaining < 0 ->
+    false;
+object_really_removed(Node, Bucket, Key, Remaining) ->
+    case vnode_get_value(Node, Bucket, Key) of
+        {error, notfound} ->
+            true;
+        _ ->
+            timer:sleep(100),
+            object_really_removed(Node, Bucket, Key, Remaining - 100)
+    end.
 
 verify_delete(Node, Bucket, Key, Mode) ->
     %% Delete - triggers async get, so do not know if object has been reaped
