@@ -96,19 +96,19 @@ confirm() ->
     %% repl13_mode is active Version 3 commands are shown.
     lager:info("Checking V2 and V3 usage output"),
     %% rpc:call(Node, riak_repl_console, set_modes, [repl12_mode, repl13_mode]),
-    rt:riak_repl(Node, ["modes mode_repl12 mode_repl13"]),
+    rt:riak_repl(Node, ["modes set mode_repl12 mode_repl13"]),
     OutBoth = check_usage(Node, ""),
     assertContains(OutBoth,"Version 2 Commands:"),
     assertContains(OutBoth,"Version 3 Commands:"),
 
     lager:info("Checking V2-only usage output"),
-    rt:riak_repl(Node, ["modes mode_repl12"]),
+    rt:riak_repl(Node, ["modes set mode_repl12"]),
     Out2 = check_usage(Node, ""),
     assertContains(Out2, "Version 2 Commands:"),
     assertNotContains(Out2, "Version 3 Commands:"),
 
     lager:info("Checking V3-only usage output"),
-    rt:riak_repl(Node, ["modes mode_repl13"]),
+    rt:riak_repl(Node, ["modes set mode_repl13"]),
     Out3 = check_usage(Node, ""),
     assertContains(Out3, "Version 3 Commands:"),
     assertNotContains(Out3, "Version 2 Commands:"),
@@ -141,24 +141,25 @@ confirm() ->
     check_cmd(Node, "clusterstats cluster_mgr"),
     check_cmd(Node, "clusterstats 192.168.1.1:5555"),
 
-    check_cmd(Node, "modes"),
-    check_cmd(Node, "modes mode_repl12"),
-    check_cmd(Node, "modes mode_repl12 mode_repl13"),
+    check_cmd(Node, "modes show"),
+    check_cmd(Node, "modes set mode_repl12"),
+    check_cmd(Node, "modes set mode_repl12 mode_repl13"),
 
     check_cmd(Node, "clustername"),
     check_cmd(Node, "clustername foo"),
 
-    check_cmd(Node, "realtime cascades"),
-    check_cmd(Node, "realtime cascades always"),
+    check_cmd(Node, "realtime cascades show"),
+    check_cmd(Node, "realtime cascades enable"),
+    check_cmd(Node, "realtime cascades disable"),
 
-    check_cmd(Node, "fullsync source max_workers_per_node"),
-    check_cmd(Node, "fullsync source max_workers_per_node 99"),
+    check_cmd(Node, "fullsync source max_workers_per_node show"),
+    check_cmd(Node, "fullsync source max_workers_per_node set 99"),
 
-    check_cmd(Node, "fullsync source max_workers_per_cluster"),
-    check_cmd(Node, "fullsync source max_workers_per_cluster 99"),
+    check_cmd(Node, "fullsync source max_workers_per_cluster show"),
+    check_cmd(Node, "fullsync source max_workers_per_cluster set 99"),
 
-    check_cmd(Node, "fullsync sink max_workers_per_node"),
-    check_cmd(Node, "fullsync sink max_workers_per_node 99"),
+    check_cmd(Node, "fullsync sink max_workers_per_node show"),
+    check_cmd(Node, "fullsync sink max_workers_per_node set 99"),
 
     check_cmd(Node, "fullsync enable foo"),
     check_cmd(Node, "fullsync disable bar"),
@@ -171,11 +172,11 @@ confirm() ->
 
     check_cmd(Node, "nat-map show"),
     check_cmd(Node, "nat-map add 1.2.3.4:4321 192.168.1.1"),
-    check_cmd(Node, "nat-map del 1.2.3.4:4321 192.168.1.1"),
+    check_cmd(Node, "nat-map delete 1.2.3.4:4321 192.168.1.1"),
 
     check_cmd(Node, "proxy-get redirect add a b"),
     check_cmd(Node, "proxy-get redirect show a"),
-    check_cmd(Node, "proxy-get redirect del a"),
+    check_cmd(Node, "proxy-get redirect delete a"),
     check_cmd(Node, "proxy-get redirect cluster-id"),
 
     pass.
