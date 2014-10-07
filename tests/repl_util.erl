@@ -217,7 +217,7 @@ start_and_wait_until_fullsync_complete(Node, Cluster) ->
     start_and_wait_until_fullsync_complete(Node, Cluster, undefined).
 
 start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid) ->
-    start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, 20).
+    start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, 200).
 
 start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),

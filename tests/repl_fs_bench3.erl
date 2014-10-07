@@ -1,6 +1,7 @@
 -module(repl_fs_bench3).
 -export([confirm/0]).
 -export([loadgen/5]).
+-compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 -compile({parse_transform, rt_intercept_pt}).
 
@@ -25,7 +26,7 @@ confirm() ->
     %%                        {max_fssource_cluster, 1},
     %%                        {max_fssource_node, 1},
     %%                        {max_fssink_node, 1}]}],
-    deploy_certs(2),
+    %% deploy_certs(2),
 
     %% Strategy = keylist,
     %% NumKeys = 10000,
@@ -37,11 +38,13 @@ confirm() ->
     Strategy = list_to_atom(rt_config:get(fs_strategy)),
     Pipeline = true,
     Direct = list_to_integer(rt_config:get(fs_direct)),
+    NoPool = list_to_atom(rt_config:get(fs_no_pool, "false")),
 
-    Config = [{riak_core, [{ssl_enabled, true},
-                           {certfile, "./etc/certs/cert.pem"},
-                           {keyfile, "./etc/certs/key.pem"},
-                           {cacertdir, "./etc/certs/cacerts.pem"},
+    Config = [{riak_core, [
+                           %% {ssl_enabled, true},
+                           %% {certfile, "./etc/certs/cert.pem"},
+                           %% {keyfile, "./etc/certs/key.pem"},
+                           %% {cacertdir, "./etc/certs/cacerts.pem"},
                            {ring_creation_size, 64},
                            {default_bucket_props, [{n_val, 3},
                                                    {allow_mult, false}]}]},
@@ -65,6 +68,7 @@ confirm() ->
     %% load this module on all the nodes
     AllNodes = lists:append(Clusters),
     ok = rt:load_modules_on_nodes([?MODULE], AllNodes),
+    NoPool andalso setup_intercepts(AllNodes),
 
     lists:foldl(fun(Nodes, N) ->
                         io:format("---~nCluster ~b: ~p~n", [N, Nodes]),
@@ -86,8 +90,8 @@ confirm() ->
     ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
     ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
 
-    setup_nat(ANodes),
-    setup_nat(BNodes),
+    %% setup_nat(ANodes),
+    %% setup_nat(BNodes),
 
     rt:wait_until_ring_converged(ANodes),
     rt:wait_until_ring_converged(BNodes),
@@ -99,9 +103,10 @@ confirm() ->
     LeaderA = rpc:call(AFirst,
                        riak_core_cluster_mgr, get_leader, []),
 
-    {ok, {_, Port}} = rpc:call(BFirst,
-                               application, get_env, [riak_core, cluster_mgr]),
-    IP = rtssh:get_public_ip(BFirst),
+    {ok, {IP, Port}} = rpc:call(BFirst,
+                                application, get_env, [riak_core, cluster_mgr]),
+    %% IP = rtssh:get_public_ip(BFirst),
+    IP = rtssh:get_private_ip(BFirst),
 
     repl_util:connect_cluster(LeaderA, IP, Port),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
@@ -216,6 +221,46 @@ write_to_cluster(Node, First, Last, Bucket) ->
     Workers = 16,
     Size = 64,
     ok = rpc:call(Node, ?MODULE, loadgen, [Bucket, First, Last, Size, Workers]).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Intercepts
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-define(MSG_INIT, 1).
+-define(MSG_LOCK_TREE, 2).
+-define(MSG_UPDATE_TREE, 3).
+-define(MSG_GET_AAE_BUCKET, 4).
+-define(MSG_GET_AAE_SEGMENT, 5).
+-define(MSG_REPLY, 6).
+-define(MSG_PUT_OBJ, 7).
+-define(MSG_GET_OBJ, 8).
+-define(MSG_COMPLETE, 9).
+
+setup_intercepts(Nodes) ->
+    _ = [rt_intercept:load_code(N) || N <- Nodes],
+    _ = [setup_node_intercepts(Node) || Node <- Nodes],
+    ok.
+
+setup_node_intercepts(Node) ->
+    rt_intercept:add(Node, {riak_repl_aae_sink, [{{process_msg, 3},
+        {[],
+         fun(Msg, Args, State) ->
+                 ?MODULE:process_msg_int(Msg, Args, State)
+         end}}]}).
+         %% fun(?MSG_PUT_OBJ, {fs_diff_obj, BObj}, State) ->
+         %%         RObj = riak_repl_util:from_wire(BObj),
+         %%         riak_repl_util:do_repl_put(RObj),
+         %%         {noreply, State};
+         %%    (Msg, Args, State) ->
+         %%         riak_repl_aae_sink_orig:process_msg(Msg, Args, State)
+         %% end}}]}).
+
+process_msg_int(?MSG_PUT_OBJ, {fs_diff_obj, BObj}, State) ->
+    RObj = riak_repl_util:from_wire(BObj),
+    riak_repl_util:do_repl_put(RObj),
+    {noreply, State};
+process_msg_int(Msg, Args, State) ->
+    riak_repl_aae_sink_orig:process_msg_orig(Msg, Args, State).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Load generator
