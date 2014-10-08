@@ -116,8 +116,10 @@ confirm() ->
                {I, kv679_tombstone:read_key(CoordClient)}
            end || I <- lists:seq(1, 5)],
 
-    First = hd(lists:dropwhile(fun({_I, {ok, _}}) -> true;
-                                  (_) -> false end,
+    lager:info("res ~p", [Res]),
+
+    First = hd(lists:dropwhile(fun({_I, {ok, _}}) -> false;
+                                  (_) -> true end,
                                Res)),
 
     lager:info("res ~p", [First]),
