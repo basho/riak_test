@@ -59,16 +59,29 @@ confirm() ->
     PL = kv679_tombstone:get_preflist(Node),
 
     %% Write key some times
-    write_key(Client, <<"bob">>),
+    write_key(Client, <<"phil">>, []),
+
+    {ok, Bod} =  write_key(Client, <<"bob">>, [return_body]),
 
     lager:info("wrote value <<bob>>"),
 
+    VCE0 = riakc_obj:vclock(Bod),
+    VC0 = rpc:call(Node, riak_object, decode_vclock, [VCE0]),
+    lager:info("VC ~p~n", [VC0]),
+
+
     %% delete the local data for Key
+    %% ERM why not just stop the node, then delete the data dir?
     delete_datadir(hd(PL)),
 
-%%    timer:sleep(000),
+    timer:sleep(10000),
 
-    write_key(Client, <<"jon">>),
+    {ok, Bod2} = write_key(Client, <<"jon">>, [return_body]),
+
+    VCE1 = riakc_obj:vclock(Bod2),
+    VC1 = rpc:call(Node, riak_object, decode_vclock, [VCE1]),
+    lager:info("VC ~p~n", [VC1]),
+
 
     lager:info("wrote value <<jon>>"),
 
@@ -81,21 +94,27 @@ confirm() ->
     ?assertMatch({ok, _}, Res),
     {ok, O} = Res,
 
-    ?assertEqual([<<"bob">>, <<"jon">>], riakc_obj:get_values(O)),
+    VCE = riakc_obj:vclock(O),
+    VC = rpc:call(Node, riak_object, decode_vclock, [VCE]),
+    lager:info("VC ~p~n", [VC]),
+
+    ?assertEqual([<<"bob">>, <<"jon">>, <<"phil">>], lists:sort(riakc_obj:get_values(O))),
 
     pass.
 
-write_key(Client, Val) ->
-    write_object(Client, riakc_obj:new(?BUCKET, ?KEY, Val)).
+write_key(Client, Val, Opts) ->
+    write_object(Client, riakc_obj:new(?BUCKET, ?KEY, Val), Opts).
 
-write_object(Client, Object) ->
-    riakc_pb_socket:put(Client, Object).
+write_object(Client, Object, Opts) ->
+    riakc_pb_socket:put(Client, Object, Opts).
 
 delete_datadir({{Idx, Node}, Type}) ->
+    %% stop node
     lager:info("deleting backend data dir for ~p ~p on ~p",
                [Idx, Node, Type]),
     %% Get default backend
     Backend = rpc:call(Node, app_helper, get_env, [riak_kv, storage_backend]),
+
     %% get name from mod
     BackendName = backend_name_from_mod(Backend),
     %% get data root for type
@@ -108,8 +127,11 @@ delete_datadir({{Idx, Node}, Type}) ->
                           integer_to_list(Idx)]),
     lager:info("Path ~p~n", [Path]),
 
-    vnode_util:kill_vnode({Idx, Node}),
-    del_dir(Path).
+    rt:stop_and_wait(Node),
+
+%%    vnode_util:kill_vnode({Idx, Node}),
+    del_dir(Path),
+    rt:start_and_wait(Node).
 
 backend_name_from_mod(riak_kv_bitcask_backend) ->
     bitcask;
