@@ -36,7 +36,13 @@ confirm() ->
     pass.
 
 create_clusters_3_3() ->
-    Conf = [{riak_repl, []}],
+    %% We want reblanacing to happen immediately after detection of changed config,
+    %% so set realtime_connection_rebalance_max_delay_secs=0.
+    Conf = [
+            {riak_repl, [
+                         {realtime_connection_rebalance_max_delay_secs, 0}]
+            }
+    ],
     rt:set_advanced_conf(all, Conf),
     rt:deploy_clusters([3,3]).
 
@@ -80,53 +86,52 @@ join_nodes_3_2(Clusters) ->
     [ANodes, BNodes].
 
 add_sink_node(TestSetup) ->
-  [_ANodes, BNodes] = TestSetup,
-  [BNode1, _BNode2, BNode3] = BNodes,
-  rt:join(BNode3, BNode1),
-  lager:info("Added node from Sink cluster. Waiting 30s for clusters to communicate rt change."),
-  timer:sleep(timer:seconds(20)),
-  lager:info("Waiting for leader to converge on cluster B"),
-  ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
-  lager:info("Waiting until ring converges on cluster B"),
-  ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
-  pass.
+    [_ANodes, BNodes] = TestSetup,
+    [BNode1, _BNode2, BNode3] = BNodes,
+    rt:join(BNode3, BNode1),
+    lager:info("Waiting for leader to converge on cluster B"),
+    ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
+    lager:info("Waiting until ring converges on cluster B"),
+    ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
+    lager:info("Added node from Sink cluster. Waiting 20s for clusters to communicate rt change."),
+    timer:sleep(timer:seconds(20)),
+    pass.
 
 verify_peer_connections_3_3(TestSetup) ->
-  lager:info("Verify we have chosen the right connections for 3 source nodes and 3 sink nodes."),
-  [[ANode1, ANode2, ANode3], _BNodes] = TestSetup,
+    lager:info("Verify we have chosen the right connections for 3 source nodes and 3 sink nodes."),
+    [[ANode1, ANode2, ANode3], _BNodes] = TestSetup,
 
-  %% For this particular setup, nodes should always get exactly these peers:
-  ?assertEqual("127.0.0.1:10066", get_rt_peer(ANode1)),
-  ?assertEqual("127.0.0.1:10056", get_rt_peer(ANode2)),
-  ?assertEqual("127.0.0.1:10046", get_rt_peer(ANode3)),
-  pass.
+    %% For this particular setup, nodes should always get exactly these peers:
+    ?assertEqual("127.0.0.1:10066", get_rt_peer(ANode1)),
+    ?assertEqual("127.0.0.1:10056", get_rt_peer(ANode2)),
+    ?assertEqual("127.0.0.1:10046", get_rt_peer(ANode3)),
+    pass.
 
 verify_peer_connections_3_2(TestSetup) ->
-  lager:info("Verify we have chosen the right connections for 3 source nodes and 2 sink nodes."),
-  [[ANode1, ANode2, ANode3], _BNodes] = TestSetup,
+    lager:info("Verify we have chosen the right connections for 3 source nodes and 2 sink nodes."),
+    [[ANode1, ANode2, ANode3], _BNodes] = TestSetup,
 
-  %% For this particular setup, nodes should always get exactly these peers:
-  ?assertEqual("127.0.0.1:10056", get_rt_peer(ANode1)),
-  ?assertEqual("127.0.0.1:10046", get_rt_peer(ANode2)),
-  ?assertEqual("127.0.0.1:10056", get_rt_peer(ANode3)),
-  pass.
+    %% For this particular setup, nodes should always get exactly these peers:
+    ?assertEqual("127.0.0.1:10056", get_rt_peer(ANode1)),
+    ?assertEqual("127.0.0.1:10046", get_rt_peer(ANode2)),
+    ?assertEqual("127.0.0.1:10056", get_rt_peer(ANode3)),
+    pass.
 
 teardown(TestSetup) ->
-  [ANodes, BNodes] = TestSetup,
-  rt:clean_cluster(ANodes),
-  rt:clean_cluster(BNodes).
+    [ANodes, BNodes] = TestSetup,
+    rt:clean_cluster(ANodes),
+    rt:clean_cluster(BNodes).
 
 get_rt_peer(Node) ->
-    Connections = rpc:call(Node, riak_repl2_rtsource_conn_sup, enabled, []),
-    if Connections == [] ->
-        lager:info("Got empty cons from riak_repl2_rtsource_conn_sup. Waiting for supervisor to have child set up."),
-        timer:sleep(timer:seconds(20)),
-        Connections2 = rpc:call(Node, riak_repl2_rtsource_conn_sup, enabled, []);
-    true ->
-        Connections2 = Connections
-    end,
+    rt:wait_until(Node,
+        fun(_) ->
+            case rpc:call(Node, riak_repl2_rtsource_conn_sup, enabled, []) of
+                [] -> false;
+            _ -> true
+        end
+    end),
 
-    [{_Remote, Pid}]  = Connections2,
+    [{_Remote, Pid}] = rpc:call(Node, riak_repl2_rtsource_conn_sup, enabled, []),
     Status = rpc:call(Node, riak_repl2_rtsource_conn, status, [Pid]),
     Socket = proplists:get_value(socket, Status),
     lager:info("Socket: ~p", [Socket]),
