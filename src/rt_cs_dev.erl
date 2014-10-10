@@ -125,23 +125,23 @@ update_app_config(Node, Config) when is_atom(Node) ->
     %% If there's an app.config, do it old style
     %% if not, use cuttlefish's adavnced.config
     case filelib:is_file(AppConfigFile) of
-        true -> 
+        true ->
             update_app_config_file(AppConfigFile, Config);
         _ ->
             update_app_config_file(AdvConfigFile, Config)
-    end; 
+    end;
 update_app_config(DevPath, Config) ->
     [update_app_config_file(AppConfig, Config) || AppConfig <- all_the_app_configs(DevPath)].
 
 update_app_config_file(ConfigFile, Config) ->
     lager:info("rtdev:update_app_config_file(~s, ~p)", [ConfigFile, Config]),
-    
+
     BaseConfig = case file:consult(ConfigFile) of
         {ok, [ValidConfig]} ->
             ValidConfig;
         {error, enoent} ->
             []
-    end, 
+    end,
     MergeA = orddict:from_list(Config),
     MergeB = orddict:from_list(BaseConfig),
     NewConfig =
@@ -188,7 +188,7 @@ get_backend(AppConfig) ->
 
             %% ConfigFileOutputLine looks like this:
             %% -config /path/to/app.config -args_file /path/to/vm.args
-            Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"), 
+            Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"),
                                  ".config" == filename:extension(Filename) ],
 
             File = hd(Files),
@@ -200,7 +200,7 @@ get_backend(AppConfig) ->
     end,
 
     case file:consult(ConfigFile) of
-        {ok, [Config]} ->  
+        {ok, [Config]} ->
             kvc:path('riak_kv.storage_backend', Config);
         E ->
             lager:error("Error reading ~s, ~p", [ConfigFile, E]),
@@ -418,14 +418,23 @@ interactive_loop(Port, Expected) ->
             ?assertEqual([], Expected)
     end.
 
-admin(Node, Args) ->
+admin(Node, Args, Options) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Cmd = rtdev:riak_admin_cmd(Path, N, Args),
     lager:info("Running: ~s", [Cmd]),
-    Result = os:cmd(Cmd),
+    Result = execute_admin_cmd(Cmd, Options),
     lager:info("~s", [Result]),
     {ok, Result}.
+
+execute_admin_cmd(Cmd, Options) ->
+    {_ExitCode, Result} = FullResult = wait_for_cmd(spawn_cmd(Cmd)),
+    case lists:member(return_exit_code, Options) of
+        true ->
+            FullResult;
+        false ->
+            Result
+    end.
 
 riak(Node, Args) ->
     N = node_id(Node),
@@ -445,7 +454,7 @@ node_version(N) ->
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
 spawn_cmd(Cmd, Opts) ->
-    Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
+    Port = open_port({spawn, Cmd}, [stream, in, exit_status, stderr_to_stdout] ++ Opts),
     Port.
 
 wait_for_cmd(Port) ->

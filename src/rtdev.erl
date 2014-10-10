@@ -151,8 +151,8 @@ upgrade(Node, NewVersion, Config) ->
     VersionMap = orddict:store(N, NewVersion, rt_config:get(rt_versions)),
     rt_config:set(rt_versions, VersionMap),
     case Config of
-	same -> ok;
-	_ -> update_app_config(Node, Config)
+        same -> ok;
+        _ -> update_app_config(Node, Config)
     end,
     start(Node),
     rt:wait_until_pingable(Node),
@@ -503,7 +503,7 @@ stop_all(DevPath) ->
             rt:pmap(gen_stop_fun(Tmout), lists:zip(Devs, Nodes)),
             kill_stragglers(DevPath, Tmout);
         _ ->
-	    lager:info("~s is not a directory.", [DevPath])
+            lager:info("~s is not a directory.", [DevPath])
     end,
     ok.
 
@@ -607,14 +607,23 @@ interactive_loop(Port, Expected) ->
             ?assertEqual([], Expected)
     end.
 
-admin(Node, Args) ->
+admin(Node, Args, Options) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Cmd = riak_admin_cmd(Path, N, Args),
     lager:info("Running: ~s", [Cmd]),
-    Result = os:cmd(Cmd),
-    lager:info("~s", [Result]),
+    Result = execute_admin_cmd(Cmd, Options),
+    lager:info("~p", [Result]),
     {ok, Result}.
+
+execute_admin_cmd(Cmd, Options) ->
+    {_ExitCode, Result} = FullResult = wait_for_cmd(spawn_cmd(Cmd)),
+    case lists:member(return_exit_code, Options) of
+        true ->
+            FullResult;
+        false ->
+            Result
+    end.
 
 riak(Node, Args) ->
     N = node_id(Node),
@@ -642,7 +651,7 @@ node_version(N) ->
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
 spawn_cmd(Cmd, Opts) ->
-    Port = open_port({spawn, lists:flatten(Cmd)}, [stream, in, exit_status] ++ Opts),
+    Port = open_port({spawn, lists:flatten(Cmd)}, [stream, in, exit_status, stderr_to_stdout] ++ Opts),
     Port.
 
 wait_for_cmd(Port) ->
@@ -673,7 +682,7 @@ get_cmd_result(Port, Acc) ->
             Output = lists:flatten(lists:reverse(Acc)),
             {Status, Output}
     after 0 ->
-            timeout
+          timeout
     end.
 
 check_node({_N, Version}) ->
