@@ -21,8 +21,8 @@ fi
 echo $VERSION
 cd $RT_DEST_DIR
 echo " - Resetting existing $RT_DEST_DIR"
-git reset HEAD --hard
-git clean -fd
+git reset HEAD --hard > /dev/null
+git clean -fd > /dev/null
 echo " - Removing and recreating $RT_DEST_DIR/current"
 rm -rf $RT_DEST_DIR/current
 mkdir $RT_DEST_DIR/current
@@ -34,4 +34,4 @@ echo -n $VERSION > $RT_DEST_DIR/current/VERSION
 cd $RT_DEST_DIR
 echo " - Reinitializing git state"
 git add .
-git commit -a -m "riak_test init" --amend
+git commit -a -m "riak_test init" --amend > /dev/null
