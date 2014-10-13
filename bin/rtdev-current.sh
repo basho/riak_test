@@ -4,11 +4,16 @@
 set -e
 
 : ${RT_DEST_DIR:="$HOME/rt/riak"}
+# If RT_CURRENT_TAG is specified, it will use that version number
+# otherwise the last annotated tag will be used
+: ${RT_CURRENT_TAG:=""}
 
 echo "Making $(pwd) the current release:"
 cwd=$(pwd)
 echo -n " - Determining version: "
-if [ -f $cwd/dependency_manifest.git ]; then
+if [ -n "$RT_CURRENT_TAG" ]; then
+	VERSION=$RT_CURRENT_TAG
+elif [ -f $cwd/dependency_manifest.git ]; then
     VERSION=`cat $cwd/dependency_manifest.git | awk '/^-/ { print $NF }'`
 else
     VERSION="$(git describe --tags)-$(git branch | awk '/\*/ {print $2}')"
@@ -16,8 +21,8 @@ fi
 echo $VERSION
 cd $RT_DEST_DIR
 echo " - Resetting existing $RT_DEST_DIR"
-git reset HEAD --hard > /dev/null 
-git clean -fd > /dev/null 
+git reset HEAD --hard > /dev/null
+git clean -fd > /dev/null
 echo " - Removing and recreating $RT_DEST_DIR/current"
 rm -rf $RT_DEST_DIR/current
 mkdir $RT_DEST_DIR/current
