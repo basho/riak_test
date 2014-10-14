@@ -307,6 +307,22 @@ admin(Node, Args) ->
     lager:info("~s", [Result]),
     {ok, Result}.
 
+admin(Node, Args, Options) ->
+    Cmd = riak_admin_cmd(Node, Args),
+    lager:info("Running: ~s :: ~s", [get_host(Node), Cmd]),
+    Result = execute_admin_cmd(Node, Cmd, Options),
+    lager:info("~s", [Result]),
+    {ok, Result}.
+
+execute_admin_cmd(Node, Cmd, Options) ->
+    {_ExitCode, Result} = FullResult = ssh_cmd(Node, Cmd),
+    case lists:member(return_exit_code, Options) of
+        true ->
+            FullResult;
+        false ->
+            Result
+    end.
+
 riak(Node, Args) ->
     Result = run_riak(Node, Args),
     lager:info("~s", [Result]),
@@ -686,7 +702,7 @@ node_version(Node) ->
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
 spawn_cmd(Cmd, Opts) ->
-    Port = open_port({spawn, Cmd}, [stream, in, exit_status] ++ Opts),
+    Port = open_port({spawn, Cmd}, [stream, in, exit_status, stderr_to_stdout] ++ Opts),
     put(Port, Cmd),
     Port.
 
@@ -772,7 +788,7 @@ teardown() ->
 to_list(X) when is_integer(X) -> integer_to_list(X);
 to_list(X) when is_float(X)   -> float_to_list(X);
 to_list(X) when is_atom(X)    -> atom_to_list(X);
-to_list(X) when is_list(X)    -> X.	%Assumed to be a string
+to_list(X) when is_list(X)    -> X.     %Assumed to be a string
 
 to_binary(X) when is_binary(X) ->
     X;

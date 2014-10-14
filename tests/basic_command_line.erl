@@ -21,6 +21,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -behavior(riak_test).
+-compile(export_all).
 -export([confirm/0]).
 
 confirm() ->
@@ -82,7 +83,8 @@ start_test(Node) ->
     lager:info("Testing riak start works on ~s", [Node]),
 
     {ok, StartPass} = rt:riak(Node, ["start"]),
-    ?assertMatch(StartPass, ""),
+    lager:info("StartPass: ~p", [StartPass]),
+    ?assert(StartPass =:= "" orelse string:str(StartPass, "WARNING") =/= 0),
     rt:stop_and_wait(Node),
     ok.
 
@@ -137,9 +139,9 @@ attach_direct_down_test(Node) ->
 status_up_test(Node) ->
     lager:info("Test riak-admin status on ~s", [Node]),
 
-    {ok, StatusOut} = rt:admin(Node, ["status"]),
+    {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     io:format("Result of status: ~s", [StatusOut]),
-
+    ?assertEqual(0, ExitCode),
     ?assert(rt:str(StatusOut, "1-minute stats")),
     ?assert(rt:str(StatusOut, "kernel_version")),
 
@@ -147,7 +149,8 @@ status_up_test(Node) ->
 
 status_down_test(Node) ->
     lager:info("Test riak-admin status while down"),
-    {ok, StatusOut} = rt:admin(Node, ["status"]),
+    {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
+    ?assertEqual(1, ExitCode),
     ?assert(rt:str(StatusOut, "Node is not running!")),
     ok.
 

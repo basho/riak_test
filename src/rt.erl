@@ -30,6 +30,7 @@
 -compile(export_all).
 -export([
          admin/2,
+         admin/3,
          assert_nodes_agree_about_ownership/1,
          async_start/1,
          attach/2,
@@ -1474,7 +1475,13 @@ httpc_write(C, Bucket, Key, Value) ->
 
 %% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'
 admin(Node, Args) ->
-    ?HARNESS:admin(Node, Args).
+    admin(Node, Args, []).
+
+%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'.
+%% The third parameter is a list of options. Valid options are:
+%%    * `return_exit_code' - Return the exit code along with the command output
+admin(Node, Args, Options) ->
+    ?HARNESS:admin(Node, Args, Options).
 
 %% @doc Call 'bin/riak' command on `Node' with arguments `Args'
 riak(Node, Args) ->
