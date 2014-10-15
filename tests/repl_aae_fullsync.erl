@@ -558,19 +558,29 @@ validate_intercepted_fullsync(InterceptTarget,
                               Intercept,
                               ReplicationLeader,
                               ReplicationCluster,
-                              NumIndicies) ->
+                              _NumIndicies) ->
     lager:info("Validating intercept ~p on ~p.",
                [Intercept, InterceptTarget]),
 
     %% Add intercept.
     ok = rt_intercept:add(InterceptTarget, Intercept),
 
-    %% Verify fullsync.
-    ok = check_fullsync(ReplicationLeader,
-                        ReplicationCluster,
-                        NumIndicies),
+    %% Start the fullsync and check that soft_retries are incremented
+    _ = rpc:call(ReplicationLeader, riak_repl_console, fullsync, [["start", ReplicationCluster]]),
+    %% ensure the soft_exits are incrementing:
+    SoftExits0 = case deep_status([fullsync_coordinator, ReplicationCluster, soft_retry_exits], ReplicationLeader) of
+        undefined -> 0;
+        N -> N
+    end,
+    SoftExitsIncremented = rt:wait_until(fun() ->
+        SoftExits = deep_status([fullsync_coordinator, ReplicationCluster, soft_rety_exits], ReplicationLeader),
+        SoftExits > SoftExits0
+    end),
+    ?assertEqual(ok, SoftExitsIncremented),
 
-    %% Reboot node.
+
+    %% Reboot node to remove the intercepts because we can't remove them
+    %% otherwise.
     rt:stop_and_wait(InterceptTarget),
     rt:start_and_wait(InterceptTarget),
 
@@ -579,7 +589,19 @@ validate_intercepted_fullsync(InterceptTarget,
     rt:wait_for_service(InterceptTarget, riak_repl),
 
     %% Wait until AAE trees are compueted on the rebooted node.
-    rt:wait_until_aae_trees_built([InterceptTarget]).
+    rt:wait_until_aae_trees_built([InterceptTarget]),
+
+    %% now we can wait for the fullsync to be done.
+    check_fullsync(ReplicationLeader, ReplicationCluster, 0).
+
+deep_status(Path, Node) when is_atom(Node) ->
+    Status = rpc:call(Node, riak_repl_condole, status, [quiet]),
+    lists:foldl(fun deep_status_/2, Status, Path).
+
+deep_status_(List, PathBit) when is_list(List) ->
+    proplists:get_value(PathBit, List);
+deep_status_(_NotList, _PathBit) ->
+    undefined.
 
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.
