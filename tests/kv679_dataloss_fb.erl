@@ -57,9 +57,9 @@ confirm() ->
                                                  {vnode_inactivity_timeout, 1000}]}]},
             {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]}],
 
-    %% 5 'cos I want a perfect preflist when 2 primaries are down.
-    %% i.e. I want to kill the fallbacks before they can handoff
-    %% without effecting the primaries
+    %% Such nodes 'cos I want a perfect preflist when 2 primaries are
+    %% down.  i.e. I want to kill the fallbacks before they can
+    %% handoff without effecting the primaries
     Nodes = rt:build_cluster(6, Conf),
 
     Clients =  kv679_tombstone:create_pb_clients(Nodes),
@@ -90,7 +90,7 @@ confirm() ->
 
     lager:info("Got a preflist with coord and 2 fbs ~p~n", [FBPL]),
 
-    %% Write key twice at C1
+    %% Write key twice at remaining, coordinating primary
     kv679_tombstone:write_key(CoordClient, [<<"bob">>, <<"jim">>]),
 
     kv679_tombstone2:dump_clock(CoordClient),
@@ -118,7 +118,7 @@ confirm() ->
 
     kv679_tombstone2:dump_clock(CoordClient),
 
-    %% Kill those primaries with there frontier clocks
+    %% Kill those primaries with their frontier clocks
     [rt:brutal_kill(P) || P <- OtherPrimaries],
 
     lager:info("killed primaries again"),
@@ -148,8 +148,8 @@ confirm() ->
 
     kv679_tombstone2:dump_clock(CoordClient),
 
-    %% Time start up those primaries, let handoff happen, and see what
-    %% happens to that last write
+    %% Time to start up those primaries, let handoff happen, and see
+    %% what happened to that last write
 
     [rt:start_and_wait(P) || P <- OtherPrimaries],
 
@@ -174,6 +174,8 @@ confirm() ->
     ?assertMatch({ok, _}, Res),
     {ok, O} = Res,
 
+    %% A nice riak would have somehow managed to make a sibling of the
+    %% last write
     ?assertEqual([<<"anne">>, <<"joe">>], riakc_obj:get_values(O)),
 
     pass.
