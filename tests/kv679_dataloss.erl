@@ -109,7 +109,6 @@ write_object(Client, Object, Opts) ->
     riakc_pb_socket:put(Client, Object, Opts).
 
 delete_datadir({{Idx, Node}, Type}) ->
-    %% stop node
     lager:info("deleting backend data dir for ~p ~p on ~p",
                [Idx, Node, Type]),
     %% Get default backend
@@ -127,9 +126,9 @@ delete_datadir({{Idx, Node}, Type}) ->
                           integer_to_list(Idx)]),
     lager:info("Path ~p~n", [Path]),
 
+    %% stop node
     rt:stop_and_wait(Node),
 
-%%    vnode_util:kill_vnode({Idx, Node}),
     del_dir(Path),
     rt:start_and_wait(Node).
 
