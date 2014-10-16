@@ -55,6 +55,8 @@ bench({Strategy, Pipeline, DirectMode, DirectLimit, DiffPercent}, Delay) ->
     [ANodes, BNodes] = rt:build_clusters([{1, Config},
                                           {1, Config}]),
 
+    repl_util:activate_debug_for_validate_aae_fullsync(ANodes ++ BNodes),
+
     [rt_intercept:load_code(Node) || Node <- ANodes],
 
     %% Install intercepts to simulate network latency

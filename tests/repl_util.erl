@@ -52,6 +52,7 @@
          validate_completed_fullsync/6,
          validate_intercepted_fullsync/5,
          get_aae_fullsync_activity/0,
+         activate_debug_for_validate_aae_fullsync/1,
          validate_aae_fullsync/6,
          update_props/5,
          get_current_bucket_props/2,
@@ -698,6 +699,11 @@ select_logs_in_time_interval(From,To,Logs) ->
                                [],
                                Logs),
     RelevantLogs.
+
+activate_debug_for_validate_aae_fullsync(Nodes) ->
+    [rpc:call(Node, lager, set_loglevel, [lager_file_backend, "./log/console.log", debug]) ||
+       Node <- Nodes].
+
 
 %% From: Start timestamp used for pulling logs for analysis.
 %% _To: End timestamp used for pulling logs for analysis. Currently not used because we look at every log statement after From.

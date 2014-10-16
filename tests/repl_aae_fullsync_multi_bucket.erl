@@ -55,6 +55,7 @@ aae_fs_test_diff_n_buckets() ->
     
     rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     repl_util:start_and_wait_until_fullsync_complete(LeaderA),
+    repl_util:activate_debug_for_validate_aae_fullsync(ANodes ++ BNodes),
 
 
     %% Setup some buckets with different n-val (N), Total number of keys (NumKeys), and fraction of keys that are changed (Div). Div=10 means 1/10th of all keys are changed and must be FS'ed over.
