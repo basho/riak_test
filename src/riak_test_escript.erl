@@ -25,9 +25,13 @@
 -export([add_deps/1]).
 
 add_deps(Path) ->
-    {ok, Deps} = file:list_dir(Path),
-    [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
-    ok.
+    case file:list_dir(Path) of
+        {ok, Deps} ->
+          [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps];
+        _ ->
+            lager:error("Missing path: ~p", [Path]),
+            init:stop(1)
+    end.
 
 cli_options() ->
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
@@ -66,10 +70,11 @@ main(Args) ->
     end,
 
     register(riak_test, self()),
-    {ParsedArgs, HarnessArgs} = case getopt:parse(cli_options(), Args) of
-        {ok, {P, H}} -> {P, H};
-        _ -> print_help()
-    end,
+    {ParsedArgs, HarnessArgs} =
+        case getopt:parse(cli_options(), Args) of
+            {ok, {P, H}} -> {P, H};
+            _ -> print_help()
+        end,
 
     case run_help(ParsedArgs) of
         true -> print_help();
