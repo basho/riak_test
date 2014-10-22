@@ -160,7 +160,8 @@ deploy_nodes(NodeConfig, Hosts) ->
     case rt_config:get(cuttle, true) of
         false ->
             rt:pmap(fun(Node) ->
-                            Host = get_host(Node),
+                            %% Host = get_host(Node),
+                            Host = get_private_ip(Node),
                             %%lager:info("ports ~p", [self()]),
                             Config = [{riak_api,
                                        [{pb, fun([{_, Port}]) ->

@@ -365,7 +365,7 @@ ca_cnf(CA) ->
      "crl_extensions = crl_ext\n",
      "unique_subject  = no\n"
      "default_days	= 3600\n"
-     "default_md	= sha256\n"
+     "default_md	= sha1\n"
      "preserve	        = no\n"
      "policy		= policy_match\n"
      "\n"

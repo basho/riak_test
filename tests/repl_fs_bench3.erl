@@ -41,10 +41,10 @@ confirm() ->
     NoPool = list_to_atom(rt_config:get(fs_no_pool, "false")),
 
     Config = [{riak_core, [
-                           %% {ssl_enabled, true},
-                           %% {certfile, "./etc/certs/cert.pem"},
-                           %% {keyfile, "./etc/certs/key.pem"},
-                           %% {cacertdir, "./etc/certs/cacerts.pem"},
+                           {ssl_enabled, false},
+                           {certfile, "./etc/certs/cert.pem"},
+                           {keyfile, "./etc/certs/key.pem"},
+                           {cacertdir, "./etc/certs/ca"},
                            {ring_creation_size, 64},
                            {default_bucket_props, [{n_val, 3},
                                                    {allow_mult, false}]}]},
@@ -108,6 +108,7 @@ confirm() ->
     %% IP = rtssh:get_public_ip(BFirst),
     IP = rtssh:get_private_ip(BFirst),
 
+    lager:info("Connecting ~p to ~p:~p", [LeaderA, IP, Port]), 
     repl_util:connect_cluster(LeaderA, IP, Port),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
 
@@ -195,6 +196,20 @@ deploy_certs(Num) ->
             make_certs:rootCA(CertDir, "rootCA"),
             %% make_certs:intermediateCA(CertDir, "intCA", "rootCA"),
             make_certs:endusers(CertDir, "rootCA", Sites),
+            %% Riak before 2.0 required directory to hold cacerts.pem
+            {ok, Dirs} = file:list_dir(CertDir),
+            [begin
+                 CACerts = filename:join([CertDir, Dir, "cacerts.pem"]),
+                 case filelib:is_regular(CACerts) of
+                     true ->
+                         CADir = filename:join([CertDir, Dir, "ca"]),
+                         Copy = filename:join(CADir, "cacerts.pem"),
+                         file:make_dir(CADir),
+                         {ok, _} = file:copy(CACerts, Copy);
+                     _ ->
+                         ok
+                 end
+             end || Dir <- Dirs],
             Both = lists:zip(lists:sublist(Clusters, Num), Sites),
             lager:info("Sites: ~p", [Both]),
             _ = [begin
@@ -216,6 +231,50 @@ deploy_certs(Num) ->
             %% Sites: [{{1,["riak101.priv"]},"site1.basho.com"},{{2,["riak201.priv"]},"site2.basho.com"}]
     end,
     pass.
+
+deploy_certs2(Num) ->
+    Clusters = rt_config:get(rtssh_clusters, []),
+    case length(Clusters) < Num of
+        true ->
+            erlang:error("Requested more clusters than available");
+        false ->
+            Sites = ["site" ++ integer_to_list(X) || X <- lists:seq(1, Num)],
+            PrivDir = rt:priv_dir(),
+            CertDir = filename:join([PrivDir, "certs", "selfsigned"]),
+            CA = filename:join(CertDir, "ca"),
+            Both = lists:zip(lists:sublist(Clusters, Num), Sites),
+            lager:info("Sites: ~p", [Both]),
+            _ = [begin
+                     rt:pmap(fun(Host) ->
+                                     SiteCert = filename:join([CertDir, Site ++ "-cert.pem"]),
+                                     SiteKey = filename:join([CertDir, Site ++ "-key.pem"]),
+                                     _ = [begin
+                                              %% Etc = NodePath ++ "/etc/",
+                                              lager:info("Syncing site certs :: ~p", [Host]),
+                                              Dest = filename:join(Etc, "certs"),
+                                              ok = rsync(Host, CA, Dest),
+                                              ok = rsync(Host, SiteCert, Dest ++ "/cert.pem"),
+                                              ok = rsync(Host, SiteKey, Dest ++ "/key.pem"),
+                                              %% rtssh:ssh_cmd(Host, "mkdir -p " ++ Dest),
+                                              %% Cmd = "rsync -tr " ++ CA ++ " " ++ Host ++ ":" ++ Dest,
+                                              %% Result = rtssh:cmd(Cmd),
+                                              %% lager:info("Syncing site certs :: ~p :: ~p :: ~p~n", [Host, Cmd, Result]),
+                                              ok
+                                          end || DevPath <- rtssh:devpaths(),
+                                                 Etc <- rtssh:all_the_files(Host, DevPath, "etc")],
+                                     ok
+                             end, Hosts)
+                 end || {{_, Hosts}, Site} <- Both],
+            ok
+            %% Sites: [{{1,["riak101.priv"]},"site1.basho.com"},{{2,["riak201.priv"]},"site2.basho.com"}]
+    end,
+    pass.
+
+rsync(Host, Local, Remote) ->
+    Cmd = "rsync -tr " ++ Local ++ " " ++ Host ++ ":" ++ Remote,
+    Result = rtssh:cmd(Cmd),
+    lager:info("rsync :: ~p :: ~p :: ~p", [Host, Cmd, Result]),
+    ok.
 
 write_to_cluster(Node, First, Last, Bucket) ->
     Workers = 16,
