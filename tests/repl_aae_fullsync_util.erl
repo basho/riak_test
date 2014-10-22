@@ -77,8 +77,8 @@ prepare_cluster_data(TestBucket, NumKeysAOnly, _NumKeysBoth, [AFirst|_] = ANodes
     ?assertEqual(NumKeysAOnly, length(Res2)),
 
     %% wait for the AAE trees to be built so that we don't get a not_built error
-    repl_util:wait_until_aae_trees_built(ANodes),
-    repl_util:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     ok.
 
