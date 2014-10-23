@@ -59,7 +59,7 @@ prereqs() ->
 % Download the ruby-client gem, unpack it and build it locally
 dat_gem() ->
     lager:info("Fetching riak-client gem"),
-    GemInstalled = os:cmd("cd " ++ rt_config:get(rt_scratch_dir) ++ " ; gem fetch riak-client"),
+    GemInstalled = os:cmd("cd " ++ rt_config:get(rt_scratch_dir) ++ " ; gem fetch --version '~> 1.4.5' riak-client"),
     GemFile = string:substr(GemInstalled, 12, length(GemInstalled) - 12),
     %GemFile = "riak-client",
     lager:info("Downloaded gem: ~s", [GemFile]),
