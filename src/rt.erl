@@ -132,6 +132,8 @@
          upgrade/2,
          upgrade/3,
          versions/0,
+         verify_rt/2,
+         verify_rt/4,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -1229,6 +1231,30 @@ object_value(_ValueCount, Obj, true) ->
         {false, _} ->
             {error, siblings}
     end.
+
+%% @doc Verify that RealTime replication is functioning correctly by
+%%      writing some objects to cluster A and checking they can be
+%%      read from cluster B. Each call creates a new bucket so that
+%%      verification can be tested multiple times independently.
+verify_rt(LeaderA, LeaderB) ->
+    First = 101,
+    Last  = 200,
+    verify_rt(LeaderA, LeaderB, First, Last).
+
+verify_rt(LeaderA, LeaderB, First, Last) ->
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+
+    %% Write some objects to the source cluster (A),
+    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
+               [Last-First+1, LeaderA, LeaderB]),
+    ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)),
+
+    %% verify data is replicated to B
+    lager:info("Reading ~p keys written from ~p", [Last-First+1, LeaderB]),
+    ?assertEqual(0, repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2)).
+
 
 sibling_compare({MetaData, Value}, {true, undefined}) ->
     Dot = case dict:find(<<"dot">>, MetaData) of

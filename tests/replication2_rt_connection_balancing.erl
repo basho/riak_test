@@ -28,10 +28,12 @@
 
 confirm() ->
     Clusters = create_clusters_3_3(),
-    join_nodes_3_2(Clusters),
+    [ANodes, BNodes] = join_nodes_3_2(Clusters),
     ?assertEqual(pass, verify_peer_connections_3_2(Clusters)),
+    rt:verify_rt(hd(ANodes), hd(BNodes)),
     ?assertEqual(pass, add_sink_node(Clusters)),
     ?assertEqual(pass, verify_peer_connections_3_3(Clusters)),
+    rt:verify_rt(hd(ANodes), hd(BNodes)),
     teardown(Clusters),
     pass.
 

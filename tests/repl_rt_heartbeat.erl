@@ -55,7 +55,7 @@ confirm() ->
     ?assertEqual(verify_heartbeat_messages(LeaderA), true),
 
     %% Verify RT repl of objects
-    verify_rt(LeaderA, LeaderB),
+    rt:verify_rt(LeaderA, LeaderB),
 
     %% Cause heartbeat messages to not be delivered, but remember the current
     %% Pid of the RT connection. It should change after we stop heartbeats
@@ -87,7 +87,7 @@ confirm() ->
     ?assertEqual(verify_heartbeat_messages(LeaderA), true),
 
     %% Verify RT repl of objects
-    verify_rt(LeaderA, LeaderB),
+    rt:verify_rt(LeaderA, LeaderB),
 
     verify_hb_noresponse(LeaderA, LeaderB),
 
@@ -102,25 +102,6 @@ enable_rt(LeaderA, ANodes) ->
     repl_util:start_realtime(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes).
 
-%% @doc Verify that RealTime replication is functioning correctly by
-%%      writing some objects to cluster A and checking they can be
-%%      read from cluster B. Each call creates a new bucket so that
-%%      verification can be tested multiple times independently.
-verify_rt(LeaderA, LeaderB) ->
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
-                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
-    TestBucket = <<TestHash/binary, "-rt_test_a">>,
-    First = 101,
-    Last = 200,
-
-    %% Write some objects to the source cluster (A),
-    lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
-               [Last-First+1, LeaderA, LeaderB]),
-    ?assertEqual([], repl_util:do_write(LeaderA, First, Last, TestBucket, 2)),
-
-    %% verify data is replicated to B
-    lager:info("Reading ~p keys written from ~p", [Last-First+1, LeaderB]),
-    ?assertEqual(0, repl_util:wait_for_reads(LeaderB, First, Last, TestBucket, 2)).
 
 verify_hb_noresponse(LeaderA, LeaderB) ->
 
