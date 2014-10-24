@@ -14,7 +14,11 @@ $ADMIN_PATH_NODE1 cluster leave &> /dev/null
 $ADMIN_PATH_NODE1 cluster plan &> /dev/null
 $ADMIN_PATH_NODE1 cluster commit &> /dev/null
 
-sleep 10
+t=$?
+while [ $t = 0 ]
+do
+    t=`$ADMIN_PATH_NODE1 transfers | grep $STOPWORD | wc -l`
+done
 
 # Keys Count
 keys2=$(expr `curl -XGET $BUCKET_URL 2>/dev/null | json_pp | wc -l` - 4)

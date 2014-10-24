@@ -10,6 +10,7 @@
 -define(BUCKET, <<"test_bkt">>).
 -define(SUCCESS, 0).
 -define(TESTCYCLE, 20).
+-define(TRANSFERSSTOPWORD, "failed").
 -define(CFG,
         [
          {riak_core,
@@ -61,6 +62,7 @@ confirm() ->
     timer:sleep(1100),
 
     [{_, SolrPort}|Shards2345] = Shards,
+    [{_, SolrPort2}|_] = Shards2345,
     SolrURL = internal_solr_url(Host, SolrPort, ?INDEX, Shards),
     BucketURL = bucket_keys_url(Host, Port, ?BUCKET),
 
@@ -68,10 +70,11 @@ confirm() ->
 
     %% Set Env
     Env = [{"SOLR_URL_BEFORE", SolrURL},
-           {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort, ?INDEX, Shards2345)},
+           {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards2345)},
            {"SEARCH_URL", search_url(Host, Port, ?INDEX)},
            {"BUCKET_URL", BucketURL},
-           {"ADMIN_PATH_NODE1", ?PATH ++ "/dev/dev1/bin/riak-admin"}],
+           {"ADMIN_PATH_NODE1", ?PATH ++ "/dev/dev1/bin/riak-admin"},
+           {"STOPWORD", ?TRANSFERSSTOPWORD}],
     lager:info("Environment Vars: ~p", [Env]),
     P = erlang:open_port({spawn_executable, "handoff-test.sh"},
                          [exit_status, {env, Env}, stderr_to_stdout]),
@@ -89,7 +92,8 @@ receiver(P, Acc) ->
             Output = [list_to_tuple(string:tokens(I, " "))
                       || I <- string:tokens(Data, "\n")],
             lager:info("From Script: ~p", [Output]),
-            receiver(P, Acc ++ [{list_to_atom(K), V} || {K, V} <- Output]);
+            receiver(P, lists:append(
+                          [{list_to_atom(K), V} || {K, V} <- Output], Acc));
         {P, {exit_status, Status}} ->
             lager:info("Exited with status ~b", [Status]),
             ?assertEqual(?SUCCESS, Status),
@@ -98,7 +102,7 @@ receiver(P, Acc) ->
             lager:warning("Unexpected return from port: ~p", [Reason]),
             catch erlang:port_close(P),
             exit(Reason)
-    after 20000 ->
+    after 200000 ->
             lager:warning("Timeout on port: ~p", [P]),
             catch erlang:port_close(P),
             exit(timeout)
