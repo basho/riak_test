@@ -28,8 +28,8 @@ confirm() ->
     %% -- others?
     %%
     RingSize = 16,
-    NumNodes = 6,
-    KeysPerVN = 23000000,
+    NumNodes = list_to_integer(rt_config:get(fs_num_nodes, "6")),
+    KeysPerVN = list_to_integer(rt_config:get(fs_num_keys_per_vnode, "23000000")),
     TotalKeys = KeysPerVN * RingSize,
     BigKeys = TotalKeys * 1 div 100,
     SmallKeys = TotalKeys - BigKeys,
