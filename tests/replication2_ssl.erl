@@ -126,13 +126,13 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["*.cataclysm-software.net"]},
+                {peer_common_name_acl, ["*.basho.com"]},
                 {certfile, filename:join([PrivDir,
-                            "certs/cacert.org/ca-cert.pem"])},
+                            "certs/selfsigned/site1-cert.pem"])},
                 {keyfile, filename:join([PrivDir,
-                            "certs/cacert.org/ca-key.pem"])},
+                            "certs/selfsigned/site1-key.pem"])},
                 {cacertdir, filename:join([PrivDir,
-                            "certs/cacert.org/ca"])}
+                            "certs/selfsigned/ca"])}
             ]}
     ],
 
@@ -145,13 +145,13 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["ca.cataclysm-software.net"]},
+                {peer_common_name_acl, ["site1.basho.com"]},
                 {certfile, filename:join([PrivDir,
-                            "certs/cacert.org/ny-cert.pem"])},
+                            "certs/selfsigned/site2-cert.pem"])},
                 {keyfile, filename:join([PrivDir,
-                            "certs/cacert.org/ny-key.pem"])},
+                            "certs/selfsigned/site2-key.pem"])},
                 {cacertdir, filename:join([PrivDir,
-                            "certs/cacert.org/ca"])}
+                            "certs/selfsigned/ca"])}
             ]}
     ],
 
