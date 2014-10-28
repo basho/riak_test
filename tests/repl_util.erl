@@ -300,11 +300,11 @@ wait_for_connection(Node, Name) ->
                             [] ->
                                 false;
                             [Pid] ->
-                                Pid ! {self(), status},
-                                receive
-                                    {Pid, status, _} ->
+                                Status = riak_core_cluster_conn:status(Pid),
+                                case Status of
+                                    {Pid, status, {_, _, _, _}} ->
                                         true;
-                                    {Pid, connecting, _} ->
+                                    _ ->
                                         false
                                 end
                         end;
