@@ -126,7 +126,6 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {ssl_depth, 1},
                 {peer_common_name_acl, ["*.basho.com"]},
                 {certfile, filename:join([PrivDir,
                             "certs/special/site5-cert.pem"])},
@@ -146,7 +145,6 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {ssl_depth, 1},
                 {peer_common_name_acl, ["site5.basho.com"]},
                 {certfile, filename:join([PrivDir,
                             "certs/special/site6-cert.pem"])},
