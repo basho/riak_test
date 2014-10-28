@@ -126,13 +126,14 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
+                {ssl_depth, 1},
                 {peer_common_name_acl, ["*.basho.com"]},
                 {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site1-cert.pem"])},
+                            "certs/special/site5-cert.pem"])},
                 {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site1-key.pem"])},
+                            "certs/special/site5-key.pem"])},
                 {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                            "certs/special/ca"])}
             ]}
     ],
 
@@ -145,13 +146,14 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["site1.basho.com"]},
+                {ssl_depth, 1},
+                {peer_common_name_acl, ["site5.basho.com"]},
                 {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site2-cert.pem"])},
+                            "certs/special/site6-cert.pem"])},
                 {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site2-key.pem"])},
+                            "certs/special/site6-key.pem"])},
                 {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                            "certs/special/ca"])}
             ]}
     ],
 
@@ -164,7 +166,7 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["ca.cataclysm-software.net"]},
+                {peer_common_name_acl, ["site5.basho.com"]},
                 {certfile, filename:join([PrivDir,
                             "certs/cacert.org/ny-cert-old.pem"])},
                 {keyfile, filename:join([PrivDir,
@@ -213,7 +215,7 @@ confirm() ->
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig2, BaseConf)})),
 
-    lager:info("testing SSL connectivity with an intermediate CA"),
+    lager:info("===testing SSL connectivity with an intermediate CA"),
     rt:log_to_nodes([Node1, Node2], "Intermediate CA test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig1, BaseConf)},
             {Node2, merge_config(SSLConfig3, BaseConf)})),
@@ -228,7 +230,7 @@ confirm() ->
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
-    lager:info("===testing wildcard and strict ACLs with cacert.org certs"),
+    lager:info("===testing wildcard and strict ACLs"),
     rt:log_to_nodes([Node1, Node2], "wildcard and strict ACL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),

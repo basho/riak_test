@@ -100,19 +100,20 @@ confirm() ->
             ]}
     ],
 
-	SSLConfig5 = [
+    SSLConfig5 = [
         {riak_repl,
             [
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
+                {ssl_depth, 1},
                 {peer_common_name_acl, ["*.basho.com"]},
                 {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site1-cert.pem"])},
+                            "certs/special/site5-cert.pem"])},
                 {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site1-key.pem"])},
+                            "certs/special/site5-key.pem"])},
                 {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                            "certs/special/ca"])}
             ]}
     ],
 
@@ -122,13 +123,14 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["site1.basho.com"]},
+                {ssl_depth, 1},
+                {peer_common_name_acl, ["site5.basho.com"]},
                 {certfile, filename:join([PrivDir,
-                            "certs/selfsigned/site2-cert.pem"])},
+                            "certs/special/site6-cert.pem"])},
                 {keyfile, filename:join([PrivDir,
-                            "certs/selfsigned/site2-key.pem"])},
+                            "certs/special/site6-key.pem"])},
                 {cacertdir, filename:join([PrivDir,
-                            "certs/selfsigned/ca"])}
+                            "certs/special/ca"])}
             ]}
     ],
 
@@ -138,7 +140,7 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["ca.cataclysm-software.net"]},
+                {peer_common_name_acl, ["site5.basho.com"]},
                 {certfile, filename:join([PrivDir,
                             "certs/cacert.org/ny-cert-old.pem"])},
                 {keyfile, filename:join([PrivDir,
@@ -148,6 +150,7 @@ confirm() ->
             ]}
     ],
 
+    lager:info("===testing basic connectivity"),
 
     [Node1, Node2] = rt:deploy_nodes(2, BaseConf),
 
@@ -159,7 +162,6 @@ confirm() ->
 
     replication:verify_site_ips(Node2, "site1", Listeners),
 
-    lager:info("===testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
     ?assertEqual(ok, test_connection({Node1, BaseConf}, {Node2, BaseConf})),
 
