@@ -106,13 +106,13 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["*.cataclysm-software.net"]},
+                {peer_common_name_acl, ["*.basho.com"]},
                 {certfile, filename:join([PrivDir,
-                            "certs/cacert.org/ca-cert.pem"])},
+                            "certs/special/site5-cert.pem"])},
                 {keyfile, filename:join([PrivDir,
-                            "certs/cacert.org/ca-key.pem"])},
+                            "certs/special/site5-key.pem"])},
                 {cacertdir, filename:join([PrivDir,
-                            "certs/cacert.org/ca"])}
+                            "certs/special/ca"])}
             ]}
     ],
 
@@ -122,13 +122,13 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["ca.cataclysm-software.net"]},
+                {peer_common_name_acl, ["site5.basho.com"]},
                 {certfile, filename:join([PrivDir,
-                            "certs/cacert.org/ny-cert.pem"])},
+                            "certs/special/site6-cert.pem"])},
                 {keyfile, filename:join([PrivDir,
-                            "certs/cacert.org/ny-key.pem"])},
+                            "certs/special/site6-key.pem"])},
                 {cacertdir, filename:join([PrivDir,
-                            "certs/cacert.org/ca"])}
+                            "certs/special/ca"])}
             ]}
     ],
 
@@ -138,7 +138,7 @@ confirm() ->
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["ca.cataclysm-software.net"]},
+                {peer_common_name_acl, ["site5.basho.com"]},
                 {certfile, filename:join([PrivDir,
                             "certs/cacert.org/ny-cert-old.pem"])},
                 {keyfile, filename:join([PrivDir,
@@ -148,6 +148,7 @@ confirm() ->
             ]}
     ],
 
+    lager:info("===testing basic connectivity"),
 
     [Node1, Node2] = rt:deploy_nodes(2, BaseConf),
 
@@ -159,7 +160,6 @@ confirm() ->
 
     replication:verify_site_ips(Node2, "site1", Listeners),
 
-    lager:info("===testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Basic connectivity test"),
     ?assertEqual(ok, test_connection({Node1, BaseConf}, {Node2, BaseConf})),
 
@@ -198,7 +198,7 @@ confirm() ->
     ?assertEqual(fail, test_connection({Node1, merge_config(SSLConfig3A, BaseConf)},
             {Node2, merge_config(SSLConfig1, BaseConf)})),
 
-    lager:info("===testing wildcard and strict ACLs with cacert.org certs"),
+    lager:info("===testing wildcard and strict ACLs"),
     rt:log_to_nodes([Node1, Node2], "wildcard and strict ACL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),
