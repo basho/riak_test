@@ -6,6 +6,7 @@
 %% Properties
 %%  - Nodes are started/stopped at random (which will start/stop connections)
 %%  - Connections shoule be balanced indepenent of nodes going up and down.
+-ifdef(EQC).
 
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -120,3 +121,5 @@ command(#state{a_up = AU,
 
 node_name(I) ->
     list_to_atom(lists:flatten(io_lib:format("dev~b@127.0.0.1", [I]))).
+
+-endif. % EQC
