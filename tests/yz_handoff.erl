@@ -16,12 +16,7 @@
          {riak_core,
           [
            {handoff_concurrency, 3},
-           {ring_creation_size, 64},
-           {vnode_management_timer, 1000}
-          ]},
-         {riak_kv,
-          [
-           {handoff_rejected_max, infinity}
+           {ring_creation_size, 64}
           ]},
          {yokozuna,
           [
