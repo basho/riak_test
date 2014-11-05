@@ -1,3 +1,22 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2014 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%%-------------------------------------------------------------------
 -module(yz_handoff).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -74,8 +93,8 @@ confirm() ->
     P = erlang:open_port({spawn_executable, "handoff-test.sh"},
                          [exit_status, {env, Env}, stderr_to_stdout]),
 
-    %% Run Shell Script to count/test # of replicas and drop one
-    %% node from cluster
+    %% Run Shell Script to count/test # of replicas and leave one
+    %% node from the cluster
     check_data(receiver(P, []), KeyCount),
     check_counts(Pid, KeyCount, BucketURL),
 
@@ -97,7 +116,7 @@ receiver(P, Acc) ->
             lager:warning("Unexpected return from port: ~p", [Reason]),
             catch erlang:port_close(P),
             exit(Reason)
-    after 200000 ->
+    after 500000 ->
             lager:warning("Timeout on port: ~p", [P]),
             catch erlang:port_close(P),
             exit(timeout)
@@ -168,9 +187,9 @@ check_counts(Pid, InitKeyCount, BucketURL) ->
                   end || _ <- lists:seq(1,?TESTCYCLE)],
     MinPBCount = lists:min(PBCounts),
     MinHTTPCount = lists:min(HTTPCounts),
-    lager:info("Before-Node-Drop PB: ~b, After-Node-Drop PB: ~b", [InitKeyCount, MinPBCount]),
+    lager:info("Before-Node-Leave PB: ~b, After-Node-Leave PB: ~b", [InitKeyCount, MinPBCount]),
     ?assertEqual(InitKeyCount, MinPBCount),
-    lager:info("Before-Node-Drop PB: ~b, After-Node-Drop HTTP: ~b", [InitKeyCount, MinHTTPCount]),
+    lager:info("Before-Node-Leave PB: ~b, After-Node-Leave HTTP: ~b", [InitKeyCount, MinHTTPCount]),
     ?assertEqual(InitKeyCount, MinHTTPCount).
 
 %% @private
@@ -191,7 +210,7 @@ check_data(Data, KeyCount) ->
     ?assertEqual(DocsBefore, DocsAfter),
 
     lager:info("ReplicasBefore - ~b should be - ~b", [ReplicasBefore, CheckCount]),
-    ?assert(ReplicasBefore =:= CheckCount),
+    ?assertEqual(ReplicasBefore, CheckCount),
 
     %% Same Replica Count Check - Always Failing Currently
     lager:info("ReplicasBefore: ~b, ReplicasAfter: ~b", [ReplicasBefore, ReplicasAfter]),
