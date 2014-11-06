@@ -126,11 +126,11 @@ realtime_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     DefaultProps = get_current_bucket_props(BNodes, DefinedType),
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, DefaultProps)),
 
-    UpdatedProps = update_props(DefinedType,
-                                [{n_val, 1}],
-                                LeaderB,
-                                BNodes),
-    ?assertEqual({n_val, 1}, lists:keyfind(n_val, 1, UpdatedProps)),
+    update_props(DefinedType, [{n_val, 1}], LeaderB, BNodes),
+    ok = rt:wait_until(fun() ->
+            UpdatedProps = get_current_bucket_props(BNodes, DefinedType),
+            {n_val, 1} =:= lists:keyfind(n_val, 1, UpdatedProps)
+        end),
 
     UnequalObjBin = <<"unequal props val">>,
     UnequalPropsObj = riakc_obj:new(BucketTyped, KeyTyped, UnequalObjBin),
@@ -142,12 +142,11 @@ realtime_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     ensure_bucket_not_updated(PBB, BucketTyped, KeyTyped, Bin),
     disable_rt(LeaderA, ANodes),
 
-    UpdatedProps2 = update_props(DefinedType,
-                                 [{n_val, 3}],
-                                 LeaderB,
-                                 BNodes),
-    ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, UpdatedProps2)),
-    ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, UpdatedProps2)),
+    update_props(DefinedType, [{n_val, 3}], LeaderB, BNodes),
+    ok = rt:wait_until(fun() ->
+            UpdatedProps2 = get_current_bucket_props(BNodes, DefinedType),
+            {n_val, 3} =:= lists:keyfind(n_val, 1, UpdatedProps2)
+        end),
 
     disable_rt(LeaderA, ANodes).
 
@@ -236,8 +235,11 @@ fullsync_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     DefaultProps = get_current_bucket_props(BNodes, DefinedType),
     ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, DefaultProps)),
 
-    UpdatedProps = update_props(DefinedType,  [{n_val, 1}], LeaderB, BNodes),
-    ?assertEqual({n_val, 1}, lists:keyfind(n_val, 1, UpdatedProps)),
+    update_props(DefinedType,  [{n_val, 1}], LeaderB, BNodes),
+    ok = rt:wait_until(fun() ->
+            UpdatedProps = get_current_bucket_props(BNodes, DefinedType),
+            {n_val, 1} =:= lists:keyfind(n_val, 1, UpdatedProps)
+        end),
 
     UnequalObjBin = <<"unequal props val">>,
     UnequalPropsObj = riakc_obj:new(BucketTyped, KeyTyped, UnequalObjBin),
@@ -459,10 +461,7 @@ get_current_bucket_props(Node, Type) when is_atom(Node) ->
 ensure_rtq_drained(ANodes) ->
     lager:info("making sure the rtq has drained"),
     Got = lists:map(fun(Node) ->
-                        case rpc:call(Node, riak_repl2_rtq, dumpq, []) of
-                            [] -> true;
-			    _ -> false
-                        end
+                    [] =:= rpc:call(Node, riak_repl2_rtq, dumpq, [])
                     end, ANodes),
     Expected = [true || _ <- lists:seq(1, length(ANodes))],
     ?assertEqual(Expected, Got).
