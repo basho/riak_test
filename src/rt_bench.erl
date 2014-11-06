@@ -14,9 +14,11 @@ bench(Config, NodeList, TestName, Runners) ->
     bench(Config, NodeList, TestName, Runners, false).
 
 bench(Config, NodeList, TestName, Runners, Drop) ->
-    lager:info("Starting basho_bench run"),
-
     LoadGens = rt_config:get(perf_loadgens, ["localhost"]),
+    bench(Config, NodeList, TestName, Runners, Drop, LoadGens).
+
+bench(Config, NodeList, TestName, Runners, Drop, LoadGens) ->
+    lager:info("Starting basho_bench run"),
 
     case Drop of
         true ->
@@ -65,32 +67,43 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                     %% specifying the remote testdir and the newly
                     %% copied remote config location
                     Cmd = ?ESCRIPT++" "++
-                        BBDir++"/"++"basho_bench -d "++
-                        BBDir++"/"++TestName++"_"++Num++" "++RemotePath,
+                              BBDir++"/"++"basho_bench -d "++
+                              BBDir++"/"++TestName++"_"++Num++" "++RemotePath,
                     lager:info("Spawning remote basho_bench w/ ~p on ~p",
                                [Cmd, LG]),
                     {0, R} = rtssh:ssh_cmd(LG, Cmd, false),
                     lager:info("bench run finished, on ~p returned ~p",
-                   [LG, R]),
+                               [LG, R]),
                     {0, _} = rtssh:ssh_cmd(LG, "rm -r "++BBTmp++"/"),
-            Owner ! {done, ok}
+                    Owner ! {done, ok}
                 catch
                     Class:Error ->
                         lager:error("basho_bench died with error ~p:~p",
                                     [Class, Error]),
-            Owner ! {done, error}
+                        Owner ! {done, error}
                 after
                     lager:info("finished bb run")
                 end
         end,
     S = self(),
     [spawn(fun() -> F(R, S) end)|| R <- GenList],
-    [ok] = lists:usort([receive {done, R} -> R end
+    lists:usort([receive {done, R} -> R end
             || _ <- GenList]),
     lager:debug("removing stage dir"),
     {ok, FL} = file:list_dir(BBTmpStage),
     [file:delete(BBTmpStage++File) || File <- FL],
     ok = file:del_dir(BBTmpStage).
+
+stop_bench() ->
+    LoadGens = rt_config:get(perf_loadgens, ["localhost"]),
+    lists:foreach(fun(LG) ->
+                          {0, Output} = rtssh:ssh_cmd(LG, "ps -ef | grep basho_bench"),
+                          [_, Pid | _] = string:tokens(Output, " "),
+                          Cmd = "kill " ++ Pid,
+                          lager:info("Spawning remote basho_bench w/ ~p on ~p",
+                                     [Cmd, LG]),
+                          {_, _} = rtssh:ssh_cmd(LG, Cmd, false)
+                  end,LoadGens).
 
 collect_bench_data(TestName, Dir) ->
     %% grab all the benchmark stuff. need L to make real files because
@@ -111,10 +124,10 @@ config(Rate, Duration, NodeList, KeyGen,
        ValGen, Operations) ->
     config(Rate, Duration, NodeList, KeyGen,
            ValGen, Operations,
-           <<"testbucket">>, riakc_pb).
+           <<"testbucket">>, riakc_pb, 10).
 
 config(Rate, Duration, NodeList, KeyGen,
-       ValGen, Operations, Bucket, Driver0) ->
+       ValGen, Operations, Bucket, Driver0, ReportInterval) ->
     lager:info("Bucket is: ~p", [Bucket]),
     {Driver, DriverB} = case Driver0 of
         '2i' ->
@@ -142,7 +155,8 @@ config(Rate, Duration, NodeList, KeyGen,
 
      {DriverIps, NodeList},
      {DriverReplies, default},
-     {driver, DriverName}
+     {driver, DriverName},
+     {report_interval, ReportInterval}
      %%{code_paths, rt_config:get(basho_bench_code_paths)}
     ].
 

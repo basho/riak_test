@@ -143,6 +143,6 @@ get_rt_peer(Node) ->
 %% @doc Connect two clusters for replication using their respective
 %%      leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+    {ok, {IP, Port}} = rpc:call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
-    repl_util:connect_cluster(LeaderA, "127.0.0.1", Port).
+    repl_util:connect_cluster(LeaderA, IP, Port).

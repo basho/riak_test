@@ -56,7 +56,10 @@
          validate_aae_fullsync/6,
          update_props/5,
          get_current_bucket_props/2,
-         create_clusters_with_rt/1,
+         create_clusters_with_rt/2,
+         deploy_clusters_with_rt/2,
+         setup_rt/3,
+         verify_correct_connection/1,
          verify_correct_connection/2
         ]).
 -include_lib("eunit/include/eunit.hrl").
@@ -972,9 +975,15 @@ get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
              get_bucket,
              [Bucket]).
 
-create_clusters_with_rt(ClusterSetup) ->
+create_clusters_with_rt(ClusterSetup, Direction) ->
     [ANodes, BNodes] = rt:build_clusters(ClusterSetup),
+    setup_cluster_rt([ANodes, BNodes], Direction).
 
+deploy_clusters_with_rt(ClusterSetup, Direction) ->
+    [ANodes, BNodes] = rt:deploy_clusters(ClusterSetup),
+    setup_cluster_rt([ANodes, BNodes], Direction).
+
+setup_cluster_rt([ANodes, BNodes], Direction) ->
     ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
     AFirst = hd(ANodes),
 
@@ -985,23 +994,33 @@ create_clusters_with_rt(ClusterSetup) ->
     repl_util:name_cluster(BFirst, "B"),
     ?assertEqual(ok, rt:wait_until_ring_converged(ANodes)),
     ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
+    case Direction of
+        '<->' ->
+            setup_rt(ANodes, '->', BNodes), setup_rt(ANodes, '<-', BNodes);
+        _ ->
+            setup_rt(ANodes, Direction, BNodes)
+        end,
+    {ANodes, BNodes}.
 
+setup_rt(ANodes, '->', BNodes) ->
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
     %% A -> B
     connect_clusters(AFirst, BFirst),
     repl_util:enable_realtime(AFirst, "B"),
     ?assertEqual(ok, rt:wait_until_ring_converged(ANodes)),
     repl_util:start_realtime(AFirst, "B"),
-    ?assertEqual(ok, rt:wait_until_ring_converged(ANodes)),
+    ?assertEqual(ok, rt:wait_until_ring_converged(ANodes));
 
+setup_rt(ANodes, '<-', BNodes) ->
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
     %% B -> A
     connect_clusters(BFirst, AFirst),
     repl_util:enable_realtime(BFirst, "A"),
     ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
     repl_util:start_realtime(BFirst, "A"),
-    ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
-    {ANodes, BNodes}.
-
-
+    ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)).
 
 verify_correct_connection(ANodes, BNodes) when length(ANodes) == length(BNodes) ->
     verify_correct_connection(ANodes),
@@ -1053,6 +1072,6 @@ rt_source_connected_to(Node) ->
 %% @doc Connect two clusters for replication using their respective
 %%      leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+    {ok, {IP, Port}} = rpc:call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
-    repl_util:connect_cluster(LeaderA, "127.0.0.1", Port).
+    repl_util:connect_cluster(LeaderA, IP, Port).

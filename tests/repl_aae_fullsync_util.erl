@@ -32,9 +32,6 @@ make_clusters(NumNodesWanted, ClusterSize, Conf) ->
     {ANodes, BNodes}.
 
 prepare_cluster([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
-    AFirst = hd(ANodes),
-    BFirst = hd(BNodes),
-
     repl_util:name_cluster(AFirst, "A"),
     repl_util:name_cluster(BFirst, "B"),
 

@@ -33,7 +33,7 @@
 %% riak_test callback
 %% ====================================================================
 confirm() ->
-    repl_util:create_clusters_with_rt([{?SizeA, ?Conf}, {?SizeB,?Conf}]),
+    repl_util:create_clusters_with_rt([{?SizeA, ?Conf}, {?SizeB,?Conf}], '<->'),
     random:seed(erlang:now()),
      ?assert(eqc:quickcheck(eqc:numtests(1, ?MODULE:prop_connection_balance()))),
     pass.
