@@ -104,7 +104,9 @@ main(Args) ->
             notice
     end,
 
-    application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel}]),
+    application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel},
+                                         {lager_file_backend, [{file, "log/test.log"},
+                                                               {level, ConsoleLagerLevel}]}]),
     lager:start(),
 
     %% Report
@@ -278,12 +280,14 @@ run_test(Test, Outdir, TestMetaData, Report, _HarnessArgs, NumTests) ->
     case Report of
         undefined -> ok;
         _ ->
-           case giddyup:post_result(SingleTestResult) of
+            {value, {log, L}, TestResult} = lists:keytake(log, 1, SingleTestResult),
+            case giddyup:post_result(TestResult) of
                 error -> woops;
                 {ok, Base} ->
-                    %% Now push up the artifacts
+                    %% Now push up the artifacts, starting with the test log
+                    giddyup:post_artifact(Base, {"riak_test.log", L}),
                     [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ],
-                    ResultPlusGiddyUp = SingleTestResult ++ [{giddyup_url, list_to_binary(Base)}],
+                    ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
                     [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ]
             end
     end,
