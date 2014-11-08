@@ -30,11 +30,12 @@ confirm() ->
     RingSize = 16,
     NumNodes = list_to_integer(rt_config:get(fs_num_nodes, "6")),
     KeysPerVN = list_to_integer(rt_config:get(fs_num_keys_per_vnode, "23000000")),
-    TotalKeys = KeysPerVN * RingSize,
+    TotalKeys = KeysPerVN * RingSize div 3,
+    lager:info("Writing ~p keys per vnode, ~p total keys", [KeysPerVN, TotalKeys]),
     BigKeys = TotalKeys * 1 div 100,
     SmallKeys = TotalKeys - BigKeys,
     BaseSize = 8 * 1024,
-    MaxSize = 40 * 1024 * 1024,
+    %MaxSize = 40 * 1024 * 1024,
 
     MaxSourceCluster = 5,
     MaxSourceNode = 1,
@@ -44,11 +45,11 @@ confirm() ->
     FullsyncDirectLimit = 1000,
     FullsyncDirectMode = inline,
 
-    Config = [{riak_core, [
-                           {ssl_enabled, false},
-                           {certfile, "./etc/certs/cert.pem"},
-                           {keyfile, "./etc/certs/key.pem"},
-                           {cacertdir, "./etc/certs/ca"},
+    Config1 = [{riak_core, [
+                           {ssl_enabled, true},
+                           {certfile, "./etc/site1-cert.pem"},
+                           {keyfile, "./etc/site1-key.pem"},
+                           {cacertdir, "./etc/ca"},
                            {ring_creation_size, RingSize},
                            {default_bucket_props, [{n_val, 3},
                                                    {allow_mult, false}]}]},
@@ -67,8 +68,31 @@ confirm() ->
                            {max_fssource_node, MaxSourceNode},
                            {max_fssink_node, MaxSinkNode}]}],
 
-    Clusters = rt:build_clusters([{NumNodes, Config},
-                                  {NumNodes, Config}]),
+    Config2 = [{riak_core, [
+                           {ssl_enabled, true},
+                           {certfile, "./etc/site2-cert.pem"},
+                           {keyfile, "./etc/site2-key.pem"},
+                           {cacertdir, "./etc/ca"},
+                           {ring_creation_size, RingSize},
+                           {default_bucket_props, [{n_val, 3},
+                                                   {allow_mult, false}]}]},
+              {riak_kv, [{anti_entropy, {on, []}},
+                         {anti_entropy_build_limit, {100, 1000}},
+                         {anti_entropy_concurrency, 100}]},
+              {riak_repl, [{fullsync_strategy, aae},
+                           {fullsync_direct_limit, FullsyncDirectLimit},
+                           {fullsync_direct_mode, FullsyncDirectMode},
+                           {fullsync_on_connect, false},
+                           {fullsync_interval, disabled},
+                           {aae_bloom_num_keys, AAEBloomKeys},
+                           {aae_bloom_rate, AAEBloomRate},
+                           {max_fssource_retries, infinity},
+                           {max_fssource_cluster, MaxSourceCluster},
+                           {max_fssource_node, MaxSourceNode},
+                           {max_fssink_node, MaxSinkNode}]}],
+
+    Clusters = rt:build_clusters([{NumNodes, Config1},
+                                  {NumNodes, Config2}]),
     [ANodes, BNodes] = Clusters,
 
     %% load this module on all the nodes
@@ -137,10 +161,11 @@ confirm() ->
                                          0, SmallKeys * Percent div 100,
                                          <<"small">>,
                                          BaseSize),
-                        write_to_cluster(AFirst,
-                                         0, BigKeys * Percent div 100,
-                                         <<"big">>,
-                                         {BaseSize, MaxSize})
+			ok
+                        %write_to_cluster(AFirst,
+                        %                 0, BigKeys * Percent div 100,
+                        %                 <<"big">>,
+                        %                 {BaseSize, MaxSize})
                 end,
 
     %% Write keys and perform fullsync.
