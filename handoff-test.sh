@@ -9,15 +9,25 @@ docs1=`curl -XGET $SEARCH_URL 2>/dev/null | json_pp | grep numFound | sed "s/[^0
 # Replicas Count
 reps1=`curl -XGET $SOLR_URL_BEFORE 2>/dev/null | json_pp | grep numFound | sed "s/[^0-9]//g"`
 
-# Leave Node 1
-$ADMIN_PATH_NODE1 cluster leave &> /dev/null
-$ADMIN_PATH_NODE1 cluster plan &> /dev/null
-$ADMIN_PATH_NODE1 cluster commit &> /dev/null
+if [[ $JOIN_NODE && ${JOIN_NODE-x} ]]; then
+    $RIAK_PATH_NODE start
+    sleep 2
+    $ADMIN_PATH_NODE cluster join $JOIN_NODE
+    $ADMIN_PATH_NODE cluster plan
+    $ADMIN_PATH_NODE cluster commit
+else
+    # Leave Node
+    $ADMIN_PATH_NODE cluster leave
+    $ADMIN_PATH_NODE cluster plan
+    $ADMIN_PATH_NODE cluster commit
+fi
 
-t=$?
-while [ $t = 0 ]
+sleep 15
+
+while ! $ADMIN_PATH_NODE2 transfers | grep -iqF "$STOPWORDS"
 do
-    t=`$ADMIN_PATH_NODE1 transfers | grep $STOPWORD | wc -l`
+    echo 'Transfers in Progress'
+    sleep 5
 done
 
 # Keys Count

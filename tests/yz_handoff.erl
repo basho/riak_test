@@ -29,7 +29,8 @@
 -define(BUCKET, <<"test_bkt">>).
 -define(SUCCESS, 0).
 -define(TESTCYCLE, 20).
--define(TRANSFERSSTOPWORD, "failed").
+-define(STOPWORDS, "No transfers active").
+-define(NUMRUNSTATES, 3).
 -define(CFG,
         [
          {riak_core,
@@ -44,11 +45,12 @@
         ]).
 
 confirm() ->
-    %% Setup cluster
+    %% Setup cluster initially
     Nodes = rt:build_cluster(5, ?CFG),
     rt:wait_for_cluster_service(Nodes, yokozuna),
 
     [_|Nodes2345] = Nodes,
+    %% We're going to always keep Node2 in the cluster.
     [Node2|_] = Nodes2345,
 
     ConnInfo = ?GET(Node2, rt:connection_info([Node2])),
@@ -75,30 +77,54 @@ confirm() ->
     [ok = rt:pbc_write(Pid, ?BUCKET, Key, Key, "text/plain") || Key <- Keys],
     timer:sleep(1100),
 
-    [{_, SolrPort}|Shards2345] = Shards,
+    %% Separate out shards for multiple runs
+    [Shard1|Shards2345] = Shards,
+    [Shard2,_|Shards45] = Shards2345,
+    Shards245 = [Shard2|Shards45],
+    Shards1245 = [Shard1|Shards245],
+    {_, SolrPort1} = Shard1,
     [{_, SolrPort2}|_] = Shards2345,
-    SolrURL = internal_solr_url(Host, SolrPort, ?INDEX, Shards),
+    SolrURL = internal_solr_url(Host, SolrPort1, ?INDEX, Shards),
     BucketURL = bucket_keys_url(Host, Port, ?BUCKET),
 
     wait_for_replica_count(SolrURL, KeyCount),
 
     %% Set Env
-    Env = [{"SOLR_URL_BEFORE", SolrURL},
-           {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards2345)},
-           {"SEARCH_URL", search_url(Host, Port, ?INDEX)},
-           {"BUCKET_URL", BucketURL},
-           {"ADMIN_PATH_NODE1", ?PATH ++ "/dev/dev1/bin/riak-admin"},
-           {"STOPWORD", ?TRANSFERSSTOPWORD}],
-    lager:info("Environment Vars: ~p", [Env]),
-    P = erlang:open_port({spawn_executable, "handoff-test.sh"},
-                         [exit_status, {env, Env}, stderr_to_stdout]),
+    DefaultEnv = [{"SEARCH_URL", search_url(Host, Port, ?INDEX)},
+                  {"BUCKET_URL", BucketURL},
+                  {"STOPWORDS", ?STOPWORDS},
+                  {"ADMIN_PATH_NODE2", ?PATH ++ "/dev/dev2/bin/riak-admin"}],
+    Envs = [[{"SOLR_URL_BEFORE", SolrURL},
+             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards2345)},
+             {"ADMIN_PATH_NODE", ?PATH ++ "/dev/dev1/bin/riak-admin"}],
+            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards2345)},
+             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards245)},
+             {"ADMIN_PATH_NODE", ?PATH ++ "/dev/dev3/bin/riak-admin"}],
+            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards245)},
+             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards1245)},
+             {"ADMIN_PATH_NODE", ?PATH ++ "/dev/dev1/bin/riak-admin"},
+             {"RIAK_PATH_NODE", ?PATH ++ "/dev/dev1/bin/riak"},
+             {"JOIN_NODE", atom_to_list(Node2)}],
+            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards1245)},
+             {"SOLR_URL_AFTER", SolrURL},
+             {"ADMIN_PATH_NODE", ?PATH ++ "/dev/dev3/bin/riak-admin"},
+             {"RIAK_PATH_NODE", ?PATH ++ "/dev/dev3/bin/riak"},
+             {"JOIN_NODE", atom_to_list(Node2)}]],
 
-    %% Run Shell Script to count/test # of replicas and leave one
-    %% node from the cluster
-    check_data(receiver(P, []), KeyCount),
-    check_counts(Pid, KeyCount, BucketURL),
+    %% Run Shell Script to count/test # of replicas and leave/join
+    %% nodes from the cluster
+    [[begin
+          check_data(receiver(spawn_handoff_executable(lists:append(Env,DefaultEnv)),
+                              []), KeyCount),
+          check_counts(Pid, KeyCount, BucketURL)
+      end || Env <- Envs]
+     || _ <- lists:seq(1,?NUMRUNSTATES)],
 
     pass.
+
+spawn_handoff_executable(Env) ->
+    erlang:open_port({spawn_executable, "handoff-test.sh"},
+                     [exit_status, {env, Env}, stderr_to_stdout]).
 
 receiver(P, Acc) ->
     receive
@@ -116,7 +142,7 @@ receiver(P, Acc) ->
             lager:warning("Unexpected return from port: ~p", [Reason]),
             catch erlang:port_close(P),
             exit(Reason)
-    after 500000 ->
+    after 300000 ->
             lager:warning("Timeout on port: ~p", [P]),
             catch erlang:port_close(P),
             exit(timeout)
