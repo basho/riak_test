@@ -106,7 +106,7 @@ confirm() ->
     pass.
 
 test_supervision() ->
-    JMXPort = 80,
+    JMXPort = 41111,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
     [Node|[]] = rt:deploy_nodes(1, Config),
     timer:sleep(20000),
@@ -219,6 +219,7 @@ jmx_dump_cmd(IP, Port) ->
 
 jmx_dump(Cmd) ->
     timer:sleep(40000), %% JMX only updates every 30seconds
+    lager:info("Dumping JMX stats using command ~s", [Cmd]),
     Output = string:strip(os:cmd(Cmd), both, $\n),
     JSONOutput = mochijson2:decode(Output),
     [ {Key, Value} || {struct, [{Key, Value}]} <- JSONOutput].
