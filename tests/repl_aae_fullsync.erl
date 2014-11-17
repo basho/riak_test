@@ -573,7 +573,7 @@ validate_intercepted_fullsync(InterceptTarget,
         N -> N
     end,
     SoftExitsIncremented = rt:wait_until(fun() ->
-        SoftExits = deep_status([fullsync_coordinator, ReplicationCluster, soft_rety_exits], ReplicationLeader),
+        SoftExits = deep_status([fullsync_coordinator, ReplicationCluster, soft_retry_exits], ReplicationLeader),
         SoftExits > SoftExits0
     end),
     ?assertEqual(ok, SoftExitsIncremented),
