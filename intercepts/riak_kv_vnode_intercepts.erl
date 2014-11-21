@@ -84,8 +84,9 @@ error_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
                     %% sleep for a while, so the vnode response order is
                     %% deterministic
                     timer:sleep(1000),
-                    riak_core_vnode:reply(Sender, {fail, Partition, ReqId}),
-                    State;
+                    Reply = {fail, Partition, ReqId},
+                    riak_core_vnode:reply(Sender, Reply),
+                    {Reply, State};
                 false ->
                     ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State)
             end
