@@ -1,18 +1,27 @@
 
 3 directories, "cacert.org", "selfsigned", and "special".
-Each contains several keys and a "ca" folder containing the CA certificate(s) used to sign them.
+Each contains several keys and a "ca" folder containing the CA certificate(s)
+used to sign them.
 
-"cacert.org" contains certificates issued by cacert.org for names within the "cataclysm-software.net" domain.
-These certificates have, as of this writing, all expired, and with the exception of tests for expired certificates they have been replaced with certs in the "special" directory.
+The function make_certs:create_priv_certs/0 re-creates all of the certificates
+in the "selfsigned" and "special" directories, though that shouldn't be
+necessary for another decade or so.
+
+"cacert.org" contains certificates issued by cacert.org for names within the
+"cataclysm-software.net" domain.
+These certificates have, as of this writing, all expired, and with the
+exception of tests for expired certificates they have been replaced with
+certs in the "special" directory.
 
 "selfsigned" has a root CA, an intermediate CA, and 4 key/cert pairs:
-* "site1" and "site2" are signed by an intermediate CA which was signed by the root CA.
+* "site1" and "site2" are signed by an intermediate CA which was signed by
+  the root CA.
 * "site3" and "site4" are signed directly by the root CA.
-The "subject" of certificates in this tree are detailed DNs.
+  The "subject" of certificates in this tree are detailed DNs.
 
 "special" has a root CA and 2 key/cert pairs:
 * "site5" and "site6" are signed directly by the root CA.
-The "subject" of certificates in this tree are fully-qualified domain names.
+  The "subject" of certificates in this tree are fully-qualified domain names.
 
 The certificate common names are as follows:
  * site1.basho.com
