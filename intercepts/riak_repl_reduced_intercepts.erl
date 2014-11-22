@@ -11,13 +11,66 @@
 -module(riak_repl_reduced_intercepts).
 
 -include("intercept.hrl").
+-compile([{parse_transform, lager_transform}]).
 
 -export([recv_get_report/0, recv_get_report/1, report_mutate_get/1,
     register_as_target/0, get_all_reports/0, get_all_reports/1]).
 -export([report_mutate_put/5, recv_put_report/0, recv_put_report/1,
     put_all_reports/0, put_all_reports/1]).
+-export([tag_mutate_get/1, tag_mutate_put/5, is_get_tagged/1,
+    is_put_tagged/1]).
 
 -define(M, riak_repl_reduced_orig).
+
+%% @doc Intercept a mutate_get of reduced repl to add a marker to the
+%% object's user metadata indicating the intercept has happened.
+tag_mutate_get(InObject) ->
+    case ?M:mutate_get_orig(InObject) of
+        notfound ->
+            notfound;
+        MidObject ->
+            Contents = riak_object:get_contents(MidObject),
+            TaggedContents = lists:map(fun({Meta, Value}) ->
+                UserMeta = case dict:find(<<"X-Riak-Meta">>, Meta) of
+                    error -> [];
+                    {ok, UM} -> UM
+                end,
+                NewUserMeta = lists:keystore(<<"X-Riak-Meta-Tag-Mutate-Get">>, 1, UserMeta, {<<"X-Riak-Meta-Tag-Mutate-Get">>, <<"true">>}),
+                NewMeta = dict:store(<<"X-Riak-Meta">>, NewUserMeta, Meta),
+                {NewMeta, Value}
+            end, Contents),
+            riak_object:set_contents(InObject, TaggedContents)
+    end.
+
+%% @doc Intercept a mutate_put of reduced repl to add a marker to the
+%% object's user metadata indicating the intercept has happened.
+tag_mutate_put(InMeta, InVal, RevMeta, Obj, Props) ->
+    {MidMeta, MidVal, MidRevMeta} = ?M:mutate_put_orig(InMeta, InVal, RevMeta, Obj, Props),
+    UserMeta = case dict:find(<<"X-Riak-Meta">>, MidMeta) of
+        error -> [];
+        {ok, UM} -> UM
+    end,
+    NewUserMeta = lists:keystore(<<"X-Riak-Meta-Tag-Mutate-Put">>, 1, UserMeta, {<<"X-Riak-Meta-Tag-Mutate-Put">>, <<"true">>}),
+    OutMeta = dict:store(<<"X-Riak-Meta">>, NewUserMeta, MidMeta),
+    OutRev = dict:store(<<"X-Riak-Meta">>, NewUserMeta, MidRevMeta),
+    {OutMeta, MidVal, OutRev}.
+
+%% @doc Is the user metadata tagged with a mutate_get intercept?
+is_get_tagged(RiakcObj) ->
+    is_tagged(RiakcObj, <<"X-Riak-Meta-Tag-Mutate-Get">>).
+
+%% @doc Is the user metadat tagged with a mutate_put intercept?
+is_put_tagged(RiakcObj) ->
+    is_tagged(RiakcObj, <<"X-Riak-Meta-Tag-Mutate-Put">>).
+
+is_tagged(RiakcObj, TagKey) ->
+    Metas = riakc_obj:get_metadatas(RiakcObj),
+    lists:all(fun(Meta) ->
+        GotValue = riakc_obj:get_user_metadata_entry(Meta, TagKey),
+        %lager:info("Der usermeta: ~p", [UserMeta]),
+        %GotValue = riakc_obj:get_user_metadata_entry(UserMeta, TagKey),
+        GotValue == <<"true">>
+    end, Metas).
 
 %% @doc Intercept a mutate_get of reduced repl. When adding as intercept,
 %% use `{{mutate_get, 1}, report_mutate_get}'. For best results, the
