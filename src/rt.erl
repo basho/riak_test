@@ -1131,6 +1131,11 @@ admin(Node, Args) ->
 riak(Node, Args) ->
     ?HARNESS:riak(Node, Args).
 
+
+%% @doc Call 'bin/riak-repl' command on `Node' with arguments `Args'
+riak_repl(Node, Args) ->
+    ?HARNESS:riak_repl(Node, Args).
+
 search_cmd(Node, Args) ->
     {ok, Cwd} = file:get_cwd(),
     rpc:call(Node, riak_search_cmd, command, [[Cwd | Args]]).
