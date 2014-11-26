@@ -237,6 +237,23 @@ add_default_node_config(Nodes) ->
             throw({invalid_config, {rt_default_config, BadValue}})
     end.
 
+deploy_clusters(ClusterConfigs) ->
+    NumNodes = rt_config:get(num_nodes, 6),
+    RequestedNodes = lists:flatten(ClusterConfigs),
+
+    case length(RequestedNodes) > NumNodes of
+        true ->
+            erlang:error("Requested more nodes than available");
+        false ->
+            Nodes = deploy_nodes(RequestedNodes),
+            {DeployedClusters, _} = lists:foldl(
+                    fun(Cluster, {Clusters, RemNodes}) ->
+                        {A, B} = lists:split(length(Cluster), RemNodes),
+                        {Clusters ++ [A], B}
+                end, {[], Nodes}, ClusterConfigs),
+            DeployedClusters
+    end.
+
 deploy_nodes(NodeConfig) ->
     Path = relpath(root),
     lager:info("Riak path: ~p", [Path]),
