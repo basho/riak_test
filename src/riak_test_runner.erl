@@ -21,6 +21,8 @@
 %% @doc riak_test_runner runs a riak_test module's run/0 function.
 -module(riak_test_runner).
 -export([confirm/3, metadata/0, metadata/1, function_name/1]).
+%% Need to export to use with `spawn_link'.
+-export([return_to_exit/3]).
 -include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
@@ -34,7 +36,7 @@ metadata() ->
 metadata(Pid) ->
     riak_test ! {metadata, Pid},
     receive
-        {metadata, TestMeta} -> TestMeta 
+        {metadata, TestMeta} -> TestMeta
     end.
 
 -spec(confirm(integer(), atom(), [{atom(), term()}]) -> [tuple()]).
@@ -58,7 +60,7 @@ confirm(TestModule, Outdir, TestMetaData) ->
         _ ->
             {fail, all_prereqs_not_present}
     end,
-    
+
     lager:notice("~s Test Run Complete", [TestModule]),
     {ok, Log} = stop_lager_backend(),
     Logs = iolist_to_binary(lists:foldr(fun(L, Acc) -> [L ++ "\n" | Acc] end, [], Log)),
@@ -95,9 +97,21 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     {0, UName} = rt:cmd("uname -a"),
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
-    Pid = spawn_link(Mod, Fun, []),
+    Pid = spawn_link(?MODULE, return_to_exit, [Mod, Fun, []]),
+    Ref = case rt_config:get(test_timeout, undefined) of
+        Timeout when is_integer(Timeout) ->
+            erlang:send_after(Timeout, self(), test_took_too_long);
+        _ ->
+            undefined
+    end,
 
     {Status, Reason} = rec_loop(Pid, TestModule, TestMetaData),
+    case Ref of
+        undefined ->
+            ok;
+        _ ->
+            erlang:cancel_timer(Ref)
+    end,
     riak_test_group_leader:tidy_up(OldGroupLeader),
     case Status of
         fail ->
@@ -114,13 +128,16 @@ function_name(TestModule) ->
     Tokz = string:tokens(TMString, ":"),
     case length(Tokz) of
         1 -> {TestModule, confirm};
-        2 ->  
+        2 ->
             [Module, Function] = Tokz,
             {list_to_atom(Module), list_to_atom(Function)}
     end.
 
 rec_loop(Pid, TestModule, TestMetaData) ->
     receive
+        test_took_too_long ->
+            exit(Pid, kill),
+            {fail, test_timed_out};
         metadata ->
             Pid ! {metadata, TestMetaData},
             rec_loop(Pid, TestModule, TestMetaData);
@@ -133,15 +150,29 @@ rec_loop(Pid, TestModule, TestMetaData) ->
             {fail, Error}
     end.
 
+%% A return of `fail' must be converted to a non normal exit since
+%% status is determined by `rec_loop'.
+%%
+%% @see rec_loop/3
+-spec return_to_exit(module(), atom(), list()) -> ok.
+return_to_exit(Mod, Fun, Args) ->
+    case apply(Mod, Fun, Args) of
+        pass ->
+            %% same as exit(normal)
+            ok;
+        fail ->
+            exit(fail)
+    end.
+
 check_prereqs(Module) ->
     try Module:module_info(attributes) of
-        Attrs ->       
+        Attrs ->
             Prereqs = proplists:get_all_values(prereq, Attrs),
             P2 = [ {Prereq, rt_local:which(Prereq)} || Prereq <- Prereqs],
             lager:info("~s prereqs: ~p", [Module, P2]),
             [ lager:warning("~s prereq '~s' not installed.", [Module, P]) || {P, false} <- P2],
             lists:all(fun({_, Present}) -> Present end, P2)
-    catch 
+    catch
         _DontCare:_Really ->
             not_present
     end.
