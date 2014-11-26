@@ -934,17 +934,7 @@ join_cluster(Nodes) ->
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
-    case OtherNodes of
-        [] ->
-            %% no other nodes, nothing to join/plan/commit
-            ok;
-        _ ->
-            %% ok do a staged join and then commit it, this eliminates the
-            %% large amount of redundant handoff done in a sequential join
-            [staged_join(Node, Node1) || Node <- OtherNodes],
-            plan_and_commit(Node1),
-            try_nodes_ready(Nodes, 3, 500)
-    end,
+    [join(Node, Node1) || Node <- OtherNodes],
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
 
@@ -1366,7 +1356,12 @@ log_to_nodes(Nodes, Fmt) ->
 %% @doc Log a message to the console of the specified test nodes.
 %%      Messages are prefixed by the string "---riak_test--- "
 %%      Uses lager:info/2 'LFmt' and 'LArgs' semantics
-log_to_nodes(Nodes, LFmt, LArgs) ->
+log_to_nodes(Nodes0, LFmt, LArgs) ->
+    %% This logs to a node's info level, but if riak_test is running
+    %% at debug level, we want to know when we send this and what
+    %% we're saying
+    Nodes = lists:flatten(Nodes0),
+    lager:debug("log_to_nodes: " ++ LFmt, LArgs),
     Module = lager,
     Function = log,
     Meta = [],
@@ -1374,7 +1369,7 @@ log_to_nodes(Nodes, LFmt, LArgs) ->
                [] -> [info, Meta, "---riak_test--- " ++ LFmt];
                _  -> [info, Meta, "---riak_test--- " ++ LFmt, LArgs]
            end,
-    [rpc:call(Node, Module, Function, Args) || Node <- Nodes].
+    [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 
 %% @private utility function
 pmap(F, L) ->
