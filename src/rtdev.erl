@@ -31,7 +31,11 @@ get_deps() ->
     lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
 
 riakcmd(Path, N, Cmd) ->
-    io_lib:format("~s/dev/dev~b/bin/riak ~s", [Path, N, Cmd]).
+    ExecName = rt_config:get(exec_name, "riak"),
+    io_lib:format("~s/dev/dev~b/bin/~s ~s", [Path, N, ExecName, Cmd]).
+
+riakreplcmd(Path, N, Cmd) ->
+    io_lib:format("~s/dev/dev~b/bin/riak-repl ~s", [Path, N, Cmd]).
 
 gitcmd(Path, Cmd) ->
     io_lib:format("git --git-dir=\"~s/.git\" --work-tree=\"~s/\" ~s",
@@ -45,7 +49,8 @@ riak_admin_cmd(Path, N, Args) ->
                           erlang:error(badarg)
                   end, Args),
     ArgStr = string:join(Quoted, " "),
-    io_lib:format("~s/dev/dev~b/bin/riak-admin ~s", [Path, N, ArgStr]).
+    ExecName = rt_config:get(exec_name, "riak"),
+    io_lib:format("~s/dev/dev~b/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
@@ -72,6 +77,12 @@ run_riak(N, Path, Cmd) ->
         _ ->
             R
     end.
+
+run_riak_repl(N, Path, Cmd) ->
+    lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
+    os:cmd(riakreplcmd(Path, N, Cmd)).
+    %% don't mess with intercepts and/or coverage,
+    %% they should already be setup at this point
 
 setup_harness(_Test, _Args) ->
     Path = relpath(root),
@@ -224,6 +235,23 @@ add_default_node_config(Nodes) ->
         BadValue ->
             lager:error("Invalid value for rt_default_config : ~p", [BadValue]),
             throw({invalid_config, {rt_default_config, BadValue}})
+    end.
+
+deploy_clusters(ClusterConfigs) ->
+    NumNodes = rt_config:get(num_nodes, 6),
+    RequestedNodes = lists:flatten(ClusterConfigs),
+
+    case length(RequestedNodes) > NumNodes of
+        true ->
+            erlang:error("Requested more nodes than available");
+        false ->
+            Nodes = deploy_nodes(RequestedNodes),
+            {DeployedClusters, _} = lists:foldl(
+                    fun(Cluster, {Clusters, RemNodes}) ->
+                        {A, B} = lists:split(length(Cluster), RemNodes),
+                        {Clusters ++ [A], B}
+                end, {[], Nodes}, ClusterConfigs),
+            DeployedClusters
     end.
 
 deploy_nodes(NodeConfig) ->
@@ -416,6 +444,14 @@ riak(Node, Args) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Result = run_riak(N, Path, Args),
+    lager:info("~s", [Result]),
+    {ok, Result}.
+
+
+riak_repl(Node, Args) ->
+    N = node_id(Node),
+    Path = relpath(node_version(N)),
+    Result = run_riak_repl(N, Path, Args),
     lager:info("~s", [Result]),
     {ok, Result}.
 

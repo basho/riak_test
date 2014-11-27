@@ -38,6 +38,8 @@
          build_cluster/1,
          build_cluster/2,
          build_cluster/3,
+         build_clusters/1,
+         join_cluster/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
@@ -52,6 +54,7 @@
          console/2,
          deploy_nodes/1,
          deploy_nodes/2,
+         deploy_clusters/1,
          down/2,
          enable_search_hook/2,
          expect_in_log/2,
@@ -87,6 +90,7 @@
          priv_dir/0,
          remove/2,
          riak/2,
+         riak_repl/2,
          rpc_get_env/2,
          set_backend/1,
          set_backend/2,
@@ -276,6 +280,27 @@ deploy_nodes(Versions, Services) ->
 version_to_config({_, _}=Config) -> Config;
 version_to_config(Version) -> {Version, default}.
 
+deploy_clusters(Settings) ->
+    ClusterConfigs = [case Setting of
+                          Configs when is_list(Configs) ->
+                              Configs;
+                          NumNodes when is_integer(NumNodes) ->
+                              [{current, default} || _ <- lists:seq(1, NumNodes)];
+                          {NumNodes, InitialConfig} when is_integer(NumNodes) ->
+                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)];
+                          {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
+                              [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                      end || Setting <- Settings],
+    ?HARNESS:deploy_clusters(ClusterConfigs).
+
+build_clusters(Settings) ->
+    Clusters = deploy_clusters(Settings),
+    [begin
+         join_cluster(Nodes),
+         lager:info("Cluster built: ~p", [Nodes])
+     end || Nodes <- Clusters],
+    Clusters.
+
 %% @doc Start the specified Riak node
 start(Node) ->
     ?HARNESS:start(Node).
@@ -321,19 +346,62 @@ slow_upgrade(Node, NewVersion, Nodes) ->
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
-    R = try_join(Node, PNode),
+    R = rpc:call(Node, riak_core, join, [PNode]),
     lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
     ?assertEqual(ok, R),
     ok.
 
-%% @doc try_join tries different rpc:calls to join a node, because the module changed
-%%      in riak 1.2.0
-try_join(Node, PNode) ->
-    case rpc:call(Node, riak_core, join, [PNode]) of
-        {badrpc, _} ->
-            rpc:call(Node, riak, join, [PNode]);
-        Result ->
-            Result
+%% @doc Have `Node' send a join request to `PNode'
+staged_join(Node, PNode) ->
+    R = rpc:call(Node, riak_core, staged_join, [PNode]),
+    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
+    ?assertEqual(ok, R),
+    ok.
+
+plan_and_commit(Node) ->
+    timer:sleep(500),
+    lager:info("planning and commiting cluster join"),
+    case rpc:call(Node, riak_core_claimant, plan, []) of
+        {error, ring_not_ready} ->
+            lager:info("plan: ring not ready"),
+            timer:sleep(100),
+            plan_and_commit(Node);
+        {ok, _, _} ->
+            lager:info("plan: done"),
+            do_commit(Node)
+    end.
+
+do_commit(Node) ->
+    case rpc:call(Node, riak_core_claimant, commit, []) of
+        {error, plan_changed} ->
+            lager:info("commit: plan changed"),
+            timer:sleep(100),
+            maybe_wait_for_changes(Node),
+            plan_and_commit(Node);
+        {error, ring_not_ready} ->
+            lager:info("commit: ring not ready"),
+            timer:sleep(100),
+            maybe_wait_for_changes(Node),
+            do_commit(Node);
+        {error,nothing_planned} ->
+            %% Assume plan actually committed somehow
+            ok;
+        ok ->
+            ok
+    end.
+
+maybe_wait_for_changes(Node) ->
+    Ring = get_ring(Node),
+    Changes = riak_core_ring:pending_changes(Ring),
+    Joining = riak_core_ring:members(Ring, [joining]),
+    lager:info("maybe_wait_for_changes, changes: ~p joining: ~p",
+               [Changes, Joining]),
+    if Changes =:= [] ->
+            ok;
+       Joining =/= [] ->
+            ok;
+       true ->
+            ok = wait_until_no_pending_changes([Node])
     end.
 
 %% @doc Have the `Node' leave the cluster
@@ -371,6 +439,7 @@ partition(P1, P2) ->
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
     [true = rpc:call(N, erlang, set_cookie, [N, NewCookie]) || N <- P1],
     [[true = rpc:call(N, erlang, disconnect_node, [P2N]) || N <- P1] || P2N <- P2],
+    wait_until_partitioned(P1, P2),
     {NewCookie, OldCookie, P1, P2}.
 
 %% @doc heal the partition created by call to `partition/2'
@@ -443,9 +512,12 @@ is_mixed_cluster(Node) ->
 is_ready(Node) ->
     case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
         {ok, Ring} ->
-            lists:member(Node, riak_core_ring:ready_members(Ring));
-        _ ->
-            false
+            case lists:member(Node, riak_core_ring:ready_members(Ring)) of
+                true -> true;
+                false -> {not_ready, Node}
+            end;
+        Other ->
+            Other
     end.
 
 %% @private
@@ -476,13 +548,13 @@ wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
 %% @doc Retry `Fun' until it returns `Retry' times, waiting `Delay'
 %% milliseconds between retries. This is our eventual consistency bread
 %% and butter
-wait_until(_, 0, _) ->
-    fail;
 wait_until(Fun, Retry, Delay) when Retry > 0 ->
-    Pass = Fun(),
-    case Pass of
+    Res = Fun(),
+    case Res of
         true ->
             ok;
+        _ when Retry == 1 ->
+            {fail, Res};
         _ ->
             timer:sleep(Delay),
             wait_until(Fun, Retry-1, Delay)
@@ -505,8 +577,8 @@ wait_until_status_ready(Node) ->
                                         case rpc:call(Node, riak_kv_console, status, [[]]) of
                                             ok ->
                                                 true;
-                                            _ ->
-                                                false
+                                            Res ->
+                                                Res
                                         end
                                 end)).
 
@@ -539,12 +611,12 @@ wait_until_transfers_complete([Node0|_]) ->
 wait_for_service(Node, Services) when is_list(Services) ->
     F = fun(N) ->
                 case rpc:call(N, riak_core_node_watcher, services, [N]) of
-                    {badrpc, _Error} ->
-                        false;
+                    {badrpc, Error} ->
+                        {badrpc, Error};
                     CurrServices when is_list(CurrServices) ->
                         lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
-                    _ ->
-                        false
+                    Res ->
+                        Res
                 end
         end,
     ?assertEqual(ok, wait_until(Node, F)),
@@ -575,12 +647,17 @@ wait_until_all_members(Nodes) ->
 
 %% @doc Wait until all nodes in the list `Nodes' believes all nodes in the
 %%      list `Members' are members of the cluster.
-wait_until_all_members(Nodes, Members) ->
-    lager:info("Wait until all members ~p ~p", [Nodes, Members]),
-    S1 = ordsets:from_list(Members),
+wait_until_all_members(Nodes, ExpectedMembers) ->
+    lager:info("Wait until all members ~p ~p", [Nodes, ExpectedMembers]),
+    S1 = ordsets:from_list(ExpectedMembers),
     F = fun(Node) ->
-                S2 = ordsets:from_list(members_according_to(Node)),
-                ordsets:is_subset(S1, S2)
+                case members_according_to(Node) of
+                    {badrpc, _} ->
+                        false;
+                    ReportedMembers ->
+                        S2 = ordsets:from_list(ReportedMembers),
+                        ordsets:is_subset(S1, S2)
+                end
         end,
     [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
     ok.
@@ -599,8 +676,8 @@ wait_until_legacy_ringready(Node) ->
                           case rpc:call(Node, riak_kv_status, ringready, []) of
                               {ok, _Nodes} ->
                                   true;
-                              _ ->
-                                  false
+                              Res ->
+                                  Res
                           end
                   end).
 
@@ -658,12 +735,32 @@ wait_until_registered(Node, Name) ->
     end.
 
 
+%% Waits until the cluster actually detects that it is partitioned.
+wait_until_partitioned(P1, P2) ->
+    lager:info("Waiting until partition acknowledged: ~p ~p", [P1, P2]),
+    [ begin
+          lager:info("Waiting for ~p to be partitioned from ~p", [Node, P2]),
+          wait_until(fun() -> is_partitioned(Node, P2) end)
+      end || Node <- P1 ],
+    [ begin
+          lager:info("Waiting for ~p to be partitioned from ~p", [Node, P1]),
+          wait_until(fun() -> is_partitioned(Node, P1) end)
+      end || Node <- P2 ].
+
+is_partitioned(Node, Peers) ->
+    AvailableNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
+    lists:all(fun(Peer) -> not lists:member(Peer, AvailableNodes) end, Peers).
+
 % when you just can't wait
 brutal_kill(Node) ->
     rt_cover:maybe_stop_on_node(Node),
     lager:info("Killing node ~p", [Node]),
     OSPidToKill = rpc:call(Node, os, getpid, []),
-    rpc:cast(Node, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]),
+    %% try a normal kill first, but set a timer to
+    %% kill -9 after 5 seconds just in case
+    rpc:cast(Node, timer, apply_after,
+             [5000, os, cmd, [io_lib:format("kill -9 ~s", [OSPidToKill])]]),
+    rpc:cast(Node, os, cmd, [io_lib:format("kill -15 ~s", [OSPidToKill])]),
     ok.
 
 capability(Node, all) ->
@@ -827,6 +924,11 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
                 deploy_nodes(Versions)
         end,
 
+    join_cluster(Nodes),
+    lager:info("Cluster built: ~p", [Nodes]),
+    Nodes.
+
+join_cluster(Nodes) ->
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
 
@@ -839,9 +941,20 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     %% Ensure each node owns a portion of the ring
     wait_until_nodes_agree_about_ownership(Nodes),
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
+    ok.
 
-    lager:info("Cluster built: ~p", [Nodes]),
-    Nodes.
+try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
+    lager:info("Nodes not ready after initial plan/commit, retrying"),
+    plan_and_commit(Node1);
+try_nodes_ready(Nodes, N, SleepMs) ->
+    ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
+    case ReadyNodes of
+        Nodes ->
+            ok;
+        _ ->
+            timer:sleep(SleepMs),
+            try_nodes_ready(Nodes, N-1, SleepMs)
+    end.
 
 %% @doc Stop nodes and wipe out their data directories
 clean_cluster(Nodes) when is_list(Nodes) ->
@@ -1131,6 +1244,11 @@ admin(Node, Args) ->
 riak(Node, Args) ->
     ?HARNESS:riak(Node, Args).
 
+
+%% @doc Call 'bin/riak-repl' command on `Node' with arguments `Args'
+riak_repl(Node, Args) ->
+    ?HARNESS:riak_repl(Node, Args).
+
 search_cmd(Node, Args) ->
     {ok, Cwd} = file:get_cwd(),
     rpc:call(Node, riak_search_cmd, command, [[Cwd | Args]]).
@@ -1238,7 +1356,12 @@ log_to_nodes(Nodes, Fmt) ->
 %% @doc Log a message to the console of the specified test nodes.
 %%      Messages are prefixed by the string "---riak_test--- "
 %%      Uses lager:info/2 'LFmt' and 'LArgs' semantics
-log_to_nodes(Nodes, LFmt, LArgs) ->
+log_to_nodes(Nodes0, LFmt, LArgs) ->
+    %% This logs to a node's info level, but if riak_test is running
+    %% at debug level, we want to know when we send this and what
+    %% we're saying
+    Nodes = lists:flatten(Nodes0),
+    lager:debug("log_to_nodes: " ++ LFmt, LArgs),
     Module = lager,
     Function = log,
     Meta = [],
@@ -1246,7 +1369,7 @@ log_to_nodes(Nodes, LFmt, LArgs) ->
                [] -> [info, Meta, "---riak_test--- " ++ LFmt];
                _  -> [info, Meta, "---riak_test--- " ++ LFmt, LArgs]
            end,
-    [rpc:call(Node, Module, Function, Args) || Node <- Nodes].
+    [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 
 %% @private utility function
 pmap(F, L) ->
