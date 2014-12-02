@@ -30,7 +30,7 @@ confirm() ->
     RingSize = 16,
     NumNodes = list_to_integer(rt_config:get(fs_num_nodes, "6")),
     KeysPerVN = list_to_integer(rt_config:get(fs_num_keys_per_vnode, "23000000")),
-    TotalKeys = KeysPerVN * RingSize,
+    TotalKeys = KeysPerVN * RingSize div 3,
     BigKeys = TotalKeys * 1 div 100,
     SmallKeys = TotalKeys - BigKeys,
     BaseSize = 8 * 1024,
@@ -283,7 +283,7 @@ worker(X, Stop, C, Count, T0, Gen=#gen{workers=Workers,
     end,
     Value = case MaybeValue of
                 {MinSize, MaxSize} ->
-                    Size = MinSize + random:uniform(MaxSize - MinSize),
+                    Size = MinSize + trunc(math:pow(random:uniform(), 150) * (MaxSize - MinSize)),
                     random_binary(Size);
                 _ ->
                     MaybeValue
