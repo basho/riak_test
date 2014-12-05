@@ -122,6 +122,10 @@ confirm() ->
 
     pass.
 
+%%%===================================================================
+%%% Private
+%%%===================================================================
+
 spawn_handoff_executable(Env) ->
     erlang:open_port({spawn_executable, "handoff-test.sh"},
                      [exit_status, {env, Env}, stderr_to_stdout]).
@@ -148,12 +152,10 @@ receiver(P, Acc) ->
             exit(timeout)
     end.
 
-%% @private
 node_solr_port(Node) ->
     riak_core_util:safe_rpc(Node, application, get_env,
                             [yokozuna, solr_port]).
 
-%% @private
 internal_solr_url(Host, Port, Index) ->
     ?FMT("http://~s:~B/internal_solr/~s", [Host, Port, Index]).
 internal_solr_url(Host, Port, Index, Shards) ->
@@ -180,7 +182,6 @@ wait_for_index(Cluster, Index) ->
     [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster],
     ok.
 
-%% @private
 wait_for_replica_count(SolrURL, KeyCount) ->
     AreReplicasUp =
         fun() ->
@@ -193,17 +194,14 @@ wait_for_replica_count(SolrURL, KeyCount) ->
     ?assertEqual(ok, rt:wait_until(AreReplicasUp, 100, 1000)),
     ok.
 
-% @private
 get_count(Resp) ->
     Struct = mochijson2:decode(Resp),
     kvc:path([<<"response">>, <<"numFound">>], Struct).
 
-% @private
 get_keys_count(Resp) ->
     Struct = mochijson2:decode(Resp),
     length(kvc:path([<<"keys">>], Struct)).
 
-%% @private
 check_counts(Pid, InitKeyCount, BucketURL) ->
     PBCounts = [begin {ok, Resp} = riakc_pb_socket:search(Pid, ?INDEX, <<"*:*">>),
                     Resp#search_results.num_found
@@ -218,7 +216,6 @@ check_counts(Pid, InitKeyCount, BucketURL) ->
     lager:info("Before-Node-Leave PB: ~b, After-Node-Leave HTTP: ~b", [InitKeyCount, MinHTTPCount]),
     ?assertEqual(InitKeyCount, MinHTTPCount).
 
-%% @private
 check_data(Data, KeyCount) ->
     lager:info("Running Asserts on Data"),
 
