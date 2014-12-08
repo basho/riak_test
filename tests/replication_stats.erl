@@ -78,17 +78,18 @@ fullsync_enabled_and_started() ->
                 {FullTime, _} = timer:tc(repl_util,
                                          start_and_wait_until_fullsync_complete,
                                          [LeaderA, undefined, Me]),
-                lager:info("Fullsync completed in ~p", [FullTime])
+                lager:info("Fullsync completed in ~p", [FullTime]),
+                Me ! fullsync_completed
         end),
 
-    Result = receive
+    StartedResult = receive
         fullsync_started ->
             lager:info("Fullsync started!"),
 
             case rpc:call(LeaderA, riak_repl_console, fs_remotes_status,
                           []) of
                 {badrpc, _} ->
-                    fail;
+                    badrpc;
                 Stats ->
                     ?assertEqual(Stats,
                                  [{fullsync_enabled, "B"},
@@ -96,10 +97,25 @@ fullsync_enabled_and_started() ->
                     pass
             end
     after 60000 ->
-            fail
+            timeout
     end,
+
+    ?assertEqual(pass, StartedResult),
+
+    _ = receive
+        fullsync_completed -> ok
+    after 60000 ->
+        ?assert(timeout)
+    end,
+
+    FullStats = rpc:call(AFirst, riak_repl_console, status, [quiet]),
+    CoordinatorStats = proplists:get_value(fullsync_coordinator, FullStats, []),
+    BStats = proplists:get_value("B", CoordinatorStats, []),
+    LastFullsyncValue = proplists:get_value(last_fullsync_completed, BStats, no_exists),
+
+    ?assertMatch({{_Year, _Month, _Day}, {_Hour, _Minute, _Second}}, LastFullsyncValue),
 
     rt:clean_cluster(ANodes),
     rt:clean_cluster(BNodes),
 
-    Result.
+    StartedResult.
