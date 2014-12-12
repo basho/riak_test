@@ -35,8 +35,8 @@
         [
          {riak_core,
           [
-           {handoff_concurrency, 3},
-           {ring_creation_size, 64}
+           {handoff_concurrency, 16},
+           {ring_creation_size, 256}
           ]},
          {yokozuna,
           [
@@ -49,9 +49,9 @@ confirm() ->
     Nodes = rt:build_cluster(5, ?CFG),
     rt:wait_for_cluster_service(Nodes, yokozuna),
 
-    [_|Nodes2345] = Nodes,
+    [_|Nodes2Rest] = Nodes,
     %% We're going to always keep Node2 in the cluster.
-    [Node2|_] = Nodes2345,
+    [Node2|_] = Nodes2Rest,
 
     ConnInfo = ?GET(Node2, rt:connection_info([Node2])),
     {Host, Port} = ?GET(http, ConnInfo),
@@ -78,12 +78,12 @@ confirm() ->
     timer:sleep(1100),
 
     %% Separate out shards for multiple runs
-    [Shard1|Shards2345] = Shards,
-    [Shard2,_|Shards45] = Shards2345,
-    Shards245 = [Shard2|Shards45],
-    Shards1245 = [Shard1|Shards245],
+    [Shard1|Shards2Rest] = Shards,
+    [Shard2,_|Shards4Rest] = Shards2Rest,
+    Shards24Rest = [Shard2|Shards4Rest],
+    Shards124Rest = [Shard1|Shards24Rest],
     {_, SolrPort1} = Shard1,
-    [{_, SolrPort2}|_] = Shards2345,
+    [{_, SolrPort2}|_] = Shards2Rest,
     SolrURL = internal_solr_url(Host, SolrPort1, ?INDEX, Shards),
     BucketURL = bucket_keys_url(Host, Port, ?BUCKET),
 
@@ -95,17 +95,17 @@ confirm() ->
                   {"STOPWORDS", ?STOPWORDS},
                   {"ADMIN_PATH_NODE2", ?PATH ++ "/dev/dev2/bin/riak-admin"}],
     Envs = [[{"SOLR_URL_BEFORE", SolrURL},
-             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards2345)},
+             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards2Rest)},
              {"ADMIN_PATH_NODE", ?PATH ++ "/dev/dev1/bin/riak-admin"}],
-            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards2345)},
-             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards245)},
+            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards2Rest)},
+             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards24Rest)},
              {"ADMIN_PATH_NODE", ?PATH ++ "/dev/dev3/bin/riak-admin"}],
-            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards245)},
-             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards1245)},
+            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards24Rest)},
+             {"SOLR_URL_AFTER", internal_solr_url(Host, SolrPort2, ?INDEX, Shards124Rest)},
              {"ADMIN_PATH_NODE", ?PATH ++ "/dev/dev1/bin/riak-admin"},
              {"RIAK_PATH_NODE", ?PATH ++ "/dev/dev1/bin/riak"},
              {"JOIN_NODE", atom_to_list(Node2)}],
-            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards1245)},
+            [{"SOLR_URL_BEFORE", internal_solr_url(Host, SolrPort2, ?INDEX, Shards124Rest)},
              {"SOLR_URL_AFTER", SolrURL},
              {"ADMIN_PATH_NODE", ?PATH ++ "/dev/dev3/bin/riak-admin"},
              {"RIAK_PATH_NODE", ?PATH ++ "/dev/dev3/bin/riak"},
