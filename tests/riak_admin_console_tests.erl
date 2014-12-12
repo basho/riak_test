@@ -53,7 +53,20 @@ cluster_tests(Node) ->
     check_admin_cmd(Node, "cluster resize-ring abort"),
     check_admin_cmd(Node, "cluster plan"),
     check_admin_cmd(Node, "cluster commit"),
-    check_admin_cmd(Node, "cluster clear").
+    check_admin_cmd(Node, "cluster clear"),
+    check_admin_cmd(Node, "cluster status"),
+    check_admin_cmd(Node, "cluster partition-count"),
+    check_admin_cmd(Node, "cluster partition-count --node=dev1@127.0.0.1"),
+    check_admin_cmd(Node, "cluster partition-count --node=dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster partitions"),
+    check_admin_cmd(Node, "cluster partitions --node=dev1@127.0.0.1"),
+    check_admin_cmd(Node, "cluster partitions --node=dev99@127.0.0.1"),
+    check_admin_cmd(Node, "cluster partition id=0"),
+    check_admin_cmd(Node, "cluster partition index=0"),
+    check_admin_cmd(Node, "cluster partition id=-1"),
+    check_admin_cmd(Node, "cluster partition index=-1"),
+    check_admin_cmd(Node, "cluster members"),
+    check_admin_cmd(Node, "cluster members --all").
 
 %% riak-admin bucket_type
 bucket_tests(Node) ->
@@ -101,6 +114,37 @@ security_tests(Node) ->
     check_admin_cmd(Node, "security print-group group"),
     check_admin_cmd(Node, "security print-grants foo"),
     check_admin_cmd(Node, "security ciphers foo").
+
+%% handoff commands
+riak_admin_handoff_tests(Node) ->
+    check_admin_cmd(Node, "handoff enable both"),
+    check_admin_cmd(Node, "handoff enable inbound"),
+    check_admin_cmd(Node, "handoff enable outbound"),
+    check_admin_cmd(Node, "handoff enable outbound --all"),
+    check_admin_cmd(Node, "handoff enable outbound --node=dev1@127.0.0.1"),
+    check_admin_cmd(Node, "handoff enable outbound --node=dev99@127.0.0.1"),
+    check_admin_cmd(Node, "handoff disable both"),
+    check_admin_cmd(Node, "handoff disable inbound"),
+    check_admin_cmd(Node, "handoff disable outbound"),
+    check_admin_cmd(Node, "handoff disable outbound --all"),
+    check_admin_cmd(Node, "handoff disable outbound --node=dev1@127.0.0.1"),
+    check_admin_cmd(Node, "handoff disable outbound --node=dev99@127.0.0.1"),
+    check_admin_cmd(Node, "handoff summary"),
+    check_admin_cmd(Node, "handoff details"),
+    check_admin_cmd(Node, "handoff details --all"),
+    check_admin_cmd(Node, "handoff details --node=dev1@127.0.0.1"),
+    check_admin_cmd(Node, "handoff details --node=dev99@127.0.0.1").
+
+riak_admin_config_tests(Node) ->
+    check_admin_cmd(Node, "set transfer_limit=2"),
+    check_admin_cmd(Node, "set transfer_limit=2 --node=dev1@127.0.0.1"),
+    check_admin_cmd(Node, "set transfer_limit=2 --all"),
+    check_admin_cmd(Node, "show transfer_limit"),
+    check_admin_cmd(Node, "show transfer_limit --node=dev1@127.0.0.1"),
+    check_admin_cmd(Node, "show transfer_limit --all"),
+    check_admin_cmd(Node, "describe transfer_limit"),
+    check_admin_cmd(Node, "set transfer_limit=2 --node=dev99@127.0.0.1"),
+    check_admin_cmd(Node, "show transfer_limit --node=dev99@127.0.0.1").
 
 %% "top level" riak-admin COMMANDS
 riak_admin_tests(Node) ->
@@ -228,6 +272,8 @@ confirm() ->
     cluster_tests(Node),
     bucket_tests(Node),
     security_tests(Node),
+    riak_admin_handoff_tests(Node),
+    riak_admin_config_tests(Node),
     pass.
 
 check_admin_cmd(Node, Cmd) ->
