@@ -192,16 +192,13 @@ help_or_parse_args({ok, {[], _}}) ->
 help_or_parse_args({ok, {ParsedArgs, HarnessArgs}}) ->
     help_or_parse_tests(ParsedArgs,
                         HarnessArgs,
-                        lists:member(help, ParsedArgs),
-                        args_invalid(ParsedArgs));
+                        lists:member(help, ParsedArgs));
 help_or_parse_args(_) ->
     print_help().
 
-help_or_parse_tests(_, _, true, _) ->
+help_or_parse_tests(_, _, true) ->
     print_help();
-help_or_parse_tests(_, _, false, true) ->
-    print_help();
-help_or_parse_tests(ParsedArgs, HarnessArgs, false, false) ->
+help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
     %% Have to load the `riak_test' config prior to assembling the
     %% test metadata
     load_initial_config(ParsedArgs),
@@ -211,16 +208,6 @@ help_or_parse_tests(ParsedArgs, HarnessArgs, false, false) ->
     Offset = rt_config:get(offset, undefined),
     Workers = rt_config:get(workers, undefined),
     shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, Offset, Workers).
-
-args_invalid(ParsedArgs) ->
-    case { proplists:is_defined(groups, ParsedArgs),
-           proplists:is_defined(tests, ParsedArgs) } of
-        {true, true} ->
-            io:format("--groups and --tests are currently mutually exclusive.~n~n"),
-            true;
-        {_, _} ->
-            false
-    end.
 
 load_initial_config(ParsedArgs) ->
     %% Loads application defaults
@@ -316,11 +303,16 @@ set_lager_env(OutputDir, ConsoleLevel, FileLevel) ->
 %%     end,
 %%     ok.
 
-load_tests([], ParsedArgs) ->
+-spec comma_tokenizer(string(), [string()]) -> [string()].
+comma_tokenizer(S, Acc) ->
+    string:tokens(S, ", ") ++ Acc.
+
+compose_test_data(ParsedArgs) ->
     RawTestList = proplists:get_all_values(tests, ParsedArgs),
-    TestList = lists:foldl(fun(X, Acc) ->
-                               string:tokens(X, ", ") ++ Acc
-                           end, [], RawTestList),
+    RawGroupList = proplists:get_all_values(groups, ParsedArgs),
+    TestList = lists:foldl(fun comma_tokenizer/2, [], RawTestList),
+    GroupList = lists:foldl(fun comma_tokenizer/2, [], RawGroupList),
+
     %% Parse Command Line Tests
     {CodePaths, SpecificTests} =
         lists:foldl(fun extract_test_names/2,
@@ -330,15 +322,28 @@ load_tests([], ParsedArgs) ->
     [code:add_patha(CodePath) || CodePath <- CodePaths,
                                  CodePath /= "."],
 
-    Dirs = proplists:get_all_values(dir, ParsedArgs),
+    Dirs = get_test_dirs(ParsedArgs, default_test_dir(GroupList)),
     SkipTests = string:tokens(proplists:get_value(skip, ParsedArgs, []), [$,]),
-    DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
-    %% Project = list_to_binary(rt_config:get(rt_project, "undefined")),
-
-    %% Upgrades = proplists:get_value(upgrade_path, ParsedArgs),
-    %% TestFoldFun = test_data_fun(rt:get_version(), Project, Upgrades),
-    %% lists:foldl(TestFoldFun, [], lists:usort(DirTests ++ SpecificTests)).
+    DirTests = lists:append([load_tests_in_dir(Dir, GroupList, SkipTests) || Dir <- Dirs]),
     lists:usort(DirTests ++ SpecificTests).
+
+-spec default_test_dir([string()]) -> [string()].
+%% @doc If any groups have been specified then we want to check in the
+%% local test directory by default; otherwise, the default behavior is
+%% that no directory is used to pull tests from.
+default_test_dir([]) ->
+    [];
+default_test_dir(_) ->
+    ["./ebin"].
+
+-spec get_test_dirs(term(), [string()]) -> [string()].
+get_test_dirs(ParsedArgs, DefaultDirs) ->
+    case proplists:get_all_values(dir, ParsedArgs) of
+        [] ->
+            DefaultDirs;
+        Dirs ->
+            Dirs
+    end.
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
     {[filename:dirname(Test) | CodePaths],
@@ -386,6 +391,23 @@ is_runnable_test(TestModule) ->
     code:ensure_loaded(Mod),
     erlang:function_exported(Mod, Fun, 0) orelse
         erlang:function_exported(Mod, Fun, 2).
+
+get_group_tests(Tests, Groups) ->
+    lists:filter(fun(Test) ->
+                         Mod = list_to_atom(Test),
+                         Attrs = Mod:module_info(attributes),
+                         match_group_attributes(Attrs, Groups)
+                 end, Tests).
+
+match_group_attributes(Attributes, Groups) ->
+    case proplists:get_value(test_type, Attributes) of
+        undefined ->
+            false;
+        TestTypes ->
+            lists:member(true,
+                         [ TestType == list_to_atom(Group)
+                           || Group <- Groups, TestType <- TestTypes ])
+    end.
 
 %% run_tests(Tests, Outdir, Report, HarnessArgs) ->
     %% Need properties for tests prior to getting here Need server to
@@ -538,28 +560,47 @@ backend_list(Backends) when is_list(Backends) ->
               end,
     lists:foldl(FoldFun, [], Backends).
 
-load_tests_in_dir(Dir, SkipTests) ->
+load_tests_in_dir(Dir, Groups, SkipTests) ->
     case filelib:is_dir(Dir) of
         true ->
             code:add_path(Dir),
             lists:sort(
-              lists:foldl(load_tests_folder(SkipTests),
+              lists:foldl(load_tests_folder(Groups, SkipTests),
                           [],
                           filelib:wildcard("*.beam", Dir)));
         _ ->
             io:format("~s is not a dir!~n", [Dir])
     end.
 
-load_tests_folder(SkipTests) ->
+load_tests_folder([], SkipTests) ->
     fun(X, Acc) ->
+            %% Drop the .beam suffix
             Test = string:substr(X, 1, length(X) - 5),
             case lists:member(Test, SkipTests) of
                 true ->
                     Acc;
                 false ->
-                    [Test | Acc]
+                    [list_to_atom(Test) | Acc]
+            end
+    end;
+load_tests_folder(Groups, SkipTests) ->
+    fun(X, Acc) ->
+            %% Drop the .beam suffix
+            Test = string:substr(X, 1, length(X) - 5),
+            case group_match(Test, Groups)
+                andalso not lists:member(Test, SkipTests) of
+                true ->
+                    [list_to_atom(Test) | Acc];
+                false ->
+                    Acc
             end
     end.
+
+-spec group_match(string(), [string()]) -> boolean().
+group_match(Test, Groups) ->
+    Mod = list_to_atom(Test),
+    Attrs = Mod:module_info(attributes),
+    match_group_attributes(Attrs, Groups).
 
 so_kill_riak_maybe() ->
     io:format("~n~nSo, we find ourselves in a tricky situation here. ~n"),
