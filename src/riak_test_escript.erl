@@ -520,7 +520,7 @@ print_summary(TestResults, _CoverResult, Verbose) ->
         true ->
             Rows =
                 [format_test_row(Result, Width) || Result <- TestResults],
-            Table = riak_cli_table:autosize_create_table(?HEADER, Rows),
+            Table = clique_table:autosize_create_table(?HEADER, Rows),
             io:format("~ts~n", [Table]);
         false ->
             ok
