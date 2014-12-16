@@ -21,12 +21,19 @@
 -module(rt_bucket_types).
 -include_lib("eunit/include/eunit.hrl").
 
--export([create_and_activate_bucket_type/3,
+-export([create_and_wait/3,
+         create_and_activate_bucket_type/3,
          wait_until_bucket_type_visible/2,
          wait_until_bucket_type_status/3,
          wait_until_bucket_props/3]).
 
 -include("rt.hrl").
+
+-spec create_and_wait([node()], binary(), proplists:proplist()) -> ok.
+create_and_wait(Nodes, Type, Properties) ->
+    create_and_activate_bucket_type(hd(Nodes), Type, Properties),
+    wait_until_bucket_type_status(Type, active, Nodes),
+    wait_until_bucket_type_visible(Nodes, Type).
 
 %% @doc create and immediately activate a bucket type
 create_and_activate_bucket_type(Node, Type, Props) ->
@@ -85,4 +92,3 @@ wait_until_bucket_props(Nodes, Bucket, Props) ->
                 see_bucket_props(Nodes, Bucket, Props)
         end,
     ?assertEqual(ok, rt:wait_until(F)).
-
