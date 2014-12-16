@@ -1,3 +1,4 @@
+-module(rt_properties).
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2013 Basho Technologies, Inc.
@@ -21,10 +22,7 @@
 %% @doc Implements a set of functions for accessing and manipulating
 %% an `rt_properties' record.
 
--module(rt_properties).
-
 -include("rt.hrl").
--include_lib("eunit/include/eunit.hrl").
 
 %% A quick note on the distinction between `node_ids' and
 %% `node_map'. `node_ids' are short identifers (e.g. dev1) and the
@@ -49,13 +47,23 @@
           make_cluster=true :: boolean(),
           cluster_count=1 :: pos_integer(),
           cluster_weights :: [float()],
-          clusters :: proplists:proplist(),
+          clusters :: [rt_cluster_info:cluster_info()],
           required_services=[riak_kv] :: [atom()],
+          bucket_types=[] :: bucket_types(),
           config=default_config() :: term()
          }).
 -type properties() :: #rt_properties_v1{}.
 
--export_type([properties/0]).
+%% Specify the bucket_types field for the properties record. The list
+%% of bucket types may have two forms, a bucket_type or a pair
+%% consisting of an integer and a bucket_type. The latter form
+%% indicates that a bucket_type should only be applied to the cluster
+%% with the given index. The former form is applied to all clusters.
+-type bucket_type() :: {binary(), proplists:proplist()}.
+-type bucket_types() :: [bucket_type() | {pos_integer(), bucket_type()}].
+
+-export_type([properties/0,
+              bucket_types/0]).
 
 -define(RT_PROPERTIES, #rt_properties_v1).
 -define(RECORD_FIELDS, record_info(fields, rt_properties_v1)).
@@ -220,6 +228,8 @@ field_index(cluster_count) ->
     ?RT_PROPERTIES.cluster_count;
 field_index(cluster_weights) ->
     ?RT_PROPERTIES.cluster_weights;
+field_index(bucket_types) ->
+    ?RT_PROPERTIES.bucket_types;
 field_index(clusters) ->
     ?RT_PROPERTIES.clusters;
 field_index(required_services) ->

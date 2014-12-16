@@ -45,18 +45,82 @@ properties() ->
 -spec setup(rt_properties:properties(), proplists:proplist()) ->
                    {ok, rt_properties:properties()} | {error, term()}.
 setup(Properties, _MetaData) ->
-    %% rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
     case form_clusters(Properties) of
-        {ok, Clusters} ->
+        {ok, ClusterNodes} ->
             maybe_wait_for_transfers(rt_properties:get(node_ids, Properties),
                                      rt_properties:get(node_map, Properties),
                                      rt_properties:get(wait_for_transfers, Properties)),
+            Clusters = prepare_clusters(ClusterNodes, Properties),
+            create_bucket_types(Clusters, Properties),
             rt_properties:set(clusters, Clusters, Properties);
         Error ->
             Error
     end.
 
--type clusters() :: [{pos_integer(), [string()]}].
+-spec create_bucket_types([rt_cluster_info:cluster_info()], rt_properties:properties()) -> no_return().
+create_bucket_types(Clusters, Properties) ->
+    BucketTypes = rt_properties:get(bucket_types, Properties),
+    create_bucket_types(Clusters, Properties, BucketTypes).
+
+-spec create_bucket_types([rt_cluster_info:cluster_info()],
+                          rt_properties:properties(),
+                          rt_properties:bucket_types()) -> no_return().
+create_bucket_types(_Clusters, _Properties, []) ->
+    ok;
+create_bucket_types([Cluster], Properties, BucketTypes) ->
+    NodeMap = rt_properties:get(node_map, Properties),
+    NodeIds = rt_cluster_info:get(node_ids, Cluster),
+    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+    lists:foldl(fun maybe_create_bucket_type/2, [{Nodes, 1}], BucketTypes);
+create_bucket_types(Clusters, Properties, BucketTypes) ->
+    NodeMap = rt_properties:get(node_map, Properties),
+    [begin
+         NodeIds = rt_cluster_info:get(node_ids, Cluster),
+         Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+         lists:foldl(fun maybe_create_bucket_type/2, {Nodes, ClusterIndex}, BucketTypes)
+     end || {Cluster, ClusterIndex} <- lists:zip(Clusters, lists:seq(1, length(Clusters)))].
+
+maybe_create_bucket_type({ClusterIndex, {TypeName, TypeProps}},
+                         {Nodes, ClusterIndex}) ->
+    rt_bucket_types:create_and_wait(Nodes, TypeName, TypeProps),
+    {Nodes, ClusterIndex};
+maybe_create_bucket_type({_ApplicableIndex, {_TypeName, _TypeProps}},
+                         {Nodes, _ClusterIndex}) ->
+    %% This bucket type does not apply to this cluster
+    {Nodes, _ClusterIndex};
+maybe_create_bucket_type({TypeName, TypeProps}, {Nodes, _ClusterIndex}) ->
+    %% This bucket type applies to all clusters
+    rt_bucket_types:create_and_wait(Nodes, TypeName, TypeProps),
+    {Nodes, _ClusterIndex}.
+
+-spec prepare_clusters([list(string())], rt_properties:properties()) ->
+                                    [rt_cluster_info:cluster_info()].
+prepare_clusters([ClusterNodes], _Properties) ->
+    rt_cluster_info:new([{node_ids, ClusterNodes}]);
+prepare_clusters(ClusterNodesList, Properties) ->
+    %% If the count of clusters is > 1 the assumption is made that the
+    %% test is exercising replication and some extra
+    %% made. This to avoid some noisy and oft-repeated setup
+    %% boilerplate in every replication test.
+    NodeMap = rt_properties:get(node_map, Properties),
+    {Clusters, _, _} = lists:foldl(fun prepare_cluster/2,
+                                {[], 1, NodeMap},
+                                ClusterNodesList),
+    lists:reverse(Clusters).
+
+-type prepare_cluster_acc() :: {[rt_cluster_info:cluster_info()], char(), proplists:proplist()}.
+-spec prepare_cluster([string()], prepare_cluster_acc()) -> prepare_cluster_acc().
+prepare_cluster(NodeIds, {Clusters, Name, NodeMap}) ->
+    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+    repl_util:name_cluster(hd(Nodes), integer_to_list(Name)),
+    repl_util:wait_until_leader_converge(Nodes),
+    Leader = repl_util:get_leader(hd(Nodes)),
+    Cluster = rt_cluster_info:new([{node_ids, NodeIds},
+                                   {leader, Leader},
+                                   {name, Name}]),
+    {[Cluster | Clusters], Name+1, NodeMap}.
+
+-type clusters() :: [rt_cluster_info:cluster_info()].
 -spec form_clusters(rt_properties:properties()) -> clusters().
 form_clusters(Properties) ->
     NodeIds = rt_properties:get(node_ids, Properties),
@@ -72,12 +136,14 @@ form_clusters(Properties) ->
             Error
     end.
 
+-spec divide_nodes([string()], pos_integer(), [float()]) ->
+                          {ok, [list(string())]} | {error, atom()}.
 divide_nodes(Nodes, Count, Weights)
   when length(Nodes) < Count;
        Weights =/= undefined, length(Weights) =/= Count ->
     {error, invalid_cluster_properties};
 divide_nodes(Nodes, 1, _) ->
-    {ok, [{1, Nodes}]};
+    {ok, [Nodes]};
 divide_nodes(Nodes, Count, Weights) ->
     case validate_weights(Weights) of
         true ->
@@ -91,7 +157,7 @@ divide_nodes(Nodes, Count, Weights) ->
 
 take_nodes(NodeCount, {Index, ClusterAcc, Nodes}) ->
     {NewClusterNodes, RestNodes} = lists:split(NodeCount, Nodes),
-    {Index + 1, [{Index, NewClusterNodes} | ClusterAcc], RestNodes}.
+    {Index + 1, [NewClusterNodes | ClusterAcc], RestNodes}.
 
 validate_weights(undefined) ->
     true;
@@ -124,13 +190,14 @@ node_count_from_weight(TotalNodes, Weight) ->
             IntegerPortion
     end.
 
-remainder_to_apply(Remainder, Index) when Remainder > Index ->
+remainder_to_apply(Remainder, Index) when Remainder > Index;
+                                          Remainder =:= 0 ->
     0;
 remainder_to_apply(_Remainder, _Index) ->
     1.
 
 maybe_join_clusters(Clusters, NodeMap, true) ->
-    [join_cluster(ClusterNodes, NodeMap) || {_, ClusterNodes} <- Clusters];
+    [join_cluster(ClusterNodes, NodeMap) || ClusterNodes <- Clusters];
 maybe_join_clusters(_Clusters, _NodeMap, false) ->
     ok.
 
@@ -151,8 +218,10 @@ join_cluster(NodeIds, NodeMap) ->
     case OtherNodes of
         [] ->
             %% no other nodes, nothing to join/plan/commit
+
             ok;
         _ ->
+
             %% ok do a staged join and then commit it, this eliminates the
             %% large amount of redundant handoff done in a sequential join
             [rt_node:staged_join(Node, Node1) || Node <- OtherNodes],
