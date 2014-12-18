@@ -9,8 +9,6 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/2]).
-
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
 -define(NUM_KEYS,    1000).
 
@@ -34,6 +32,7 @@
           {fullsync_strategy, aae},
           {fullsync_on_connect, false},
           {fullsync_interval, disabled},
+          {max_fssource_soft_retries, 10},
           {max_fssource_retries, Retries}
          ]}
         ]).
@@ -48,7 +47,7 @@ confirm() ->
 
 simple_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, BNodes} = lists:split(3, Nodes),
@@ -120,7 +119,7 @@ simple_test() ->
 
 dual_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(infinity)),
+    Nodes = rt:deploy_nodes(6, ?CONF(infinity), [riak_kv, riak_repl]),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, Rest} = lists:split(2, Nodes),
@@ -220,7 +219,7 @@ dual_test() ->
 
 bidirectional_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, BNodes} = lists:split(3, Nodes),
@@ -303,7 +302,7 @@ bidirectional_test() ->
 
 difference_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, BNodes} = lists:split(3, Nodes),
@@ -395,7 +394,7 @@ difference_test() ->
 
 deadlock_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, BNodes} = lists:split(3, Nodes),
@@ -506,10 +505,6 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
     %% check that the expected number of partitions failed to sync
     ?assertEqual(ExpectedFailures,
                  proplists:get_value(error_exits, Props)),
-
-    %% check that we retried each of them 5 times
-    ?assert(
-        proplists:get_value(retry_exits, Props) >= ExpectedFailures * 5),
 
     ok.
 

@@ -4,11 +4,6 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/2,
-             join/2,
-             wait_until_nodes_ready/1,
-             wait_until_no_pending_changes/1]).
-
 %% export functions shared with other replication tests...
 -export([make_bucket/3]).
 
@@ -23,6 +18,8 @@ confirm() ->
     ],
     rt:set_advanced_conf(all, Conf),
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
+    rt:wait_for_cluster_service(ANodes, riak_repl),
+    rt:wait_for_cluster_service(BNodes, riak_repl),
     replication(ANodes, BNodes, false),
     pass.
 
@@ -204,7 +201,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Restarting down node ~p", [LeaderA]),
     rt:start(LeaderA),
     rt:wait_until_pingable(LeaderA),
-    wait_until_no_pending_changes(ANodes),
+    rt:wait_until_no_pending_changes(ANodes),
     wait_until_leader_converge(ANodes),
     start_and_wait_until_fullsync_complete(LeaderA2),
 

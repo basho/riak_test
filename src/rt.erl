@@ -56,6 +56,7 @@
          create_and_activate_bucket_type/3,
          deploy_nodes/1,
          deploy_nodes/2,
+         deploy_nodes/3,
          deploy_clusters/1,
          down/2,
          enable_search_hook/2,
@@ -305,8 +306,7 @@ deploy_nodes(NumNodes) when is_integer(NumNodes) ->
 %%      `InitialConfig', returning a list of the nodes deployed.
 -spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
 deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
-    NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
-    deploy_nodes(NodeConfig);
+    deploy_nodes(NumNodes, InitialConfig, [riak_kv]);
 deploy_nodes(Versions, Services) ->
     NodeConfig = [ version_to_config(Version) || Version <- Versions ],
     Nodes = ?HARNESS:deploy_nodes(NodeConfig),
@@ -314,6 +314,10 @@ deploy_nodes(Versions, Services) ->
     [ ok = wait_for_service(Node, Service) || Node <- Nodes,
                                               Service <- Services ],
     Nodes.
+
+deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
+    NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
+    deploy_nodes(NodeConfig, Services).
 
 version_to_config(Config) when is_tuple(Config)-> Config;
 version_to_config(Version) -> {Version, default}.

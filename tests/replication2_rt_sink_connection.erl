@@ -43,7 +43,7 @@ confirm() ->
              ]}
     ],
 
-    Nodes = rt:deploy_nodes(NumNodes, Conf),
+    Nodes = rt:deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
     {ANodes, Rest} = lists:split(2, Nodes),
     {BNodes, CNodes} = lists:split(2, Rest),
 

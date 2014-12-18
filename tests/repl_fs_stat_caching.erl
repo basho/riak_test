@@ -38,7 +38,7 @@ setup() ->
     NodeCount = rt_config:get(num_nodes, 6),
 
     lager:info("Deploy ~p nodes", [NodeCount]),
-    Nodes = rt:deploy_nodes(NodeCount, cluster_conf()),
+    Nodes = rt:deploy_nodes(NodeCount, cluster_conf(), [riak_kv, riak_repl]),
     SplitSize = NodeCount div 2,
     {SourceNodes, SinkNodes} = lists:split(SplitSize, Nodes),
 

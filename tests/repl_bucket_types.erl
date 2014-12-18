@@ -347,10 +347,10 @@ cluster_conf() ->
     ].
 
 deploy_nodes(NumNodes, current) ->
-    rt:deploy_nodes(NumNodes, cluster_conf());
+    rt:deploy_nodes(NumNodes, cluster_conf(), [riak_kv, riak_repl]);
 deploy_nodes(_, mixed) ->
     Conf = cluster_conf(),
-    rt:deploy_nodes([{current, Conf}, {previous, Conf}]).
+    rt:deploy_nodes([{current, Conf}, {previous, Conf}], [riak_kv, riak_repl]).
 
 %% @doc Create two clusters of 1 node each and connect them for replication:
 %%      Cluster "A" -> cluster "B"
