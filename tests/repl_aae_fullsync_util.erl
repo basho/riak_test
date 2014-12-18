@@ -6,18 +6,16 @@
         prepare_cluster_data/5]).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/2,
+-import(rt, [deploy_nodes/3,
              join/2,
              log_to_nodes/2,
-             log_to_nodes/3,
-             wait_until_nodes_ready/1,
-             wait_until_no_pending_changes/1]).
+             log_to_nodes/3]).
 
 make_clusters(NumNodesWanted, ClusterSize, Conf) ->
     NumNodes = rt_config:get(num_nodes, NumNodesWanted),
     ClusterASize = rt_config:get(cluster_a_size, ClusterSize),
     lager:info("Deploy ~p nodes", [NumNodes]),
-    Nodes = deploy_nodes(NumNodes, Conf),
+    Nodes = deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),

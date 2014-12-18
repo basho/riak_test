@@ -168,6 +168,9 @@ configure_clusters(AVersion, BVersion, Realtime) ->
 
     Nodes = [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
+    rt:wait_for_cluster_service(ANodes, riak_repl),
+    rt:wait_for_cluster_service(BNodes, riak_repl),
+
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
 

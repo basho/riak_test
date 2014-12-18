@@ -19,7 +19,7 @@ confirm() ->
 
 toggle_enabled_test_() ->
     {setup, fun() ->
-        Nodes = rt:deploy_nodes(3, conf()),
+        Nodes = rt:deploy_nodes(3, conf(), [riak_kv, riak_repl]),
         repl_util:make_cluster(Nodes),
         Nodes
     end,
@@ -78,7 +78,7 @@ data_push() ->
 
 data_push_test_() ->
     {timeout, rt_cascading:timeout(1000000000000000), {setup, fun() ->
-        Nodes = rt:deploy_nodes(6, conf()),
+        Nodes = rt:deploy_nodes(6, conf(), [riak_kv, riak_repl]),
         {[N1 | _] = C123, [N4 | _] = C456} = lists:split(3, Nodes),
         repl_util:make_cluster(C123),
         repl_util:name_cluster(N1, "c123"),
@@ -211,7 +211,7 @@ read_repair_interaction() ->
 
 read_repair_interaction_test_() ->
     {timeout, rt_cascading:timeout(100000), {setup, fun() ->
-        Nodes = rt:deploy_nodes(6, conf()),
+        Nodes = rt:deploy_nodes(6, conf(), [riak_kv, riak_repl]),
         {[N1 | _] = C123, [N4 | _] = C456} = lists:split(3, Nodes),
         repl_util:make_cluster(C123),
         repl_util:name_cluster(N1, "c123"),

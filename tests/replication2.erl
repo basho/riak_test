@@ -3,8 +3,7 @@
 -export([confirm/0, replication/3]).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/2,
-             join/2,
+-import(rt, [join/2,
              log_to_nodes/2,
              log_to_nodes/3,
              wait_until_nodes_ready/1,
@@ -33,8 +32,7 @@ confirm() ->
              ]}
     ],
 
-    Nodes = deploy_nodes(NumNodes, Conf),
-
+    Nodes = rt:deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),
@@ -252,6 +250,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     lager:info("Restarting down node ~p", [LeaderA]),
     rt:start(LeaderA),
     rt:wait_until_pingable(LeaderA),
+    rt:wait_for_service(LeaderA, [riak_kv, riak_repl]),
     repl_util:start_and_wait_until_fullsync_complete(LeaderA2),
 
     log_to_nodes(AllNodes, "Starting Joe's Repl Test"),

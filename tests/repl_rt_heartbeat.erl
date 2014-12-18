@@ -174,7 +174,7 @@ make_connected_clusters() ->
              ]}
     ],
 
-    Nodes = rt:deploy_nodes(NumNodes, Conf),
+    Nodes = rt:deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
 
     {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
     lager:info("ANodes: ~p", [ANodes]),

@@ -190,7 +190,7 @@ confirm() ->
 
     lager:info("===testing basic connectivity"),
 
-    [Node1, Node2] = rt:deploy_nodes(2, BaseConf),
+    [Node1, Node2] = rt:deploy_nodes(2, BaseConf, [riak_kv, riak_repl]),
 
     repl_util:name_cluster(Node1, "A"),
     repl_util:name_cluster(Node2, "B"),
@@ -264,7 +264,7 @@ confirm() ->
 
     lager:info("Re-deploying 6 nodes"),
 
-    Nodes = rt:deploy_nodes(6, BaseConf),
+    Nodes = rt:deploy_nodes(6, BaseConf, [riak_kv, riak_repl]),
 
     [rt:wait_until_pingable(N) || N <- Nodes],
 

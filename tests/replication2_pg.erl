@@ -3,10 +3,6 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/2,
-             join/2,
-             wait_until_nodes_ready/1,
-             wait_until_no_pending_changes/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -70,6 +66,10 @@ setup_repl_clusters(Conf, SSL) ->
 
     rt:set_advanced_conf(all, Conf),
     Nodes = [ANodes, BNodes, CNodes] = rt:build_clusters([2, 2, 2]),
+
+    rt:wait_for_cluster_service(ANodes, riak_repl),
+    rt:wait_for_cluster_service(BNodes, riak_repl),
+    rt:wait_for_cluster_service(CNodes, riak_repl),
 
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),

@@ -2,11 +2,6 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/2,
-             join/2,
-             wait_until_nodes_ready/1,
-             wait_until_no_pending_changes/1]).
-
 confirm() ->
     TestHash = erlang:md5(term_to_binary(os:timestamp())),
     TestBucket = <<TestHash/binary, "-systest_a">>,
@@ -22,7 +17,7 @@ confirm() ->
              ]}
     ],
 
-    Nodes = deploy_nodes(NumNodes, Conf),
+    Nodes = rt:deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
     {[AFirst|_] = ANodes, [BFirst|_] = BNodes} = lists:split(ClusterASize, Nodes),
 
     AllNodes = ANodes ++ BNodes,

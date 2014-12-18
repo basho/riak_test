@@ -43,6 +43,9 @@ fullsync_enabled_and_started() ->
 
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
+    rt:wait_for_cluster_service(ANodes, riak_repl),
+    rt:wait_for_cluster_service(BNodes, riak_repl),
+
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
 

@@ -2,11 +2,6 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [deploy_nodes/2,
-             join/2,
-             wait_until_nodes_ready/1,
-             wait_until_no_pending_changes/1]).
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% This tests fullsync scheduling in 1.4+ Advanced Replication%% intercept
@@ -17,7 +12,7 @@ setup_repl_clusters(Conf, InterceptSetup) ->
     NumNodes = 6,
     lager:info("Deploy ~p nodes", [NumNodes]),
 
-    Nodes = deploy_nodes(NumNodes, Conf),
+    Nodes = rt:deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
     InterceptSetup(Nodes),
 
     lager:info("Nodes = ~p", [Nodes]),
