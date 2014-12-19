@@ -52,7 +52,6 @@
 
 -record(state, {test_module :: atom(),
                 properties :: proplists:proplist(),
-                metadata :: term(),
                 backend :: atom(),
                 test_timeout :: integer(),
                 execution_pid :: pid(),
@@ -97,6 +96,8 @@ init([TestModule, Backend, Properties]) ->
                 {platform, <<"local">>},
                 {version, rt:get_version()},
                 {project, Project}],
+    {ok, UpdProperties} =
+        rt_properties:set(metadata, MetaData, Properties),
     TestTimeout = rt_config:get(test_timeout, rt_config:get(rt_max_wait_time)),
     SetupModFun = function_name(setup, TestModule, 2, rt_cluster),
     {ConfirmMod, _} = ConfirmModFun = function_name(confirm, TestModule),
@@ -104,8 +105,7 @@ init([TestModule, Backend, Properties]) ->
                                  rt_properties:get(valid_backends, Properties)),
     PreReqCheck = check_prereqs(ConfirmMod),
     State = #state{test_module=TestModule,
-                   properties=Properties,
-                   metadata=MetaData,
+                   properties=UpdProperties,
                    backend=Backend,
                    test_timeout=TestTimeout,
                    setup_modfun=SetupModFun,
@@ -181,7 +181,6 @@ execute({nodes_deployed, _}, State) ->
            properties=Properties,
            setup_modfun={SetupMod, SetupFun},
            confirm_modfun=ConfirmModFun,
-           metadata=MetaData,
            test_timeout=TestTimeout} = State,
     lager:notice("Running ~s", [TestModule]),
 
@@ -190,11 +189,10 @@ execute({nodes_deployed, _}, State) ->
     %% required by the test properties. The cluster information is placed
     %% into the properties record and returned by the `setup' function.
     UpdState =
-        case SetupMod:SetupFun(Properties, MetaData) of
+        case SetupMod:SetupFun(Properties) of
             {ok, UpdProperties} ->
                 Pid = spawn_link(test_fun(UpdProperties,
                                           ConfirmModFun,
-                                          MetaData,
                                           self())),
                 State#state{execution_pid=Pid,
                             properties=UpdProperties,
@@ -245,7 +243,6 @@ wait_for_upgrade(nodes_upgraded, State) ->
     #state{properties=Properties,
            confirm_modfun=ConfirmModFun,
            current_version=CurrentVersion,
-           metadata=MetaData,
            test_timeout=TestTimeout} = State,
 
     %% Update the `current_version' in the properties record
@@ -256,7 +253,6 @@ wait_for_upgrade(nodes_upgraded, State) ->
     %% a call to an exported function in `rt_cluster'
     Pid = spawn_link(test_fun(UpdProperties,
                               ConfirmModFun,
-                              MetaData,
                               self())),
     UpdState = State#state{execution_pid=Pid,
                            properties=UpdProperties},
@@ -282,13 +278,13 @@ wait_for_upgrade(_Event, _From, _State) ->
 %%% Internal functions
 %%%===================================================================
 
--spec test_fun(rt_properties:properties(), {atom(), atom()}, proplists:proplist(), pid()) ->
+-spec test_fun(rt_properties:properties(), {atom(), atom()}, pid()) ->
                       function().
-test_fun(Properties, {ConfirmMod, ConfirmFun}, MetaData, NotifyPid) ->
+test_fun(Properties, {ConfirmMod, ConfirmFun}, NotifyPid) ->
     fun() ->
             %% Exceptions and their handling sucks, but eunit throws
             %% errors `erlang:error' so here we are
-            try ConfirmMod:ConfirmFun(Properties, MetaData) of
+            try ConfirmMod:ConfirmFun(Properties) of
                 TestResult ->
                     ?MODULE:send_event(NotifyPid, test_result(TestResult))
             catch

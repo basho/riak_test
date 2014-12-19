@@ -22,7 +22,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([properties/0,
-         setup/2,
+         setup/1,
          augment_config/3,
          clean_cluster/1,
          join_cluster/2,
@@ -42,9 +42,9 @@
 properties() ->
     rt_properties:new().
 
--spec setup(rt_properties:properties(), proplists:proplist()) ->
+-spec setup(rt_properties:properties()) ->
                    {ok, rt_properties:properties()} | {error, term()}.
-setup(Properties, _MetaData) ->
+setup(Properties) ->
     case form_clusters(Properties) of
         {ok, ClusterNodes} ->
             maybe_wait_for_transfers(rt_properties:get(node_ids, Properties),

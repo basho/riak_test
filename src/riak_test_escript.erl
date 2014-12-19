@@ -390,7 +390,7 @@ is_runnable_test(TestModule) ->
     {Mod, Fun} = riak_test_runner:function_name(confirm, TestModule),
     code:ensure_loaded(Mod),
     erlang:function_exported(Mod, Fun, 0) orelse
-        erlang:function_exported(Mod, Fun, 2).
+        erlang:function_exported(Mod, Fun, 1).
 
 get_group_tests(Tests, Groups) ->
     lists:filter(fun(Test) ->
