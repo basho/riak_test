@@ -18,9 +18,12 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_listkeys).
+
 %% -behavior(riak_test).
+
 -export([properties/0,
-         confirm/2]).
+         confirm/1]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"listkeys_bucket">>).
@@ -33,8 +36,8 @@ properties() ->
     rt_properties:new([{node_count, 4},
                        {make_cluster, false}]).
 
--spec confirm(rt_properties:properties(), proplists:proplist()) -> pass | fail.
-confirm(Properties, _MD) ->
+-spec confirm(rt_properties:properties()) -> pass | fail.
+confirm(Properties) ->
     [NodeId1, NodeId2, NodeId3 | _] = NodeIds = rt_properties:get(node_ids, Properties),
     NodeMap = rt_properties:get(node_map, Properties),
     Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],

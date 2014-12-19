@@ -37,7 +37,6 @@
           node_map :: [{string(), node()}],
           node_count=3 :: non_neg_integer(),
           metadata=[] :: proplists:proplist(),
-          properties=[] :: proplists:proplist(),
           rolling_upgrade=false :: boolean(),
           start_version="head" :: string(),
           current_version :: string(),
@@ -208,8 +207,6 @@ field_index(node_count) ->
     ?RT_PROPERTIES.node_count;
 field_index(metadata) ->
     ?RT_PROPERTIES.metadata;
-field_index(properties) ->
-    ?RT_PROPERTIES.properties;
 field_index(rolling_upgrade) ->
     ?RT_PROPERTIES.rolling_upgrade;
 field_index(start_version) ->

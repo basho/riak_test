@@ -5,11 +5,11 @@
 %%
 %% -------------------------------------------------------------------
 
--behaviour(riak_test).
+%% -behaviour(riak_test).
 
--export([setup/2,
+-export([setup/1,
          properties/0,
-         confirm/2]).
+         confirm/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -test_type([bucket_types, replication]).
@@ -31,8 +31,8 @@ properties() ->
                        {wait_for_transfers, true},
                        {required_services, [riak_kv, riak_repl]}]).
 
-setup(Properties, _MD) ->
-    case rt_cluster:setup(Properties, _MD) of
+setup(Properties) ->
+    case rt_cluster:setup(Properties) of
         {ok, UpdProperties} ->
             Clusters = rt_properties:get(clusters, UpdProperties),
             [LeaderA, LeaderB] = [rt_cluster_info:get(leader, Cluster)
@@ -43,8 +43,8 @@ setup(Properties, _MD) ->
             Error
     end.
 
--spec confirm(rt_properties:properties(), proplists:proplist()) -> pass | fail.
-confirm(Properties, _MD) ->
+-spec confirm(rt_properties:properties()) -> pass | fail.
+confirm(Properties) ->
     Clusters = rt_properties:get(clusters, Properties),
     NodeMap = rt_properties:get(node_map, Properties),
 
