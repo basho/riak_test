@@ -1,3 +1,4 @@
+-module(secondary_index_tests).
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2012 Basho Technologies, Inc.
@@ -17,9 +18,11 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(secondary_index_tests).
--export([confirm/2,
-         properties/0]).
+
+%% -behaviour(riak_test).
+
+-export([properties/0,
+         confirm/1]).
 -export([put_an_object/3, put_an_object/5, int_to_key/1,
          stream_pb/3, stream_pb/4, pb_query/4, http_query/3,
          http_query/4, http_stream/4, int_to_field1_bin/1, url/2,
@@ -46,8 +49,8 @@ config() ->
     [{riak_kv, [{secondary_index_sort_default, false}]},
      {riak_core, [{handoff_concurrency, 11}]}].
 
--spec confirm(rt_properties:properties(), proplists:proplist()) -> pass | fail.
-confirm(Properties, _MD) ->
+-spec confirm(rt_properties:properties()) -> pass | fail.
+confirm(Properties) ->
     NodeMap= rt_properties:get(node_map, Properties),
     Nodes = [rt_node:node_name(NodeId, NodeMap)
              || NodeId <- rt_properties:get(node_ids, Properties)],

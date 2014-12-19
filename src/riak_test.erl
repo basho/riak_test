@@ -21,4 +21,5 @@
 
 
 %% Define the riak_test behavior
--callback confirm(rt_properties:properties(), proplists:proplist()) -> pass | fail.
+%% -callback confirm(rt_properties:properties()) -> pass | fail.
+-callback confirm() -> pass | fail.
