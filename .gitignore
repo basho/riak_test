@@ -18,3 +18,7 @@ tags
 riak-*
 *.png
 .rebar/
+.local_dialyzer_plt
+dialyzer_unhandled_warnings
+dialyzer_warnings
+
