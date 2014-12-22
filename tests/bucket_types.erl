@@ -1,6 +1,11 @@
 -module(bucket_types).
 
--export([properties/0,confirm/2, mapred_modfun/3, mapred_modfun_type/3]).
+%% -behaviour(riak_test).
+
+-export([properties/0,
+         confirm/1,
+         mapred_modfun/3,
+         mapred_modfun_type/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("rt.hrl").
@@ -14,12 +19,16 @@ properties() ->
     rt_properties:new([{node_count, 4},
                        {config, CustomConfig}]).
 
-confirm(Properties, _MD) ->
-    Nodes = rt_properties:get(nodes, Properties),
+-spec confirm(rt_properties:properties()) -> pass | fail.
+confirm(Properties) ->
+    NodeIds = rt_properties:get(node_ids, Properties),
+    NodeMap = rt_properties:get(node_map, Properties),
+    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
     Node = hd(Nodes),
+
     application:start(inets),
 
-    RMD = riak_test_runner:metadata(),
+    RMD = rt_properties:get(metadata, Properties),
     HaveIndexes = case proplists:get_value(backend, RMD) of
                       undefined -> false; %% default is da 'cask
                       bitcask -> false;
@@ -406,7 +415,7 @@ confirm(Properties, _MD) ->
                                          undefined, true}])),
 
     riakc_pb_socket:stop(PB),
-    ok.
+    pass.
 
 accumulate(ReqID) ->
     receive

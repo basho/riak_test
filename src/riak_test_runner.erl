@@ -95,6 +95,7 @@ init([TestModule, Backend, Properties]) ->
     MetaData = [{id, -1},
                 {platform, <<"local">>},
                 {version, rt:get_version()},
+                {backend, Backend},
                 {project, Project}],
     {ok, UpdProperties} =
         rt_properties:set(metadata, MetaData, Properties),

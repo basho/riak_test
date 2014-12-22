@@ -3,9 +3,16 @@
 
 %% -behaviour(riak_test).
 
--export([confirm/1]).
+-include_lib("eunit/include/eunit.hrl").
+
+-export([properties/0,
+         confirm/1]).
+
+properties() ->
+    rt_properties:new([{make_cluster, false}]).
 
 -spec confirm(rt_properties:properties()) -> pass | fail.
 confirm(_Properties) ->
     lager:info("Running test confirm function"),
+    ?assertEqual(1,2),
     fail.
