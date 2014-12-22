@@ -80,7 +80,7 @@ handle_call(stop, _From, State) ->
 handle_cast({reserve_nodes, Count, Versions, NotifyFun}, State) ->
     {Result, UpdState} =
         reserve(Count, Versions, State),
-    NotifyFun({nodes, Result, State#state.node_map}),
+    NotifyFun(Result),
     {noreply, UpdState};
 handle_cast({deploy_nodes, Nodes, Version, Config, Services, NotifyFun}, State) ->
     Result = deploy(Nodes, State#state.node_map, Version, Config, Services),
@@ -158,8 +158,9 @@ reserve(Count, Versions, State=#state{nodes_available=NodesAvailable,
     case versions_available(Count, Versions, VersionMap) of
         true ->
             UpdNodesDeployed = lists:sort(NodesDeployed ++ NodesAvailable),
-            {NodesAvailable, State#state{nodes_available=[],
-                                         nodes_deployed=UpdNodesDeployed}};
+            Result = {nodes, NodesAvailable, State#state.node_map},
+            {Result, State#state{nodes_available=[],
+                                 nodes_deployed=UpdNodesDeployed}};
         false ->
             {insufficient_versions_available, State}
     end;
@@ -172,7 +173,8 @@ reserve(Count, Versions, State=#state{nodes_available=NodesAvailable,
             UpdNodesDeployed = lists:sort(NodesDeployed ++ Reserved),
             UpdState = State#state{nodes_available=UpdNodesAvailable,
                                    nodes_deployed=UpdNodesDeployed},
-            {Reserved, UpdState};
+            Result = {nodes, Reserved, UpdState#state.node_map},
+            {Result, UpdState};
         false ->
             {insufficient_versions_available, State}
     end.

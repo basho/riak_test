@@ -27,9 +27,12 @@
          stream_pb/3, stream_pb/4, pb_query/4, http_query/3,
          http_query/4, http_stream/4, int_to_field1_bin/1, url/2,
          assertExactQuery/5, assertRangeQuery/7]).
+
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
+
+-test_type(['2i']).
 
 -define(KEYS(A), [int_to_key(A)]).
 -define(KEYS(A,B), [int_to_key(N) || N <- lists:seq(A,B)]).
