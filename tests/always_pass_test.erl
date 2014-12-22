@@ -12,7 +12,8 @@ properties() ->
     rt_properties:new([{make_cluster, false}]).
 
 -spec confirm(rt_properties:properties()) -> pass | fail.
-confirm(_Properties) ->
-    lager:info("Running test confirm function"),
+confirm(Properties) ->
+    NodeIds = rt_properties:get(node_ids, Properties),
+    lager:notice("~p is using ~p nodes", [?MODULE, length(NodeIds)]),
     ?assertEqual(1,1),
     pass.

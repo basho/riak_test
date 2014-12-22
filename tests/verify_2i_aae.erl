@@ -18,10 +18,13 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_2i_aae).
--behaviour(riak_test).
--export([confirm/0]).
+
+%% -behaviour(riak_test).
+
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
+
+-test_type(['2i']).
 
 %% Make it multi-backend compatible.
 -define(BUCKETS, [<<"eleveldb1">>, <<"memory1">>]).
@@ -30,13 +33,26 @@
 -define(SCAN_BATCH_SIZE, 100).
 -define(N_VAL, 3).
 
-confirm() ->
-    [Node1] = rt_cluster:build_cluster(1,
-                               [{riak_kv,
-                                 [{anti_entropy, {off, []}},
-                                  {anti_entropy_build_limit, {100, 500}},
-                                  {anti_entropy_concurrency, 100},
-                                  {anti_entropy_tick, 200}]}]),
+-export([properties/0,
+         confirm/1]).
+
+properties() ->
+    Config = [{riak_kv,
+               [{anti_entropy, {off, []}},
+                {anti_entropy_build_limit, {100, 500}},
+                {anti_entropy_concurrency, 100},
+                {anti_entropy_tick, 200}]}] ++ rt_properties:default_config(),
+    rt_properties:new([{node_count, 1},
+                       {make_cluster, false},
+                       {config, Config}]).
+
+-spec confirm(rt_properties:properties()) -> pass | fail.
+confirm(Properties) ->
+    NodeIds = rt_properties:get(node_ids, Properties),
+    NodeMap = rt_properties:get(node_map, Properties),
+    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+    Node1 = hd(Nodes),
+
     rt_intercept:load_code(Node1),
     rt_intercept:add(Node1,
                      {riak_object,
@@ -86,7 +102,7 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     DelRange = lists:seq(NumItems-NumDel+1, NumItems),
     lager:info("Deleting ~b objects without updating indexes", [NumDel]),
     [del_obj(PBC, Bucket, N) || N <- DelRange, Bucket <- ?BUCKETS],
-    DelKeys = [to_key(N) || N <- DelRange], 
+    DelKeys = [to_key(N) || N <- DelRange],
     [rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, DelKeys) end)
      || Bucket <- ?BUCKETS],
     %% Verify they are damaged
@@ -172,7 +188,7 @@ run_2i_repair(Node1) ->
     RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae]),
     lager:info("Wait for repair process to finish"),
     Mon = monitor(process, RepairPid),
-    MaxWaitTime = rt_config:get(rt_max_wait_time),
+    MaxWaitTime = 120000,
     receive
         {'DOWN', Mon, _, _, Status} ->
             lager:info("Status: ~p", [Status]),
