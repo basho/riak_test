@@ -58,12 +58,13 @@ confirm() ->
     %% should have.) Turn off DVV in `make_cluster` and see the
     %% siblings explode!
     AObj = get_object(ClientA),
-    BObj = get_object(ClientB),
 
     Expected  = lists:seq(1, 100),
 
     ?assertEqual(1, riakc_obj:value_count(AObj)),
     rt:wait_until(fun() ->
+                          lager:info("Checking sink object"),
+                          BObj = get_object(ClientB),
                           ?assertEqual(2, riakc_obj:value_count(BObj)),
                           Resolved = resolve(riakc_obj:get_values(BObj)),
                           %% Better check final value, no?
