@@ -61,7 +61,8 @@ confirm() ->
 
     Expected  = lists:seq(1, 100),
 
-    ?assertEqual(1, riakc_obj:value_count(AObj)),
+    %% NB: It is possible that there are three siblings because 
+    ?assertMatch(Count when Count =< 3, riakc_obj:value_count(AObj)),
     rt:wait_until(fun() ->
                           lager:info("Checking sink object"),
                           BObj = get_object(ClientB),
