@@ -87,7 +87,7 @@ confirm() ->
                         lager:info("Suspending vnode: ~p", [VIdx]),
                         Pid2 = vnode_util:suspend_vnode(VNode, VIdx),
                         orddict:store(VN, Pid2, Suspended)
-                end, L2, L2),
+                end, orddict:new(), L2),
 
     lager:info("Resuming all vnodes"),
     [vnode_util:resume_vnode(Pid) || {_, Pid} <- L3],
