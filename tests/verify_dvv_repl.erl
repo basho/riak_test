@@ -61,18 +61,24 @@ confirm() ->
 
     Expected  = lists:seq(1, 100),
 
-    %% NB: It is possible that there are three siblings because 
+    %% Having up to 3 siblings could happen in rare cases when the writes hit
+    %% different nodes concurrently in the n_val=3 preflist.
     ?assertMatch(Count when Count =< 3, riakc_obj:value_count(AObj)),
-    rt:wait_until(fun() ->
-                          lager:info("Checking sink object"),
-                          BObj = get_object(ClientB),
-                          ?assertEqual(2, riakc_obj:value_count(BObj)),
-                          Resolved = resolve(riakc_obj:get_values(BObj)),
-                          %% Better check final value, no?
-                          ?assertEqual(Expected, lists:sort(sets:to_list(Resolved))),
-                          true
-                  end),
-
+    WaitFun = fun() ->
+                      lager:info("Checking sink object"),
+                      BObj = get_object(ClientB),
+                      Resolved0 = resolve(riakc_obj:get_values(BObj)),
+                      Resolved = lists:sort(sets:to_list(Resolved0)),
+                      case Resolved of
+                          Expected ->
+                              BCount = riakc_obj:value_count(BObj),
+                              ?assertMatch(C when C =< 6, BCount),
+                              true;
+                          _ ->
+                              false
+                      end
+              end,
+    ?assertEqual(ok, rt:wait_until(WaitFun)),
     pass.
 
 
