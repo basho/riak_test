@@ -58,19 +58,27 @@ confirm() ->
     %% should have.) Turn off DVV in `make_cluster` and see the
     %% siblings explode!
     AObj = get_object(ClientA),
-    BObj = get_object(ClientB),
 
     Expected  = lists:seq(1, 100),
 
-    ?assertEqual(1, riakc_obj:value_count(AObj)),
-    rt:wait_until(fun() ->
-                          ?assertEqual(2, riakc_obj:value_count(BObj)),
-                          Resolved = resolve(riakc_obj:get_values(BObj)),
-                          %% Better check final value, no?
-                          ?assertEqual(Expected, lists:sort(sets:to_list(Resolved))),
-                          true
-                  end),
-
+    %% Having up to 3 siblings could happen in rare cases when the writes hit
+    %% different nodes concurrently in the n_val=3 preflist.
+    ?assertMatch(Count when Count =< 3, riakc_obj:value_count(AObj)),
+    WaitFun = fun() ->
+                      lager:info("Checking sink object"),
+                      BObj = get_object(ClientB),
+                      Resolved0 = resolve(riakc_obj:get_values(BObj)),
+                      Resolved = lists:sort(sets:to_list(Resolved0)),
+                      case Resolved of
+                          Expected ->
+                              BCount = riakc_obj:value_count(BObj),
+                              ?assertMatch(C when C =< 6, BCount),
+                              true;
+                          _ ->
+                              false
+                      end
+              end,
+    ?assertEqual(ok, rt:wait_until(WaitFun)),
     pass.
 
 
