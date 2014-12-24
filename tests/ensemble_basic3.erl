@@ -78,10 +78,7 @@ confirm() ->
          end || VN={VIdx, VNode} <- MajorityVN],
     L2 = orddict:from_list(L),
 
-    lager:info("Sleeping for 5s"),
-    timer:sleep(5000),
-
-    lists:foldl(fun({VN={VIdx, VNode}, Pid}, Suspended) ->
+    L3 = lists:foldl(fun({VN={VIdx, VNode}, Pid}, Suspended) ->
                         lager:info("Resuming vnode: ~p", [VIdx]),
                         vnode_util:resume_vnode(Pid),
                         ensemble_util:wait_until_stable(Node, Quorum),
@@ -90,10 +87,10 @@ confirm() ->
                         lager:info("Suspending vnode: ~p", [VIdx]),
                         Pid2 = vnode_util:suspend_vnode(VNode, VIdx),
                         orddict:store(VN, Pid2, Suspended)
-                end, L2, L2),
+                end, orddict:new(), L2),
 
     lager:info("Resuming all vnodes"),
-    [vnode_util:resume_vnode(Pid) || {_, Pid} <- L2],
+    [vnode_util:resume_vnode(Pid) || {_, Pid} <- L3],
     ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Re-reading keys"),
     [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
