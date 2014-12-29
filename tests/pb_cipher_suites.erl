@@ -28,10 +28,13 @@ confirm() ->
     make_certs:revoke(CertDir, "rootCA", "revokedCA"),
 
     %% start a HTTP server to serve the CRLs
-    inets:start(httpd, [{port, 8000}, {server_name, "localhost"},
+    %%
+    %% NB: we use the 'stand_alone' option to link the server to the
+    %% test process, so it exits when the test process exits.
+    {ok, _HTTPPid} = inets:start(httpd, [{port, 8000}, {server_name, "localhost"},
                         {server_root, "/tmp"},
                         {document_root, CertDir},
-                        {modules, [mod_get]}]),
+                        {modules, [mod_get]}], stand_alone),
 
     lager:info("Deploy some nodes"),
     Conf = [{riak_core, [
