@@ -20,7 +20,7 @@
         [{riak_kv, [{storage_backend, riak_kv_eleveldb_backend},
                     {anti_entropy, {on, []}}
                    ]},
-         {riak_repl, [{realtime_connection_rebalance_max_delay_secs, 30},
+         {riak_repl, [{realtime_connection_rebalance_max_delay_secs, 30},%% speed up rebalancing a bit
                       {fullsync_strategy, aae},
                       {fullsync_on_connect, false},
                       {fullsync_interval, disabled}
@@ -45,7 +45,7 @@ confirm() ->
         end,
 
     State = #state{ a_up = ANodes, b_up = BNodes},
-    rt:wait_until_aae_trees_built(all_active_nodes(State)),
+%%    rt:wait_until_aae_trees_built(all_active_nodes(State)),
 
 
     start_bench(ANodes, BNodes),
@@ -80,7 +80,7 @@ run_full_sync(State) ->
     time_stamp_action(run_full_sync, "A->B"),
     LeaderA = prepare_cluster(State#state.a_up, State#state.b_up),
     
-    rt:wait_until_aae_trees_built(all_active_nodes(State)),
+%%    rt:wait_until_aae_trees_built(all_active_nodes(State)),
     {FullsyncTime, _} = timer:tc(repl_util,
                                   start_and_wait_until_fullsync_complete,
                                   [LeaderA]),
