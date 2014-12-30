@@ -121,15 +121,15 @@ start_basho_bench(Nodes, LoadGens) ->
 
 bacho_bench_config(HostList) ->
     BenchRate =
-        rt_config:get(basho_bench_rate, 20),
+        rt_config:get(basho_bench_rate, 1),
     BenchDuration =
         rt_config:get(basho_bench_duration, infinity),
     KeyGen =
-        rt_config:get(basho_bench_keygen, {to_binstr, "~w", {partitioned_sequential_int, 30000000}}),
+        rt_config:get(basho_bench_keygen, {to_binstr, "~w", {pareto_int, 10000000}}),
     ValGen =
         rt_config:get(basho_bench_valgen, {exponential_bin, 1000, 10000}),
     Operations =
-        rt_config:get(basho_bench_operations, [{get, 5},{put, 1}]),
+        rt_config:get(basho_bench_operations, [{get, 10},{put, 2},{delete, 1}]),
     Bucket =
         rt_config:get(basho_bench_bucket, <<"mybucket">>),
     Driver =
