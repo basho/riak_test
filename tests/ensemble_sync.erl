@@ -48,23 +48,37 @@ confirm() ->
     [ok = run_scenario(Nodes, NVal, Scenario) || Scenario <- Scenarios],
     pass.
 
+-spec partition(non_neg_integer(), node(), list()) -> {[{non_neg_integer(), node()}], [node()]}.
+partition(Minority, ContactNode, PL) ->
+    All = [VN || {VN, _} <- PL],
+    Other = [VN || {VN={_, Owner}, _} <- PL,
+                   Owner =/= ContactNode],
+    NodeCounts = lists:foldl(fun({_, Node}, Acc) ->
+                                  orddict:update_counter(Node, 1, Acc)
+                             end, orddict:new(), Other),
+    Partitioned = lists:foldl(fun({Node, Count}, Acc) ->
+                                  case Count =:= 1 andalso length(Acc) < Minority of
+                                      true ->
+                                          [Node | Acc];
+                                      false ->
+                                          Acc
+                                  end
+                              end, [], NodeCounts),
+    PartitionedVN = [VN || {_, Node}=VN <- Other, lists:member(Node, Partitioned)],
+    Valid = All -- PartitionedVN,
+    {Valid, Partitioned}.
+
 run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     Node = hd(Nodes),
     Quorum = NVal div 2 + 1,
+    Minority = NVal - Quorum,
     Bucket = {<<"strong">>, Name},
     Keys = [<<N:64/integer>> || N <- lists:seq(1,1000)],
 
     Key1 = hd(Keys),
     DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key1}]),
     PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
-    All = [VN || {VN, _} <- PL],
-    Other = [VN || {VN={_, Owner}, _} <- PL,
-                   Owner =/= Node],
-
-    Minority = NVal - Quorum,
-    PartitionedVN = lists:sublist(Other, Minority),
-    Partitioned = [VNode || {_, VNode} <- PartitionedVN],
-    Valid = All -- PartitionedVN,
+    {Valid, Partitioned} = partition(Minority, Node, PL),
 
     {KillVN,    Valid2} = lists:split(NumKill,    Valid),
     {SuspendVN, Valid3} = lists:split(NumSuspend, Valid2),
