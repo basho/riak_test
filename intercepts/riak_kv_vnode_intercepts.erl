@@ -62,7 +62,8 @@ drop_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
                     lager:log(info, self(), "dropping put request for ~p",
                         [Partition]),
                     %% ?I_INFO("Dropping put for ~p on ~p", [BKey, Partition]),
-                    State;
+                    %% NB: riak_kv#1046 - do_put returns a tuple now
+                    {dropped_by_intercept, State};
                 false ->
                     ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State)
             end
@@ -85,7 +86,8 @@ error_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
                     %% deterministic
                     timer:sleep(1000),
                     riak_core_vnode:reply(Sender, {fail, Partition, ReqId}),
-                    State;
+                    %% NB: riak_kv#1046 - do_put returns a tuple now
+                    {error_by_intercept, State};
                 false ->
                     ?M:do_put_orig(Sender, BKey, RObj, ReqId, StartTime, Options, State)
             end
