@@ -122,7 +122,7 @@ prepare_search_vnodes(Node) ->
       [ list_to_binary(integer_to_list(N))
         || N <- lists:seq(1000, 1000+?SEARCH_COUNT) ]),
     riakc_pb_socket:stop(C).
-                     
+
 prepare_pipe_vnodes(Node) ->
     %% the riak_pipe_w_pass worker produces no archive, but the vnode
     %% still sends its queue (even if empty) through handoff
@@ -173,7 +173,7 @@ find_app_handoff({Path, Port}) ->
     end.
 
 find_line(Port, {ok, Data}) ->
-    Re = "ownership_transfer transfer of ([a-z_]+).*"
+    Re = "ownership transfer of ([a-z_]+).*"
         "completed.*([0-9]+) objects",
     case re:run(Data, Re, [{capture, all_but_first, list}]) of
         {match, [App, Count]} ->
