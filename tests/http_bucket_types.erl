@@ -6,6 +6,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
+-define(WAIT(E), ?assertEqual(ok, rt:wait_until(fun() -> (E) end))).
+
 confirm() ->
     application:start(ibrowse),
     lager:info("Deploy some nodes"),
@@ -50,13 +52,13 @@ confirm() ->
 
     lager:info("list_keys test"),
     %% list keys
-    ?assertEqual({ok, [<<"key">>]}, rhc:list_keys(RHC, <<"bucket">>)),
-    ?assertEqual({ok, [<<"key">>]}, rhc:list_keys(RHC, {<<"default">>,
-                                                        <<"bucket">>})),
+    ?WAIT({ok, [<<"key">>]} == rhc:list_keys(RHC, <<"bucket">>)),
+    ?WAIT({ok, [<<"key">>]} == rhc:list_keys(RHC, {<<"default">>, <<"bucket">>})),
+
     lager:info("list_buckets test"),
     %% list buckets
-    ?assertEqual({ok, [<<"bucket">>]}, rhc:list_buckets(RHC)),
-    ?assertEqual({ok, [<<"bucket">>]}, rhc:list_buckets(RHC, <<"default">>)),
+    ?WAIT({ok, [<<"bucket">>]} == rhc:list_buckets(RHC)),
+    ?WAIT({ok, [<<"bucket">>]} == rhc:list_buckets(RHC, <<"default">>)),
 
     timer:sleep(5000),
     lager:info("default type delete test"),
@@ -90,13 +92,12 @@ confirm() ->
     %% now there shoyld be no buckets or keys to be listed...
     %%
     %% list keys
-    ?assertEqual({ok, []}, rhc:list_keys(RHC, <<"bucket">>)),
-    ?assertEqual({ok, []}, rhc:list_keys(RHC, {<<"default">>,
-                                               <<"bucket">>})),
-    %% list buckets
-    ?assertEqual({ok, []}, rhc:list_buckets(RHC)),
-    ?assertEqual({ok, []}, rhc:list_buckets(RHC, <<"default">>)),
+    ?WAIT({ok, []} == rhc:list_keys(RHC, <<"bucket">>)),
+    ?WAIT({ok, []} == rhc:list_keys(RHC, {<<"default">>, <<"bucket">>})),
 
+    %% list buckets
+    ?WAIT({ok, []} == rhc:list_buckets(RHC)),
+    ?WAIT({ok, []} == rhc:list_buckets(RHC, <<"default">>)),
 
     lager:info("custom type get/put test"),
     %% create a new type
@@ -119,13 +120,13 @@ confirm() ->
     {error, notfound} = rhc:get(RHC, <<"bucket">>, <<"key">>),
 
     lager:info("custom type list_keys test"),
-    ?assertEqual({ok, []}, rhc:list_keys(RHC, <<"bucket">>)),
-    ?assertEqual({ok, [<<"key">>]}, rhc:list_keys(RHC, {<<"mytype">>,
-                                                        <<"bucket">>})),
+    ?WAIT({ok, []} == rhc:list_keys(RHC, <<"bucket">>)),
+    ?WAIT({ok, [<<"key">>]} == rhc:list_keys(RHC, {<<"mytype">>, <<"bucket">>})),
+
     lager:info("custom type list_buckets test"),
     %% list buckets
-    ?assertEqual({ok, []}, rhc:list_buckets(RHC)),
-    ?assertEqual({ok, [<<"bucket">>]}, rhc:list_buckets(RHC, <<"mytype">>)),
+    ?WAIT({ok, []} == rhc:list_buckets(RHC)),
+    ?WAIT({ok, [<<"bucket">>]} == rhc:list_buckets(RHC, <<"mytype">>)),
 
     lager:info("UTF-8 type get/put test"),
     %% こんにちは - konnichiwa (Japanese)
@@ -147,7 +148,7 @@ confirm() ->
     ?assertEqual(<<"unicode">>, riakc_obj:get_value(O6)),
 
     lager:info("unicode type list_keys test"),
-    ?assertEqual({ok, [<<"key">>]}, rhc:list_keys(RHC, UCBBin)),
+    ?WAIT({ok, [<<"key">>]}== rhc:list_keys(RHC, UCBBin)),
 
     lager:info("unicode type list_buckets test"),
     %% list buckets
@@ -158,7 +159,7 @@ confirm() ->
     %% the values are coming from, and those are indeed the correct
     %% hexadecimal values for the UTF-8 representation of the bucket
     %% name
-    ?assertEqual({ok, [<<"0633064406270645">>]}, rhc:list_buckets(RHC, UnicodeTypeBin)),
+    ?WAIT({ok, [<<"0633064406270645">>]} == rhc:list_buckets(RHC, UnicodeTypeBin)),
 
     lager:info("bucket properties tests"),
     rhc:set_bucket(RHC, {<<"default">>, <<"mybucket">>},
