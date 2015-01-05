@@ -50,23 +50,32 @@ confirm() ->
 
 -spec partition(non_neg_integer(), node(), list()) -> {[{non_neg_integer(), node()}], [node()]}.
 partition(Minority, ContactNode, PL) ->
-    All = [VN || {VN, _} <- PL],
-    Other = [VN || {VN={_, Owner}, _} <- PL,
+    AllVnodes = [VN || {VN, _} <- PL],
+    OtherVnodes = [VN || {VN={_, Owner}, _} <- PL,
                    Owner =/= ContactNode],
-    NodeCounts = lists:foldl(fun({_, Node}, Acc) ->
-                                  orddict:update_counter(Node, 1, Acc)
-                             end, orddict:new(), Other),
-    Partitioned = lists:foldl(fun({Node, Count}, Acc) ->
-                                  case Count =:= 1 andalso length(Acc) < Minority of
-                                      true ->
-                                          [Node | Acc];
-                                      false ->
-                                          Acc
-                                  end
-                              end, [], NodeCounts),
-    PartitionedVN = [VN || {_, Node}=VN <- Other, lists:member(Node, Partitioned)],
-    Valid = All -- PartitionedVN,
-    {Valid, Partitioned}.
+    NodeCounts = num_partitions_per_node(OtherVnodes),
+    PartitionedNodes = minority_nodes(NodeCounts, Minority),
+    PartitionedVnodes = minority_vnodes(OtherVnodes, PartitionedNodes),
+    ValidVnodes = AllVnodes -- PartitionedVnodes,
+    {ValidVnodes, PartitionedNodes}.
+
+num_partitions_per_node(Other) ->
+    lists:foldl(fun({_, Node}, Acc) ->
+                    orddict:update_counter(Node, 1, Acc)
+                end, orddict:new(), Other).
+
+minority_nodes(NodeCounts, MinoritySize) ->
+    lists:foldl(fun({Node, Count}, Acc) ->
+                    case Count =:= 1 andalso length(Acc) < MinoritySize of
+                        true ->
+                            [Node | Acc];
+                        false ->
+                            Acc
+                    end
+                end, [], NodeCounts).
+
+minority_vnodes(Vnodes, PartitionedNodes) ->
+    [VN || {_, Node}=VN <- Vnodes, lists:member(Node, PartitionedNodes)].
 
 run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     Node = hd(Nodes),
