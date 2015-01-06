@@ -125,7 +125,7 @@ bacho_bench_config(HostList) ->
     BenchDuration =
         rt_config:get(basho_bench_duration, infinity),
     KeyGen =
-        rt_config:get(basho_bench_keygen, {to_binstr, "~w", {pareto_int, 10000000}}),
+        rt_config:get(basho_bench_keygen, {pareto_int, 10000000}),
     ValGen =
         rt_config:get(basho_bench_valgen, {exponential_bin, 1000, 10000}),
     Operations =
