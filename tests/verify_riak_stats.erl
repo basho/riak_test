@@ -36,6 +36,8 @@ confirm() ->
     verify_dt_converge:create_bucket_types(Nodes, ?TYPES),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
     Stats1 = get_stats(Node1),
+    AdminStats1 = get_console_stats(Node1),
+    compare_http_and_console_stats(Stats1, AdminStats1),
     %% make sure a set of stats have valid values
     verify_nz(Stats1,[<<"cpu_nprocs">>,
                       <<"mem_total">>,
@@ -146,7 +148,43 @@ get_stats(Node) ->
     %%lager:debug(StatString),
     Stats.
 
+get_console_stats(Node) ->
+    %% Problem: rt:admin(Node, Cmd) seems to drop parts of the output when
+    %% used for "riak-admin status" in 'rtdev'.
+    %% Temporary workaround: use os:cmd/1 when in 'rtdev' (needs some cheats
+    %% in order to find the right path etc.)
+    try
+	Stats =
+	    case rt_config:get(rt_harness) of
+		rtdev ->
+		    N = rtdev:node_id(Node),
+		    Path = rtdev:relpath(rtdev:node_version(N)),
+		    Cmd = rtdev:riak_admin_cmd(Path, N, ["status"]),
+		    lager:info("Cmd = ~p~n", [Cmd]),
+		    os:cmd(Cmd);
+		_ ->
+		    rt:admin(Node, "status")
+	    end,
+	[S || {_,_} = S <-
+		  [list_to_tuple(re:split(L, " : ", []))
+		   || L <- tl(tl(string:tokens(Stats, "\n")))]]
+    catch
+	error:Reason ->
+	    lager:info("riak-admin status ERROR: ~p~n~p~n",
+		       [Reason, erlang:get_stacktrace()]),
+	    []
+    end.
 
+compare_http_and_console_stats(Stats1, Stats2) ->
+    OnlyInHttp = [S || {K,_} = S <- Stats1,
+		       not lists:keymember(K, 1, Stats2)],
+    OnlyInAdmin = [S || {K,_} = S <- Stats2,
+			not lists:keymember(K, 1, Stats1)],
+    lager:info("OnlyInHttp = ~p~n"
+	       "OnlyInAdmin = ~p~n", [OnlyInHttp, OnlyInAdmin]),
+    ?assertEqual([], OnlyInHttp),
+    ?assertEqual([], OnlyInAdmin),
+    ok.
 
 datatype_stats() ->
     %% Merge stats are excluded because we likely never merge disjoint
