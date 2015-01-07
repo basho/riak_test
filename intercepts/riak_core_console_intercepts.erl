@@ -240,3 +240,29 @@ verify_console_transfer_limit(Val) ->
         ["dev55@127.0.0.1", "1"] -> ?PASS;
         _ -> ?FAIL
     end.
+
+verify_cluster_status(Val) ->
+    inspect(Val).
+
+verify_cluster_partition_count(Val) ->
+    inspect(Val).
+
+verify_cluster_partitions(Val) ->
+    inspect(Val).
+
+% partition takes a key of id= or index=
+verify_cluster_partition(Val) ->
+    inspect(Val).
+
+verify_handoff_summary(Val) ->
+    inspect(Val).
+
+verify_handoff_details(Val) ->
+    inspect(Val).
+
+inspect(Val) ->
+    io:format("Val: ~p~n", [Val]),
+    ?PASS.
+
+
+

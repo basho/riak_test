@@ -56,17 +56,9 @@ cluster_tests(Node) ->
     check_admin_cmd(Node, "cluster clear"),
     check_admin_cmd(Node, "cluster status"),
     check_admin_cmd(Node, "cluster partition-count"),
-    check_admin_cmd(Node, "cluster partition-count --node=dev1@127.0.0.1"),
-    check_admin_cmd(Node, "cluster partition-count --node=dev99@127.0.0.1"),
     check_admin_cmd(Node, "cluster partitions"),
-    check_admin_cmd(Node, "cluster partitions --node=dev1@127.0.0.1"),
-    check_admin_cmd(Node, "cluster partitions --node=dev99@127.0.0.1"),
     check_admin_cmd(Node, "cluster partition id=0"),
-    check_admin_cmd(Node, "cluster partition index=0"),
-    check_admin_cmd(Node, "cluster partition id=-1"),
-    check_admin_cmd(Node, "cluster partition index=-1"),
-    check_admin_cmd(Node, "cluster members"),
-    check_admin_cmd(Node, "cluster members --all").
+    check_admin_cmd(Node, "cluster partition index=0").
 
 %% riak-admin bucket_type
 bucket_tests(Node) ->
@@ -117,34 +109,8 @@ security_tests(Node) ->
 
 %% handoff commands
 riak_admin_handoff_tests(Node) ->
-    check_admin_cmd(Node, "handoff enable both"),
-    check_admin_cmd(Node, "handoff enable inbound"),
-    check_admin_cmd(Node, "handoff enable outbound"),
-    check_admin_cmd(Node, "handoff enable outbound --all"),
-    check_admin_cmd(Node, "handoff enable outbound --node=dev1@127.0.0.1"),
-    check_admin_cmd(Node, "handoff enable outbound --node=dev99@127.0.0.1"),
-    check_admin_cmd(Node, "handoff disable both"),
-    check_admin_cmd(Node, "handoff disable inbound"),
-    check_admin_cmd(Node, "handoff disable outbound"),
-    check_admin_cmd(Node, "handoff disable outbound --all"),
-    check_admin_cmd(Node, "handoff disable outbound --node=dev1@127.0.0.1"),
-    check_admin_cmd(Node, "handoff disable outbound --node=dev99@127.0.0.1"),
     check_admin_cmd(Node, "handoff summary"),
-    check_admin_cmd(Node, "handoff details"),
-    check_admin_cmd(Node, "handoff details --all"),
-    check_admin_cmd(Node, "handoff details --node=dev1@127.0.0.1"),
-    check_admin_cmd(Node, "handoff details --node=dev99@127.0.0.1").
-
-riak_admin_config_tests(Node) ->
-    check_admin_cmd(Node, "set transfer_limit=2"),
-    check_admin_cmd(Node, "set transfer_limit=2 --node=dev1@127.0.0.1"),
-    check_admin_cmd(Node, "set transfer_limit=2 --all"),
-    check_admin_cmd(Node, "show transfer_limit"),
-    check_admin_cmd(Node, "show transfer_limit --node=dev1@127.0.0.1"),
-    check_admin_cmd(Node, "show transfer_limit --all"),
-    check_admin_cmd(Node, "describe transfer_limit"),
-    check_admin_cmd(Node, "set transfer_limit=2 --node=dev99@127.0.0.1"),
-    check_admin_cmd(Node, "show transfer_limit --node=dev99@127.0.0.1").
+    check_admin_cmd(Node, "handoff details").
 
 %% "top level" riak-admin COMMANDS
 riak_admin_tests(Node) ->
@@ -266,6 +232,23 @@ confirm() ->
                         {{reload,1}, verify_console_reload}
                       ]}),
 
+    rt_intercept:add(Node,
+                     {riak_core_cluster_cli,
+                      [
+                       {{status,2}, verify_cluster_status},
+                       {{partition_count,2}, verify_cluster_partition_count},
+                       {{partitions,2}, verify_cluster_partitions},
+                       {{partition,2}, verify_cluster_partition}
+                      ]}),
+
+    rt_intercept:add(Node,
+                     {riak_core_handoff_status,
+                      [
+                       {{handoff_summary,2}, verify_handoff_summary},
+                       {{handoff_details,2}, verify_handoff_details}
+                      ]}),
+
+
     rt_intercept:wait_until_loaded(Node),
 
     riak_admin_tests(Node),
@@ -273,7 +256,6 @@ confirm() ->
     bucket_tests(Node),
     security_tests(Node),
     riak_admin_handoff_tests(Node),
-    riak_admin_config_tests(Node),
     pass.
 
 check_admin_cmd(Node, Cmd) ->
