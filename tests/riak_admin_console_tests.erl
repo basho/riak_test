@@ -53,7 +53,12 @@ cluster_tests(Node) ->
     check_admin_cmd(Node, "cluster resize-ring abort"),
     check_admin_cmd(Node, "cluster plan"),
     check_admin_cmd(Node, "cluster commit"),
-    check_admin_cmd(Node, "cluster clear").
+    check_admin_cmd(Node, "cluster clear"),
+    check_admin_output(Node, "cluster status", "Cluster Status"),
+    check_admin_output(Node, "cluster partition-count", "partition-count"),
+    check_admin_output(Node, "cluster partitions", "dev1@127\\.0\\.0\\.1"),
+    check_admin_output(Node, "cluster partition id=0", "^\\+"),
+    check_admin_output(Node, "cluster partition index=0", "\\+").
 
 %% riak-admin bucket_type
 bucket_tests(Node) ->
@@ -101,6 +106,11 @@ security_tests(Node) ->
     check_admin_cmd(Node, "security print-group group"),
     check_admin_cmd(Node, "security print-grants foo"),
     check_admin_cmd(Node, "security ciphers foo").
+
+%% handoff commands
+riak_admin_handoff_tests(Node) ->
+    check_admin_output(Node, "handoff summary", "Each cell"),
+    check_admin_output(Node, "handoff details", "No ongoing").
 
 %% "top level" riak-admin COMMANDS
 riak_admin_tests(Node) ->
@@ -228,6 +238,7 @@ confirm() ->
     cluster_tests(Node),
     bucket_tests(Node),
     security_tests(Node),
+    riak_admin_handoff_tests(Node),
     pass.
 
 check_admin_cmd(Node, Cmd) ->
@@ -244,3 +255,14 @@ check_admin_cmd_2x(Node, Cmd) ->
     lager:info("Testing riak-admin ~s on ~s", [Cmd, Node]),
     {ok, Out} = rt:admin(Node, S),
     ?assertEqual("passpass", Out).
+
+%% Everyone hates regexp but...
+check_admin_output(Node, Cmd, Expected) ->
+    S = string:tokens(Cmd, " "),
+    lager:info("Testing riak-admin ~s on ~s", [Cmd, Node]),
+    {ok, Out} = rt:admin(Node, S),
+    Result = case re:run(Out, Expected) of
+        nomatch -> "fail";
+        _ -> "pass"
+    end,
+    ?assertEqual("pass", Result).
