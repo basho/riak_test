@@ -54,11 +54,11 @@ cluster_tests(Node) ->
     check_admin_cmd(Node, "cluster plan"),
     check_admin_cmd(Node, "cluster commit"),
     check_admin_cmd(Node, "cluster clear"),
-    check_admin_output(Node, "cluster status", ".*"),
-    check_admin_output(Node, "cluster partition-count", ".*"),
-    check_admin_output(Node, "cluster partitions", ".*"),
-    check_admin_output(Node, "cluster partition id=0", ".*"),
-    check_admin_output(Node, "cluster partition index=0", ".*").
+    check_admin_output(Node, "cluster status", "Cluster Status"),
+    check_admin_output(Node, "cluster partition-count", "partition-count"),
+    check_admin_output(Node, "cluster partitions", "dev1@127\\.0\\.0\\.1"),
+    check_admin_output(Node, "cluster partition id=0", "^\\+"),
+    check_admin_output(Node, "cluster partition index=0", "\\+").
 
 %% riak-admin bucket_type
 bucket_tests(Node) ->
@@ -109,8 +109,8 @@ security_tests(Node) ->
 
 %% handoff commands
 riak_admin_handoff_tests(Node) ->
-    check_admin_output(Node, "handoff summary", ".*"),
-    check_admin_output(Node, "handoff details", ".*").
+    check_admin_output(Node, "handoff summary", "Each cell"),
+    check_admin_output(Node, "handoff details", "No ongoing").
 
 %% "top level" riak-admin COMMANDS
 riak_admin_tests(Node) ->
@@ -261,7 +261,6 @@ check_admin_output(Node, Cmd, Expected) ->
     S = string:tokens(Cmd, " "),
     lager:info("Testing riak-admin ~s on ~s", [Cmd, Node]),
     {ok, Out} = rt:admin(Node, S),
-    lager:debug("Output: ~p", [Out]),
     Result = case re:run(Out, Expected) of
         nomatch -> "fail";
         _ -> "pass"
