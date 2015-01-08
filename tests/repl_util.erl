@@ -301,12 +301,20 @@ wait_for_connection(Node, Name) ->
                             [] ->
                                 false;
                             [Pid] ->
-                                Pid ! {self(), status},
-                                receive
+                                try riak_core_cluster_conn:status(Pid, 2) of
                                     {Pid, status, _} ->
                                         true;
-                                    {Pid, connecting, _} ->
+                                    _ ->
                                         false
+                                catch
+                                    _W:_Y ->
+                                        Pid ! {self(), status},
+                                        receive
+                                            {Pid, status, _} ->
+                                                true;
+                                            {Pid, connecting, _} ->
+                                                false
+                                        end
                                 end
                         end;
                     _ ->
