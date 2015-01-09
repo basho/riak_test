@@ -58,7 +58,8 @@
 -define(SCRATCH_DIR, (rt_config:get(rt_scratch_dir))).
 
 get_deps() ->
-    lists:flatten(io_lib:format("~s/dev1/lib", [filename:join(?PATH, "head")])).
+    DefaultVersionPath = filename:join(?PATH, rt_config:get(default_version)),
+    lists:flatten(io_lib:format("~s/dev1/lib", [DefaultVersionPath])).
 
 riakcmd(Path, N, Cmd) ->
     ExecName = rt_config:get(exec_name, "riak"),

@@ -100,7 +100,7 @@ init([TestModule, Backend, Properties]) ->
     {ok, UpdProperties} =
         rt_properties:set(metadata, MetaData, Properties),
     TestTimeout = rt_config:get(test_timeout, rt_config:get(rt_max_wait_time)),
-    SetupModFun = function_name(setup, TestModule, 2, rt_cluster),
+    SetupModFun = function_name(setup, TestModule, 1, rt_cluster),
     {ConfirmMod, _} = ConfirmModFun = function_name(confirm, TestModule),
     BackendCheck = check_backend(Backend,
                                  rt_properties:get(valid_backends, Properties)),
