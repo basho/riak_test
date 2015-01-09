@@ -71,7 +71,7 @@ create_bucket_types([Cluster], Properties, BucketTypes) ->
     NodeMap = rt_properties:get(node_map, Properties),
     NodeIds = rt_cluster_info:get(node_ids, Cluster),
     Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
-    lists:foldl(fun maybe_create_bucket_type/2, [{Nodes, 1}], BucketTypes);
+    lists:foldl(fun maybe_create_bucket_type/2, {Nodes, 1}, BucketTypes);
 create_bucket_types(Clusters, Properties, BucketTypes) ->
     NodeMap = rt_properties:get(node_map, Properties),
     [begin
@@ -96,7 +96,7 @@ maybe_create_bucket_type({TypeName, TypeProps}, {Nodes, _ClusterIndex}) ->
 -spec prepare_clusters([list(string())], rt_properties:properties()) ->
                                     [rt_cluster_info:cluster_info()].
 prepare_clusters([ClusterNodes], _Properties) ->
-    rt_cluster_info:new([{node_ids, ClusterNodes}]);
+    [rt_cluster_info:new([{node_ids, ClusterNodes}])];
 prepare_clusters(ClusterNodesList, Properties) ->
     %% If the count of clusters is > 1 the assumption is made that the
     %% test is exercising replication and some extra
