@@ -56,15 +56,17 @@ fi
 echo "Reseting the riak_test environment using RIAK_HOME=$RIAK_HOME, RT_HOME=$RT_HOME, NUM_NODES=$NUM_NODES, VERSION=$VERSION, and FULL_CLEAN=$FULL_CLEAN"
 
 cd $RIAK_HOME
+rm -rf current
 
-# Clean out previous devrel build ...
+# Clean out deps for when a full clean is requested ...
 if [ "$FULL_CLEAN" = true ] ; then
   echo "Cleaning Riak in $RIAK_HOME ..."
-  make devclean
-else
-  echo "Removing previous stagedevrel instance from $RIAK_HOME and rebuilding ..."
-  rm -rf dev
+  make distclean
 fi
+
+
+echo "Removing previous stagedevrel instance from $RIAK_HOME and rebuilding ..."
+make devclean
 
 # Rebuild Riak ...
 echo "Building Riak stagedevrel with $NUM_NODES nodes in $RIAK_HOME ..."
@@ -76,7 +78,7 @@ cd $RT_HOME
 
 if [ "$FULL_CLEAN" = true ] ; then
   echo "Cleaning riak_test in $RT_HOME ..."
-  make clean
+  make distclean
 fi
 
 echo "Rebuilding riak_test in $RT_HOME ..."

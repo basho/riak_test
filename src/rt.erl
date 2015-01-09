@@ -98,6 +98,7 @@
          pbc_really_deleted/3,
          pmap/2,
          post_result/2,
+         product/1,
          priv_dir/0,
          remove/2,
          riak/2,
@@ -1099,6 +1100,21 @@ join_cluster(Nodes) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
     ok.
 
+-type products() :: riak | riak_ee | riak_cs | unknown.
+
+-spec product(node()) -> products().
+product(Node) ->
+    Applications = rpc:call(Node, application, which_applications, []),
+
+    HasRiakCS = proplists:is_defined(riak_cs, Applications),
+    HasRiakEE = proplists:is_defined(riak_repl, Applications),
+    HasRiak = proplists:is_defined(riak_kv, Applications),
+    if HasRiakCS -> riak_cs;
+       HasRiakEE -> riak_ee;
+       HasRiak -> riak;
+       true -> unknown
+    end.
+   
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
     plan_and_commit(Node1);
@@ -1862,3 +1878,26 @@ is_control_gui_route_loaded(Routes) ->
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
+
+-ifdef(TEST).
+
+verify_product(Applications, ExpectedApplication) ->
+    ?_test(begin
+               meck:new(rpc, [unstick]),
+               meck:expect(rpc, call, fun([], application, which_applications, []) -> 
+                                           Applications end),
+               ?assertMatch(ExpectedApplication, product([])),
+               meck:unload(rpc)
+           end).
+
+product_test_() ->
+    {foreach,
+     fun() -> ok end,
+     [verify_product([riak_cs], riak_cs),
+      verify_product([riak_repl, riak_kv, riak_cs], riak_cs),
+      verify_product([riak_repl], riak_ee),
+      verify_product([riak_repl, riak_kv], riak_ee),
+      verify_product([riak_kv], riak),
+      verify_product([kernel], unknown)]}.
+   
+-endif.
