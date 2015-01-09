@@ -49,7 +49,8 @@
           clusters :: [rt_cluster_info:cluster_info()],
           required_services=[riak_kv] :: [atom()],
           bucket_types=[] :: bucket_types(),
-          config=default_config() :: term()
+          config=default_config() :: term(),
+          external_properties :: term() % arbitrary properties for 3rd party use
          }).
 -type properties() :: #rt_properties_v1{}.
 
@@ -232,4 +233,6 @@ field_index(clusters) ->
 field_index(required_services) ->
     ?RT_PROPERTIES.required_services;
 field_index(config) ->
-    ?RT_PROPERTIES.config.
+    ?RT_PROPERTIES.config;
+field_index(external_properties) ->
+    ?RT_PROPERTIES.external_properties.
