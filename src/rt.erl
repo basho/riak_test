@@ -248,31 +248,31 @@ Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr
 stream_cmd_loop(Port, "", "", now()).
 
 stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs}) ->
-receive
-{Port, {data, Data}} ->
-    {_, Now, _} = now(),
-    NewNewLineBuffer = case Now > Secs of
-	true ->
-	    lager:info(NewLineBuffer),
-	    "";
-	_ ->
-	    NewLineBuffer
-    end,
-    case rt:str(Data, "\n") of
-	true ->
-	    lager:info(NewNewLineBuffer),
-	    Tokens = string:tokens(Data, "\n"),
-	    [ lager:info(Token) || Token <- Tokens ],
-	    stream_cmd_loop(Port, Buffer ++ NewNewLineBuffer ++ Data, "", Time);
-	_ ->
-	    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, now())
-    end;
-{Port, {exit_status, Status}} ->
-    catch port_close(Port),
-    {Status, Buffer}
-after rt:config(rt_max_wait_time) ->
-    {-1, Buffer}
-end.
+    receive
+        {Port, {data, Data}} ->
+            {_, Now, _} = now(),
+            NewNewLineBuffer = case Now > Secs of
+                true ->
+                    lager:info(NewLineBuffer),
+                    "";
+                _ ->
+                    NewLineBuffer
+            end,
+            case rt:str(Data, "\n") of
+                true ->
+                    lager:info(NewNewLineBuffer),
+                    Tokens = string:tokens(Data, "\n"),
+                    [ lager:info(Token) || Token <- Tokens ],
+                    stream_cmd_loop(Port, Buffer ++ NewNewLineBuffer ++ Data, "", Time);
+                _ ->
+                    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, now())
+            end;
+        {Port, {exit_status, Status}} ->
+            catch port_close(Port),
+            {Status, Buffer}
+    after rt_config:get(rt_max_wait_time) ->
+            {-1, Buffer}
+    end.
 
 %%%===================================================================
 %%% Remote code management
