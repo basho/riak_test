@@ -14,7 +14,7 @@
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
 -define(NUM_KEYS,    1000).
 
--define(CONF(Retries), [
+-define(CONF(Retries, AAESwitch), [
         {riak_core,
             [
              {ring_creation_size, 8},
@@ -24,7 +24,7 @@
         {riak_kv,
             [
              %% Specify fast building of AAE trees
-             {anti_entropy, {on, []}},
+             {anti_entropy, {AAESwitch, []}},
              {anti_entropy_build_limit, {100, 1000}},
              {anti_entropy_concurrency, 100}
             ]
@@ -39,7 +39,8 @@
         ]).
 
 confirm() ->
-    difference_test(),
+    difference_test(off),
+    difference_test(on),
     deadlock_test(),
     simple_test(),
     bidirectional_test(),
@@ -48,7 +49,7 @@ confirm() ->
 
 simple_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = deploy_nodes(6, ?CONF(5, on)),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, BNodes} = lists:split(3, Nodes),
@@ -120,7 +121,7 @@ simple_test() ->
 
 dual_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(infinity)),
+    Nodes = deploy_nodes(6, ?CONF(infinity, on)),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, Rest} = lists:split(2, Nodes),
@@ -220,7 +221,7 @@ dual_test() ->
 
 bidirectional_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = deploy_nodes(6, ?CONF(5, on)),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, BNodes} = lists:split(3, Nodes),
@@ -301,9 +302,9 @@ bidirectional_test() ->
 
     pass.
 
-difference_test() ->
+difference_test(AAESwitch) ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = deploy_nodes(6, ?CONF(5, AAESwitch)),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, BNodes} = lists:split(3, Nodes),
@@ -348,10 +349,14 @@ difference_test() ->
                              riakc_obj:new(<<"foo">>, <<"bar">>,
                                            <<"baz">>),
                              [{timeout, 4000}]),
-
-    %% Wait for trees to compute.
-    rt:wait_until_aae_trees_built(ANodes),
-    rt:wait_until_aae_trees_built(BNodes),
+    case AAESwitch of
+        on ->
+            %% Wait for trees to compute.
+            rt:wait_until_aae_trees_built(ANodes),
+            rt:wait_until_aae_trees_built(BNodes);
+        off ->
+            ok
+    end,
 
     lager:info("Test fullsync from cluster A leader ~p to cluster B",
                [LeaderA]),
@@ -395,7 +400,7 @@ difference_test() ->
 
 deadlock_test() ->
     %% Deploy 6 nodes.
-    Nodes = deploy_nodes(6, ?CONF(5)),
+    Nodes = deploy_nodes(6, ?CONF(5, on)),
 
     %% Break up the 6 nodes into three clustes.
     {ANodes, BNodes} = lists:split(3, Nodes),
