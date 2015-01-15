@@ -208,12 +208,9 @@ wait_for_new_pl(PL, Node) ->
     rt:wait_until(fun() ->
                           NewPL = get_preflist(Node),
                           lager:info("new ~p~n old ~p~nNode ~p~n", [NewPL, PL, Node]),
-                          NewPL /= PL%% andalso contains_fallback(NewPL)
+                          NewPL /= PL
                   end),
     get_preflist(Node).
-
-contains_fallback(PL) ->
-    lists:keymember(fallback, 2, PL).
 
 start_fallback_and_wait_for_handoff(DeadFallback) ->
     %% Below is random voodoo shit as I have no idea how to _KNOW_ that handoff has happened
