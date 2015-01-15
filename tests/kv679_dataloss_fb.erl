@@ -83,7 +83,7 @@ confirm() ->
 
     rt:wait_until(fun() ->
                           NewPL = kv679_tombstone:get_preflist(CoordNode),
-                          two_fallbacks_one_primary(NewPL) == {1, 2}
+                          primary_and_fallback_counts(NewPL) == {1, 2}
                   end),
 
     FBPL = kv679_tombstone:get_preflist(CoordNode),
@@ -180,7 +180,7 @@ confirm() ->
 
     pass.
 
-two_fallbacks_one_primary(PL) ->
+primary_and_fallback_counts(PL) ->
     lists:foldl(fun({{_, _}, primary}, {P, F}) ->
                         {P+1, F};
                    ({{_, _}, fallback}, {P, F}) ->

@@ -43,7 +43,7 @@
 -define(KEY, <<"test">>).
 
 confirm() ->
-    Config = [{riak_kv, [{delete_mode, 10000}]}, %% 20 seconds to reap.
+    Config = [{riak_kv, [{delete_mode, 10000}]}, %% 10 seconds to reap.
               {riak_core, [{ring_creation_size, 8},
                            {vnode_management_timer, 1000},
                            {handoff_concurrency, 100},
@@ -59,7 +59,8 @@ confirm() ->
 
     ?assert(perfect_preflist(PL)),
 
-    %% Patsy is the node that will take a fall
+    %% Patsy is the primary node that will take a fall, where the
+    %% lingering doomstone will stay
     {CoordClient, Patsy} = get_coord_client_and_patsy(Clients, PL),
 
     lager:info("CoordClient ~p~nPatsy ~p~n", [CoordClient, Patsy]),
@@ -76,17 +77,12 @@ confirm() ->
     lager:info("deleted key"),
 
     %% kill the patsy, must happen before the reap
-    %%
-    %% @TODO make deterministic (would be nice without all these
-    %% timers)
-    timer:sleep(500),
-
     rt:brutal_kill(Patsy),
 
     lager:info("killed the patsy"),
 
-    %% A time to reap
-    %% %% wait for the up  nodes to reap
+    %% A time to reap wait for the up nodes to reap, can't use
+    %% kv679_tombstone:read_it_and_reap
     timer:sleep(15000),
 
     lager:info("tombstone (should be) reaped"),
@@ -94,10 +90,7 @@ confirm() ->
     %% %% write the key again, this will start a new clock, a clock
     %% that is in the past of that un-reaped primary tombstone. We use the
     %% same node to get the same clock.
-    kv679_tombstone:write_key(CoordClient, [<<"jon">>],
-                              [{pw, 2},
-                               {sloppy_quorum, false},
-                               {n_val, 2}]),
+    kv679_tombstone:write_key(CoordClient, [<<"jon">>]),
 
     dump_clock(CoordClient),
 

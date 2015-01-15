@@ -71,10 +71,7 @@ confirm() ->
 
 
     %% delete the local data for Key
-    %% ERM why not just stop the node, then delete the data dir?
     delete_datadir(hd(PL)),
-
-    timer:sleep(10000),
 
     {ok, Bod2} = write_key(Client, <<"jon">>, [return_body]),
 
@@ -130,7 +127,8 @@ delete_datadir({{Idx, Node}, Type}) ->
     rt:stop_and_wait(Node),
 
     del_dir(Path),
-    rt:start_and_wait(Node).
+    rt:start_and_wait(Node),
+    rt:wait_for_service(Node, riak_kv).
 
 backend_name_from_mod(riak_kv_bitcask_backend) ->
     bitcask;
