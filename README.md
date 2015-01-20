@@ -44,7 +44,7 @@ you'll want to run and write tests. This repository also holds code for
 an Erlang application called `riak_test`. The actual tests exist in
 the `test/` directory.
 
-## Bootstraping Your Test Environment
+## Bootstrapping Your Test Environment
 
 Running tests against a
 development version of Riak is just one of the things that you can do
@@ -78,21 +78,25 @@ left unchanged, this script is going to do the following:
    using kerl (which it will also download)
 1. Build those releases of Riak.
 
-You'll want to run this script from an empty directory. Also, you
-might be thinking that you already have all the required versions of
-erlang. Great! You can crack open the script and set the paths to your
-installation or set them from the command-line:
+You'll want to run this script from an empty directory. Also, you might be
+thinking that you already have all the required versions of erlang. Great! You
+should set and export the following environment variables prior to running this
+and other `riak_test` scripts:
+
+Here, kerl is configured to use "$HOME/.kerl/installs" as the installation
+directory for erlang builds.
 
 ```bash
-R15B01=${R15B01:-$HOME/erlang-R15B01}
-R16B02=${R16B02:-$HOME/erlang-R16B02}
+export R15B01="$HOME/.kerl/installs/erlang-R15B01"
+export R16B02="$HOME/.kerl/installs/erlang-R16B02"
+export CURRENT_OTP="$R16B02"
 ```
 
 **Kerlveat**: If you want kerl to build erlangs with serious 64-bit
 Macintosh action, you'll need a `~/.kerlrc` file that looks like this:
 
 ```
-KERL_CONFIGURE_OPTIONS="--disable-hipe --enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit"
+KERL_CONFIGURE_OPTIONS="--disable-hipe --enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit --without-odbc"
 ```
 
 The script will check that all these paths exist. If even one of them
