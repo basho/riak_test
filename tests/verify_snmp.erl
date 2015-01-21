@@ -27,7 +27,7 @@
 
 confirm() ->
     %% Bring up a small cluster
-    Config = [{riak_snmp, [{polling_interval, 1000}]}],
+    %% Config = [{riak_snmp, [{polling_interval, 1000}]}],
     [Node1] = rt_cluster:deploy_nodes(1),
     ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node1])),
 

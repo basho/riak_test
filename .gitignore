@@ -15,7 +15,7 @@ doc/
 *.jar
 coverage
 tags
-riak-*
+riak*
 *.png
 .rebar/
 .local_dialyzer_plt

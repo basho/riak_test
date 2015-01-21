@@ -38,7 +38,7 @@
          get_ip/1,
          node_id/1,
          node_version/1,
-         admin/2,
+         %% admin/2,
          riak/2,
          attach/2,
          attach_direct/2,

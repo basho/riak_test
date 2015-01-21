@@ -9,6 +9,8 @@
 -include_lib("riakc/include/riakc.hrl").
 -include("rt.hrl").
 
+-define(WAIT(E), ?assertEqual(ok, rt:wait_until(fun() ->
+                                                         (E) end))).
 -test_type([bucket_types, http]).
 
 properties() ->

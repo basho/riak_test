@@ -41,6 +41,7 @@
          node_id/1,
          node_version/1,
          admin/2,
+         admin/3,
          riak/2,
          attach/2,
          attach_direct/2,
@@ -409,23 +410,27 @@ interactive_loop(Port, Expected) ->
             ?assertEqual([], Expected)
     end.
 
+%% TODO is the correct implementation for admin/2 -- added to pass compilation by jsb
+admin(Node, Args) ->
+    admin(Node, Args, []).
+
 admin(Node, Args, Options) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    Cmd = rtdev:riak_admin_cmd(Path, N, Args),
-    lager:info("Running: ~s", [Cmd]),
-    Result = execute_admin_cmd(Cmd, Options),
-    lager:info("~s", [Result]),
-    {ok, Result}.
+     N = node_id(Node),
+     Path = relpath(node_version(N)),
+     Cmd = rtdev:riak_admin_cmd(Path, N, Args),
+     lager:info("Running: ~s", [Cmd]),
+     Result = execute_admin_cmd(Cmd, Options),
+     lager:info("~s", [Result]),
+     {ok, Result}.
 
 execute_admin_cmd(Cmd, Options) ->
-    {_ExitCode, Result} = FullResult = wait_for_cmd(spawn_cmd(Cmd)),
-    case lists:member(return_exit_code, Options) of
-        true ->
-            FullResult;
-        false ->
-            Result
-    end.
+     {_ExitCode, Result} = FullResult = wait_for_cmd(spawn_cmd(Cmd)),
+     case lists:member(return_exit_code, Options) of
+         true ->
+             FullResult;
+         false ->
+             Result
+     end.
 
 riak(Node, Args) ->
     N = node_id(Node),

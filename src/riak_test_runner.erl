@@ -50,7 +50,9 @@
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-type test_type() :: {new | old}.
 -record(state, {test_module :: atom(),
+                test_type :: test_type(),
                 properties :: proplists:proplist(),
                 backend :: atom(),
                 test_timeout :: integer(),
@@ -102,10 +104,15 @@ init([TestModule, Backend, Properties]) ->
     TestTimeout = rt_config:get(test_timeout, rt_config:get(rt_max_wait_time)),
     SetupModFun = function_name(setup, TestModule, 1, rt_cluster),
     {ConfirmMod, _} = ConfirmModFun = function_name(confirm, TestModule),
+    TestType = case erlang:function_exported(ConfirmMod, ConfirmModFun, 1) of
+        true -> new;
+        false -> old
+    end,
     BackendCheck = check_backend(Backend,
                                  rt_properties:get(valid_backends, Properties)),
     PreReqCheck = check_prereqs(ConfirmMod),
     State = #state{test_module=TestModule,
+                   test_type=TestType,
                    properties=UpdProperties,
                    backend=Backend,
                    test_timeout=TestTimeout,
@@ -147,7 +154,9 @@ setup(timeout, State=#state{prereq_check=false}) ->
     notify_executor({fail, prereq_check_failed}, State),
     cleanup(State),
     {stop, normal, State};
-setup(timeout, State=#state{backend=Backend,
+setup(timeout, State=#state{test_type=TestType,
+                            test_module=TestModule,
+                            backend=Backend,
                             properties=Properties}) ->
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
@@ -159,12 +168,18 @@ setup(timeout, State=#state{backend=Backend,
     Services = rt_properties:get(required_services, Properties),
     {StartVersion, OtherVersions} = test_versions(Properties),
     Config = rt_backend:set(Backend, rt_properties:get(config, Properties)),
-    node_manager:deploy_nodes(NodeIds,
-                              StartVersion,
-                              Config,
-                              Services,
-                              notify_fun(self())),
-    lager:info("Waiting for deploy nodes response at ~p", [self()]),
+
+    case TestType of
+        new ->
+            node_manager:deploy_nodes(NodeIds,
+                                      StartVersion,
+                                      Config,
+                                      Services,
+                                      notify_fun(self())),
+            lager:info("Waiting for deploy nodes response at ~p", [self()]);
+        old ->
+            lager:warn("Test ~p has not been ported to the new framework.", [TestModule])
+    end,
 
     %% Set the initial value for `current_version' in the properties record
     {ok, UpdProperties} =
@@ -184,6 +199,7 @@ execute({nodes_deployed, _}, State) ->
            confirm_modfun=ConfirmModFun,
            test_timeout=TestTimeout} = State,
     lager:notice("Running ~s", [TestModule]),
+    lager:notice("Properties: ~p", [Properties]),
 
     StartTime = os:timestamp(),
     %% Perform test setup which includes clustering of the nodes if
@@ -290,7 +306,7 @@ test_fun(Properties, {ConfirmMod, ConfirmFun}, NotifyPid) ->
                     ?MODULE:send_event(NotifyPid, test_result(TestResult))
             catch
                 Error:Reason ->
-                    lager:notice("Error: ~p Reason: ~p", [Error, Reason]),
+                    lager:error("Error: ~p Reason: ~p", [Error, Reason]),
                     TestResult = format_eunit_error(Reason),
                     ?MODULE:send_event(NotifyPid, test_result(TestResult))
             end

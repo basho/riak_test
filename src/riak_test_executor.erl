@@ -104,12 +104,14 @@ gather_properties(_Event, _State) ->
 request_nodes(timeout, State) ->
     #state{pending_tests=[NextTest | _],
            test_properties=PropertiesList} = State,
-    lager:notice("Starting next test: ~p", [NextTest]),
+    lager:debug("Requesting nodes using properties ~p", [PropertiesList]),
     %% Find the properties for the next pending test
     {NextTest, TestProps} = lists:keyfind(NextTest, 1, PropertiesList),
     %% Send async request to node manager
     VersionsToTest = versions_to_test(TestProps),
-    node_manager:reserve_nodes(rt_properties:get(node_count, TestProps),
+    NodeCount = rt_properties:get(node_count, TestProps),
+    lager:notice("Requesting ~p nodes for the next test, ~p", [NodeCount, NextTest]),
+    node_manager:reserve_nodes(NodeCount,
                                VersionsToTest,
                                reservation_notify_fun()),
     {next_state, launch_test, State};

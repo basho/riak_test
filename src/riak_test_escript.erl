@@ -29,23 +29,31 @@
 -define(HEADER, [<<"Test">>, <<"Result">>, <<"Reason">>, <<"Test Duration">>]).
 
 main(Args) ->
-    {ParsedArgs, HarnessArgs, Tests, _} = prepare(Args),
+    %% TODO Should we use clique? -jsb
+    %% Parse command line arguments ...
+    {ParsedArgs, HarnessArgs, Tests, NonTests} = parse_args(Args),
+
+    %% Configure logging ...
+    OutDir = proplists:get_value(outdir, ParsedArgs, "log"),
+    ensure_dir(OutDir),
+
+    lager_setup(OutDir),
+    
+    ok = prepare(ParsedArgs, Tests, NonTests),
     Results = execute(Tests, ParsedArgs, HarnessArgs),
     finalize(Results, ParsedArgs).
 
-prepare(Args) ->
-    {ParsedArgs, _, Tests, NonTests} = ParseResults = parse_args(Args),
-    io:format("Tests to run: ~p~n", [Tests]),
+prepare(ParsedArgs, Tests, NonTests) ->
+    lager:notice("Tests to run: ~p~n", [Tests]),
     case NonTests of
         [] ->
             ok;
         _ ->
-            io:format("These modules are not runnable tests: ~p~n",
+            lager:notice("These modules are not runnable tests: ~p~n",
                       [[NTMod || {NTMod, _} <- NonTests]])
     end,
     ok = erlang_setup(ParsedArgs),
-    ok = test_setup(ParsedArgs),
-    ParseResults.
+    test_setup().
 
 execute(Tests, ParsedArgs, _HarnessArgs) ->
     OutDir = proplists:get_value(outdir, ParsedArgs),
@@ -141,17 +149,17 @@ print_help() ->
     halt(0).
 
 add_deps(Path) ->
-    {ok, Deps} = file:list_dir(Path),
-    [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
-    ok.
+    lager:debug("Adding dep path ~p", [Path]),
+    case file:list_dir(Path) of
+        {ok, Deps} ->
+            [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
+            ok;
+        {error, Reason} ->
+            lager:error("Failed to add dep path ~p due to ~p.", [Path, Reason]),
+            erlang:error(Reason)
+    end.
 
-test_setup(ParsedArgs) ->
-    %% File output
-    OutDir = proplists:get_value(outdir, ParsedArgs, "log"),
-    ensure_dir(OutDir),
-
-    lager_setup(OutDir),
-
+test_setup() ->
     %% Prepare the test harness
     {NodeIds, NodeMap, VersionMap} = rt_harness:setup(),
 
@@ -218,7 +226,7 @@ load_initial_config(ParsedArgs) ->
                    proplists:get_value(file, ParsedArgs)).
 
 shuffle_tests(_, _, [], _, _, _) ->
-    io:format("No tests are scheduled to run~n"),
+    lager:error("No tests are scheduled to run~n"),
     halt(1);
 shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, undefined, _) ->
     {ParsedArgs, HarnessArgs, Tests, NonTests};
@@ -512,6 +520,7 @@ format_test_row({Test, Result, Duration}, _Width) ->
     end.
 
 print_summary(TestResults, _CoverResult, Verbose) ->
+    %% TODO Log vs console output ... -jsb
     io:format("~nTest Results:~n~n"),
 
     {StatusCounts, Width} = lists:foldl(fun test_summary_fun/2, {{0,0,0}, 0}, TestResults),

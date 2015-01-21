@@ -139,7 +139,7 @@ attach_direct_down_test(Node) ->
 status_up_test(Node) ->
     lager:info("Test riak-admin status on ~s", [Node]),
 
-    {ok, StatusOut} = rt_cmd_line:admin(Node, ["status"]),
+    {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     io:format("Result of status: ~s", [StatusOut]),
     ?assertEqual(0, ExitCode),
     ?assert(rt:str(StatusOut, "1-minute stats")),
@@ -150,6 +150,7 @@ status_up_test(Node) ->
 status_down_test(Node) ->
     lager:info("Test riak-admin status while down"),
     {ok, StatusOut} = rt_cmd_line:admin(Node, ["status"]),
+    ?assert(rt:str(StatusOut, "Node is not running!")),
     ok.
 
 getpid_up_test(Node) ->
