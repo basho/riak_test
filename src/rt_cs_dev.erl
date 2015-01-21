@@ -156,56 +156,9 @@ update_app_config_file(ConfigFile, Config) ->
     ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
     ok.
 
+%% Appropriate backend will be set by rtcs later.
 get_backends() ->
-    Backends = lists:usort(
-        lists:flatten([ get_backends(DevPath) || DevPath <- devpaths()])),
-    case Backends of
-        [riak_kv_bitcask_backend] -> bitcask;
-        [riak_kv_eleveldb_backend] -> eleveldb;
-        [riak_kv_memory_backend] -> memory;
-        [Other] -> Other;
-        MoreThanOne -> MoreThanOne
-    end.
-
-get_backends(DevPath) ->
-    [get_backend(AppConfig) || AppConfig <- all_the_app_configs(DevPath)].
-
-get_backend(AppConfig) ->
-    lager:info("get_backend(~s)", [AppConfig]),
-    Tokens = lists:reverse(filename:split(AppConfig)),
-    ConfigFile = case Tokens of
-        ["app.config"| _ ] ->
-            AppConfig;
-        ["advanced.config" | T] ->
-            ["etc", [$d, $e, $v | N], "dev" | RPath] = T,
-            Path = filename:join(lists:reverse(RPath)),
-            %% Why chkconfig? It generates an app.config from cuttlefish
-            %% without starting riak.
-            ConfigFileOutputLine = lists:last(string:tokens(
-                rtdev:run_riak(list_to_integer(N), Path, "chkconfig"),
-                "\n"
-            )),
-
-            %% ConfigFileOutputLine looks like this:
-            %% -config /path/to/app.config -args_file /path/to/vm.args
-            Files =[ Filename || Filename <- string:tokens(ConfigFileOutputLine, "\s"),
-                                 ".config" == filename:extension(Filename) ],
-
-            File = hd(Files),
-            case filename:pathtype(Files) of
-                absolute -> File;
-                relative ->
-                    io_lib:format("~s/dev/dev~s/~s", [Path, N, tl(hd(Files))])
-            end
-    end,
-
-    case file:consult(ConfigFile) of
-        {ok, [Config]} ->
-            kvc:path('riak_kv.storage_backend', Config);
-        E ->
-            lager:error("Error reading ~s, ~p", [ConfigFile, E]),
-            error
-    end.
+    cs_multi_backend.
 
 node_path(Node) ->
     N = node_id(Node),
