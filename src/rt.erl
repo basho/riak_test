@@ -37,16 +37,28 @@
          attach/2,
          attach_direct/2,
          brutal_kill/1,
+         build_cluster/1,
+         build_cluster/2,
+         build_cluster/3,
+         build_clusters/1,
+         join_cluster/1,
          capability/2,
          capability/3,
          check_singleton_node/1,
          check_ibrowse/0,
          claimant_according_to/1,
+         clean_cluster/1,
+         clean_data_dir/1,
+         clean_data_dir/2,
          cmd/1,
          cmd/2,
          connection_info/1,
          console/2,
          create_and_activate_bucket_type/3,
+         deploy_nodes/1,
+         deploy_nodes/2,
+         deploy_nodes/3,
+         deploy_clusters/1,
          down/2,
          enable_search_hook/2,
          expect_in_log/2,
@@ -118,8 +130,11 @@
          systest_write/3,
          systest_write/5,
          systest_write/6,
+         teardown/0,
+         update_app_config/2,
          upgrade/2,
          upgrade/3,
+         versions/0,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -269,13 +284,12 @@ deploy_nodes(Versions, Services) ->
     NodeConfig = [ version_to_config(Version) || Version <- Versions ],
     lager:debug("Starting nodes config ~p using versions ~p", [NodeConfig, Versions]),
 
-
-
     Nodes = ?HARNESS:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
     [ ok = wait_for_service(Node, Service) || Node <- Nodes,
                                               Service <- Services ],
     Nodes.
+
 deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
     NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
     deploy_nodes(NodeConfig, Services).
@@ -1022,7 +1036,6 @@ status_of_according_to(Member, Node) ->
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.
 claimant_according_to(Node) ->
-<<<<<<< HEAD
     case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
         {ok, Ring} ->
             Claimant = riak_core_ring:claimant(Ring),
@@ -1030,17 +1043,119 @@ claimant_according_to(Node) ->
         {badrpc, _}=BadRpc ->
             BadRpc
     end.
-=======
-case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
-{ok, Ring} ->
-    Claimant = riak_core_ring:claimant(Ring),
-    Claimant;
-{badrpc, _}=BadRpc ->
-    BadRpc
-end.
->>>>>>> Migrate several more functions into rt_cluster from rt.
 
 %%%===================================================================
+=======
+
+%%%===================================================================
+%%% Cluster Utility Functions
+%%%===================================================================
+
+%% @doc Safely construct a new cluster and return a list of the deployed nodes
+%% @todo Add -spec and update doc to reflect mult-version changes
+build_cluster(Versions) when is_list(Versions) ->
+    build_cluster(length(Versions), Versions, default);
+build_cluster(NumNodes) ->
+    build_cluster(NumNodes, default).
+
+%% @doc Safely construct a `NumNode' size cluster using
+%%      `InitialConfig'. Return a list of the deployed nodes.
+build_cluster(NumNodes, InitialConfig) ->
+    build_cluster(NumNodes, [], InitialConfig).
+
+build_cluster(NumNodes, Versions, InitialConfig) ->
+    %% Deploy a set of new nodes
+    Nodes =
+        case Versions of
+            [] ->
+                deploy_nodes(NumNodes, InitialConfig);
+            _ ->
+                deploy_nodes(Versions)
+        end,
+
+    join_cluster(Nodes),
+    lager:info("Cluster built: ~p", [Nodes]),
+    Nodes.
+
+join_cluster(Nodes) ->
+    %% Ensure each node owns 100% of it's own ring
+    [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
+
+    %% Join nodes
+    [Node1|OtherNodes] = Nodes,
+    case OtherNodes of
+        [] ->
+            %% no other nodes, nothing to join/plan/commit
+            ok;
+        _ ->
+            %% ok do a staged join and then commit it, this eliminates the
+            %% large amount of redundant handoff done in a sequential join
+            [staged_join(Node, Node1) || Node <- OtherNodes],
+            plan_and_commit(Node1),
+            try_nodes_ready(Nodes, 3, 500)
+    end,
+
+    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
+
+    %% Ensure each node owns a portion of the ring
+    wait_until_nodes_agree_about_ownership(Nodes),
+    ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
+    ok.
+
+-type products() :: riak | riak_ee | riak_cs | unknown.
+
+-spec product(node()) -> products().
+product(Node) ->
+    Applications = rpc:call(Node, application, which_applications, []),
+
+    HasRiakCS = proplists:is_defined(riak_cs, Applications),
+    HasRiakEE = proplists:is_defined(riak_repl, Applications),
+    HasRiak = proplists:is_defined(riak_kv, Applications),
+    if HasRiakCS -> riak_cs;
+       HasRiakEE -> riak_ee;
+       HasRiak -> riak;
+       true -> unknown
+    end.
+   
+try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
+    lager:info("Nodes not ready after initial plan/commit, retrying"),
+    plan_and_commit(Node1);
+try_nodes_ready(Nodes, N, SleepMs) ->
+    ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
+    case ReadyNodes of
+        Nodes ->
+            ok;
+        _ ->
+            timer:sleep(SleepMs),
+            try_nodes_ready(Nodes, N-1, SleepMs)
+    end.
+
+%% @doc Stop nodes and wipe out their data directories
+clean_cluster(Nodes) when is_list(Nodes) ->
+    [stop_and_wait(Node) || Node <- Nodes],
+    clean_data_dir(Nodes).
+
+clean_data_dir(Nodes) ->
+    clean_data_dir(Nodes, "").
+
+clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
+    clean_data_dir([Nodes], SubDir);
+clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    ?HARNESS:clean_data_dir(Nodes, SubDir).
+
+%% @doc Shutdown every node, this is for after a test run is complete.
+teardown() ->
+    %% stop all connected nodes, 'cause it'll be faster that
+    %%lager:info("RPC stopping these nodes ~p", [nodes()]),
+    %%[ rt:stop(Node) || Node <- nodes()],
+    %% Then do the more exhaustive harness thing, in case something was up
+    %% but not connected.
+    ?HARNESS:teardown().
+
+versions() ->
+    ?HARNESS:versions().
+%%%===================================================================
+>>>>>>> WIP: Support execution of old and new style tests
 %%% Basic Read/Write Functions
 %%%===================================================================
 
@@ -1847,7 +1962,7 @@ pmap(F, L) ->
 
 %% @private
 setup_harness(Test, Args) ->
-    rt_harness:setup_harness(Test, Args).
+    ?HARNESS:setup_harness(Test, Args).
 
 %% @doc Downloads any extant log files from the harness's running
 %%   nodes.

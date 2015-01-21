@@ -155,7 +155,9 @@ setup(timeout, State=#state{prereq_check=false}) ->
     notify_executor({fail, prereq_check_failed}, State),
     cleanup(State),
     {stop, normal, State};
-setup(timeout, State=#state{backend=Backend,
+setup(timeout, State=#state{test_type=TestType,
+                            test_module=TestModule,
+                            backend=Backend,
                             properties=Properties}) ->
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
@@ -168,12 +170,17 @@ setup(timeout, State=#state{backend=Backend,
     {StartVersion, OtherVersions} = test_versions(Properties),
     Config = rt_backend:set(Backend, rt_properties:get(config, Properties)),
 
-    node_manager:deploy_nodes(NodeIds,
-                              StartVersion,
-                              Config,
-                              Services,
-                              notify_fun(self())),
-    lager:info("Waiting for deploy nodes response at ~p", [self()]),
+    case TestType of
+        new ->
+            node_manager:deploy_nodes(NodeIds,
+                                      StartVersion,
+                                      Config,
+                                      Services,
+                                      notify_fun(self())),
+            lager:info("Waiting for deploy nodes response at ~p", [self()]);
+        old ->
+            lager:warn("Test ~p has not been ported to the new framework.", [TestModule])
+    end,
 
     %% Set the initial value for `current_version' in the properties record
     {ok, UpdProperties} =
