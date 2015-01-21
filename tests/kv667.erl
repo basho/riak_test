@@ -23,11 +23,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(HARNESS, (rt_config:get(rt_harness))).
--define(INDEX, <<"maps">>).
 -define(TYPE, <<"maps">>).
 -define(KEY, "cmeiklejohn").
 -define(BUCKET, {?TYPE, <<"testbucket">>}).
--define(NAME_REGISTER_VALUE, "Christopher Meiklejohn").
 
 -define(CONF, [
         {riak_core,
@@ -42,6 +40,8 @@ confirm() ->
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
     Nodes = [Node|_] = rt:build_cluster([OldVsn]),
 
+    lager:info("v ~p", [length(Nodes)]),
+
     %% Create PB connection.
     Pid = rt:pbc(Node),
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
@@ -51,15 +51,24 @@ confirm() ->
 
     %% Write some sample data.
     Map = riakc_map:update(
-            {<<"name">>, register},
+            {<<"names">>, set},
             fun(R) ->
-                    riakc_register:set(<<"Original">>, R)
+                    riakc_set:add_element(<<"Original">>, R)
                     end, riakc_map:new()),
+    Map2 = riakc_map:update({<<"profile">>, map},
+                            fun(M) ->
+                                    riakc_map:update(
+                                      {"name", register},
+                                      fun(R) ->
+                                              riakc_register:set(<<"Bob">>, R)
+                                      end, M)
+                            end, Map),
+
     ok = riakc_pb_socket:update_type(
             Pid,
             ?BUCKET,
             ?KEY,
-            riakc_map:to_op(Map)),
+            riakc_map:to_op(Map2)),
 
     %% Stop PB connection.
     riakc_pb_socket:stop(Pid),
@@ -75,16 +84,26 @@ confirm() ->
     {ok, O} = riakc_pb_socket:fetch_type(Pid2, ?BUCKET, ?KEY),
 
     %% Write some sample data.
-    Map2 = riakc_map:update(
-            {<<"name">>, register},
+    Map3 = riakc_map:update(
+            {<<"names">>, set},
             fun(R) ->
-                    riakc_register:set(<<"Updated">>, R)
+                    riakc_set:add_element(<<"Updated">>, R)
                     end, O),
+
+    Map4 = riakc_map:update({<<"profile">>, map},
+                            fun(M) ->
+                                    riakc_map:update(
+                                      {"name", register},
+                                      fun(R) ->
+                                              riakc_register:set(<<"Rita">>, R)
+                                      end, M)
+                            end, Map3),
+
     ok = riakc_pb_socket:update_type(
             Pid2,
             ?BUCKET,
             ?KEY,
-            riakc_map:to_op(Map2)),
+            riakc_map:to_op(Map4)),
 
     %% Stop PB connection.
     riakc_pb_socket:stop(Pid2),
