@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(kv667).
+-module(riak667_mixed).
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
