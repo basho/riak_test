@@ -42,7 +42,9 @@ confirm() ->
     %% Configure cluster.
     TestMetaData = riak_test_runner:metadata(),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, "2.0.2"),
-    Nodes = [Node1, Node2] = rt:build_cluster([OldVsn, OldVsn]),
+    _Nodes = [Node1, Node2] = rt:build_cluster([OldVsn, OldVsn]),
+
+    CurrentVer = rt:get_version(),
 
     %% Create PB connection.
     Pid = rt:pbc(Node1),
@@ -56,11 +58,11 @@ confirm() ->
             {<<"names">>, set},
             fun(R) ->
                     riakc_set:add_element(<<"Original">>, R)
-                    end, riakc_map:new()),
+            end, riakc_map:new()),
     Map2 = riakc_map:update({<<"profile">>, map},
                             fun(M) ->
                                     riakc_map:update(
-                                      {"name", register},
+                                      {<<"name">>, register},
                                       fun(R) ->
                                               riakc_register:set(<<"Bob">>, R)
                                       end, M)
@@ -85,9 +87,9 @@ confirm() ->
     ?assertMatch({error, <<"Error processing incoming message: error:{badrecord,dict}", _/binary>>},
                  riakc_pb_socket:fetch_type(Pid2, ?BUCKET, ?KEY)),
 
-    lager:info("Cant't read a 2.0.2 map from 2.0.4 node"),
+    lager:info("Can't read a 2.0.2 map from 2.0.4 node"),
 
-    %% Write some 2.0.4  data.
+    %% Write some 2.0.4 data.
     Oh4Map = riakc_map:update(
             {<<"names">>, set},
             fun(R) ->
@@ -120,7 +122,7 @@ confirm() ->
     riakc_pb_socket:stop(Pid2),
     upgrade(Node2, current),
 
-    lager:info("running mixed 2.0.2 and current (~p)", [rt:get_version()]),
+    lager:info("running mixed 2.0.2 and ~s", [CurrentVer]),
 
     %% Create PB connection.
     Pid3 = rt:pbc(Node2),
@@ -134,12 +136,59 @@ confirm() ->
     lager:info("2.0.4 map ~p", [K2O]),
 
     %% update 2.0.2 map on new node ?KEY Pid3
+    K1OU = riakc_map:update({<<"profile">>, map},
+                            fun(M) ->
+                                    riakc_map:update(
+                                      {<<"name">>, register},
+                                      fun(R) ->
+                                              riakc_register:set(<<"Rita">>, R)
+                                      end, M)
+                            end, K1O),
+
+    ok = riakc_pb_socket:update_type(Pid3, ?BUCKET, ?KEY, riakc_map:to_op(K1OU)),
+    lager:info("Updated 2.0.2 map on ~s", [CurrentVer]),
+
     %% read 2.0.2 map from 2.0.2 node ?KEY Pid
+    {ok, K1OR} = riakc_pb_socket:fetch_type(Pid, ?BUCKET, ?KEY),
+    lager:info("Read 2.0.2 map from 2.0.2 node: ~p", [K1OR]),
+
+    ?assertEqual(<<"Rita">>, orddict:fetch({<<"name">>, register},
+                                           riakc_map:fetch({<<"profile">>, map}, K1OR))),
+
     %% update 2.0.2 map on old node ?KEY Pid
+    K1O2 = riakc_map:update({<<"profile">>, map},
+                            fun(M) ->
+                                    riakc_map:update(
+                                      {<<"name">>, register},
+                                      fun(R) ->
+                                              riakc_register:set(<<"Sue">>, R)
+                                      end, M)
+                            end, K1OR),
+
+    ok = riakc_pb_socket:update_type(Pid, ?BUCKET, ?KEY, riakc_map:to_op(K1O2)),
+    lager:info("Updated 2.0.2 map on 2.0.2 node"),
+
     %% read it from 2.0.5 node ?KEY Pid3
+    {ok, K1OC} = riakc_pb_socket:fetch_type(Pid3, ?BUCKET, ?KEY),
+    lager:info("Read 2.0.2 map from ~s node: ~p", [CurrentVer, K1OC]),
+
+    ?assertEqual(<<"Sue">>, orddict:fetch({<<"name">>, register},
+                                          riakc_map:fetch({<<"profile">>, map}, K1OC))),
+
     %% update 2.0.4 map node ?KEY2 Pid3
+    K2OU = riakc_map:update({<<"people">>, set},
+                            fun(S) ->
+                                    riakc_set:add_element(<<"Joan">>, S)
+                            end, riakc_map:new()),
+
+    ok = riakc_pb_socket:update_type(Pid3, ?BUCKET, ?KEY2, riakc_map:to_op(K2OU)),
+    lager:info("Updated 2.0.4 map on ~s node", [CurrentVer]),
     %% upgrade 2.0.2 node
+
+    upgrade(Node1, current),
+    lager:info("Upgraded 2.0.2 node to ~s", [CurrentVer]),
     %% read and write maps
+
     %% (how???) check format is still v1 (maybe get raw kv object and inspect contents using riak_kv_crdt??
     %% unset env var
     %% read and write maps
@@ -149,8 +198,6 @@ confirm() ->
     %% Stop PB connection.
     riakc_pb_socket:stop(Pid3),
     riakc_pb_socket:stop(Pid),
-    %% Clean cluster.
-    rt:clean_cluster(Nodes),
 
     pass.
 
@@ -158,6 +205,4 @@ upgrade(Node, NewVsn) ->
     lager:info("Upgrading ~p to ~p", [Node, NewVsn]),
     rt:upgrade(Node, NewVsn),
     rt:wait_for_service(Node, riak_kv),
-    lager:info("Ensuring keys still exist"),
-    rt:systest_read(Node, 100, 1),
     ok.
