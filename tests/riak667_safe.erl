@@ -25,9 +25,9 @@
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(INDEX, <<"maps">>).
 -define(TYPE, <<"maps">>).
--define(KEY, "cmeiklejohn").
+-define(KEY, <<"cmeiklejohn">>).
 -define(BUCKET, {?TYPE, <<"testbucket">>}).
--define(NAME_REGISTER_VALUE, "Christopher Meiklejohn").
+-define(NAME_REGISTER_VALUE, <<"Christopher Meiklejohn">>).
 
 -define(CONF, [
         {riak_core,
@@ -99,6 +99,4 @@ upgrade(Node, NewVsn) ->
     lager:info("Upgrading ~p to ~p", [Node, NewVsn]),
     rt:upgrade(Node, NewVsn),
     rt:wait_for_service(Node, riak_kv),
-    lager:info("Ensuring keys still exist"),
-    rt:systest_read(Node, 100, 1),
     ok.
