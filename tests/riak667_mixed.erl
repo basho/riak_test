@@ -24,8 +24,8 @@
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(TYPE, <<"maps">>).
--define(KEY, "cmeiklejohn").
--define(KEY2, "cmeik").
+-define(KEY, <<"cmeiklejohn">>).
+-define(KEY2, <<"cmeik">>).
 -define(BUCKET, {?TYPE, <<"testbucket">>}).
 
 -define(CONF, [
@@ -41,7 +41,7 @@ confirm() ->
 
     %% Configure cluster.
     TestMetaData = riak_test_runner:metadata(),
-    OldVsn = proplists:get_value(upgrade_version, TestMetaData, two_oh_two),
+    OldVsn = proplists:get_value(upgrade_version, TestMetaData, "2.0.2"),
     Nodes = [Node1, Node2] = rt:build_cluster([OldVsn, OldVsn]),
 
     %% Create PB connection.
@@ -73,7 +73,7 @@ confirm() ->
             riakc_map:to_op(Map2)),
 
     %% Upgrade one node.
-    upgrade(Node2, two_oh_four),
+    upgrade(Node2, "2.0.4"),
 
     lager:info("running mixed 2.0.2 and 2.0.4"),
 
@@ -120,7 +120,7 @@ confirm() ->
     riakc_pb_socket:stop(Pid2),
     upgrade(Node2, current),
 
-    lager:info("running mixed 2.0.2 and 2.0.5"),
+    lager:info("running mixed 2.0.2 and current (~p)", [rt:get_version()]),
 
     %% Create PB connection.
     Pid3 = rt:pbc(Node2),
