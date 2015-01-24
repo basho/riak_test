@@ -185,9 +185,21 @@ confirm() ->
     lager:info("Updated 2.0.4 map on ~s node", [CurrentVer]),
     %% upgrade 2.0.2 node
 
+    riakc_pb_socket:stop(Pid),
     upgrade(Node1, current),
     lager:info("Upgraded 2.0.2 node to ~s", [CurrentVer]),
+
     %% read and write maps
+    Pid4 = rt:pbc(Node1),
+
+    {ok, K1N1} = riakc_pb_socket:fetch_type(Pid4, ?BUCKET, ?KEY),
+    {ok, K1N2} = riakc_pb_socket:fetch_type(Pid3, ?BUCKET, ?KEY),
+    ?assertEqual(K1N1, K1N2),
+
+    {ok, K2N1} = riakc_pb_socket:fetch_type(Pid4, ?BUCKET, ?KEY2),
+    {ok, K2N2} = riakc_pb_socket:fetch_type(Pid3, ?BUCKET, ?KEY2),
+    ?assertEqual(K2N1, K2N2),
+    lager:info("Maps fetched from both nodes are same K1:~p K2:~p", [K1N1, K2N1]),
 
     %% (how???) check format is still v1 (maybe get raw kv object and inspect contents using riak_kv_crdt??
     %% unset env var
@@ -197,7 +209,7 @@ confirm() ->
 
     %% Stop PB connection.
     riakc_pb_socket:stop(Pid3),
-    riakc_pb_socket:stop(Pid),
+    riakc_pb_socket:stop(Pid4),
 
     pass.
 
