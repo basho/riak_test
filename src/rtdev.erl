@@ -178,8 +178,31 @@ set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
     append_to_conf_file(get_advanced_riak_conf(Node), NameValuePairs),
     ok;
 set_advanced_conf(DevPath, NameValuePairs) ->
-    [update_app_config_file(RiakConf, NameValuePairs) || RiakConf <- all_the_files(DevPath, "etc/advanced.config")],
+    AdvancedConfs = case all_the_files(DevPath, "etc/advanced.config") of
+                        [] ->
+                            %% no advanced conf? But we _need_ them, so make 'em
+                            make_advanced_confs(DevPath);
+                        Confs ->
+                            Confs
+                    end,
+    [update_app_config_file(RiakConf, NameValuePairs) || RiakConf <- AdvancedConfs],
     ok.
+
+make_advanced_confs(DevPath) ->
+    case filelib:is_dir(DevPath) of
+        false ->
+            lager:debug("Failed generating advanced.conf ~p is not a directory.", [DevPath]);
+        true ->
+            Wildcard = io_lib:format("~s/dev/dev*/etc", [DevPath]),
+            ConfDirs = filelib:wildcard(Wildcard),
+            [
+             begin
+                 AC = filename:join(Path, "advanced.config"),
+                 lager:debug("writing advanced.conf to ~p", [AC]),
+                 file:write_file(AC, io_lib:fwrite("~p.\n",[[]])),
+                 AC
+             end || Path <- ConfDirs]
+    end.
 
 get_riak_conf(Node) ->
     N = node_id(Node),

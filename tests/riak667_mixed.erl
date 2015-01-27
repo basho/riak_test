@@ -46,6 +46,8 @@ confirm() ->
 
     CurrentVer = rt:get_version(),
 
+    lager:info("crdt_mixed_versions? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, crdt_mixed_versions])]),
+
     %% Create PB connection.
     Pid = rt:pbc(Node1),
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
@@ -216,9 +218,14 @@ confirm() ->
     ?assert(map_contents_are_lists(Robj1)),
 
     {ok, Robj2} = riakc_pb_socket:get(Pid4, ?BUCKET, ?KEY2),
+
+    lager:info("crdt_mixed_versions? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, crdt_mixed_versions])]),
+
     ?assert(map_contents_are_lists(Robj2)),
     %% unset env var
     rpc:multicall(Nodes, application, set_env, [riak_kv, crdt_mixed_versions, false]),
+
+    lager:info("crdt_mixed_versions? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, crdt_mixed_versions])]),
 
     %% read and write maps
     {ok, Up1N1} = riakc_pb_socket:fetch_type(Pid4, ?BUCKET, ?KEY),
@@ -309,7 +316,7 @@ nested_are_dicts(Entries) ->
                                     end, true, CRDTs);
                  (_) ->
                       true
-              end, Entries).
+              end, dict:to_list(Entries)).
 
 set_is_dict({_Clock, Entries, Deferred}) ->
     is_dict(Entries) andalso is_dict(Deferred).
