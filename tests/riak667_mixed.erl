@@ -33,7 +33,7 @@
                 [{ring_creation_size, 8}]
                },
                {riak_kv,
-                [{crdt_mixed_versions, true}]}
+                [{mdc_crdt_epoch, 1}]}
               ]).
 
 confirm() ->
@@ -46,7 +46,7 @@ confirm() ->
 
     CurrentVer = rt:get_version(),
 
-    lager:info("crdt_mixed_versions? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, crdt_mixed_versions])]),
+    lager:info("mdc_crdt_epoch? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, mdc_crdt_epoch])]),
 
     %% Create PB connection.
     Pid = rt:pbc(Node1),
@@ -219,13 +219,13 @@ confirm() ->
 
     {ok, Robj2} = riakc_pb_socket:get(Pid4, ?BUCKET, ?KEY2),
 
-    lager:info("crdt_mixed_versions? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, crdt_mixed_versions])]),
+    lager:info("mdc_crdt_epoch? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, mdc_crdt_epoch])]),
 
     ?assert(map_contents_are_lists(Robj2)),
     %% unset env var
-    rpc:multicall(Nodes, application, set_env, [riak_kv, crdt_mixed_versions, false]),
+    rpc:multicall(Nodes, application, set_env, [riak_kv, mdc_crdt_epoch, false]),
 
-    lager:info("crdt_mixed_versions? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, crdt_mixed_versions])]),
+    lager:info("mdc_crdt_epoch? ~p", [rpc:multicall(Nodes, application, get_env, [riak_kv, mdc_crdt_epoch])]),
 
     %% read and write maps
     {ok, Up1N1} = riakc_pb_socket:fetch_type(Pid4, ?BUCKET, ?KEY),
