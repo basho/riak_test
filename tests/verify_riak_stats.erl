@@ -218,7 +218,7 @@ diff_lists(List, ThatList) ->
 -spec maybe_log_stats_keys([binary()], string()) -> ok.
 maybe_log_stats_keys(StatsKeys, _Description) when length(StatsKeys) == 0 ->
     ok;
-maybe_log_stats_keys(StatsKeys, Description) when StatsKeys ->
+maybe_log_stats_keys(StatsKeys, Description) ->
     lager:info("~s: ~s", [Description, pretty_print_stats_keys(StatsKeys)]).
 
 -spec pretty_print_stats_keys([binary()]) -> string().
@@ -755,6 +755,11 @@ common_stats() ->
         <<"vnode_counter_update_total">>,
         <<"vnode_gets">>,
         <<"vnode_gets_total">>,
+        <<"vnode_get_fsm_time_mean">>,
+        <<"vnode_get_fsm_time_median">>,
+        <<"vnode_get_fsm_time_95">>,
+        <<"vnode_get_fsm_time_99">>,
+        <<"vnode_get_fsm_time_100">>,
         <<"vnode_index_deletes">>,
         <<"vnode_index_deletes_postings">>,
         <<"vnode_index_deletes_postings_total">>,
@@ -776,6 +781,11 @@ common_stats() ->
         <<"vnode_map_update_total">>,
         <<"vnode_puts">>,
         <<"vnode_puts_total">>,
+        <<"vnode_put_fsm_time_mean">>,
+        <<"vnode_put_fsm_time_median">>,
+        <<"vnode_put_fsm_time_95">>,
+        <<"vnode_put_fsm_time_99">>,
+        <<"vnode_put_fsm_time_100">>,
         <<"vnode_set_update">>,
         <<"vnode_set_update_time_100">>,
         <<"vnode_set_update_time_95">>,
