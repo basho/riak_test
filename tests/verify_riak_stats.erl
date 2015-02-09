@@ -218,7 +218,7 @@ diff_lists(List, ThatList) ->
 -spec maybe_log_stats_keys([binary()], string()) -> ok.
 maybe_log_stats_keys(StatsKeys, _Description) when length(StatsKeys) == 0 ->
     ok;
-maybe_log_stats_keys(StatsKeys, Description) when StatsKeys ->
+maybe_log_stats_keys(StatsKeys, Description) ->
     lager:info("~s: ~s", [Description, pretty_print_stats_keys(StatsKeys)]).
 
 -spec pretty_print_stats_keys([binary()]) -> string().
