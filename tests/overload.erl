@@ -103,7 +103,7 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
-    ProcFun = build_predicate_lt(test_vnode_protection, (?NUM_REQUESTS), "ProcFun", "Procs"),
+    ProcFun = build_predicate_lt(test_vnode_protection, (2*?THRESHOLD * 1.5), "ProcFun", "Procs"),
     QueueFun = build_predicate_lt(test_vnode_protection, (?NUM_REQUESTS), "QueueFun", "QueueSize"),
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
 
