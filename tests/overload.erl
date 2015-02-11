@@ -115,7 +115,7 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     Config = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
                            {vnode_check_interval, 1}]}],
     rt:pmap(fun(Node) ->
-                    rt_config:update_app_config(Node, Config)
+                    rt:update_app_config(Node, Config)
             end, Nodes),
     ProcFun = build_predicate_lt(test_vnode_protection, (?NUM_REQUESTS+1), "ProcFun", "Procs"),
     QueueFun = build_predicate_lt(test_vnode_protection, (?NUM_REQUESTS), "QueueFun", "QueueSize"),
@@ -147,7 +147,7 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
     lager:info("Setting FSM limit to ~b", [?THRESHOLD]),
     Config = [{riak_kv, [{fsm_limit, ?THRESHOLD}]}],
     rt:pmap(fun(Node) ->
-                    rt_config:update_app_config(Node, Config)
+                    rt:update_app_config(Node, Config)
             end, Nodes),
     ProcFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
                                  "ProcFun", "Procs"),
@@ -268,8 +268,10 @@ node_overload_check(Pid) ->
     end.
 
 list_keys(Node) ->
-    Pid = rt_pb:pbc(Node),
-    riakc_pb_socket:list_keys(Pid, ?BUCKET, 30000).
+    Pid = rt:pbc(Node, [{auto_reconnect, true}, {queue_if_disconnected, true}]),
+    Res = riakc_pb_socket:list_keys(Pid, {<<"normal_type">>, ?BUCKET}, infinity),
+    riakc_pb_socket:stop(Pid),
+    Res.
 
 list_buckets(Node) ->
     {ok, C} = riak:client_connect(Node),
