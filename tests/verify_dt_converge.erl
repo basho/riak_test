@@ -227,7 +227,7 @@ update_2a({BType, map}, Bucket, Client, CMod) ->
                                             riakc_set:add_element(<<"Sam">>, S)
                                     end, M),
                              riakc_map:update({<<"verified">>, flag}, fun(F) ->
-                                                                              riakc_flag:disable(F)
+                                                                              riakc_flag:enable(F)
                                                                                   end,
                                               M1)
                      end,
@@ -287,7 +287,7 @@ check_3a({BType, map}, Bucket, Client, CMod) ->
     check_value(Client, CMod, {BType, Bucket}, ?KEY, riakc_map,
                 [{{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Russell">>, <<"Sam">>]},
-                 {{<<"verified">>, flag}, false}]).
+                 {{<<"verified">>, flag}, true}]).
 
 check_4({BType, counter}, Bucket, Client, CMod) ->
     lager:info("check_4: Checking final merged value of counter"),
@@ -310,7 +310,7 @@ check_4({BType, map}, Bucket, Client, CMod) ->
                   ]},
                  {{<<"followers">>, counter}, 10},
                  {{<<"friends">>, set}, [<<"Sam">>]},
-                 {{<<"verified">>, flag}, false}],
+                 {{<<"verified">>, flag}, true}],
                 [{pr, 3}, {notfound_ok, false}]).
 
 check_value(Client, CMod, Bucket, Key, DTMod, Expected) ->
