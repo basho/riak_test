@@ -19,6 +19,7 @@ confirm() ->
     make_certs:intermediateCA(CertDir, "intCA", "rootCA"),
     make_certs:endusers(CertDir, "rootCA", ["site3.basho.com", "site4.basho.com"]),
     make_certs:endusers(CertDir, "intCA", ["site1.basho.com", "site2.basho.com"]),
+    make_certs:enduser(CertDir, "intCA", "*.basho.com", "wildcard.basho.com"),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
     BaseConf = [
@@ -188,6 +189,25 @@ confirm() ->
             ]}
     ],
 
+    SSLConfig8 = [
+        {riak_repl,
+            [
+                {fullsync_on_connect, false},
+                {fullsync_interval, disabled}
+            ]},
+        {riak_core,
+            [
+                {ssl_enabled, true},
+                {peer_common_name_acl, ["*.basho.com"]},
+                {certfile, filename:join([CertDir,
+                            "wildcard.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                            "wildcard.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                            "wildcard.basho.com/cacerts.pem"])}
+            ]}
+    ],
+
     lager:info("===testing basic connectivity"),
 
     [Node1, Node2] = rt:deploy_nodes(2, BaseConf, [riak_kv, riak_repl]),
@@ -252,6 +272,12 @@ confirm() ->
     rt:log_to_nodes([Node1, Node2], "wildcard and strict ACL test"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),
+
+
+    lager:info("===testing using same wildcard certificate"),
+    rt:log_to_nodes([Node1, Node2], "wildcard certificates test"),
+    ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig8, BaseConf)},
+        {Node2, merge_config(SSLConfig8, BaseConf)})),
 
     lager:info("===testing expired certificates fail"),
     rt:log_to_nodes([Node1, Node2], "expired certificates test"),
