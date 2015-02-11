@@ -185,13 +185,15 @@ set_advanced_conf(DevPath, NameValuePairs) ->
                         Confs ->
                             Confs
                     end,
+    lager:info("AdvancedConfs = ~p~n", [AdvancedConfs]),
     [update_app_config_file(RiakConf, NameValuePairs) || RiakConf <- AdvancedConfs],
     ok.
 
 make_advanced_confs(DevPath) ->
     case filelib:is_dir(DevPath) of
         false ->
-            lager:debug("Failed generating advanced.conf ~p is not a directory.", [DevPath]);
+            lager:error("Failed generating advanced.conf ~p is not a directory.", [DevPath]),
+            [];
         true ->
             Wildcard = io_lib:format("~s/dev/dev*/etc", [DevPath]),
             ConfDirs = filelib:wildcard(Wildcard),
