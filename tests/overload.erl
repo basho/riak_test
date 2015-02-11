@@ -103,8 +103,8 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
-    ProcFun = build_predicate_lt(test_vnode_protection, (2*?THRESHOLD * 1.5), "ProcFun", "Procs"),
-    QueueFun = build_predicate_lt(test_vnode_protection, (?THRESHOLD * 1.1), "QueueFun", "QueueSize"),
+    ProcFun = build_predicate_lt(test_vnode_protection, (?NUM_REQUESTS), "ProcFun", "Procs"),
+    QueueFun = build_predicate_lt(test_vnode_protection, (?NUM_REQUESTS), "QueueFun", "QueueSize"),
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
 
     [Node1 | _] = Nodes,
@@ -120,7 +120,7 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     ProcFun2 = build_predicate_gte("test_vnode_protection after suspend",
                                    (?NUM_REQUESTS), "ProcFun", "Procs"),
     QueueFun2 = build_predicate_lt("test_vnode_protection after suspend",
-                                   (?THRESHOLD) * 1.1, "QueueFun", "QueueSize"),
+                                   (?NUM_REQUESTS), "QueueFun", "QueueSize"),
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun2, QueueFun2),
     Pid ! resume,
     ok.
@@ -132,9 +132,9 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
-    ProcFun = build_predicate_lt(test_fsm_protection, (?THRESHOLD * 1.2),
+    ProcFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
                                  "ProcFun", "Procs"),
-    QueueFun = build_predicate_lt(test_fsm_protection, (?THRESHOLD * 1.2),
+    QueueFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
                                   "QueueFun", "QueueSize"),
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
     ok.
