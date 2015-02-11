@@ -476,7 +476,7 @@ remote_vnode_queue(Idx) ->
 %% at least ?NUM_REQUESTS (processes|queue entries) are handled.
 build_predicate_gte(Test, Metric, Label, ValueLabel) ->
     fun (X) ->
-        lager:info("in test ~w ~w, ~w:~w, expected no overload, Metric:>=~w",
+        lager:info("in test ~p ~p, ~p:~p, expected no overload, Metric:>=~p",
                    [Test, Label, ValueLabel, X, Metric]),
         X >= Metric
     end.
@@ -485,7 +485,7 @@ build_predicate_gte(Test, Metric, Label, ValueLabel) ->
 %% less than ?NUM_REQUESTS.
 build_predicate_lt(Test, Metric, Label, ValueLabel) ->
     fun (X) ->
-        lager:info("in test ~w ~w, ~w:~w, expected overload, Metric:<~w",
+        lager:info("in test ~p ~p, ~p:~p, expected overload, Metric:<~p",
                    [Test, Label, ValueLabel, X, Metric]),
         X < Metric
     end.
