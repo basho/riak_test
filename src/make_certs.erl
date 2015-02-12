@@ -112,14 +112,14 @@ intermediateCA(Root, CA, ParentCA) ->
 endusers(Root, CA, Users) ->
     [enduser(Root, CA, User) || User <- Users].
 
-enduser(Root, CA, {User, Path}) ->
-    enduser(Root, CA, User, Path);
+enduser(Root, CA, {User, DirName}) ->
+    enduser(Root, CA, User, DirName);
 
 enduser(Root, CA, User) ->
     enduser(Root, CA, User, User).
 
-enduser(Root, CA, User, Path) ->
-    UsrRoot = filename:join([Root, Path]),
+enduser(Root, CA, User, DirName) ->
+    UsrRoot = filename:join([Root, DirName]),
     file:make_dir(UsrRoot),
     CnfFile = filename:join([UsrRoot, "req.cnf"]),
     DN = #dn{commonName = User},

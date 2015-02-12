@@ -198,13 +198,31 @@ confirm() ->
         {riak_core,
             [
                 {ssl_enabled, true},
-                {peer_common_name_acl, ["*.basho.com"]},
                 {certfile, filename:join([CertDir,
                             "wildcard.basho.com/cert.pem"])},
                 {keyfile, filename:join([CertDir,
                             "wildcard.basho.com/key.pem"])},
                 {cacertdir, filename:join([CertDir,
                             "wildcard.basho.com/cacerts.pem"])}
+            ]}
+    ],
+
+    SSLConfig9 = [
+        {riak_repl,
+            [
+                {fullsync_on_connect, false},
+                {fullsync_interval, disabled}
+            ]},
+        {riak_core,
+            [
+                {ssl_enabled, true},
+                {peer_common_name_acl, ["*.basho.com"]},
+                {certfile, filename:join([CertDir,
+                    "wildcard.basho.com/cert.pem"])},
+                {keyfile, filename:join([CertDir,
+                    "wildcard.basho.com/key.pem"])},
+                {cacertdir, filename:join([CertDir,
+                    "wildcard.basho.com/cacerts.pem"])}
             ]}
     ],
 
@@ -273,11 +291,29 @@ confirm() ->
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig5, BaseConf)},
             {Node2, merge_config(SSLConfig6, BaseConf)})),
 
+    %% WILDCARD CERT TESTS
 
-    lager:info("===testing using same wildcard certificate"),
-    rt:log_to_nodes([Node1, Node2], "wildcard certificates test"),
+    lager:info("===testing wildcard certifictes on both ends"),
+    rt:log_to_nodes([Node1, Node2], "wildcard certificates test - both end"),
     ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig8, BaseConf)},
         {Node2, merge_config(SSLConfig8, BaseConf)})),
+
+    lager:info("===testing wildcard certifictes on one end"),
+    rt:log_to_nodes([Node1, Node2], "wildcard certificates test - one end"),
+    ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig8, BaseConf)},
+        {Node2, merge_config(SSLConfig3, BaseConf)})),
+
+    lager:info("===testing wildcard certifictes on one end with ACL"),
+    rt:log_to_nodes([Node1, Node2], "wildcard certificates test - one end with ACLs"),
+    ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig8, BaseConf)},
+        {Node2, merge_config(SSLConfig5, BaseConf)})),
+
+    lager:info("===testing wildcard certifictes on both ends with ACLs"),
+    rt:log_to_nodes([Node1, Node2], "wildcard certificates test - both end with ACLs"),
+    ?assertEqual(ok, test_connection({Node1, merge_config(SSLConfig9, BaseConf)},
+        {Node2, merge_config(SSLConfig9, BaseConf)})),
+
+    %% END WILDCARD CERT TESTS
 
     lager:info("===testing expired certificates fail"),
     rt:log_to_nodes([Node1, Node2], "expired certificates test"),
