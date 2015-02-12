@@ -30,13 +30,13 @@
 -define(SUCCESS, 0).
 -define(TESTCYCLE, 20).
 -define(STOPWORDS, "No transfers active").
--define(NUMRUNSTATES, 3).
+-define(NUMRUNSTATES, 1).
 -define(CFG,
         [
          {riak_core,
           [
-           {handoff_concurrency, 16},
-           {ring_creation_size, 256}
+           {handoff_concurrency, 11},
+           {ring_creation_size, 64}
           ]},
          {yokozuna,
           [
@@ -185,7 +185,7 @@ wait_for_index(Cluster, Index) ->
 wait_for_replica_count(SolrURL, KeyCount) ->
     AreReplicasUp =
         fun() ->
-                lager:info("Waiting for replica count to be > than 3 * docs"),
+                lager:info("Waiting for replica count to be 3 * docs"),
                 {ok, "200", _, RBody} = ibrowse:send_req(SolrURL, [], get, []),
                 FoundCount = get_count(RBody),
                 lager:info("Replicas Count ~b", [FoundCount]),

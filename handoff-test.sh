@@ -22,12 +22,12 @@ else
     $ADMIN_PATH_NODE cluster commit
 fi
 
-sleep 15
+sleep 10
 
 while ! $ADMIN_PATH_NODE2 transfers | grep -iqF "$STOPWORDS"
 do
     echo 'Transfers in Progress'
-    sleep 5
+    sleep 10
 done
 
 # Keys Count
