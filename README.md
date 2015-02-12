@@ -8,16 +8,16 @@ in Erlang, and can interact with the cluster using distributed Erlang.
 
 ### How does it work?
 
-`riak_test` runs tests in a sandbox, typically `$HOME/rt/riak`. The sanbox
+`riak_test` runs tests in a sandbox, typically `$HOME/rt/riak`. The sandbox
 uses `git` to reset back to a clean state after tests are run. The
 contents of `$HOME/rt/riak` might look something like this:
 
 ```
 $ ls $HOME/rt/riak
-current riak-1.2.1 riak-1.3.2 riak-1.4.10
+head riak-1.3.2 riak-1.4.12
 ```
 
-Inside each of these directories is a `dev` folder, typically
+Inside each of these directories is a series `dev[0-9]+` directories, typically
 created with your normal `make [stage]devrel`. So how does
 this sandbox get populated to begin with?
 
@@ -31,13 +31,13 @@ help you get both `~/test-releases` and `$HOME/rt/riak` all set up. A full
 tutorial for using them exists further down in this README.
 
 There is one folder in `$HOME/rt/riak` that does not come from
-`~/test-releases`: `current`. The `current` folder can refer
+`~/test-releases`: `head`. The `head` folder can refer
 to any version of Riak, but is typically used for something
 like the `master` branch, a feature branch, or a release candidate.
-The `$HOME/rt/riak/current` dev release gets populated from a devrel of Riak
+The `$HOME/rt/riak/head` dev release gets populated from a devrel of Riak
 that can come from anywhere, but is usually your 'normal' git checkout
-of Riak. The `bin/rtdev-current.sh` can be run from within that folder
-to copy `dev/` into `$HOME/rt/riak/current`.
+of Riak. The `bin/rtdev-install.sh` can be run from within that folder
+to copy `dev/` into `$HOME/rt/riak/head`.
 
 Once you have everything set up (again, instructions for this are below),
 you'll want to run and write tests. This repository also holds code for
@@ -53,37 +53,45 @@ previous versions of Riak. Together, we'll get your test environment
 up and running. Scripts to help in this process are located in the
 `bin` directory of this project.
 
+### Prerequisites
+
+In order to successfully build Erlang and Riak there are several dependencies
+which need to be fulfilled.  Details can be found at
+[Installing Erlang](http://docs.basho.com/riak/latest/ops/building/installing/erlang/).
+
+Essentially these packages need to be on your system for a successful build:
+- autoconf
+- gcc/g++
+- curses
+- JDK
+- make
+- openssl (a very current one)
+
+
 ### rtdev-all.sh
 
-This script is for the lazy. It performs all of the setup steps described
-in the other scripts, including installing the current "master" branch from
-Github into "current". The releases will be built in your current working
+This script is for a complete installation. It performs all of the setup steps
+including installing the current "master" branch from
+Github into "head". The releases will be built in your current working
 directory, so create an empty one in a place you'd like to store these
 builds for posterity, so that you don't have to rebuild them if your
 installation path (`$HOME/rt/riak` by the way this script installs it) gets into
 a bad state.
 
-If you do want to restore your `$HOME/rt/riak` folder to factory condition, see
-`rtdev-setup-releases.sh` and if you want to change the current riak under
-test, see `rtdev-current.sh`.
-
-### rtdev-build-releases.sh
-
-The first one that we want to look at is `rtdev-build-releases.sh`. If
-left unchanged, this script is going to do the following:
+This script is going to do the following:
 
 1. Download the source for the past three major Riak versions (e.g.
-   1.3.2, 1.4.10 and 2.0.0)
+   1.3.2, 1.4.12 and master)
 1. Build the proper version of Erlang that release was built with,
-   using kerl (which it will also download)
+   using **kerl** (which it will also download)
 1. Build those releases of Riak.
 
 You'll want to run this script from an empty directory. Also, you might be
-thinking that you already have all the required versions of erlang. Great! You
+thinking that you already have all the required versions of Erlang. Great! You
 should set and export the following environment variables prior to running this
 and other `riak_test` scripts:
 
-Here, kerl is configured to use "$HOME/.kerl/installs" as the installation
+Here, **kerl** is configured to use "$HOME/.kerl/installs" as the installation
 directory for erlang builds.
 
 ```bash
@@ -92,12 +100,8 @@ export R16B02="$HOME/.kerl/installs/erlang-R16B02"
 export CURRENT_OTP="$R16B02"
 ```
 
-**Kerlveat**: If you want kerl to build erlangs with serious 64-bit
-Macintosh action, you'll need a `~/.kerlrc` file that looks like this:
-
-```
-KERL_CONFIGURE_OPTIONS="--disable-hipe --enable-smp-support --enable-threads --enable-kernel-poll  --enable-darwin-64bit --without-odbc"
-```
+If you have your own versions of Erlang, just set the above environment
+variables before running `rtdev-all.sh`.
 
 The script will check that all these paths exist. If even one of them
 is missing, it will prompt you to install kerl, even if you already
@@ -105,38 +109,40 @@ have kerl. If you say no, the script quits. If you say yes, or all of
 your erlang paths check out, then go get a cup of coffee, you'll be
 building for a little while.
 
-### rtdev-setup-releases.sh
-
-The `rtdev-setup-releases.sh` will get the releases you just built
-into a local git repository. Run this script from the
-same directory that you just built all of your releases into.
-By default this script initializes the repository into `$HOME/rt/riak` but
-you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-setup-releases.sh#L11).
+To use `riak_ee` instead of `riak` set [`$RT_USE_EE`](https://github.com/basho/riak_test/blob/master/bin/rtdev-all.sh#L46)
+to any non-empty string.
 
 **Note**: There is a bug in 1.3.x `leveldb` which does not properly resolve
 the location of `pthread.h` when building on Macintosh OS X 10.9, aka
-Mavericks.  This has been fixed in subsequent releases, but for now a fix
-is to manually add `#include <pthread.h>` to the top of
+Mavericks, and 10.10 (Yosemite).  This has been fixed in subsequent releases,
+but for now a fix is to manually add `#include <pthread.h>` to the top of
 `deps/eleveldb/c_src/leveldb/include/leveldb/env.h`.  Also the version
-of `meck` needs to be updated, too.  This is handled autmatically by
+of `meck` needs to be updated, too.  This is handled automatically by
 the script.
 
-### rtdev-current.sh
+### rtdev-install.sh
 
-`rtdev-current.sh` is where it gets interesting. You need to run that
-from the Riak source folder you're wanting to test as the current
-version of Riak. Also, make sure that you've already run `make devrel`
-or `make stagedevrel` before you run `rtdev-current.sh`. Like setting up
-releases you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-current.sh#L6)
-so all your riak builds are in one place.  Also you can override the tag
-of the current version pulled by setting [`$RT_CURRENT_TAG`](https://github.com/basho/riak_test/blob/master/bin/rtdev-current.sh#L7)
-to a release number, e.g. `2.0.0`.  It will automatically be prefixed with
-the repo name, e.g. `riak_ee-2.0.0`.  To use `riak_ee` instead of `riak` set [`$RT_USE_EE`](https://github.com/basho/riak_test/blob/master/bin/rtdev-setup-releases.sh#L23)
-to any non-empty string.
+`rtdev-install.sh` will check the releases you just built
+into a local git repository.  Run this script from the
+same directory in which you just built all of your releases.
+By default this script initializes the repository into `$HOME/rt/riak` but
+you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-install.sh#L24).
 
-####  reset-current-env.sh
+Also, make sure that you've already run `make devrel`
+or `make stagedevrel` before you run `rtdev-install.sh`. Like setting up
+releases you can override [`$RT_VERSION`](https://github.com/basho/riak_test/blob/master/bin/rtdev-install.sh#L28)
+so all your Riak builds are in one place.
 
-`reset-current-env.sh` resets test environments setup using `rtdev-current.sh`
+### rtdev-migrate.sh
+
+`rtdev-migrate.sh` will convert existing devrels installed in `$RT_DEST_DIR`
+from the legacy format to the new format.  It also will reset the local
+Git repo.  It is only necessary to run this script once.
+
+
+###  reset-current-env.sh
+
+`reset-current-env.sh` resets test environments setup using `rtdev-install.sh`
 using the following process:
 
   1. Delete the current stagedevrel/devrel environment
@@ -180,11 +186,8 @@ to tell riak_test about them. The method of choice is to create a
 
 {rtdev, [
     {rt_project, "riak"},
-    {rtdev_path, [{root,     "/home/you/rt/riak"},
-                  {current,  "/home/you/rt/riak/current"},
-                  {previous, "/home/you/rt/riak/riak-1.4.10"},
-                  {legacy,   "/home/you/rt/riak/riak-1.3.2"}
-                 ]}
+    {root_path, "/home/you/rt/riak"},
+    {default_version, head}
 ]}.
 ```
 
@@ -193,6 +196,10 @@ name you specify. For example, running the command below will use an
 `rt_retry_delay` of 500 and an `rt_max_wait_time` of 180000. If your 
 defaults contain every option you need, you can run riak_test without
 the `-c` argument.
+
+** Note **: You *need* to have a built version of
+[basho_bench](http://www.github.com/basho/basho_bench) setup and added to
+your config file before running riak_test.
 
 Some configuration parameters:
  
