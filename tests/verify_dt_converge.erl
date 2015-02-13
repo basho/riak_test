@@ -25,7 +25,8 @@
 -module(verify_dt_converge).
 -behavior(riak_test).
 -compile([export_all]).
--export([confirm/0]).
+-export([confirm/0,
+         create_bucket_types/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 

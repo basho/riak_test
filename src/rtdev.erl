@@ -178,11 +178,18 @@ so_fresh_so_clean(VersionMap) ->
             end, VersionMap),
     ok.
 
-setup_harness() ->
-    %% Get node names and populate node map
+available_resources() ->
     VersionMap = [{Version, harness_node_ids(Version)} || Version <- versions()],
     NodeIds = harness_node_ids(rt_config:get(default_version, "head")),
+    lager:debug("Available Node IDs: ~p", [NodeIds]),
     NodeMap = lists:zip(NodeIds, harness_nodes(NodeIds)),
+    lager:debug("Available Node Map: ~p", [NodeMap]),
+    [NodeIds, NodeMap, VersionMap].
+ 
+
+setup_harness() ->
+    %% Get node names and populate node map
+    [NodeIds, NodeMap, VersionMap] = available_resources(),
     so_fresh_so_clean(VersionMap),
     rm_dir(filename:join(?SCRATCH_DIR, "gc")),
     rt_harness_util:setup_harness(VersionMap, NodeIds, NodeMap).
@@ -319,9 +326,10 @@ all_the_app_configs(DevPath) ->
             AppConfigs
     end.
 
-%% update_app_config(all, Config) ->
-%%     lager:info("rtdev:update_app_config(all, ~p)", [Config]),
-%%     [ update_app_config(DevPath, Config) || DevPath <- devpaths()];
+update_app_config(all, Config) ->
+     lager:info("rtdev:update_app_config(all, ~p)", [Config]),
+     [ update_app_config(DevPath, Config) || DevPath <- devpaths()].
+
 update_app_config(Node, Version, Config) ->
     VersionPath = filename:join(?PATH, Version),
     FileFormatString = "~s/~s/etc/~s.config",
@@ -510,57 +518,58 @@ configure_nodes(Nodes, Configs) ->
             end,
             lists:zip(Nodes, Configs)).
 
-%% deploy_nodes(NodeConfig) ->
-%%     Path = relpath(root),
-%%     lager:info("Riak path: ~p", [Path]),
-%%     NumNodes = length(NodeConfig),
-%%     %% TODO: The starting index should not be fixed to 1
-%%     NodesN = lists:seq(1, NumNodes),
-%%     Nodes = [?DEV(N) || N <- NodesN],
-%%     NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
-%%     {Versions, Configs} = lists:unzip(NodeConfig),
-%%     VersionMap = lists:zip(NodesN, Versions),
+deploy_nodes(NodeConfig) ->
+     Path = relpath(root),
+     lager:info("Riak path: ~p", [Path]),
+     NumNodes = length(NodeConfig),
+     %% TODO: The starting index should not be fixed to 1
+     NodesN = lists:seq(1, NumNodes),
+     Nodes = [?DEV(N) || N <- NodesN],
+     NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
+     {Versions, Configs} = lists:unzip(NodeConfig),
+     VersionMap = lists:zip(NodesN, Versions),
 
-%%     %% Check that you have the right versions available
-%%     [ check_node(Version) || Version <- VersionMap ],
-%%     rt_config:set(rt_nodes, NodeMap),
-%%     rt_config:set(rt_versions, VersionMap),
+     %% TODO The new node deployment doesn't appear to perform this check ... -jsb
+     %% Check that you have the right versions available
+     %%[ check_node(Version) || Version <- VersionMap ],
+     rt_config:set(rt_nodes, NodeMap),
+     rt_config:set(rt_versions, VersionMap),
 
-%%     create_dirs(Nodes),
+     create_dirs(Nodes),
 
-%%     %% Set initial config
-%%     add_default_node_config(Nodes),
-%%     rt:pmap(fun({_, default}) ->
-%%                     ok;
-%%                ({Node, {cuttlefish, Config}}) ->
-%%                     set_conf(Node, Config);
-%%                ({Node, Config}) ->
-%%                     update_app_config(Node, Config)
-%%             end,
-%%             lists:zip(Nodes, Configs)),
+     %% Set initial config
+     add_default_node_config(Nodes),
+     rt:pmap(fun({_, default}) ->
+                     ok;
+                ({Node, {cuttlefish, Config}}) ->
+                     set_conf(Node, Config);
+                ({Node, Config}) ->
+                     update_app_config(Node, Config)
+             end,
+             lists:zip(Nodes, Configs)),
 
-%%     %% create snmp dirs, for EE
-%%     create_dirs(Nodes),
+     %% create snmp dirs, for EE
+     create_dirs(Nodes),
 
-%%     %% Start nodes
-%%     %%[run_riak(N, relpath(node_version(N)), "start") || N <- Nodes],
-%%     rt:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
+     %% Start nodes
+     %%[run_riak(N, relpath(node_version(N)), "start") || N <- Nodes],
+     rt:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
 
-%%     %% Ensure nodes started
-%%     [ok = rt:wait_until_pingable(N) || N <- Nodes],
+     %% Ensure nodes started
+     [ok = rt:wait_until_pingable(N) || N <- Nodes],
 
-%%     %% %% Enable debug logging
-%%     %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+     %% %% Enable debug logging
+     %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
 
-%%     %% We have to make sure that riak_core_ring_manager is running before we can go on.
-%%     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
+     %% We have to make sure that riak_core_ring_manager is running before we can go on.
+     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
 
-%%     %% Ensure nodes are singleton clusters
-%%     [ok = rt_ring:check_singleton_node(?DEV(N)) || {N, Version} <- VersionMap,
-%%                                               Version /= "0.14.2"],
+     %% Ensure nodes are singleton clusters
+     [ok = rt_ring:check_singleton_node(?DEV(N)) || {N, Version} <- VersionMap,
+                                               Version /= "0.14.2"],
 
-%%     lager:info("Deployed nodes: ~p", [Nodes]),
-%%     Nodes.
+     lager:info("Deployed nodes: ~p", [Nodes]),
+     Nodes.
 
 gen_stop_fun(Path, Timeout) ->
     fun(Node) ->
@@ -832,7 +841,7 @@ get_cmd_result(Port, Acc) ->
     end.
 
 check_node({_N, Version}) ->
-    case proplists:is_defined(Version, rt_config:get(rtdev_path)) of
+    case proplists:is_defined(Version, rt_config:get(root_path)) of
         true -> ok;
         _ ->
             lager:error("You don't have Riak ~s installed or configured", [Version]),

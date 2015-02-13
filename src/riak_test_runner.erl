@@ -1,4 +1,4 @@
-%% -------------------------------------------------------------------
+% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2013 Basho Technologies, Inc.
 %%
@@ -104,7 +104,8 @@ init([TestModule, Backend, Properties]) ->
     TestTimeout = rt_config:get(test_timeout, rt_config:get(rt_max_wait_time)),
     SetupModFun = function_name(setup, TestModule, 1, rt_cluster),
     {ConfirmMod, _} = ConfirmModFun = function_name(confirm, TestModule),
-    TestType = case erlang:function_exported(ConfirmMod, ConfirmModFun, 1) of
+    lager:debug("Confirm function -- ~p:~p", [ConfirmMod, ConfirmModFun]),
+    TestType = case erlang:function_exported(TestModule, confirm, 1) of
         true -> new;
         false -> old
     end,
@@ -154,9 +155,7 @@ setup(timeout, State=#state{prereq_check=false}) ->
     notify_executor({fail, prereq_check_failed}, State),
     cleanup(State),
     {stop, normal, State};
-setup(timeout, State=#state{test_type=TestType,
-                            test_module=TestModule,
-                            backend=Backend,
+setup(timeout, State=#state{backend=Backend,
                             properties=Properties}) ->
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
     group_leader(NewGroupLeader, self()),
@@ -169,17 +168,12 @@ setup(timeout, State=#state{test_type=TestType,
     {StartVersion, OtherVersions} = test_versions(Properties),
     Config = rt_backend:set(Backend, rt_properties:get(config, Properties)),
 
-    case TestType of
-        new ->
-            node_manager:deploy_nodes(NodeIds,
-                                      StartVersion,
-                                      Config,
-                                      Services,
-                                      notify_fun(self())),
-            lager:info("Waiting for deploy nodes response at ~p", [self()]);
-        old ->
-            lager:warn("Test ~p has not been ported to the new framework.", [TestModule])
-    end,
+    node_manager:deploy_nodes(NodeIds,
+                              StartVersion,
+                              Config,
+                              Services,
+                              notify_fun(self())),
+    lager:info("Waiting for deploy nodes response at ~p", [self()]),
 
     %% Set the initial value for `current_version' in the properties record
     {ok, UpdProperties} =
@@ -194,8 +188,9 @@ setup(_Event, _State) ->
 
 execute({nodes_deployed, _}, State) ->
     #state{test_module=TestModule,
+           test_type=TestType,
            properties=Properties,
-           setup_modfun={SetupMod, SetupFun},
+           setup_modfun=SetupModFun,
            confirm_modfun=ConfirmModFun,
            test_timeout=TestTimeout} = State,
     lager:notice("Running ~s", [TestModule]),
@@ -205,22 +200,32 @@ execute({nodes_deployed, _}, State) ->
     %% Perform test setup which includes clustering of the nodes if
     %% required by the test properties. The cluster information is placed
     %% into the properties record and returned by the `setup' function.
-    UpdState =
-        case SetupMod:SetupFun(Properties) of
-            {ok, UpdProperties} ->
-                Pid = spawn_link(test_fun(UpdProperties,
-                                          ConfirmModFun,
-                                          self())),
-                State#state{execution_pid=Pid,
-                            properties=UpdProperties,
-                            start_time=StartTime};
-            _ ->
-                ?MODULE:send_event(self(), test_result({fail, test_setup_failed})),
-                State#state{start_time=StartTime}
-        end,
+    SetupResult = maybe_setup_test(TestModule, TestType, SetupModFun, Properties),
+    UpdState = maybe_execute_test(SetupResult, TestModule, TestType, ConfirmModFun, StartTime, State),
+
     {next_state, wait_for_completion, UpdState, TestTimeout};
 execute(_Event, _State) ->
     {next_state, execute, _State}.
+
+maybe_setup_test(_TestModule, old, _SetupModFun, Properties) ->
+    {ok, Properties};
+maybe_setup_test(TestModule, new, {SetupMod, SetupFun}, Properties) ->
+    lager:debug("Setting up test ~p using ~p:~p", [TestModule, SetupMod, SetupFun]),
+    SetupMod:SetupFun(Properties).
+
+maybe_execute_test({ok, Properties}, _TestModule, TestType, ConfirmModFun, StartTime, State) ->
+    Pid = spawn_link(test_fun(TestType,
+                              Properties,
+                              ConfirmModFun,
+                              self())),
+    State#state{execution_pid=Pid,
+                properties=Properties,
+                start_time=StartTime};
+maybe_execute_test(Error, TestModule, _TestType, _ConfirmModFun, StartTime, State) ->
+    lager:error("Setup of test ~p failed due to ~p", [TestModule, Error]),
+    ?MODULE:send_event(self(), test_result({fail, test_setup_failed})),
+    State#state{start_time=StartTime}.
+    
 
 wait_for_completion(timeout, State) ->
     %% Test timed out
@@ -258,6 +263,7 @@ wait_for_completion(_Msg, _State) ->
 
 wait_for_upgrade(nodes_upgraded, State) ->
     #state{properties=Properties,
+           test_type=TestType,
            confirm_modfun=ConfirmModFun,
            current_version=CurrentVersion,
            test_timeout=TestTimeout} = State,
@@ -268,7 +274,8 @@ wait_for_upgrade(nodes_upgraded, State) ->
 
     %% TODO: Maybe wait for transfers. Probably should be
     %% a call to an exported function in `rt_cluster'
-    Pid = spawn_link(test_fun(UpdProperties,
+    Pid = spawn_link(test_fun(TestType,
+                              UpdProperties,
                               ConfirmModFun,
                               self())),
     UpdState = State#state{execution_pid=Pid,
@@ -295,18 +302,31 @@ wait_for_upgrade(_Event, _From, _State) ->
 %%% Internal functions
 %%%===================================================================
 
--spec test_fun(rt_properties:properties(), {atom(), atom()}, pid()) ->
-                      function().
-test_fun(Properties, {ConfirmMod, ConfirmFun}, NotifyPid) ->
+-spec test_fun(test_type(), rt_properties:properties(), {atom(), atom()},
+               pid()) -> function().
+test_fun(TestType, Properties, {ConfirmMod, ConfirmFun}, NotifyPid) ->
+    test_fun(TestType, Properties, ConfirmMod, ConfirmFun, NotifyPid).
+
+-spec test_fun(test_type(), rt_properties:properties(), atom(), atom(),
+               pid()) -> function().
+test_fun(new, Properties, ConfirmMod, ConfirmFun, NotifyPid) ->
+    test_fun(fun() -> ConfirmMod:ConfirmFun(Properties) end, NotifyPid);
+test_fun(old, _Properties, ConfirmMod, ConfirmFun, NotifyPid) ->
+    lager:debug("Building test fun for ~p:~p/0 (defined: ~p)", [ConfirmMod, ConfirmFun, erlang:function_exported(ConfirmMod, ConfirmFun, 0)]),
+    test_fun(fun() -> ConfirmMod:ConfirmFun() end, NotifyPid).
+
+-spec test_fun(function(), pid()) -> function().
+test_fun(ConfirmFun, NotifyPid) ->
     fun() ->
             %% Exceptions and their handling sucks, but eunit throws
             %% errors `erlang:error' so here we are
-            try ConfirmMod:ConfirmFun(Properties) of
+            try ConfirmFun() of
                 TestResult ->
                     ?MODULE:send_event(NotifyPid, test_result(TestResult))
             catch
                 Error:Reason ->
-                    lager:error("Error: ~p Reason: ~p", [Error, Reason]),
+                    lager:error("Failed to execute confirm function ~p due to ~p with reason ~p (trace: ~p)", 
+                                [ConfirmFun, Error, Reason, erlang:get_stacktrace()]),
                     TestResult = format_eunit_error(Reason),
                     ?MODULE:send_event(NotifyPid, test_result(TestResult))
             end

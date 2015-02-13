@@ -35,8 +35,7 @@ while getopts chn:v: opt; do
        ;;
     v) VERSION=$OPTARG
        ;;
-    n) echo "parsing num nodes"
-       NUM_NODES=$OPTARG
+    n) NUM_NODES=$OPTARG
        ;;
     h) usage
        exit 0
@@ -46,7 +45,7 @@ done
 
 shift $(($OPTIND-1))
 
-RIAK_HOME=$RT_HOME/riak-$VERSION
+RIAK_HOME=$RT_HOME/$VERSION
 
 if ! [[ -d $RIAK_HOME || -h $RIAK_HOME ]]; then
   echo "Riak home $RIAK_HOME does not exist."

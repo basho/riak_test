@@ -104,16 +104,11 @@ gather_properties(_Event, _State) ->
 request_nodes(timeout, State) ->
     #state{pending_tests=[NextTest | _],
            test_properties=PropertiesList} = State,
-    lager:debug("Requesting nodes using properties ~p", [PropertiesList]),
     %% Find the properties for the next pending test
     {NextTest, TestProps} = lists:keyfind(NextTest, 1, PropertiesList),
-    %% Send async request to node manager
-    VersionsToTest = versions_to_test(TestProps),
-    NodeCount = rt_properties:get(node_count, TestProps),
-    lager:notice("Requesting ~p nodes for the next test, ~p", [NodeCount, NextTest]),
-    node_manager:reserve_nodes(NodeCount,
-                               VersionsToTest,
-                               reservation_notify_fun()),
+    
+    ok = maybe_reserve_nodes(NextTest, TestProps),
+    
     {next_state, launch_test, State};
 request_nodes({test_complete, Test, Pid, Results, Duration}, State) ->
     #state{pending_tests=Pending,
@@ -155,6 +150,7 @@ launch_test({nodes, Nodes, NodeMap}, State) ->
     {NextTest, TestProps} = lists:keyfind(NextTest, 1, PropertiesList),
     UpdTestProps = rt_properties:set([{node_map, NodeMap}, {node_ids, Nodes}],
                                      TestProps),
+    lager:debug("Spawning test runner to execute ~p", [NextTest]),
     Pid = spawn_link(riak_test_runner, start, [NextTest, Backend, UpdTestProps]),
     UpdState = State#state{pending_tests=RestPending,
                            runner_pids=[Pid | Pids],
@@ -172,7 +168,26 @@ launch_test({test_complete, Test, Pid, Results, Duration}, State) ->
                            pending_tests=Pending++Waiting,
                            waiting_tests=[]},
     {next_state, launch_test, UpdState};
-launch_test(_Event, _State) ->
+launch_test(Event, State) ->
+    lager:error("Unknown event ~p with state ~p.", [Event, State]),
+    ok.
+
+maybe_reserve_nodes(NextTest, TestProps) ->
+    VersionsToTest = versions_to_test(TestProps),
+    maybe_reserve_nodes(erlang:function_exported(NextTest, confirm, 1), 
+                        NextTest, VersionsToTest, TestProps).
+
+maybe_reserve_nodes(true, NextTest, VersionsToTest, TestProps) ->
+    NodeCount = rt_properties:get(node_count, TestProps),
+    
+    %% Send async request to node manager
+    lager:notice("Requesting ~p nodes for the next test, ~p", [NodeCount, NextTest]),
+    node_manager:reserve_nodes(NodeCount,
+                               VersionsToTest,
+                               reservation_notify_fun());
+maybe_reserve_nodes(false, NextTest, VersionsToTest, _TestProps) ->
+    lager:warning("~p is an old style test that requires conversion.", [NextTest]),
+    node_manager:reserve_nodes(0, VersionsToTest, reservation_notify_fun()),
     ok.
 
 wait_for_completion({test_complete, Test, Pid, Results, Duration}, State) ->

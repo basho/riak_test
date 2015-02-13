@@ -82,6 +82,8 @@ console(Node, Expected) ->
 %%     end.
 
 %% deploy_nodes(NodeConfig) ->
+deploy_nodes(NodeIds, _NodeMap, _Version, _Config, _Services) when NodeIds =:= [] ->
+    NodeIds;
 deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
     %% create snmp dirs, for EE
     create_dirs(Version, NodeIds),

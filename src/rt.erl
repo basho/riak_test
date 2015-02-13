@@ -24,6 +24,7 @@
 %% Please extend this module with new functions that prove useful between
 %% multiple independent tests.
 -module(rt).
+-deprecated(module).
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -249,6 +250,84 @@ get_https_conn_info(Node) ->
         _ ->
             undefined
     end.
+
+%% @doc Deploy a set of freshly installed Riak nodes, returning a list of the
+%%      nodes deployed.
+%% @todo Re-add -spec after adding multi-version support
+deploy_nodes(Versions) when is_list(Versions) ->
+    deploy_nodes(Versions, [riak_kv]);
+deploy_nodes(NumNodes) when is_integer(NumNodes) ->
+    [NodeIds, NodeMap, _] = allocate_nodes(NumNodes),
+    deploy_nodes(NodeIds, NodeMap, head, rt_properties:default_config(), [riak_kv]).
+    
+%% @doc Deploy a set of freshly installed Riak nodes with the given
+%%      `InitialConfig', returning a list of the nodes deployed.
+-spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
+deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
+    deploy_nodes(NumNodes, InitialConfig, [riak_kv]);
+deploy_nodes(Versions, Services) ->
+    NodeConfig = [ version_to_config(Version) || Version <- Versions ],
+    lager:debug("Starting nodes config ~p using versions ~p", [NodeConfig, Versions]),
+
+
+
+    Nodes = ?HARNESS:deploy_nodes(NodeConfig),
+    lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
+    [ ok = wait_for_service(Node, Service) || Node <- Nodes,
+                                              Service <- Services ],
+    Nodes.
+deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
+    NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
+    deploy_nodes(NodeConfig, Services).
+
+deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
+    _ = rt_harness_util:deploy_nodes(NodeIds, NodeMap, Version, Config, Services),
+    lists:foldl(fun({_, NodeName}, Nodes) -> [NodeName|Nodes] end,
+                [],
+                NodeMap).
+    
+allocate_nodes(NumNodes) ->
+    [AvailableNodeIds, AvailableNodeMap, VersionMap] = rt_harness:available_resources(),
+    lager:debug("Availabe node ids ~p, node map ~p, and version map ~p.", 
+                [AvailableNodeIds, AvailableNodeMap, VersionMap]),
+
+    AllocatedNodeIds = lists:sublist(AvailableNodeIds, NumNodes),
+    lager:debug("Allocated node ids ~p with version map ~p", [AllocatedNodeIds, VersionMap]),
+
+    
+    AllocatedNodeMap = lists:foldl(
+                         fun(NodeId, NodeMap) ->
+                                 NodeName = proplists:get_value(NodeId, AvailableNodeMap),
+                                 [{NodeId, NodeName}|NodeMap]
+                         end,
+                         [],
+                         AllocatedNodeIds),
+    lager:debug("Allocated node map ~p", [AllocatedNodeMap]),
+    [AllocatedNodeIds, AllocatedNodeMap, VersionMap].
+
+version_to_config(Config) when is_tuple(Config)-> Config;
+version_to_config(Version) -> {Version, default}.
+
+deploy_clusters(Settings) ->
+    ClusterConfigs = [case Setting of
+                          Configs when is_list(Configs) ->
+                              Configs;
+                          NumNodes when is_integer(NumNodes) ->
+                              [{current, default} || _ <- lists:seq(1, NumNodes)];
+                          {NumNodes, InitialConfig} when is_integer(NumNodes) ->
+                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)];
+                          {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
+                              [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                      end || Setting <- Settings],
+    ?HARNESS:deploy_clusters(ClusterConfigs).
+
+build_clusters(Settings) ->
+    Clusters = deploy_clusters(Settings),
+    [begin
+         join_cluster(Nodes),
+         lager:info("Cluster built: ~p", [Nodes])
+     end || Nodes <- Clusters],
+    Clusters.
 
 %% @doc Start the specified Riak node
 start(Node) ->
@@ -1758,7 +1837,7 @@ pmap(F, L) ->
 
 %% @private
 setup_harness(Test, Args) ->
-    ?HARNESS:setup_harness(Test, Args).
+    rt_harness:setup_harness(Test, Args).
 
 %% @doc Downloads any extant log files from the harness's running
 %%   nodes.

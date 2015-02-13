@@ -30,6 +30,7 @@
          deploy_clusters/1,
          clean_data_dir/3,
          deploy_nodes/1,
+         available_resources/0,
          spawn_cmd/1,
          spawn_cmd/2,
          cmd/1,
@@ -80,6 +81,9 @@ cmd(Cmd, Opts) ->
 
 deploy_nodes(NodeConfig) ->
     ?HARNESS_MODULE:deploy_nodes(NodeConfig).
+
+available_resources() ->
+    ?HARNESS_MODULE:available_resources().
 
 setup() ->
     ?HARNESS_MODULE:setup_harness().

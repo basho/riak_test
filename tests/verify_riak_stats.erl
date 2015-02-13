@@ -35,7 +35,7 @@
 
 %% You should have curl installed locally to do this.
 confirm() ->
-    Nodes = rt_cluster:deploy_nodes(1),
+    Nodes = rt:deploy_nodes(1),
     [Node1] = Nodes,
     verify_dt_converge:create_bucket_types(Nodes, ?TYPES),
     ?assertEqual(ok, rt_node:wait_until_nodes_ready([Node1])),
@@ -205,6 +205,7 @@ verify_stats_keys_complete(Node, Stats) ->
     MissingStatsKeys = diff_lists(ActualKeys, ExpectedKeys),
     AdditionalStatsKeys = diff_lists(ExpectedKeys, ActualKeys),
     maybe_log_stats_keys(MissingStatsKeys, "missing stats keys"),
+    lager:debug("Additional stats ~p", [AdditionalStatsKeys]),
     maybe_log_stats_keys(AdditionalStatsKeys, "additional stats"),
     ?assertEqual({[],[]}, {MissingStatsKeys, AdditionalStatsKeys}),
     ok.

@@ -36,6 +36,7 @@ start_link(Nodes, NodeMap, VersionMap) ->
 
 -spec reserve_nodes(pos_integer(), [string()], function()) -> ok.
 reserve_nodes(NodeCount, Versions, NotifyFun) ->
+    lager:debug("reserve_nodes(~p, ~p, ~p)", [NodeCount, Versions, NotifyFun]),
     gen_server:cast(?MODULE, {reserve_nodes, NodeCount, Versions, NotifyFun}).
 
 -spec deploy_nodes([string()], string(), term(), list(atom()), function()) -> ok.
@@ -78,6 +79,7 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
 handle_cast({reserve_nodes, Count, Versions, NotifyFun}, State) ->
+    lager:debug("Handling cast to reserve ~p nodes with versions ~p.", [Count, Versions]),
     {Result, UpdState} =
         reserve(Count, Versions, State),
     NotifyFun(Result),
@@ -148,6 +150,9 @@ wait_for_cleaner(Pid, true) ->
 wait_for_cleaner(_, false) ->
     ok.
 
+reserve(Count, _Versions, State) when Count == 0 ->
+    lager:debug("Reserving no nodes ..."),
+    {{nodes, [], State#state.node_map}, State};
 reserve(Count, _Versions, State=#state{nodes_available=NodesAvailable})
   when Count > length(NodesAvailable) ->
     {not_enough_nodes, State};
