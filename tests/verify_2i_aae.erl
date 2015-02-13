@@ -33,13 +33,26 @@
 -define(SCAN_BATCH_SIZE, 100).
 -define(N_VAL, 3).
 
-confirm() ->
-    [Node1] = rt_cluster:build_cluster(1,
-                               [{riak_kv,
-                                 [{anti_entropy, {off, []}},
-                                  {anti_entropy_build_limit, {100, 500}},
-                                  {anti_entropy_concurrency, 100},
-                                  {anti_entropy_tick, 200}]}]),
+-export([properties/0,
+         confirm/1]).
+
+properties() ->
+    Config = [{riak_kv,
+               [{anti_entropy, {off, []}},
+                {anti_entropy_build_limit, {100, 500}},
+                {anti_entropy_concurrency, 100},
+                {anti_entropy_tick, 200}]}] ++ rt_properties:default_config(),
+    rt_properties:new([{node_count, 1},
+                       {make_cluster, false},
+                       {config, Config}]).
+
+-spec confirm(rt_properties:properties()) -> pass | fail.
+confirm(Properties) ->
+    NodeIds = rt_properties:get(node_ids, Properties),
+    NodeMap = rt_properties:get(node_map, Properties),
+    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+    Node1 = hd(Nodes),
+
     rt_intercept:load_code(Node1),
     rt_intercept:add(Node1,
                      {riak_object,

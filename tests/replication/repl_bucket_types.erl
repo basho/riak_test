@@ -13,12 +13,15 @@
 -define(ENSURE_READ_INTERVAL, 1000).
 
 %% Replication Bucket Types test
+<<<<<<< HEAD
 %%
 
 setup(Type) ->
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes = make_clusters(Type),
+=======
+>>>>>>> Additional rebase cleanup
 
     PBA = rt:pbc(LeaderA),
     PBB = rt:pbc(LeaderB),
@@ -51,6 +54,7 @@ setup(Type) ->
     connect_clusters(LeaderA, LeaderB),
     {ClusterNodes, Types, PBA, PBB}.
 
+<<<<<<< HEAD
 cleanup({ClusterNodes, _Types, PBA, PBB}, CleanCluster) ->
     riakc_pb_socket:stop(PBA),
     riakc_pb_socket:stop(PBB),
@@ -64,6 +68,8 @@ cleanup({ClusterNodes, _Types, PBA, PBB}, CleanCluster) ->
 
 %% @doc riak_test entry point
 confirm() ->
+=======
+>>>>>>> Additional rebase cleanup
     %% Test two clusters of the current version
     SetupData = setup(current),
     realtime_test(SetupData),
@@ -346,11 +352,19 @@ cluster_conf() ->
       ]}
     ].
 
+<<<<<<< HEAD
 deploy_nodes(NumNodes, current) ->
     rt:deploy_nodes(NumNodes, cluster_conf(), [riak_kv, riak_repl]);
 deploy_nodes(_, mixed) ->
     Conf = cluster_conf(),
     rt:deploy_nodes([{current, Conf}, {previous, Conf}], [riak_kv, riak_repl]).
+=======
+%% deploy_nodes(NumNodes, current) ->
+%%     rt_cluster:deploy_nodes(NumNodes, cluster_conf());
+%% deploy_nodes(_, mixed) ->
+%%     Conf = cluster_conf(),
+%%     rt_cluster:deploy_nodes([{current, Conf}, {previous, Conf}]).
+>>>>>>> Additional rebase cleanup
 
 %% @doc Create two clusters of 1 node each and connect them for replication:
 %%      Cluster "A" -> cluster "B"
