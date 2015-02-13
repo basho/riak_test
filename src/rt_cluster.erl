@@ -22,102 +22,186 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([properties/0,
-         setup/2,
-         config/0,
+         setup/1,
          augment_config/3,
-         deploy_nodes/1,
-         deploy_nodes/2,
-         deploy_clusters/1,
-         build_cluster/1,
-         build_cluster/2,
-         build_cluster/3,
-         build_clusters/1,
          clean_cluster/1,
-         join_cluster/1,
+         join_cluster/2,
          clean_data_dir/1,
          clean_data_dir/2,
          try_nodes_ready/3,
          versions/0,
          teardown/0]).
--export([maybe_wait_for_transfers/2]).
+
+-export([maybe_wait_for_transfers/3]).
 
 -include("rt.hrl").
-
--define(HARNESS, (rt_config:get(rt_harness))).
 
 %% @doc Default properties used if a riak_test module does not specify
 %% a custom properties function.
 -spec properties() -> rt_properties:properties().
 properties() ->
-    #rt_properties{config=config()}.
+    rt_properties:new().
 
--spec setup(rt_properties(), proplists:proplist()) ->
-                   {ok, rt_properties()} | {error, term()}.
-setup(Properties, MetaData) ->
-    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+-spec setup(rt_properties:properties()) ->
+                   {ok, rt_properties:properties()} | {error, term()}.
+setup(Properties) ->
+    case form_clusters(Properties) of
+        {ok, ClusterNodes} ->
+            maybe_wait_for_transfers(rt_properties:get(node_ids, Properties),
+                                     rt_properties:get(node_map, Properties),
+                                     rt_properties:get(wait_for_transfers, Properties)),
+            Clusters = prepare_clusters(ClusterNodes, Properties),
+            create_bucket_types(Clusters, Properties),
+            rt_properties:set(clusters, Clusters, Properties);
+        Error ->
+            Error
+    end.
 
-    RollingUpgrade = proplists:get_value(rolling_upgrade,
-                                         MetaData,
-                                         Properties#rt_properties.rolling_upgrade),
-    Version = Properties#rt_properties.start_version,
-    Versions = [{Version, Properties#rt_properties.config} ||
-                   _ <- lists:seq(1, Properties#rt_properties.node_count)],
-    Nodes = deploy_or_build_cluster(Versions, Properties#rt_properties.make_cluster),
+-spec create_bucket_types([rt_cluster_info:cluster_info()], rt_properties:properties()) -> no_return().
+create_bucket_types(Clusters, Properties) ->
+    BucketTypes = rt_properties:get(bucket_types, Properties),
+    create_bucket_types(Clusters, Properties, BucketTypes).
 
-    maybe_wait_for_transfers(Nodes, Properties#rt_properties.wait_for_transfers),
-    UpdProperties = Properties#rt_properties{nodes=Nodes,
-                                             rolling_upgrade=RollingUpgrade},
-    {ok, UpdProperties}.
-
-deploy_or_build_cluster(Versions, true) ->
-    build_cluster(Versions);
-deploy_or_build_cluster(Versions, false) ->
-    deploy_nodes(Versions).
-
-%% @doc Deploy a set of freshly installed Riak nodes, returning a list of the
-%%      nodes deployed.
-%% @todo Re-add -spec after adding multi-version support
-deploy_nodes(Versions) when is_list(Versions) ->
-    deploy_nodes(Versions, [riak_kv]);
-deploy_nodes(NumNodes) when is_integer(NumNodes) ->
-    deploy_nodes([ current || _ <- lists:seq(1, NumNodes)]).
-
-%% @doc Deploy a set of freshly installed Riak nodes with the given
-%%      `InitialConfig', returning a list of the nodes deployed.
--spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
-deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
-    NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
-    deploy_nodes(NodeConfig);
-deploy_nodes(Versions, Services) ->
-    NodeConfig = [ rt_config:version_to_config(Version) || Version <- Versions ],
-    Nodes = ?HARNESS:deploy_nodes(NodeConfig),
-    lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
-    [ ok = rt:wait_for_service(Node, Service) || Node <- Nodes,
-                                              Service <- Services ],
-    Nodes.
-
-deploy_clusters(Settings) ->
-    ClusterConfigs = [case Setting of
-                          Configs when is_list(Configs) ->
-                              Configs;
-                          NumNodes when is_integer(NumNodes) ->
-                              [{current, default} || _ <- lists:seq(1, NumNodes)];
-                          {NumNodes, InitialConfig} when is_integer(NumNodes) ->
-                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)];
-                          {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
-                              [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
-                      end || Setting <- Settings],
-    ?HARNESS:deploy_clusters(ClusterConfigs).
-
-build_clusters(Settings) ->
-    Clusters = deploy_clusters(Settings),
+-spec create_bucket_types([rt_cluster_info:cluster_info()],
+                          rt_properties:properties(),
+                          rt_properties:bucket_types()) -> no_return().
+create_bucket_types(_Clusters, _Properties, []) ->
+    ok;
+create_bucket_types([Cluster], Properties, BucketTypes) ->
+    NodeMap = rt_properties:get(node_map, Properties),
+    NodeIds = rt_cluster_info:get(node_ids, Cluster),
+    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+    lists:foldl(fun maybe_create_bucket_type/2, {Nodes, 1}, BucketTypes);
+create_bucket_types(Clusters, Properties, BucketTypes) ->
+    NodeMap = rt_properties:get(node_map, Properties),
     [begin
-         join_cluster(Nodes),
-         lager:info("Cluster built: ~p", [Nodes])
-     end || Nodes <- Clusters],
-    Clusters.
+         NodeIds = rt_cluster_info:get(node_ids, Cluster),
+         Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+         lists:foldl(fun maybe_create_bucket_type/2, {Nodes, ClusterIndex}, BucketTypes)
+     end || {Cluster, ClusterIndex} <- lists:zip(Clusters, lists:seq(1, length(Clusters)))].
 
-maybe_wait_for_transfers(Nodes, true) ->
+maybe_create_bucket_type({ClusterIndex, {TypeName, TypeProps}},
+                         {Nodes, ClusterIndex}) ->
+    rt_bucket_types:create_and_wait(Nodes, TypeName, TypeProps),
+    {Nodes, ClusterIndex};
+maybe_create_bucket_type({_ApplicableIndex, {_TypeName, _TypeProps}},
+                         {Nodes, _ClusterIndex}) ->
+    %% This bucket type does not apply to this cluster
+    {Nodes, _ClusterIndex};
+maybe_create_bucket_type({TypeName, TypeProps}, {Nodes, _ClusterIndex}) ->
+    %% This bucket type applies to all clusters
+    rt_bucket_types:create_and_wait(Nodes, TypeName, TypeProps),
+    {Nodes, _ClusterIndex}.
+
+-spec prepare_clusters([list(string())], rt_properties:properties()) ->
+                                    [rt_cluster_info:cluster_info()].
+prepare_clusters([ClusterNodes], _Properties) ->
+    [rt_cluster_info:new([{node_ids, ClusterNodes}])];
+prepare_clusters(ClusterNodesList, Properties) ->
+    %% If the count of clusters is > 1 the assumption is made that the
+    %% test is exercising replication and some extra
+    %% made. This to avoid some noisy and oft-repeated setup
+    %% boilerplate in every replication test.
+    NodeMap = rt_properties:get(node_map, Properties),
+    {Clusters, _, _} = lists:foldl(fun prepare_cluster/2,
+                                {[], 1, NodeMap},
+                                ClusterNodesList),
+    lists:reverse(Clusters).
+
+-type prepare_cluster_acc() :: {[rt_cluster_info:cluster_info()], char(), proplists:proplist()}.
+-spec prepare_cluster([string()], prepare_cluster_acc()) -> prepare_cluster_acc().
+prepare_cluster(NodeIds, {Clusters, Name, NodeMap}) ->
+    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
+    repl_util:name_cluster(hd(Nodes), integer_to_list(Name)),
+    repl_util:wait_until_leader_converge(Nodes),
+    Leader = repl_util:get_leader(hd(Nodes)),
+    Cluster = rt_cluster_info:new([{node_ids, NodeIds},
+                                   {leader, Leader},
+                                   {name, Name}]),
+    {[Cluster | Clusters], Name+1, NodeMap}.
+
+-type clusters() :: [rt_cluster_info:cluster_info()].
+-spec form_clusters(rt_properties:properties()) -> clusters().
+form_clusters(Properties) ->
+    NodeIds = rt_properties:get(node_ids, Properties),
+    NodeMap = rt_properties:get(node_map, Properties),
+    ClusterCount = rt_properties:get(cluster_count, Properties),
+    ClusterWeights = rt_properties:get(cluster_weights, Properties),
+    MakeCluster = rt_properties:get(make_cluster, Properties),
+    case divide_nodes(NodeIds, ClusterCount, ClusterWeights) of
+        {ok, Clusters} ->
+            maybe_join_clusters(Clusters, NodeMap, MakeCluster),
+            {ok, Clusters};
+        Error ->
+            Error
+    end.
+
+-spec divide_nodes([string()], pos_integer(), [float()]) ->
+                          {ok, [list(string())]} | {error, atom()}.
+divide_nodes(Nodes, Count, Weights)
+  when length(Nodes) < Count;
+       Weights =/= undefined, length(Weights) =/= Count ->
+    {error, invalid_cluster_properties};
+divide_nodes(Nodes, 1, _) ->
+    {ok, [Nodes]};
+divide_nodes(Nodes, Count, Weights) ->
+    case validate_weights(Weights) of
+        true ->
+            TotalNodes = length(Nodes),
+            NodeCounts = node_counts_from_weights(TotalNodes, Count, Weights),
+            {_, Clusters, _} = lists:foldl(fun take_nodes/2, {1, [], Nodes}, NodeCounts),
+                {ok, lists:reverse(Clusters)};
+        false ->
+            {error, invalid_cluster_weights}
+    end.
+
+take_nodes(NodeCount, {Index, ClusterAcc, Nodes}) ->
+    {NewClusterNodes, RestNodes} = lists:split(NodeCount, Nodes),
+    {Index + 1, [NewClusterNodes | ClusterAcc], RestNodes}.
+
+validate_weights(undefined) ->
+    true;
+validate_weights(Weights) ->
+    not lists:sum(Weights) > 1.0 .
+
+node_counts_from_weights(NodeCount, ClusterCount, undefined) ->
+    %% Split the nodes evenly. A remainder of nodes is handled by
+    %% distributing one node per cluster until the remainder is
+    %% exhausted.
+    NodesPerCluster = NodeCount div ClusterCount,
+    Remainder = NodeCount rem ClusterCount,
+    [NodesPerCluster + remainder_to_apply(Remainder, ClusterIndex) ||
+        ClusterIndex <- lists:seq(1, ClusterCount)];
+node_counts_from_weights(NodeCount, ClusterCount, Weights) ->
+    InitialNodeCounts = [node_count_from_weight(NodeCount, Weight) || Weight <- Weights],
+    Remainder = NodeCount - lists:sum(InitialNodeCounts),
+    [ClusterNodeCount + remainder_to_apply(Remainder, ClusterIndex) ||
+        {ClusterIndex, ClusterNodeCount}
+            <- lists:zip(lists:seq(1, ClusterCount), InitialNodeCounts)].
+
+node_count_from_weight(TotalNodes, Weight) ->
+    RawNodeCount = TotalNodes * Weight,
+    IntegerPortion = trunc(RawNodeCount),
+    Remainder = RawNodeCount - IntegerPortion,
+    case Remainder >= 0.5 of
+        true ->
+            IntegerPortion + 1;
+        false ->
+            IntegerPortion
+    end.
+
+remainder_to_apply(Remainder, Index) when Remainder > Index;
+                                          Remainder =:= 0 ->
+    0;
+remainder_to_apply(_Remainder, _Index) ->
+    1.
+
+maybe_join_clusters(Clusters, NodeMap, true) ->
+    [join_cluster(ClusterNodes, NodeMap) || ClusterNodes <- Clusters];
+maybe_join_clusters(_Clusters, _NodeMap, false) ->
+    ok.
+
+maybe_wait_for_transfers(NodeIds, NodeMap, true) ->
     lager:info("Waiting for transfers"),
     rt:wait_until_transfers_complete([rt_node:node_name(NodeId, NodeMap)
                                       || NodeId <- NodeIds]);
@@ -152,62 +236,11 @@ join_cluster(NodeIds, NodeMap) ->
     ?assertEqual(ok, rt:wait_until_no_pending_changes(NodeNames)),
     ok.
 
-%% @doc Safely construct a new cluster and return a list of the deployed nodes
-%% @todo Add -spec and update doc to reflect mult-version changes
-build_cluster(Versions) when is_list(Versions) ->
-    build_cluster(length(Versions), Versions, default);
-build_cluster(NumNodes) ->
-    build_cluster(NumNodes, default).
-
-%% @doc Safely construct a `NumNode' size cluster using
-%%      `InitialConfig'. Return a list of the deployed nodes.
-build_cluster(NumNodes, InitialConfig) ->
-    build_cluster(NumNodes, [], InitialConfig).
-
-build_cluster(NumNodes, Versions, InitialConfig) ->
-    %% Deploy a set of new nodes
-    Nodes =
-        case Versions of
-            [] ->
-                deploy_nodes(NumNodes, InitialConfig);
-            _ ->
-                deploy_nodes(Versions)
-        end,
-
-    join_cluster(Nodes),
-    lager:info("Cluster built: ~p", [Nodes]),
-    Nodes.
-
-join_cluster(Nodes) ->
-    %% Ensure each node owns 100% of it's own ring
-    [?assertEqual([Node], rt:owners_according_to(Node)) || Node <- Nodes],
-
-    %% Join nodes
-    [Node1|OtherNodes] = Nodes,
-    case OtherNodes of
-        [] ->
-            %% no other nodes, nothing to join/plan/commit
-            ok;
-        _ ->
-            %% ok do a staged join and then commit it, this eliminates the
-            %% large amount of redundant handoff done in a sequential join
-            [rt:staged_join(Node, Node1) || Node <- OtherNodes],
-            rt:plan_and_commit(Node1),
-            try_nodes_ready(Nodes, 3, 500)
-    end,
-
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
-
-    %% Ensure each node owns a portion of the ring
-    rt:wait_until_nodes_agree_about_ownership(Nodes),
-    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
-    ok.
-
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
-    rt:plan_and_commit(Node1);
+    rt_node:plan_and_commit(Node1);
 try_nodes_ready(Nodes, N, SleepMs) ->
-    ReadyNodes = [Node || Node <- Nodes, rt:is_ready(Node) =:= true],
+    ReadyNodes = [Node || Node <- Nodes, rt_node:is_ready(Node) =:= true],
     case ReadyNodes of
         Nodes ->
             ok;
@@ -218,7 +251,7 @@ try_nodes_ready(Nodes, N, SleepMs) ->
 
 %% @doc Stop nodes and wipe out their data directories
 clean_cluster(Nodes) when is_list(Nodes) ->
-    [rt:stop_and_wait(Node) || Node <- Nodes],
+    [rt_node:stop_and_wait(Node) || Node <- Nodes],
     clean_data_dir(Nodes).
 
 clean_data_dir(Nodes) ->
@@ -227,24 +260,19 @@ clean_data_dir(Nodes) ->
 clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
     clean_data_dir([Nodes], SubDir);
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
-    ?HARNESS:clean_data_dir(Nodes, SubDir).
+    rt_harness:clean_data_dir(Nodes, SubDir).
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
     %% stop all connected nodes, 'cause it'll be faster that
     %%lager:info("RPC stopping these nodes ~p", [nodes()]),
-    %%[ rt:stop(Node) || Node <- nodes()],
+    %%[ rt_node:stop(Node) || Node <- nodes()],
     %% Then do the more exhaustive harness thing, in case something was up
     %% but not connected.
-    ?HARNESS:teardown().
+    rt_harness:teardown().
 
 versions() ->
-    ?HARNESS:versions().
-
-config() ->
-    [{riak_core, [{handoff_concurrency, 11}]},
-     {riak_search, [{enabled, true}]},
-     {riak_pipe, [{worker_limit, 200}]}].
+    rt_harness:versions().
 
 augment_config(Section, Property, Config) ->
     UpdSectionConfig = update_section(Section,
