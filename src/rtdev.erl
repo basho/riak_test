@@ -715,7 +715,7 @@ check_node({_N, Version}) ->
         true -> ok;
         _ ->
             lager:error("You don't have Riak ~s installed or configured", [Version]),
-            erlang:error("You don't have Riak " ++ atom_to_list(Version) ++ " installed or configured")
+            erlang:error(lists:flatten(io_lib:format("You don't have Riak ~p installed or configured", [Version])))
     end.
 
 set_backend(Backend) ->
