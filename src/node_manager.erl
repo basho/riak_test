@@ -199,6 +199,8 @@ version_available_fun(Count, VersionMap) ->
             end
     end.
 
+deploy([], _NodeMap, _Version, _Config, []) ->
+    [];
 deploy(Nodes, NodeMap, Version, Config, Services) ->
     rt_harness_util:deploy_nodes(Nodes, NodeMap, Version, Config, Services).
 

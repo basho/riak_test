@@ -165,22 +165,21 @@ setup(timeout, State=#state{test_type=TestType,
     {0, UName} = rt:cmd("uname -a"),
     lager:info("Test Runner: ~s", [UName]),
 
-    NodeIds = rt_properties:get(node_ids, Properties),
-    Services = rt_properties:get(required_services, Properties),
     {StartVersion, OtherVersions} = test_versions(Properties),
     Config = rt_backend:set(Backend, rt_properties:get(config, Properties)),
 
     case TestType of
         new ->
-            node_manager:deploy_nodes(NodeIds,
-                                      StartVersion,
-                                      Config,
-                                      Services,
-                                      notify_fun(self())),
-            lager:info("Waiting for deploy nodes response at ~p", [self()]);
+            NodeIds = rt_properties:get(node_ids, Properties),
+            Services = rt_properties:get(required_services, Properties);
         old ->
-            lager:warn("Test ~p has not been ported to the new framework.", [TestModule])
+            NodeIds = [],
+            Services = [],
+            lager:warning("Test ~p has not been ported to the new framework.", [TestModule])
     end,
+
+    node_manager:deploy_nodes(NodeIds, StartVersion, Config, Services, notify_fun(self())),
+    lager:info("Waiting for deploy nodes response at ~p", [self()]),
 
     %% Set the initial value for `current_version' in the properties record
     {ok, UpdProperties} =
