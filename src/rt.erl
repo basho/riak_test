@@ -291,7 +291,7 @@ deploy_nodes(Versions, Services) ->
     Nodes.
 
 deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
-    NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
+    NodeConfig = [{head, InitialConfig} || _ <- lists:seq(1,NumNodes)],
     deploy_nodes(NodeConfig, Services).
 
 deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
@@ -320,7 +320,7 @@ allocate_nodes(NumNodes) ->
     [AllocatedNodeIds, AllocatedNodeMap, VersionMap].
 
 version_to_config(Config) when is_tuple(Config)-> Config;
-version_to_config(Version) -> {Version, default}.
+version_to_config(Version) -> {Version, head}.
 
 deploy_clusters(Settings) ->
     ClusterConfigs = [case Setting of
@@ -345,7 +345,9 @@ build_clusters(Settings) ->
 
 %% @doc Start the specified Riak node
 start(Node) ->
-    ?HARNESS:start(Node).
+    %% TODO Determine the best way to work with versions.  
+    %% For now, we are using the default version ...  -jsb
+    rt_harness:start(Node, head).
 
 %% @doc Start the specified Riak `Node' and wait for it to be pingable
 start_and_wait(Node) ->
@@ -357,10 +359,9 @@ async_start(Node) ->
 
 %% @doc Stop the specified Riak `Node'.
 stop(Node) ->
-    lager:info("Stopping riak on ~p", [Node]),
-    timer:sleep(10000), %% I know, I know!
-    ?HARNESS:stop(Node).
-    %%rpc:call(Node, init, stop, []).
+    %% TODO Determine the best way to work with versions.  
+    %% For now, we are using the default version ...  -jsb
+    rt_node:stop(Node, head).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
 stop_and_wait(Node) ->
@@ -393,137 +394,78 @@ slow_upgrade(Node, NewVersion, Nodes) ->
 
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
-    R = rpc:call(Node, riak_core, join, [PNode]),
-    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
-    ?assertEqual(ok, R),
-    ok.
+    rt_node:join(Node, PNode).
 
 %% @doc Have `Node' send a join request to `PNode'
 staged_join(Node, PNode) ->
-    R = rpc:call(Node, riak_core, staged_join, [PNode]),
-    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
-    ?assertEqual(ok, R),
-    ok.
+    rt_node:staged_join(Node, PNode).
 
 plan_and_commit(Node) ->
-    timer:sleep(500),
-    lager:info("planning and commiting cluster join"),
-    case rpc:call(Node, riak_core_claimant, plan, []) of
-        {error, ring_not_ready} ->
-            lager:info("plan: ring not ready"),
-            timer:sleep(100),
-            plan_and_commit(Node);
-        {ok, _, _} ->
-            lager:info("plan: done"),
-            do_commit(Node)
-    end.
+    rt_node:plan_and_comment(Node).
 
 do_commit(Node) ->
-    case rpc:call(Node, riak_core_claimant, commit, []) of
-        {error, plan_changed} ->
-            lager:info("commit: plan changed"),
-            timer:sleep(100),
-            maybe_wait_for_changes(Node),
-            plan_and_commit(Node);
-        {error, ring_not_ready} ->
-            lager:info("commit: ring not ready"),
-            timer:sleep(100),
-            maybe_wait_for_changes(Node),
-            do_commit(Node);
-        {error,nothing_planned} ->
-            %% Assume plan actually committed somehow
-            ok;
-        ok ->
-            ok
-    end.
+    rt_node:do_commit(Node).
 
 maybe_wait_for_changes(Node) ->
-    Ring = get_ring(Node),
-    Changes = riak_core_ring:pending_changes(Ring),
-    Joining = riak_core_ring:members(Ring, [joining]),
-    lager:info("maybe_wait_for_changes, changes: ~p joining: ~p",
-               [Changes, Joining]),
-    if Changes =:= [] ->
-            ok;
-       Joining =/= [] ->
-            ok;
-       true ->
-            ok = wait_until_no_pending_changes([Node])
-    end.
+    rt2:maybe_wait_for_changes(Node).
 
 %% @doc Have the `Node' leave the cluster
 leave(Node) ->
-    R = rpc:call(Node, riak_core, leave, []),
-    lager:info("[leave] ~p: ~p", [Node, R]),
-    ?assertEqual(ok, R),
-    ok.
+    rt_node:leave(Node).
 
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
-    ?assertEqual(ok,
-                 rpc:call(Node, riak_kv_console, remove, [[atom_to_list(OtherNode)]])).
+    rt_node:remove(Node, OtherNode).
 
 %% @doc Have `Node' mark `OtherNode' as down
 down(Node, OtherNode) ->
-    rpc:call(Node, riak_kv_console, down, [[atom_to_list(OtherNode)]]).
+    rt_node:down(Node, OtherNode).
 
 %% @doc partition the `P1' from `P2' nodes
 %%      note: the nodes remained connected to riak_test@local,
 %%      which is how `heal/1' can still work.
 partition(P1, P2) ->
-    OldCookie = rpc:call(hd(P1), erlang, get_cookie, []),
-    NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
-    [true = rpc:call(N, erlang, set_cookie, [N, NewCookie]) || N <- P1],
-    [[true = rpc:call(N, erlang, disconnect_node, [P2N]) || N <- P1] || P2N <- P2],
-    wait_until_partitioned(P1, P2),
-    {NewCookie, OldCookie, P1, P2}.
+    rt_node:partition(P1, P2).
 
 %% @doc heal the partition created by call to `partition/2'
 %%      `OldCookie' is the original shared cookie
-heal({_NewCookie, OldCookie, P1, P2}) ->
-    Cluster = P1 ++ P2,
-    % set OldCookie on P1 Nodes
-    [true = rpc:call(N, erlang, set_cookie, [N, OldCookie]) || N <- P1],
-    wait_until_connected(Cluster),
-    {_GN, []} = rpc:sbcast(Cluster, riak_core_node_watcher, broadcast),
-    ok.
+heal({NewCookie, OldCookie, P1, P2}) ->
+    rt_node:heal({NewCookie, OldCookie, P1, P2}).
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd) ->
-    ?HARNESS:spawn_cmd(Cmd).
+    rt2:spawn_cmd(Cmd).
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd, Opts) ->
-    ?HARNESS:spawn_cmd(Cmd, Opts).
+    rt2:spawn_cmd(Cmd, Opts).
 
 %% @doc Wait for a command spawned by `spawn_cmd', returning
 %%      the exit status and result
 wait_for_cmd(CmdHandle) ->
-    ?HARNESS:wait_for_cmd(CmdHandle).
+    rt2:wait_for_cmd(CmdHandle).
 
 %% @doc Spawn `Cmd' on the machine running the test harness, returning
 %%      the exit status and result
 cmd(Cmd) ->
-    ?HARNESS:cmd(Cmd).
+    rt2:cmd(Cmd).
 
 %% @doc Spawn `Cmd' on the machine running the test harness, returning
 %%      the exit status and result
 cmd(Cmd, Opts) ->
-    ?HARNESS:cmd(Cmd, Opts).
+    rt2:cmd(Cmd, Opts).
 
 %% @doc pretty much the same as os:cmd/1 but it will stream the output to lager.
 %%      If you're running a long running command, it will dump the output
 %%      once per second, as to not create the impression that nothing is happening.
 -spec stream_cmd(string()) -> {integer(), string()}.
 stream_cmd(Cmd) ->
-    Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr_to_stdout, exit_status]),
-    stream_cmd_loop(Port, "", "", now()).
+    rt2:stream_cmd(Cmd).
 
 %% @doc same as rt:stream_cmd/1, but with options, like open_port/2
 -spec stream_cmd(string(), string()) -> {integer(), string()}.
 stream_cmd(Cmd, Opts) ->
-    Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr_to_stdout, exit_status] ++ Opts),
-    stream_cmd_loop(Port, "", "", now()).
+    rt2:stream_cmd(Cmd, Opts).
 
 stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs}) ->
     receive
@@ -555,19 +497,8 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
 %%%===================================================================
 %%% Remote code management
 %%%===================================================================
-load_modules_on_nodes([], Nodes)
-  when is_list(Nodes) ->
-    ok;
-load_modules_on_nodes([Module | MoreModules], Nodes)
-  when is_list(Nodes) ->
-    case code:get_object_code(Module) of
-        {Module, Bin, File} ->
-            {_, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]);
-        error ->
-            error(lists:flatten(io_lib:format("unable to get_object_code(~s)", [Module])))
-    end,
-    load_modules_on_nodes(MoreModules, Nodes).
-
+load_modules_on_nodes(Modules, Nodes) ->
+    rt2:load_modules_on_nodes(Modules, Nodes).
 
 %%%===================================================================
 %%% Status / Wait Functions
@@ -575,27 +506,14 @@ load_modules_on_nodes([Module | MoreModules], Nodes)
 
 %% @doc Is the `Node' up according to net_adm:ping
 is_pingable(Node) ->
-    net_adm:ping(Node) =:= pong.
+    rt_node:is_pingable(Node).
 
-is_mixed_cluster(Nodes) when is_list(Nodes) ->
-    %% If the nodes are bad, we don't care what version they are
-    {Versions, _BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt_config:get(rt_max_wait_time)),
-    length(lists:usort(Versions)) > 1;
-is_mixed_cluster(Node) ->
-    Nodes = rpc:call(Node, erlang, nodes, []),
-    is_mixed_cluster(Nodes).
+is_mixed_cluster(Nodes) ->
+    rt2:is_mixed_cluster(Nodes).
 
 %% @private
 is_ready(Node) ->
-    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
-        {ok, Ring} ->
-            case lists:member(Node, riak_core_ring:ready_members(Ring)) of
-                true -> true;
-                false -> {not_ready, Node}
-            end;
-        Other ->
-            Other
-    end.
+    rt_node:is_ready(Node).
 
 %% @private
 is_ring_ready(Node) ->
@@ -612,10 +530,7 @@ is_ring_ready(Node) ->
 %%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
 wait_until(Fun) when is_function(Fun) ->
-    MaxTime = rt_config:get(rt_max_wait_time),
-    Delay = rt_config:get(rt_retry_delay),
-    Retry = MaxTime div Delay,
-    wait_until(Fun, Retry, Delay).
+    rt2:wait_until(Fun).
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
@@ -626,96 +541,43 @@ wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
 %% milliseconds between retries. This is our eventual consistency bread
 %% and butter
 wait_until(Fun, Retry, Delay) when Retry > 0 ->
-    Res = Fun(),
-    case Res of
-        true ->
-            ok;
-        _ when Retry == 1 ->
-            {fail, Res};
-        _ ->
-            timer:sleep(Delay),
-            wait_until(Fun, Retry-1, Delay)
-    end.
+    rt2:wait_until(Fun, Retry, Delay).
 
 %% @doc Wait until the specified node is considered ready by `riak_core'.
 %%      As of Riak 1.0, a node is ready if it is in the `valid' or `leaving'
 %%      states. A ready node is guaranteed to have current preflist/ownership
 %%      information.
 wait_until_ready(Node) ->
-    lager:info("Wait until ~p ready", [Node]),
-    ?assertEqual(ok, wait_until(Node, fun is_ready/1)),
-    ok.
+    rt2:wait_until_ready(Node).
 
 %% @doc Wait until status can be read from riak_kv_console
 wait_until_status_ready(Node) ->
-    lager:info("Wait until status ready in ~p", [Node]),
-    ?assertEqual(ok, wait_until(Node,
-                                fun(_) ->
-                                        case rpc:call(Node, riak_kv_console, status, [[]]) of
-                                            ok ->
-                                                true;
-                                            Res ->
-                                                Res
-                                        end
-                                end)).
+    rt2:wait_until_status_ready(Node).
 
 %% @doc Given a list of nodes, wait until all nodes believe there are no
 %% on-going or pending ownership transfers.
 -spec wait_until_no_pending_changes([node()]) -> ok | fail.
 wait_until_no_pending_changes(Nodes) ->
-    lager:info("Wait until no pending changes on ~p", [Nodes]),
-    F = fun() ->
-                rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
-                {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
-                Changes = [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
-                BadNodes =:= [] andalso length(Changes) =:= length(Nodes) andalso lists:all(fun(T) -> T end, Changes)
-        end,
-    ?assertEqual(ok, wait_until(F)),
-    ok.
+    rt2:wait_until_no_pending_changes(Nodes).
 
 %% @doc Waits until no transfers are in-flight or pending, checked by
 %% riak_core_status:transfers().
 -spec wait_until_transfers_complete([node()]) -> ok | fail.
-wait_until_transfers_complete([Node0|_]) ->
-    lager:info("Wait until transfers complete ~p", [Node0]),
-    F = fun(Node) ->
-                {DownNodes, Transfers} = rpc:call(Node, riak_core_status, transfers, []),
-                DownNodes =:= [] andalso Transfers =:= []
-        end,
-    ?assertEqual(ok, wait_until(Node0, F)),
-    ok.
+wait_until_transfers_complete(Nodes) ->
+    rt2:wait_until_transfers_complete(Nodes).
 
 wait_for_service(Node, Services) when is_list(Services) ->
-    F = fun(N) ->
-                case rpc:call(N, riak_core_node_watcher, services, [N]) of
-                    {badrpc, Error} ->
-                        {badrpc, Error};
-                    CurrServices when is_list(CurrServices) ->
-                        lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
-                    Res ->
-                        Res
-                end
-        end,
-    ?assertEqual(ok, wait_until(Node, F)),
-    ok;
+    rt2:wait_for_service(Node, Services);
 wait_for_service(Node, Service) ->
     wait_for_service(Node, [Service]).
 
 wait_for_cluster_service(Nodes, Service) ->
-    lager:info("Wait for cluster service ~p in ~p", [Service, Nodes]),
-    F = fun(N) ->
-                UpNodes = rpc:call(N, riak_core_node_watcher, nodes, [Service]),
-                (Nodes -- UpNodes) == []
-        end,
-    [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
-    ok.
+    rt2:wait_for_cluster_service(Nodes, Service).
 
 %% @doc Given a list of nodes, wait until all nodes are considered ready.
 %%      See {@link wait_until_ready/1} for definition of ready.
 wait_until_nodes_ready(Nodes) ->
-    lager:info("Wait until nodes are ready : ~p", [Nodes]),
-    [?assertEqual(ok, wait_until(Node, fun is_ready/1)) || Node <- Nodes],
-    ok.
+    rt_node:wait_until_nodes_ready(Nodes).
 
 %% @doc Wait until all nodes in the list `Nodes' believe each other to be
 %%      members of the cluster.
@@ -725,26 +587,12 @@ wait_until_all_members(Nodes) ->
 %% @doc Wait until all nodes in the list `Nodes' believes all nodes in the
 %%      list `Members' are members of the cluster.
 wait_until_all_members(Nodes, ExpectedMembers) ->
-    lager:info("Wait until all members ~p ~p", [Nodes, ExpectedMembers]),
-    S1 = ordsets:from_list(ExpectedMembers),
-    F = fun(Node) ->
-                case members_according_to(Node) of
-                    {badrpc, _} ->
-                        false;
-                    ReportedMembers ->
-                        S2 = ordsets:from_list(ReportedMembers),
-                        ordsets:is_subset(S1, S2)
-                end
-        end,
-    [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
-    ok.
+    rt2:wait_until_all_members(Nodes, ExpectedMembers).
 
 %% @doc Given a list of nodes, wait until all nodes believe the ring has
 %%      converged (ie. `riak_core_ring:is_ready' returns `true').
 wait_until_ring_converged(Nodes) ->
-    lager:info("Wait until ring converged on ~p", [Nodes]),
-    [?assertEqual(ok, wait_until(Node, fun is_ring_ready/1)) || Node <- Nodes],
-    ok.
+    rt2:wait_until_ring_converged(Nodes).
 
 wait_until_legacy_ringready(Node) ->
     lager:info("Wait until legacy ring ready on ~p", [Node]),
@@ -770,29 +618,11 @@ wait_until_connected(Nodes) ->
 
 %% @doc Wait until the specified node is pingable
 wait_until_pingable(Node) ->
-    lager:info("Wait until ~p is pingable", [Node]),
-    F = fun(N) ->
-                net_adm:ping(N) =:= pong
-        end,
-    ?assertEqual(ok, wait_until(Node, F)),
-    ok.
+    rt2:wait_until_pingable(Node).
 
 %% @doc Wait until the specified node is no longer pingable
 wait_until_unpingable(Node) ->
-    lager:info("Wait until ~p is not pingable", [Node]),
-    _OSPidToKill = rpc:call(Node, os, getpid, []),
-    F = fun() -> net_adm:ping(Node) =:= pang end,
-    %% riak stop will kill -9 after 5 mins, so we try to wait at least that
-    %% amount of time.
-    Delay = rt_config:get(rt_retry_delay),
-    Retry = lists:max([360000, rt_config:get(rt_max_wait_time)]) div Delay,
-    case wait_until(F, Retry, Delay) of
-        ok -> ok;
-        _ ->
-            lager:error("Timed out waiting for node ~p to shutdown", [Node]),
-            ?assert(node_shutdown_timed_out)
-    end.
-
+    rt2:wait_until_unpingable(Node).
 
 % Waits until a certain registered name pops up on the remote node.
 wait_until_registered(Node, Name) ->
@@ -840,27 +670,17 @@ brutal_kill(Node) ->
     rpc:cast(Node, os, cmd, [io_lib:format("kill -15 ~s", [OSPidToKill])]),
     ok.
 
-capability(Node, all) ->
-    rpc:call(Node, riak_core_capability, all, []);
 capability(Node, Capability) ->
-    rpc:call(Node, riak_core_capability, get, [Capability]).
+    rt2:capability(Node, Capability).
 
 capability(Node, Capability, Default) ->
-    rpc:call(Node, riak_core_capability, get, [Capability, Default]).
+    rt2:capability(Node, Capability, Default).
 
 wait_until_capability(Node, Capability, Value) ->
-    rt:wait_until(Node,
-                  fun(_) ->
-                          cap_equal(Value, capability(Node, Capability))
-                  end).
+    rt2:wait_until_capability(Node, Capability, Value).
 
 wait_until_capability(Node, Capability, Value, Default) ->
-    rt:wait_until(Node,
-                  fun(_) ->
-                          Cap = capability(Node, Capability, Default),
-                io:format("capability is ~p ~p",[Node, Cap]),
-                          cap_equal(Value, Cap)
-                  end).
+    rt2:wait_until_capability(Node, Capability, Value, Default).
 
 cap_equal(Val, Cap) when is_list(Cap) ->
     lists:sort(Cap) == lists:sort(Val);
@@ -876,9 +696,7 @@ wait_until_owners_according_to(Node, Nodes) ->
     ok.
 
 wait_until_nodes_agree_about_ownership(Nodes) ->
-    lager:info("Wait until nodes agree about ownership ~p", [Nodes]),
-    Results = [ wait_until_owners_according_to(Node, Nodes) || Node <- Nodes ],
-    ?assert(lists:all(fun(X) -> ok =:= X end, Results)).
+    rt_node:wait_until_nodes_agree_about_ownership(Nodes).
 
 %% AAE support
 wait_until_aae_trees_built(Nodes) ->
@@ -923,13 +741,7 @@ all_aae_trees_built(Node, Partitions) ->
     end.
 
 get_aae_tree_info(Node) ->
-    case rpc:call(Node, riak_kv_entropy_info, compute_tree_info, []) of
-        {badrpc, _} ->
-            {error, {badrpc, Node}};
-        Info  ->
-            lager:debug("Entropy table on node ~p : ~p", [Node, Info]),
-            {ok, Info}
-    end.
+    rt_aae:get_aae_tree_info(Node).
 
 all_trees_have_build_times(Info) ->
     not lists:keymember(undefined, 2, Info).
@@ -965,11 +777,7 @@ index_built_fun(Node) ->
 %% @doc Ensure that the specified node is a singleton node/cluster -- a node
 %%      that owns 100% of the ring.
 check_singleton_node(Node) ->
-    lager:info("Check ~p is a singleton", [Node]),
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
-    Owners = lists:usort([Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)]),
-    ?assertEqual([Node], Owners),
-    ok.
+    rt_ring:check_singleton_node(Node).
 
 % @doc Get list of partitions owned by node (primary).
 partitions_for_node(Node) ->
@@ -1025,13 +833,7 @@ nearest_ringsize(Count, Power) ->
 %% @doc Return the cluster status of `Member' according to the ring
 %%      retrieved from `Node'.
 status_of_according_to(Member, Node) ->
-    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
-        {ok, Ring} ->
-            Status = riak_core_ring:member_status(Ring, Member),
-            Status;
-        {badrpc, _}=BadRpc ->
-            BadRpc
-    end.
+    rt_ring:status_of_according_to(Member, Node).
 
 %% @doc Return a list of nodes that own partitions according to the ring
 %%      retrieved from the specified node.

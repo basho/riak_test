@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(verify_build_cluster).
 -export([properties/0,
-         confirm/2]).
+         confirm/1]).
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -33,7 +33,8 @@ properties() ->
                        {make_cluster, false},
                        {start_version, previous}]).
 
-confirm(Properties, _MD) ->
+-spec confirm(rt_properties:properties()) -> pass | fail.
+confirm(Properties) ->
     [Node1, Node2, Node3, Node4] = Nodes = rt_properties:get(nodes, Properties),
 
     lager:info("Loading some data up in this cluster."),
