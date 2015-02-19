@@ -660,22 +660,24 @@ stop_nodes(Path, Nodes) ->
     ok.
 
 stop(Node, Version) ->
-    case rpc:call(?DEV(Node), os, getpid, []) of
+    {NodeId, NodeName} = extract_node_id_and_name(Node),
+    lager:debug("Stopping node ~p using node name ~p", [NodeId, NodeName]),
+    case rpc:call(NodeName, os, getpid, []) of
         {badrpc, nodedown} ->
             ok;
         RiakPid ->
             %% rt_cover:maybe_stop_on_node(Node),
-            run_riak(Node, Version, "stop"),
+            run_riak(NodeId, Version, "stop"),
             F = fun(_N) ->
                         os:cmd("kill -0 " ++ RiakPid) =/= []
                 end,
-            ?assertEqual(ok, rt:wait_until(?DEV(Node), F)),
+            ?assertEqual(ok, rt:wait_until(NodeName, F)),
             ok
     end.
 
 start(Node, Version) ->
-    %% N = node_id(Node),
-    run_riak(Node, Version, "start"),
+    {NodeId, _} = extract_node_id_and_name(Node),
+    run_riak(NodeId, Version, "start"),
     ok.
 
 attach(Node, Expected) ->
@@ -888,3 +890,51 @@ get_node_logs() ->
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+
+-type node_tuple() :: {list(), atom()}.
+
+-spec extract_node_id_and_name(atom() | string()) -> node_tuple().
+extract_node_id_and_name(Node) when is_atom(Node) ->
+    NodeStr = atom_to_list(Node),
+    extract_node_id_and_name(NodeStr, contains(NodeStr, $@));
+extract_node_id_and_name(Node) when is_list(Node) ->
+    extract_node_id_and_name(Node, contains(Node, $@));
+extract_node_id_and_name(_Node) ->
+    erlang:error(unsupported_node_type).
+
+-spec extract_node_id_and_name(list(), boolean()) -> node_tuple().
+extract_node_id_and_name(Node, true) ->
+    [NodeId, _] = re:split(Node, "@"),
+    {binary_to_list(NodeId), list_to_atom(Node)};
+extract_node_id_and_name(Node, false) ->
+    {Node, ?DEV(Node)}.
+
+-spec contains(list(), char()) -> boolean.
+contains(Str, Char) ->
+    maybe_contains(string:chr(Str, Char)).
+
+-spec maybe_contains(integer()) -> boolean.
+maybe_contains(Pos) when Pos > 0 ->
+    true;
+maybe_contains(_) ->
+    false.
+
+-ifdef(TEST).
+
+extract_node_id_and_name_test() ->
+    Expected = {"dev2", 'dev2@127.0.0.1'},
+    ?assertEqual(Expected, extract_node_id_and_name('dev2@127.0.0.1')),
+    ?assertEqual(Expected, extract_node_id_and_name("dev2@127.0.0.1")),
+    ?assertEqual(Expected, extract_node_id_and_name("dev2")).
+
+maybe_contains_test() ->
+    ?assertEqual(true, maybe_contains(1)),
+    ?assertEqual(true, maybe_contains(10)),
+    ?assertEqual(false, maybe_contains(0)).
+
+
+contains_test() ->
+    ?assertEqual(true, contains("dev2@127.0.0.1", $@)),
+    ?assertEqual(false, contains("dev2", $@)).
+
+-endif.
