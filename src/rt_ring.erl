@@ -27,6 +27,7 @@
          get_ring/1,
          members_according_to/1,
          nearest_ringsize/1,
+         nearest_ringsize/2,
          owners_according_to/1,
          partitions_for_node/1,
          status_of_according_to/2]).
