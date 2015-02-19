@@ -186,26 +186,26 @@ str(String, Substr) ->
 set_conf(Node, NameValuePairs) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    ?HARNESS:set_conf(Node, NameValuePairs),
+    rt_config:set_conf(Node, NameValuePairs),
     start(Node).
 
 -spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
 set_advanced_conf(all, NameValuePairs) ->
-    ?HARNESS:set_advanced_conf(all, NameValuePairs);
+    rt_config:set_advanced_conf(all, NameValuePairs);
 set_advanced_conf(Node, NameValuePairs) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    ?HARNESS:set_advanced_conf(Node, NameValuePairs),
+    rt_config:set_advanced_conf(Node, NameValuePairs),
     start(Node).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in `Config'.
 update_app_config(all, Config) ->
-    ?HARNESS:update_app_config(all, Config);
+    rt_config:update_app_config(all, Config);
 update_app_config(Node, Config) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    ?HARNESS:update_app_config(Node, Config),
+    rt_config:update_app_config(Node, Config),
     start(Node).
 
 %% @doc Helper that returns first successful application get_env result,
@@ -313,8 +313,7 @@ build_clusters(Settings) ->
 
 %% @doc Start the specified Riak node
 start(Node) ->
-    %% TODO Determine the best way to work with versions.  
-    %% For now, we are using the default version ...  -jsb
+    %% TODO Determine the best way to implement the current version specification. -jsb
     rt_node:start(Node, head).
 
 %% @doc Start the specified Riak `Node' and wait for it to be pingable
@@ -323,12 +322,12 @@ start_and_wait(Node) ->
     ?assertEqual(ok, wait_until_pingable(Node)).
 
 async_start(Node) ->
-    spawn(fun() -> start(Node) end).
+    %% TODO Determine the best way to implement the current version specification. -jsb
+    rt_node:async_start(Node, head).
 
 %% @doc Stop the specified Riak `Node'.
 stop(Node) ->
-    %% TODO Determine the best way to work with versions.  
-    %% For now, we are using the default version ...  -jsb
+    %% TODO Determine the best way to implement the current version specification. -jsb
     rt_node:stop(Node, head).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
