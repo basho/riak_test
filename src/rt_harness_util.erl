@@ -98,7 +98,7 @@ deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
     %% Start nodes
     RunRiakFun =
         fun(Node) ->
-                rt_harness:run_riak(Node, Version, "start")
+            rt_harness:run_riak(Node, Version, "start")
         end,
     rt:pmap(RunRiakFun, NodeIds),
 

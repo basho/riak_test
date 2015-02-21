@@ -67,18 +67,22 @@ get_deps() ->
     lists:flatten(io_lib:format("~s/dev1/lib", [DefaultVersionPath])).
 
 %% @doc Create a command-line command
--spec riakcmd(string(), integer(), string()) -> string().
+-spec riakcmd(Path :: string(), N :: string(), Cmd :: string()) -> string().
 riakcmd(Path, N, Cmd) ->
     ExecName = rt_config:get(exec_name, "riak"),
-    io_lib:format("~s/dev~B/bin/~s ~s", [Path, N, ExecName, Cmd]).
+    io_lib:format("~s/~s/bin/~s ~s", [Path, N, ExecName, Cmd]).
 
+%% @doc Create a command-line command for repl
+-spec riakreplcmd(Path :: string(), N :: string(), Cmd :: string()) -> string().
 riakreplcmd(Path, N, Cmd) ->
-    io_lib:format("~s/dev~B/bin/riak-repl ~s", [Path, N, Cmd]).
+    io_lib:format("~s/~s/bin/riak-repl ~s", [Path, N, Cmd]).
 
 gitcmd(Path, Cmd) ->
     io_lib:format("git --git-dir=\"~s/.git\" --work-tree=\"~s/\" ~s",
                   [Path, Path, Cmd]).
 
+%% @doc Create a command-line command for riak-admin
+-spec riak_admin_cmd(Path :: string(), N :: string(), Args :: string()) -> string().
 riak_admin_cmd(Path, N, Args) ->
     Quoted =
         lists:map(fun(Arg) when is_list(Arg) ->
@@ -88,7 +92,7 @@ riak_admin_cmd(Path, N, Args) ->
                   end, Args),
     ArgStr = string:join(Quoted, " "),
     ExecName = rt_config:get(exec_name, "riak"),
-    io_lib:format("~s/dev~B/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
+    io_lib:format("~s/~s/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
@@ -105,9 +109,9 @@ run_riak(Node, Version, "start") ->
     %% rt_cover:maybe_start_on_node(?DEV(Node), Version),
     %% Intercepts may load code on top of the cover compiled
     %% modules. We'll just get no coverage info then.
-    case rt_intercept:are_intercepts_loaded(devrel_node_name(Node)) of
+    case rt_intercept:are_intercepts_loaded(?DEV(Node)) of
         false ->
-            ok = rt_intercept:load_intercepts([devrel_node_name(Node)]);
+            ok = rt_intercept:load_intercepts([?DEV(Node)]);
         true ->
             ok
     end,
@@ -300,14 +304,12 @@ make_advanced_confs(DevPath) ->
     end.
 
 get_riak_conf(Node) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    io_lib:format("~s/dev~b/etc/riak.conf", [Path, N]).
+    Path = relpath(node_version(Node)),
+    io_lib:format("~s/~s/etc/riak.conf", [Path, Node]).
 
 get_advanced_riak_conf(Node) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    io_lib:format("~s/dev~b/etc/advanced.config", [Path, N]).
+    Path = relpath(node_version(Node)),
+    io_lib:format("~s/~s/etc/advanced.config", [Path, Node]).
 
 append_to_conf_file(File, NameValuePairs) ->
     Settings = lists:flatten(
@@ -430,9 +432,8 @@ get_backend(AppConfig) ->
     end.
 
 node_path(Node) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    lists:flatten(io_lib:format("~s/dev~b", [Path, N])).
+    Path = relpath(node_version(Node)),
+    lists:flatten(io_lib:format("~s/~s", [Path, Node])).
 
 get_ip(_Node) ->
     %% localhost 4 lyfe
@@ -532,10 +533,11 @@ deploy_nodes(NodeConfig) ->
     NumNodes = length(NodeConfig),
     %% TODO: The starting index should not be fixed to 1
     NodesN = lists:seq(1, NumNodes),
-    Nodes = [devrel_node_name(N) || N <- NodesN],
-    NodeMap = orddict:from_list(lists:zip(Nodes, NodesN)),
+    FullNodes = [devrel_node_name(N) || N <- NodesN],
+    DevNodes = [list_to_atom(lists:concat(["dev", N])) || N <- NodesN],
+    NodeMap = orddict:from_list(lists:zip(FullNodes, NodesN)),
     {Versions, Configs} = lists:unzip(NodeConfig),
-    VersionMap = lists:zip(NodesN, Versions),
+    VersionMap = lists:zip(DevNodes, Versions),
 
     %% TODO The new node deployment doesn't appear to perform this check ... -jsb
     %% Check that you have the right versions available
@@ -543,10 +545,10 @@ deploy_nodes(NodeConfig) ->
     rt_config:set(rt_nodes, NodeMap),
     rt_config:set(rt_versions, VersionMap),
 
-    create_dirs(Nodes),
+    create_dirs(DevNodes),
 
     %% Set initial config
-    add_default_node_config(Nodes),
+    add_default_node_config(FullNodes),
     rt:pmap(fun({_, default}) ->
                  ok;
             ({Node, {cuttlefish, Config}}) ->
@@ -554,30 +556,30 @@ deploy_nodes(NodeConfig) ->
             ({Node, Config}) ->
                  update_app_config(Node, Config)
          end,
-         lists:zip(Nodes, Configs)),
+         lists:zip(FullNodes, Configs)),
 
     %% create snmp dirs, for EE
-    create_dirs(Nodes),
+    create_dirs(DevNodes),
 
     %% Start nodes
     %%[run_riak(N, relpath(node_version(N)), "start") || N <- NodesN],
-    rt:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
+    rt:pmap(fun(Node) -> run_riak(Node, relpath(node_version(Node)), "start") end, DevNodes),
 
     %% Ensure nodes started
-    [ok = rt:wait_until_pingable(N) || N <- Nodes],
+    [ok = rt:wait_until_pingable(N) || N <- FullNodes],
 
     %% %% Enable debug logging
     %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
 
     %% We have to make sure that riak_core_ring_manager is running before we can go on.
-    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
+    [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- FullNodes],
 
     %% Ensure nodes are singleton clusters
-    [ok = rt_ring:check_singleton_node(devrel_node_name(N)) || {N, Version} <- VersionMap,
+    [ok = rt_ring:check_singleton_node(?DEV(Node)) || {Node, Version} <- VersionMap,
                                            Version /= "0.14.2"],
 
-    lager:info("Deployed nodes: ~p", [Nodes]),
-    Nodes.
+    lager:info("Deployed nodes: ~p", [FullNodes]),
+    FullNodes.
 
 gen_stop_fun(Path, Timeout) ->
     fun(Node) ->
@@ -698,9 +700,8 @@ console(Node, Expected) ->
     interactive(Node, "console", Expected).
 
 interactive(Node, Command, Exp) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    Cmd = riakcmd(Path, N, Command),
+    Path = relpath(node_version(Node)),
+    Cmd = riakcmd(Path, Node, Command),
     lager:debug("Opening a port for riak ~s.", [Command]),
     lager:debug("Calling open_port with cmd ~s", [binary_to_list(iolist_to_binary(Cmd))]),
     P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))},
@@ -773,9 +774,8 @@ interactive_loop(Port, Expected) ->
     end.
 
 admin(Node, Args, Options) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    Cmd = riak_admin_cmd(Path, N, Args),
+    Path = relpath(node_version(Node)),
+    Cmd = riak_admin_cmd(Path, Node, Args),
     lager:info("Running: ~s", [Cmd]),
     Result = execute_admin_cmd(Cmd, Options),
     lager:info("~p", [Result]),
@@ -791,17 +791,15 @@ execute_admin_cmd(Cmd, Options) ->
     end.
 
 riak(Node, Args) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    Result = run_riak(N, Path, Args),
+    Path = relpath(node_version(Node)),
+    Result = run_riak(Node, Path, Args),
     lager:info("~s", [Result]),
     {ok, Result}.
 
 
 riak_repl(Node, Args) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    Result = run_riak_repl(N, Path, Args),
+    Path = relpath(node_version(Node)),
+    Result = run_riak_repl(Node, Path, Args),
     lager:info("~s", [Result]),
     {ok, Result}.
 
@@ -810,9 +808,9 @@ node_id(Node) ->
     orddict:fetch(Node, NodeMap).
 
 %% @doc Return the node version from rt_versions
-node_version(N) ->
+node_version(Node) ->
     VersionMap = rt_config:get(rt_versions),
-    orddict:fetch(N, VersionMap).
+    orddict:fetch(Node, VersionMap).
 
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
