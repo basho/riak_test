@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013-2014 Basho Technologies, Inc.
+%% Copyright (c) 2013-2015 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -590,7 +590,9 @@ log_to_nodes(Nodes0, LFmt, LArgs) ->
     end,
     [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 
-%% @private utility function
+%% @doc Parallel Map: Runs function F for each item in list L, then
+%%      returns the list of results
+-spec pmap(F :: fun(), L :: list()) -> list().
 pmap(F, L) ->
     Parent = self(),
     lists:foldl(

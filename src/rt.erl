@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013-2014 Basho Technologies, Inc.
+%% Copyright (c) 2013-2015 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -371,7 +371,7 @@ staged_join(Node, PNode) ->
     rt_node:staged_join(Node, PNode).
 
 plan_and_commit(Node) ->
-    rt_node:plan_and_comment(Node).
+    rt_node:plan_and_commit(Node).
 
 do_commit(Node) ->
     rt_node:do_commit(Node).
