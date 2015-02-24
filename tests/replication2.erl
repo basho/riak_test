@@ -393,7 +393,9 @@ bucket_sync_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
   NoRepl = <<TestHash/binary, "-no_replication">>,
   LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
   {ok, {_IP, BFirstPort}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
-  
+
+  log_to_nodes(ANodes ++ BNodes, "Starting bucket sync test"),
+
   replication:make_bucket(ANodes, NoRepl, [{repl, false}]),
   replication:make_bucket(ANodes, RealtimeOnly, [{repl, realtime}]),
   replication:make_bucket(ANodes, FullsyncOnly, [{repl, fullsync}]),
@@ -456,10 +458,6 @@ bucket_sync_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
   lager:info("Write 100 more keys into realtime only bucket on ~p", [AFirst]),
   ?assertEqual([], repl_util:do_write(AFirst, 101, 200, RealtimeOnly, 2)),
 
-%% ALERT!! SLEEP TIMER
-  %% wait_for_reads should be sufficient.
-  %timer:sleep(5000),
-
   lager:info("Check the realtime keys replicated"),
   ?assertEqual(0, repl_util:wait_for_reads(BFirst, 101, 200, RealtimeOnly, 2)),
 
@@ -506,10 +504,6 @@ offline_queueing_tests( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
   repl_util:start_realtime(LeaderA, "B"),
   rt:wait_until_ring_converged(ANodes),
   ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
-
-%% ALERT!! SLEEP TIMER
-  %% wait_for_reads should be sufficient.
-  %%timer:sleep(3000),
 
   lager:info("Reading keys written while repl was stopped"),
   ?assertEqual(0, repl_util:wait_for_reads(BFirst, 800, 900, TestBucket, 2)),
