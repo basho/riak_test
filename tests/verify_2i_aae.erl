@@ -18,13 +18,10 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_2i_aae).
-
-%% -behaviour(riak_test).
-
+-behaviour(riak_test).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
-
--test_type(['2i']).
 
 %% Make it multi-backend compatible.
 -define(BUCKETS, [<<"eleveldb1">>, <<"memory1">>]).
@@ -33,26 +30,13 @@
 -define(SCAN_BATCH_SIZE, 100).
 -define(N_VAL, 3).
 
--export([properties/0,
-         confirm/1]).
-
-properties() ->
-    Config = [{riak_kv,
-               [{anti_entropy, {off, []}},
-                {anti_entropy_build_limit, {100, 500}},
-                {anti_entropy_concurrency, 100},
-                {anti_entropy_tick, 200}]}] ++ rt_properties:default_config(),
-    rt_properties:new([{node_count, 1},
-                       {make_cluster, false},
-                       {config, Config}]).
-
--spec confirm(rt_properties:properties()) -> pass | fail.
-confirm(Properties) ->
-    NodeIds = rt_properties:get(node_ids, Properties),
-    NodeMap = rt_properties:get(node_map, Properties),
-    Nodes = [rt_node:node_name(NodeId, NodeMap) || NodeId <- NodeIds],
-    Node1 = hd(Nodes),
-
+confirm() ->
+    [Node1] = rt:build_cluster(1,
+                               [{riak_kv,
+                                 [{anti_entropy, {off, []}},
+                                  {anti_entropy_build_limit, {100, 500}},
+                                  {anti_entropy_concurrency, 100},
+                                  {anti_entropy_tick, 200}]}]),
     rt_intercept:load_code(Node1),
     rt_intercept:add(Node1,
                      {riak_object,
@@ -60,7 +44,7 @@ confirm(Properties) ->
                        {{diff_index_specs, 2}, skippable_diff_index_specs}]}),
     lager:info("Installed intercepts to corrupt index specs on node ~p", [Node1]),
     %%rpc:call(Node1, lager, set_loglevel, [lager_console_backend, debug]),
-    PBC = rt_pb:pbc(Node1),
+    PBC = rt:pbc(Node1),
     NumItems = ?NUM_ITEMS,
     NumDel = ?NUM_DELETES,
     pass = check_lost_objects(Node1, PBC, NumItems, NumDel),
@@ -84,7 +68,7 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     ok = rpc:call(Node1, application, set_env,
                   [riak_kv, anti_entropy, {on, [debug]}]),
     ok = rpc:call(Node1, riak_kv_entropy_manager, enable, []),
-    rt_aae:wait_until_aae_trees_built([Node1]),
+    rt:wait_until_aae_trees_built([Node1]),
 
     lager:info("AAE trees built, now put the rest of the data"),
     [put_obj(PBC, Bucket, N, N+1, Index)
@@ -102,8 +86,8 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     DelRange = lists:seq(NumItems-NumDel+1, NumItems),
     lager:info("Deleting ~b objects without updating indexes", [NumDel]),
     [del_obj(PBC, Bucket, N) || N <- DelRange, Bucket <- ?BUCKETS],
-    DelKeys = [to_key(N) || N <- DelRange],
-    [rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, DelKeys) end)
+    DelKeys = [to_key(N) || N <- DelRange], 
+    [rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, DelKeys) end)
      || Bucket <- ?BUCKETS],
     %% Verify they are damaged
     lager:info("Verify change did not take, needs repair"),
@@ -141,7 +125,7 @@ do_tree_rebuild(Node) ->
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {100, 1000}])),
-    rt_aae:wait_until_aae_trees_built([Node]),
+    rt:wait_until_aae_trees_built([Node]),
     ok.
 
 %% Write objects without a 2i index. Test that running 2i repair will generate
@@ -167,7 +151,7 @@ check_kill_repair(Node1) ->
     lager:info("Test that killing 2i repair works as desired"),
     spawn(fun() ->
                   timer:sleep(1500),
-                  rt_cmd_line:admin(Node1, ["repair-2i", "kill"])
+                  rt:admin(Node1, ["repair-2i", "kill"])
           end),
     ExitStatus = run_2i_repair(Node1),
     case ExitStatus of
@@ -184,11 +168,11 @@ check_kill_repair(Node1) ->
 
 run_2i_repair(Node1) ->
     lager:info("Run 2i AAE repair"),
-    ?assertMatch({ok, _}, rt_cmd_line:admin(Node1, ["repair-2i"])),
+    ?assertMatch({ok, _}, rt:admin(Node1, ["repair-2i"])),
     RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae]),
     lager:info("Wait for repair process to finish"),
     Mon = monitor(process, RepairPid),
-    MaxWaitTime = 120000,
+    MaxWaitTime = rt_config:get(rt_max_wait_time),
     receive
         {'DOWN', Mon, _, _, Status} ->
             lager:info("Status: ~p", [Status]),

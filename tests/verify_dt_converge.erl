@@ -25,8 +25,7 @@
 -module(verify_dt_converge).
 -behavior(riak_test).
 -compile([export_all]).
--export([confirm/0,
-         create_bucket_types/2]).
+-export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -50,7 +49,7 @@ confirm() ->
                {riak_core, [ {ring_creation_size, 16},
                              {vnode_management_timer, 1000} ]}],
 
-    [N1, N2, N3, N4]=Nodes = rt_cluster:build_cluster(4, Config),
+    [N1, N2, N3, N4]=Nodes = rt:build_cluster(4, Config),
 
     create_bucket_types(Nodes, ?TYPES),
 
@@ -73,7 +72,7 @@ confirm() ->
 
     lager:info("Partition cluster in two."),
 
-    PartInfo = rt_node:partition([N1, N2], [N3, N4]),
+    PartInfo = rt:partition([N1, N2], [N3, N4]),
 
     lager:info("Modify data on side 1"),
     %% Modify one side
@@ -109,7 +108,7 @@ confirm() ->
 
     %% heal
     lager:info("Heal and check merged values"),
-    ok = rt_node:heal(PartInfo),
+    ok = rt:heal(PartInfo),
     ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree
@@ -125,13 +124,13 @@ confirm() ->
 
 create_pb_clients(Nodes) ->
     [begin
-         C = rt_pb:pbc(N),
+         C = rt:pbc(N),
          riakc_pb_socket:set_options(C, [queue_if_disconnected]),
          C
      end || N <- Nodes].
 
 create_http_clients(Nodes) ->
-    [ rt_http:httpc(N) || N <- Nodes ].
+    [ rt:httpc(N) || N <- Nodes ].
 
 create_bucket_types([N1|_]=Nodes, Types) ->
     lager:info("Creating bucket types with datatypes: ~p", [Types]),

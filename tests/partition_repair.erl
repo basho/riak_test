@@ -72,7 +72,7 @@ confirm() ->
             %%      [{"./log/console.log",debug,10485760,"$D0",5}]}]}]}
            ],
 
-    Nodes = rt_cluster:build_cluster(NumNodes, Conf),
+    Nodes = rt:build_cluster(NumNodes, Conf),
 
     case NVal of
         undefined ->
@@ -86,15 +86,15 @@ confirm() ->
     rt:enable_search_hook(hd(Nodes), Bucket),
 
     lager:info("Insert Scott's spam emails"),
-    Pbc = rt_pb:pbc(hd(Nodes)),
-    rt_pb:pbc_put_dir(Pbc, Bucket, SpamDir),
+    Pbc = rt:pbc(hd(Nodes)),
+    rt:pbc_put_dir(Pbc, Bucket, SpamDir),
 
     lager:info("Stash ITFs for each partition"),
     %% @todo Should riak_test guarantee that the scratch pad is clean instead?
     ?assertCmd("rm -rf " ++ base_stash_path()),
     %% need to load the module so riak can see the fold fun
     rt:load_modules_on_nodes([?MODULE], Nodes),
-    Ring = rt_ring:get_ring(hd(Nodes)),
+    Ring = rt:get_ring(hd(Nodes)),
     Owners = riak_core_ring:all_owners(Ring),
     [stash_data(riak_search, Owner) || Owner <- Owners],
 
@@ -120,7 +120,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     %% kill the partition data
     Path = DataSuffix ++ "/" ++ integer_to_list(Partition),
     lager:info("Killing data for ~p on ~p at ~s", [Partition, Node, Path]),
-    rt_cluster:clean_data_dir([Node], Path),
+    rt:clean_data_dir([Node], Path),
 
     %% force restart of vnode since some data is kept in memory
     lager:info("Restarting ~p vnode for ~p on ~p", [Service, Partition, Node]),

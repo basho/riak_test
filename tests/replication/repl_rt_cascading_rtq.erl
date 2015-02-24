@@ -6,7 +6,7 @@
 -define(TEST_BUCKET, <<"rt-cascading-rtq-systest-a">>).
 
 setup() ->
-    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     {SourceLeader, SinkLeaderA, SinkLeaderB, _, _, _} = ClusterNodes = make_clusters(),
 
@@ -153,9 +153,9 @@ cluster_conf(_CascadingWrites) ->
     ].
 
 deploy_nodes(NumNodes, true) ->
-    rt_cluster:deploy_nodes(NumNodes, cluster_conf(always));
+    rt:deploy_nodes(NumNodes, cluster_conf(always), [riak_kv, riak_repl]);
 deploy_nodes(NumNodes, false) ->
-    rt_cluster:deploy_nodes(NumNodes, cluster_conf(never)).
+    rt:deploy_nodes(NumNodes, cluster_conf(never), [riak_kv, riak_repl]).
 
 %% @doc Turn on Realtime replication on the cluster lead by LeaderA.
 %%      The clusters must already have been named and connected.
@@ -181,5 +181,5 @@ write_to_cluster(Node, Start, End) ->
 %%      of errors.
 read_from_cluster(Node, Start, End, Errors) ->
     lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
-    Res2 = rt_systest:read(Node, Start, End, ?TEST_BUCKET, 1),
+    Res2 = rt:systest_read(Node, Start, End, ?TEST_BUCKET, 1),
     ?assertEqual(Errors, length(Res2)).

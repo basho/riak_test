@@ -432,14 +432,17 @@ get_backend(AppConfig) ->
     end.
 
 node_path(Node) ->
-    Path = relpath(node_version(Node)),
-    lists:flatten(io_lib:format("~s/~s", [Path, Node])).
+    N = node_id(Node),
+    lager:debug("Node ~p node id ~p", [Node, N]),
+    Path = relpath(node_version(N)),
+    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
 
 get_ip(_Node) ->
     %% localhost 4 lyfe
     "127.0.0.1".
 
 create_dirs(Nodes) ->
+    lager:debug("Nodes ~p", [Nodes]),
     Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],
     [?assertCmd("mkdir -p " ++ Dir) || Dir <- Snmp].
 

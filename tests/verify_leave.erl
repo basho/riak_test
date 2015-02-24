@@ -42,7 +42,7 @@ confirm() ->
     lager:info("Verify ~p no longer owns partitions and all nodes believe "
                "it is invalid", [Node2]),
     Remaining1 = Nodes -- [Node2],
-    rt_node:wait_until_nodes_agree_about_ownership(Remaining1),
+    rt:wait_until_nodes_agree_about_ownership(Remaining1),
     [?assertEqual(invalid, status_of_according_to(Node2, Node)) || Node <- Remaining1],
 
     %% Have node1 remove node3
@@ -54,6 +54,6 @@ confirm() ->
     lager:info("Verify ~p no longer owns partitions, and all nodes believe "
                "it is invalid", [Node3]),
     Remaining2 = Remaining1 -- [Node3],
-    rt_node:wait_until_nodes_agree_about_ownership(Remaining2),
+    rt:wait_until_nodes_agree_about_ownership(Remaining2),
     [?assertEqual(invalid, status_of_according_to(Node3, Node)) || Node <- Remaining2],
     pass.

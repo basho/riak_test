@@ -64,7 +64,7 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    Nodes = rt_cluster:build_cluster(?NUM_NODES, ?CFG),
+    Nodes = rt:build_cluster(?NUM_NODES, ?CFG),
     verify_aae(Nodes),
     pass.
 
@@ -144,7 +144,7 @@ write_data(Node, KVs) ->
     write_data(Node, KVs, []).
 
 write_data(Node, KVs, Opts) ->
-    PB = rt_pb:pbc(Node),
+    PB = rt:pbc(Node),
     [begin
          O =
          case riakc_pb_socket:get(PB, ?BUCKET, K) of
@@ -161,7 +161,7 @@ write_data(Node, KVs, Opts) ->
 % @doc Verifies that the data is eventually restored to the expected set.
 verify_data(Node, KeyValues) ->
     lager:info("Verify all replicas are eventually correct"),
-    PB = rt_pb:pbc(Node),
+    PB = rt:pbc(Node),
     CheckFun =
     fun() ->
             Matches = [verify_replicas(Node, ?BUCKET, K, V, ?N_VAL)
@@ -242,12 +242,12 @@ test_less_than_n_mods(Node, KeyValues) ->
 
 wipe_out_partition(Node, Partition) ->
     lager:info("Wiping out partition ~p in node ~p", [Partition, Node]),
-    rt_cluster:clean_data_dir(Node, dir_for_partition(Partition)),
+    rt:clean_data_dir(Node, dir_for_partition(Partition)),
     ok.
 
 wipe_out_aae_data(Node, Partition) ->
     lager:info("Wiping out AAE data for partition ~p in node ~p", [Partition, Node]),
-    rt_cluster:clean_data_dir(Node, "anti_entropy/"++integer_to_list(Partition)),
+    rt:clean_data_dir(Node, "anti_entropy/"++integer_to_list(Partition)),
     ok.
 
 base_dir_for_backend(undefined) ->
