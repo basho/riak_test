@@ -787,8 +787,9 @@ interactive_loop(Port, Expected) ->
     end.
 
 admin(Node, Args, Options) ->
-    Path = relpath(node_version(Node)),
-    Cmd = riak_admin_cmd(Path, Node, Args),
+    {NodeId, _} = extract_node_id_and_name(Node),
+    Path = relpath(node_version(NodeId)),
+    Cmd = riak_admin_cmd(Path, NodeId, Args),
     lager:info("Running: ~s", [Cmd]),
     Result = execute_admin_cmd(Cmd, Options),
     lager:info("~p", [Result]),

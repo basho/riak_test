@@ -277,7 +277,6 @@ allocate_nodes(NumNodes) ->
     AllocatedNodeIds = lists:sublist(AvailableNodeIds, NumNodes),
     lager:debug("Allocated node ids ~p with version map ~p", [AllocatedNodeIds, VersionMap]),
 
-
     AllocatedNodeMap = lists:foldl(
                          fun(NodeId, NodeMap) ->
                                  NodeName = proplists:get_value(NodeId, AvailableNodeMap),
@@ -285,7 +284,23 @@ allocate_nodes(NumNodes) ->
                          end,
                          [],
                          AllocatedNodeIds),
+    NodeVersionMap = orddict:fold(
+                       fun(Version, Nodes, NodeVersionMap) ->
+                               lists:foldl(
+                                 fun(Node, Acc) -> orddict:append(Node, Version, Acc) end,
+                                 NodeVersionMap,
+                                 Nodes)
+                       end,
+                       orddict:new(),
+                       VersionMap),
+                               
     lager:debug("Allocated node map ~p", [AllocatedNodeMap]),
+
+    rt_config:set(rt_nodes, AllocatedNodeMap),
+    %% May be incorrect -- see rtdev:deploy_nodes ... -jsb
+    rt_config:set(rt_nodenames, AllocatedNodeMap),
+    rt_config:set(rt_versions, NodeVersionMap),
+
     [AllocatedNodeIds, AllocatedNodeMap, VersionMap].
 
 version_to_config(Config) when is_tuple(Config)-> Config;
