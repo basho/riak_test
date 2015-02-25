@@ -46,6 +46,7 @@
          node_id/1,
          node_version/1,
          admin/2,
+         admin/3,
          riak/2,
          run_riak/3,
          attach/2,
@@ -119,6 +120,9 @@ node_version(N) ->
 
 admin(Node, Args) ->
     ?HARNESS_MODULE:admin(Node, Args).
+
+admin(Node, Args, Options) ->
+    ?HARNESS_MODULE:admin(Node, Args, Options).
 
 riak(Node, Args) ->
     ?HARNESS_MODULE:riak(Node, Args).

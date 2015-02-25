@@ -251,7 +251,8 @@ deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
     deploy_nodes(NumNodes, InitialConfig, [riak_kv]);
 deploy_nodes(Versions, Services) ->
     NodeConfig = [ version_to_config(Version) || Version <- Versions ],
-    lager:debug("Starting nodes config ~p using versions ~p", [NodeConfig, Versions]),
+    lager:debug("Starting nodes using config ~p and versions ~p", [NodeConfig, Versions]),
+
     Nodes = rt_harness:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
     [ ok = wait_for_service(Node, Service) || Node <- Nodes,

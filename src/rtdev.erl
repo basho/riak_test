@@ -556,6 +556,8 @@ deploy_nodes(NodeConfig) ->
     rt_config:set(rt_nodenames, DevNodeMap),
     rt_config:set(rt_versions, VersionMap),
 
+    lager:debug("Set rtnodes: ~p and rt_versions: ~p", [ rt_config:get(rt_nodes), rt_config:get(rt_versions) ]),
+
     create_dirs(FullNodes),
 
     %% Set initial config

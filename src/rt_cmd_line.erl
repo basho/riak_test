@@ -22,6 +22,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([admin/2, 
+         admin/3,
          riak/2,
          riak_repl/2,
          search_cmd/2,
@@ -37,6 +38,12 @@
 %% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'
 admin(Node, Args) ->
     rt_harness:admin(Node, Args).
+
+%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'.
+%% The third parameter is a list of options. Valid options are:
+%%    * `return_exit_code' - Return the exit code along with the command output
+admin(Node, Args, Options) ->
+    rt_harness:admin(Node, Args, Options).
 
 %% @doc Call 'bin/riak' command on `Node' with arguments `Args'
 riak(Node, Args) ->
