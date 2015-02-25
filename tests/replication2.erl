@@ -32,19 +32,10 @@ confirm() ->
            ]}
   ],
 
-  Nodes = rt:deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
+  lager:info( "Building Clusters A and B" ),
+  [ANodes, BNodes] = rt:build_clusters([{ClusterASize, Conf}, {NumNodes - ClusterASize, Conf}]),
 
-  {ANodes, BNodes} = lists:split(ClusterASize, Nodes),
-  lager:info("ANodes: ~p", [ANodes]),
-  lager:info("BNodes: ~p", [BNodes]),
-
-  lager:info("Build cluster A"),
-  repl_util:make_cluster(ANodes),
-
-  lager:info("Build cluster B"),
-  repl_util:make_cluster(BNodes),
-
-  lager:info( "Skipping all tests" ),
+  %lager:info( "Skipping all tests" ),
   replication(ANodes, BNodes, false),
   pass.
 
@@ -179,6 +170,7 @@ real_time_replication_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected 
       ok
   end.
 
+
 %% @doc Disconnected Clusters Full Sync Test
 %%      Test Cycle:
 %%        Disconnect Clusters "A" and "B".
@@ -284,15 +276,13 @@ master_failover_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
   lager:info("Reading 101 keys written to ~p from ~p", [ASecond, BSecond]),
   ?assertEqual(0, repl_util:wait_for_reads(BSecond, 301, 400, TestBucket, 2)),
 
-%% Still don't know the purpose of this block
   log_to_nodes(ANodes ++ BNodes, "Test fullsync with ~p and ~p down", [LeaderA, LeaderB]),
   lager:info("Re-running fullsync with ~p and ~p down", [LeaderA, LeaderB]),
 
   repl_util:start_and_wait_until_fullsync_complete(LeaderA2),
 
-  %% This says test full sync, but there's never really a 'test'.
+  %% This says test full sync, but there's never a verification step.
   log_to_nodes(ANodes ++ BNodes, "Test fullsync after restarting ~p", [LeaderA]),
-%% end Block
 
   %% Put everything back to 'normal'.
   lager:info("Nodes restarted"),
@@ -443,8 +433,7 @@ bucket_sync_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
   Res8 = rt:systest_read(BFirst, 1, 100, NoRepl, 2),
   ?assertEqual(100, length(Res8)),
 
-%% ??
-  %% do a fullsync, make sure that fullsync_only is replicated, but
+  %% Do a fullsync, make sure that fullsync_only is replicated, but
   %% realtime_only and no_repl aren't
   repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 
@@ -663,7 +652,7 @@ http_write_during_shutdown( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
   ReadErrors = http_read(C2, 12000, 22000, TestBucket, 2),
   lager:info("Received ~p read failures from ~p", [length(ReadErrors), BFirst]),
 
-  %% ensure node is down before we try to start it up again.
+  %% Ensure node is down before we try to start it up again.
   lager:info("HTTP: write_during_shutdown: Ensure node ~p is down before restart", [Target]),
   ?assertEqual(ok, rt:wait_until_unpingable(Target)),
 
