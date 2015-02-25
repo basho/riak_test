@@ -100,7 +100,7 @@ check_leave_and_expiry(NodeA, NodeB) ->
     _ = rt:systest_read(NodeA, 1, 100, ?BUCKET, 2),
     timer:sleep(timer:seconds(5)),
     Res = rt:systest_read(NodeA, 1, 100, ?BUCKET, 2),
-    
+
     ?assertEqual(100, length(Res)),
     ok.
 
@@ -201,7 +201,10 @@ put_until_changed(Pid, Node, Key) ->
     end.
 
 mkconf(Test, Mode) ->
-    MembConfig = 
+    RiakCore = [
+        {ring_creation_size, 4}
+    ],
+    MembConfig =
         case Test of
             ttl ->
                 [{ttl, 200}];
@@ -217,9 +220,7 @@ mkconf(Test, Mode) ->
             rt:set_backend(memory),
 
             [
-             {riak_core, [
-                          {ring_creation_size, 4}
-                         ]},
+             {riak_core, RiakCore},
              {riak_kv, [
                         {anti_entropy, {off, []}},
                         {delete_mode, immediate},
@@ -229,9 +230,7 @@ mkconf(Test, Mode) ->
         multi ->
             rt:set_backend(multi),
             [
-             {riak_core, [
-                          {ring_creation_size, 4}
-                         ]},
+             {riak_core, RiakCore},
              {riak_kv, [
                         {anti_entropy, {off, []}},
                         {delete_mode, immediate},
@@ -256,7 +255,7 @@ get_remote_vnode_pid(Node) ->
 get_used_space(VNode, Node) ->
     S = rpc:call(Node, sys, get_state, [VNode]),
     Mode = get(mode),
-    Version = rt:get_version(),
+    Version = rt:get_version(Node),
     %% lager:info("version mode ~p", [{Version, Mode}]),
     TwoOhReg =
         fun(X) -> 
@@ -280,6 +279,10 @@ get_used_space(VNode, Node) ->
             {<<"riak-2.0",_/binary>>, multi} ->
                 TwoOhMulti;
             {<<"riak_ee-2.0",_/binary>>, multi} ->
+                TwoOhMulti;
+            {<<"head",_/binary>>, regular} ->
+                TwoOhReg;
+            {<<"head",_/binary>>, multi} ->
                 TwoOhMulti;
             _Else ->
                 lager:error("didn't understand version/mode tuple ~p",

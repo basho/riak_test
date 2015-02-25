@@ -37,6 +37,7 @@
          whats_up/0,
          get_ip/1,
          node_id/1,
+         node_short_name/1,
          node_version/1,
          %% admin/2,
          riak/2,
@@ -338,15 +339,21 @@ all_the_app_configs(DevPath) ->
 
 update_app_config(all, Config) ->
      lager:info("rtdev:update_app_config(all, ~p)", [Config]),
-     [ update_app_config(DevPath, Config) || DevPath <- devpaths()].
+     [ update_app_config(DevPath, Config) || DevPath <- devpaths()];
+update_app_config(Node, Config) when is_atom(Node) ->
+    lager:info("rtdev:update_app_config Node(~p, ~p)", [Node, Config]),
+    Version = node_version(Node),
+    update_app_config(Node, Version, Config);
+update_app_config(DevPath, Config) ->
+    [update_app_config_file(AppConfig, Config) || AppConfig <- all_the_app_configs(DevPath)].
 
 update_app_config(Node, Version, Config) ->
     VersionPath = filename:join(?PATH, Version),
     FileFormatString = "~s/~s/etc/~s.config",
     AppConfigFile = io_lib:format(FileFormatString,
-                                  [VersionPath, Node, "app"]),
+                                  [VersionPath, node_short_name(Node), "app"]),
     AdvConfigFile = io_lib:format(FileFormatString,
-                                  [VersionPath, Node, "advanced"]),
+                                  [VersionPath, node_short_name(Node), "advanced"]),
 
     %% If there's an app.config, do it old style
     %% if not, use cuttlefish's advanced.config
@@ -356,6 +363,7 @@ update_app_config(Node, Version, Config) ->
         _ ->
             update_app_config_file(AdvConfigFile, Config)
     end.
+
 
 update_app_config_file(ConfigFile, Config) ->
     lager:debug("rtdev:update_app_config_file(~s, ~p)", [ConfigFile, Config]),
@@ -393,12 +401,12 @@ get_backend(AppConfig) ->
         ["app.config"| _ ] ->
             AppConfig;
         ["advanced.config" | T] ->
-            ["etc", [$d, $e, $v | N], "dev" | RPath] = T,
+            ["etc", Node | RPath] = T,
             Path = filename:join(lists:reverse(RPath)),
             %% Why chkconfig? It generates an app.config from cuttlefish
             %% without starting riak.
 
-            ChkConfigOutput = string:tokens(run_riak(list_to_integer(N), Path, "chkconfig"), "\n"),
+            ChkConfigOutput = string:tokens(run_riak(Node, Path, "chkconfig"), "\n"),
 
             ConfigFileOutputLine = lists:last(ChkConfigOutput),
 
@@ -418,7 +426,7 @@ get_backend(AppConfig) ->
                     case filename:pathtype(Files) of
                         absolute -> File;
                         relative ->
-                            io_lib:format("~s/dev~s/~s", [Path, N, tl(hd(Files))])
+                            io_lib:format("~s/~s/~s", [Path, Node, tl(hd(Files))])
                     end
                 end
     end,
@@ -432,10 +440,8 @@ get_backend(AppConfig) ->
     end.
 
 node_path(Node) ->
-    N = node_id(Node),
-    lager:debug("Node ~p node id ~p", [Node, N]),
-    Path = relpath(node_version(N)),
-    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
+    Path = relpath(node_version(Node)),
+    lists:flatten(io_lib:format("~s/~s", [Path, node_short_name(Node)])).
 
 get_ip(_Node) ->
     %% localhost 4 lyfe
@@ -531,7 +537,7 @@ configure_nodes(Nodes, Configs) ->
             lists:zip(Nodes, Configs)).
 
 deploy_nodes(NodeConfig) ->
-    Path = relpath(root),
+    Path = relpath(""),
     lager:info("Riak path: ~p", [Path]),
     NumNodes = length(NodeConfig),
     %% TODO: The starting index should not be fixed to 1
@@ -539,34 +545,36 @@ deploy_nodes(NodeConfig) ->
     FullNodes = [devrel_node_name(N) || N <- NodesN],
     DevNodes = [list_to_atom(lists:concat(["dev", N])) || N <- NodesN],
     NodeMap = orddict:from_list(lists:zip(FullNodes, NodesN)),
-    {Versions, Configs} = lists:unzip(NodeConfig),
-    VersionMap = lists:zip(DevNodes, Versions),
+    DevNodeMap = orddict:from_list(lists:zip(FullNodes, DevNodes)),
+    {Versions, _} = lists:unzip(NodeConfig),
+    VersionMap = lists:zip(FullNodes, Versions),
 
     %% TODO The new node deployment doesn't appear to perform this check ... -jsb
     %% Check that you have the right versions available
     %%[ check_node(Version) || Version <- VersionMap ],
     rt_config:set(rt_nodes, NodeMap),
+    rt_config:set(rt_nodenames, DevNodeMap),
     rt_config:set(rt_versions, VersionMap),
 
-    create_dirs(DevNodes),
+    create_dirs(FullNodes),
 
     %% Set initial config
     add_default_node_config(FullNodes),
-    rt:pmap(fun({_, default}) ->
+    rt:pmap(fun({_, {_, default}}) ->
                  ok;
-            ({Node, {cuttlefish, Config}}) ->
+            ({Node, {_, {cuttlefish, Config}}}) ->
                  set_conf(Node, Config);
-            ({Node, Config}) ->
-                 update_app_config(Node, Config)
+            ({Node, {Version, Config}}) ->
+                 update_app_config(Node, Version, Config)
          end,
-         lists:zip(FullNodes, Configs)),
+         lists:zip(FullNodes, NodeConfig)),
 
     %% create snmp dirs, for EE
-    create_dirs(DevNodes),
+    create_dirs(FullNodes),
 
     %% Start nodes
     %%[run_riak(N, relpath(node_version(N)), "start") || N <- NodesN],
-    rt:pmap(fun(Node) -> run_riak(Node, relpath(node_version(Node)), "start") end, DevNodes),
+    rt:pmap(fun(Node) -> run_riak(node_short_name(Node), relpath(node_version(Node)), "start") end, FullNodes),
 
     %% Ensure nodes started
     [ok = rt:wait_until_pingable(N) || N <- FullNodes],
@@ -578,7 +586,7 @@ deploy_nodes(NodeConfig) ->
     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- FullNodes],
 
     %% Ensure nodes are singleton clusters
-    [ok = rt_ring:check_singleton_node(?DEV(Node)) || {Node, Version} <- VersionMap,
+    [ok = rt_ring:check_singleton_node(FullNode) || {FullNode, Version} <- VersionMap,
                                            Version /= "0.14.2"],
 
     lager:info("Deployed nodes: ~p", [FullNodes]),
@@ -806,11 +814,22 @@ riak_repl(Node, Args) ->
     lager:info("~s", [Result]),
     {ok, Result}.
 
+%% @doc Find the node number from the full name
+-spec node_id(atom()) -> integer().
 node_id(Node) ->
     NodeMap = rt_config:get(rt_nodes),
     orddict:fetch(Node, NodeMap).
 
-%% @doc Return the node version from rt_versions
+%% @doc Find the short dev node name from the full name
+-spec node_short_name(atom()) -> atom().
+node_short_name(Node) when is_list(Node) ->
+    Node;
+node_short_name(Node) when is_atom(Node) ->
+    NodeMap = rt_config:get(rt_nodenames),
+    orddict:fetch(Node, NodeMap).
+
+%% @doc Return the node version from rt_versions based on full node name
+-spec node_version(atom()) -> string().
 node_version(Node) ->
     VersionMap = rt_config:get(rt_versions),
     orddict:fetch(Node, VersionMap).
@@ -869,8 +888,15 @@ set_backend(Backend, OtherOpts) ->
     update_app_config(all, version_here, [{riak_kv, Opts}]),
     get_backends().
 
+%% WRONG: Seemingly always stuck on the current version
 get_version() ->
-    case file:read_file(relpath(current) ++ "/VERSION") of
+    case file:read_file(relpath(head) ++ "/VERSION") of
+        {error, enoent} -> unknown;
+        {ok, Version} -> Version
+    end.
+
+get_version(Node) ->
+    case file:read_file(filename:join([relpath(node_version(Node)),"VERSION"])) of
         {error, enoent} -> unknown;
         {ok, Version} -> Version
     end.
@@ -887,19 +913,27 @@ whats_up() ->
     Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
 
+%% @doc Gather the devrel directories in the root_path parent directory
+-spec devpaths() -> list().
 devpaths() ->
-    lists:usort([ DevPath || {_Name, DevPath} <- proplists:delete(root, rt_config:get(rtdev_path))]).
+    RootDir = rt_config:get(root_path),
+    {ok, RawDirs} = file:list_dir(RootDir),
+    %% Remove any dot files in the directory (e.g. .git)
+    FilteredPaths = lists:filter(fun([$.|_]) -> false; (_) -> true end, RawDirs),
+    %% Generate fully qualified path names
+    DevPaths = lists:map(fun(X) -> filename:join(RootDir, X) end, FilteredPaths),
+    lists:usort(DevPaths).
 
 %% versions() ->
 %%     proplists:get_keys(rt_config:get(rtdev_path)) -- [root].
 
 get_node_logs() ->
-    Root = filename:absname(proplists:get_value(root, ?PATH)),
+    Root = filename:absname(proplists:get_value(root_path, ?PATH)),
     RootLen = length(Root) + 1, %% Remove the leading slash
     [ begin
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
-      end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+      end || Filename <- filelib:wildcard(Root ++ "/*/dev*/log/*") ].
 
 -type node_tuple() :: {list(), atom()}.
 

@@ -68,6 +68,7 @@
          get_replica/5,
          get_ring/1,
          get_version/0,
+         get_version/1,
          heal/1,
          http_url/1,
          https_url/1,
@@ -242,7 +243,7 @@ deploy_nodes(Versions) when is_list(Versions) ->
 deploy_nodes(NumNodes) when is_integer(NumNodes) ->
     [NodeIds, NodeMap, _] = allocate_nodes(NumNodes),
     deploy_nodes(NodeIds, NodeMap, head, rt_properties:default_config(), [riak_kv]).
-    
+
 %% @doc Deploy a set of freshly installed Riak nodes with the given
 %%      `InitialConfig', returning a list of the nodes deployed.
 -spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
@@ -251,7 +252,6 @@ deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
 deploy_nodes(Versions, Services) ->
     NodeConfig = [ version_to_config(Version) || Version <- Versions ],
     lager:debug("Starting nodes config ~p using versions ~p", [NodeConfig, Versions]),
-
     Nodes = rt_harness:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
     [ ok = wait_for_service(Node, Service) || Node <- Nodes,
@@ -267,16 +267,16 @@ deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
     lists:foldl(fun({_, NodeName}, Nodes) -> [NodeName|Nodes] end,
                 [],
                 NodeMap).
-    
+
 allocate_nodes(NumNodes) ->
     [AvailableNodeIds, AvailableNodeMap, VersionMap] = rt_harness:available_resources(),
-    lager:debug("Availabe node ids ~p, node map ~p, and version map ~p.", 
+    lager:debug("Available node ids ~p, node map ~p, and version map ~p.",
                 [AvailableNodeIds, AvailableNodeMap, VersionMap]),
 
     AllocatedNodeIds = lists:sublist(AvailableNodeIds, NumNodes),
     lager:debug("Allocated node ids ~p with version map ~p", [AllocatedNodeIds, VersionMap]),
 
-    
+
     AllocatedNodeMap = lists:foldl(
                          fun(NodeId, NodeMap) ->
                                  NodeName = proplists:get_value(NodeId, AvailableNodeMap),
@@ -734,15 +734,16 @@ try_nodes_ready(Nodes, N, SleepMs) ->
 
 %% @doc Stop nodes and wipe out their data directories
 clean_cluster(Nodes) when is_list(Nodes) ->
-    rt_cluster:clean_cluster(Nodes).
+    [stop_and_wait(Node) || Node <- Nodes],
+    clean_data_dir(Nodes).
 
 clean_data_dir(Nodes) ->
-    %% TODO Determine the best approach to specifying the version. -jsb
-    rt_cluster:clean_data_dir(Nodes, head).
+    clean_data_dir(Nodes, "").
 
-clean_data_dir(Nodes, SubDir) ->
-    %% TODO Determine the best approach to specifying the version. -jsb
-    rt_cluster:clean_data_dir(Nodes, head, SubDir).
+clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
+    clean_data_dir([Nodes], SubDir);
+clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
+    ?HARNESS:clean_data_dir(Nodes, SubDir).
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
@@ -1334,6 +1335,10 @@ get_backend(AppConfigProplist) ->
 -spec get_version() -> binary().
 get_version() ->
     rt2:get_version().
+
+-spec get_version(string()) -> binary().
+get_version(Node) ->
+    rt_harness:get_version(Node).
 
 %% @doc outputs some useful information about nodes that are up
 whats_up() ->

@@ -38,6 +38,7 @@
          setup/0,
          get_deps/0,
          get_version/0,
+         get_version/1,
          get_backends/0,
          set_backend/1,
          whats_up/0,
@@ -53,7 +54,8 @@
          update_app_config/3,
          teardown/0,
          set_conf/2,
-         set_advanced_conf/2]).
+         set_advanced_conf/2,
+         update_app_config/2]).
 
 start(Node, Version) ->
     ?HARNESS_MODULE:start(Node, Version).
@@ -93,6 +95,9 @@ get_deps() ->
 
 get_version() ->
     ?HARNESS_MODULE:get_version().
+
+get_version(Node) ->
+    ?HARNESS_MODULE:get_version(Node).
 
 get_backends() ->
     ?HARNESS_MODULE:get_backends().
@@ -141,3 +146,7 @@ set_conf(Node, NameValuePairs) ->
 
 set_advanced_conf(Node, NameValuePairs) ->
     ?HARNESS_MODULE:set_advanced_conf(Node, NameValuePairs).
+
+update_app_config(Node, Config) ->
+    ?HARNESS_MODULE:update_app_config(Node, Config).
+

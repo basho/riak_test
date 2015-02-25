@@ -25,6 +25,7 @@
          read/3,
          read/5,
          read/6,
+         read/7,
          write/2,
          write/3,
          write/5,
