@@ -301,6 +301,9 @@ allocate_nodes(NumNodes) ->
     rt_config:set(rt_nodenames, AllocatedNodeMap),
     rt_config:set(rt_versions, NodeVersionMap),
 
+    lager:debug("Set rt_nodes: ~p, rt_nodenames: ~p, rt_versions: ~p", 
+                [ rt_config:get(rt_nodes), rt_config:get(rt_nodenames), rt_config:get(rt_versions) ]),
+
     [AllocatedNodeIds, AllocatedNodeMap, VersionMap].
 
 version_to_config(Config) when is_tuple(Config)-> Config;
