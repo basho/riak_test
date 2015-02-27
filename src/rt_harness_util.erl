@@ -93,18 +93,18 @@ deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
         fun(Node) ->
                 rt_harness:update_app_config(Node, Version, Config)
         end,
-    rt:pmap(ConfigUpdateFun, NodeIds),
+    rt2:pmap(ConfigUpdateFun, NodeIds),
 
     %% Start nodes
     RunRiakFun =
         fun(Node) ->
             rt_harness:run_riak(Node, Version, "start")
         end,
-    rt:pmap(RunRiakFun, NodeIds),
+    rt2:pmap(RunRiakFun, NodeIds),
 
     %% Ensure nodes started
     lager:debug("Wait until pingable: ~p", [NodeIds]),
-    [ok = rt:wait_until_pingable(rt_node:node_name(NodeId, NodeMap))
+    [ok = rt2:wait_until_pingable(rt_node:node_name(NodeId, NodeMap))
                                  || NodeId <- NodeIds],
 
     %% TODO Rubbish! Fix this.
@@ -114,7 +114,7 @@ deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
 
     %% We have to make sure that riak_core_ring_manager is running
     %% before we can go on.
-    [ok = rt:wait_until_registered(rt_node:node_name(NodeId, NodeMap),
+    [ok = rt2:wait_until_registered(rt_node:node_name(NodeId, NodeMap),
                                    riak_core_ring_manager)
      || NodeId <- NodeIds],
 
@@ -129,7 +129,7 @@ deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
 
     %% Wait for services to start
     lager:debug("Waiting for services ~p to start on ~p.", [Services, NodeIds]),
-    [ ok = rt:wait_for_service(rt_node:node_name(NodeId, NodeMap), Service)
+    [ ok = rt2:wait_for_service(rt_node:node_name(NodeId, NodeMap), Service)
       || NodeId <- NodeIds,
          Service <- Services ],
 
@@ -170,7 +170,7 @@ interactive_loop(Port, Expected) ->
                         [] -> [{done, "done"}|[]];
                         E -> E
                     end,
-                    case {Type, rt:str(X, Text)} of
+                    case {Type, rt2:str(X, Text)} of
                         {expect, true} ->
                             RemainingExpect;
                         {expect, false} ->
@@ -225,7 +225,7 @@ spawn_cmd(Cmd, Opts) ->
     Port.
 
 wait_for_cmd(Port) ->
-    rt:wait_until(node(),
+    rt2:wait_until(node(),
                   fun(_) ->
                           receive
                               {Port, Msg={exit_status, _}} ->
