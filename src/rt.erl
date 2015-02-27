@@ -241,7 +241,7 @@ get_https_conn_info(Node) ->
 deploy_nodes(Versions) when is_list(Versions) ->
     deploy_nodes(Versions, [riak_kv]);
 deploy_nodes(NumNodes) when is_integer(NumNodes) ->
-    [NodeIds, NodeMap, _] = allocate_nodes(NumNodes),
+    [NodeIds, NodeMap, _] = allocate_nodes(NumNodes, head),
     deploy_nodes(NodeIds, NodeMap, head, rt_properties:default_config(), [riak_kv]).
 
 %% @doc Deploy a set of freshly installed Riak nodes with the given
@@ -269,13 +269,16 @@ deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
                 [],
                 NodeMap).
 
-allocate_nodes(NumNodes) ->
-    [AvailableNodeIds, AvailableNodeMap, VersionMap] = rt_harness:available_resources(),
-    lager:debug("Available node ids ~p, node map ~p, and version map ~p.",
-                [AvailableNodeIds, AvailableNodeMap, VersionMap]),
+allocate_nodes(NumNodes, Version) when is_atom(Version) ->
+    allocate_nodes(NumNodes, atom_to_list(Version));
+allocate_nodes(NumNodes, Version) ->
+    [_, AvailableNodeMap, VersionMap] = rt_harness:available_resources(),
+    lager:debug("Available node map ~p and version map ~p.", [AvailableNodeMap, VersionMap]),
 
+    AvailableNodeIds = proplists:get_value(Version, VersionMap),
+    lager:debug("Availabe node ids ~p for version ~p", [AvailableNodeIds, Version]),
     AllocatedNodeIds = lists:sublist(AvailableNodeIds, NumNodes),
-    lager:debug("Allocated node ids ~p with version map ~p", [AllocatedNodeIds, VersionMap]),
+    lager:debug("Allocated node ids ~p", [AllocatedNodeIds]),
 
     AllocatedNodeMap = lists:foldl(
                          fun(NodeId, NodeMap) ->
@@ -284,15 +287,10 @@ allocate_nodes(NumNodes) ->
                          end,
                          [],
                          AllocatedNodeIds),
-    NodeVersionMap = orddict:fold(
-                       fun(Version, Nodes, NodeVersionMap) ->
-                               lists:foldl(
-                                 fun(Node, Acc) -> orddict:append(Node, Version, Acc) end,
-                                 NodeVersionMap,
-                                 Nodes)
-                       end,
+    NodeVersionMap = lists:foldl(
+                       fun(NodeId, Acc) -> orddict:append(NodeId, Version, Acc) end,
                        orddict:new(),
-                       VersionMap),
+                       AllocatedNodeIds),
                                
     lager:debug("Allocated node map ~p", [AllocatedNodeMap]),
 
@@ -301,8 +299,9 @@ allocate_nodes(NumNodes) ->
     rt_config:set(rt_nodenames, AllocatedNodeMap),
     rt_config:set(rt_versions, NodeVersionMap),
 
-    lager:debug("Set rt_nodes: ~p, rt_nodenames: ~p, rt_versions: ~p", 
-                [ rt_config:get(rt_nodes), rt_config:get(rt_nodenames), rt_config:get(rt_versions) ]),
+    lager:debug("Set rt_nodes: ~p", [ rt_config:get(rt_nodes) ]),
+    lager:debug("Set rt_nodenames: ~p", [ rt_config:get(rt_nodenames) ]),
+    lager:debug("Set rt_versions: ~p", [ rt_config:get(rt_versions) ]),
 
     [AllocatedNodeIds, AllocatedNodeMap, VersionMap].
 
