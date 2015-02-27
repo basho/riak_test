@@ -46,7 +46,7 @@ compile(Config, AppFile) ->
         false -> ok;
         _ -> riak_test_compile(Config, AppFile)
     end.
-    
+
 rt_run(Config, AppFile) ->
     case should_i_run(Config) of
         false -> ok;
@@ -69,7 +69,7 @@ option(Key, Config) ->
 
 riak_test_clean(Config, _AppFile) ->
     case option(test_output, Config) of
-        {error, not_set} -> 
+        {error, not_set} ->
             io:format("No test_output directory set, check your rebar.config");
         TestOutputDir ->
             io:format("Removing test_output dir ~s~n", [TestOutputDir]),
@@ -77,18 +77,18 @@ riak_test_clean(Config, _AppFile) ->
     end,
     ok.
 
-riak_test_compile(Config, AppFile) ->    
+riak_test_compile(Config, AppFile) ->
     CompilationConfig = compilation_config(Config),
     rebar_erlc_compiler:compile(CompilationConfig, AppFile),
     ok.
-    
+
 riak_test_run(Config, _AppFile) ->
     RiakTestConfig = rebar_config:get_global(Config, config, "rtdev"),
     Test = rebar_config:get_global(Config, test, ""),
     code:add_pathsz([rebar_utils:ebin_dir(), option(test_output, Config)]),
-    riak_test:main(["-c", RiakTestConfig, "-t", Test]),
+    riak_test_escript:main(["-c", RiakTestConfig, "-t", Test]),
     ok.
-    
+
 compilation_config(Conf) ->
     C1 = rebar_config:set(Conf, riak_test, undefined),
     C2 = rebar_config:set(C1, plugins, undefined),
