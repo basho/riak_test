@@ -280,24 +280,29 @@ allocate_nodes(NumNodes, Version) ->
     AllocatedNodeIds = lists:sublist(AvailableNodeIds, NumNodes),
     lager:debug("Allocated node ids ~p", [AllocatedNodeIds]),
 
-    AllocatedNodeMap = lists:foldl(
-                         fun(NodeId, NodeMap) ->
+    [AllocatedNodeMap, NodeNames, _] = lists:foldl(
+                         fun(NodeId, [AllocatedNodeMapAcc, NodeNamesAcc, Number]) ->
                                  NodeName = proplists:get_value(NodeId, AvailableNodeMap),
-                                 [{NodeId, NodeName}|NodeMap]
+                                 [[{NodeId, NodeName}|AllocatedNodeMapAcc], 
+                                  orddict:append(NodeId, Number, NodeNamesAcc),  
+                                  Number + 1]
                          end,
-                         [],
+                         [[], orddict:new(), 1],
                          AllocatedNodeIds),
-    NodeVersionMap = lists:foldl(
-                       fun(NodeId, Acc) -> orddict:append(NodeId, Version, Acc) end,
-                       orddict:new(),
-                       AllocatedNodeIds),
+    lager:debug("AllocatedNodeMap: ~p", [AllocatedNodeMap]),
+    [Nodes, Versions] = lists:foldl(
+                       fun({NodeId, NodeName}, [NodesAcc, VersionsAcc]) -> 
+                               [orddict:append(NodeName, NodeId, NodesAcc),
+                               orddict:append(NodeName, Version, VersionsAcc)]
+                       end,
+                       [orddict:new(), orddict:new()],
+                       AllocatedNodeMap),
                                
     lager:debug("Allocated node map ~p", [AllocatedNodeMap]),
 
-    rt_config:set(rt_nodes, AllocatedNodeMap),
-    %% May be incorrect -- see rtdev:deploy_nodes ... -jsb
-    rt_config:set(rt_nodenames, AllocatedNodeMap),
-    rt_config:set(rt_versions, NodeVersionMap),
+    rt_config:set(rt_nodes, Nodes),
+    rt_config:set(rt_nodenames, NodeNames),
+    rt_config:set(rt_versions, Versions),
 
     lager:debug("Set rt_nodes: ~p", [ rt_config:get(rt_nodes) ]),
     lager:debug("Set rt_nodenames: ~p", [ rt_config:get(rt_nodenames) ]),

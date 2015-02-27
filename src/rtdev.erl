@@ -83,7 +83,9 @@ gitcmd(Path, Cmd) ->
                   [Path, Path, Cmd]).
 
 %% @doc Create a command-line command for riak-admin
--spec riak_admin_cmd(Path :: string(), N :: string(), Args :: string()) -> string().
+-spec riak_admin_cmd(Path :: string(), N :: integer() | string(), Args :: string()) -> string().
+riak_admin_cmd(Path, N, Args) when is_integer(N) ->
+    riak_admin_cmd(Path, node_short_name_to_name(N), Args);
 riak_admin_cmd(Path, N, Args) ->
     Quoted =
         lists:map(fun(Arg) when is_list(Arg) ->
@@ -93,7 +95,8 @@ riak_admin_cmd(Path, N, Args) ->
                   end, Args),
     ArgStr = string:join(Quoted, " "),
     ExecName = rt_config:get(exec_name, "riak"),
-    io_lib:format("~s/~s/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
+    {NodeId, _} = extract_node_id_and_name(N),
+    io_lib:format("~s/~s/bin/~s-admin ~s", [Path, NodeId, ExecName, ArgStr]).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
@@ -104,15 +107,16 @@ run_git(Path, Cmd) ->
 -spec run_riak(Node :: string(), Version :: string(), string()) -> string().
 run_riak(Node, Version, "start") ->
     VersionPath = filename:join(?PATH, Version),
-    RiakCmd = riakcmd(VersionPath, Node, "start"),
+    {NodeId, NodeName} = extract_node_id_and_name(Node),
+    RiakCmd = riakcmd(VersionPath, NodeId, "start"),
     lager:info("Running: ~s", [RiakCmd]),
     CmdRes = os:cmd(RiakCmd),
     %% rt_cover:maybe_start_on_node(?DEV(Node), Version),
     %% Intercepts may load code on top of the cover compiled
     %% modules. We'll just get no coverage info then.
-    case rt_intercept:are_intercepts_loaded(?DEV(Node)) of
+    case rt_intercept:are_intercepts_loaded(NodeName) of
         false ->
-            ok = rt_intercept:load_intercepts([?DEV(Node)]);
+            ok = rt_intercept:load_intercepts([NodeName]);
         true ->
             ok
     end,
@@ -195,9 +199,7 @@ so_fresh_so_clean(VersionMap) ->
 available_resources() ->
     VersionMap = [{Version, harness_node_ids(Version)} || Version <- versions()],
     NodeIds = harness_node_ids(rt_config:get(default_version, "head")),
-    lager:debug("Available Node IDs: ~p", [NodeIds]),
     NodeMap = lists:zip(NodeIds, harness_nodes(NodeIds)),
-    lager:debug("Available Node Map: ~p", [NodeMap]),
     [NodeIds, NodeMap, VersionMap].
  
 
@@ -699,8 +701,7 @@ stop(Node, Version) ->
     end.
 
 start(Node, Version) ->
-    {NodeId, _} = extract_node_id_and_name(Node),
-    run_riak(NodeId, Version, "start"),
+    run_riak(Node, Version, "start"),
     ok.
 
 attach(Node, Expected) ->
@@ -787,9 +788,8 @@ interactive_loop(Port, Expected) ->
     end.
 
 admin(Node, Args, Options) ->
-    {NodeId, _} = extract_node_id_and_name(Node),
-    Path = relpath(node_version(NodeId)),
-    Cmd = riak_admin_cmd(Path, NodeId, Args),
+    Path = relpath(node_version(Node)),
+    Cmd = riak_admin_cmd(Path, Node, Args),
     lager:info("Running: ~s", [Cmd]),
     Result = execute_admin_cmd(Cmd, Options),
     lager:info("~p", [Result]),
@@ -832,7 +832,9 @@ node_short_name(Node) when is_atom(Node) ->
     orddict:fetch(Node, NodeMap).
 
 %% @doc Return the node version from rt_versions based on full node name
--spec node_version(atom()) -> string().
+-spec node_version(atom() | integer()) -> string().
+node_version(Node) when is_integer(Node) ->
+    node_version(node_short_name_to_name(Node));
 node_version(Node) ->
     VersionMap = rt_config:get(rt_versions),
     orddict:fetch(Node, VersionMap).
@@ -966,6 +968,10 @@ maybe_contains(Pos) when Pos > 0 ->
 maybe_contains(_) ->
     false.
 
+-spec node_short_name_to_name(integer()) -> atom().
+node_short_name_to_name(N) ->
+   ?DEV("dev" ++ integer_to_list(N)).
+
 -ifdef(TEST).
 
 extract_node_id_and_name_test() ->
@@ -983,5 +989,8 @@ maybe_contains_test() ->
 contains_test() ->
     ?assertEqual(true, contains("dev2@127.0.0.1", $@)),
     ?assertEqual(false, contains("dev2", $@)).
+
+node_short_name_to_name_test() ->
+    ?assertEqual('dev1@127.0.0.1', node_short_name_to_name(1)).
 
 -endif.
