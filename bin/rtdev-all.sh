@@ -149,7 +149,14 @@ build()
     echo " - Building stagedevrel in $SRCDIR (this could take a while)"
     cd $SRCDIR
 
-	$RUN make locked-deps
+    # For non-tagged builds (i.e. head), use make deps.  Otherwise, use
+    # make locked-deps for tagged builds ...
+    if [ "$SRCDIR" == "head" ]; then
+      make deps
+    else
+      $RUN make locked-deps
+    fi
+
     $RUN make all stagedevrel
     RES=$?
     if [ "$RES" -ne 0 ]; then
