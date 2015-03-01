@@ -32,10 +32,10 @@ confirm() ->
              ]}
     ],
 
-    lager:info( "Building Clusters A and B" ),
+    lager:info("Building Clusters A and B"),
     [ANodes, BNodes] = rt:build_clusters([{ClusterASize, Conf}, {NumNodes - ClusterASize, Conf}]),
 
-    %lager:info( "Skipping all tests" ),
+    %lager:info("Skipping all tests"),
     replication(ANodes, BNodes, false),
     pass.
 
@@ -43,31 +43,31 @@ confirm() ->
 replication(ANodes, BNodes, Connected) ->
 
     log_to_nodes(ANodes ++ BNodes, "Starting replication2 test"),
-    lager:info( "Connection Status: ~p", [Connected] ),
+    lager:info("Connection Status: ~p", [Connected]),
 
-    lager:info( "Real Time Full Sync Replication test" ),
-    real_time_replication_test( ANodes, BNodes, Connected ),
+    lager:info("Real Time Full Sync Replication test"),
+    real_time_replication_test(ANodes, BNodes, Connected),
  
-    lager:info( "Disconnected cluster Full Sync test" ),
-    disconnected_cluster_fsync_test( ANodes, BNodes ),
+    lager:info("Disconnected cluster Full Sync test"),
+    disconnected_cluster_fsync_test(ANodes, BNodes),
 
-    lager:info( "Failover tests" ),
-    master_failover_test( ANodes, BNodes ),
+    lager:info("Failover tests"),
+    master_failover_test(ANodes, BNodes),
 
-    lager:info( "Network Partition test" ),
-    network_partition_test( ANodes, BNodes ),
+    lager:info("Network Partition test"),
+    network_partition_test(ANodes, BNodes),
 
-    lager:info( "Bucket Sync tests" ),
-    bucket_sync_test( ANodes, BNodes ), 
+    lager:info("Bucket Sync tests"),
+    bucket_sync_test(ANodes, BNodes), 
 
-    lager:info( "Offline queueing tests" ),
-    offline_queueing_tests( ANodes, BNodes ),
+    lager:info("Offline queueing tests"),
+    offline_queueing_tests(ANodes, BNodes),
 
-    lager:info( "Protocol Buffer writes during shutdown test" ),
-    pb_write_during_shutdown( ANodes, BNodes ),
+    lager:info("Protocol Buffer writes during shutdown test"),
+    pb_write_during_shutdown(ANodes, BNodes),
 
-    lager:info( "HTTP writes during shutdown test" ),
-    http_write_during_shutdown( ANodes, BNodes ),
+    lager:info("HTTP writes during shutdown test"),
+    http_write_during_shutdown(ANodes, BNodes),
 
     lager:info("Tests passed"),
 
@@ -80,9 +80,9 @@ replication(ANodes, BNodes, Connected) ->
 %%        Write some keys with full sync enabled.
 %%        Check for keys written prior to full sync.
 %%        Check all keys.
-real_time_replication_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected ) ->
+real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-real_time_replication_test">>,
 
     case Connected of
@@ -177,9 +177,9 @@ real_time_replication_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected 
 %%        Write 2000 keys to Cluster "A".
 %%        Reconnect Clusters "A" and "B" and enable real time and full sync.
 %%        Read 2000 keys from Cluster "B".
-disconnected_cluster_fsync_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
+disconnected_cluster_fsync_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
   
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-discon_fsync_replication_tests">>,
     {ok, {_IP, BFirstPort}} = rpc:call(BFirst, application, get_env,[riak_core, cluster_mgr]),
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
@@ -225,9 +225,9 @@ disconnected_cluster_fsync_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
 %%        Get new Cluster "B" leader.
 %%        Write 100 keys to Cluster "A".
 %%        Verify 100 keys are replicated to Cluster "B".
-master_failover_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
+master_failover_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
   
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-master_failover_test">>,
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
@@ -303,9 +303,9 @@ master_failover_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
 %%        Reset cookie on disconnected node and reconnct.
 %%        Write 2 keys to node that was reconnected.
 %%        Verify replication of keys to Cluster "B".
-network_partition_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
+network_partition_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-network_partition_test">>,
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
@@ -327,8 +327,8 @@ network_partition_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
     rpc:call(LeaderA, erlang, set_cookie, [LeaderA, NewCookie]),
 
-    [ rpc:call(LeaderA, erlang, disconnect_node, [Node]) || Node <- ANodes -- [LeaderA]],
-    [ rpc:call(Node, erlang, disconnect_node, [LeaderA]) || Node <- ANodes -- [LeaderA]],
+    [rpc:call(LeaderA, erlang, disconnect_node, [Node]) || Node <- ANodes -- [LeaderA]],
+    [rpc:call(Node, erlang, disconnect_node, [LeaderA]) || Node <- ANodes -- [LeaderA]],
 
     repl_util:wait_until_new_leader(hd(ANodes -- [LeaderA]), LeaderA),
     InterimLeader = rpc:call(LeaderA, riak_core_cluster_mgr, get_leader, []),
@@ -336,8 +336,8 @@ network_partition_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
 
     rpc:call(LeaderA, erlang, set_cookie, [LeaderA, OldCookie]),
 
-    [ rpc:call(LeaderA, net_adm, ping, [Node]) || Node <- ANodes -- [LeaderA]],
-    [ rpc:call(Node, net_adm, ping, [LeaderA]) || Node <- ANodes -- [LeaderA]],
+    [rpc:call(LeaderA, net_adm, ping, [Node]) || Node <- ANodes -- [LeaderA]],
+    [rpc:call(Node, net_adm, ping, [LeaderA]) || Node <- ANodes -- [LeaderA]],
 
     %% There's no point in writing anything until the leaders converge, as we
     %% can drop writes in the middle of an election
@@ -375,9 +375,9 @@ network_partition_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
 %%        Verify that the Real time keys replicated
 %%        Verify that the original real time keys did not replicate
 %%        Verify that the No replication bucket didn't replicate.
-bucket_sync_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
+bucket_sync_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     FullsyncOnly = <<TestHash/binary, "-fullsync_only">>,
     RealtimeOnly = <<TestHash/binary, "-realtime_only">>,
     NoRepl = <<TestHash/binary, "-no_replication">>,
@@ -472,9 +472,9 @@ bucket_sync_test( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
 %%        Verify that 100 keys are NOT on Cluster "B"
 %%        Re-enable real time on Cluster "A"
 %%        Verify that 100 keys are available on Cluster "B"
-offline_queueing_tests( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
+offline_queueing_tests([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-offline_queueing_test">>,
 
     log_to_nodes(ANodes ++ BNodes, "Testing offline realtime queueing"),
@@ -542,11 +542,12 @@ offline_queueing_tests( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
 %%        Spawn background process to stop Cluster "A" nodes
 %%        Write 10,000 keys to Cluster "A"
 %%        Verify that there are and equal number of write failures on Cluster "A" and read failures on Cluster "B"
-pb_write_during_shutdown( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+pb_write_during_shutdown([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
+    
+    TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-pb_write_shutdown_test">>,
 
-    log_to_nodes( ANodes ++ BNodes, "Testing protocol buffer writes during shutdown" ),
+    log_to_nodes(ANodes ++ BNodes, "Testing protocol buffer writes during shutdown"),
 
     LeaderA = rpc:call( AFirst, riak_core_cluster_mgr, get_leader, []),
     Target = hd( ANodes -- [LeaderA]),
@@ -613,14 +614,15 @@ pb_write_during_shutdown( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
 %%        Spawn background process to stop Cluster "A" nodes
 %%        Write 10,000 keys to Cluster "A"
 %%        Verify that there are and equal number of write failures on Cluster "A" and read failures on Cluster "B"
-http_write_during_shutdown( [AFirst|_] = ANodes, [BFirst|_] = BNodes ) ->
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+http_write_during_shutdown([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
+    
+    TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-http_write_shutdown_test">>,
 
-    log_to_nodes( ANodes ++ BNodes, "Testing http writes during shutdown" ),
+    log_to_nodes(ANodes ++ BNodes, "Testing http writes during shutdown"),
 
-    LeaderA = rpc:call( AFirst, riak_core_cluster_mgr, get_leader, []),
-    Target = hd( ANodes -- [LeaderA]),
+    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    Target = hd(ANodes -- [LeaderA]),
 
     ConnInfo = proplists:get_value(Target, rt:connection_info([Target])),
     {IP, Port} = proplists:get_value(http, ConnInfo),
