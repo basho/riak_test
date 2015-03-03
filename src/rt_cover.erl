@@ -188,6 +188,7 @@ maybe_start_on_node(Node, Version) ->
             ok;
         true ->
             lager:debug("Starting cover on node ~p", [Node]),
+            rt:wait_until_pingable(Node),
             {ok, _Node} = cover:start(Node),
             ok
     end.
