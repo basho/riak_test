@@ -35,6 +35,8 @@
 ]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
+-define(CONFIG_NAMESPACE, riak_test).
+-define(RECEIVE_WAIT_TIME_KEY, rt_max_recieve_wait_time).
 
 %% @doc Get the value of an OS Environment variable. The arity 1 version of
 %%      this function will fail the test if it is undefined.
@@ -82,23 +84,25 @@ load_dot_config(ConfigName, ConfigFile) ->
 set(Key, Value) ->
     ok = application:set_env(riak_test, Key, Value).
 
+
+-spec get(rt_max_wait_time | atom()) -> any().
+get(rt_max_wait_time) ->
+    lager:info("rt_max_wait_time is deprecated. Please use rt_max_receive_wait_time instead."),
+    rt_config:get(?RECEIVE_WAIT_TIME_KEY);
 get(Key) ->
-    case kvc:path(Key, application:get_all_env(riak_test)) of
+    case kvc:path(Key, application:get_all_env(?CONFIG_NAMESPACE)) of
         [] ->
             lager:warning("Missing configuration key: ~p", [Key]),
             erlang:error("Missing configuration key", [Key]);
-        Value ->
-            case Key of
-                rt_max_wait_time ->
-                    lager:info("Obsolete key rt_max_wait_time used. Please use rt_max_receive_wait_time instead."),
-                    Value;
-                _ ->
-                    Value
-            end
+        Value -> Value
     end.
 
+-spec get(rt_max_wait_time | atom(), any()) -> any().
+get(rt_max_wait_time, Default) ->
+    lager:info("rt_max_wait_time is deprecated. Please use rt_max_receive_wait_time instead."),
+    get(?RECEIVE_WAIT_TIME_KEY, Default);
 get(Key, Default) ->
-    case kvc:path(Key, application:get_all_env(riak_test)) of
+    case kvc:path(Key, application:get_all_env(?CONFIG_NAMESPACE)) of
         [] -> Default;
         Value -> Value
     end.
@@ -165,3 +169,30 @@ update_app_config(Node, Config) ->
 to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
 char_to_upper(C) -> C.
+
+-ifdef(TEST).
+
+clear(Key) ->
+    application:unset_env(?CONFIG_NAMESPACE, Key).
+
+get_rt_max_wait_time_test() -> 
+    clear(?RECEIVE_WAIT_TIME_KEY),
+
+    ExpectedWaitTime = 10987,
+    ok = set(?RECEIVE_WAIT_TIME_KEY, ExpectedWaitTime),
+    ?assertEqual(ExpectedWaitTime, rt_config:get(?RECEIVE_WAIT_TIME_KEY)),
+    ?assertEqual(ExpectedWaitTime, rt_config:get(rt_max_wait_time)).
+        
+get_rt_max_wait_time_default_test() ->
+    clear(?RECEIVE_WAIT_TIME_KEY),
+
+    DefaultWaitTime = 20564,
+    ?assertEqual(DefaultWaitTime, get(?RECEIVE_WAIT_TIME_KEY, DefaultWaitTime)),
+    ?assertEqual(DefaultWaitTime, get(rt_max_wait_time, DefaultWaitTime)),
+    
+    ExpectedWaitTime = 30421,
+    ok = set(?RECEIVE_WAIT_TIME_KEY, ExpectedWaitTime),
+    ?assertEqual(ExpectedWaitTime, get(?RECEIVE_WAIT_TIME_KEY, DefaultWaitTime)),
+    ?assertEqual(ExpectedWaitTime, get(rt_max_wait_time, DefaultWaitTime)).
+
+-endif.
