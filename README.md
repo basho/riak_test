@@ -175,7 +175,8 @@ to tell riak_test about them. The method of choice is to create a
     {giddyup_host, "localhost:5000"},
     {giddyup_user, "user"},
     {giddyup_password, "password"},
-    {rt_max_wait_time, 600000},
+    {test_timeout, 1800000},
+    {rt_max_receive_wait_time, 600000},
     {rt_retry_delay, 1000},
     {rt_harness, rtdev},
     {rt_scratch_dir, "/tmp/riak_test_scratch"},
@@ -193,7 +194,7 @@ to tell riak_test about them. The method of choice is to create a
 
 The `default` section of the config file will be overridden by the config
 name you specify. For example, running the command below will use an
-`rt_retry_delay` of 500 and an `rt_max_wait_time` of 180000. If your 
+`rt_retry_delay` of 500 and an `rt_max_receive_wait_time` of 180000. If your
 defaults contain every option you need, you can run riak_test without
 the `-c` argument.
 
@@ -202,8 +203,62 @@ the `-c` argument.
 your config file before running riak_test.
 
 Some configuration parameters:
- 
-#### rt_default_config
+
+#### basho_bench
+Path to local installation of `basho_bench`; used by performance testing.
+
+#### giddyup_host
+This is a hostname and port number for communicating with Basho's internal build
+reporting tool, Giddyup.
+
+#### giddyup_password
+String used as a password when communicating with Giddyup.
+
+#### giddyup_user
+String used to identify the user when communicating with Giddyup.
+
+#### platform
+String identifying the current testing platform when reporting to Giddyup.
+Current values include `centos-5-64`, `centos-6-64`, `fedora-17-64`,
+`freebsd-9-64`, `osx-64`, `solaris-10u9-64`, `ubuntu-1004-64`, `ubuntu-1204-64`
+
+#### spam_dir
+Name of a `tar` file containing ancientSPAM e-mail used as a data load
+for a few tests.
+
+#### rt_harness
+Which testing harness should be used.  Current valid values include
+- `rtdev` - Local devrel
+- `rtssh` - Remote host
+- `rtperf` - Performance testing
+
+#### rt_max_receive_wait_time
+Number of milliseconds allowed for a `receive` operation to complete.
+
+#### rt_scratch_dir
+Path to scratch directory used by `riak_test`.  It's used for downloading
+external files and for cleaning out the `data` directory between runs.
+
+#### rt_retry_delay
+Number of milliseconds between attempts to send a message.
+
+#### test_timeout
+Number of milliseconds allowed for a single test to run.
+
+#### rtdev
+This is the devrel configuration section.
+
+##### rt_project
+The name of the current project name; used in reporting to Giddyup.
+
+##### root_path
+Path to the top of the installed devrel instances.
+
+##### default_version
+If specific versions of Riak are not specified, this one is tested.
+The default value is `head` which is typically the head of `develop`.
+
+##### rt_default_config
 Default configuration parameters that will be used for nodes deployed by riak_test.  Tests can
 override these.
 

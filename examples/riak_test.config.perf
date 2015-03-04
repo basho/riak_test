@@ -2,7 +2,8 @@
    {rt_deps, ["/mnt/riak_ee/deps"]},
    %% should be really long to allow full bitcasks to
    %% come up
-   {rt_max_wait_time, 600000000000000},
+   {rt_max_receive_wait_time, 600000000000000},
+   {test_timeout, 600000000000000},
    {basho_bench, "/mnt/basho_bench"},
    {basho_bench_escript, "/usr/local/erlang-r16b02/bin/escript"},
    {basho_bench_statedir, "/tmp/bb_seqstate/"},
@@ -11,8 +12,6 @@
    {load_intercepts, false},
    {perf_builds, "/mnt/perf_builds"},
    {perf_loadgens, ["bench101.aws"]},
-   {rtdev_path, [{root, "/mnt/rt/riak_ee"},
-      {current, "/mnt/rt/riak_ee/riak-ee-2.0.0rc1"},
-      {previous, "/mnt/rt/riak_ee/riak-ee-1.4.8"},
-      {legacy, "/mnt/rt/riak_ee/riak-ee-1.3.4"}]}
+   {root_path, "/mnt/rt/riak"},
+   {default_version, head}
 ]}.

@@ -88,7 +88,13 @@ get(Key) ->
             lager:warning("Missing configuration key: ~p", [Key]),
             erlang:error("Missing configuration key", [Key]);
         Value ->
-            Value
+            case Key of
+                rt_max_wait_time ->
+                    lager:info("Obsolete key rt_max_wait_time used. Please use rt_max_receive_wait_time instead."),
+                    Value;
+                _ ->
+                    Value
+            end
     end.
 
 get(Key, Default) ->

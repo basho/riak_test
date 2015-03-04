@@ -145,7 +145,10 @@ Erlang term based config files. The references `rtdev.config' file above:
 {rt_deps, ["/Users/jtuple/basho/riak/deps"]}.
 
 %% Maximum time in milliseconds for wait_until to wait
-{rt_max_wait_time, 180000}.
+{rt_max_receive_wait_time, 180000}.
+
+%% Maximum time in milliseconds allowed for a single test
+{test_timeout, 1800000}.
 
 %% Delay between each retry in wait_until
 {rt_retry_delay, 500}.

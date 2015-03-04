@@ -780,7 +780,7 @@ interactive_loop(Port, Expected) ->
             %% We've met every expectation. Yay! If not, it means we've exited before
             %% something expected happened.
             ?assertEqual([], Expected)
-        after rt_config:get(rt_max_wait_time) ->
+        after rt_config:get(rt_max_receive_wait_time) ->
             %% interactive_loop is going to wait until it matches expected behavior
             %% If it doesn't, the test should fail; however, without a timeout it
             %% will just hang forever in search of expected behavior. See also: Parenting

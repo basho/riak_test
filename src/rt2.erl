@@ -221,7 +221,7 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
         {Port, {exit_status, Status}} ->
             catch port_close(Port),
             {Status, Buffer}
-    after rt_config:get(rt_max_wait_time) ->
+    after rt_config:get(rt_max_receive_wait_time) ->
             {-1, Buffer}
     end.
 
@@ -246,7 +246,7 @@ load_modules_on_nodes([Module | MoreModules], Nodes) when is_list(Nodes) ->
 
 is_mixed_cluster(Nodes) when is_list(Nodes) ->
     %% If the nodes are bad, we don't care what version they are
-    {Versions, _BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt_config:get(rt_max_wait_time)),
+    {Versions, _BadNodes} = rpc:multicall(Nodes, init, script_id, [], rt_config:get(rt_max_receive_wait_time)),
     length(lists:usort(Versions)) > 1;
     is_mixed_cluster(Node) ->
     Nodes = rpc:call(Node, erlang, nodes, []),
@@ -280,10 +280,10 @@ product(Node) ->
 %% @doc Utility function used to construct test predicates. Retries the
 %%      function `Fun' until it returns `true', or until the maximum
 %%      number of retries is reached. The retry limit is based on the
-%%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
+%%      provided `rt_max_receive_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
 wait_until(Fun) when is_function(Fun) ->
-    MaxTime = rt_config:get(rt_max_wait_time),
+    MaxTime = rt_config:get(rt_max_receive_wait_time),
     Delay = rt_config:get(rt_retry_delay),
     Retry = MaxTime div Delay,
     wait_until(Fun, Retry, Delay).
@@ -448,7 +448,7 @@ wait_until_unpingable(Node) ->
     %% riak stop will kill -9 after 5 mins, so we try to wait at least that
     %% amount of time.
     Delay = rt_config:get(rt_retry_delay),
-    Retry = lists:max([360000, rt_config:get(rt_max_wait_time)]) div Delay,
+    Retry = lists:max([360000, rt_config:get(rt_max_receive_wait_time)]) div Delay,
     lager:info("Wait until ~p is not pingable for ~p seconds with a retry of ~p", 
                [Node, Delay, Retry]),
     case wait_until(F, Retry, Delay) of

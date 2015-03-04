@@ -483,7 +483,7 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
         {Port, {exit_status, Status}} ->
             catch port_close(Port),
             {Status, Buffer}
-    after rt:config(rt_max_wait_time) ->
+    after rt:config(rt_max_receive_wait_time) ->
             {-1, Buffer}
     end.
 
@@ -511,7 +511,7 @@ is_ready(Node) ->
 %% @doc Utility function used to construct test predicates. Retries the
 %%      function `Fun' until it returns `true', or until the maximum
 %%      number of retries is reached. The retry limit is based on the
-%%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
+%%      provided `rt_max_receive_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
 wait_until(Fun) when is_function(Fun) ->
     rt2:wait_until(Fun).

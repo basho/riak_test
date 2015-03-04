@@ -53,7 +53,7 @@ wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
 
 -spec bucket_type_visible([atom()], binary()|{binary(), binary()}) -> boolean().
 bucket_type_visible(Nodes, Type) ->
-    MaxTime = rt_config:get(rt_max_wait_time),
+    MaxTime = rt_config:get(rt_max_receive_wait_time),
     IsVisible = fun erlang:is_list/1,
     {Res, NodesDown} = rpc:multicall(Nodes, riak_core_bucket_type, get, [Type], MaxTime),
     NodesDown == [] andalso lists:all(IsVisible, Res).
@@ -65,7 +65,7 @@ wait_until_bucket_type_visible(Nodes, Type) ->
 -spec see_bucket_props([atom()], binary()|{binary(), binary()},
                        proplists:proplist()) -> boolean().
 see_bucket_props(Nodes, Bucket, ExpectProps) ->
-    MaxTime = rt_config:get(rt_max_wait_time),
+    MaxTime = rt_config:get(rt_max_receive_wait_time),
     IsBad = fun({badrpc, _}) -> true;
                ({error, _}) -> true;
                (Res) when is_list(Res) -> false

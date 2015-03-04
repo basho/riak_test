@@ -11,7 +11,8 @@
   {env, [
     {platform, undefined},
     {rt_scratch_dir, "/tmp/riak_test_scratch"},
-    {rt_max_wait_time, 180000},
+    {rt_max_receive_wait_time, 600000},
+    {test_timeout, 1800000},
     {rt_retry_delay, 500},
     {rt_harness, rtdev},
     {java, [{fat_be_url, "http://riak-java-client.s3.amazonaws.com/riak-client-1.4.2-jar-with-dependencies-and-tests.jar"},
