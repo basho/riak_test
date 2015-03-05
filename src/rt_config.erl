@@ -36,7 +36,7 @@
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(CONFIG_NAMESPACE, riak_test).
--define(RECEIVE_WAIT_TIME_KEY, rt_max_recieve_wait_time).
+-define(RECEIVE_WAIT_TIME_KEY, rt_max_receive_wait_time).
 
 %% @doc Get the value of an OS Environment variable. The arity 1 version of
 %%      this function will fail the test if it is undefined.
