@@ -479,6 +479,16 @@ parse_webhook(Props) ->
             undefined
     end.
 
+test_summary_format_time(Milliseconds) ->
+    Mills = trunc(((Milliseconds / 1000000) - (Milliseconds div 1000000)) * 1000000),
+    TotalSecs = (Milliseconds - Mills) div 1000000,
+    TotalMins = TotalSecs div 60,
+    Hours = TotalSecs div 3600,
+    Secs = TotalSecs - (TotalMins * 60),
+    Mins = TotalMins - (Hours * 60),
+    list_to_binary(io_lib:format("~ph ~pm ~p.~ps", [Hours, Mins, Secs, Mills])).
+
+
 test_summary_fun({Test, pass, _}, {{Pass, _Fail, _Skipped}, Width}) ->
     TestNameLength = length(atom_to_list(Test)),
     UpdWidth =
@@ -514,9 +524,9 @@ format_test_row({Test, Result, Duration}, _Width) ->
     TestString = atom_to_list(Test),
     case Result of
         {Status, Reason} ->
-            [TestString, Status, Reason, Duration];
+            [TestString, Status, Reason, test_summary_format_time(Duration)];
         pass ->
-            [TestString, "pass", "N/A", Duration]
+            [TestString, "pass", "N/A", test_summary_format_time(Duration)]
     end.
 
 print_summary(TestResults, _CoverResult, Verbose) ->
