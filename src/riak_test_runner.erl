@@ -44,6 +44,7 @@
          handle_event/3,
          handle_sync_event/4,
          handle_info/3,
+         metadata/0,
          terminate/3,
          code_change/4]).
 
@@ -84,6 +85,13 @@ send_event(Pid, Msg) ->
 -spec stop() -> ok | {error, term()}.
 stop() ->
     gen_fsm:sync_send_all_state_event(?MODULE, stop, infinity).
+
+-spec(metadata() -> [{atom(), term()}]).
+%% @doc fetches test metadata from spawned test process
+%% TODO: Remove when test ports are over
+metadata() ->
+    FSMPid = get(test_runner_fsm),
+    gen_fsm:sync_send_all_state_event(FSMPid, metadata_event, infinity).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -132,6 +140,10 @@ handle_event(_Event, StateName, State) ->
 %% the same regardless of the current state.
 -spec handle_sync_event(term(), term(), atom(), #state{}) ->
                                {reply, term(), atom(), #state{}}.
+handle_sync_event(metadata_event, _From, _StateName, State) ->
+    Properties = State#state.properties,
+    MetaData = rt_properties:get(metadata, Properties),
+    {reply, MetaData, ok, State};
 handle_sync_event(_Event, _From, _StateName, _State) ->
     {reply, ok, ok, _State}.
 
@@ -324,7 +336,9 @@ test_fun(old, _Properties, ConfirmMod, ConfirmFun, NotifyPid) ->
 -spec test_fun(function(), pid()) -> function().
 test_fun(ConfirmFun, NotifyPid) ->
     fun() ->
-            %% Exceptions and their handling sucks, but eunit throws
+        %% Store the FSM Pid for use in unported tests
+        put(test_runner_fsm, NotifyPid),
+        %% Exceptions and their handling sucks, but eunit throws
             %% errors `erlang:error' so here we are
             try ConfirmFun() of
                 TestResult ->
