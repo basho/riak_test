@@ -140,12 +140,12 @@ handle_event(_Event, StateName, State) ->
 %% the same regardless of the current state.
 -spec handle_sync_event(term(), term(), atom(), #state{}) ->
                                {reply, term(), atom(), #state{}}.
-handle_sync_event(metadata_event, _From, _StateName, State) ->
+handle_sync_event(metadata_event, _From, StateName, State) ->
     Properties = State#state.properties,
     MetaData = rt_properties:get(metadata, Properties),
-    {reply, MetaData, ok, State};
-handle_sync_event(_Event, _From, _StateName, _State) ->
-    {reply, ok, ok, _State}.
+    {reply, MetaData, StateName, State};
+handle_sync_event(_Event, _From, StateName, _State) ->
+    {reply, ok, StateName, _State}.
 
 handle_info(_Info, StateName, State) ->
     {next_state, StateName, State}.
