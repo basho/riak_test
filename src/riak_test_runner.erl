@@ -160,12 +160,12 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Asynchronous call handling functions for each FSM state
 
 setup(timeout, State=#state{backend_check=false}) ->
-    notify_executor({skipped, invalid_backend}, State),
     cleanup(State),
+    notify_executor({skipped, invalid_backend}, State),
     {stop, normal, State};
 setup(timeout, State=#state{prereq_check=false}) ->
-    notify_executor({fail, prereq_check_failed}, State),
     cleanup(State),
+    notify_executor({fail, prereq_check_failed}, State),
     {stop, normal, State};
 setup(timeout, State=#state{test_type=TestType,
                             test_module=TestModule,
@@ -237,30 +237,45 @@ maybe_execute_test({ok, Properties}, _TestModule, TestType, ConfirmModFun, Start
                               ConfirmModFun,
                               self())),
     State#state{execution_pid=Pid,
+                test_type=TestType,
                 properties=Properties,
                 start_time=StartTime};
-maybe_execute_test(Error, TestModule, _TestType, _ConfirmModFun, StartTime, State) ->
+maybe_execute_test(Error, TestModule, TestType, _ConfirmModFun, StartTime, State) ->
     lager:error("Setup of test ~p failed due to ~p", [TestModule, Error]),
     ?MODULE:send_event(self(), test_result({fail, test_setup_failed})),
-    State#state{start_time=StartTime}.
+    State#state{test_type=TestType,
+                start_time=StartTime}.
     
 
-wait_for_completion(timeout, State) ->
+wait_for_completion(timeout, State=#state{test_module=TestModule,
+                                          test_type=TestType, 
+                                          group_leader=GroupLeader}) ->
     %% Test timed out
-    UpdState = State#state{end_time=os:timestamp()},
-    notify_executor(timeout, UpdState),
+    UpdState = State#state{test_module=TestModule,
+                           test_type=TestType,
+                           group_leader=GroupLeader,
+                           end_time=os:timestamp()},
     cleanup(UpdState),
+    notify_executor(timeout, UpdState),
     {stop, normal, UpdState};
-wait_for_completion({test_result, Result}, State=#state{remaining_versions=[]}) ->
+wait_for_completion({test_result, Result}, State=#state{test_module=TestModule,
+                                                        test_type=TestType,
+                                                        group_leader=GroupLeader,
+                                                        remaining_versions=[]}) ->
     %% TODO: Format results for aggregate test runs if needed. For
     %% upgrade tests with failure return which versions had failure
     %% along with reasons.
-    UpdState = State#state{end_time=os:timestamp()},
-    notify_executor(Result, UpdState),
+    UpdState = State#state{test_module=TestModule,
+                           test_type=TestType,
+                           group_leader=GroupLeader,
+                           end_time=os:timestamp()},
     cleanup(UpdState),
+    notify_executor(Result, UpdState),
     {stop, normal, UpdState};
 wait_for_completion({test_result, Result}, State) ->
     #state{backend=Backend,
+           test_module=TestModule,
+           test_type=TestType,
            test_results=TestResults,
            current_version=CurrentVersion,
            remaining_versions=[NextVersion | RestVersions],
@@ -273,6 +288,8 @@ wait_for_completion({test_result, Result}, State) ->
                                Config,
                                notify_fun(self())),
     UpdState = State#state{test_results=[Result | TestResults],
+                           test_module=TestModule,
+                           test_type=TestType,
                            current_version=NextVersion,
                            remaining_versions=RestVersions},
     {next_state, wait_for_upgrade, UpdState};
@@ -297,6 +314,7 @@ wait_for_upgrade(nodes_upgraded, State) ->
                               ConfirmModFun,
                               self())),
     UpdState = State#state{execution_pid=Pid,
+                           test_type=TestType,
                            properties=UpdProperties},
     {next_state, wait_for_completion, UpdState, TestTimeout};
 wait_for_upgrade(_Event, _State) ->
@@ -444,7 +462,22 @@ notify_fun(Pid) ->
     end.
 
 cleanup(#state{group_leader=OldGroupLeader,
+               test_module=TestModule,
+               test_type=TestType}) when TestType == old ->
+    lager:debug("Cleaning up old style test ~p", [TestModule]),
+    %% Reset the state of the nodes ...
+    rt_harness:setup(),
+    
+    %% Reset the global variables
+    rt_config:set(rt_nodes, []),
+    rt_config:set(rt_nodenames, []),
+    rt_config:set(rt_versions, []),
+
+    riak_test_group_leader:tidy_up(OldGroupLeader);
+cleanup(#state{test_module=TestModule,
+               group_leader=OldGroupLeader,
                properties=Properties}) ->
+    lager:debug("Cleaning up new style test ~p", [TestModule]),
     node_manager:return_nodes(rt_properties:get(node_ids, Properties)),
     riak_test_group_leader:tidy_up(OldGroupLeader).
 
@@ -496,3 +529,4 @@ now_diff(End, Start) ->
 %% Simple function to hide the details of the message wrapping
 test_result(Result) ->
     {test_result, Result}.
+
