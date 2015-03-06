@@ -25,7 +25,8 @@
 
 -define(DEFAULT_RING_SIZE, 16).
 -define(NVAL, 3).
--define(BUCKET, <<"immutable_bucket">>).
+-define(BUCKET_TYPE, <<"immutable">>).
+-define(BUCKET, {?BUCKET_TYPE, <<"bucket">>}).
 
 %%
 %% TODO
@@ -45,27 +46,48 @@ confirm() ->
     %%
     %% Select a random node, and use it to create an immutable bucket
     %%
-    Type = <<"immutable">>,
     Node = lists:nth(random:uniform(length((Nodes))), Nodes),
-    rt:create_and_activate_bucket_type(Node, Type, [{immutable, true}]),
-    rt:wait_until_bucket_type_status(Type, active, Nodes),
-    lager:info("Created immutable bucket type on ~p", [Node]),
+    rt:create_and_activate_bucket_type(Node, ?BUCKET_TYPE, [{fast_path, true}]),
+    rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Nodes),
+    lager:info("Created ~p bucket type on ~p", [?BUCKET_TYPE, Node]),
+    %%
+    %%
+    %%
+    pass = confirm_put(Node),
+    pass = confirm_w(Node, Nodes),
+    pass = confirm_dw(Node, Nodes),
+    pass = confirm_pw(Node, Nodes),
+    pass = confirm_rww(Node, Nodes),
+    pass.
+
+%%
+%% private
+%%
+
+
+confirm_put(Node) ->
     %%
     %% Do a put through a protobuf client connected to the selected node
     %%
     Client = rt:pbc(Node),
-    riakc_pb_socket:put(
+    _Ret = riakc_pb_socket:put(
         Client, riakc_obj:new(
-            {<<"immutable">>, <<"bucket">>}, <<"key">>, <<"value">>
+            ?BUCKET, <<"key">>, <<"value">>
         )
     ),
     %%
     %% verify the result
     %%
-    {ok, Val} = riakc_pb_socket:get(Client, {<<"immutable">>, <<"bucket">>}, <<"key">>),
-    ?assertEqual(riakc_obj:get_value(Val), <<"value">>),
+    {ok, Val} = riakc_pb_socket:get(Client, ?BUCKET, <<"key">>),
+    ?assertEqual(<<"value">>, riakc_obj:get_value(Val)),
+    lager:info("confirm_put...ok"),
     pass.
 
+
+confirm_w(_Node, _Nodes) -> unimplemented.
+confirm_dw(_Node, _Nodes) -> unimplemented.
+confirm_pw(_Node, _Nodes) -> unimplemented.
+confirm_rww(_Node, _Nodes) -> unimplemented.
 
 config(RingSize, NVal) ->
     [
