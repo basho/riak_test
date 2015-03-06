@@ -32,6 +32,7 @@ get_deps() ->
     lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
 
 setup_harness(_Test, _Args) ->
+    confirm_build_type(rt_config:get(build_type, oss)),
     Path = relpath(root),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
     rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
@@ -56,6 +57,20 @@ setup_harness(_Test, _Args) ->
                     file:del_dir(PipeDir)
             end, devpaths()),
     ok.
+
+confirm_build_type(BuildType) ->
+    [ok = confirm_build_type(BuildType, Vsn) || Vsn <- [cs_current, cs_previous]].
+
+confirm_build_type(BuildType, Vsn) ->
+    ReplPB = filename:join([relpath(Vsn), "dev/dev1/lib/riak_repl_pb_api*"]),
+    case {BuildType, filelib:wildcard(ReplPB)} of
+        {oss, []} -> ok;
+        {ee,  [_|_]} -> ok;
+        _ ->
+            lager:error("Build type of ~p is not ~p",
+                        [Vsn, BuildType]),
+            {error, {build_type_mismatch, Vsn}}
+    end.
 
 relpath(Vsn) ->
     Path = ?BUILD_PATHS,
