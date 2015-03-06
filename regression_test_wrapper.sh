@@ -8,6 +8,6 @@ if [ -z $1 ]; then
   exit 1
 fi
 
-TEST_CASES="always_pass_test,verify_riak_stats,verify_down,verify_staged_clustering,verify_membackend,verify_leave"
+TEST_CASES="always_pass_test,verify_riak_stats,verify_down,verify_staged_clustering,verify_membackend,verify_leave,partition_repair"
 
 ./riak_test -c $1 -t $TEST_CASES
