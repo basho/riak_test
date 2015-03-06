@@ -1406,13 +1406,13 @@ post_result(TestResult, Webhook) ->
 
 %% @doc create and immediately activate a bucket type
 create_and_activate_bucket_type(Node, Type, Props) ->
-    rt_bucket_type:create_and_activate_bucket_type(Node, Type, Props).
+    rt_bucket_types:create_and_activate_bucket_type(Node, Type, Props).
 
 wait_until_bucket_type_status(Type, ExpectedStatus, Nodes) ->
-    rt_bucket_type:wait_until_bucket_type_status(Type, ExpectedStatus, Nodes).
+    rt_bucket_types:wait_until_bucket_type_status(Type, ExpectedStatus, Nodes).
 
 wait_until_bucket_type_visible(Nodes, Type) ->
-    rt_bucket_types:wait_until_bucket_type_visble(Nodes, Type).
+    rt_bucket_types:wait_until_bucket_type_visible(Nodes, Type).
 
 wait_until_bucket_props(Nodes, Bucket, Props) ->
     rt_bucket_types:wait_until_bucket_props(Nodes, Bucket, Props).
