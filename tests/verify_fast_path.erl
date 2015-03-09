@@ -54,9 +54,8 @@ confirm() ->
     %%
     %%
     pass = confirm_put(Node),
+    pass = confirm_w(Nodes),
     pass = confirm_pw(Nodes),
-    %pass = confirm_dw(Node, Nodes),
-    %pass = confirm_w(Node, Nodes),
     pass = confirm_rww(Nodes),
     pass.
 
@@ -71,7 +70,7 @@ confirm_put(Node) ->
     pass.
 
 
-confirm_pw(Nodes) ->
+confirm_w(Nodes) ->
     %%
     %% split the cluster into 2 paritions [dev1, dev2, dev3], [dev4]
     %%
@@ -81,6 +80,30 @@ confirm_pw(Nodes) ->
     [Node1 | _Rest1] = P1,
     verify_put(Node1, ?BUCKET, <<"confirm_w_key">>, <<"confirm_w_value">>),
     [Node2 | _Rest2] = P2,
+    %%
+    %% By setting sloppy_quorum to false, we require a strict quorum of primaries.  But because
+    %% we only have one node in the partition, the put should fail.
+    %%
+    verify_put_timeout(Node2, ?BUCKET, <<"confirm_w_key">>, <<"confirm_w_value">>, [{sloppy_quorum, false}, {timeout, 1000}]),
+    rt:heal(PartitonInfo),
+    lager:info("confirm_pw...ok"),
+    pass.
+
+
+confirm_pw(Nodes) ->
+    %%
+    %% split the cluster into 2 paritions [dev1, dev2, dev3], [dev4]
+    %%
+    P1 = lists:sublist(Nodes, 3),
+    P2 = lists:sublist(Nodes, 4, 1),
+    PartitonInfo = rt:partition(P1, P2),
+    [Node1 | _Rest1] = P1,
+    verify_put(Node1, ?BUCKET, <<"confirm_pw_key">>, <<"confirm_pw_value">>),
+    [Node2 | _Rest2] = P2,
+    %%
+    %% Similar to the above test -- if pw is all, then we require n_val puts on primaries, but
+    %% the node is a singleton in the partition, so this, too, should fail.
+    %%
     verify_put_timeout(Node2, ?BUCKET, <<"confirm_pw_key">>, <<"confirm_pw_value">>, [{pw, all}, {timeout, 1000}]),
     rt:heal(PartitonInfo),
     lager:info("confirm_pw...ok"),
@@ -93,6 +116,7 @@ confirm_rww(Nodes) ->
     P1 = lists:sublist(Nodes, 2),
     P2 = lists:sublist(Nodes, 3, 2),
     PartitonInfo = rt:partition(P1, P2),
+    NumFastMerges = num_fast_merges(Nodes),
     %%
     %% put different values into each partiton
     %%
@@ -101,7 +125,7 @@ confirm_rww(Nodes) ->
     [Node2 | _Rest2] = P2,
     verify_put(Node2, ?BUCKET, <<"confirm_rww_key">>, <<"confirm_rww_value2">>),
     %%
-    %% After healing, both should agree on an arbitrary value, and that one merge has taken place
+    %% After healing, both should agree on an arbitrary value
     %%
     rt:heal(PartitonInfo),
     rt:wait_until(fun() ->
@@ -109,6 +133,7 @@ confirm_rww(Nodes) ->
         V2 = get(Node2, ?BUCKET, <<"confirm_rww_key">>),
         V1 =:= V2
     end),
+    ?assert(NumFastMerges < num_fast_merges(Nodes)),
     lager:info("confirm_rww...ok"),
     pass.
 
@@ -137,6 +162,17 @@ verify_put_timeout(Node, Bucket, Key, Value, Options) ->
     ),
     ok.
 
+num_fast_merges(Nodes) ->
+    lists:foldl(
+        fun(Node, Acc) ->
+            {fast_path_merge, N} = proplists:lookup(
+                fast_path_merge,
+                rpc:call(Node, riak_kv_stat, get_stats, [])
+            ),
+            Acc + N
+        end,
+        0, Nodes
+    ).
 
 get(Node, Bucket, Key) ->
     Client = rt:pbc(Node),
