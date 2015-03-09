@@ -67,7 +67,6 @@ confirm() ->
 
     %% Create a search index and associate with a bucket
     ok = riakc_pb_socket:create_search_index(Pid, ?INDEX),
-    wait_for_index(Nodes, ?INDEX),
     ok = riakc_pb_socket:set_search_index(Pid, ?BUCKET, ?INDEX),
     timer:sleep(1000),
 
@@ -170,16 +169,6 @@ bucket_keys_url(Host, Port, BName) ->
 %% @private
 search_url(Host, Port, Index) ->
     ?FMT("http://~s:~B/solr/~s/select?wt=json&q=*:*", [Host, Port, Index]).
-
-%% @private
-wait_for_index(Cluster, Index) ->
-    IsIndexUp =
-        fun(Node) ->
-                lager:info("Waiting for index ~s to be avaiable on node ~p", [Index, Node]),
-                rpc:call(Node, yz_solr, ping, [Index])
-        end,
-    [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster],
-    ok.
 
 wait_for_replica_count(SolrURL, KeyCount) ->
     AreReplicasUp =

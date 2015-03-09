@@ -32,14 +32,6 @@ confirm() ->
     %% Create index.
     riakc_pb_socket:create_search_index(Pid, ?INDEX, <<"_yz_default">>, []),
 
-    IsIndexUp =
-                fun(N) ->
-                        lager:info("Waiting for index ~s to be avaiable on node ~p",
-                                   [?INDEX, N]),
-                        rpc:call(N, yz_solr, ping, [?INDEX])
-                end,
-    [?assertEqual(ok, rt:wait_until(N, IsIndexUp)) || N <- Nodes],
-
     %% Create bucket type for maps.
     rt:create_and_activate_bucket_type(Node,
                                        ?TYPE,

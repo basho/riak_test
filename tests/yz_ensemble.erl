@@ -32,7 +32,6 @@ confirm() ->
     Bucket = {<<"strong">>, <<"test">>},
     Index = <<"testi">>,
     create_index(Node, Index),
-    wait_for_index(Nodes, Index),
     set_bucket_props(Node, Bucket, Index),
 
 	verify_ensemble_delete_support(Node, Bucket, Index),
@@ -60,7 +59,7 @@ verify_ensemble_delete_support(Node, Bucket, Index) ->
         {M, _} = riakc_pb_socket:search(PBC, Index, query_value(LKey)),
         ok == M
     end),
-    [{ok, _} = 
+    [{ok, _} =
         riakc_pb_socket:search(PBC, Index, query_value(Key)) || Key <- Keys],
 
     lager:info("Deleting keys"),
@@ -71,7 +70,7 @@ verify_ensemble_delete_support(Node, Bucket, Index) ->
             {ok,{search_results,Res,_,_}} ->
             	lager:info("RES: ~p ~p~n", [Res, LKey]),
             	Res == [];
-            S -> 
+            S ->
             	lager:info("OTHER: ~p ~p~n", [S, LKey]),
             	false
         end
@@ -84,7 +83,7 @@ verify_ensemble_delete_support(Node, Bucket, Index) ->
 
 %% @private
 %% @doc build a cluster from ensemble_util + yz support
-%% 
+%%
 %% NOTE: There's a timing issue that causes join_cluster to hang the r_t
 %% node when adding yokozuna and ensemble support. Waiting for yokozuna
 %% to load on each node allows join_cluster to complete consistently
@@ -111,16 +110,6 @@ query_value(Value) ->
 create_index(Node, Index) ->
     lager:info("Creating index ~s [~p]", [Index, Node]),
     ok = rpc:call(Node, yz_index, create, [Index]).
-
-%% @private
-wait_for_index(Cluster, Index) ->
-    IsIndexUp =
-        fun(Node) ->
-                lager:info("Waiting for index ~s to be avaiable on node ~p", [Index, Node]),
-                rpc:call(Node, yz_solr, ping, [Index])
-        end,
-    [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster],
-    ok.
 
 %% @private
 set_bucket_props(Node, Bucket, Index) ->
