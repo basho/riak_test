@@ -184,6 +184,8 @@ str(String, Substr) ->
     rt2:str(String, Substr).
 
 -spec set_conf(atom(), [{string(), string()}]) -> ok.
+set_conf(all, NameValuePairs) ->
+    rt_harness:set_conf(all, NameValuePairs);
 set_conf(Node, NameValuePairs) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
