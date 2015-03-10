@@ -64,7 +64,7 @@
 -define(SRC_PATHS, (rt_config:get(src_paths))).
 
 get_deps() ->
-    lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
+    lists:flatten(io_lib:format("~s/dev1/lib", [relpath(rt_config:get(default_version, "head"))])).
 
 deploy_clusters(ClusterConfig) ->
     rt_harness_util:deploy_clusters(ClusterConfig).
@@ -136,11 +136,11 @@ upgrade(Node, NewVersion) ->
     NewPath = relpath(NewVersion),
 
     Commands = [
-        io_lib:format("cp -p -P -R \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
+        io_lib:format("cp -p -P -R \"~s/dev~b/data\" \"~s/dev~b\"",
                        [OldPath, N, NewPath, N]),
-        io_lib:format("rm -rf ~s/dev/dev~b/data/*",
+        io_lib:format("rm -rf ~s/dev~b/data/*",
                        [OldPath, N]),
-        io_lib:format("cp -p -P -R \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
+        io_lib:format("cp -p -P -R \"~s/dev~b/etc\" \"~s/dev~b\"",
                        [OldPath, N, NewPath, N])
     ],
     [ begin
@@ -157,7 +157,7 @@ all_the_app_configs(DevPath) ->
     lager:error("The dev path is ~p", [DevPath]),
     case filelib:is_dir(DevPath) of
         true ->
-            Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
+            Devs = filelib:wildcard(DevPath ++ "/dev*"),
             [ Dev ++ "/etc/app.config" || Dev <- Devs];
         _ ->
             lager:debug("~s is not a directory.", [DevPath]),
@@ -170,7 +170,7 @@ update_app_config(all, Config) ->
 update_app_config(Node, Config) when is_atom(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
-    FileFormatString = "~s/dev/dev~b/etc/~s.config",
+    FileFormatString = "~s/dev~b/etc/~s.config",
 
     AppConfigFile = io_lib:format(FileFormatString, [Path, N, "app"]),
     AdvConfigFile = io_lib:format(FileFormatString, [Path, N, "advanced"]),
@@ -215,7 +215,7 @@ get_backends() ->
 node_path(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
-    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
+    lists:flatten(io_lib:format("~s/dev~b", [Path, N])).
 
 create_dirs(Nodes) ->
     Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],
@@ -528,7 +528,7 @@ get_node_logs(Base) ->
     [ begin
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
-      end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+      end || Filename <- filelib:wildcard(Root ++ "/*/dev*/log/*") ].
 
 set_advanced_conf(Node, NameValuePairs) ->
     rt_harness_util:set_advanced_conf(Node, NameValuePairs).
