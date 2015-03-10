@@ -19,44 +19,53 @@
 %% -------------------------------------------------------------------
 
 -module(verify_fast_path).
--export([confirm/0]).
+-export([confirm/0, description/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 -define(DEFAULT_RING_SIZE, 16).
 -define(NVAL, 2).
--define(BUCKET_TYPE, <<"immutable">>).
+-define(BUCKET_TYPE, <<"fast_path">>).
 -define(BUCKET, {?BUCKET_TYPE, <<"bucket">>}).
+-define(ASYNC_PUT_BUCKET_TYPE, <<"async_put">>).
+-define(ASYNC_PUT_BUCKET, {?ASYNC_PUT_BUCKET_TYPE, <<"bucket">>}).
 
-%%
-%% TODO
-%%      w, dw, pw values
-%%      recv_timeout
-%%      partitions and sibling prevention
-%%
+
+description() ->
+    "This test exercises the fast_path bucket property, which results in puts that avoid coordination "
+        ++ "and reads before writes, and which therefore have lower latency and higher throughput.  "
+    .
 
 confirm() ->
     %%
-    %% Set up a cluster of nodes
+    %% Set two clusters.  We need one for most of the testing of this code path.
+    %% The first cluster will use the memory back end.
+    %% The second cluster will be a singleton cluster with the leveldb back end,
+    %% in order to test asynchronous puts
     %%
-    NumNodes = 4,
-    Nodes = rt:deploy_nodes(NumNodes, config(?DEFAULT_RING_SIZE, ?NVAL)),
-    rt:join_cluster(Nodes),
-    lager:info("Set up ~p node cluster: ~p", [NumNodes, Nodes]),
+    [Cluster1, Cluster2] = rt:deploy_clusters([
+        {4, config(?DEFAULT_RING_SIZE, ?NVAL)},
+        {1, config(?DEFAULT_RING_SIZE, ?NVAL, riak_kv_eleveldb_backend)}
+    ]),
+    rt:partition(Cluster2, Cluster1),
+    rt:join_cluster(Cluster1),
+    % rt:join_cluster(Cluster2),
+    lager:info("Set up clusters: ~p, ~p", [Cluster1, Cluster2]),
     %%
     %% Select a random node, and use it to create an immutable bucket
     %%
-    Node = lists:nth(random:uniform(length((Nodes))), Nodes),
+    Node = lists:nth(random:uniform(length((Cluster1))), Cluster1),
     rt:create_and_activate_bucket_type(Node, ?BUCKET_TYPE, [{fast_path, true}]),
-    rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Nodes),
+    rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Cluster1),
     lager:info("Created ~p bucket type on ~p", [?BUCKET_TYPE, Node]),
     %%
     %%
     %%
     pass = confirm_put(Node),
-    pass = confirm_w(Nodes),
-    pass = confirm_pw(Nodes),
-    pass = confirm_rww(Nodes),
+    pass = confirm_w(Cluster1),
+    pass = confirm_pw(Cluster1),
+    pass = confirm_rww(Cluster1),
+    pass = confirm_async_put(hd(Cluster2)),
     pass.
 
 %%
@@ -137,6 +146,20 @@ confirm_rww(Nodes) ->
     lager:info("confirm_rww...ok"),
     pass.
 
+%%
+%% In order to test asynchronous puts, at this point we need a node with leveldb, as
+%% that is currently the only back end that supports it.  In the future, we may add
+%% async puts as a capability which can be arbitrated through the multi backend.
+%%
+confirm_async_put(Node) ->
+    rt:create_and_activate_bucket_type(Node, ?ASYNC_PUT_BUCKET_TYPE, [{fast_path, true}, {backend, myeleveldb}]),
+    rt:wait_until_bucket_type_status(?ASYNC_PUT_BUCKET_TYPE, active, [Node]),
+    lager:info("Created ~p bucket type on ~p", [?ASYNC_PUT_BUCKET_TYPE, Node]),
+
+    ok = verify_put(Node, ?ASYNC_PUT_BUCKET, <<"confirm_async_put_key">>, <<"confirm_async_put_value">>),
+    lager:info("confirm_async_put...ok"),
+    pass.
+
 
 verify_put(Node, Bucket, Key, Value) ->
     Client = rt:pbc(Node),
@@ -180,6 +203,9 @@ get(Node, Bucket, Key) ->
     riakc_obj:get_value(Val).
 
 config(RingSize, NVal) ->
+    config(RingSize, NVal, riak_kv_multi_backend).
+
+config(RingSize, NVal, Backend) ->
     [
         {riak_core, [
             {default_bucket_props, [{n_val, NVal}]},
@@ -192,7 +218,11 @@ config(RingSize, NVal) ->
             {anti_entropy_tick, 100},
             {anti_entropy, {on, []}},
             {anti_entropy_timeout, 5000},
-            {storage_backend, riak_kv_memory_backend}]
-        }
+            {storage_backend, Backend},
+            {multi_backend, [
+                {mymemory, riak_kv_memory_backend, []},
+                {myeleveldb, riak_kv_eleveldb_backend, []}
+            ]}
+        ]}
     ].
 
