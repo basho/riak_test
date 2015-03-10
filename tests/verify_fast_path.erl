@@ -47,7 +47,6 @@ confirm() ->
         {4, config(?DEFAULT_RING_SIZE, ?NVAL)},
         {1, config(?DEFAULT_RING_SIZE, ?NVAL, riak_kv_eleveldb_backend)}
     ]),
-    rt:partition(Cluster2, Cluster1),
     rt:join_cluster(Cluster1),
     % rt:join_cluster(Cluster2),
     lager:info("Set up clusters: ~p, ~p", [Cluster1, Cluster2]),
