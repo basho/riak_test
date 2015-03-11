@@ -115,14 +115,11 @@ finalize(TestResults, Args) ->
     %%     R <- TestResults],
     %% CoverDir = rt_config:get(cover_output, "coverage"),
     %% Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
-
-    node_manager:stop(),
     Verbose = proplists:is_defined(verbose, Args),
     report_results(TestResults, Verbose),
 
-
-    %% Teardown = not proplists:get_value(keep, Args, false),
-    %% maybe_teardown(Teardown, TestResults, Coverage, Verbose),
+    Teardown = not proplists:get_value(keep, Args, false),
+    maybe_teardown(Teardown, TestResults),
     ok.
 
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
@@ -296,20 +293,18 @@ set_lager_env(OutputDir, ConsoleLevel, FileLevel) ->
                                            {level, FileLevel}]}],
     application:set_env(lager, handlers, HandlerConfig).
 
-%% maybe_teardown(false, TestResults, Coverage, Verbose) ->
-%%     print_summary(TestResults, Coverage, Verbose),
-%%     lager:info("Keeping cluster running as requested");
-%% maybe_teardown(true, TestResults, Coverage, Verbose) ->
-%%     case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
-%%         {1, fail} ->
-%%             print_summary(TestResults, Coverage, Verbose),
-%%             so_kill_riak_maybe();
-%%         _ ->
-%%             lager:info("Multiple tests run or no failure"),
-%%             rt_cluster:teardown(),
-%%             print_summary(TestResults, Coverage, Verbose)
-%%     end,
-%%     ok.
+maybe_teardown(false, _TestResults) ->
+    lager:info("Keeping cluster running as requested");
+maybe_teardown(Keep, TestResults) when is_list(TestResults) andalso 
+                                       erlang:length(TestResults) == 1 ->
+    maybe_teardown(Keep, hd(TestResults));
+maybe_teardown(true, {_, {fail, _}, _}) ->
+    so_kill_riak_maybe(),
+    ok;
+maybe_teardown(true, _TestResults) ->
+    lager:info("Multiple tests run or no failure"),
+    rt_cluster:teardown(),
+    ok.
 
 -spec comma_tokenizer(string(), [string()]) -> [string()].
 comma_tokenizer(S, Acc) ->

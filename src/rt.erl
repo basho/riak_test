@@ -187,19 +187,13 @@ str(String, Substr) ->
 set_conf(all, NameValuePairs) ->
     rt_harness:set_conf(all, NameValuePairs);
 set_conf(Node, NameValuePairs) ->
-    stop(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    rt_config:set_conf(Node, NameValuePairs),
-    start(Node).
+    rt_config:set_conf(Node, NameValuePairs).
 
 -spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
 set_advanced_conf(all, NameValuePairs) ->
     rt_config:set_advanced_conf(all, NameValuePairs);
 set_advanced_conf(Node, NameValuePairs) ->
-    stop(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    rt_config:set_advanced_conf(Node, NameValuePairs),
-    start(Node).
+    rt_config:set_advanced_conf(Node, NameValuePairs).
 
 %% @doc Rewrite the given node's app.config file, overriding the varialbes
 %%      in the existing app.config with those in `Config'.
@@ -262,8 +256,10 @@ deploy_nodes(Versions, Services) ->
     Nodes.
 
 deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
-    NodeConfig = [{rt_config:get(default_version, "head"), InitialConfig} || _ <- lists:seq(1,NumNodes)],
-    deploy_nodes(NodeConfig, Services).
+    Version = rt_config:get(default_version, "head"),
+    [NodeIds, NodeMap, _] = allocate_nodes(NumNodes, Version),
+
+    deploy_nodes(NodeIds, NodeMap, Version, InitialConfig, Services).
 
 deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
     _ = rt_harness_util:deploy_nodes(NodeIds, NodeMap, Version, Config, Services),
@@ -693,9 +689,9 @@ claimant_according_to(Node) ->
 %% @doc Safely construct a new cluster and return a list of the deployed nodes
 %% @todo Add -spec and update doc to reflect mult-version changes
 build_cluster(Versions) when is_list(Versions) ->
-    build_cluster(length(Versions), Versions, default);
+    build_cluster(length(Versions), Versions, rt_properties:default_config());
 build_cluster(NumNodes) ->
-    build_cluster(NumNodes, default).
+    build_cluster(NumNodes, rt_properties:default_config()).
 
 %% @doc Safely construct a `NumNode' size cluster using
 %%      `InitialConfig'. Return a list of the deployed nodes.

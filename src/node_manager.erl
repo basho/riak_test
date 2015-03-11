@@ -113,12 +113,11 @@ handle_cast(_Msg, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, State) ->
+terminate(_Reason, _State) ->
     %% Stop and reset all deployed nodes
-    stop_and_clean(State#state.nodes_deployed,
-                   State#state.node_map,
-                   State#state.deployed_versions,
-                   true),
+    %%stop(State#state.nodes_deployed,
+    %%     State#state.node_map,
+    %%     State#state.deployed_versions),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -127,6 +126,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+% stop(NodeIds, NodeMap, DeployedVersions) ->
+%    [begin
+%         case version_deployed(NodeId, DeployedVersions) of
+%             undefined ->
+%                 ok;
+%             Version ->
+%                 rt_node:stop_and_wait(NodeId,
+%                                       rt_node:node_name(NodeId, NodeMap),
+%                                       Version)
+%         end
+%     end || NodeId <- NodeIds].
+    
 
 stop_and_clean(NodeIds, NodeMap, DeployedVersions, Wait) ->
     [begin

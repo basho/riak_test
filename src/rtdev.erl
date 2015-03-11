@@ -164,19 +164,7 @@ harness_nodes(NodeIds) ->
     [list_to_atom(NodeId ++ "@127.0.0.1") || NodeId <- NodeIds].
 
 so_fresh_so_clean(VersionMap) ->
-    %% make sure we stop any cover processes on any nodes otherwise,
-    %% if the next test boots a legacy node we'll end up with cover
-    %% incompatabilities and crash the cover server
-    %% rt_cover:maybe_stop_on_nodes(),
-    %% Path = relpath(root),
-    %% Stop all discoverable nodes, not just nodes we'll be using for
-    %% this test.
-    StopAllFun =
-        fun({Version, VersionNodes}) ->
-                VersionPath = filename:join([?PATH, Version]),
-                stop_nodes(VersionPath, VersionNodes)
-        end,
-    rt:pmap(StopAllFun, VersionMap),
+    ok = stop_all(VersionMap),
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
@@ -196,13 +184,32 @@ so_fresh_so_clean(VersionMap) ->
             end, VersionMap),
     ok.
 
+stop_all() ->
+    [_, _, VersionMap] = available_resources(),
+    stop_all(VersionMap).
+
+stop_all(VersionMap) ->
+    %% make sure we stop any cover processes on any nodes otherwise,
+    %% if the next test boots a legacy node we'll end up with cover
+    %% incompatabilities and crash the cover server
+    %% rt_cover:maybe_stop_on_nodes(),
+    %% Path = relpath(root),
+    %% Stop all discoverable nodes, not just nodes we'll be using for
+    %% this test.
+    StopAllFun =
+        fun({Version, VersionNodes}) ->
+                VersionPath = filename:join([?PATH, Version]),
+                stop_nodes(VersionPath, VersionNodes)
+        end,
+    rt:pmap(StopAllFun, VersionMap),
+    ok.
+
 available_resources() ->
     VersionMap = [{Version, harness_node_ids(Version)} || Version <- versions()],
     NodeIds = harness_node_ids(rt_config:get(default_version, "head")),
     NodeMap = lists:zip(NodeIds, harness_nodes(NodeIds)),
     [NodeIds, NodeMap, VersionMap].
  
-
 setup_harness() ->
     %% Get node names and populate node map
     [NodeIds, NodeMap, VersionMap] = available_resources(),
@@ -376,6 +383,7 @@ update_app_config_file(ConfigFile, Config) ->
         {error, enoent} ->
             []
     end,
+    lager:debug("Config: ~p", [Config]),
     MergeA = orddict:from_list(Config),
     MergeB = orddict:from_list(BaseConfig),
     NewConfig =
@@ -386,6 +394,7 @@ update_app_config_file(ConfigFile, Config) ->
                                                     ValA
                                             end, MergeC, MergeD)
                       end, MergeA, MergeB),
+    lager:debug("Writing ~p to ~p", [NewConfig, ConfigFile]),
     NewConfigOut = io_lib:format("~p.", [NewConfig]),
     ?assertEqual(ok, file:write_file(ConfigFile, NewConfigOut)),
     ok.
@@ -442,8 +451,9 @@ get_backend(AppConfig) ->
     end.
 
 node_path(Node) ->
-    Path = relpath(node_version(Node)),
-    lists:flatten(io_lib:format("~s/~s", [Path, node_short_name(Node)])).
+    {NodeId, NodeName} = extract_node_id_and_name(Node),
+    Path = relpath(node_version(NodeName)),
+    lists:flatten(io_lib:format("~s/~s", [Path, node_short_name(NodeId)])).
 
 get_ip(_Node) ->
     %% localhost 4 lyfe
@@ -456,6 +466,7 @@ create_dirs(Nodes) ->
 
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
     DataDirs = [node_path(Node) ++ "/data/" ++ SubDir || Node <- Nodes],
+    lager:debug("Cleaning data directories ~p", [DataDirs]),
     lists:foreach(fun rm_dir/1, DataDirs).
 
 %% Blocking to delete files is not the best use of time. Generally it
@@ -714,8 +725,9 @@ console(Node, Expected) ->
     interactive(Node, "console", Expected).
 
 interactive(Node, Command, Exp) ->
-    Path = relpath(node_version(Node)),
-    Cmd = riakcmd(Path, Node, Command),
+    {NodeId, NodeName} = extract_node_id_and_name(Node),
+    Path = relpath(node_version(NodeName)),
+    Cmd = riakcmd(Path, NodeId, Command),
     lager:debug("Opening a port for riak ~s.", [Command]),
     lager:debug("Calling open_port with cmd ~s", [binary_to_list(iolist_to_binary(Cmd))]),
     P = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))},
@@ -805,8 +817,9 @@ execute_admin_cmd(Cmd, Options) ->
     end.
 
 riak(Node, Args) ->
-    Path = relpath(node_version(Node)),
-    Result = run_riak(Node, Path, Args),
+    {NodeId, NodeName} = extract_node_id_and_name(Node),
+    Path = relpath(node_version(NodeName)),
+    Result = run_riak(NodeId, Path, Args),
     lager:info("~s", [Result]),
     {ok, Result}.
 
@@ -824,7 +837,7 @@ node_id(Node) ->
     orddict:fetch(Node, NodeMap).
 
 %% @doc Find the short dev node name from the full name
--spec node_short_name(atom()) -> atom().
+-spec node_short_name(atom() | list()) -> atom().
 node_short_name(Node) when is_list(Node) ->
     Node;
 node_short_name(Node) when is_atom(Node) ->
@@ -832,12 +845,13 @@ node_short_name(Node) when is_atom(Node) ->
     orddict:fetch(Node, NodeMap).
 
 %% @doc Return the node version from rt_versions based on full node name
--spec node_version(atom() | integer()) -> string().
+-spec node_version(atom() | integer() | list()) -> string().
 node_version(Node) when is_integer(Node) ->
     node_version(node_short_name_to_name(Node));
 node_version(Node) ->
+    {_, NodeName} = extract_node_id_and_name(Node),
     VersionMap = rt_config:get(rt_versions),
-    orddict:fetch(Node, VersionMap).
+    orddict:fetch(NodeName, VersionMap).
 
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
@@ -910,7 +924,7 @@ teardown() ->
     %% rt_cover:maybe_stop_on_nodes(),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
     %% rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()).
-    ok.
+    stop_all().
 
 whats_up() ->
     io:format("Here's what's running...~n"),
@@ -945,7 +959,7 @@ get_node_logs() ->
 -spec extract_node_id_and_name(atom() | string()) -> node_tuple().
 extract_node_id_and_name(Node) when is_atom(Node) ->
     NodeStr = atom_to_list(Node),
-    extract_node_id_and_name(NodeStr, contains(NodeStr, $@));
+    extract_node_id_and_name(NodeStr);
 extract_node_id_and_name(Node) when is_list(Node) ->
     extract_node_id_and_name(Node, contains(Node, $@));
 extract_node_id_and_name(_Node) ->
@@ -956,7 +970,7 @@ extract_node_id_and_name(Node, true) ->
     [NodeId, _] = re:split(Node, "@"),
     {binary_to_list(NodeId), list_to_atom(Node)};
 extract_node_id_and_name(Node, false) ->
-    {Node, ?DEV(Node)}.
+    {Node, ?DEV(lists:flatten(Node))}.
 
 -spec contains(list(), char()) -> boolean.
 contains(Str, Char) ->
@@ -978,6 +992,7 @@ extract_node_id_and_name_test() ->
     Expected = {"dev2", 'dev2@127.0.0.1'},
     ?assertEqual(Expected, extract_node_id_and_name('dev2@127.0.0.1')),
     ?assertEqual(Expected, extract_node_id_and_name("dev2@127.0.0.1")),
+    ?assertEqual(Expected, extract_node_id_and_name('dev2')),
     ?assertEqual(Expected, extract_node_id_and_name("dev2")).
 
 maybe_contains_test() ->

@@ -67,7 +67,10 @@
                 prereq_check :: atom(),
                 current_version :: string(),
                 remaining_versions :: [string()],
-                test_results :: [term()]}).
+                test_results :: [term()],
+                stop_on_fail :: boolean()}).
+
+-deprecated([{metadata,0,next_major_release}]).
 
 %%%===================================================================
 %%% API
@@ -88,7 +91,6 @@ stop() ->
 
 -spec(metadata() -> [{atom(), term()}]).
 %% @doc fetches test metadata from spawned test process
-%% TODO: Remove when test ports are over
 metadata() ->
     FSMPid = get(test_runner_fsm),
     gen_fsm:sync_send_all_state_event(FSMPid, metadata_event, infinity).
@@ -120,6 +122,7 @@ init([TestModule, Backend, Properties]) ->
     BackendCheck = check_backend(Backend,
                                  rt_properties:get(valid_backends, Properties)),
     PreReqCheck = check_prereqs(ConfirmMod),
+    StopOnFail = rt_config:get(rt_stop_on_fail, true),
     State = #state{test_module=TestModule,
                    test_type=TestType,
                    properties=UpdProperties,
@@ -129,7 +132,8 @@ init([TestModule, Backend, Properties]) ->
                    confirm_modfun=ConfirmModFun,
                    backend_check=BackendCheck,
                    prereq_check=PreReqCheck,
-                   group_leader=group_leader()},
+                   group_leader=group_leader(),
+                   stop_on_fail=StopOnFail},
     {ok, setup, State, 0}.
 
 %% @doc there are no all-state events for this fsm
@@ -213,7 +217,7 @@ execute({nodes_deployed, _}, State) ->
            test_timeout=TestTimeout} = State,
     lager:notice("Running ~s", [TestModule]),
     lager:notice("Properties: ~p", [Properties]),
-
+    
     StartTime = os:timestamp(),
     %% Perform test setup which includes clustering of the nodes if
     %% required by the test properties. The cluster information is placed
@@ -257,6 +261,24 @@ wait_for_completion(timeout, State=#state{test_module=TestModule,
                            end_time=os:timestamp()},
     cleanup(UpdState),
     notify_executor(timeout, UpdState),
+    {stop, normal, UpdState};
+wait_for_completion({test_result, {fail, Reason}}, State=#state{test_module=TestModule,
+                                                        test_type=TestType,
+                                                        group_leader=GroupLeader,
+                                                        stop_on_fail=StopOnFail,
+                                                        remaining_versions=[]}) ->
+    Result = {fail, Reason},
+    UpdState = State#state{test_module=TestModule,
+                           test_type=TestType,
+                           test_results=Result,
+                           group_leader=GroupLeader,
+                           stop_on_fail=StopOnFail,
+                           end_time=os:timestamp()},
+    case StopOnFail of
+        true -> ok;
+        false -> cleanup(UpdState)
+    end,
+    notify_executor(Result, UpdState),
     {stop, normal, UpdState};
 wait_for_completion({test_result, Result}, State=#state{test_module=TestModule,
                                                         test_type=TestType,
