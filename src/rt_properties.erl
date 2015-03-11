@@ -38,7 +38,7 @@
           node_count=3 :: non_neg_integer(),
           metadata=[] :: proplists:proplist(),
           rolling_upgrade=false :: boolean(),
-          start_version="head" :: string(),
+          start_version=rt_config:get(default_version, "head") :: string(),
           current_version :: string(),
           upgrade_path :: [string()],
           wait_for_transfers=false :: boolean(),

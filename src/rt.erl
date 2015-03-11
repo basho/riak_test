@@ -243,8 +243,8 @@ get_https_conn_info(Node) ->
 deploy_nodes(Versions) when is_list(Versions) ->
     deploy_nodes(Versions, [riak_kv]);
 deploy_nodes(NumNodes) when is_integer(NumNodes) ->
-    [NodeIds, NodeMap, _] = allocate_nodes(NumNodes, head),
-    deploy_nodes(NodeIds, NodeMap, head, rt_properties:default_config(), [riak_kv]).
+    [NodeIds, NodeMap, _] = allocate_nodes(NumNodes, rt_config:get(default_version, "head")),
+    deploy_nodes(NodeIds, NodeMap, rt_config:get(default_version, "head"), rt_properties:default_config(), [riak_kv]).
 
 %% @doc Deploy a set of freshly installed Riak nodes with the given
 %%      `InitialConfig', returning a list of the nodes deployed.
@@ -262,7 +262,7 @@ deploy_nodes(Versions, Services) ->
     Nodes.
 
 deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
-    NodeConfig = [{head, InitialConfig} || _ <- lists:seq(1,NumNodes)],
+    NodeConfig = [{rt_config:get(default_version, "head"), InitialConfig} || _ <- lists:seq(1,NumNodes)],
     deploy_nodes(NodeConfig, Services).
 
 deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
@@ -313,22 +313,24 @@ allocate_nodes(NumNodes, Version) ->
     [AllocatedNodeIds, AllocatedNodeMap, VersionMap].
 
 version_to_config(Config) when is_tuple(Config)-> Config;
-version_to_config(Version) -> {Version, head}.
+version_to_config(Version) -> {Version, rt_config:get(default_version, "head")}.
 
 deploy_clusters(Settings) ->
     ClusterConfigs = [case Setting of
                           Configs when is_list(Configs) ->
+                              lager:info("deploy_cluster Configs"),
                               Configs;
                           NumNodes when is_integer(NumNodes) ->
-                              [{current, default} || _ <- lists:seq(1, NumNodes)];
+                              [{rt_config:get(default_version, "head"), default} || _ <- lists:seq(1, NumNodes)];
                           {NumNodes, InitialConfig} when is_integer(NumNodes) ->
-                              [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)];
+                              [{rt_config:get(default_version, "head"), InitialConfig} || _ <- lists:seq(1,NumNodes)];
                           {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
-                              [{Vsn, InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                              [{rt_config:version_to_path(Vsn), InitialConfig} || _ <- lists:seq(1,NumNodes)]
                       end || Setting <- Settings],
     ?HARNESS:deploy_clusters(ClusterConfigs).
 
 build_clusters(Settings) ->
+    lager:debug("build_clusters ~p", [Settings]),
     Clusters = deploy_clusters(Settings),
     [begin
          join_cluster(Nodes),
@@ -339,7 +341,7 @@ build_clusters(Settings) ->
 %% @doc Start the specified Riak node
 start(Node) ->
     %% TODO Determine the best way to implement the current version specification. -jsb
-    rt_node:start(Node, head).
+    rt_node:start(Node, rt_harness:node_version(Node)).
 
 %% @doc Start the specified Riak `Node' and wait for it to be pingable
 start_and_wait(Node) ->
@@ -348,12 +350,12 @@ start_and_wait(Node) ->
 
 async_start(Node) ->
     %% TODO Determine the best way to implement the current version specification. -jsb
-    rt_node:async_start(Node, head).
+    rt_node:async_start(Node, rt_harness:node_version(Node)).
 
 %% @doc Stop the specified Riak `Node'.
 stop(Node) ->
     %% TODO Determine the best way to implement the current version specification. -jsb
-    rt_node:stop(Node, head).
+    rt_node:stop(Node, rt_harness:node_version(Node)).
 
 %% @doc Stop the specified Riak `Node' and wait until it is not pingable
 stop_and_wait(Node) ->
@@ -369,7 +371,7 @@ upgrade(Node, NewVersion) ->
 %% the config based on entries in `Config'.
 upgrade(Node, NewVersion, Config) ->
     %% TODO Determine the best way to implement the current version specification. -jsb
-    rt_node:upgrade(Node, head, NewVersion, Config).
+    rt_node:upgrade(Node, rt_harness:node_version(Node), NewVersion, Config).
 
 %% @doc Upgrade a Riak node to a specific version using the alternate
 %%      leave/upgrade/rejoin approach

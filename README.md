@@ -149,7 +149,7 @@ using the following process:
   1. `make stagedevrel` for the Riak release being tested (current default is 2.0,
      overidden with the `-v` flag).  When the `-c` option is specified,
      `make devclean` will be executed before rebuilding.
-  1. Execute `rtdev-current.sh` for the Riak release being tested
+  1. Execute `rtdev-install.sh` for the Riak release being tested
   1. Rebuild the current riak_test branch.  When the `-c` option is specified,
      'make clean' will be executed before rebuilding.
 
@@ -188,7 +188,9 @@ to tell riak_test about them. The method of choice is to create a
 {rtdev, [
     {rt_project, "riak"},
     {root_path, "/home/you/rt/riak"},
-    {default_version, head}
+    {default_version, head},
+    {previous_version, "1.4.12"},
+    {legacy_version, "1.3.4"}
 ]}.
 ```
 
@@ -257,6 +259,14 @@ Path to the top of the installed devrel instances.
 ##### default_version
 If specific versions of Riak are not specified, this one is tested.
 The default value is `head` which is typically the head of `develop`.
+
+##### previous_version
+Previous version of Riak EE, if not specified defaults to `1.4.12`.
+Will be removed after tests have been ported.
+
+##### legacy_version
+Ancient version of Riak EE, if not specified defaults to `1.3.4`.
+Will be removed after tests have been ported.
 
 ##### rt_default_config
 Default configuration parameters that will be used for nodes deployed by riak_test.  Tests can

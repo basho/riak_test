@@ -176,8 +176,8 @@ find_app_modules(CoverApps) ->
 %% so only current will do.
 maybe_start_on_node(Node, Version) ->
     IsCurrent = case Version of
-        current      -> true;
-        {current, _} -> true;
+        head      -> true;
+        {head, _} -> true;
         _            -> false
     end,
     ShouldStart = IsCurrent andalso

@@ -681,7 +681,7 @@ scp_from(Host, RemotePath, Path) ->
 -define(PATH, (rt_config:get(rtdev_path))).
 
 dev_path(Path, N) ->
-    format("~s/dev/dev~b", [Path, N]).
+    format("~s/dev~b", [Path, N]).
 
 dev_bin_path(Path, N) ->
     dev_path(Path, N) ++ "/bin".

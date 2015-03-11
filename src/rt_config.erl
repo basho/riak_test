@@ -31,12 +31,19 @@
          set/2,
          set_conf/2,
          set_advanced_conf/2,
-         update_app_config/2
+         update_app_config/2,
+         version_to_path/1
 ]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(CONFIG_NAMESPACE, riak_test).
 -define(RECEIVE_WAIT_TIME_KEY, rt_max_receive_wait_time).
+-define(DEFAULT_VERSION_KEY, default_version).
+-define(PREVIOUS_VERSION_KEY, previous_version).
+-define(LEGACY_VERSION_KEY, legacy_version).
+-define(DEFAULT_VERSION, head).
+-define(PREVIOUS_VERSION, "1.4.12").
+-define(LEGACY_VERSION, "1.3.4").
 
 %% @doc Get the value of an OS Environment variable. The arity 1 version of
 %%      this function will fail the test if it is undefined.
@@ -170,6 +177,23 @@ to_upper(S) -> lists:map(fun char_to_upper/1, S).
 char_to_upper(C) when C >= $a, C =< $z -> C bxor $\s;
 char_to_upper(C) -> C.
 
+%% TODO: Remove after conversion
+%% @doc Look up the version by name from the config file
+-spec version_to_path(atom()) -> string().
+version_to_path(Version) ->
+    NewVersion = case Version of
+                     current -> default_version;
+                     legacy -> legacy_version;
+                     previous -> previous_version;
+                     _ -> Version
+                 end,
+    Path = rt_config:get(NewVersion, Version),
+    %% If path is stored as an atom, convert to a string
+    case is_atom(Path) of
+        true -> atom_to_list(Path);
+        _ -> Path
+    end.
+
 -ifdef(TEST).
 
 clear(Key) ->
@@ -194,5 +218,18 @@ get_rt_max_wait_time_default_test() ->
     ok = set(?RECEIVE_WAIT_TIME_KEY, ExpectedWaitTime),
     ?assertEqual(ExpectedWaitTime, get(?RECEIVE_WAIT_TIME_KEY, DefaultWaitTime)),
     ?assertEqual(ExpectedWaitTime, get(rt_max_wait_time, DefaultWaitTime)).
+
+get_version_path_test() ->
+    clear(?DEFAULT_VERSION_KEY),
+    clear(?PREVIOUS_VERSION_KEY),
+    clear(?LEGACY_VERSION_KEY),
+
+    set(?DEFAULT_VERSION_KEY, atom_to_list(?DEFAULT_VERSION)),
+    set(?PREVIOUS_VERSION_KEY, ?PREVIOUS_VERSION),
+    set(?LEGACY_VERSION_KEY, ?LEGACY_VERSION),
+
+    ?assertEqual(version_to_path(?DEFAULT_VERSION_KEY), ?DEFAULT_VERSION),
+    ?assertEqual(version_to_path(?PREVIOUS_VERSION_KEY), ?PREVIOUS_VERSION),
+    ?assertEqual(version_to_path(?LEGACY_VERSION_KEY), ?LEGACY_VERSION).
 
 -endif.

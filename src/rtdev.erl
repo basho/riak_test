@@ -508,23 +508,23 @@ add_default_node_config(Nodes) ->
             throw({invalid_config, {rt_default_config, BadValue}})
     end.
 
-deploy_clusters(_ClusterConfigs) ->
-    ok.
-%%     NumNodes = rt_config:get(num_nodes, 6),
-%%     RequestedNodes = lists:flatten(ClusterConfigs),
+deploy_clusters(ClusterConfigs) ->
+    NumNodes = rt_config:get(num_nodes, 6),
+    RequestedNodes = lists:flatten(ClusterConfigs),
+    lager:info("RequestedNodes ~p~n", [RequestedNodes]),
 
-%%     case length(RequestedNodes) > NumNodes of
-%%         true ->
-%%             erlang:error("Requested more nodes than available");
-%%         false ->
-%%             Nodes = deploy_nodes(RequestedNodes),
-%%             {DeployedClusters, _} = lists:foldl(
-%%                     fun(Cluster, {Clusters, RemNodes}) ->
-%%                         {A, B} = lists:split(length(Cluster), RemNodes),
-%%                         {Clusters ++ [A], B}
-%%                 end, {[], Nodes}, ClusterConfigs),
-%%             DeployedClusters
-%%     end.
+    case length(RequestedNodes) > NumNodes of
+        true ->
+            erlang:error("Requested more nodes than available");
+        false ->
+            Nodes = deploy_nodes(RequestedNodes),
+            {DeployedClusters, _} = lists:foldl(
+                    fun(Cluster, {Clusters, RemNodes}) ->
+                        {A, B} = lists:split(length(Cluster), RemNodes),
+                        {Clusters ++ [A], B}
+                end, {[], Nodes}, ClusterConfigs),
+            DeployedClusters
+    end.
 
 configure_nodes(Nodes, Configs) ->
     %% Set initial config
@@ -895,7 +895,7 @@ set_backend(Backend, OtherOpts) ->
 
 %% WRONG: Seemingly always stuck on the current version
 get_version() ->
-    case file:read_file(relpath(head) ++ "/VERSION") of
+    case file:read_file(relpath(rt_config:get(default_version, "head")) ++ "/VERSION") of
         {error, enoent} -> unknown;
         {ok, Version} -> Version
     end.

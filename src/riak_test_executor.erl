@@ -134,6 +134,7 @@ request_nodes(_Event, _State) ->
     {next_state, request_nodes, _State}.
 
 launch_test(insufficient_versions_available, State) ->
+    lager:debug("riak_test_executor:launch_test insufficient_versions_available"),
     #state{pending_tests=[HeadPending | RestPending],
            execution_mode=ExecutionMode} = State,
     report_results(HeadPending, {skipped, insufficient_versions}, 0, State),
@@ -143,6 +144,7 @@ launch_test(insufficient_versions_available, State) ->
 launch_test(not_enough_nodes, State) ->
     %% Move head of pending to waiting and try next test if there is
     %% one left in pending.
+    lager:debug("riak_test_executor:launch_test not_enough_nodes"),
     #state{pending_tests=[HeadPending | RestPending],
            waiting_tests=Waiting,
            execution_mode=ExecutionMode} = State,
@@ -261,7 +263,7 @@ wait_for_completion_transition(State) ->
 
 launch_test_transition(State=#state{pending_tests=PendingTests,
                                     execution_mode=ExecutionMode}) when PendingTests == [] orelse ExecutionMode == serial ->
-    lager:debug("Waiting for complete: execution mode ~p with pending tests ~p", [ExecutionMode, PendingTests]),
+    lager:debug("Waiting for completion: execution mode ~p with pending tests ~p", [ExecutionMode, PendingTests]),
     {next_state, wait_for_completion, State};
 launch_test_transition(State) ->
     {next_state, request_nodes, State, 0}.
@@ -297,12 +299,20 @@ versions_to_test(Properties) ->
 versions_to_test(Properties, true) ->
     case rt_properties:get(upgrade_path, Properties) of
         undefined ->
-            [rt_properties:get(start_version, Properties)];
+            versions_to_test(Properties, false);
         UpgradePath ->
-            UpgradePath
+            [versions_to_test_to_string(Upgrade) || Upgrade <- UpgradePath]
     end;
 versions_to_test(Properties, false) ->
-    [rt_properties:get(start_version, Properties)].
+    InitialVersion = rt_properties:get(start_version, Properties),
+    [versions_to_test_to_string(InitialVersion)].
+%% Can be in .riak_test.config as either a string or atom, but let's
+%% agree upon strings for consistency
+-spec versions_to_test_to_string(string()|atom()) -> string().
+versions_to_test_to_string(Version) when is_atom(Version) ->
+    atom_to_list(Version);
+versions_to_test_to_string(Version) when is_list(Version) ->
+    Version.
 
 %% Function to abstract away the details of what properties
 %% can be overridden on the command line.
