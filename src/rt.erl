@@ -553,7 +553,7 @@ wait_until_transfers_complete(Nodes) ->
 wait_for_service(Node, Services) when is_list(Services) ->
     rt2:wait_for_service(Node, Services);
 wait_for_service(Node, Service) ->
-    wait_for_service(Node, [Service]).
+    rt2:wait_for_service(Node, [Service]).
 
 wait_for_cluster_service(Nodes, Service) ->
     rt2:wait_for_cluster_service(Nodes, Service).
@@ -566,7 +566,7 @@ wait_until_nodes_ready(Nodes) ->
 %% @doc Wait until all nodes in the list `Nodes' believe each other to be
 %%      members of the cluster.
 wait_until_all_members(Nodes) ->
-    wait_until_all_members(Nodes, Nodes).
+    rt2:wait_until_all_members(Nodes, Nodes).
 
 %% @doc Wait until all nodes in the list `Nodes' believes all nodes in the
 %%      list `Members' are members of the cluster.
