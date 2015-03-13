@@ -27,6 +27,7 @@
 %% Certificate Names
 -define(DEF_DOM,    ".basho.com").
 -define(DOM_WC,     "*" ++ ?DEF_DOM).
+-define(BAD_WC,     "*.bahso.com").
 -define(CERTN(S),   S ++ ?DEF_DOM).
 -define(SITEN(N),   ?CERTN("site" ++ ??N)).
 -define(CERTP(S),   filename:join(CertDir, S)).
@@ -39,35 +40,64 @@
     ssl             %% options returned from ssl_paths
 }).
 
+%%
+%%  @doc    Tests various TLS (SSL) connection scenarios for MDC.
+%%  The following configiration options are recognized:
+%%
+%%  num_nodes       [default 6]
+%%  How many nodes to use to build two clusters.
+%%
+%%  cluster_a_size  [default (num_nodes div 2)]
+%%  How many nodes to use in cluster "A". The remainder is used in cluster "B".
+%%
+%%  conn_fail_time  [default rt_max_wait_time]
+%%  A (presumably shortened) timout to use in tests where the connection is
+%%  expected to be rejected due to invalid TLS configurations. Something around
+%%  one minute is appropriate. Using the default ten-minute timeout, this
+%%  test will take more than an hour and a half to run successfully.
+%%
 confirm() ->
 
     %% test requires allow_mult=false
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     NumNodes = rt_config:get(num_nodes, 6),
-    ClusterASize = rt_config:get(cluster_a_size, 3),
+    ClusterASize = rt_config:get(cluster_a_size, (NumNodes div 2)),
 
     CertDir = rt_config:get(rt_scratch_dir) ++ "/certs",
 
-    %% make a bunch of certificates and matching ci records
-    make_certs:rootCA(CertDir, "rootCA"),
-    make_certs:intermediateCA(CertDir, "intCA", "rootCA"),
+    %% make some CAs
+    make_certs:rootCA(CertDir, "CA_0"),
+    make_certs:intermediateCA(CertDir, "CA_1", "CA_0"),
+    make_certs:intermediateCA(CertDir, "CA_2", "CA_1"),
 
+    %% make a bunch of certificates and matching ci records
     S1Name = ?SITEN(1),
     S2Name = ?SITEN(2),
-    make_certs:endusers(CertDir, "intCA", [S1Name, S2Name]),
-    CIsite1 = #ci{cn = S1Name, rd = 1, ssl = ssl_paths(?CERTP(S1Name))},
-    CIsite2 = #ci{cn = S2Name, rd = 1, ssl = ssl_paths(?CERTP(S2Name))},
-
     S3Name = ?SITEN(3),
     S4Name = ?SITEN(4),
-    make_certs:endusers(CertDir, "rootCA", [S3Name, S4Name]),
-    CIsite3 = #ci{cn = S3Name, rd = 0, ssl = ssl_paths(?CERTP(S3Name))},
-    CIsite4 = #ci{cn = S4Name, rd = 0, ssl = ssl_paths(?CERTP(S4Name))},
+    S5Name = ?SITEN(5),
+    S6Name = ?SITEN(6),
+    W1Name = ?CERTN("wildcard1"),
+    W2Name = ?CERTN("wildcard2"),
 
-    WCName = ?CERTN("wildcard"),
-    make_certs:enduser(CertDir, "intCA", ?DOM_WC, WCName),
-    CIsiteWC = #ci{cn = WCName, rd = 1, ssl = ssl_paths(?CERTP(WCName))},
+    make_certs:endusers(CertDir, "CA_0", [S1Name, S2Name]),
+    CIdep0s1 = #ci{cn = S1Name, rd = 0, ssl = ssl_paths(?CERTP(S1Name))},
+    CIdep0s2 = #ci{cn = S2Name, rd = 0, ssl = ssl_paths(?CERTP(S2Name))},
+
+    make_certs:endusers(CertDir, "CA_1", [S3Name, S4Name]),
+    CIdep1s1 = #ci{cn = S3Name, rd = 1, ssl = ssl_paths(?CERTP(S3Name))},
+    CIdep1s2 = #ci{cn = S4Name, rd = 1, ssl = ssl_paths(?CERTP(S4Name))},
+
+    make_certs:endusers(CertDir, "CA_2", [S5Name, S6Name]),
+    CIdep2s1 = #ci{cn = S5Name, rd = 2, ssl = ssl_paths(?CERTP(S5Name))},
+    CIdep2s2 = #ci{cn = S6Name, rd = 2, ssl = ssl_paths(?CERTP(S6Name))},
+
+    make_certs:enduser(CertDir, "CA_1", ?DOM_WC, W1Name),
+    CIdep1wc = #ci{cn = ?DOM_WC, rd = 1, ssl = ssl_paths(?CERTP(W1Name))},
+
+    make_certs:enduser(CertDir, "CA_2", ?DOM_WC, W2Name),
+    CIdep2wc = #ci{cn = ?DOM_WC, rd = 2, ssl = ssl_paths(?CERTP(W2Name))},
 
     % crufty old certs really need to be replaced
     CIexpired = #ci{cn = "ny.cataclysm-software.net", rd = 0,
@@ -87,6 +117,8 @@ confirm() ->
     %% Properties added to node configurations CANNOT currently be removed,
     %% only overwritten.  As such, configurations that include ACLs MUST come
     %% after ALL non-ACL configurations!  This has been learned the hard way :(
+    %% The same applies to the ssl_depth option, though it's much easier to
+    %% contend with - make sure it works, then always use a valid depth.
     %%
 
     %%
@@ -94,103 +126,159 @@ confirm() ->
     %% Each is a tuple: {Description, Node1Config, Node2Config, Should Pass}
     %%
     SslConnTests = [
-        {"identical certificate CN is disallowed",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite1#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite1#ci.ssl }],
-            false},
+        %%
+        %% basic tests
+        %%
         {"non-SSL peer fails",
             [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite1#ci.ssl }],
+            ] ++ CIdep0s1#ci.ssl }],
             ConfTcpBasic,
             false},
         {"non-SSL local fails",
             ConfTcpBasic,
             [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite2#ci.ssl }],
+            ] ++ CIdep0s2#ci.ssl }],
             false},
         {"basic SSL connectivity",
             [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite1#ci.ssl }],
+            ] ++ CIdep0s1#ci.ssl }],
             [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite2#ci.ssl }],
+            ] ++ CIdep0s2#ci.ssl }],
             true},
-        {"SSL connectivity with intermediate CA",
+        {"expired peer certificate fails",
             [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite1#ci.ssl }],
+            ] ++ CIdep0s1#ci.ssl }],
             [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite3#ci.ssl }],
-            true},
-        {"wildcard certifictes on both ends",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsiteWC#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsiteWC#ci.ssl }],
-            true},
-        {"wildcard certifictes on one end",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsiteWC#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-            ] ++ CIsite3#ci.ssl }],
-            true},
-        %% first use of ssl_depth, all subsequent tests must specify it
-        {"disallowing intermediate CA setting",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, 0}
-            ] ++ CIsite3#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, 0}
-            ] ++ CIsite4#ci.ssl }],
-            true},
-        {"disallowing intermediate CA connection",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, 0}
-            ] ++ CIsite3#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIsite3#ci.rd}
-            ] ++ CIsite1#ci.ssl }],
-            false},
-        %% first use of peer_common_name_acl, all subsequent tests must specify it
-        {"wildcard certifictes on one end with ACL",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIsite1#ci.rd}
-            ] ++ CIsiteWC#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIsiteWC#ci.rd}
-                , {peer_common_name_acl, [?DOM_WC]}
-            ] ++ CIsite1#ci.ssl }],
-            true},
-        {"wildcard and strict ACL",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIsite2#ci.rd}
-                , {peer_common_name_acl, [?DOM_WC]}
-            ] ++ CIsite1#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIsite1#ci.rd}
-                , {peer_common_name_acl, [CIsite1#ci.cn]}
-            ] ++ CIsite2#ci.ssl }],
-            true},
-        {"wildcard certifictes on both ends with ACLs",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIsiteWC#ci.rd}
-                , {peer_common_name_acl, [CIsiteWC#ci.wc]}
-            ] ++ CIsiteWC#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIsiteWC#ci.rd}
-                , {peer_common_name_acl, [CIsiteWC#ci.wc]}
-            ] ++ CIsiteWC#ci.ssl }],
-            true},
-        {"expired certificates fail",
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIexpired#ci.rd}
-                , {peer_common_name_acl, [CIexpired#ci.wc]}
-            ] ++ CIsite1#ci.ssl }],
-            [ConfRepl, {riak_core, [{ssl_enabled, true}
-                , {ssl_depth, CIsite1#ci.rd}
-                , {peer_common_name_acl, [CIsite1#ci.wc]}
             ] ++ CIexpired#ci.ssl }],
-            false}
+            false},
+        {"expired local certificate fails",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIexpired#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep0s2#ci.ssl }],
+            false},
+        {"identical certificate CN is disallowed",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep0s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep0s1#ci.ssl }],
+            false},
+        {"identical wildcard certificate CN is allowed",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep1wc#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep1wc#ci.ssl }],
+            true},
+        {"SSL connectivity with one intermediate CA is allowed by default",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep1s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep1s2#ci.ssl }],
+            true},
+        {"SSL connectivity with two intermediate CAs is disallowed by default",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep2s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep2s2#ci.ssl }],
+            false},
+        {"wildcard certificates on both ends",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep1wc#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep1wc#ci.ssl }],
+            true},
+        {"wildcard certificate on one end",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep1wc#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+            ] ++ CIdep0s1#ci.ssl }],
+            true},
+        %%
+        %% first use of ssl_depth, all subsequent tests must specify
+        %%
+        {"disallowing intermediate CA setting allows direct-signed certs",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, 0}
+            ] ++ CIdep0s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, 0}
+            ] ++ CIdep0s2#ci.ssl }],
+            true},
+        {"disallowing intermediate CA disallows intermediate-signed peer",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, 0}
+            ] ++ CIdep0s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep0s1#ci.rd}
+            ] ++ CIdep1s2#ci.ssl }],
+            false},
+        {"disallowing intermediate CA disallows intermediate-signed local",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep0s2#ci.rd}
+            ] ++ CIdep1s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, 0}
+            ] ++ CIdep0s2#ci.ssl }],
+            false},
+        {"allow arbitrary-depth intermediate CAs",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep2s2#ci.rd}
+            ] ++ CIdep2s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep2s1#ci.rd}
+            ] ++ CIdep2s2#ci.ssl }],
+            true},
+        %%
+        %% first use of peer_common_name_acl, all subsequent tests must specify
+        %%
+        {"wildcard certificate on one end with matching ACL",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep1s1#ci.rd}
+            ] ++ CIdep1wc#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep1wc#ci.rd}
+                , {peer_common_name_acl, [?DOM_WC]}
+            ] ++ CIdep1s1#ci.ssl }],
+            true},
+        {"wildcard certificate on one end with mismatched ACL",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep1s1#ci.rd}
+            ] ++ CIdep1wc#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep1wc#ci.rd}
+                , {peer_common_name_acl, [?BAD_WC]}
+            ] ++ CIdep1s1#ci.ssl }],
+            false},
+        {"one wildcard ACL and one strict ACL",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep1s2#ci.rd}
+                , {peer_common_name_acl, [?DOM_WC]}
+            ] ++ CIdep1s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep1s1#ci.rd}
+                , {peer_common_name_acl, [CIdep1s1#ci.cn]}
+            ] ++ CIdep1s2#ci.ssl }],
+            true},
+        {"wildcard certificates on both ends with ACLs",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep2wc#ci.rd}
+                , {peer_common_name_acl, [CIdep2wc#ci.wc]}
+            ] ++ CIdep1wc#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep1wc#ci.rd}
+                , {peer_common_name_acl, [CIdep1wc#ci.wc]}
+            ] ++ CIdep2wc#ci.ssl }],
+            true},
+        {"explicit certificates with strict ACLs",
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep2s2#ci.rd}
+                , {peer_common_name_acl, [CIdep2s2#ci.cn]}
+            ] ++ CIdep1s1#ci.ssl }],
+            [ConfRepl, {riak_core, [{ssl_enabled, true}
+                , {ssl_depth, CIdep1s1#ci.rd}
+                , {peer_common_name_acl, [CIdep1s1#ci.cn]}
+            ] ++ CIdep2s2#ci.ssl }],
+            true}
     ],
 
     lager:info("Deploying 2 nodes for connectivity tests"),
@@ -238,13 +326,13 @@ confirm() ->
 
     lager:info("Reconfiguring nodes with SSL options"),
     ConfANodes = [ConfRepl, {riak_core, [{ssl_enabled, true}
-        , {ssl_depth, CIsite2#ci.rd}
-        , {peer_common_name_acl, [CIsite2#ci.cn]}
-    ] ++ CIsite1#ci.ssl }],
+        , {ssl_depth, CIdep1s2#ci.rd}
+        , {peer_common_name_acl, [CIdep1s2#ci.cn]}
+    ] ++ CIdep1s1#ci.ssl }],
     ConfBNodes = [ConfRepl, {riak_core, [{ssl_enabled, true}
-        , {ssl_depth, CIsite1#ci.rd}
-        , {peer_common_name_acl, [CIsite1#ci.cn]}
-    ] ++ CIsite2#ci.ssl }],
+        , {ssl_depth, CIdep1s1#ci.rd}
+        , {peer_common_name_acl, [CIdep1s1#ci.cn]}
+    ] ++ CIdep1s2#ci.ssl }],
     [rt:update_app_config(N, ConfANodes) || N <- ANodes],
     [rt:update_app_config(N, ConfBNodes) || N <- BNodes],
 
@@ -271,7 +359,11 @@ test_connection(Left, Right, true) ->
     ?assertEqual(ok, test_connection(Left, Right)),
     lager:info("Connection succeeded");
 test_connection(Left, Right, false) ->
+    DefaultTimeout = rt_config:get(rt_max_wait_time),
+    ConnFailTimeout = rt_config:get(conn_fail_time, DefaultTimeout),
+    rt_config:set(rt_max_wait_time, ConnFailTimeout),
     ?assertMatch({fail, _}, test_connection(Left, Right)),
+    rt_config:set(rt_max_wait_time, DefaultTimeout),
     lager:info("Connection rejected").
 
 test_connection({Node1, Config1}, {Node2, Config2}) ->
