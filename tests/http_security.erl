@@ -435,8 +435,8 @@ confirm() ->
                                                true}])),
 
     lager:info("whitelisting module path"),
-    ok = rpc:call(Node, application, set_env, [riak_kv, add_paths,
-                                    [filename:dirname(code:which(?MODULE))]]),
+    {?MODULE, _ModBin, ModFile} = code:get_object_code(?MODULE),
+    ok = rpc:call(Node, application, set_env, [riak_kv, add_paths, [filename:dirname(ModFile)]]),
 
     lager:info("checking that insecure input modfun fails when whitelisted but"
                " lacking permissions"),
