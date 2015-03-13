@@ -200,10 +200,7 @@ set_advanced_conf(Node, NameValuePairs) ->
 update_app_config(all, Config) ->
     rt_config:update_app_config(all, Config);
 update_app_config(Node, Config) ->
-    stop(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
-    rt_config:update_app_config(Node, Config),
-    start(Node).
+    rt_config:update_app_config(Node, Config).
 
 %% @doc Helper that returns first successful application get_env result,
 %%      used when different versions of Riak use different app vars for

@@ -359,10 +359,11 @@ update_app_config(DevPath, Config) ->
 update_app_config(Node, Version, Config) ->
     VersionPath = filename:join(?PATH, Version),
     FileFormatString = "~s/~s/etc/~s.config",
+    {NodeId, _} = extract_node_id_and_name(Node),
     AppConfigFile = io_lib:format(FileFormatString,
-                                  [VersionPath, node_short_name(Node), "app"]),
+                                  [VersionPath, node_short_name(NodeId), "app"]),
     AdvConfigFile = io_lib:format(FileFormatString,
-                                  [VersionPath, node_short_name(Node), "advanced"]),
+                                  [VersionPath, node_short_name(NodeId), "advanced"]),
 
     %% If there's an app.config, do it old style
     %% if not, use cuttlefish's advanced.config
