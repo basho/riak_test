@@ -234,8 +234,8 @@ get_https_conn_info(Node) ->
 deploy_nodes(Versions) when is_list(Versions) ->
     deploy_nodes(Versions, [riak_kv]);
 deploy_nodes(NumNodes) when is_integer(NumNodes) ->
-    [NodeIds, NodeMap, _] = allocate_nodes(NumNodes, rt_config:get(default_version, "head")),
-    deploy_nodes(NodeIds, NodeMap, rt_config:get(default_version, "head"), rt_properties:default_config(), [riak_kv]).
+    [NodeIds, NodeMap, _] = allocate_nodes(NumNodes, rt_config:get_default_version()),
+    deploy_nodes(NodeIds, NodeMap, rt_config:get_default_version(), rt_properties:default_config(), [riak_kv]).
 
 %% @doc Deploy a set of freshly installed Riak nodes with the given
 %%      `InitialConfig', returning a list of the nodes deployed.
@@ -253,7 +253,7 @@ deploy_nodes(Versions, Services) ->
     Nodes.
 
 deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
-    Version = rt_config:get(default_version, "head"),
+    Version = rt_config:get_default_version(),
     [NodeIds, NodeMap, _] = allocate_nodes(NumNodes, Version),
 
     deploy_nodes(NodeIds, NodeMap, Version, InitialConfig, Services).
@@ -306,7 +306,7 @@ allocate_nodes(NumNodes, Version) ->
     [AllocatedNodeIds, AllocatedNodeMap, VersionMap].
 
 version_to_config(Config) when is_tuple(Config)-> Config;
-version_to_config(Version) -> {Version, rt_config:get(default_version, "head")}.
+version_to_config(Version) -> {Version, rt_config:get_default_version()}.
 
 deploy_clusters(Settings) ->
     ClusterConfigs = [case Setting of
@@ -314,9 +314,9 @@ deploy_clusters(Settings) ->
                               lager:info("deploy_cluster Configs"),
                               Configs;
                           NumNodes when is_integer(NumNodes) ->
-                              [{rt_config:get(default_version, "head"), default} || _ <- lists:seq(1, NumNodes)];
+                              [{rt_config:get_default_version(), default} || _ <- lists:seq(1, NumNodes)];
                           {NumNodes, InitialConfig} when is_integer(NumNodes) ->
-                              [{rt_config:get(default_version, "head"), InitialConfig} || _ <- lists:seq(1,NumNodes)];
+                              [{rt_config:get_default_version(), InitialConfig} || _ <- lists:seq(1,NumNodes)];
                           {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
                               [{rt_config:version_to_path(Vsn), InitialConfig} || _ <- lists:seq(1,NumNodes)]
                       end || Setting <- Settings],

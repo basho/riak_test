@@ -64,7 +64,7 @@
 -define(SRC_PATHS, (rt_config:get(src_paths))).
 
 get_deps() ->
-    lists:flatten(io_lib:format("~s/dev1/lib", [relpath(rt_config:get(default_version, "head"))])).
+    lists:flatten(io_lib:format("~s/dev1/lib", [relpath(rt_config:get_default_version())])).
 
 deploy_clusters(ClusterConfig) ->
     rt_harness_util:deploy_clusters(ClusterConfig).

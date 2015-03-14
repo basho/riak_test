@@ -40,7 +40,7 @@
 # Current version of Erlang (for "head" version)
 : ${CURRENT_OTP:=$R16B02}
 # Label of the "current" version
-: ${VERSION:="head"}
+: ${DEFAULT_VERSION:="riak-head"}
 # By default the Open Source version of Riak will be used, but for internal
 # testing you can override this variable to use `riak_ee` instead
 : ${RT_USE_EE:=""}
@@ -52,6 +52,7 @@ popd > /dev/null
 GITURL_RIAK="git://github.com/basho/riak"
 GITURL_RIAK_EE="git@github.com:basho/riak_ee"
 
+# Determine if Erlang has already been built
 checkbuild()
 {
     ERLROOT=$1
@@ -76,21 +77,28 @@ checkbuild()
     fi
 }
 
+# Build and install Erlangs
 kerl()
 {
     RELEASE=$1
     BUILDNAME=$2
 
+    export CFLAGS="-g -O2"
+    export LDFLAGS="-g"
     if [ -n "`uname -r | grep el6`" ]; then
-        export CFLAGS="-DOPENSSL_NO_EC=1"
+        export CFLAGS="-g -DOPENSSL_NO_EC=1"
     fi
     if [ "`uname`" == "Darwin" ]; then
-        export CFLAGS="-O0"
-        export KERL_CONFIGURE_OPTIONS="-disable-hipe --enable-smp-support --enable-threads --enable-kernel-poll --without-odbc --enable-darwin-64bit"
+        export CFLAGS="-g -O0"
+        export KERL_CONFIGURE_OPTIONS="--disable-hipe --enable-smp-support --enable-threads --enable-kernel-poll --without-odbc --enable-darwin-64bit"
+    else
+        export KERL_CONFIGURE_OPTIONS="--disable-hipe --enable-smp-support --enable-threads --without-odbc --enable-m64-build"
     fi
     echo " - Building Erlang $RELEASE (this could take a while)"
     # Use the patched version of Erlang for R16B02 builds
-    if [ "$RELEASE" == "R16B02" ]; then
+    if [ "$RELEASE" == "R15B01" ]; then
+        ./kerl build git git://github.com/basho/otp.git basho_OTP_R15B01p $BUILDNAME
+    elif [ "$RELEASE" == "R16B02" ]; then
         ./kerl build git git://github.com/basho/otp.git r16 $BUILDNAME
     else
         ./kerl build $RELEASE $BUILDNAME
@@ -110,6 +118,7 @@ kerl()
     fi
 }
 
+# Build stagedevrels for testing
 build()
 {
     SRCDIR=$1
@@ -151,10 +160,10 @@ build()
 
     # For non-tagged builds (i.e. head), use make deps.  Otherwise, use
     # make locked-deps for tagged builds ...
-    if [ "$SRCDIR" == "head" ]; then
-      make deps
+    if [ -n "`echo ${SRCDIR} | grep head`" ]; then
+        make deps
     else
-      $RUN make locked-deps
+        $RUN make locked-deps
     fi
 
     $RUN make all stagedevrel
@@ -242,11 +251,14 @@ echo
 if [ -z "$RT_USE_EE" ]; then
 	build "riak-1.3.2" $R15B01
 	build "riak-1.4.12" $R15B01
+	if [ "${DEFAULT_VERSION" == "riak-head" ]; then
+	    DEFAULT_VERSION = "riak_ee-head"
+	fi
 else
 	build "riak_ee-1.3.4" $R15B01
 	build "riak_ee-1.4.12" $R15B01
 fi
-build "$VERSION" $R16B02
+build "$DEFAUlT_VERSION" $R16B02
 
 echo
 echo "= Build complete! ==============================================="

@@ -28,28 +28,34 @@ echo -n " - Determining version: "
 if [ -z "${RT_VERSION+xxx}" ] || ([ -z "$RT_VERSION" ] && [ "${RT_VERSION+xxx}" = "xxx" ]); then
     if [ -f $cwd/dependency_manifest.git ]; then
         # For packaged distributions
-        RT_VERSION=`cat $cwd/dependency_manifest.git | awk '/^-/ { print $NF }'`
+        VERSION=`cat $cwd/dependency_manifest.git | awk '/^-/ { print $NF }'`
     else
         echo "Making $(pwd) a tagged release:"
-        #TAGS=`git describe --tags`
+        TAGS=`git describe --tags`
         CURRENT=`git rev-parse HEAD`
         HEAD=`git show-ref | grep HEAD | cut -f1 -d" "`
-        #if [ -n "`echo ${TAGS} | grep riak_ee`" ]; then
+        PRODUCT=""
+        if [ -n "`echo ${TAGS} | grep riak_ee`" ]; then
             # For riak_ee
-        #    RT_VERSION=`echo ${TAGS} | awk '{sub(/riak_ee-/,"",$0);print}'`
-        #else
+            PRODUCT="riak_ee"
+            VERSION=`echo ${TAGS} | awk '{sub(/riak_ee-/,"",$0);print}'`
+        elif [ -n "`echo ${TAGS} | grep riak_cs`" ]; then
+            # For riak_cs
+            PRODUCT="riak_cs"
+            VERSION=`echo ${TAGS} | awk '{sub(/riak_cs-/,"",$0);print}'`
+        else
             # For open source riak
-        #    RT_VERSION=`echo ${TAGS} | awk '{sub(/riak-/,"",$0);print}'`
-        #fi
+            PRODUCT="riak"
+            RT_VERSION=`echo ${TAGS} | awk '{sub(/riak-/,"",$0);print}'`
+        fi
         # If we are on the tip, call the version "head"
         if [ "${CURRENT}" == "${HEAD}" ]; then
-            RT_VERSION="head"
-        else
-            RT_VERSION="$(git describe --tags)"
+            VERSION="head"
         fi
     fi
+    RT_VERSION="${PRODUCT}-${VERSION}"
 fi
-echo $RT_VERSION
+echo "Version: ${RT_VERSION}"
 
 # Create the RT_DEST_DIR directory if it does not yet exist
 if [ ! -d $RT_DEST_DIR ]; then
@@ -91,6 +97,11 @@ for i in `ls`; do cp -p -P -R $i $RT_DEST_DIR/$RT_VERSION/; done
         git commit -a -m "riak_test init" --amend > /dev/null 2>&1
     else
         git init
+        cat > .gitignore <<EOF
+# Don't check in large binaries
+bin/
+lib/
+EOF
 
         ## Some versions of git and/or OS require these fields
         git config user.name "Riak Test"

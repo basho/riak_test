@@ -25,6 +25,9 @@
          get/2,
          config_or_os_env/1,
          config_or_os_env/2,
+         get_default_version/0,
+         get_previous_version/0,
+         get_legacy_version/0,
          get_os_env/1,
          get_os_env/2,
          load/2,
@@ -41,6 +44,7 @@
 -define(DEFAULT_VERSION_KEY, default_version).
 -define(PREVIOUS_VERSION_KEY, previous_version).
 -define(LEGACY_VERSION_KEY, legacy_version).
+-define(PROJECT_KEY, rt_project).
 -define(DEFAULT_VERSION, head).
 -define(PREVIOUS_VERSION, "1.4.12").
 -define(LEGACY_VERSION, "1.3.4").
@@ -114,6 +118,27 @@ get(Key, Default) ->
         Value -> Value
     end.
 
+%% @doc Return the default version
+-spec get_default_version() -> string().
+get_default_version() ->
+    get_version(?DEFAULT_VERSION_KEY).
+
+%% @doc Return the default version
+-spec get_previous_version() -> string().
+get_previous_version() ->
+    get_version(?PREVIOUS_VERSION_KEY).
+
+%% @doc Return the default version
+-spec get_legacy_version() -> string().
+get_legacy_version() ->
+    get_version(?LEGACY_VERSION_KEY).
+
+%% @doc Prepends the project onto the default version
+%%      e.g. "riak_ee-3.0.1" or "riak-head"
+-spec get_version(atom()) -> string().
+get_version(Vsn) ->
+    convert_to_string(rt_config:get(?PROJECT_KEY)) ++ "-" ++ convert_to_string(rt_config:get(Vsn)).
+
 -spec config_or_os_env(atom()) -> term().
 config_or_os_env(Config) ->
     OSEnvVar = to_upper(atom_to_list(Config)),
@@ -181,18 +206,22 @@ char_to_upper(C) -> C.
 %% @doc Look up the version by name from the config file
 -spec version_to_path(atom()) -> string().
 version_to_path(Version) ->
-    NewVersion = case Version of
-                     current -> default_version;
-                     legacy -> legacy_version;
-                     previous -> previous_version;
-                     _ -> Version
-                 end,
-    Path = rt_config:get(NewVersion, Version),
-    %% If path is stored as an atom, convert to a string
-    case is_atom(Path) of
-        true -> atom_to_list(Path);
-        _ -> Path
+    case Version of
+        default_version -> rt_config:get_default_version();
+        legacy_version -> rt_config:get_legacy_version();
+        previous_version -> rt_config:get_previous_version();
+        current -> rt_config:get_default_version();
+        legacy -> rt_config:get_legacy_version();
+        previous -> rt_config:get_previous_version();
+        _ -> rt_config:get(Version)
     end.
+
+%% @doc: Convert an atom to a string if it is not already
+-spec convert_to_string(string() | atom()) -> string().
+convert_to_string(Val) when is_atom(Val) ->
+    atom_to_list(Val);
+convert_to_string(Val) when is_list(Val) ->
+    Val.
 
 -ifdef(TEST).
 

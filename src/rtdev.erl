@@ -64,7 +64,7 @@ devrel_node_name(N) when is_integer(N) ->
     list_to_atom(lists:concat(["dev", N, "@127.0.0.1"])).
 
 get_deps() ->
-    DefaultVersionPath = filename:join(?PATH, rt_config:get(default_version)),
+    DefaultVersionPath = filename:join(?PATH, rt_config:get_default_version()),
     lists:flatten(io_lib:format("~s/dev1/lib", [DefaultVersionPath])).
 
 %% @doc Create a command-line command
@@ -206,7 +206,7 @@ stop_all(VersionMap) ->
 
 available_resources() ->
     VersionMap = [{Version, harness_node_ids(Version)} || Version <- versions()],
-    NodeIds = harness_node_ids(rt_config:get(default_version, "head")),
+    NodeIds = harness_node_ids(rt_config:get_default_version()),
     NodeMap = lists:zip(NodeIds, harness_nodes(NodeIds)),
     [NodeIds, NodeMap, VersionMap].
  
@@ -910,7 +910,7 @@ set_backend(Backend, OtherOpts) ->
 
 %% WRONG: Seemingly always stuck on the current version
 get_version() ->
-    case file:read_file(relpath(rt_config:get(default_version, "head")) ++ "/VERSION") of
+    case file:read_file(relpath(rt_config:get_default_version()) ++ "/VERSION") of
         {error, enoent} -> unknown;
         {ok, Version} -> Version
     end.

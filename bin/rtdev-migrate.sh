@@ -27,7 +27,7 @@ cd ${RT_DEST_DIR}
 # New "standard" for current version of Riak
 if [ -d current ]; then
     echo "Renaming current to head"
-    mv -f current head
+    mv -f current riak-head
 fi
 
 # Chop off the "riak-" prefix

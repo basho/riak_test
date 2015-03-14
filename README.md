@@ -14,7 +14,7 @@ contents of `$HOME/rt/riak` might look something like this:
 
 ```
 $ ls $HOME/rt/riak
-head riak-1.3.2 riak-1.4.12
+riak-head riak-1.3.2 riak-1.4.12
 ```
 
 Inside each of these directories is a series `dev[0-9]+` directories, typically
@@ -34,10 +34,10 @@ There is one folder in `$HOME/rt/riak` that does not come from
 `~/test-releases`: `head`. The `head` folder can refer
 to any version of Riak, but is typically used for something
 like the `master` branch, a feature branch, or a release candidate.
-The `$HOME/rt/riak/head` dev release gets populated from a devrel of Riak
+The `$HOME/rt/riak/riak-head` dev release gets populated from a stagedevrel of Riak
 that can come from anywhere, but is usually your 'normal' git checkout
 of Riak. The `bin/rtdev-install.sh` can be run from within that folder
-to copy `dev/` into `$HOME/rt/riak/head`.
+to copy `dev/` into `$HOME/rt/riak/riak-head`.
 
 Once you have everything set up (again, instructions for this are below),
 you'll want to run and write tests. This repository also holds code for
@@ -72,7 +72,7 @@ Essentially these packages need to be on your system for a successful build:
 
 This script is for a complete installation. It performs all of the setup steps
 including installing the current "master" branch from
-Github into "head". The releases will be built in your current working
+Github into "riak-head". The releases will be built in your current working
 directory, so create an empty one in a place you'd like to store these
 builds for posterity, so that you don't have to rebuild them if your
 installation path (`$HOME/rt/riak` by the way this script installs it) gets into
