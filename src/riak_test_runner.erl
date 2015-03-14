@@ -268,6 +268,7 @@ wait_for_completion({test_result, {fail, Reason}}, State=#state{test_module=Test
                                                         stop_on_fail=StopOnFail,
                                                         remaining_versions=[]}) ->
     Result = {fail, Reason},
+    lager:debug("Test Result ~p = {fail, ~p}", [TestModule, Reason]),
     UpdState = State#state{test_module=TestModule,
                            test_type=TestType,
                            test_results=Result,
@@ -284,6 +285,7 @@ wait_for_completion({test_result, Result}, State=#state{test_module=TestModule,
                                                         test_type=TestType,
                                                         group_leader=GroupLeader,
                                                         remaining_versions=[]}) ->
+    lager:debug("Test Result ~p = {~p}", [TestModule, Result]),
     %% TODO: Format results for aggregate test runs if needed. For
     %% upgrade tests with failure return which versions had failure
     %% along with reasons.
@@ -302,6 +304,7 @@ wait_for_completion({test_result, Result}, State) ->
            current_version=CurrentVersion,
            remaining_versions=[NextVersion | RestVersions],
            properties=Properties} = State,
+    lager:debug("Test Result ~p = {~p}", [TestModule, Result]),
     Config = rt_backend:set(Backend, rt_properties:get(config, Properties)),
     NodeIds = rt_properties:get(node_ids, Properties),
     node_manager:upgrade_nodes(NodeIds,
