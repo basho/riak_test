@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 -module(verify_fast_path).
--export([confirm/0, description/0]).
+-export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -31,11 +31,9 @@
 -define(ASYNC_PUT_BUCKET, {?ASYNC_PUT_BUCKET_TYPE, <<"bucket">>}).
 
 
-description() ->
-    "This test exercises the fast_path bucket property, which results in puts that avoid coordination "
-        ++ "and reads before writes, and which therefore have lower latency and higher throughput.  "
-    .
-
+%% @doc This test exercises the fast_path bucket property, which results in puts that avoid coordination
+%%      and reads before writes, and which therefore have lower latency and higher throughput.
+%%
 confirm() ->
     %%
     %% Set two clusters.  We need one for most of the testing of this code path.
@@ -92,7 +90,7 @@ confirm_w(Nodes) ->
     %% By setting sloppy_quorum to false, we require a strict quorum of primaries.  But because
     %% we only have one node in the partition, the put should fail.
     %%
-    verify_put_timeout(Node2, ?BUCKET, <<"confirm_w_key">>, <<"confirm_w_value">>, [{sloppy_quorum, false}, {timeout, 1000}]),
+    verify_put_timeout(Node2, ?BUCKET, <<"confirm_w_key">>, <<"confirm_w_value">>, [{sloppy_quorum, false}], 1000),
     rt:heal(PartitonInfo),
     lager:info("confirm_pw...ok"),
     pass.
@@ -112,7 +110,7 @@ confirm_pw(Nodes) ->
     %% Similar to the above test -- if pw is all, then we require n_val puts on primaries, but
     %% the node is a singleton in the partition, so this, too, should fail.
     %%
-    verify_put_timeout(Node2, ?BUCKET, <<"confirm_pw_key">>, <<"confirm_pw_value">>, [{pw, all}, {timeout, 1000}]),
+    verify_put_timeout(Node2, ?BUCKET, <<"confirm_pw_key">>, <<"confirm_pw_value">>, [{pw, all}], 1000),
     rt:heal(PartitonInfo),
     lager:info("confirm_pw...ok"),
     pass.
@@ -172,16 +170,19 @@ verify_put(Node, Bucket, Key, Value) ->
     ok.
 
 
-verify_put_timeout(Node, Bucket, Key, Value, Options) ->
+verify_put_timeout(Node, Bucket, Key, Value, Options, Timeout) ->
     Client = rt:pbc(Node),
-    ?assertEqual(
-        {error, <<"timeout">>},
-        riakc_pb_socket:put(
-            Client, riakc_obj:new(
-                Bucket, Key, Value
-            ), Options
-        )
+    {Time, Val} = timer:tc(
+        fun() ->
+            riakc_pb_socket:put(
+                Client, riakc_obj:new(
+                    Bucket, Key, Value
+                ), [{timeout, Timeout} | Options]
+            )
+        end
     ),
+    ?assertEqual({error, <<"timeout">>}, Val),
+    ?assert(Time div 1000000 =< 2*Timeout),
     ok.
 
 num_fast_merges(Nodes) ->
