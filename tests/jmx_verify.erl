@@ -40,6 +40,8 @@ confirm() ->
 
     JMXDumpCmd = jmx_dump_cmd(IP, JMXPort),
 
+    % give the jvm some time to come up
+    timer:sleep(rt_config:config_or_os_env(jmx_boot_wait, 1000)),
     JMX1 = jmx_dump(JMXDumpCmd),
 
     %% make sure a set of stats have valid values
