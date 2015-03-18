@@ -56,7 +56,8 @@
          teardown/0,
          set_conf/2,
          set_advanced_conf/2,
-         update_app_config/2]).
+         update_app_config/2,
+         validate_config/1]).
 
 start(Node, Version) ->
     ?HARNESS_MODULE:start(Node, Version).
@@ -154,3 +155,5 @@ set_advanced_conf(Node, NameValuePairs) ->
 update_app_config(Node, Config) ->
     ?HARNESS_MODULE:update_app_config(Node, Config).
 
+validate_config(Versions) ->
+    ?HARNESS_MODULE:validate_config(Versions).

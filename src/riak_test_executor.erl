@@ -301,18 +301,11 @@ versions_to_test(Properties, true) ->
         undefined ->
             versions_to_test(Properties, false);
         UpgradePath ->
-            [versions_to_test_to_string(Upgrade) || Upgrade <- UpgradePath]
+            [rt_config:convert_to_string(Upgrade) || Upgrade <- UpgradePath]
     end;
 versions_to_test(Properties, false) ->
     InitialVersion = rt_properties:get(start_version, Properties),
-    [versions_to_test_to_string(InitialVersion)].
-%% Can be in .riak_test.config as either a string or atom, but let's
-%% agree upon strings for consistency
--spec versions_to_test_to_string(string()|atom()) -> string().
-versions_to_test_to_string(Version) when is_atom(Version) ->
-    atom_to_list(Version);
-versions_to_test_to_string(Version) when is_list(Version) ->
-    Version.
+    [rt_config:convert_to_string(InitialVersion)].
 
 %% Function to abstract away the details of what properties
 %% can be overridden on the command line.

@@ -25,27 +25,30 @@
          get/2,
          config_or_os_env/1,
          config_or_os_env/2,
+         convert_to_string/1,
          get_default_version/0,
          get_previous_version/0,
          get_legacy_version/0,
          get_os_env/1,
          get_os_env/2,
+         get_upgrade_path/1,
          load/2,
          set/2,
          set_conf/2,
          set_advanced_conf/2,
          update_app_config/2,
-         version_to_path/1
+         version_to_tag/1
 ]).
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(CONFIG_NAMESPACE, riak_test).
 -define(RECEIVE_WAIT_TIME_KEY, rt_max_receive_wait_time).
--define(DEFAULT_VERSION_KEY, default_version).
--define(PREVIOUS_VERSION_KEY, previous_version).
--define(LEGACY_VERSION_KEY, legacy_version).
--define(PROJECT_KEY, rt_project).
+-define(VERSION_KEY, versions).
+-define(DEFAULT_VERSION_KEY, default).
+-define(PREVIOUS_VERSION_KEY, previous).
+-define(LEGACY_VERSION_KEY, legacy).
 -define(DEFAULT_VERSION, head).
+-define(UPGRADE_KEY, upgrade_paths).
 -define(PREVIOUS_VERSION, "1.4.12").
 -define(LEGACY_VERSION, "1.3.4").
 
@@ -87,10 +90,15 @@ load_dot_config(ConfigName, ConfigFile) ->
             %% Now, overlay the specific project
             Config = proplists:get_value(list_to_atom(ConfigName), Terms),
             [set(Key, Value) || {Key, Value} <- Config],
-            ok;
+            %% Validate all versions and upgrade paths
+            Versions=rt_config:get(?VERSION_KEY),
+            Upgrades=rt_config:get(?UPGRADE_KEY),
+            RealVersions = [get_version(Name) || {Name, Vsn} <- Versions, is_tuple(Vsn)],
+            RealUpgrades = lists:merge([get_upgrade_path(Name) || {Name, Upg} <- Upgrades, Upg =/= []]),
+            rt_harness:validate_config(lists:usort(RealVersions ++ RealUpgrades));
         {error, Reason} ->
             erlang:error("Failed to parse config file", [ConfigFile, Reason])
- end.
+    end.
 
 set(Key, Value) ->
     ok = application:set_env(riak_test, Key, Value).
@@ -135,9 +143,46 @@ get_legacy_version() ->
 
 %% @doc Prepends the project onto the default version
 %%      e.g. "riak_ee-3.0.1" or "riak-head"
--spec get_version(atom()) -> string().
+-spec get_version(term()) -> string() | not_found.
 get_version(Vsn) ->
-    convert_to_string(rt_config:get(?PROJECT_KEY)) ++ "-" ++ convert_to_string(rt_config:get(Vsn)).
+    Versions = rt_config:get(?VERSION_KEY),
+    resolve_version(Vsn, Versions).
+
+%% @doc Map logical name of version into a pathname string
+-spec resolve_version(term(), [{term(), term()}]) -> string() | no_return().
+resolve_version(Vsn, Versions) ->
+    case find_atom_or_string(Vsn, Versions) of
+        undefined ->
+            erlang:error("Could not find version", [Vsn]);
+        {Product, Tag} ->
+            convert_to_string(Product) ++ "-" ++ convert_to_string(Tag);
+        Version ->
+            resolve_version(Version, Versions)
+    end.
+
+%% @doc Look up values by both atom and by string
+find_atom_or_string(Key, Table) ->
+    case {Key, proplists:get_value(Key, Table)} of
+        {_, undefined} when is_atom(Key) ->
+            proplists:get_value(atom_to_list(Key), Table);
+        {_, undefined} when is_list(Key) ->
+            proplists:get_value(list_to_atom(Key), Table);
+        {Key, Value} ->
+            Value
+    end.
+
+%% @doc Look up a named upgrade path and return the resolved list of versions
+-spec get_upgrade_path(term()) -> list() | not_found.
+get_upgrade_path(Upg) ->
+    Upgrades = rt_config:get(?UPGRADE_KEY),
+    case proplists:get_value(Upg, Upgrades) of
+        undefined ->
+            erlang:error("Could not find upgrade path version", [Upg]);
+        UpgradePath when is_list(UpgradePath) ->
+            [get_version(Vsn) || Vsn <- UpgradePath];
+        _ ->
+            erlang:error("Upgrade path has an invalid definition", [Upg])
+    end.
 
 -spec config_or_os_env(atom()) -> term().
 config_or_os_env(Config) ->
@@ -204,20 +249,18 @@ char_to_upper(C) -> C.
 
 %% TODO: Remove after conversion
 %% @doc Look up the version by name from the config file
--spec version_to_path(atom()) -> string().
-version_to_path(Version) ->
+-spec version_to_tag(atom()) -> string().
+version_to_tag(Version) ->
     case Version of
-        default_version -> rt_config:get_default_version();
-        legacy_version -> rt_config:get_legacy_version();
-        previous_version -> rt_config:get_previous_version();
+        default -> rt_config:get_default_version();
         current -> rt_config:get_default_version();
         legacy -> rt_config:get_legacy_version();
         previous -> rt_config:get_previous_version();
-        _ -> rt_config:get(Version)
+        _ -> rt_config:get_version(Version)
     end.
 
 %% @doc: Convert an atom to a string if it is not already
--spec convert_to_string(string() | atom()) -> string().
+-spec convert_to_string(string()|atom()) -> string().
 convert_to_string(Val) when is_atom(Val) ->
     atom_to_list(Val);
 convert_to_string(Val) when is_list(Val) ->
@@ -253,12 +296,12 @@ get_version_path_test() ->
     clear(?PREVIOUS_VERSION_KEY),
     clear(?LEGACY_VERSION_KEY),
 
-    set(?DEFAULT_VERSION_KEY, atom_to_list(?DEFAULT_VERSION)),
+    set(?DEFAULT_VERSION_KEY, ?DEFAULT_VERSION),
     set(?PREVIOUS_VERSION_KEY, ?PREVIOUS_VERSION),
     set(?LEGACY_VERSION_KEY, ?LEGACY_VERSION),
 
-    ?assertEqual(version_to_path(?DEFAULT_VERSION_KEY), ?DEFAULT_VERSION),
-    ?assertEqual(version_to_path(?PREVIOUS_VERSION_KEY), ?PREVIOUS_VERSION),
-    ?assertEqual(version_to_path(?LEGACY_VERSION_KEY), ?LEGACY_VERSION).
+    ?assertEqual(version_to_tag(?DEFAULT_VERSION_KEY), ?DEFAULT_VERSION),
+    ?assertEqual(version_to_tag(?PREVIOUS_VERSION_KEY), ?PREVIOUS_VERSION),
+    ?assertEqual(version_to_tag(?LEGACY_VERSION_KEY), ?LEGACY_VERSION).
 
 -endif.

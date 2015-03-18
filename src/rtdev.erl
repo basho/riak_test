@@ -48,7 +48,8 @@
          teardown/0,
          set_conf/2,
          set_advanced_conf/2,
-         rm_dir/1]).
+         rm_dir/1,
+         validate_config/1]).
 
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -986,6 +987,21 @@ maybe_contains(_) ->
 -spec node_short_name_to_name(integer()) -> atom().
 node_short_name_to_name(N) ->
    ?DEV("dev" ++ integer_to_list(N)).
+
+%% @doc Check to make sure that all versions specified in the config file actually exist
+-spec validate_config([term()]) -> ok | no_return().
+validate_config(Versions) ->
+    Root = rt_config:get(root_path),
+    Validate = fun(Vsn) ->
+        {Result, _} = file:read_file_info(filename:join([Root, Vsn, "dev1/bin/riak"])),
+        case Result of
+            ok -> ok;
+            _ ->
+                erlang:error("Could not find specified devrel version", [Vsn])
+        end
+    end,
+    [Validate(Vsn) || Vsn <- Versions],
+    ok.
 
 -ifdef(TEST).
 

@@ -135,9 +135,9 @@ cli_options() ->
  {verbose,            $v, "verbose",  undefined,  "verbose output"},
  {outdir,             $o, "outdir",   string,     "output directory"},
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
- {upgrade_path,    $u, "upgrade-path",  atom,       "comma-separated list representing an upgrade path (e.g. 1.2.1,1.3.4,1.4.10,2.0.0)"},
+ {upgrade_path,       $u, "upgrade-path", atom,   "comma-separated list representing an upgrade path (e.g. riak-1.3.4,riak_ee-1.4.12,riak_ee-2.0.0)"},
  {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
- {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
+ {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1404-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
  {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
 ].
 
@@ -192,6 +192,7 @@ report(ParsedArgs) ->
 parse_args(Args) ->
     help_or_parse_args(getopt:parse(cli_options(), Args)).
 
+%% @doc Print help string if it's specified, otherwise parse the arguments
 help_or_parse_args({ok, {[], _}}) ->
     print_help();
 help_or_parse_args({ok, {ParsedArgs, HarnessArgs}}) ->

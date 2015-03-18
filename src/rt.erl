@@ -318,7 +318,7 @@ deploy_clusters(Settings) ->
                           {NumNodes, InitialConfig} when is_integer(NumNodes) ->
                               [{rt_config:get_default_version(), InitialConfig} || _ <- lists:seq(1,NumNodes)];
                           {NumNodes, Vsn, InitialConfig} when is_integer(NumNodes) ->
-                              [{rt_config:version_to_path(Vsn), InitialConfig} || _ <- lists:seq(1,NumNodes)]
+                              [{rt_config:version_to_tag(Vsn), InitialConfig} || _ <- lists:seq(1,NumNodes)]
                       end || Setting <- Settings],
     ?HARNESS:deploy_clusters(ClusterConfigs).
 
@@ -686,7 +686,8 @@ claimant_according_to(Node) ->
 %% @doc Safely construct a new cluster and return a list of the deployed nodes
 %% @todo Add -spec and update doc to reflect mult-version changes
 build_cluster(Versions) when is_list(Versions) ->
-    build_cluster(length(Versions), Versions, rt_properties:default_config());
+    UpdatedVersions = [{rt_config:version_to_tag(Vsn), Cfg} || {Vsn, Cfg} <- Versions],
+    build_cluster(length(Versions), UpdatedVersions, rt_properties:default_config());
 build_cluster(NumNodes) ->
     build_cluster(NumNodes, rt_properties:default_config()).
 

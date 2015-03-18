@@ -26,7 +26,8 @@
          update_app_config/2,
          teardown/0,
          set_conf/2,
-         set_advanced_conf/2]).
+         set_advanced_conf/2,
+         validate_config/1]).
 
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -678,7 +679,7 @@ scp_from(Host, RemotePath, Path) ->
 %%% Riak devrel path utilities
 %%%===================================================================
 
--define(PATH, (rt_config:get(rtdev_path))).
+-define(PATH, (rt_config:get(root_path))).
 
 dev_path(Path, N) ->
     format("~s/dev~b", [Path, N]).
@@ -830,6 +831,24 @@ stop_all(Host, DevPath) ->
 
 teardown() ->
     stop_all(rt_config:get(rt_hostnames)).
+
+%% @doc Check to make sure that all versions specified in the config file actually exist
+-spec validate_config([term()]) -> ok | no_return().
+validate_config(Versions) ->
+    Hosts = load_hosts(),
+    Root = rt_config:get(root_path),
+    Validate = fun(Host, Vsn) ->
+        Cmd = "ls " ++ filename:join([Root, Vsn, "dev1/bin/riak"]),
+        Result = wait_for_cmd(spawn_ssh_cmd(atom_to_list(Host), Cmd, [], true)),
+        io:format("Result = ~p~n", [Result]),
+        case Result of
+            {0, _} -> ok;
+            _ ->
+                erlang:error("Could not find specified devrel version", [Host, Vsn])
+        end
+    end,
+    [[Validate(Host, Vsn) || Vsn <- Versions] ||  Host <- Hosts],
+    ok.
 
 %%%===================================================================
 %%% Utilities
