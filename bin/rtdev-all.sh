@@ -249,16 +249,17 @@ echo
 
 echo
 if [ -z "$RT_USE_EE" ]; then
-	build "riak-1.3.2" $R15B01
-	build "riak-1.4.12" $R15B01
-	if [ "${DEFAULT_VERSION" == "riak-head" ]; then
-	    DEFAULT_VERSION = "riak_ee-head"
-	fi
+    build "riak-1.3.2" $R15B01
+    build "riak-1.4.12" $R15B01
 else
-	build "riak_ee-1.3.4" $R15B01
-	build "riak_ee-1.4.12" $R15B01
+    build "riak_ee-1.3.4" $R15B01
+    build "riak_ee-1.4.12" $R15B01
+    if [ "${DEFAULT_VERSION}" == "riak-head" ]; then
+        DEFAULT_VERSION="riak_ee-head"
+    fi
+    echo "Default version: $DEFAULT_VERSION"
 fi
-build "$DEFAUlT_VERSION" $R16B02
+build $DEFAULT_VERSION $R16B02
 
 echo
 echo "= Build complete! ==============================================="

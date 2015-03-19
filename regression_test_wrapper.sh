@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Bail out on error ...
-set -e
+#set -e
 
 if [ -z $1 ]; then
   echo "An r_t configuration is required as the first parameter"
@@ -15,12 +15,13 @@ ELEVELDB_BACKEND_TEST_CASES="$ALL_BACKEND_TEST_CASES,verify_2i_aae"
 MEMORY_BACKEND_TEST_CASES="$ALL_BACKEND_TEST_CASES,verify_2i_aae"
 
 ROOT_RESULTS_DIR="results/regression"
-RESULTS_DIR="$ROOT_RESULTS_DIR/`date +"%y%m%d%H%M%s"`"
+RESULTS=`date +"%y%m%d%H%M%s"`
+RESULTS_DIR="$ROOT_RESULTS_DIR/$RESULTS"
 mkdir -p $RESULTS_DIR
 
 RESULTS_SYMLINK=$ROOT_RESULTS_DIR/current
 rm -f $RESULTS_SYMLINK
-ln -s $RESULTS_DIR $RESULTS_SYMLINK
+ln -s $RESULTS $RESULTS_SYMLINK
 
 echo "Running bitcask regression tests using the following test cases: $BITCASK_BACKEND_TEST_CASES"
 ./riak_test -v -c $1 -t $BITCASK_BACKEND_TEST_CASES &> $RESULTS_DIR/bitcask_results.log
