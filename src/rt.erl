@@ -1399,8 +1399,8 @@ log_to_nodes(Nodes0, LFmt, LArgs) ->
 pmap(F, L) ->
     rt2:pmap(F, L).
 
-setup_harness(Test, Args) ->
-    rt2:setup_harness(Test, Args).
+setup_harness(_Test, _Args) ->
+    rt_harness:setup().
 
 %% @doc Downloads any extant log files from the harness's running
 %%   nodes.
