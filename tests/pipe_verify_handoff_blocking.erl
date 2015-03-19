@@ -42,6 +42,18 @@
 %% handoff (because the vnode waits for them to be between inputs to
 %% archive), but we don't want them to process so many inputs that
 %% they consume their blocking queues before handing off.
+
+%% Please Note: Under rare circumstances, this test may fail with a 
+%% "bad match vnode_down, noproc' error. This is not a failure of this 
+%% test but rather a side effect of a race condition in 
+%% riak_core::vnode_proxy. It manifests due to the fact that the
+%% test is attempting to send a command to a vnode that is in fact 
+%% down, however monitor only works by issuing a command and getting
+%% a PID. In soem instances, get_vnode_pid fails because vnode shutdown
+%% is queued up in the mailbox before monitor node. Unfortunately, the
+%% fix would require a fundamental shift in the architecture of
+%% riak_core, which at the time of this writing is not feasible for
+%% this rare failure case.
 -module(pipe_verify_handoff_blocking).
 
 -export([
