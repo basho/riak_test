@@ -44,7 +44,7 @@ set(eleveldb, Config) ->
                                    lists:keyfind(riak_kv, 1, Config)),
     lists:keystore(riak_kv, 1, Config, {riak_kv, UpdKVSection});
 set(memory, Config) ->
-    UpdKVSection = replace_backend(riak_kv_eleveldb_backend,
+    UpdKVSection = replace_backend(riak_kv_memory_backend,
                                    lists:keyfind(riak_kv, 1, Config)),
     lists:keystore(riak_kv, 1, Config, {riak_kv, UpdKVSection});
 set(multi, Config) ->

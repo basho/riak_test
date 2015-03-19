@@ -61,6 +61,11 @@ stop() ->
 init([Tests, Backend, LogDir, ReportInfo, UpgradeList, NotifyPid]) ->
     %% TODO Change the default when parallel execution support is implemented -jsb
     ExecutionMode = rt_config:get(rt_execution_mode, serial),
+
+    %% TODO: Remove after all tests ported 2.0 -- workaround to support 
+    %% backend command line argument fo v1 cluster provisioning -jsb
+    rt_config:set(rt_backend, Backend),
+
     lager:notice("Starting the Riak Test executor in ~p execution mode", [ExecutionMode]),
     State = #state{pending_tests=Tests,
                    backend=Backend,
