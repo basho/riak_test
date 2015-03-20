@@ -48,6 +48,7 @@
          admin/2,
          admin/3,
          riak/2,
+         riak_repl/2,
          run_riak/3,
          attach/2,
          attach_direct/2,
@@ -128,6 +129,9 @@ admin(Node, Args, Options) ->
 
 riak(Node, Args) ->
     ?HARNESS_MODULE:riak(Node, Args).
+
+riak_repl(Node, Args) ->
+    ?HARNESS_MODULE:riak_repl(Node, Args).
 
 run_riak(Node, Version, Command) ->
     ?HARNESS_MODULE:run_riak(Node, Version, Command).

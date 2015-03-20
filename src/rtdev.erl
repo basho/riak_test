@@ -835,8 +835,9 @@ riak(Node, Args) ->
 
 
 riak_repl(Node, Args) ->
-    Path = relpath(node_version(Node)),
-    Result = run_riak_repl(Node, Path, Args),
+    {NodeId, NodeName} = extract_node_id_and_name(Node),
+    Path = relpath(node_version(NodeName)),
+    Result = run_riak_repl(NodeId, Path, Args),
     lager:info("~s", [Result]),
     {ok, Result}.
 
