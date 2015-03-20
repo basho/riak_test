@@ -51,35 +51,33 @@
 %%%===================================================================
 -type cluster_name() :: atom().
 -type cluster_id() :: pid().
--type error() :: {error(), term()}.
 %% -type partition() :: [node()].
--type result() :: ok | error().
 
 %% TODO Move to the rt_version module
 %% TODO Split out the product type
 -type version() :: {atom(), string()}.
 
--spec activate_bucket_type(cluster_id(), atom()) -> result().
+-spec activate_bucket_type(cluster_id(), atom()) -> rt_util:result().
 activate_bucket_type(Cluster, BucketType) ->
     lager:error("activate_bucket_type(~p, ~p, ~p) not implemented", [Cluster, BucketType]), 
     ok.
 
--spec decommission(cluster_id()) -> result().
+-spec decommission(cluster_id()) -> rt_util:result().
 decommission(Cluster) ->
     lager:error("decomission(~p) not implemented", [Cluster]), 
     ok.
 
--spec clean(cluster_id()) -> result().
+-spec clean(cluster_id()) -> rt_util:result().
 clean(Cluster) ->
     lager:error("clean(~p) not implemented", [Cluster]), 
     ok.
 
--spec create_and_activate_bucket_type(cluster_id(), atom(), proplists:proplist()) -> result().
+-spec create_and_activate_bucket_type(cluster_id(), atom(), proplists:proplist()) -> rt_util:result().
 create_and_activate_bucket_type(Cluster, BucketType, Parameters) ->
     ok = create_bucket_type(Cluster, BucketType, Parameters),
     activate_bucket_type(Cluster, BucketType).
 
--spec create_bucket_type(cluster_id(), atom(), proplists:proplist()) -> result().
+-spec create_bucket_type(cluster_id(), atom(), proplists:proplist()) -> rt_util:result().
 create_bucket_type(Cluster, BucketType, Parameters) ->
     lager:error("create_bucket_type(~p, ~p, ~p) not implemented", [Cluster, BucketType, Parameters]), 
     ok.
@@ -89,12 +87,12 @@ is_mixed(Cluster) ->
     lager:error("is_mixed(~p) not implemented", [Cluster]), 
     ok.
 
--spec join(cluster_id(), node()) -> result().
+-spec join(cluster_id(), node()) -> rt_util:result().
 join(Cluster, Node) ->
     lager:error("join(~p, ~p) not implemented.", [Cluster, Node]),
     ok.
 
--spec leave(cluster_id(), node()) -> result().
+-spec leave(cluster_id(), node()) -> rt_util:result().
 leave(Cluster, Node) ->
     lager:error("leave(~p, ~p) not implemented.", [Cluster, Node]),
     ok.
@@ -104,62 +102,62 @@ nodes(Cluster) ->
     lager:error("nodes(~p) not implemented", [Cluster]), 
     ok.
 
-%% -spec partition(cluster_id(), partition(), partition()) -> [atom(), atom(), partition(), partition()] | error().
+%% -spec partition(cluster_id(), partition(), partition()) -> [atom(), atom(), partition(), partition()] | rt_util:error().
 partition(Cluster, P1, P2) -> 
     lager:error("partition(~p, ~p, ~p) not implemented.", [Cluster, P1, P2]),
     ok.
 
--spec provision(cluster_name(), [node()], proplists:proplist(), proplists:proplist()) -> {cluster_name(), cluster_id()} | error().
+-spec provision(cluster_name(), [node()], proplists:proplist(), proplists:proplist()) -> {cluster_name(), cluster_id()} | rt_util:error().
 provision(Name, Nodes, Conf, AdvancedConfig) ->
     lager:error("provision(~p, ~p, ~p, ~p) not implemented.", [Name, Nodes, Conf, AdvancedConfig]),
     ok.
 
--spec staged_join(cluster_id(), node()) -> result().
+-spec staged_join(cluster_id(), node()) -> rt_util:result().
 staged_join(Cluster, Node) ->
     lager:error("stagad_join(~p, ~p) not implemented.", [Cluster, Node]),
     ok.
 
--spec start(cluster_id()) -> result().
+-spec start(cluster_id()) -> rt_util:result().
 start(Cluster) ->
     lager:error("start(~p) not implemented", [Cluster]), 
     ok.
 
--spec stop(cluster_id()) -> result().
+-spec stop(cluster_id()) -> rt_util:result().
 stop(Cluster) ->
     lager:error("stop(~p) not implemented", [Cluster]), 
     ok.
 
--spec wait_until_all_members([node()]) -> result().
+-spec wait_until_all_members([node()]) -> rt_util:result().
 wait_until_all_members(Nodes) ->
     lager:error("wait_until_all_members(~p) not implemented", [Nodes]), 
     ok.
 
--spec wait_until_connected(cluster_id()) -> result().
+-spec wait_until_connected(cluster_id()) -> rt_util:result().
 wait_until_connected(Cluster) ->
     lager:error("wait_until_connected(~p) not implemented", [Cluster]), 
     ok.
 
--spec wait_until_legacy_ring_ready(cluster_id()) -> result().
+-spec wait_until_legacy_ring_ready(cluster_id()) -> rt_util:result().
 wait_until_legacy_ring_ready(Cluster) ->
     lager:error("wait_until_legacy_ring_ready(~p) not implemented", [Cluster]), 
     ok.
 
--spec wait_until_no_pending_changes(cluster_id()) -> result().
+-spec wait_until_no_pending_changes(cluster_id()) -> rt_util:result().
 wait_until_no_pending_changes(Cluster) ->
     lager:error("wait_until_no_pending_changes(~p) not implemented", [Cluster]), 
     ok.
 
--spec wait_until_nodes_agree_about_ownership(cluster_id()) -> result().
+-spec wait_until_nodes_agree_about_ownership(cluster_id()) -> rt_util:result().
 wait_until_nodes_agree_about_ownership(Cluster) ->
     lager:error("wait_until_nodes_agree_about_ownership(~p) not implemented", [Cluster]), 
     ok.
 
--spec wait_until_ring_converged(cluster_id()) -> result().
+-spec wait_until_ring_converged(cluster_id()) -> rt_util:result().
 wait_until_ring_converged(Cluster) ->
     lager:error("wait_until_ring_converged(~p) not implemented", [Cluster]), 
     ok.
 
--spec upgrade(cluster_id(), version()) -> result().
+-spec upgrade(cluster_id(), version()) -> rt_util:result().
 upgrade(Cluster, Version) ->
     lager:error("upgrade(~p, ~p) not implemented.", [Cluster, Version]),
     ok.
