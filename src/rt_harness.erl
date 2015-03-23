@@ -57,6 +57,7 @@
          set_conf/2,
          set_advanced_conf/2,
          update_app_config/2,
+         upgrade/2,
          validate_config/1]).
 
 start(Node, Version) ->
@@ -154,6 +155,9 @@ set_advanced_conf(Node, NameValuePairs) ->
 
 update_app_config(Node, Config) ->
     ?HARNESS_MODULE:update_app_config(Node, Config).
+
+upgrade(Node, NewVersion) ->
+    ?HARNESS_MODULE:upgrade(Node, NewVersion).
 
 validate_config(Versions) ->
     ?HARNESS_MODULE:validate_config(Versions).

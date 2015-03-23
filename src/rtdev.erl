@@ -230,6 +230,13 @@ relpath(Vsn) ->
 relpath(Vsn, Path) ->
     lists:concat([Path, "/", Vsn]).
 
+%% TODO: Need to replace without the node_version/1 map
+upgrade(Node, NewVersion) ->
+    N = node_id(Node),
+    CurrentVersion = node_version(N),
+    UpgradedVersion = rt_config:version_to_tag(NewVersion),
+    upgrade(Node, CurrentVersion, UpgradedVersion, same).
+
 %% upgrade(Node, CurrentVersion, NewVersion) ->
 %%     upgrade(Node, CurrentVersion, NewVersion, same).
 
@@ -237,14 +244,14 @@ upgrade(Node, CurrentVersion, NewVersion, Config) ->
     lager:info("Upgrading ~p : ~p -> ~p", [Node, CurrentVersion, NewVersion]),
     stop(Node, CurrentVersion),
     rt:wait_until_unpingable(Node),
-    CurrentPath = filename:join([?PATH, CurrentVersion, Node]),
-    NewPath = filename:join([?PATH, NewVersion, Node]),
+    CurrentPath = filename:join([?PATH, CurrentVersion, node_short_name(Node)]),
+    NewPath = filename:join([?PATH, NewVersion, node_short_name(Node)]),
     Commands = [
         io_lib:format("cp -p -P -R \"~s\" \"~s\"",
                        [filename:join(CurrentPath, "data"),
                         NewPath]),
-        %% io_lib:format("rm -rf ~s/dev~b/data/*",
-        %%                [CurrePath, N]),
+     %%   io_lib:format("rm -rf ~s*",
+     %%                  [filename:join([CurrentPath, "data", "*"])]),
         io_lib:format("cp -p -P -R \"~s\" \"~s\"",
                        [filename:join(CurrentPath, "etc"),
                         NewPath])
@@ -253,10 +260,11 @@ upgrade(Node, CurrentVersion, NewVersion, Config) ->
          lager:debug("Running: ~s", [Cmd]),
          os:cmd(Cmd)
      end || Cmd <- Commands],
-    clean_data_dir(Node, CurrentVersion, ""),
+    clean_data_dir(node_short_name(Node), CurrentVersion, ""),
 
-    %% VersionMap = orddict:store(N, NewVersion, rt_config:get(rt_versions)),
-    %% rt_config:set(rt_versions, VersionMap),
+    %% TODO: This actually is required by old framework
+    VersionMap = orddict:store(Node, NewVersion, rt_config:get(rt_versions)),
+    rt_config:set(rt_versions, VersionMap),
 
     case Config of
         same -> ok;
@@ -841,7 +849,12 @@ node_id(Node) ->
 %% @doc Find the short dev node name from the full name
 -spec node_short_name(atom() | list()) -> atom().
 node_short_name(Node) when is_list(Node) ->
-    Node;
+    case lists:member($@, Node) of
+        true ->
+            node_short_name(list_to_atom(Node));
+        _ ->
+            Node
+    end;
 node_short_name(Node) when is_atom(Node) ->
     NodeMap = rt_config:get(rt_nodenames),
     orddict:fetch(Node, NodeMap).

@@ -243,8 +243,9 @@ deploy_nodes(NumNodes) when is_integer(NumNodes) ->
 deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
     deploy_nodes(NumNodes, InitialConfig, [riak_kv]);
 deploy_nodes(Versions, Services) ->
-    NodeConfig = [ version_to_config(Version) || Version <- Versions ],
-    lager:debug("Starting nodes using config ~p and versions ~p", [NodeConfig, Versions]),
+    MappedVersions = [rt_config:version_to_tag(Vsn) || Vsn <- Versions],
+    NodeConfig = [ {Version, rt_properties:default_config()} || Version <- MappedVersions ],
+    lager:debug("Starting nodes using config ~p and versions ~p", [NodeConfig, MappedVersions]),
 
     Nodes = rt_harness:deploy_nodes(NodeConfig),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
@@ -321,7 +322,7 @@ allocate_nodes(NumNodes, Version) ->
     [AllocatedNodeIds, AllocatedNodeMap, VersionMap].
 
 version_to_config(Config) when is_tuple(Config)-> Config;
-version_to_config(Version) -> {Version, rt_config:get_default_version()}.
+version_to_config(Version) -> {Version, default}.
 
 deploy_clusters(Settings) ->
     ClusterConfigs = [case Setting of
@@ -373,7 +374,7 @@ stop_and_wait(Node) ->
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
 upgrade(Node, NewVersion) ->
     %% GAP: The new API does not provide an analog to this function. -jsb
-    ?HARNESS:upgrade(Node, NewVersion).
+    rt_harness:upgrade(Node, NewVersion).
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
 %% the config based on entries in `Config'.
@@ -785,8 +786,9 @@ clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
 teardown() ->
     rt_cluster:teardown().
 
+%% TODO: Only used in verify_capabalities. Probably should be refactored.
 versions() ->
-    rt_cluster:versions().
+    proplists:get_keys(rt_config:get(versions)).
 
 %%%===================================================================
 %%% Basic Read/Write Functions

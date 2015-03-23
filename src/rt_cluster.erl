@@ -271,6 +271,7 @@ teardown() ->
     %% but not connected.
     rt_harness:teardown().
 
+%% TODO: Determine if this is used outside of verify_capabilities
 versions() ->
     rt_harness:versions().
 
