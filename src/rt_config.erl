@@ -32,6 +32,7 @@
          get_os_env/1,
          get_os_env/2,
          get_upgrade_path/1,
+         get_version/1,
          load/2,
          set/2,
          set_conf/2,
@@ -141,12 +142,14 @@ get_previous_version() ->
 get_legacy_version() ->
     get_version(?LEGACY_VERSION_KEY).
 
-%% @doc Prepends the project onto the default version
-%%      e.g. "riak_ee-3.0.1" or "riak-head"
+%% @doc Looks up the version in the list of aliases (e.g. riak_ee-latest-2.0)
+%%      and actual version names (riak_ee-2.0.5) and return the actual
+%%      name <product>-<version> string, e.g. "riak_ee-1.4.12"
 -spec get_version(term()) -> string() | not_found.
 get_version(Vsn) ->
-    Versions = rt_config:get(?VERSION_KEY),
-    resolve_version(Vsn, Versions).
+    Aliases = rt_config:get(?VERSION_KEY),
+    RealNames = [{convert_to_string(Product) ++ "-" ++ convert_to_string(Tag), {Product, Tag}} || {_, {Product, Tag}} <- Aliases],
+    resolve_version(Vsn, lists:append(Aliases, RealNames)).
 
 %% @doc Map logical name of version into a pathname string
 -spec resolve_version(term(), [{term(), term()}]) -> string() | no_return().

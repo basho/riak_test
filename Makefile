@@ -1,6 +1,6 @@
 .PHONY: deps
 
-all: deps compile
+all: deps compile testcases
 	./rebar skip_deps=true escriptize
 	SMOKE_TEST=1 ./rebar skip_deps=true escriptize
 
@@ -13,7 +13,7 @@ docsclean:
 compile: deps
 	./rebar compile
 
-clean:
+clean: clean_testcases
 	@./rebar clean
 
 distclean: clean
@@ -22,6 +22,12 @@ distclean: clean
 quickbuild:
 	./rebar skip_deps=true compile
 	./rebar escriptize
+
+testcases:
+	@(cd search-corpus; tar fx spam.0.1.tar.gz)
+
+clean_testcases:
+	@rm -rf search-corpus/spam.0/
 
 ##################
 # Dialyzer targets

@@ -243,11 +243,10 @@ deploy_nodes(NumNodes) when is_integer(NumNodes) ->
 deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
     deploy_nodes(NumNodes, InitialConfig, [riak_kv]);
 deploy_nodes(Versions, Services) ->
-    MappedVersions = [rt_config:version_to_tag(Vsn) || Vsn <- Versions],
-    NodeConfig = [ {Version, rt_properties:default_config()} || Version <- MappedVersions ],
-    lager:debug("Starting nodes using config ~p and versions ~p", [NodeConfig, MappedVersions]),
+    MappedVersions = [map_version_and_config(Vsn) || Vsn <- Versions],
+    lager:debug("Starting nodes using config and versions ~p", [MappedVersions]),
 
-    Nodes = rt_harness:deploy_nodes(NodeConfig),
+    Nodes = rt_harness:deploy_nodes(MappedVersions),
     lager:info("Waiting for services ~p to start on ~p.", [Services, Nodes]),
     [ ok = wait_for_service(Node, Service) || Node <- Nodes,
                                               Service <- Services ],
@@ -265,6 +264,11 @@ deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
     lists:foldl(fun({_, NodeName}, Nodes) -> [NodeName|Nodes] end,
                 [],
                 NodeMap).
+
+map_version_and_config({Vsn, Cfg}) ->
+    {rt_config:version_to_tag(Vsn), Cfg};
+map_version_and_config(Vsn) ->
+    {rt_config:version_to_tag(Vsn), rt_properties:default_config()}.
 
 maybe_set_backend(Backend, Config) ->
     maybe_set_backend(lists:keyfind(riak_kv, 1, Config), Backend, Config).

@@ -182,7 +182,10 @@ to tell riak_test about them. The method of choice is to create a
     {rt_scratch_dir, "/tmp/riak_test_scratch"},
     {basho_bench, "/home/you/basho/basho_bench"},
     {spam_dir, "/home/you/basho/riak_test/search-corpus"},
-    {platform, "osx-64"}
+    {platform, "osx-64"},
+    {load_workers, 3},
+    {offset, 2},
+    {workers, 5}
 ]}.
 
 {rtdev, [
