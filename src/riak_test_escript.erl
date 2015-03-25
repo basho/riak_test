@@ -121,24 +121,24 @@ finalize(TestResults, Args) ->
     Teardown = not proplists:get_value(keep, Args, false),
     maybe_teardown(Teardown, TestResults),
     ok.
-
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
 cli_options() ->
 [
- {help,               $h, "help",     undefined,  "Print this usage page"},
- {config,             $c, "conf",     string,     "specifies the project configuration"},
- {tests,              $t, "tests",    string,     "specifies which tests to run"},
- {suites,             $s, "suites",   string,     "which suites to run"},
- {groups,             $g, "groups",   string,     "specifiy a list of test groups to run"},
- {dir,                $d, "dir",      string,     "run all tests in the specified directory"},
- {skip,               $x, "skip",     string,     "list of tests to skip in a directory"},
- {verbose,            $v, "verbose",  undefined,  "verbose output"},
- {outdir,             $o, "outdir",   string,     "output directory"},
- {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
- {upgrade_path,       $u, "upgrade-path", atom,   "comma-separated list representing an upgrade path (e.g. riak-1.3.4,riak_ee-1.4.12,riak_ee-2.0.0)"},
- {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
- {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1404-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
- {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
+ {help,                   $h, "help",     undefined,  "Print this usage page"},
+ {config,                 $c, "conf",     string,     "specifies the project configuration"},
+ {tests,                  $t, "tests",    string,     "specifies which tests to run"},
+ {suites,                 $s, "suites",   string,     "which suites to run"},
+ {groups,                 $g, "groups",   string,     "specifiy a list of test groups to run"},
+ {dir,                    $d, "dir",      string,     "run all tests in the specified directory"},
+ {skip,                   $x, "skip",     string,     "list of tests to skip in a directory"},
+ {verbose,                $v, "verbose",  undefined,  "verbose output"},
+ {outdir,                 $o, "outdir",   string,     "output directory"},
+ {backend,                $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
+ {upgrade_path,           $u, "upgrade-path", atom,   "comma-separated list representing an upgrade path (e.g. riak-1.3.4,riak_ee-1.4.12,riak_ee-2.0.0)"},
+ {keep,            undefined, "keep",     boolean,    "do not teardown cluster"},
+ {continue_on_fail,undefined, "continue", boolean,    "continues executing tests on failure"},
+ {report,                 $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1404-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
+ {file,                   $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
 ].
 
 print_help() ->
@@ -208,6 +208,9 @@ help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
     %% Have to load the `riak_test' config prior to assembling the
     %% test metadata
     load_initial_config(ParsedArgs),
+
+    %% TODO Likely need to evaluate loading all parsed args into the config ..
+    rt_config:set(continue_on_fail, proplists:get_value(continue_on_fail, ParsedArgs, false)),
 
     TestData = compose_test_data(ParsedArgs),
     {Tests, NonTests} = which_tests_to_run(report(ParsedArgs), TestData),
@@ -578,7 +581,7 @@ backend_list(Backends) when is_list(Backends) ->
 load_tests_in_dir(Dir, Groups, SkipTests) ->
     case filelib:is_dir(Dir) of
         true ->
-            code:add_path(Dir),
+            
             lists:sort(
               lists:foldl(load_tests_folder(Groups, SkipTests),
                           [],

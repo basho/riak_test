@@ -24,7 +24,7 @@
 -behavior(gen_fsm).
 
 %% API
--export([start/3,
+-export([start/4,
          send_event/2,
          stop/0]).
 
@@ -68,7 +68,7 @@
                 current_version :: string(),
                 remaining_versions :: [string()],
                 test_results :: [term()],
-                stop_on_fail :: boolean()}).
+                continue_on_fail :: boolean()}).
 
 -deprecated([{metadata,0,next_major_release}]).
 
@@ -77,8 +77,8 @@
 %%%===================================================================
 
 %% @doc Start the test executor
-start(TestModule, Backend, Properties) ->
-    Args = [TestModule, Backend, Properties],
+start(TestModule, Backend, Properties, ContinueOnFail) ->
+    Args = [TestModule, Backend, Properties, ContinueOnFail],
     gen_fsm:start_link(?MODULE, Args, []).
 
 send_event(Pid, Msg) ->
@@ -101,8 +101,8 @@ metadata() ->
 
 %% @doc Read the storage schedule and go to idle.
 %% compose_test_datum(Version, Project, undefined, undefined) ->
-init([TestModule, Backend, Properties]) ->
-    lager:debug("Started riak_test_runnner with pid ~p", [self()]),
+init([TestModule, Backend, Properties, ContinueOnFail]) ->
+    lager:debug("Started riak_test_runnner with pid ~p (continue on fail: ~p)", [self(), ContinueOnFail]),
     Project = list_to_binary(rt_config:get(rt_project, "undefined")),
     MetaData = [{id, -1},
                 {platform, <<"local">>},
@@ -122,7 +122,6 @@ init([TestModule, Backend, Properties]) ->
     BackendCheck = check_backend(Backend,
                                  rt_properties:get(valid_backends, Properties)),
     PreReqCheck = check_prereqs(ConfirmMod),
-    StopOnFail = rt_config:get(rt_stop_on_fail, true),
     State = #state{test_module=TestModule,
                    test_type=TestType,
                    properties=UpdProperties,
@@ -133,7 +132,7 @@ init([TestModule, Backend, Properties]) ->
                    backend_check=BackendCheck,
                    prereq_check=PreReqCheck,
                    group_leader=group_leader(),
-                   stop_on_fail=StopOnFail},
+                   continue_on_fail=ContinueOnFail},
     {ok, setup, State, 0}.
 
 %% @doc there are no all-state events for this fsm
@@ -265,7 +264,7 @@ wait_for_completion(timeout, State=#state{test_module=TestModule,
 wait_for_completion({test_result, {fail, Reason}}, State=#state{test_module=TestModule,
                                                         test_type=TestType,
                                                         group_leader=GroupLeader,
-                                                        stop_on_fail=StopOnFail,
+                                                        continue_on_fail=ContinueOnFail,
                                                         remaining_versions=[]}) ->
     Result = {fail, Reason},
     lager:debug("Test Result ~p = {fail, ~p}", [TestModule, Reason]),
@@ -273,12 +272,10 @@ wait_for_completion({test_result, {fail, Reason}}, State=#state{test_module=Test
                            test_type=TestType,
                            test_results=Result,
                            group_leader=GroupLeader,
-                           stop_on_fail=StopOnFail,
+                           continue_on_fail=ContinueOnFail,
                            end_time=os:timestamp()},
-    case StopOnFail of
-        true -> ok;
-        false -> cleanup(UpdState)
-    end,
+    lager:debug("ContinueOnFail: ~p", [ContinueOnFail]),
+    maybe_cleanup(ContinueOnFail, UpdState),
     notify_executor(Result, UpdState),
     {stop, normal, UpdState};
 wait_for_completion({test_result, Result}, State=#state{test_module=TestModule,
@@ -485,6 +482,11 @@ notify_fun(Pid) ->
     fun(X) ->
             ?MODULE:send_event(Pid, X)
     end.
+
+maybe_cleanup(true, State) ->
+    cleanup(State);
+maybe_cleanup(false, _State) ->
+    ok.
 
 cleanup(#state{group_leader=OldGroupLeader,
                test_module=TestModule,

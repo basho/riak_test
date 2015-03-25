@@ -34,7 +34,8 @@
                 runner_pids=[] :: [pid()],
                 log_dir :: string(),
                 report_info :: string(),
-                execution_mode :: execution_mode()}).
+                execution_mode :: execution_mode(),
+                continue_on_fail :: boolean()}).
 
 %%%===================================================================
 %%% API
@@ -66,6 +67,8 @@ init([Tests, Backend, LogDir, ReportInfo, UpgradeList, NotifyPid]) ->
     %% backend command line argument fo v1 cluster provisioning -jsb
     rt_config:set(rt_backend, Backend),
 
+    ContinueOnFail = rt_config:get(continue_on_fail),
+
     lager:notice("Starting the Riak Test executor in ~p execution mode", [ExecutionMode]),
     State = #state{pending_tests=Tests,
                    backend=Backend,
@@ -73,7 +76,8 @@ init([Tests, Backend, LogDir, ReportInfo, UpgradeList, NotifyPid]) ->
                    report_info=ReportInfo,
                    upgrade_list=UpgradeList,
                    notify_pid=NotifyPid,
-                   execution_mode=ExecutionMode},
+                   execution_mode=ExecutionMode,
+                   continue_on_fail=ContinueOnFail},
     {ok, gather_properties, State, 0}.
 
 %% @doc there are no all-state events for this fsm
@@ -107,7 +111,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% properties record.
 gather_properties(timeout, State) ->
     OverrideProps = override_props(State),
-    Properties = test_properties(State#state.pending_tests, OverrideProps),
+Properties = test_properties(State#state.pending_tests, OverrideProps),
     {next_state, request_nodes, State#state{test_properties=Properties}, 0};
 gather_properties(_Event, _State) ->
     {next_state, gather_properties, _State}.
@@ -166,12 +170,14 @@ launch_test({nodes, Nodes, NodeMap}, State) ->
            backend=Backend,
            test_properties=PropertiesList,
            runner_pids=Pids,
-           running_tests=Running} = State,
+           running_tests=Running,
+           continue_on_fail=ContinueOnFail} = State,
     lager:debug("Executing test ~p in mode ~p", [NextTest, ExecutionMode]),
     {NextTest, TestProps} = lists:keyfind(NextTest, 1, PropertiesList),
     UpdTestProps = rt_properties:set([{node_map, NodeMap}, {node_ids, Nodes}],
                                      TestProps),
-    {RunnerPids, RunningTests} = run_test(ExecutionMode, NextTest, Backend, UpdTestProps, Pids, Running),
+    {RunnerPids, RunningTests} = run_test(ExecutionMode, NextTest, Backend, UpdTestProps, 
+                                          Pids, Running, ContinueOnFail),
     UpdState = State#state{pending_tests=RestPending,
                            execution_mode=ExecutionMode,
                            runner_pids=RunnerPids,
@@ -228,7 +234,7 @@ wait_for_completion({test_complete, Test, Pid, Results, Duration}, State) ->
                            pending_tests=Pending++Waiting,
                            waiting_tests=[],
                            execution_mode=ExecutionMode},
-    wait_for_completion_transition(UpdState);
+    wait_for_completion_transition(Results, UpdState);
 wait_for_completion(_Event, _State) ->
     ok.
 
@@ -258,12 +264,14 @@ report_done(#state{notify_pid=NotifyPid}) ->
     NotifyPid ! {self(), done},
     ok.
 
-wait_for_completion_transition(State=#state{pending_tests=[],
+wait_for_completion_transition({_Status, _Reason}, State=#state{continue_on_fail=ContinueOnFail}) when ContinueOnFail == false ->
+    {stop, normal, State};
+wait_for_completion_transition(_Result, State=#state{pending_tests=[],
                                             running_tests=[]}) ->
     {stop, normal, State};
-wait_for_completion_transition(State=#state{pending_tests=[]}) ->
+wait_for_completion_transition(_Result, State=#state{pending_tests=[]}) ->
     {next_state, wait_for_completion, State};
-wait_for_completion_transition(State) ->
+wait_for_completion_transition(_Result, State) ->
     {next_state, request_nodes, State, 0}.
 
 launch_test_transition(State=#state{pending_tests=PendingTests,
@@ -322,11 +330,11 @@ override_props(State) ->
             [{upgrade_path, UpgradeList}]
     end.
 
--spec run_test(parallel | serial, atom(), atom(), proplists:proplist(), [pid()], [atom()]) -> {[pid()], [atom()]}.
-run_test(parallel, Test, Backend, Properties, RunningPids, RunningTests) ->
-    Pid = spawn_link(riak_test_runner, start, [Test, Backend, Properties]),
+-spec run_test(parallel | serial, atom(), atom(), proplists:proplist(), [pid()], [atom()], boolean()) -> {[pid()], [atom()]}.
+run_test(parallel, Test, Backend, Properties, RunningPids, RunningTests, ContinueOnFail) ->
+    Pid = spawn_link(riak_test_runner, start, [Test, Backend, Properties, ContinueOnFail]),
     {[Pid | RunningPids], [Test | RunningTests]};
-run_test(serial, Test, Backend, Properties, RunningPids, RunningTests) ->
-    riak_test_runner:start(Test, Backend, Properties),
+run_test(serial, Test, Backend, Properties, RunningPids, RunningTests, ContinueOnFail) ->
+    riak_test_runner:start(Test, Backend, Properties, ContinueOnFail),
     {RunningPids, RunningTests}.
 
