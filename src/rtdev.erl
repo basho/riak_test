@@ -963,7 +963,7 @@ devpaths() ->
 %%     proplists:get_keys(rt_config:get(rtdev_path)) -- [root].
 
 get_node_logs() ->
-    Root = filename:absname(proplists:get_value(root_path, ?PATH)),
+    Root = filename:absname(?PATH),
     RootLen = length(Root) + 1, %% Remove the leading slash
     [ begin
           {ok, Port} = file:open(Filename, [read, binary]),
