@@ -23,7 +23,7 @@ RESULTS_SYMLINK=$ROOT_RESULTS_DIR/current
 rm -f $RESULTS_SYMLINK
 ln -s $RESULTS $RESULTS_SYMLINK
 
-RT_OPS="-v --continue -c $1"
+RT_OPTS="-v --continue -c $1"
 
 echo "Running bitcask regression tests using the following test cases: $BITCASK_BACKEND_TEST_CASES"
 ./riak_test $RT_OPTS -t $BITCASK_BACKEND_TEST_CASES &> $RESULTS_DIR/bitcask_results.log
