@@ -30,6 +30,12 @@ slow_handle_coverage(Req, Filter, Sender, State) ->
     timer:sleep(Rand),
     ?M:handle_coverage_orig(Req, Filter, Sender, State).
 
+count_handoff_ts_puts({ts_put, _, _, _, _}=Req, Sender, State) ->
+    ets:update_counter(intercepts_tab, ts_put_counter, 1),
+    ?M:handle_handoff_command_orig(Req, Sender, State);
+count_handoff_ts_puts(Req, Sender, State) ->
+    ?M:handle_handoff_command_orig(Req, Sender, State).
+
 %% @doc Simulate dropped gets/network partitions byresponding with
 %%      noreply during get requests.
 drop_do_get(Sender, BKey, ReqId, State) ->
