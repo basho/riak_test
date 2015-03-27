@@ -29,6 +29,7 @@
 -define(BUCKET, {?BUCKET_TYPE, <<"bucket">>}).
 -define(ASYNC_PUT_BUCKET_TYPE, <<"async_put">>).
 -define(ASYNC_PUT_BUCKET, {?ASYNC_PUT_BUCKET_TYPE, <<"bucket">>}).
+-define(ANY_VALUE, <<"any">>).
 
 
 %% @doc This test exercises the fast_path bucket property, which results in puts that avoid coordination
@@ -72,6 +73,14 @@ confirm() ->
 
 confirm_put(Node) ->
     ok = verify_put(Node, ?BUCKET, <<"confirm_put_key">>, <<"confirm_put_value">>),
+    verify_failed_put(
+        Node, ?BUCKET, <<"confirm_put-bad_w">>, ?ANY_VALUE, [{w, 9999}],
+        {error, <<"{n_val_violation,3}">>}
+    ),
+    verify_failed_put(
+        Node, ?BUCKET, <<"confirm_put-bad_pw">>, ?ANY_VALUE, [{pw, 9999}],
+        {error, <<"{n_val_violation,3}">>}
+    ),
     lager:info("confirm_put...ok"),
     pass.
 
@@ -88,9 +97,13 @@ confirm_w(Nodes) ->
     [Node2 | _Rest2] = P2,
     %%
     %% By setting sloppy_quorum to false, we require a strict quorum of primaries.  But because
-    %% we only have one node in the partition, the put should fail.
+    %% we only have one node in the partition, the put should fail.  It should bail immediately
+    %% without even attempting a write on the back end, because a quorum will not be possible.
     %%
-    verify_put_timeout(Node2, ?BUCKET, <<"confirm_w_key">>, <<"confirm_w_value">>, [{sloppy_quorum, false}], 1000),
+    verify_failed_put(
+        Node2, ?BUCKET, <<"confirm_w_key">>, <<"confirm_w_value">>, [{sloppy_quorum, false}],
+        {error, <<"{insufficient_vnodes,1,need,2}">>}
+    ),
     rt:heal(PartitonInfo),
     lager:info("confirm_pw...ok"),
     pass.
@@ -108,9 +121,13 @@ confirm_pw(Nodes) ->
     [Node2 | _Rest2] = P2,
     %%
     %% Similar to the above test -- if pw is all, then we require n_val puts on primaries, but
-    %% the node is a singleton in the partition, so this, too, should fail.
+    %% the node is a singleton in the partition, so this, too, should fail.  This will time
+    %% out, so set the timeout to something small.
     %%
-    verify_put_timeout(Node2, ?BUCKET, <<"confirm_pw_key">>, <<"confirm_pw_value">>, [{pw, all}], 1000),
+    verify_put_timeout(
+        Node2, ?BUCKET, <<"confirm_pw_key">>, ?ANY_VALUE, [{pw, all}], 1000,
+        {error, <<"{pw_val_unsatisfied,3,0}">>}
+    ),
     rt:heal(PartitonInfo),
     lager:info("confirm_pw...ok"),
     pass.
@@ -157,20 +174,34 @@ confirm_async_put(Node) ->
     lager:info("confirm_async_put...ok"),
     pass.
 
-
 verify_put(Node, Bucket, Key, Value) ->
+    verify_put(Node, Bucket, Key, Value, [], Value).
+
+verify_put(Node, Bucket, Key, Value, Options, ExpectedValue) ->
     Client = rt:pbc(Node),
     _Ret = riakc_pb_socket:put(
         Client, riakc_obj:new(
             Bucket, Key, Value
-        )
+        ),
+        Options
     ),
     {ok, Val} = riakc_pb_socket:get(Client, Bucket, Key),
-    ?assertEqual(Value, riakc_obj:get_value(Val)),
+    ?assertEqual(ExpectedValue, riakc_obj:get_value(Val)),
+    ok.
+
+verify_failed_put(Node, Bucket, Key, Value, Options, ExpectedPutReturn) ->
+    Client = rt:pbc(Node),
+    PutReturnValue = riakc_pb_socket:put(
+        Client, riakc_obj:new(
+            Bucket, Key, Value
+        ),
+        Options
+    ),
+    ?assertEqual(ExpectedPutReturn, PutReturnValue),
     ok.
 
 
-verify_put_timeout(Node, Bucket, Key, Value, Options, Timeout) ->
+verify_put_timeout(Node, Bucket, Key, Value, Options, Timeout, ExpectedPutReturn) ->
     Client = rt:pbc(Node),
     {Time, Val} = timer:tc(
         fun() ->
@@ -181,7 +212,7 @@ verify_put_timeout(Node, Bucket, Key, Value, Options, Timeout) ->
             )
         end
     ),
-    ?assertEqual({error, <<"timeout">>}, Val),
+    ?assertEqual(ExpectedPutReturn, Val),
     ?assert(Time div 1000000 =< 2*Timeout),
     ok.
 
