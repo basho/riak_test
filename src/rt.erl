@@ -88,7 +88,6 @@
          partition/2,
          partitions_for_node/1,
          pbc/1,
-         pbc/2,
          pbc_read/3,
          pbc_read/4,
          pbc_read_check/4,
@@ -476,33 +475,6 @@ stream_cmd(Cmd) ->
 -spec stream_cmd(string(), string()) -> {integer(), string()}.
 stream_cmd(Cmd, Opts) ->
     rt2:stream_cmd(Cmd, Opts).
-
-stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs}) ->
-    receive
-        {Port, {data, Data}} ->
-            {_, Now, _} = now(),
-            NewNewLineBuffer = case Now > Secs of
-                true ->
-                    lager:info(NewLineBuffer),
-                    "";
-                _ ->
-                    NewLineBuffer
-            end,
-            case rt:str(Data, "\n") of
-                true ->
-                    lager:info(NewNewLineBuffer),
-                    Tokens = string:tokens(Data, "\n"),
-                    [ lager:info(Token) || Token <- Tokens ],
-                    stream_cmd_loop(Port, Buffer ++ NewNewLineBuffer ++ Data, "", Time);
-                _ ->
-                    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, now())
-            end;
-        {Port, {exit_status, Status}} ->
-            catch port_close(Port),
-            {Status, Buffer}
-    after rt:config(rt_max_receive_wait_time) ->
-            {-1, Buffer}
-    end.
 
 %%%===================================================================
 %%% Remote code management
@@ -1159,16 +1131,7 @@ pbc_systest_read(Node, Start, End, Bucket, R) ->
 %% @doc get me a protobuf client process and hold the mayo!
 -spec pbc(node()) -> pid().
 pbc(Node) ->
-    pbc(Node, [{auto_reconnect, true}]).
-
-%% GAP: rt_pb does not provide an analog to this function. -jsb
--spec pbc(node(), proplists:proplist()) -> pid().
-pbc(Node, Options) ->
-    rt:wait_for_service(Node, riak_kv),
-    ConnInfo = proplists:get_value(Node, connection_info([Node])),
-    {IP, PBPort} = proplists:get_value(pb, ConnInfo),
-    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, Options),
-    Pid.
+    rt_pb:pbc(Node).
 
 %% @doc does a read via the erlang protobuf client
 -spec pbc_read(pid(), binary(), binary()) -> binary().

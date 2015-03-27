@@ -209,14 +209,22 @@ help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
     %% test metadata
     load_initial_config(ParsedArgs),
 
-    %% TODO Likely need to evaluate loading all parsed args into the config ..
-    rt_config:set(continue_on_fail, proplists:get_value(continue_on_fail, ParsedArgs, false)),
+    maybe_override_setting(continue_on_fail, true, ParsedArgs),
 
     TestData = compose_test_data(ParsedArgs),
     {Tests, NonTests} = which_tests_to_run(report(ParsedArgs), TestData),
     Offset = rt_config:get(offset, undefined),
     Workers = rt_config:get(workers, undefined),
     shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, Offset, Workers).
+
+maybe_override_setting(Argument, Value, Arguments) ->
+    maybe_override_setting(proplists:is_defined(Argument, Arguments), Argument, 
+                           Value, Arguments).
+
+maybe_override_setting(true, Argument, Value, Arguments) ->
+    rt_config:set(Argument, proplists:get_value(Argument, Arguments, Value));
+maybe_override_setting(false, _Argument, _Value, _Arguments) ->
+    ok.
 
 load_initial_config(ParsedArgs) ->
     %% Loads application defaults
