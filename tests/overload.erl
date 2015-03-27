@@ -37,22 +37,29 @@ confirm() ->
 
     NormalType = <<"normal_type">>,
     ConsistentType = <<"consistent_type">>,
+    FastPathType = <<"fast_path_type">>,
+
     ok = create_bucket_type(Nodes, NormalType, [{n_val, 3}]),
     ok = create_bucket_type(Nodes, ConsistentType, [{consistent, true}, {n_val, 5}]),
+    ok = create_bucket_type(Nodes, FastPathType, [{fast_path, true}, {n_val, 1}]),
     rt:wait_until(ring_manager_check_fun(hd(Nodes))),
 
     BKV1 = {{NormalType, ?BUCKET}, ?KEY, <<"test">>},
     BKV2 = {{ConsistentType, ?BUCKET}, ?KEY, <<"test">>},
+    BKV3 = {{FastPathType, ?BUCKET}, ?KEY, <<"test">>},
 
     Tests = [test_no_overload_protection,
              test_vnode_protection,
              test_fsm_protection,
              test_cover_queries_overload],
 
-    [ok = erlang:apply(?MODULE, Test, [Nodes, BKV, IsConsistent]) ||
-        Test <- Tests,
-        {BKV, IsConsistent} <- [{BKV1, false},
-                                {BKV2, true}]],
+    [begin
+        lager:info("Starting Test ~p for ~p~n", [Test, BKV]),
+        ok = erlang:apply(?MODULE, Test, [Nodes, BKV, IsConsistent])
+     end || Test <- Tests,
+            {BKV, IsConsistent} <- [{BKV1, false},
+                                    {BKV2, true},
+                                    {BKV3, false}]],
     pass.
 
 
@@ -125,6 +132,9 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     Pid ! resume,
     ok.
 
+%% Don't check on fast path
+test_fsm_protection(_, {{<<"fast_path_type">>, _}, _, _}, _) ->
+    ok;
 test_fsm_protection(Nodes, BKV, ConsistentType) ->
     lager:info("Testing with coordinator protection enabled"),
     lager:info("Setting FSM limit to ~b", [?THRESHOLD]),
