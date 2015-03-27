@@ -52,8 +52,8 @@ pbc(Node) ->
 -spec pbc(node(), proplists:proplist()) -> pid().
 pbc(Node, Options) ->
     rt2:wait_for_service(Node, riak_kv),
-    ConnInfo = proplists:get_value(Node, get_pb_conn_info([Node])),
-    {IP, PBPort} = proplists:get_value(pb, ConnInfo),
+    ConnInfo = get_pb_conn_info(Node),
+    {ok, [{IP, PBPort}]} = ConnInfo,
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, Options),
     Pid.
 
@@ -186,13 +186,14 @@ pbc_systest_read(Node, Start, End, Bucket, R) ->
 
 -spec get_pb_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
 get_pb_conn_info(Node) ->
-    case rt:rpc_get_env(Node, [{riak_api, pb},
+    lager:debug("Querying connection pb connection information for node ~p", [Node]),
+    case rt2:rpc_get_env(Node, [{riak_api, pb},
                             {riak_api, pb_ip},
                             {riak_kv, pb_ip}]) of
         {ok, [{NewIP, NewPort}|_]} ->
             {ok, [{NewIP, NewPort}]};
         {ok, PB_IP} ->
-            {ok, PB_Port} = rt:rpc_get_env(Node, [{riak_api, pb_port},
+            {ok, PB_Port} = rt2:rpc_get_env(Node, [{riak_api, pb_port},
                                                {riak_kv, pb_port}]),
             {ok, [{PB_IP, PB_Port}]};
         _ ->

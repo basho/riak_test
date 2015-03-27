@@ -124,10 +124,10 @@ rpc_get_env(_, []) ->
     undefined;
 rpc_get_env(Node, [{App,Var}|Others]) ->
     case rpc:call(Node, application, get_env, [App, Var]) of
-    {ok, Value} ->
-        {ok, Value};
-    _ ->
-        rpc_get_env(Node, Others)
+        {ok, Value} ->
+            {ok, Value};
+        _ ->
+            rpc_get_env(Node, Others)
     end.
 
 -type interface() :: {http, tuple()} | {pb, tuple()}.
@@ -145,7 +145,7 @@ connection_info(Node) when is_atom(Node) ->
             [{http, {HTTP_IP, HTTP_Port}}, {https, {HTTPS_IP, HTTPS_Port}}, {pb, {PB_IP, PB_Port}}]
     end;
 connection_info(Nodes) when is_list(Nodes) ->
-[ {Node, connection_info(Node)} || Node <- Nodes].
+    [ {Node, connection_info(Node)} || Node <- Nodes].
 
 maybe_wait_for_changes(Node) ->
     Ring = rt_ring:get_ring(Node),
