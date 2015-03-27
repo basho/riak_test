@@ -22,6 +22,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([pbc/1,
+         pbc/2,
          stop/1,
          pbc_read/3,
          pbc_read/4,
@@ -46,11 +47,14 @@
 %% @doc get me a protobuf client process and hold the mayo!
 -spec pbc(node()) -> pid().
 pbc(Node) ->
-    %% rt:wait_for_service(Node, riak_kv),
-    %% ConnInfo = proplists:get_value(Node, rt:connection_info([Node])),
-    %% {IP, PBPortz} = proplists:get_value(pb, ConnInfo),
-    {ok, [{IP, PBPort}]} = get_pb_conn_info(Node),
-    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, [{auto_reconnect, true}]),
+    pbc(Node, [{auto_reconnect, true}]).
+
+-spec pbc(node(), proplists:proplist()) -> pid().
+pbc(Node, Options) ->
+    rt2:wait_for_service(Node, riak_kv),
+    ConnInfo = proplists:get_value(Node, get_pb_conn_info([Node])),
+    {IP, PBPort} = proplists:get_value(pb, ConnInfo),
+    {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, Options),
     Pid.
 
 stop(Pid) ->

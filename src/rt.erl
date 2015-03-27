@@ -88,6 +88,7 @@
          partition/2,
          partitions_for_node/1,
          pbc/1,
+         pbc/2,
          pbc_read/3,
          pbc_read/4,
          pbc_read_check/4,
@@ -1132,6 +1133,10 @@ pbc_systest_read(Node, Start, End, Bucket, R) ->
 -spec pbc(node()) -> pid().
 pbc(Node) ->
     rt_pb:pbc(Node).
+
+-spec pbc(node(), proplists:proplist()) -> pid().
+pbc(Node, Options) ->
+    rt_pb:pbc(Node, Options).
 
 %% @doc does a read via the erlang protobuf client
 -spec pbc_read(pid(), binary(), binary()) -> binary().
