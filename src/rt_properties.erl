@@ -24,6 +24,13 @@
 
 -include("rt.hrl").
 
+%%-record(rt_cluster_topology_v1, {
+%%          name :: atom(),
+%%          connected_to :: [atom()],
+%%          override_properties :: proplists:proplist()
+%%          }).
+%%-type topology() :: #rt_cluster_topology_v1{}.
+
 %% A quick note on the distinction between `node_ids' and
 %% `node_map'. `node_ids' are short identifers (e.g. dev1) and the
 %% `node_map' maps each node_id to a full erlang node names. Both are
@@ -52,6 +59,26 @@
           config=default_config() :: term(),
           external_properties :: term() % arbitrary properties for 3rd party use
          }).
+%%-record(rt_properties_v2, {
+%%          description :: string(),
+%%          supported_products :: [atom()],  %% TODO Use the product type when exported ...
+%%          minimum_version :: string(),     %% TODO Use the version types when exported ...
+%%          maximum_version :: string(),     %% TODO Use the version types when exported ...
+%%          supported_backends=all :: [atom()],
+%%          node_count :: non_neg_integer(),
+%%          wait_for_transfers=false :: boolean(),
+%%          bucket_types=[] :: bucket_types(),
+%%          indexes=[] :: [index()],
+%%          ring_size=auto :: [atom() | non_neg_integer()],
+%%          enable_strong_consistency=false :: boolean(),
+%%          enable_yokozuna=false :: boolean(),
+%%          enable_jmx=false :: boolean(),
+%%          enable_snmp=false :: boolean(),
+%%          config=default_config() :: term(),
+%%          required_services=[riak_kv] :: [atom()]
+          %% TODO What elements are needed to configure security?
+%%         }).
+
 -type properties() :: #rt_properties_v1{}.
 
 %% Specify the bucket_types field for the properties record. The list
@@ -61,8 +88,10 @@
 %% with the given index. The former form is applied to all clusters.
 -type bucket_type() :: {binary(), proplists:proplist()}.
 -type bucket_types() :: [bucket_type() | {pos_integer(), bucket_type()}].
+%%-type index() :: {binary(), binary(), binary()}.
 
 -export_type([properties/0,
+%%              index/0,
               bucket_types/0]).
 
 -define(RT_PROPERTIES, #rt_properties_v1).

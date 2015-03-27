@@ -10,12 +10,20 @@
 
 -behaviour(gen_fsm).
 
+-include_lib("eunit/include/eunit.hrl").
+
 %% API
--export([assert_singleton/1,
+-export([admin/2,
+         admin/3,
+         assert_singleton/1,
+         attach/2,
+         attach_direct/2,
          brutal_kill/1,
          claimant_according_to/1,
+         clean_data_dir/1,
+         clean_data_dir/2,
          commit/1,
-         configure/3,
+         console/2,
          get_ring/1,
          is_allocated/1,
          is_ready/1,
@@ -26,12 +34,16 @@
          partitions/1,
          ping/1,
          plan/1,
+         riak/2,
+         riak_repl/2,
+         search_cmd/2,
          start/1,
          start/2,
-         start_link/4,
+         start_link/5,
          status_of_according_to/1,
          stop/1,
          stop/2,
+         upgrade/2,
          wait_for_service/2,
          wait_until_pingable/1,
          wait_until_registered/2,
@@ -47,21 +59,63 @@
 -type host() :: string().
 -type node_id() :: string().
 
--record(state, {host :: host(),
+-record(configuration, {one :: proplists:proplist(),
+                        two :: proplists:proplist()}).
+
+-record(state, {config :: #configuration{},
+                host :: host(),
                 id :: node_id(),
+                install_type :: module(),
                 name :: node(),
+                transport :: module(),
                 version :: string()}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'
+-spec admin(node(), [term()]) -> {ok, term()} | rt_util:error().
+admin(Node, Args) ->
+    admin(Node, Args, []).
+
+%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'.
+%% The third parameter is a list of options. Valid options are:
+%%    * `return_exit_code' - Return the exit code along with the command output
+-spec admin(node(), [term()], [term()]) -> {ok, term()} | rt_util:error().
+admin(Node, Args, Options) ->
+    gen_fsm:sync_send_event(Node, {admin, Node, Args, Options}).
 
 %% @doc Ensure that the specified node is a singleton node/cluster -- a node
 %%      that owns 100% of the ring.
 -spec assert_singleton(node()) -> boolean().
 assert_singleton(Node) ->
-    gen_fsm:sync_send_event(Node, check_singleton).
+    SingletonFlag = gen_fsm:sync_send_event(Node, check_singleton),
+    ?assert(SingletonFlag),
+    SingletonFlag.
+
+%% @doc Runs `riak attach' on a specific node, and tests for the expected behavoir.
+%%      Here's an example: ```
+%%      rt_cmd_line:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
+%%                       {send, "riak_core_ring_manager:get_my_ring()."},
+%%                       {expect, "dict,"},
+%%                       {send, [4]}]), %% 4 = Ctrl + D'''
+%%      `{expect, String}' scans the output for the existance of the String.
+%%         These tuples are processed in order.
+%%
+%%      `{send, String}' sends the string to the console.
+%%         Once a send is encountered, the buffer is discarded, and the next
+%%         expect will process based on the output following the sent data.
+%%
+-spec attach(node(), {expect, list()} | {send, list()}) -> {ok, term()} | rt_util:error().
+attach(Node, Expected) ->
+    gen_fsm:sync_send_event(Node, {attach, Expected}).
+
+%% @doc Runs 'riak attach-direct' on a specific node
+%% @see rt_riak_node:attach/2
+-spec attach_direct(node(), {expect, list()} | {send, list()}) -> {ok, term()} | rt_util:error().
+attach_direct(Node, Expected) ->
+    gen_fsm:sync_send_event(Node, {attach_direct, Expected}).
 
 -spec brutal_kill(node()) -> rt_util:result().
 brutal_kill(Node) ->
@@ -72,14 +126,23 @@ brutal_kill(Node) ->
 claimant_according_to(Node) ->
     gen_fsm:sync_send_event(Node, claimant_according_to).
 
+-spec clean_data_dir(node()) -> rt_util:result().
+clean_data_dir(Node) ->
+    gen_fsm:sync_send_event(Node, clean_data_dir).
+
+-spec clean_data_dir(node(), list()) -> rt_util:result().
+clean_data_dir(Node, SubDir) ->
+    gen_fsm:sync_send_event(Node, {clean_data_dir, SubDir}).
+
+%% @doc Runs `riak console' on a specific node
+%% @see rt_riak_node:attach/2
+-spec console(node(), {expect, list()} | {send, list()}) -> {ok, term()} | rt_util:error().
+console(Node, Expected) ->
+    geb_fsm:sync_send_event(Node, {console, Expected}).
+
 -spec commit(node()) -> rt_util:result().
 commit(Node) ->
     gen_fsm:sync_send_event(Node, commit).
-
-%% @doc Modifies the riak.conf and advanced.config
--spec configure(node(), proplists:proplist(), proplists:proplist()) -> rt_util:result().
-configure(Node, Conf, AdvancedConfig) ->
-    gen_fsm:sync_send_event(Node, {configure, Conf, AdvancedConfig}).
 
 %% @doc Get the raw ring for `Node'.
 -spec get_ring(node()) -> term().
@@ -128,6 +191,20 @@ ping(Node) ->
 plan(Node) ->
     gen_fsm:sync_send_event(Node, plan).
 
+%% @doc Call 'bin/riak' command on `Node' with arguments `Args'
+-spec riak(node(), [term()]) -> {ok, term()} | rt_util:error().
+riak(Node, Args) ->
+    gen_fsm:sync_send_event(Node, {riak, Args}).
+
+%% @doc Call 'bin/riak' command on `Node' with arguments `Args'
+-spec riak_repl(node(), [term()]) -> {ok, term()} | rt_util:error().
+riak_repl(Node, Args) ->
+    gen_fsm:sync_send_event(Node, {riak_repl, Args}).
+
+-spec search_cmd(node(), [term()]) -> {ok, term()} | rt_util:error().
+search_cmd(Node, Args) ->
+    gen_fsm:sync_send_event(Node, {search_cmd, Args}).
+
 -spec start(node()) -> rt_util:result().
 start(Node) ->
     start(Node, true).
@@ -139,9 +216,9 @@ start(Node, Wait) ->
 %% @doc Starts a gen_fsm process to configure, start, and
 %% manage a Riak node on the `Host' identified by `NodeId'
 %% and `NodeName' using Riak `Version' ({product, release})
--spec start_link(host(), node_id(), node(), string()) -> {ok, pid()} | ignore | rt_util:error().
-start_link(Host, NodeId, NodeName, Version) ->
-    Args = [Host, NodeId, NodeName, Version],
+-spec start_link(host(), node_id(), node(), #configuration{}, string()) -> {ok, pid()} | ignore | rt_util:error().
+start_link(Host, NodeId, NodeName, Config, Version) ->
+    Args = [Host, NodeId, NodeName, Config, Version],
     gen_fsm:start_link(NodeName, ?MODULE, Args, []).
 
 %% @doc Return the cluster status of `Member' according to the ring
@@ -158,6 +235,9 @@ stop(Node) ->
 -spec stop(node(), boolean()) -> rt_util:result().
 stop(Node, Wait) ->
     gen_fsm:sync_send_event(Node, {stop, Wait}).
+
+upgrade(Node, NewVersion) ->
+    gen_fsm:sync_send_event(Node, {upgrade, NewVersion}).
 
 -spec wait_for_service(node(), [string()]) -> rt_util:result().
 wait_for_service(Node, Services) ->
@@ -195,10 +275,11 @@ version(Node) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([Host, NodeId, NodeName, Version]) ->
+init([Host, NodeId, NodeName, Config, Version]) ->
     State = #state{host=Host,
                    id=NodeId,
                    name=NodeName,
+                   config=Config,
                    version=Version},
     {ok, allocated, State}.
 

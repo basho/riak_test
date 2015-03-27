@@ -12,7 +12,6 @@
 
 %% API
 -export([activate_bucket_type/2,
-         decommission/1,
          clean/1,
          create_and_activate_bucket_type/3,
          create_bucket_type/3,
@@ -21,7 +20,6 @@
          leave/2,
          nodes/1,
          partition/3,
-         provision/4,
          staged_join/2,
          start/1,
          stop/1,
@@ -31,10 +29,11 @@
          wait_until_no_pending_changes/1,
          wait_until_nodes_agree_about_ownership/1,
          wait_until_ring_converged/1,
+         version/1,
          upgrade/2]).
 
 %% gen_fsm callbacks
--export([init/1, state_name/2, state_name/3, handle_event/3,
+-export([init/1, state_name/2, state_name/3, handle_event/3, start_link/3,
          handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 -define(SERVER, ?MODULE).
@@ -43,7 +42,7 @@
                 bucket_types :: [atom()],   %% should this be a string?
                 indexes :: [atom()],        %% should this be a string?
                 nodes :: [node()],
-                version :: string()
+                version :: version()
          }).
 
 %%%===================================================================
@@ -54,113 +53,105 @@
 %% -type partition() :: [node()].
 
 %% TODO Move to the rt_version module
-%% TODO Split out the product type
--type version() :: {atom(), string()}.
+-type product_type() :: riak | riak_ee | riak_cs.
+-type version() :: {product_type(), string()}.
 
 -spec activate_bucket_type(cluster_id(), atom()) -> rt_util:result().
 activate_bucket_type(Cluster, BucketType) ->
-    lager:error("activate_bucket_type(~p, ~p, ~p) not implemented", [Cluster, BucketType]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, {activate_bucket_type, BucketType}).
 
--spec decommission(cluster_id()) -> rt_util:result().
-decommission(Cluster) ->
-    lager:error("decomission(~p) not implemented", [Cluster]), 
-    ok.
-
+%% @doc Stops cluster, `Cluster', removes all data, and restarts it
 -spec clean(cluster_id()) -> rt_util:result().
 clean(Cluster) ->
-    lager:error("clean(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, clean).
 
+%% @doc Creates and activates a bucket type, `BucketType', on cluster, `Cluster', using properties, `Properties'
 -spec create_and_activate_bucket_type(cluster_id(), atom(), proplists:proplist()) -> rt_util:result().
-create_and_activate_bucket_type(Cluster, BucketType, Parameters) ->
-    ok = create_bucket_type(Cluster, BucketType, Parameters),
+create_and_activate_bucket_type(Cluster, BucketType, Properties) ->
+    ok = create_bucket_type(Cluster, BucketType, Properties),
     activate_bucket_type(Cluster, BucketType).
 
+%% @doc Creates a bucket type, `BucketType', on cluster, `Cluster', with properties, `Properties'
 -spec create_bucket_type(cluster_id(), atom(), proplists:proplist()) -> rt_util:result().
-create_bucket_type(Cluster, BucketType, Parameters) ->
-    lager:error("create_bucket_type(~p, ~p, ~p) not implemented", [Cluster, BucketType, Parameters]), 
-    ok.
+create_bucket_type(Cluster, BucketType, Properties) ->
+    gen_fsm:create_bucket_type(Cluster, {create_bucket_type, BucketType, Properties}).
 
 -spec is_mixed(cluster_id()) -> boolean().
 is_mixed(Cluster) ->
-    lager:error("is_mixed(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, is_mixed).
 
+%% @doc Joins a node, `Node', to the cluster, `Cluster'
 -spec join(cluster_id(), node()) -> rt_util:result().
 join(Cluster, Node) ->
-    lager:error("join(~p, ~p) not implemented.", [Cluster, Node]),
-    ok.
+    gen_fsm:sync_send_event(Cluster, {join, Node}).
+
 
 -spec leave(cluster_id(), node()) -> rt_util:result().
 leave(Cluster, Node) ->
-    lager:error("leave(~p, ~p) not implemented.", [Cluster, Node]),
-    ok.
+    gen_fsm:sync_send_event(Cluster, {leave, Node}).
 
+%% @doc Returns the list of nodes in the cluster
 -spec nodes(cluster_id()) -> [node()].
 nodes(Cluster) ->
-    lager:error("nodes(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, nodes).
 
 %% -spec partition(cluster_id(), partition(), partition()) -> [atom(), atom(), partition(), partition()] | rt_util:error().
-partition(Cluster, P1, P2) -> 
-    lager:error("partition(~p, ~p, ~p) not implemented.", [Cluster, P1, P2]),
-    ok.
+partition(Cluster, P1, P2) ->
+    gen_fsm:sync_send_event(Cluster, {partition, P1, P2}).
 
--spec provision(cluster_name(), [node()], proplists:proplist(), proplists:proplist()) -> {cluster_name(), cluster_id()} | rt_util:error().
-provision(Name, Nodes, Conf, AdvancedConfig) ->
-    lager:error("provision(~p, ~p, ~p, ~p) not implemented.", [Name, Nodes, Conf, AdvancedConfig]),
+%% @doc Starts the FSM initializing the state with the passed `Name', `Nodes', and `Config'
+-spec start_link(cluster_name(), [node()], proplists:proplist()) -> {cluster_name(), cluster_id()} | rt_util:error().
+start_link(Name, Nodes, Config) ->
+    lager:error("provision(~p, ~p, ~p) not implemented.", [Name, Nodes, Config]),
     ok.
 
 -spec staged_join(cluster_id(), node()) -> rt_util:result().
 staged_join(Cluster, Node) ->
-    lager:error("stagad_join(~p, ~p) not implemented.", [Cluster, Node]),
-    ok.
+    gen_fsm:sync_send_event(Cluster, {staged_join, Node}).
 
+%% @doc Starts each node in the cluster
 -spec start(cluster_id()) -> rt_util:result().
 start(Cluster) ->
-    lager:error("start(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, start).
 
+%% @doc Stops each node in the cluster
 -spec stop(cluster_id()) -> rt_util:result().
 stop(Cluster) ->
-    lager:error("stop(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, stop).
 
--spec wait_until_all_members([node()]) -> rt_util:result().
-wait_until_all_members(Nodes) ->
-    lager:error("wait_until_all_members(~p) not implemented", [Nodes]), 
-    ok.
+-spec wait_until_all_members(cluster_id()) -> rt_util:result().
+wait_until_all_members(Cluster) ->
+    gen_fsm:sync_send_event(Cluster, wait_unit_all_members).
 
 -spec wait_until_connected(cluster_id()) -> rt_util:result().
 wait_until_connected(Cluster) ->
-    lager:error("wait_until_connected(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, wait_until_connected).
 
 -spec wait_until_legacy_ring_ready(cluster_id()) -> rt_util:result().
 wait_until_legacy_ring_ready(Cluster) ->
-    lager:error("wait_until_legacy_ring_ready(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, wait_until_legacy_ring).
 
 -spec wait_until_no_pending_changes(cluster_id()) -> rt_util:result().
 wait_until_no_pending_changes(Cluster) ->
-    lager:error("wait_until_no_pending_changes(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, wait_until_no_pending_changes).
 
 -spec wait_until_nodes_agree_about_ownership(cluster_id()) -> rt_util:result().
 wait_until_nodes_agree_about_ownership(Cluster) ->
-    lager:error("wait_until_nodes_agree_about_ownership(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, wait_until_nodes_agree_about_ownership).
 
 -spec wait_until_ring_converged(cluster_id()) -> rt_util:result().
 wait_until_ring_converged(Cluster) ->
-    lager:error("wait_until_ring_converged(~p) not implemented", [Cluster]), 
-    ok.
+    gen_fsm:sync_send_event(Cluster, wait_until_ring_converged).
 
+%% @doc Returns the version of the cluster, `Cluster'
+-spec version(cluster_id()) -> version().
+version(Cluster) ->
+    gen_fsm:sync_send_event(Cluster, version).
+
+%% @doc Performs a rolling upgrade of the cluster, `Cluster', to version, `NewVersion'.
 -spec upgrade(cluster_id(), version()) -> rt_util:result().
-upgrade(Cluster, Version) ->
-    lager:error("upgrade(~p, ~p) not implemented.", [Cluster, Version]),
-    ok.
+upgrade(Cluster, NewVersion) ->
+    gen_fsm:sync_send_event(Cluster, {upgrade, NewVersion}).
 
 %% index creation ...
 
