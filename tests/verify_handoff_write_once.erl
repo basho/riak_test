@@ -54,7 +54,7 @@ run_test(NTestItems, NTestNodes) ->
     %% Count everytime riak_kv_vnode:handle_overload_command/3 is called with a
     %% ts_puts tuple
     [rt_intercept:add(N, {riak_kv_vnode,
-                          [{{handle_handoff_command, 3}, count_handoff_ts_puts}]})
+                          [{{handle_handoff_command, 3}, count_handoff_w1c_puts}]})
      || N <- Nodes],
 
     lager:info("Populating root node."),
@@ -73,8 +73,8 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     lager:info("Waiting for service on new node."),
     rt:wait_for_service(NewNode, riak_kv),
 
-    %% Set the ts_put counter to 0
-    true = rpc:call(RootNode, ets, insert, [intercepts_tab, {ts_put_counter, 0}]),
+    %% Set the w1c_put counter to 0
+    true = rpc:call(RootNode, ets, insert, [intercepts_tab, {w1c_put_counter, 0}]),
 
     lager:info("Joining new node with cluster."),
     rt:join(NewNode, RootNode),
@@ -90,9 +90,9 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     Results2 = rt:systest_read(NewNode, 1, 2*NTestItems, {?BUCKET_TYPE, <<"bucket">>}, 1),
     ?assertEqual(0, length(Results2)),
     lager:info("Data looks ok."),
-    [{_, Count}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, ts_put_counter]),
+    [{_, Count}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
     ?assert(Count > 0),
-    lager:info("Looking Good. We handled ~p ts_puts during handoff.", [Count]).
+    lager:info("Looking Good. We handled ~p write_once puts during handoff.", [Count]).
 
 deploy_test_nodes(N) ->
     Config = [{riak_core, [{default_bucket_props, [{n_val, 1}]},
