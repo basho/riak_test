@@ -18,21 +18,21 @@
 %%
 %% -------------------------------------------------------------------
 
--module(verify_fast_path).
+-module(verify_write_once).
 -export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 -define(DEFAULT_RING_SIZE, 16).
 -define(NVAL, 2).
--define(BUCKET_TYPE, <<"fast_path">>).
+-define(BUCKET_TYPE, <<"write_once">>).
 -define(BUCKET, {?BUCKET_TYPE, <<"bucket">>}).
 -define(ASYNC_PUT_BUCKET_TYPE, <<"async_put">>).
 -define(ASYNC_PUT_BUCKET, {?ASYNC_PUT_BUCKET_TYPE, <<"bucket">>}).
 -define(ANY_VALUE, <<"any">>).
 
 
-%% @doc This test exercises the fast_path bucket property, which results in puts that avoid coordination
+%% @doc This test exercises the write_once bucket property, which results in puts that avoid coordination
 %%      and reads before writes, and which therefore have lower latency and higher throughput.
 %%
 confirm() ->
@@ -53,7 +53,7 @@ confirm() ->
     %% Select a random node, and use it to create an immutable bucket
     %%
     Node = lists:nth(random:uniform(length((Cluster1))), Cluster1),
-    rt:create_and_activate_bucket_type(Node, ?BUCKET_TYPE, [{fast_path, true}]),
+    rt:create_and_activate_bucket_type(Node, ?BUCKET_TYPE, [{write_once, true}]),
     rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Cluster1),
     lager:info("Created ~p bucket type on ~p", [?BUCKET_TYPE, Node]),
     %%
@@ -75,11 +75,15 @@ confirm_put(Node) ->
     ok = verify_put(Node, ?BUCKET, <<"confirm_put_key">>, <<"confirm_put_value">>),
     verify_failed_put(
         Node, ?BUCKET, <<"confirm_put-bad_w">>, ?ANY_VALUE, [{w, 9999}],
-        {error, <<"{n_val_violation,3}">>}
+        fun(Error) ->
+            ?assertMatch({n_val_violation, 3}, Error)
+        end
     ),
     verify_failed_put(
         Node, ?BUCKET, <<"confirm_put-bad_pw">>, ?ANY_VALUE, [{pw, 9999}],
-        {error, <<"{n_val_violation,3}">>}
+        fun(Error) ->
+            ?assertMatch({n_val_violation, 3}, Error)
+        end
     ),
     lager:info("confirm_put...ok"),
     pass.
@@ -102,7 +106,9 @@ confirm_w(Nodes) ->
     %%
     verify_failed_put(
         Node2, ?BUCKET, <<"confirm_w_key">>, <<"confirm_w_value">>, [{sloppy_quorum, false}],
-        {error, <<"{insufficient_vnodes,1,need,2}">>}
+        fun(Error) ->
+            ?assertMatch({insufficient_vnodes, _, need, 2}, Error)
+        end
     ),
     rt:heal(PartitonInfo),
     lager:info("confirm_pw...ok"),
@@ -126,7 +132,9 @@ confirm_pw(Nodes) ->
     %%
     verify_put_timeout(
         Node2, ?BUCKET, <<"confirm_pw_key">>, ?ANY_VALUE, [{pw, all}], 1000,
-        {error, <<"{pw_val_unsatisfied,3,0}">>}
+        fun(Error) ->
+            ?assertMatch({pw_val_unsatisfied, 3, _}, Error)
+        end
     ),
     rt:heal(PartitonInfo),
     lager:info("confirm_pw...ok"),
@@ -166,7 +174,7 @@ confirm_rww(Nodes) ->
 %% async puts as a capability which can be arbitrated through the multi backend.
 %%
 confirm_async_put(Node) ->
-    rt:create_and_activate_bucket_type(Node, ?ASYNC_PUT_BUCKET_TYPE, [{fast_path, true}, {backend, myeleveldb}]),
+    rt:create_and_activate_bucket_type(Node, ?ASYNC_PUT_BUCKET_TYPE, [{write_once, true}, {backend, myeleveldb}]),
     rt:wait_until_bucket_type_status(?ASYNC_PUT_BUCKET_TYPE, active, [Node]),
     lager:info("Created ~p bucket type on ~p", [?ASYNC_PUT_BUCKET_TYPE, Node]),
 
@@ -189,21 +197,21 @@ verify_put(Node, Bucket, Key, Value, Options, ExpectedValue) ->
     ?assertEqual(ExpectedValue, riakc_obj:get_value(Val)),
     ok.
 
-verify_failed_put(Node, Bucket, Key, Value, Options, ExpectedPutReturn) ->
+verify_failed_put(Node, Bucket, Key, Value, Options, ExpectedPutReturnFunc) ->
     Client = rt:pbc(Node),
-    PutReturnValue = riakc_pb_socket:put(
+    {error, PutReturnValue} = riakc_pb_socket:put(
         Client, riakc_obj:new(
             Bucket, Key, Value
         ),
         Options
     ),
-    ?assertEqual(ExpectedPutReturn, PutReturnValue),
+    ExpectedPutReturnFunc(parse(PutReturnValue)),
     ok.
 
 
-verify_put_timeout(Node, Bucket, Key, Value, Options, Timeout, ExpectedPutReturn) ->
+verify_put_timeout(Node, Bucket, Key, Value, Options, Timeout, ExpectedPutReturnFunc) ->
     Client = rt:pbc(Node),
-    {Time, Val} = timer:tc(
+    {Time, {error, Val}} = timer:tc(
         fun() ->
             riakc_pb_socket:put(
                 Client, riakc_obj:new(
@@ -212,15 +220,15 @@ verify_put_timeout(Node, Bucket, Key, Value, Options, Timeout, ExpectedPutReturn
             )
         end
     ),
-    ?assertEqual(ExpectedPutReturn, Val),
+    ExpectedPutReturnFunc(parse(Val)),
     ?assert(Time div 1000000 =< 2*Timeout),
     ok.
 
 num_fast_merges(Nodes) ->
     lists:foldl(
         fun(Node, Acc) ->
-            {fast_path_merge, N} = proplists:lookup(
-                fast_path_merge,
+            {write_once_merge, N} = proplists:lookup(
+                write_once_merge,
                 rpc:call(Node, riak_kv_stat, get_stats, [])
             ),
             Acc + N
@@ -257,3 +265,7 @@ config(RingSize, NVal, Backend) ->
         ]}
     ].
 
+parse(Binary) ->
+    {ok, Tokens, _} = erl_scan:string(binary_to_list(Binary) ++ "."),
+    {ok, Term} = erl_parse:parse_term(Tokens),
+    Term.

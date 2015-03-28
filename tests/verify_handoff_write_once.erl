@@ -17,11 +17,11 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(verify_handoff_fastpath).
+-module(verify_handoff_write_once).
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
--define(BUCKET_TYPE, <<"fast_path">>).
+-define(BUCKET_TYPE, <<"write_once">>).
 
 %% We've got a separate test for capability negotiation and other mechanisms, so the test here is fairly
 %% straightforward: get a list of different versions of nodes and join them into a cluster, making sure that
@@ -59,7 +59,7 @@ run_test(NTestItems, NTestNodes) ->
 
     lager:info("Populating root node."),
     %% write one object with a bucket type
-    rt:create_and_activate_bucket_type(RootNode, ?BUCKET_TYPE, [{fast_path, true}]),
+    rt:create_and_activate_bucket_type(RootNode, ?BUCKET_TYPE, [{write_once, true}]),
     %% allow cluster metadata some time to propogate
     rt:systest_write(RootNode, 1, NTestItems, {?BUCKET_TYPE, <<"bucket">>}, 1),
 
