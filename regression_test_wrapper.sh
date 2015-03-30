@@ -13,7 +13,7 @@ ALL_BACKEND_TEST_CASES="always_pass_test,verify_riak_stats,verify_down,verify_st
 
 BITCASK_BACKEND_TEST_CASES="$ALL_BACKEND_TEST_CASES,loaded_upgrade"
 ELEVELDB_BACKEND_TEST_CASES="verify_2i_aae,loaded_upgrade"
-MEMORY_BACKEND_TEST_CASES="verify_2i_aae"
+MEMORY_BACKEND_TEST_CASES="verify_2i_aae,verify_membackend"
 
 ROOT_RESULTS_DIR="results/regression"
 RESULTS=`date +"%y%m%d%H%M%s"`

@@ -181,13 +181,14 @@ setup(timeout, State=#state{test_type=TestType,
     lager:info("Test Runner: ~s", [UName]),
 
     {StartVersion, OtherVersions} = test_versions(Properties),
-    Config = rt_backend:set(Backend, rt_properties:get(config, Properties)),
 
     case TestType of
         new ->
+            Config = rt_backend:set(Backend, rt_properties:get(config, Properties)),
             NodeIds = rt_properties:get(node_ids, Properties),
             Services = rt_properties:get(required_services, Properties);
         old ->
+            Config = rt:set_backend(Backend),
             NodeIds = [],
             Services = [],
             lager:warning("Test ~p has not been ported to the new framework.", [TestModule])

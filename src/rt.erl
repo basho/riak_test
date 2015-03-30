@@ -259,8 +259,7 @@ deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
     deploy_nodes(NodeIds, NodeMap, Version, InitialConfig, Services).
 
 deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
-    BackendConfig = maybe_set_backend(rt_config:get(rt_backend), Config),
-    _ = rt_harness_util:deploy_nodes(NodeIds, NodeMap, Version, BackendConfig, Services),
+    _ = rt_harness_util:deploy_nodes(NodeIds, NodeMap, Version, Config, Services),
     lists:foldl(fun({_, NodeName}, Nodes) -> [NodeName|Nodes] end,
                 [],
                 NodeMap).
@@ -269,20 +268,6 @@ map_version_and_config({Vsn, Cfg}) ->
     {rt_config:version_to_tag(Vsn), Cfg};
 map_version_and_config(Vsn) ->
     {rt_config:version_to_tag(Vsn), rt_properties:default_config()}.
-
-maybe_set_backend(Backend, Config) ->
-    maybe_set_backend(lists:keyfind(riak_kv, 1, Config), Backend, Config).
-
-maybe_set_backend(false, riak_kv_eleveldb_backend, Config) ->
-    maybe_set_backend(false, eleveldb, Config);
-maybe_set_backend(false, riak_kv_memory_backend, Config) ->
-    maybe_set_backend(false, memory, Config);
-maybe_set_backend(false, Backend, Config) ->
-    rt_backend:set(Backend, Config);
-maybe_set_backend({storage_backend, _}=_KVSection, _Backend, Config) ->
-    Config;
-maybe_set_backend({riak_kv, KVSection}, Backend, Config) ->
-    maybe_set_backend(lists:keyfind(storage_backend, 1, KVSection), Backend, Config).
 
 allocate_nodes(NumNodes, Version) when is_atom(Version) ->
     allocate_nodes(NumNodes, atom_to_list(Version));
@@ -1289,6 +1274,8 @@ set_backend(Backend) ->
 -spec set_backend(atom(), [{atom(), term()}]) -> atom()|[atom()].
 set_backend(bitcask, _) ->
     set_backend(riak_kv_bitcask_backend);
+set_backend(leveldb, Extras) ->
+    set_backend(eleveldb, Extras);
 set_backend(eleveldb, _) ->
     set_backend(riak_kv_eleveldb_backend);
 set_backend(memory, _) ->
@@ -1425,25 +1412,6 @@ wait_for_control(VersionedNodes) ->
     rt2:wait_for_control(VersionedNodes).
 
 -ifdef(TEST).
-
-verify_backend(InputConfig, ExpectedBackend) ->
-    verify_backend(InputConfig, ExpectedBackend, ExpectedBackend).
-
-verify_backend(InputConfig, Backend, ExpectedBackend) ->
-    ?_test(begin
-              ActualConfig = maybe_set_backend(Backend, InputConfig),
-              io:format("ActualConfig: ~p", [ActualConfig]),
-              [{riak_kv, [{storage_backend, ActualBackend}]}] = ActualConfig,
-              ?assertEqual(ExpectedBackend, ActualBackend)
-           end).
-
-maybe_set_backend_test_() ->
-    {foreach,
-     fun() -> ok end,
-     [verify_backend([], riak_kv_bitcask_backend),
-      verify_backend([], riak_kv_eleveldb_backend),
-      verify_backend([], riak_kv_memory_backend),
-      verify_backend([{riak_kv, [{storage_backend, riak_kv_bitcask_backend}]}], riak_kv_eleveldb_backend, riak_kv_bitcask_backend)]}.
 
 verify_product(Applications, ExpectedApplication) ->
     ?_test(begin
