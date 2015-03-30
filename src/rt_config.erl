@@ -52,6 +52,8 @@
 -define(UPGRADE_KEY, upgrade_paths).
 -define(PREVIOUS_VERSION, "1.4.12").
 -define(LEGACY_VERSION, "1.3.4").
+-define(CONTINUE_ON_FAIL_KEY, continue_on_fail).
+-define(DEFAULT_CONTINUE_ON_FAIL, false).
 
 %% @doc Get the value of an OS Environment variable. The arity 1 version of
 %%      this function will fail the test if it is undefined.
@@ -109,6 +111,8 @@ set(Key, Value) ->
 get(rt_max_wait_time) ->
     lager:info("rt_max_wait_time is deprecated. Please use rt_max_receive_wait_time instead."),
     rt_config:get(?RECEIVE_WAIT_TIME_KEY);
+get(?CONTINUE_ON_FAIL_KEY) ->
+    get(?CONTINUE_ON_FAIL_KEY, ?DEFAULT_CONTINUE_ON_FAIL);
 get(Key) ->
     case kvc:path(Key, application:get_all_env(?CONFIG_NAMESPACE)) of
         [] ->
@@ -306,5 +310,16 @@ get_version_path_test() ->
     ?assertEqual(version_to_tag(?DEFAULT_VERSION_KEY), ?DEFAULT_VERSION),
     ?assertEqual(version_to_tag(?PREVIOUS_VERSION_KEY), ?PREVIOUS_VERSION),
     ?assertEqual(version_to_tag(?LEGACY_VERSION_KEY), ?LEGACY_VERSION).
+
+get_continue_on_fail_test() ->
+    clear(?CONTINUE_ON_FAIL_KEY),
+    ?assertEqual(?DEFAULT_CONTINUE_ON_FAIL, rt_config:get(?CONTINUE_ON_FAIL_KEY)),
+    
+    set(?CONTINUE_ON_FAIL_KEY, false),
+    ?assertEqual(false, rt_config:get(?CONTINUE_ON_FAIL_KEY)),
+    
+    clear(?CONTINUE_ON_FAIL_KEY),
+    set(?CONTINUE_ON_FAIL_KEY, true),
+    ?assertEqual(true, rt_config:get(?CONTINUE_ON_FAIL_KEY)).
 
 -endif.
