@@ -87,7 +87,7 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     %% See if we get the same data back from the joined node that we added to the root node.
     %%  Note: systest_read() returns /non-matching/ items, so getting nothing back is good:
     lager:info("Validating data after handoff:"),
-    Results2 = rt:systest_read(NewNode, 1, 2*NTestItems, {?BUCKET_TYPE, <<"bucket">>}, 1),
+    Results2 = rt:systest_read(NewNode, 1, NTestItems, {?BUCKET_TYPE, <<"bucket">>}, 1),
     ?assertEqual(0, length(Results2)),
     lager:info("Data looks ok."),
     [{_, Count}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
