@@ -21,6 +21,7 @@ fi
 echo $VERSION
 cd $RT_DEST_DIR
 echo " - Resetting existing $RT_DEST_DIR"
+export GIT_WORK_TREE="$RT_DEST_DIR"
 git reset HEAD --hard > /dev/null
 git clean -fd > /dev/null
 echo " - Removing and recreating $RT_DEST_DIR/current"
