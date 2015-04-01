@@ -2,6 +2,14 @@
 -compile(export_all).
 -include("intercept.hrl").
 
+%% shamelessly copied from riak_kv_vnode.hrl
+-record(riak_kv_w1c_put_req_v1, {
+    bkey :: {binary(),binary()},
+    encoded_val :: binary(),
+    type :: primary | fallback
+    % start_time :: non_neg_integer(), Jon to add?
+}).
+
 -define(M, riak_kv_vnode_orig).
 
 %% @doc Simulate dropped puts by truncating the preflist for every kv
@@ -29,6 +37,12 @@ slow_handle_coverage(Req, Filter, Sender, State) ->
     error_logger:info_msg("coverage sleeping ~p", [Rand]),
     timer:sleep(Rand),
     ?M:handle_coverage_orig(Req, Filter, Sender, State).
+
+count_handoff_w1c_puts(#riak_kv_w1c_put_req_v1{}=Req, Sender, State) ->
+    ets:update_counter(intercepts_tab, w1c_put_counter, 1),
+    ?M:handle_handoff_command_orig(Req, Sender, State);
+count_handoff_w1c_puts(Req, Sender, State) ->
+    ?M:handle_handoff_command_orig(Req, Sender, State).
 
 %% @doc Simulate dropped gets/network partitions byresponding with
 %%      noreply during get requests.

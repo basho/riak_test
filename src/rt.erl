@@ -762,9 +762,10 @@ wait_until_legacy_ringready(Node) ->
 %% @doc wait until each node in Nodes is disterl connected to each.
 wait_until_connected(Nodes) ->
     lager:info("Wait until connected ~p", [Nodes]),
+    NodeSet = sets:from_list(Nodes),
     F = fun(Node) ->
                 Connected = rpc:call(Node, erlang, nodes, []),
-                lists:sort(Nodes) == lists:sort([Node]++Connected)--[node()]
+                sets:is_subset(NodeSet, sets:from_list(([Node] ++ Connected) -- [node()]))
         end,
     [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
     ok.
