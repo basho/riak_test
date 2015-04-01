@@ -37,16 +37,16 @@ confirm() ->
 
     NormalType = <<"normal_type">>,
     ConsistentType = <<"consistent_type">>,
-    FastPathType = <<"fast_path_type">>,
+    WriteOnceType = <<"write_once_type">>,
 
     ok = create_bucket_type(Nodes, NormalType, [{n_val, 3}]),
     ok = create_bucket_type(Nodes, ConsistentType, [{consistent, true}, {n_val, 5}]),
-    ok = create_bucket_type(Nodes, FastPathType, [{fast_path, true}, {n_val, 1}]),
+    ok = create_bucket_type(Nodes, WriteOnceType, [{write_once, true}, {n_val, 1}]),
     rt:wait_until(ring_manager_check_fun(hd(Nodes))),
 
     BKV1 = {{NormalType, ?BUCKET}, ?KEY, <<"test">>},
     BKV2 = {{ConsistentType, ?BUCKET}, ?KEY, <<"test">>},
-    BKV3 = {{FastPathType, ?BUCKET}, ?KEY, <<"test">>},
+    BKV3 = {{WriteOnceType, ?BUCKET}, ?KEY, <<"test">>},
 
     Tests = [test_no_overload_protection,
              test_vnode_protection,
@@ -133,7 +133,7 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     ok.
 
 %% Don't check on fast path
-test_fsm_protection(_, {{<<"fast_path_type">>, _}, _, _}, _) ->
+test_fsm_protection(_, {{<<"write_once_type">>, _}, _, _}, _) ->
     ok;
 test_fsm_protection(Nodes, BKV, ConsistentType) ->
     lager:info("Testing with coordinator protection enabled"),
