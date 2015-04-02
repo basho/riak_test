@@ -51,8 +51,8 @@
          version/1]).
 
 %% gen_fsm callbacks
--export([init/1, state_name/2, state_name/3, handle_event/3,
-         handle_sync_event/4, handle_info/3, ready/3, terminate/3, code_change/4]).
+-export([init/1, handle_event/3, stopped/3, handle_sync_event/4, 
+         handle_info/3, ready/3, terminate/3, code_change/4]).
 
 -define(SERVER, ?MODULE).
 
@@ -62,11 +62,23 @@
 -record(configuration, {one :: proplists:proplist(),
                         two :: proplists:proplist()}).
 
+-type path() :: string().
+-record(directory_overlay, {bin_dir :: path(),
+                            conf_dir :: path(),
+                            data_dir :: path(),
+                            home_dir :: path(),
+                            lib_dir :: path(),
+                            log_dir :: path()}).
+                            
+
+-type command() :: string().
 -record(state, {config :: #configuration{},
                 host :: host(),
                 id :: node_id(),
-                install_type :: module(),
+                directory_overlay :: #directory_overlay{},
                 name :: node(),
+                start_command :: command(),
+                stop_command :: command(),
                 transport :: module(),
                 version :: string()}).
 
@@ -180,12 +192,11 @@ owners_according_to(Node) ->
 %% @doc Get list of partitions owned by node (primary).
 -spec partitions(node()) -> [term()].
 partitions(Node) ->
-    lager:error("partitions(~p) is not implemented.", [Node]),
-    [].
+    gen_fsm:sync_send_event(Node, partitions).
 
 -spec ping(node()) -> boolean().
 ping(Node) ->
-    gen_fsm:sync_send_event(Node, ping).
+    gen_fsm:sync_send_all_state_event(Node, ping).
 
 -spec plan(node()) -> rt_util:result().
 plan(Node) ->
@@ -227,7 +238,6 @@ start_link(Host, NodeId, NodeName, Config, Version) ->
 status_of_according_to(Node) ->
     gen_fsm:sync_send_event(Node, status_of_according_to).
 
-
 -spec stop(node()) -> rt_util:result().
 stop(Node) ->
     stop(Node, true).
@@ -256,7 +266,7 @@ wait_until_unpingable(Node) ->
     gen_fsm:sync_send_event(Node, wait_until_unpingable).
 
 version(Node) ->
-    gen_fsm:sync_send_event(Node, version).
+    gen_fsm:sync_send_all_state_event(Node, version).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -275,44 +285,60 @@ version(Node) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([Host, NodeId, NodeName, Config, Version]) ->
+init([Host, NodeType, NodeId, NodeName, Config, Version]) ->
+    DirOverlay = create_directory_overlay(NodeType, Version),
     State = #state{host=Host,
                    id=NodeId,
                    name=NodeName,
                    config=Config,
+                   directory_overlay=DirOverlay,
+                   start_command=start_command(NodeType, DirOverlay),
+                   stop_command=stop_command(NodeType, DirOverlay),
                    version=Version},
     {ok, allocated, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_event/2, the instance of this function with the same
-%% name as the current state name StateName is called to handle
-%% the event. It is also called if a timeout occurs.
-%%
-%% @spec state_name(Event, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
-%% @end
-%%--------------------------------------------------------------------
-state_name(_Event, State) ->
-    {next_state, state_name, State}.
 
+stopped(start, _From, State) ->
+    transition_stopped_to_started(State);
+stopped(stop, _From, State=#state{name=NodeName}) ->
+    lager:debug("Stop called on an already stopped node ~p", [NodeName]),
+    {reply, ok, stopped, State};
+stopped(_Event, _From, State) ->
+    %% The state of the node is not harmed.  Therefore, we leave the FSM running
+    %% in the stopped state, but refuse to execute the command ...
+    {reply, {error, invalid_state}, stopped, State}.
+
+
+transition_stopped_to_started(State=#state{start_command=StartCommand, transport=Transport}) ->
+    transition_stopped_to_started(Transport:exec(StartCommand), State).
+
+transition_stopped_to_started(ok, State) ->
+    {reply, ok, started, State};
+transition_stopped_to_started(Error={error, _}, State) ->
+    {stop, Error, State}.
+   
+
+ready({admin, Args, Options}, _From, State=#state{directory_overlay=DirOverlay, transport=Transport}) ->
+    Result = Transport:exec(riak_admin_path(DirOverlay), Args, Options),
+    {reply, Result, ready, State};
 ready(get_ring, _From, #state{name=NodeName}=State) ->
     {ok, Ring} = maybe_get_ring(NodeName),
     {reply, Ring, ready, State};
 ready(members_according_to, _From, #state{name=NodeName}=State) ->
     Members = maybe_members_according_to(NodeName),
     {reply, Members, ready, State};
+ready(owners_according_to, _From, #state{name=NodeName}=State) ->
+    Owners = maybe_owners_according_to(NodeName),
+    {reply, Owners, ready, State};
 ready(partitions, _From, #state{name=NodeName}=State) ->
     Partitions = maybe_partitions(NodeName),
     {reply, Partitions, ready, State};
-ready(owners_according_to, _From, #state{name=NodeName}=State) ->
-    Owners = maybe_owners_according_to(NodeName),
-    {reply, Owners, ready, State}.
+ready({riak, Args}, _From, State=#state{directory_overlay=DirOverlay, transport=Transport}) ->
+    Result = Transport:exec(riak_path(DirOverlay), Args), 
+    {reply, Result, ready, State};
+ready({riak_repl, Args}, _From, State=#state{directory_overlay=DirOverlay, transport=Transport}) ->
+    Result = Transport:exec(riak_repl_path(DirOverlay), Args),
+    {reply, Result, ready, State}.
 
 -spec maybe_get_ring(node()) -> rt_rpc_result().
 maybe_get_ring(NodeName) ->
@@ -357,28 +383,6 @@ maybe_rpc_call({badrpc, _}) ->
     {error, badrpc};
 maybe_rpc_call(Result) ->
     Result.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:sync_send_event/[2,3], the instance of this function with
-%% the same name as the current state name StateName is called to
-%% handle the event.
-%%
-%% @spec state_name(Event, From, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {reply, Reply, NextStateName, NextState} |
-%%                   {reply, Reply, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState} |
-%%                   {stop, Reason, Reply, NewState}
-%% @end
-%%--------------------------------------------------------------------
-state_name(_Event, _From, State) ->
-    Reply = ok,
-    {reply, Reply, state_name, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -461,3 +465,35 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% TODO Convert to the version() type when it is exported ..
+-spec create_directory_overlay({atom(), path()}, {string(), string()}) -> #directory_overlay{}.
+create_directory_overlay([devrel, RootPath], {Product, Version}) -> 
+    HomeDir = filename:join([RootPath], Product ++ "-" ++ Version),
+    #directory_overlay{bin_dir=filename:join([HomeDir, "bin"]),
+                       conf_dir=filename:join([HomeDir, "etc"]),
+                       data_dir=filename:join([HomeDir, "data"]),
+                       home_dir=HomeDir,
+                       lib_dir=filename:join([HomeDir, "lib"]),
+                       log_dir=filename:join([HomeDir, "log"])}.
+
+-spec start_command({devrel, string()}, #directory_overlay{}) -> command().
+start_command({devrel, _}, DirOverlay) ->
+    riak_path(DirOverlay) ++ " " ++ "start".
+
+-spec stop_command({devrel, string()}, #directory_overlay{}) -> command().
+stop_command({devrel, _}, DirOverlay) ->
+    riak_path(DirOverlay) ++ " " ++ "stop".
+
+-spec riak_path(#directory_overlay{}) -> path(). 
+riak_path(#directory_overlay{bin_dir=BinDir}) ->
+    filename:join([BinDir, "riak"]).
+
+-spec riak_admin_path(#directory_overlay{}) -> path(). 
+riak_admin_path(#directory_overlay{bin_dir=BinDir}) ->
+    filename:join([BinDir, "riak-admin"]).
+
+-spec riak_repl_path(#directory_overlay{}) -> path(). 
+riak_repl_path(#directory_overlay{bin_dir=BinDir}) ->
+    filename:join([BinDir, "riak-repl"]).
+
