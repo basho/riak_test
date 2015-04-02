@@ -16,6 +16,7 @@ leader_server(Node) ->
 
 set_leader_node(Node) ->
     LeaderPid = spawn(?MODULE, leader_server, [Node]),
+    global:unregister_name(?NODE_KEY),
     global:register_name(?NODE_KEY, LeaderPid).
 
 set_leader_node(LocalPid, LeaderNode, LeaderPid) ->
