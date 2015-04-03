@@ -63,6 +63,7 @@ confirm() ->
     lager:info("Upgrayded!!"),
     ?assertEqual(ok, rt:wait_until_ready(Current)),
     ?assertEqual(ok, rt:wait_until_ready(Previous)),
+    rt:wait_for_service(Previous, riak_kv), 
     ?assertEqual(ok, rt:wait_until_capability_contains(Current, {riak_kv, crdt}, [riak_dt_pncounter, riak_dt_orswot, riak_dt_map, pncounter])),
     ?assertMatch(ok, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
     ?assertMatch({ok, 5}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
