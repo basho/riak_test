@@ -208,8 +208,7 @@ verify_stats_keys_complete(Node, Stats) ->
     AdditionalStatsKeys = diff_lists(ExpectedKeys, ActualKeys),
     maybe_log_stats_keys(MissingStatsKeys, "missing stats keys"),
     maybe_log_stats_keys(AdditionalStatsKeys, "additional stats"),
-    ?assert(length(MissingStatsKeys) == 0),
-    ?assert(length(AdditionalStatsKeys) == 0),
+    ?assertEqual({[],[]}, {MissingStatsKeys, AdditionalStatsKeys}),
     ok.
 
 diff_lists(List, ThatList) ->
@@ -229,7 +228,7 @@ pretty_print_stats_keys(StatsKeys) ->
 datatype_stats() ->
     %% Merge stats are excluded because we likely never merge disjoint
     %% copies on a single node after a single write each.
-    [ list_to_binary(Stat) || 
+    [ list_to_binary(Stat) ||
         Stat <- [
                  %%  "object_counter_merge"
                  %% ,"object_counter_merge_total"
@@ -652,16 +651,16 @@ common_stats() ->
         <<"read_repairs">>,
         <<"read_repairs_counter">>,
         <<"read_repairs_counter_total">>,
-        <<"read_repairs_fallback_notfound_one">>,
         <<"read_repairs_fallback_notfound_count">>,
-        <<"read_repairs_fallback_outofdate_one">>,
+        <<"read_repairs_fallback_notfound_one">>,
         <<"read_repairs_fallback_outofdate_count">>,
+        <<"read_repairs_fallback_outofdate_one">>,
         <<"read_repairs_map">>,
         <<"read_repairs_map_total">>,
         <<"read_repairs_primary_notfound_count">>,
         <<"read_repairs_primary_notfound_one">>,
-        <<"read_repairs_primary_outofdate_one">>,
         <<"read_repairs_primary_outofdate_count">>,
+        <<"read_repairs_primary_outofdate_one">>,
         <<"read_repairs_set">>,
         <<"read_repairs_set_total">>,
         <<"read_repairs_total">>,
@@ -706,16 +705,18 @@ common_stats() ->
         <<"search_index_latency_99">>,
         <<"search_index_latency_999">>,
         <<"search_index_latency_max">>,
+        <<"search_index_latency_mean">>,
         <<"search_index_latency_median">>,
         <<"search_index_latency_min">>,
         <<"search_index_throughput_count">>,
-        <<"search_index_throughtput_one">>,
+        <<"search_index_throughput_one">>,
         <<"search_query_fail_count">>,
         <<"search_query_fail_one">>,
         <<"search_query_latency_95">>,
         <<"search_query_latency_99">>,
         <<"search_query_latency_999">>,
         <<"search_query_latency_max">>,
+        <<"search_query_latency_mean">>,
         <<"search_query_latency_median">>,
         <<"search_query_latency_min">>,
         <<"search_query_throughput_count">>,
@@ -753,13 +754,13 @@ common_stats() ->
         <<"vnode_counter_update_time_mean">>,
         <<"vnode_counter_update_time_median">>,
         <<"vnode_counter_update_total">>,
-        <<"vnode_gets">>,
-        <<"vnode_gets_total">>,
-        <<"vnode_get_fsm_time_mean">>,
-        <<"vnode_get_fsm_time_median">>,
+        <<"vnode_get_fsm_time_100">>,
         <<"vnode_get_fsm_time_95">>,
         <<"vnode_get_fsm_time_99">>,
-        <<"vnode_get_fsm_time_100">>,
+        <<"vnode_get_fsm_time_mean">>,
+        <<"vnode_get_fsm_time_median">>,
+        <<"vnode_gets">>,
+        <<"vnode_gets_total">>,
         <<"vnode_index_deletes">>,
         <<"vnode_index_deletes_postings">>,
         <<"vnode_index_deletes_postings_total">>,
@@ -779,13 +780,13 @@ common_stats() ->
         <<"vnode_map_update_time_mean">>,
         <<"vnode_map_update_time_median">>,
         <<"vnode_map_update_total">>,
-        <<"vnode_puts">>,
-        <<"vnode_puts_total">>,
-        <<"vnode_put_fsm_time_mean">>,
-        <<"vnode_put_fsm_time_median">>,
+        <<"vnode_put_fsm_time_100">>,
         <<"vnode_put_fsm_time_95">>,
         <<"vnode_put_fsm_time_99">>,
-        <<"vnode_put_fsm_time_100">>,
+        <<"vnode_put_fsm_time_mean">>,
+        <<"vnode_put_fsm_time_median">>,
+        <<"vnode_puts">>,
+        <<"vnode_puts_total">>,
         <<"vnode_set_update">>,
         <<"vnode_set_update_time_100">>,
         <<"vnode_set_update_time_95">>,
@@ -794,19 +795,32 @@ common_stats() ->
         <<"vnode_set_update_time_median">>,
         <<"vnode_set_update_total">>,
         <<"webmachine_version">>,
+        <<"write_once_merge">>,
+        <<"write_once_put_objsize_100">>,
+        <<"write_once_put_objsize_95">>,
+        <<"write_once_put_objsize_99">>,
+        <<"write_once_put_objsize_mean">>,
+        <<"write_once_put_objsize_median">>,
+        <<"write_once_put_time_100">>,
+        <<"write_once_put_time_95">>,
+        <<"write_once_put_time_99">>,
+        <<"write_once_put_time_mean">>,
+        <<"write_once_put_time_median">>,
+        <<"write_once_puts">>,
+        <<"write_once_puts_total">>,
         <<"xmerl_version">>,
         <<"yokozuna_version">>
     ].
 
 product_stats(riak_ee) ->
     [
-        <<"riak_jmx_version">>, 
-        <<"ebloom_version">>, 
-        <<"riak_snmp_version">>, 
-        <<"riak_repl_version">>, 
-        <<"snmp_version">>, 
-        <<"ranch_version">>, 
-        <<"mnesia_version">>
+        <<"ebloom_version">>,
+        <<"mnesia_version">>,
+        <<"ranch_version">>,
+        <<"riak_jmx_version">>,
+        <<"riak_repl_version">>,
+        <<"riak_snmp_version">>,
+        <<"snmp_version">>
     ];
 product_stats(riak) ->
     [].
