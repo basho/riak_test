@@ -181,7 +181,7 @@ main(Args) ->
 
     Teardown = not proplists:get_value(keep, ParsedArgs, false),
     maybe_teardown(Teardown, TestResults, Coverage, Verbose),
-    ok.
+    proper_exit_status(TestResults).
 
 maybe_teardown(false, TestResults, Coverage, Verbose) ->
     print_summary(TestResults, Coverage, Verbose),
@@ -372,6 +372,15 @@ print_summary(TestResults, CoverResult, Verbose) ->
              || {App, Cov, _} <- AppCov]
     end,
     ok.
+
+proper_exit_status(TestResults) ->
+    Failed = [X || X <- TestResults, proplists:get_value(status, X) =:= fail],
+    case Failed of
+        [] ->
+            ok;
+        _ ->
+            halt(1)
+    end.
 
 test_name_width(Results) ->
     lists:max([ length(X) || [X | _T] <- Results ]).
