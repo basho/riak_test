@@ -30,7 +30,9 @@
 confirm() ->
     lager:info("Build ~b node cluster", [?NODE_COUNT]),
     Nodes = rt:build_cluster(?NODE_COUNT),
-    
+
+    [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
+
     verify_example(Nodes),
     verify_example_transform(Nodes),
     verify_example_reduce(Nodes),
