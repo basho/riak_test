@@ -374,12 +374,12 @@ print_summary(TestResults, CoverResult, Verbose) ->
     ok.
 
 proper_exit_status(TestResults) ->
-    FailCount = length(lists:filter(fun(X) -> proplists:get_value(status, X) =:= fail end, TestResults)),
-    case FailCount > 0 of
-        true ->
-            halt(1);
-        false ->
-            ok
+    Failed = [X || X <- TestResults, proplists:get_value(status, X) =:= fail],
+    case Failed of
+        [] ->
+            ok;
+        _ ->
+            halt(1)
     end.
 
 test_name_width(Results) ->
