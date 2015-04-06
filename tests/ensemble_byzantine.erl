@@ -102,8 +102,7 @@ test_lose_minority_synctrees_one_node_partitioned(PBC, Bucket, Key, Val, PL,
     %% Heal the partition so that we can get quorum
     rt:heal(PartInfo),
     ensemble_util:wait_until_quorum(Node0, Ensemble),
-    Obj = rt:pbc_read(PBC, Bucket, Key),
-    ?assertEqual(Val, riakc_obj:get_value(Obj)).
+    assert_valid_read(PBC, Bucket, Key, Val).
 
 test_lose_all_but_one_partition(PBC, Bucket, Key, Val, PL) ->
     Wiped = tl(PL),
@@ -112,8 +111,7 @@ test_lose_all_but_one_partition(PBC, Bucket, Key, Val, PL) ->
     lager:info("Wiping Data on Following Vnodes: ~p", [Wiped]),
     wipe_partitions(Wiped),
     ensemble_util:wait_until_quorum(Node0, Ensemble),
-    Obj = rt:pbc_read(PBC, Bucket, Key),
-    ?assertEqual(Val, riakc_obj:get_value(Obj)).
+    assert_valid_read(PBC, Bucket, Key, Val).
 
 test_lose_one_node_one_partition(PBC, Bucket, Key, Val, PL) ->
     {{Idx0, Node0}, primary} = hd(PL),
@@ -124,8 +122,7 @@ test_lose_one_node_one_partition(PBC, Bucket, Key, Val, PL) ->
     lager:info("Wiping Idx ~p data on LeaderNode ~p", [LeaderIdx, LeaderNode]),
     wipe_partition(LeaderIdx, LeaderNode),
     ensemble_util:wait_until_quorum(LeaderNode, Ensemble),
-    Obj = rt:pbc_read(PBC, Bucket, Key),
-    ?assertEqual(Val, riakc_obj:get_value(Obj)).
+    assert_valid_read(PBC, Bucket, Key, Val).
 
 test_lose_all_data_and_trees_except_one_node(PBC, Bucket, Key, Val, PL) ->
     Wiped = tl(PL),
@@ -181,8 +178,11 @@ test_lose_all_data(PBC, Bucket, Key, PL) ->
     lager:info("All data loss error = ~p", [E]).
 
 assert_valid_read(PBC, Bucket, Key, Val) ->
-    Obj = rt:pbc_read(PBC, Bucket, Key),
-    ?assertEqual(Val, riakc_obj:get_value(Obj)).
+    ReadFun = fun() ->
+                      Obj = rt:pbc_read(PBC, Bucket, Key),
+                      Val =:= riakc_obj:get_value(Obj)
+              end,
+    ?assertEqual(ok, rt:wait_until(ReadFun)).
 
 assert_failed_read(PBC, Bucket, Key) ->
     ?assertMatch({error, _}, riakc_pb_socket:get(PBC, Bucket, Key, [])).
@@ -191,8 +191,7 @@ normal_write_and_read(PBC, Bucket, Key, Val) ->
     lager:info("Writing a consistent key"),
     ok = rt:pbc_write(PBC, Bucket, Key, Val),
     lager:info("Read key to verify it exists"),
-    Obj = rt:pbc_read(PBC, Bucket, Key),
-    ?assertEqual(Val, riakc_obj:get_value(Obj)).
+    assert_valid_read(PBC, Bucket, Key, Val).
 
 stop_nodes(PL) ->
     [rt:stop_and_wait(Node) || {{_, Node}, _} <- PL].
@@ -230,8 +229,7 @@ assert_lose_synctrees_and_recover(PBC, Bucket, Key, Val, PL, ToLose) ->
     Ensemble = {kv, Idx0, 5},
     [wipe_tree(Ensemble, Idx, Node) || {{Idx, Node}, _} <- ToLose],
     ensemble_util:wait_until_quorum(Node0, Ensemble),
-    Obj = rt:pbc_read(PBC, Bucket, Key),
-    ?assertEqual(Val, riakc_obj:get_value(Obj)).
+    assert_valid_read(PBC, Bucket, Key, Val).
 
 majority_vnodes(PL) ->
     Num = ?NVAL div 2 + 1,
