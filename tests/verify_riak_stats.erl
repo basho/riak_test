@@ -814,13 +814,13 @@ common_stats() ->
 
 product_stats(riak_ee) ->
     [
-        <<"riak_jmx_version">>,
         <<"ebloom_version">>,
-        <<"riak_snmp_version">>,
-        <<"riak_repl_version">>,
-        <<"snmp_version">>,
+        <<"mnesia_version">>,
         <<"ranch_version">>,
-        <<"mnesia_version">>
+        <<"riak_jmx_version">>,
+        <<"riak_repl_version">>,
+        <<"riak_snmp_version">>,
+        <<"snmp_version">>
     ];
 product_stats(riak) ->
     [].
