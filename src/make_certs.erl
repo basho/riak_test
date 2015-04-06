@@ -367,6 +367,7 @@ ca_cnf(CA) ->
      "crl		= $dir/crl.pem\n"
      "crlnumber		= $dir/crlnumber\n"
      "private_key	= $dir/private/key.pem\n"
+     "string_mask	= utf8only\n"
      "RANDFILE	        = $dir/private/RAND\n"
      "\n"
      "x509_extensions   = user_cert\n"
