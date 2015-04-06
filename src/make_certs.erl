@@ -326,7 +326,9 @@ req_cnf(DN) ->
      "RANDFILE		= $ROOTDIR/RAND\n"
      "encrypt_key	= no\n"
      "default_md	= sha1\n"
-     "#string_mask	= pkix\n"
+     %% use string_mask to force the use of UTF8 for CN fields, as some OpenSSL installs
+     %% end up creating 'teletexString' fields, which nobody supports any more (since 2003)
+     "string_mask	= utf8only\n"
      "x509_extensions	= ca_ext\n"
      "prompt		= no\n"
      "distinguished_name= name\n"
