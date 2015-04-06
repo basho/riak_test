@@ -125,7 +125,9 @@ confirm() ->
 %%%===================================================================
 
 spawn_handoff_executable(Env) ->
-    erlang:open_port({spawn_executable, "handoff-test.sh"},
+    {ok, CurrDir} = file:get_cwd(),
+    ExecPath = filename:absname([CurrDir, "/handoff-test.sh"]),
+    erlang:open_port({spawn_executable, ExecPath},
                      [exit_status, {env, Env}, stderr_to_stdout]).
 
 receiver(P, Acc) ->
@@ -211,7 +213,7 @@ check_data(Data, KeyCount) ->
     KeysBefore     = list_to_integer(?GET(keys1, Data)),
     KeysAfter      = list_to_integer(?GET(keys2, Data)),
     DocsBefore     = list_to_integer(?GET(docs1, Data)),
-    DocsAfter      = list_to_integer(?GET(docs1, Data)),
+    DocsAfter      = list_to_integer(?GET(docs2, Data)),
     ReplicasBefore = list_to_integer(?GET(reps1, Data)),
     ReplicasAfterURL  = ?GET(reps2URL, Data),
 
