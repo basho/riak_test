@@ -281,6 +281,14 @@ get_used_space(VNode, Node) ->
                 TwoOhMulti;
             {<<"riak_ee-2.0",_/binary>>, multi} ->
                 TwoOhMulti;
+            {<<"riak-2.1",_/binary>>, regular} ->
+                TwoOhReg;
+            {<<"riak_ee-2.1",_/binary>>, regular} ->
+                TwoOhReg;
+            {<<"riak-2.1",_/binary>>, multi} ->
+                TwoOhMulti;
+            {<<"riak_ee-2.1",_/binary>>, multi} ->
+                TwoOhMulti;
             _Else ->
                 lager:error("didn't understand version/mode tuple ~p",
                             [{Version, Mode}]),
