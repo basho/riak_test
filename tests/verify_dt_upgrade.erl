@@ -50,7 +50,7 @@ confirm() ->
 populate_counters(Node) ->
     lager:info("Writing counters to ~p", [Node]),
     rt:wait_for_service(Node, riak_kv),
-    ?assertEqual(ok, rt:wait_until_capability(Node, {riak_kv, crdt}, [pncounter])),
+    ?assertEqual(ok, rt:wait_until(Node, fun has_counter_capability/1)),
 
     RHC = rt:httpc(Node),
     ?assertMatch(ok, rhc:counter_incr(RHC, ?COUNTER_BUCKET, <<"httpkey">>, 2)),
@@ -85,3 +85,7 @@ upgrade(Node, NewVsn) ->
     rt:upgrade(Node, NewVsn),
     rt:wait_for_service(Node, riak_kv),
     ok.
+
+has_counter_capability(Node) ->
+    Types = rt:capability(Node, {riak_kv, crdt}),
+    is_list(Types) andalso lists:member(pncounter, Types).
