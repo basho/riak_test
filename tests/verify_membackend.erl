@@ -136,24 +136,26 @@ check_eviction(Node) ->
     %% make sure all deletes propagate?
     timer:sleep(timer:seconds(10)),
     ok.
-    
+
 check_put_delete(Node) ->
     lager:info("checking that used mem is reclaimed on delete"),
     Pid = get_remote_vnode_pid(Node),
-    
+
     {MemBaseline, Key} = put_until_changed(Pid, Node, 1000),
 
     {ok, C} = riak:client_connect(Node),
 
     ok = C:delete(?BUCKET, <<Key:32/integer>>),
-    
+
     timer:sleep(timer:seconds(5)),
 
     Mem = get_used_space(Pid, Node),
 
-    %% this is meh, but the value isn't always the same length.
-    case (Mem == MemBaseline - 1142) orelse 
-        (Mem == MemBaseline - 1141) of
+    %% this is meh, but the value isn't always the same length.  Under
+    %% 2.0, this was expected to be 1141 or 1142. With 2.1 we're
+    %% seeing 1145, 1146.
+    case (MemBaseline - Mem < 1147) andalso
+         (MemBaseline - Mem > 1140) of
         true ->
             ok;
         false ->
@@ -257,13 +259,16 @@ get_used_space(VNode, Node) ->
     S = rpc:call(Node, sys, get_state, [VNode]),
     Mode = get(mode),
     Version = rt:get_version(),
-    %% lager:info("version mode ~p", [{Version, Mode}]),
     TwoOhReg =
-        fun(X) -> 
+        fun(X) ->
                 element(4, element(4, element(2, X)))
         end,
+    TwoOneReg =
+        fun(X) ->
+                element(5, element(4, element(2, X)))
+        end,
     TwoOhMulti =
-        fun(X) -> 
+        fun(X) ->
                 element(
                   3, lists:nth(
                        1, element(
@@ -271,7 +276,16 @@ get_used_space(VNode, Node) ->
                                  4, element(
                                       4, element(2, X))))))
         end,
-    Extract = 
+    TwoOneMulti =
+        fun(X) ->
+                element(
+                  3, lists:nth(
+                       1, element(
+                            2, element(
+                                 5, element(
+                                      4, element(2, X))))))
+        end,
+    Extract =
         case {Version, Mode} of
             {<<"riak-2.0",_/binary>>, regular} ->
                 TwoOhReg;
@@ -282,13 +296,13 @@ get_used_space(VNode, Node) ->
             {<<"riak_ee-2.0",_/binary>>, multi} ->
                 TwoOhMulti;
             {<<"riak-2.1",_/binary>>, regular} ->
-                TwoOhReg;
+                TwoOneReg;
             {<<"riak_ee-2.1",_/binary>>, regular} ->
-                TwoOhReg;
+                TwoOneReg;
             {<<"riak-2.1",_/binary>>, multi} ->
-                TwoOhMulti;
+                TwoOneMulti;
             {<<"riak_ee-2.1",_/binary>>, multi} ->
-                TwoOhMulti;
+                TwoOneMulti;
             _Else ->
                 lager:error("didn't understand version/mode tuple ~p",
                             [{Version, Mode}]),
