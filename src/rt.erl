@@ -104,6 +104,7 @@
          riak/2,
          riak_repl/2,
          rpc_get_env/2,
+         select_random/1,
          set_backend/1,
          set_backend/2,
          set_conf/2,
@@ -1128,7 +1129,7 @@ product(Node) ->
        HasRiak -> riak;
        true -> unknown
     end.
-   
+
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
     plan_and_commit(Node1);
@@ -1893,12 +1894,18 @@ is_control_gui_route_loaded(Routes) ->
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
 
+%% @doc Choose random in cluster, for example.
+select_random(List) ->
+    Length = length(List),
+    Idx = random:uniform(Length),
+    lists:nth(Idx, List).
+
 -ifdef(TEST).
 
 verify_product(Applications, ExpectedApplication) ->
     ?_test(begin
                meck:new(rpc, [unstick]),
-               meck:expect(rpc, call, fun([], application, which_applications, []) -> 
+               meck:expect(rpc, call, fun([], application, which_applications, []) ->
                                            Applications end),
                ?assertMatch(ExpectedApplication, product([])),
                meck:unload(rpc)
@@ -1913,5 +1920,5 @@ product_test_() ->
       verify_product([riak_repl, riak_kv], riak_ee),
       verify_product([riak_kv], riak),
       verify_product([kernel], unknown)]}.
-   
+
 -endif.

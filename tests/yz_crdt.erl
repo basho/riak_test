@@ -9,21 +9,24 @@
 -define(TYPE, <<"maps">>).
 -define(KEY, "Chris Meiklejohn").
 -define(BUCKET, {?TYPE, <<"testbucket">>}).
+-define(GET(K,L), proplists:get_value(K, L)).
 
--define(CONF, [
-        {riak_core,
-            [{ring_creation_size, 8}]
-        },
-        {yokozuna,
-            [{enabled, true}]
-        }]).
+-define(CONF,
+        [
+         {riak_core,
+          [{ring_creation_size, 8}]
+         },
+         {yokozuna,
+          [{enabled, true}]
+         }]).
 
 confirm() ->
     rt:set_advanced_conf(all, ?CONF),
 
     %% Configure cluster.
-    [Nodes] = rt:build_clusters([1]),
-    [Node|_] = Nodes,
+    Nodes = rt:build_cluster(5, ?CONF),
+
+    Node = rt:select_random(Nodes),
 
     %% Create PB connection.
     Pid = rt:pbc(Node),
@@ -39,26 +42,69 @@ confirm() ->
                                         {search_index, ?INDEX}]),
 
     %% Write some sample data.
-    Map = riakc_map:update(
+
+    Map1 = riakc_map:update(
             {<<"name">>, register},
             fun(R) ->
-                riakc_register:set(
-                    list_to_binary(?KEY), R)
+                    riakc_register:set(list_to_binary(?KEY), R)
             end, riakc_map:new()),
+    Map2 = riakc_map:update(
+             {<<"interests">>, set},
+             fun(S) ->
+                     riakc_set:add_element(<<"thing">>, S) end,
+             Map1),
     ok = riakc_pb_socket:update_type(
-            Pid,
-            ?BUCKET,
-            ?KEY,
-            riakc_map:to_op(Map)),
+           Pid,
+           ?BUCKET,
+           ?KEY,
+           riakc_map:to_op(Map2)),
 
     %% Wait for yokozuna index to trigger.
     timer:sleep(1000),
 
-    %% Perform a simple query.
-    {ok, {search_results, Results, _, _}} = riakc_pb_socket:search(
+    %% Perform simple queries, check for register, set fields.
+    {ok, {search_results, Results1a, _, _}} = riakc_pb_socket:search(
             Pid, ?INDEX, <<"name_register:Chris*">>),
-    ?assertEqual(length(Results), 1),
-    lager:info("~p~n", [Results]),
+    lager:info("Search name_register:Chris*: ~p~n", [Results1a]),
+    ?assertEqual(length(Results1a), 1),
+    ?assertEqual(?GET(<<"name_register">>, ?GET(?INDEX, Results1a)),
+                 list_to_binary(?KEY)),
+    ?assertEqual(?GET(<<"interests_set">>, ?GET(?INDEX, Results1a)),
+                 <<"thing">>),
+
+    {ok, {search_results, Results2a, _, _}} = riakc_pb_socket:search(
+            Pid, ?INDEX, <<"interests_set:thing*">>),
+    lager:info("Search interests_set:thing*: ~p~n", [Results2a]),
+    ?assertEqual(length(Results2a), 1),
+    ?assertEqual(?GET(<<"name_register">>, ?GET(?INDEX, Results2a)),
+                 list_to_binary(?KEY)),
+    ?assertEqual(?GET(<<"interests_set">>, ?GET(?INDEX, Results2a)),
+                 <<"thing">>),
+
+    {ok, {search_results, Results3a, _, _}} = riakc_pb_socket:search(
+            Pid, ?INDEX, <<"_yz_rb:testbucket">>),
+    lager:info("Search testbucket: ~p~n", [Results3a]),
+    ?assertEqual(length(Results3a), 1),
+    ?assertEqual(?GET(<<"name_register">>, ?GET(?INDEX, Results3a)),
+                 list_to_binary(?KEY)),
+    ?assertEqual(?GET(<<"interests_set">>, ?GET(?INDEX, Results3a)),
+                 <<"thing">>),
+
+    %% Redo queries and check if results are equal
+    {ok, {search_results, Results1b, _, _}} = riakc_pb_socket:search(
+            Pid, ?INDEX, <<"name_register:Chris*">>),
+    ?assertEqual(number_of_fields(Results1a),
+                 number_of_fields(Results1b)),
+
+    {ok, {search_results, Results2b, _, _}} = riakc_pb_socket:search(
+            Pid, ?INDEX, <<"interests_set:thing*">>),
+    ?assertEqual(number_of_fields(Results2a),
+                 number_of_fields(Results2b)),
+
+    {ok, {search_results, Results3b, _, _}} = riakc_pb_socket:search(
+            Pid, ?INDEX, <<"_yz_rb:testbucket">>),
+        ?assertEqual(number_of_fields(Results3a),
+                     number_of_fields(Results3b)),
 
     %% Stop PB connection.
     riakc_pb_socket:stop(Pid),
@@ -67,3 +113,7 @@ confirm() ->
     rt:clean_cluster(Nodes),
 
     pass.
+
+%% @private
+number_of_fields(Resp) ->
+    length(?GET(?INDEX, Resp)).
