@@ -63,7 +63,7 @@ confirm() ->
 
     PrevPB2 = rt:pbc(Legacy),
 
-    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter])),
+    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter,riak_dt_pncounter,riak_dt_orswot,riak_dt_map])),
 
     ?assertMatch(ok, rhc:counter_incr(LegacyHttp, ?BUCKET, ?KEY, 1)),
     ?assertMatch({ok, 5}, rhc:counter_val(LegacyHttp, ?BUCKET, ?KEY)),
