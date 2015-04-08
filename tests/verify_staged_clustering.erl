@@ -65,12 +65,16 @@ confirm() ->
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes134)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes134)),
     rt:assert_nodes_agree_about_ownership(Nodes134),
-    
+
     lager:info("Verify that ~p shutdown after being replaced", [Node2]),
     ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
 
     lager:info("Restart ~p and re-join to cluster", [Node2]),
     rt:start(Node2),
+    %% Wait for Node 2 to be fully up before doing the force replace. This seems
+    %% to be what's causing the issue in BTA-175
+    rt:wait_for_service(Node2, riak_kv),
+
     stage_join(Node2, Node1),
     ?assertEqual(ok, rt:wait_until_all_members(Nodes)),
 
