@@ -853,21 +853,34 @@ capability(Node, Capability, Default) ->
 wait_until_capability(Node, Capability, Value) ->
     rt:wait_until(Node,
                   fun(_) ->
-                          cap_equal(Value, capability(Node, Capability))
+                      Cap = capability(Node, Capability),
+                      lager:info("Capability on node ~p is ~p~n",[Node, Cap]),
+                      cap_equal(Value, Cap)
                   end).
 
 wait_until_capability(Node, Capability, Value, Default) ->
     rt:wait_until(Node,
                   fun(_) ->
                           Cap = capability(Node, Capability, Default),
-                io:format("capability is ~p ~p",[Node, Cap]),
+                          lager:info("Capability on node ~p is ~p~n",[Node, Cap]),
                           cap_equal(Value, Cap)
                   end).
+
+wait_until_capability_contains(Node, Capability, Value) ->
+    rt:wait_until(Node,
+                fun(_) ->
+                    Cap = capability(Node, Capability),
+                    lager:info("Capability on node ~p is ~p~n",[Node, Cap]),
+                    cap_subset(Value, Cap)
+                end).
 
 cap_equal(Val, Cap) when is_list(Cap) ->
     lists:sort(Cap) == lists:sort(Val);
 cap_equal(Val, Cap) ->
     Val == Cap.
+
+cap_subset(Val, Cap) when is_list(Cap) ->
+    sets:is_subset(sets:from_list(Val), sets:from_list(Cap)).
 
 wait_until_owners_according_to(Node, Nodes) ->
     SortedNodes = lists:usort(Nodes),

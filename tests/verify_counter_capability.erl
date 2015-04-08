@@ -40,7 +40,7 @@ confirm() ->
     %% Get put on all nodes
     Config = [],
     [Legacy, Previous] = Nodes = rt:build_cluster([{legacy, Config}, {previous, Config}]),
-    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter])),
+    ?assertEqual(ok, rt:wait_until_capability_contains(Previous, {riak_kv, crdt}, [pncounter])),
     verify_counter_converge:set_allow_mult_true(Nodes),
 
     {LegacyPB, LegacyHttp} = get_clients(Legacy),
@@ -63,7 +63,7 @@ confirm() ->
 
     PrevPB2 = rt:pbc(Legacy),
 
-    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter,riak_dt_pncounter,riak_dt_orswot,riak_dt_map])),
+    ?assertEqual(ok, rt:wait_until_capability_contains(Previous, {riak_kv, crdt}, [pncounter,riak_dt_pncounter,riak_dt_orswot,riak_dt_map])),
 
     ?assertMatch(ok, rhc:counter_incr(LegacyHttp, ?BUCKET, ?KEY, 1)),
     ?assertMatch({ok, 5}, rhc:counter_val(LegacyHttp, ?BUCKET, ?KEY)),
