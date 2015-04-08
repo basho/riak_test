@@ -39,7 +39,7 @@ confirm() ->
     %% Get put on all nodes
     Config = [],
     [Previous, Current]=Nodes = rt:build_cluster([{previous, Config}, {current, Config}]),
-    ?assertEqual(ok, rt:wait_until_capability(Current, {riak_kv, crdt}, [pncounter])),
+    ?assertEqual(ok, rt:wait_until_capability(Current, {riak_kv, crdt}, [pncounter,riak_dt_pncounter,riak_dt_orswot,riak_dt_map])),
 
     verify_counter_converge:set_allow_mult_true(Nodes),
 

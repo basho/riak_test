@@ -39,25 +39,25 @@ confirm() ->
     %% Upgrade nodes to previous
     %% Get put on all nodes
     Config = [],
-    [Legacy, Previous]=Nodes = rt:build_cluster([{legacy, Config}, {previous, Config}]),
-    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [])),
+    [Legacy, Previous] = Nodes = rt:build_cluster([{legacy, Config}, {previous, Config}]),
+    ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter])),
     verify_counter_converge:set_allow_mult_true(Nodes),
 
-    {PrevPB, PrevHttp} = get_clients(Legacy),
-    {PB, Http} = get_clients(Previous),
+    {LegacyPB, LegacyHttp} = get_clients(Legacy),
+    {PrevPB, PrevHttp} = get_clients(Previous),
 
-    ?assertMatch({error, {ok, "404", _, _}}, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
-    ?assertMatch({error, {ok, "404", _, _}}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
+    ?assertMatch(ok, rhc:counter_incr(LegacyHttp, ?BUCKET, ?KEY, 1)),
+    ?assertMatch({ok, 1}, rhc:counter_val(LegacyHttp, ?BUCKET, ?KEY)),
 
-    ?assertMatch({error, {ok, "503", _, _}}, rhc:counter_incr(Http, ?BUCKET, ?KEY, 1)),
-    ?assertMatch({error, {ok, "503", _, _}}, rhc:counter_val(Http, ?BUCKET, ?KEY)),
+    ?assertMatch(ok, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
+    ?assertMatch({ok, 2}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
 
-    ?assertEqual({error,<<"Unknown message code.">>}, riakc_pb_socket:counter_incr(PrevPB, ?BUCKET, ?KEY, 1)),
-    ?assertEqual({error,<<"Unknown message code.">>}, riakc_pb_socket:counter_val(PrevPB, ?BUCKET, ?KEY)),
-    ?assertEqual({error,<<"\"Counters are not supported\"">>}, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
-    ?assertEqual({error,<<"\"Counters are not supported\"">>}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
+    ?assertEqual(ok, riakc_pb_socket:counter_incr(LegacyPB, ?BUCKET, ?KEY, 1)),
+    ?assertEqual({ok, 3}, riakc_pb_socket:counter_val(LegacyPB, ?BUCKET, ?KEY)),
+    ?assertEqual(ok, riakc_pb_socket:counter_incr(PrevPB, ?BUCKET, ?KEY, 1)),
+    ?assertEqual({ok, 4}, riakc_pb_socket:counter_val(PrevPB, ?BUCKET, ?KEY)),
 
-    riakc_pb_socket:stop(PrevPB),
+    riakc_pb_socket:stop(LegacyPB),
 
     rt:upgrade(Legacy, previous),
 
@@ -65,18 +65,18 @@ confirm() ->
 
     ?assertEqual(ok, rt:wait_until_capability(Previous, {riak_kv, crdt}, [pncounter])),
 
-    ?assertMatch(ok, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
-    ?assertMatch({ok, 1}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
+    ?assertMatch(ok, rhc:counter_incr(LegacyHttp, ?BUCKET, ?KEY, 1)),
+    ?assertMatch({ok, 5}, rhc:counter_val(LegacyHttp, ?BUCKET, ?KEY)),
 
-    ?assertMatch(ok, rhc:counter_incr(Http, ?BUCKET, ?KEY, 1)),
-    ?assertMatch({ok, 2}, rhc:counter_val(Http, ?BUCKET, ?KEY)),
+    ?assertMatch(ok, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
+    ?assertMatch({ok, 6}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
 
     ?assertEqual(ok, riakc_pb_socket:counter_incr(PrevPB2, ?BUCKET, ?KEY, 1)),
-    ?assertEqual({ok, 3}, riakc_pb_socket:counter_val(PrevPB2, ?BUCKET, ?KEY)),
-    ?assertEqual(ok, riakc_pb_socket:counter_incr(PB, ?BUCKET, ?KEY, 1)),
-    ?assertEqual({ok, 4}, riakc_pb_socket:counter_val(PB, ?BUCKET, ?KEY)),
+    ?assertEqual({ok, 7}, riakc_pb_socket:counter_val(PrevPB2, ?BUCKET, ?KEY)),
+    ?assertEqual(ok, riakc_pb_socket:counter_incr(PrevPB, ?BUCKET, ?KEY, 1)),
+    ?assertEqual({ok, 8}, riakc_pb_socket:counter_val(PrevPB, ?BUCKET, ?KEY)),
 
-    [riakc_pb_socket:stop(C) || C <- [PB, PrevPB2]],
+    [riakc_pb_socket:stop(C) || C <- [PrevPB, PrevPB2]],
 
     pass.
 
