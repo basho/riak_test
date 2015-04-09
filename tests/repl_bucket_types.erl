@@ -434,6 +434,8 @@ assert_bucket_not_found(Pid, Bucket, Key) ->
     case riakc_pb_socket:get(Pid, Bucket, Key) of
         {error, notfound} ->
             true;
+        {error, <<"no_type">>} ->
+            true;
         {ok, Res} ->
             lager:error("Found bucket:~p and key:~p on sink when we should not have", [Res, Key]),
             false
