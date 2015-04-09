@@ -34,7 +34,11 @@
 %% @doc Return the home directory of the riak_test script.
 -spec home_dir() -> file:filename().
 home_dir() ->
-    filename:dirname(filename:absname(escript:script_name())).
+    ProgramName = case catch escript:script_name() of
+        {'EXIT', _} -> riak_test;
+        Name -> Name
+    end,
+    filename:dirname(filename:absname(ProgramName)).
 
 %% @doc Wrap 'which' to give a good output if something is not installed
 which(Command) ->

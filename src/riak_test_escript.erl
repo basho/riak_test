@@ -48,8 +48,12 @@ cli_options() ->
 ].
 
 print_help() ->
-    getopt:usage(cli_options(),
-                 escript:script_name()),
+    ProgramName = case catch escript:script_name() of
+        {'EXIT', _} ->
+            ?MODULE;
+        Name -> Name
+    end,
+    getopt:usage(cli_options(), ProgramName),
     halt(0).
 
 run_help([]) -> true;
