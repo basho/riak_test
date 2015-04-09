@@ -33,6 +33,7 @@ confirm() ->
     pass.
 
 simple_test() ->
+    lager:info("Running simple_test()~n"),
     Conf = [{riak_repl,
              [
               %% turn off fullsync
@@ -98,6 +99,7 @@ simple_test() ->
     pass.
 
 disconnect_test() ->
+    lager:info("Running disconnect_test()~n"),
     Conf = [{riak_repl,
              [
               %% turn off fullsync
@@ -160,6 +162,7 @@ disconnect_test() ->
     pass.
 
 error_cleanup_test() ->
+    lager:info("Running error_cleanup_test()~n"),
     NumNodes = rt_config:get(num_nodes, 6),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
