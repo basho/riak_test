@@ -34,7 +34,6 @@
          {riak_core,
           [
            {ring_creation_size, 16},
-           {handoff_concurrency, 11},
            {claimant_tick, 1000}
           ]},
          {yokozuna,
