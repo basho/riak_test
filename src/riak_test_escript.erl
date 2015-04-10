@@ -44,38 +44,37 @@ main(Args) ->
     finalize(Results, ParsedArgs).
 
 prepare(ParsedArgs, Tests, NonTests) ->
-    lager:notice("Tests to run: ~p~n", [Tests]),
+    lager:notice("Test to run: ~p", [[rt_test_plan:get_module(Test) || Test <- Tests]]),
     case NonTests of
         [] ->
             ok;
         _ ->
-            lager:notice("These modules are not runnable tests: ~p~n",
-                      [[NTMod || {NTMod, _} <- NonTests]])
+            lager:notice("Test not to run: ~p", [[rt_test_plan:get_module(Test) || Test <- NonTests]])
     end,
     ok = erlang_setup(ParsedArgs),
     test_setup().
 
-execute(Tests, ParsedArgs, _HarnessArgs) ->
+execute(TestPlans, ParsedArgs, _HarnessArgs) ->
     OutDir = proplists:get_value(outdir, ParsedArgs),
     Report = report(ParsedArgs),
     UpgradeList = upgrade_list(
                     proplists:get_value(upgrade_path, ParsedArgs)),
-    Backend = proplists:get_value(backend, ParsedArgs, bitcask),
 
-    {ok, Executor} = riak_test_executor:start_link(Tests,
-                                                   Backend,
+    {ok, Executor} = riak_test_executor:start_link(TestPlans,
                                                    OutDir,
                                                    Report,
                                                    UpgradeList,
                                                    self()),
-    wait_for_results(Executor, [], length(Tests), 0).
+    wait_for_results(Executor, [], length(TestPlans), 0).
 
 
 report_results(Results, Verbose) ->
     %% TODO: Good place to also do giddyup reporting and provide a
     %% place for extending to any other reporting sources that might
     %% be useful.
-    print_summary(Results, undefined, Verbose),
+
+    ModuleResults = [{rt_test_plan:get_module(TestPlan), PassFail, Duration} || {TestPlan, PassFail, Duration} <- Results],
+    print_summary(ModuleResults, undefined, Verbose),
     ok.
 
     %% TestResults = run_tests(Tests, Outdir, Report, HarnessArgs),
@@ -121,6 +120,7 @@ finalize(TestResults, Args) ->
     Teardown = not proplists:get_value(keep, Args, false),
     maybe_teardown(Teardown, TestResults),
     ok.
+
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
 cli_options() ->
 [
@@ -184,7 +184,7 @@ report(ParsedArgs) ->
         undefined ->
             undefined;
         "config" ->
-            rt_config:get(platform, undefined);
+            rt_config:get(giddyup_platform, undefined);
         R ->
             R
     end.
@@ -212,7 +212,8 @@ help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
     maybe_override_setting(continue_on_fail, true, ParsedArgs),
 
     TestData = compose_test_data(ParsedArgs),
-    {Tests, NonTests} = which_tests_to_run(report(ParsedArgs), TestData),
+    Backend = proplists:get_value(backend, ParsedArgs, bitcask),
+    {Tests, NonTests} = wrap_test_in_test_plan(report(ParsedArgs), Backend, TestData),
     Offset = rt_config:get(offset, undefined),
     Workers = rt_config:get(workers, undefined),
     shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, Offset, Workers).
@@ -235,6 +236,7 @@ load_initial_config(ParsedArgs) ->
                    proplists:get_value(file, ParsedArgs)).
 
 shuffle_tests(_, _, [], _, _, _) ->
+    io:format("No tests are scheduled to run~n"),
     lager:error("No tests are scheduled to run~n"),
     halt(1);
 shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, undefined, _) ->
@@ -364,48 +366,40 @@ extract_test_names(Test, {CodePaths, TestNames}) ->
     {[filename:dirname(Test) | CodePaths],
      [list_to_atom(filename:rootname(filename:basename(Test))) | TestNames]}.
 
-which_tests_to_run(undefined, CommandLineTests) ->
-    lists:partition(fun is_runnable_test/1, CommandLineTests);
-which_tests_to_run(Platform, []) ->
-    giddyup:get_suite(Platform);
-which_tests_to_run(Platform, CommandLineTests) ->
-    Suite = filter_zip_suite(Platform, CommandLineTests),
-    lists:partition(fun is_runnable_test/1,
-                    lists:foldr(fun filter_merge_tests/2, [], Suite)).
+%% @doc Determine which tests to run based on command-line argument
+%%      If the platform is defined, consult GiddyUp, otherwise just shovel
+%%      the whole thing into the Planner
+-spec(load_up_test_planner(string() | undefined, string(), list()) -> list()).
+load_up_test_planner(undefined, Backend, CommandLineTests) ->
+    [rt_planner:add_test_plan(Name, undefined, Backend, undefined, undefined) || Name <- CommandLineTests];
+%% GiddyUp Flavor
+load_up_test_planner(Platform, Backend, CommandLineTests) ->
+    rt_planner:load_from_giddyup(Platform, Backend, CommandLineTests).
 
-filter_zip_suite(Platform, CommandLineTests) ->
-    [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform),
-                                 {CModule, CMeta} <- CommandLineTests,
-                                 SModule =:= CModule].
+%% @doc Push all of the test into the Planner for now and wrap them in an `rt_test_plan'
+%% TODO: Let the Planner do the work, not the riak_test_executor
+-spec(wrap_test_in_test_plan(string(), string(), [atom()]) -> {list(), list()}).
+wrap_test_in_test_plan(Platform, Backend, CommandLineTests) ->
+    %% ibrowse neededfor GiddyUp
+    load_and_start(ibrowse),
+    {ok, _Pid} = rt_planner:start_link(),
+    load_up_test_planner(Platform, Backend, CommandLineTests),
+    TestPlans = [rt_planner:fetch_test_plan() || _ <- lists:seq(1, rt_planner:number_of_plans())],
+    NonRunnableTestPlans = [rt_planner:fetch_test_non_runnable_plan() || _ <- lists:seq(1, rt_planner:number_of_non_runable_plans())],
+    rt_planner:stop(),
+    {TestPlans, NonRunnableTestPlans}.
 
-filter_merge_tests({Module, SMeta, CMeta}, Tests) ->
-    case filter_merge_meta(SMeta, CMeta, [backend, upgrade_version]) of
-        false ->
-            Tests;
-        Meta ->
-            [{Module, Meta}|Tests]
-    end.
-
-filter_merge_meta(SMeta, _CMeta, []) ->
-    SMeta;
-filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
-    case {kvc:value(Field, SMeta, undefined), kvc:value(Field, CMeta, undefined)} of
-        {X, X} ->
-            filter_merge_meta(SMeta, CMeta, Rest);
-        {_, undefined} ->
-            filter_merge_meta(SMeta, CMeta, Rest);
-        {undefined, X} ->
-            filter_merge_meta(lists:keystore(Field, 1, SMeta, {Field, X}), CMeta, Rest);
+%% @doc Pull all jobs from the Planner
+%%      Better than using rt_planner:number_of_plans/0
+-spec(fetch_all_test_plans(list()) -> list()).
+fetch_all_test_plans(Acc) ->
+    Plan = rt_planner:fetch_test_plan(),
+    case Plan of
+        empty ->
+            Acc;
         _ ->
-            false
+            fetch_all_test_plans([Plan|Acc])
     end.
-
-%% Check for api compatibility
-is_runnable_test(TestModule) ->
-    {Mod, Fun} = riak_test_runner:function_name(confirm, TestModule),
-    code:ensure_loaded(Mod),
-    erlang:function_exported(Mod, Fun, 0) orelse
-        erlang:function_exported(Mod, Fun, 1).
 
 get_group_tests(Tests, Groups) ->
     lists:filter(fun(Test) ->
@@ -546,6 +540,8 @@ print_summary(TestResults, _CoverResult, Verbose) ->
         true ->
             Rows =
                 [format_test_row(Result, Width) || Result <- TestResults],
+            %% TODO: Remove once clique table is fixed
+            [lager:debug("ROW ~p", [Row]) || Row <- Rows],
             Table = clique_table:autosize_create_table(?HEADER, Rows),
             io:format("~ts~n", [Table]);
         false ->

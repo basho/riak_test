@@ -60,7 +60,7 @@ main(Args) ->
     end,
     rt_config:set(rt_harness, ?MODULE),
     lager:debug("ParsedArgs ~p", [Parsed]),
-    Suites = giddyup:get_suite(rt_config:get(platform)),
+    Suites = giddyup:get_suite(rt_config:get(giddyup_platform)),
     Jobs = case lists:keyfind(jobs, 1, Parsed) of
         false ->
             1;

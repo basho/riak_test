@@ -3,7 +3,7 @@
 -behavior(gen_fsm).
 
 %% API
--export([start_link/6,
+-export([start_link/5,
          send_event/1,
          stop/0]).
 
@@ -28,7 +28,6 @@
                 running_tests=[] :: [atom()],
                 waiting_tests=[] :: [atom()],
                 notify_pid :: pid(),
-                backend :: atom(),
                 upgrade_list :: [string()],
                 test_properties :: [proplists:proplist()],
                 runner_pids=[] :: [pid()],
@@ -42,9 +41,9 @@
 %%%===================================================================
 
 %% @doc Start the test executor
--spec start_link(atom(), atom(), string(), string(), [string()], pid()) -> {ok, pid()} | ignore | {error, term()}.
-start_link(Tests, Backend, LogDir, ReportInfo, UpgradeList, NotifyPid) ->
-    Args = [Tests, Backend, LogDir, ReportInfo, UpgradeList, NotifyPid],
+-spec start_link(atom(), string(), string(), [string()], pid()) -> {ok, pid()} | ignore | {error, term()}.
+start_link(Tests, LogDir, ReportInfo, UpgradeList, NotifyPid) ->
+    Args = [Tests, LogDir, ReportInfo, UpgradeList, NotifyPid],
     gen_fsm:start_link({local, ?MODULE}, ?MODULE, Args, []).
 
 send_event(Msg) ->
@@ -59,19 +58,14 @@ stop() ->
 %%% gen_fsm callbacks
 %%%===================================================================
 
-init([Tests, Backend, LogDir, ReportInfo, UpgradeList, NotifyPid]) ->
+init([Tests, LogDir, ReportInfo, UpgradeList, NotifyPid]) ->
     %% TODO Change the default when parallel execution support is implemented -jsb
     ExecutionMode = rt_config:get(rt_execution_mode, serial),
-
-    %% TODO: Remove after all tests ported 2.0 -- workaround to support 
-    %% backend command line argument fo v1 cluster provisioning -jsb
-    rt_config:set(rt_backend, Backend),
 
     ContinueOnFail = rt_config:get(continue_on_fail),
 
     lager:notice("Starting the Riak Test executor in ~p execution mode", [ExecutionMode]),
     State = #state{pending_tests=Tests,
-                   backend=Backend,
                    log_dir=LogDir,
                    report_info=ReportInfo,
                    upgrade_list=UpgradeList,
@@ -165,18 +159,18 @@ launch_test({nodes, Nodes, NodeMap}, State) ->
     %% Spawn a test runner for the head of pending. If pending is now
     %% empty transition to `wait_for_completion'; otherwise,
     %% transition to `request_nodes'.
-    #state{pending_tests=[NextTest | RestPending],
+    #state{pending_tests=[NextTestPlan | RestPending],
            execution_mode=ExecutionMode,
-           backend=Backend,
            test_properties=PropertiesList,
            runner_pids=Pids,
            running_tests=Running,
            continue_on_fail=ContinueOnFail} = State,
-    lager:debug("Executing test ~p in mode ~p", [NextTest, ExecutionMode]),
-    {NextTest, TestProps} = lists:keyfind(NextTest, 1, PropertiesList),
+    NextTestModule = rt_test_plan:get_module(NextTestPlan),
+    lager:debug("Executing test ~p in mode ~p", [NextTestModule, ExecutionMode]),
+    {NextTestPlan, TestProps} = lists:keyfind(NextTestPlan, 1, PropertiesList),
     UpdTestProps = rt_properties:set([{node_map, NodeMap}, {node_ids, Nodes}],
                                      TestProps),
-    {RunnerPids, RunningTests} = run_test(ExecutionMode, NextTest, Backend, UpdTestProps, 
+    {RunnerPids, RunningTests} = run_test(ExecutionMode, NextTestPlan, UpdTestProps,
                                           Pids, Running, ContinueOnFail),
     UpdState = State#state{pending_tests=RestPending,
                            execution_mode=ExecutionMode,
@@ -184,15 +178,15 @@ launch_test({nodes, Nodes, NodeMap}, State) ->
                            running_tests=RunningTests},
 
     launch_test_transition(UpdState);
-launch_test({test_complete, Test, Pid, Results, Duration}, State) ->
+launch_test({test_complete, TestPlan, Pid, Results, Duration}, State) ->
     #state{pending_tests=Pending,
            waiting_tests=Waiting,
            running_tests=Running,
            runner_pids=Pids,
            execution_mode=ExecutionMode} = State,
     %% Report results
-    report_results(Test, Results, Duration, State),
-    UpdState = State#state{running_tests=lists:delete(Test, Running),
+    report_results(TestPlan, Results, Duration, State),
+    UpdState = State#state{running_tests=lists:delete(TestPlan, Running),
                            runner_pids=lists:delete(Pid, Pids),
                            pending_tests=Pending++Waiting,
                            waiting_tests=[],
@@ -202,26 +196,26 @@ launch_test(Event, State) ->
     lager:error("Unknown event ~p with state ~p.", [Event, State]),
     ok.
 
-maybe_reserve_nodes(NextTest, TestProps) ->
+maybe_reserve_nodes(NextTestPlan, TestProps) ->
     VersionsToTest = versions_to_test(TestProps),
-    maybe_reserve_nodes(erlang:function_exported(NextTest, confirm, 1), 
-                        NextTest, VersionsToTest, TestProps).
+    maybe_reserve_nodes(erlang:function_exported(rt_test_plan:get_module(NextTestPlan), confirm, 1),
+                        NextTestPlan, VersionsToTest, TestProps).
 
 maybe_reserve_nodes(true, NextTest, VersionsToTest, TestProps) ->
     NodeCount = rt_properties:get(node_count, TestProps),
     
     %% Send async request to node manager
-    lager:notice("Requesting ~p nodes for the next test, ~p", [NodeCount, NextTest]),
+    lager:notice("Requesting ~p nodes for the next test, ~p", [NodeCount, rt_test_plan:get_module(NextTest)]),
     node_manager:reserve_nodes(NodeCount,
                                VersionsToTest,
                                reservation_notify_fun());
 maybe_reserve_nodes(false, NextTest, VersionsToTest, _TestProps) ->
-    lager:warning("~p is an old style test that requires conversion.", [NextTest]),
+    lager:warning("~p is an old style test that requires conversion.", [rt_test_plan:get_module(NextTest)]),
     node_manager:reserve_nodes(0, VersionsToTest, reservation_notify_fun()),
     ok.
 
 wait_for_completion({test_complete, Test, Pid, Results, Duration}, State) ->
-    lager:debug("Test ~p complete", [Test]),
+    lager:debug("Test ~p complete", [rt_test_plan:get_module(Test)]),
     #state{pending_tests=Pending,
            waiting_tests=Waiting,
            running_tests=Running,
@@ -256,8 +250,8 @@ wait_for_completion(_Event, _From, _State) ->
 %%% Internal functions
 %%%===================================================================
 
-report_results(Test, Results, Duration, #state{notify_pid=NotifyPid}) ->
-    NotifyPid ! {self(), {test_result, {Test, Results, Duration}}},
+report_results(TestPlan, Results, Duration, #state{notify_pid=NotifyPid}) ->
+    NotifyPid ! {self(), {test_result, {TestPlan, Results, Duration}}},
     ok.
 
 report_done(#state{notify_pid=NotifyPid}) ->
@@ -276,7 +270,8 @@ wait_for_completion_transition(_Result, State) ->
 
 launch_test_transition(State=#state{pending_tests=PendingTests,
                                     execution_mode=ExecutionMode}) when PendingTests == [] orelse ExecutionMode == serial ->
-    lager:debug("Waiting for completion: execution mode ~p with pending tests ~p", [ExecutionMode, PendingTests]),
+    PendingModules = [rt_test_plan:get_module(Test) || Test <- PendingTests],
+    lager:debug("Waiting for completion: execution mode ~p with pending tests ~p", [ExecutionMode, PendingModules]),
     {next_state, wait_for_completion, State};
 launch_test_transition(State) ->
     {next_state, request_nodes, State, 0}.
@@ -293,13 +288,13 @@ test_properties(Tests, OverriddenProps) ->
     lists:foldl(test_property_fun(OverriddenProps), [], Tests).
 
 test_property_fun(OverrideProps) ->
-    fun(TestModule, Acc) ->
+    fun(TestPlan, Acc) ->
             {PropsMod, PropsFun} = riak_test_runner:function_name(properties,
-                                                                  TestModule,
+                                                                  rt_test_plan:get_module(TestPlan),
                                                                   0,
                                                                   rt_cluster),
             Properties = rt_properties:set(OverrideProps, PropsMod:PropsFun()),
-            [{TestModule, Properties} | Acc]
+            [{TestPlan, Properties} | Acc]
     end.
 
 versions_to_test(Properties) ->
@@ -330,11 +325,11 @@ override_props(State) ->
             [{upgrade_path, UpgradeList}]
     end.
 
--spec run_test(parallel | serial, atom(), atom(), proplists:proplist(), [pid()], [atom()], boolean()) -> {[pid()], [atom()]}.
-run_test(parallel, Test, Backend, Properties, RunningPids, RunningTests, ContinueOnFail) ->
-    Pid = spawn_link(riak_test_runner, start, [Test, Backend, Properties, ContinueOnFail]),
-    {[Pid | RunningPids], [Test | RunningTests]};
-run_test(serial, Test, Backend, Properties, RunningPids, RunningTests, ContinueOnFail) ->
-    riak_test_runner:start(Test, Backend, Properties, ContinueOnFail),
+-spec run_test(parallel | serial, atom(), proplists:proplist(), [pid()], [atom()], boolean()) -> {[pid()], [atom()]}.
+run_test(parallel, TestPlan, Properties, RunningPids, RunningTests, ContinueOnFail) ->
+    Pid = spawn_link(riak_test_runner, start, [TestPlan, Properties, ContinueOnFail]),
+    {[Pid | RunningPids], [TestPlan | RunningTests]};
+run_test(serial, TestPlan, Properties, RunningPids, RunningTests, ContinueOnFail) ->
+    riak_test_runner:start(TestPlan, Properties, ContinueOnFail),
     {RunningPids, RunningTests}.
 

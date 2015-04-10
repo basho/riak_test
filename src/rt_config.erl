@@ -44,6 +44,8 @@
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(CONFIG_NAMESPACE, riak_test).
 -define(RECEIVE_WAIT_TIME_KEY, rt_max_receive_wait_time).
+-define(GIDDYUP_PLATFORM_KEY, giddyup_platform).
+-define(GIDDYUP_PROJECT_KEY, giddyup_project).
 -define(VERSION_KEY, versions).
 -define(DEFAULT_VERSION_KEY, default).
 -define(PREVIOUS_VERSION_KEY, previous).
@@ -111,6 +113,12 @@ set(Key, Value) ->
 get(rt_max_wait_time) ->
     lager:info("rt_max_wait_time is deprecated. Please use rt_max_receive_wait_time instead."),
     rt_config:get(?RECEIVE_WAIT_TIME_KEY);
+get(platform) ->
+    lager:info("platform is deprecated. Please use giddyup_platform instead."),
+    rt_config:get(?GIDDYUP_PLATFORM_KEY);
+get(rt_project) ->
+    lager:info("rt_project is deprecated. Please use giddyup_project instead."),
+    rt_config:get(?GIDDYUP_PROJECT_KEY);
 get(?CONTINUE_ON_FAIL_KEY) ->
     get(?CONTINUE_ON_FAIL_KEY, ?DEFAULT_CONTINUE_ON_FAIL);
 get(Key) ->

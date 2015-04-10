@@ -29,6 +29,16 @@
 
 -include("rt.hrl").
 
+%% Specify the bucket_types field for the properties record. The list
+%% of bucket types may have two forms, a bucket_type or a pair
+%% consisting of an integer and a bucket_type. The latter form
+%% indicates that a bucket_type should only be applied to the cluster
+%% with the given index. The former form is applied to all clusters.
+-type bucket_type() :: {binary(), proplists:proplist()}.
+-type bucket_types() :: [bucket_type() | {pos_integer(), bucket_type()}].
+
+-export_type([bucket_types/0]).
+
 -spec create_and_wait([node()], binary(), proplists:proplist()) -> ok.
 create_and_wait(Nodes, Type, Properties) ->
     create_and_activate_bucket_type(hd(Nodes), Type, Properties),

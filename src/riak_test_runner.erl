@@ -24,7 +24,7 @@
 -behavior(gen_fsm).
 
 %% API
--export([start/4,
+-export([start/3,
          send_event/2,
          stop/0]).
 
@@ -52,7 +52,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -type test_type() :: {new | old}.
--record(state, {test_module :: atom(),
+-record(state, {test_plan :: rt_test_plan:test_plan(),
+                test_module :: atom(),
                 test_type :: test_type(),
                 properties :: proplists:proplist(),
                 backend :: atom(),
@@ -77,8 +78,8 @@
 %%%===================================================================
 
 %% @doc Start the test executor
-start(TestModule, Backend, Properties, ContinueOnFail) ->
-    Args = [TestModule, Backend, Properties, ContinueOnFail],
+start(TestPlan, Properties, ContinueOnFail) ->
+    Args = [TestPlan, Properties, ContinueOnFail],
     gen_fsm:start_link(?MODULE, Args, []).
 
 send_event(Pid, Msg) ->
@@ -101,14 +102,22 @@ metadata() ->
 
 %% @doc Read the storage schedule and go to idle.
 %% compose_test_datum(Version, Project, undefined, undefined) ->
-init([TestModule, Backend, Properties, ContinueOnFail]) ->
+init([TestPlan, Properties, ContinueOnFail]) ->
     lager:debug("Started riak_test_runnner with pid ~p (continue on fail: ~p)", [self(), ContinueOnFail]),
     Project = list_to_binary(rt_config:get(rt_project, "undefined")),
+    Backend = rt_test_plan:get(backend, TestPlan),
+    TestModule = rt_test_plan:get_module(TestPlan),
     MetaData = [{id, -1},
                 {platform, <<"local">>},
                 {version, rt:get_version()},
                 {backend, Backend},
                 {project, Project}],
+
+    %% TODO: Remove after all tests ported 2.0 -- workaround to support
+    %% backend command line argument fo v1 cluster provisioning -jsb
+    rt_config:set(rt_backend, Backend),
+    lager:info("Using backend ~p", [Backend]),
+
     {ok, UpdProperties} =
         rt_properties:set(metadata, MetaData, Properties),
     TestTimeout = rt_config:get(test_timeout, rt_config:get(rt_max_receive_wait_time)),
@@ -122,7 +131,8 @@ init([TestModule, Backend, Properties, ContinueOnFail]) ->
     BackendCheck = check_backend(Backend,
                                  rt_properties:get(valid_backends, Properties)),
     PreReqCheck = check_prereqs(ConfirmMod),
-    State = #state{test_module=TestModule,
+    State = #state{test_plan=TestPlan,
+                   test_module=TestModule,
                    test_type=TestType,
                    properties=UpdProperties,
                    backend=Backend,
@@ -509,29 +519,29 @@ cleanup(#state{test_module=TestModule,
     node_manager:return_nodes(rt_properties:get(node_ids, Properties)),
     riak_test_group_leader:tidy_up(OldGroupLeader).
 
-notify_executor(timeout, #state{test_module=Test,
+notify_executor(timeout, #state{test_plan=TestPlan,
                                 start_time=Start,
                                 end_time=End}) ->
     Duration = timer:now_diff(End, Start),
-    Notification = {test_complete, Test, self(), {fail, timeout}, Duration},
+    Notification = {test_complete, TestPlan, self(), {fail, timeout}, Duration},
     riak_test_executor:send_event(Notification);
-notify_executor(fail, #state{test_module=Test,
+notify_executor(fail, #state{test_plan=TestPlan,
                                 start_time=Start,
                                 end_time=End}) ->
     Duration = timer:now_diff(End, Start),
-    Notification = {test_complete, Test, self(), {fail, unknown}, Duration},
+    Notification = {test_complete, TestPlan, self(), {fail, unknown}, Duration},
     riak_test_executor:send_event(Notification);
-notify_executor(pass, #state{test_module=Test,
+notify_executor(pass, #state{test_plan=TestPlan,
                              start_time=Start,
                              end_time=End}) ->
     Duration = timer:now_diff(End, Start),
-    Notification = {test_complete, Test, self(), pass, Duration},
+    Notification = {test_complete, TestPlan, self(), pass, Duration},
     riak_test_executor:send_event(Notification);
-notify_executor(FailResult, #state{test_module=Test,
+notify_executor(FailResult, #state{test_plan=TestPlan,
                                    start_time=Start,
                                    end_time=End}) ->
     Duration = now_diff(End, Start),
-    Notification = {test_complete, Test, self(), FailResult, Duration},
+    Notification = {test_complete, TestPlan, self(), FailResult, Duration},
     riak_test_executor:send_event(Notification).
 
 test_versions(Properties) ->

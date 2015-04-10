@@ -58,7 +58,7 @@ get_schema(Platform) ->
 
 get_schema(Platform, Retries) ->
     Host = rt_config:get(giddyup_host),
-    Project = rt_config:get(rt_project),
+    Project = rt_config:get(giddyup_project),
     Version = rt:get_version(),
     URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
