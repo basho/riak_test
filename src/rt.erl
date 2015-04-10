@@ -1093,6 +1093,10 @@ join_cluster(Nodes) ->
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
 
+    %% Potential fix for BTA-116 and other similar "join before nodes ready" issues.
+    %% TODO: Investigate if there is an actual race in Riak relating to cluster joins.
+    [ok = wait_for_service(Node, riak_kv) || Node <- Nodes],
+
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
     case OtherNodes of
