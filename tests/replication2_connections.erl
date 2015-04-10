@@ -93,8 +93,11 @@ simple_test() ->
     [verify_connectivity(Node, "B") || Node <- ANodes],
     [verify_connectivity(Node, "A") || Node <- BNodes],
 
+    lager:info("Cleaning cluster A"),
     rt:clean_cluster(ANodes),
+    lager:info("Cleaning cluster B"),
     rt:clean_cluster(BNodes),
+    lager:info("Test passed"),
 
     pass.
 
