@@ -104,6 +104,8 @@
          riak/2,
          riak_repl/2,
          rpc_get_env/2,
+         rpc_set_env/4,
+         rpc_unset_env/3,
          set_backend/1,
          set_backend/2,
          set_conf/2,
@@ -242,6 +244,38 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
         _ ->
             rpc_get_env(Node, Others)
     end.
+
+%% @doc Sets an application environment variable in all given nodes.
+%% The function asserts and the test fails if any of the remote
+%% set_env calls fails.
+-spec rpc_set_env([atom()] | atom(), atom(), atom(), any()) -> ok.
+rpc_set_env(Nodes, App, Var, Val) when is_list(Nodes) ->
+    Timeout = rt_config:get(rt_max_wait_time),
+    {R0, _} = rpc:multicall(Nodes, application, set_env,
+                            [App, Var, Val], Timeout),
+    BadReplies = [{Node, Reply} || {Node, Reply} <- lists:zip(Nodes, R0),
+                                   Reply /= ok],
+    Tag = {failed_rpc_set_env, App, Var, Val},
+    ?assertEqual({Tag, []}, {Tag, BadReplies}),
+    ok;
+rpc_set_env(Node, App, Var, Val) when is_atom(Node) ->
+    rpc_set_env([Node], App, Var, Val).
+
+%% @doc Unsets an application environment variable in all given nodes.
+%% The function asserts and the test fails if any of the remote
+%% unset_env calls fails.
+-spec rpc_unset_env([atom()] | atom(), atom(), any()) -> ok.
+rpc_unset_env(Nodes, App, Var) when is_list(Nodes) ->
+    Timeout = rt_config:get(rt_max_wait_time),
+    {R0, _} = rpc:multicall(Nodes, application, unset_env,
+                            [App, Var], Timeout),
+    BadReplies = [{Node, Reply} || {Node, Reply} <- lists:zip(Nodes, R0),
+                                   Reply /= ok],
+    Tag = {failed_rpc_unset_env, App, Var},
+    ?assertEqual({Tag, []}, {Tag, BadReplies}),
+    ok;
+rpc_unset_env(Node, App, Var) when is_atom(Node) ->
+    rpc_unset_env([Node], App, Var).
 
 -type interface() :: {http, tuple()} | {pb, tuple()}.
 -type interfaces() :: [interface()].

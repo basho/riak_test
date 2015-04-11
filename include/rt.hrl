@@ -18,6 +18,12 @@
 %%
 %% -------------------------------------------------------------------
 
+-record(rt_test_context,
+        {
+         nodes :: [atom()],
+         buckets :: [binary()]
+        }).
+
 -record(rt_webhook, {
         name :: string(),
         url :: string(),

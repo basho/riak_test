@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2012-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -19,24 +19,38 @@
 %% -------------------------------------------------------------------
 -module(secondary_index_tests).
 -behavior(riak_test).
+
+-include("include/rt.hrl").
+
 -export([confirm/0]).
--export([put_an_object/2, put_an_object/4, int_to_key/1,
-         stream_pb/2, stream_pb/3, pb_query/3, http_query/2,
-         http_query/3, http_stream/3, int_to_field1_bin/1, url/2,
-         assertExactQuery/5, assertRangeQuery/7]).
+-export([confirm/1]).
+-export([put_an_object/3, put_an_object/5, int_to_key/1,
+         stream_pb/3, stream_pb/4, pb_query/4, http_query/3,
+         http_query/4, http_stream/4, int_to_field1_bin/1, url/2,
+         assertExactQuery/6, assertRangeQuery/8]).
+
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
--define(BUCKET, <<"2ibucket">>).
 -define(KEYS(A), [int_to_key(A)]).
 -define(KEYS(A,B), [int_to_key(N) || N <- lists:seq(A,B)]).
 -define(KEYS(A,B,C), [int_to_key(N) || N <- lists:seq(A,B), C]).
 -define(KEYS(A,B,G1,G2), [int_to_key(N) || N <- lists:seq(A,B), G1, G2]).
 
+-define(CONFIG,
+        [{riak_kv,
+          [{anti_entropy, {off, []}},
+           {anti_entropy_build_limit, {100, 500}},
+           {anti_entropy_concurrency, 100},
+           {anti_entropy_tick, 200}]}]).
+
 confirm() ->
-    Nodes = rt:build_cluster(3),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    inets:start(),
+    Nodes = rt:build_cluster(3, ?CONFIG),
+    confirm(#rt_test_context{nodes=Nodes,
+                             buckets=[<<"2i_basic">>]}).
     
+confirm(#rt_test_context{buckets=[Bucket|_], nodes=Nodes}) ->
     %% First test with sorting non-paginated results off by default 
     SetResult = rpc:multicall(Nodes, application, set_env,
                               [riak_kv, secondary_index_sort_default, false]),
@@ -47,60 +61,60 @@ confirm() ->
     HTTPC = rt:httpc(hd(Nodes)),
     Clients = [{pb, PBC}, {http, HTTPC}],
     
-    [put_an_object(PBC, N) || N <- lists:seq(0, 20)],
+    [put_an_object(PBC, Bucket, N) || N <- lists:seq(0, 20)],
     
     K = fun int_to_key/1,
 
-    assertExactQuery(Clients, ?KEYS(5), <<"field1_bin">>, <<"val5">>),
-    assertExactQuery(Clients, ?KEYS(5), <<"field2_int">>, 5),
-    assertExactQuery(Clients, ?KEYS(5, 9), <<"field3_int">>, 5),
-    assertRangeQuery(Clients, ?KEYS(10, 18), <<"field1_bin">>, <<"val10">>, <<"val18">>),
-    assertRangeQuery(Clients, ?KEYS(12), <<"field1_bin">>, <<"val10">>, <<"val18">>, <<"v...2">>),
-    assertRangeQuery(Clients, ?KEYS(10, 19), <<"field2_int">>, 10, 19),
-    assertRangeQuery(Clients, ?KEYS(10, 17), <<"$key">>, <<"obj10">>, <<"obj17">>),
-    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"ob..2">>),
+    assertExactQuery(Clients, Bucket, ?KEYS(5), <<"field1_bin">>, <<"val5">>),
+    assertExactQuery(Clients, Bucket, ?KEYS(5), <<"field2_int">>, 5),
+    assertExactQuery(Clients, Bucket, ?KEYS(5, 9), <<"field3_int">>, 5),
+    assertRangeQuery(Clients, Bucket, ?KEYS(10, 18), <<"field1_bin">>, <<"val10">>, <<"val18">>),
+    assertRangeQuery(Clients, Bucket, ?KEYS(12), <<"field1_bin">>, <<"val10">>, <<"val18">>, <<"v...2">>),
+    assertRangeQuery(Clients, Bucket, ?KEYS(10, 19), <<"field2_int">>, 10, 19),
+    assertRangeQuery(Clients, Bucket, ?KEYS(10, 17), <<"$key">>, <<"obj10">>, <<"obj17">>),
+    assertRangeQuery(Clients, Bucket, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"ob..2">>),
 
     lager:info("Delete an object, verify deletion..."),
     ToDel = [<<"obj05">>, <<"obj11">>],
-    [?assertMatch(ok, riakc_pb_socket:delete(PBC, ?BUCKET, KD)) || KD <- ToDel],
+    [?assertMatch(ok, riakc_pb_socket:delete(PBC, Bucket, KD)) || KD <- ToDel],
     lager:info("Make sure the tombstone is reaped..."),
-    ?assertMatch(ok, rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, ?BUCKET, ToDel) end)),
+    ?assertMatch(ok, rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, ToDel) end)),
     
-    assertExactQuery(Clients, [], <<"field1_bin">>, <<"val5">>),
-    assertExactQuery(Clients, [], <<"field2_int">>, 5),
-    assertExactQuery(Clients, ?KEYS(6, 9), <<"field3_int">>, 5),
-    assertRangeQuery(Clients, ?KEYS(10, 18, N /= 11), <<"field1_bin">>, <<"val10">>, <<"val18">>),
-    assertRangeQuery(Clients, ?KEYS(10), <<"field1_bin">>, <<"val10">>, <<"val18">>, <<"10$">>),
-    assertRangeQuery(Clients, ?KEYS(10, 19, N /= 11), <<"field2_int">>, 10, 19),
-    assertRangeQuery(Clients, ?KEYS(10, 17, N /= 11), <<"$key">>, <<"obj10">>, <<"obj17">>),
-    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"2">>),
+    assertExactQuery(Clients, Bucket, [], <<"field1_bin">>, <<"val5">>),
+    assertExactQuery(Clients, Bucket, [], <<"field2_int">>, 5),
+    assertExactQuery(Clients, Bucket, ?KEYS(6, 9), <<"field3_int">>, 5),
+    assertRangeQuery(Clients, Bucket, ?KEYS(10, 18, N /= 11), <<"field1_bin">>, <<"val10">>, <<"val18">>),
+    assertRangeQuery(Clients, Bucket, ?KEYS(10), <<"field1_bin">>, <<"val10">>, <<"val18">>, <<"10$">>),
+    assertRangeQuery(Clients, Bucket, ?KEYS(10, 19, N /= 11), <<"field2_int">>, 10, 19),
+    assertRangeQuery(Clients, Bucket, ?KEYS(10, 17, N /= 11), <<"$key">>, <<"obj10">>, <<"obj17">>),
+    assertRangeQuery(Clients, Bucket, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"2">>),
 
     %% Verify the $key index, and riak_kv#367 regression
-    assertRangeQuery(Clients, ?KEYS(6), <<"$key">>, <<"obj06">>, <<"obj06">>),
-    assertRangeQuery(Clients, ?KEYS(6,7), <<"$key">>, <<"obj06">>, <<"obj07">>),
+    assertRangeQuery(Clients, Bucket, ?KEYS(6), <<"$key">>, <<"obj06">>, <<"obj06">>),
+    assertRangeQuery(Clients, Bucket, ?KEYS(6,7), <<"$key">>, <<"obj06">>, <<"obj07">>),
 
     %% Exercise sort set to true by default
     SetResult2 = rpc:multicall(Nodes, application, set_env,
                                [riak_kv, secondary_index_sort_default, true]),
     ?assertMatch({AOK, []}, SetResult2),
                                                     
-    assertExactQuery(Clients, ?KEYS(15, 19),
+    assertExactQuery(Clients, Bucket, ?KEYS(15, 19),
                      <<"field3_int">>, 15, {undefined, true}),
     %% Keys ordered by val index term, since 2i order is {term, key}
     KsVal = [A || {_, A} <-
                   lists:sort([{int_to_field1_bin(N), K(N)} ||
                         N <- lists:seq(0, 20), N /= 11, N /= 5])],
-    assertRangeQuery(Clients, KsVal,
+    assertRangeQuery(Clients, Bucket, KsVal,
                      <<"field1_bin">>, <<"val0">>, <<"val9">>, undefined, {undefined, true}),
-    assertRangeQuery(Clients, ?KEYS(0, 20, N /= 11, N /= 5),
+    assertRangeQuery(Clients, Bucket, ?KEYS(0, 20, N /= 11, N /= 5),
                      <<"field2_int">>, 0, 20, undefined, {undefined, true}),
-    assertRangeQuery(Clients, ?KEYS(0, 20, N /= 11, N /= 5),
+    assertRangeQuery(Clients, Bucket, ?KEYS(0, 20, N /= 11, N /= 5),
                      <<"$key">>, <<"obj00">>, <<"obj20">>, undefined, {undefined, true}),
 
     %% Verify bignum sort order in sext -- eleveldb only (riak_kv#499)
     TestIdxVal = 1362400142028,
-    put_an_object(PBC, TestIdxVal),
-    assertRangeQuery(Clients,
+    put_an_object(PBC, Bucket, TestIdxVal),
+    assertRangeQuery(Clients, Bucket,
                      [<<"obj1362400142028">>],
                      <<"field2_int">>,
                      1000000000000,
@@ -108,22 +122,22 @@ confirm() ->
 
     pass.
 
-assertExactQuery(Clients, Expected, Index, Value) ->
-    assertExactQuery(Clients, Expected, Index, Value, {false, false}),
-    assertExactQuery(Clients, Expected, Index, Value, {true, true}).
+assertExactQuery(Clients, Bucket, Expected, Index, Value) ->
+    assertExactQuery(Clients, Bucket, Expected, Index, Value, {false, false}),
+    assertExactQuery(Clients, Bucket, Expected, Index, Value, {true, true}).
 
-assertExactQuery(Clients, Expected, Index, Value, Sorted) when is_list(Clients) ->
-    [assertExactQuery(C, Expected, Index, Value, Sorted) || C <- Clients];
-assertExactQuery({ClientType, Client}, Expected, Index, Value,
+assertExactQuery(Clients, Bucket, Expected, Index, Value, Sorted) when is_list(Clients) ->
+    [assertExactQuery(C, Bucket, Expected, Index, Value, Sorted) || C <- Clients];
+assertExactQuery({ClientType, Client}, Bucket, Expected, Index, Value,
                  {Sort, ExpectSorted}) -> 
-    lager:info("Searching Index ~p for ~p, sort: ~p ~p with client ~p",
-               [Index, Value, Sort, ExpectSorted, ClientType]),
+    lager:info("Searching Index ~p for ~p in bucket ~p, sort: ~p ~p with client ~p",
+               [Index, Value, Bucket, Sort, ExpectSorted, ClientType]),
     {ok, ?INDEX_RESULTS{keys=Results}} = case ClientType of
         pb ->
-             riakc_pb_socket:get_index_eq(Client, ?BUCKET, Index, Value,
+             riakc_pb_socket:get_index_eq(Client, Bucket, Index, Value,
                                           [{pagination_sort, Sort} || Sort /= undefined]);
         http ->
-            rhc:get_index(Client, ?BUCKET, Index, Value, [{pagination_sort, Sort}])
+            rhc:get_index(Client, Bucket, Index, Value, [{pagination_sort, Sort}])
     end,
             
     ActualKeys = case ExpectSorted of
@@ -135,26 +149,26 @@ assertExactQuery({ClientType, Client}, Expected, Index, Value,
     lager:info("Sorted  : ~p", [ActualKeys]),
     ?assertEqual(Expected, ActualKeys). 
 
-assertRangeQuery(Clients, Expected, Index, StartValue, EndValue) ->
-    assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, undefined).
+assertRangeQuery(Clients, Bucket, Expected, Index, StartValue, EndValue) ->
+    assertRangeQuery(Clients, Bucket, Expected, Index, StartValue, EndValue, undefined).
 
-assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re) ->
-    assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, {false, false}),
-    assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, {true, true}).
+assertRangeQuery(Clients, Bucket, Expected, Index, StartValue, EndValue, Re) ->
+    assertRangeQuery(Clients, Bucket, Expected, Index, StartValue, EndValue, Re, {false, false}),
+    assertRangeQuery(Clients, Bucket, Expected, Index, StartValue, EndValue, Re, {true, true}).
     
-assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, Sort) when is_list(Clients) ->
-    [assertRangeQuery(C, Expected, Index, StartValue, EndValue, Re, Sort) || C <- Clients];
-assertRangeQuery({ClientType, Client}, Expected, Index, StartValue, EndValue, Re,
+assertRangeQuery(Clients, Bucket, Expected, Index, StartValue, EndValue, Re, Sort) when is_list(Clients) ->
+    [assertRangeQuery(C, Bucket, Expected, Index, StartValue, EndValue, Re, Sort) || C <- Clients];
+assertRangeQuery({ClientType, Client}, Bucket, Expected, Index, StartValue, EndValue, Re,
                  {Sort, ExpectSorted}) ->
-    lager:info("Searching Index ~p for ~p-~p re:~p, sort: ~p, ~p with ~p client",
-               [Index, StartValue, EndValue, Re, Sort, ExpectSorted, ClientType]),
+    lager:info("Searching Index ~p in bucket ~p for ~p-~p re:~p, sort: ~p, ~p with ~p client",
+               [Index, Bucket, StartValue, EndValue, Re, Sort, ExpectSorted, ClientType]),
     {ok, ?INDEX_RESULTS{keys=Results}} = case ClientType of
         pb ->
-            riakc_pb_socket:get_index_range(Client, ?BUCKET, Index, StartValue, EndValue,
+            riakc_pb_socket:get_index_range(Client, Bucket, Index, StartValue, EndValue,
                                             [{term_regex, Re} || Re /= undefined] ++
                                             [{pagination_sort, Sort} || Sort /= undefined]);
         http ->
-            rhc:get_index(Client,  ?BUCKET, Index, {StartValue, EndValue},
+            rhc:get_index(Client, Bucket, Index, {StartValue, EndValue},
                                             [{term_regex, Re} || Re /= undefined] ++
                                             [{pagination_sort, Sort}])
     end,
@@ -165,10 +179,10 @@ assertRangeQuery({ClientType, Client}, Expected, Index, StartValue, EndValue, Re
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [Results]),
     lager:info("Sorted  : ~p", [ActualKeys]),
-    ?assertEqual(Expected, ActualKeys).
+    ?assertEqual({Bucket, Expected}, {Bucket, ActualKeys}).
 
 %% general 2i utility
-put_an_object(Pid, N) ->
+put_an_object(Pid, Bucket, N) ->
     Key = int_to_key(N),
     Data = io_lib:format("data~p", [N]),
     BinIndex = int_to_field1_bin(N),
@@ -177,17 +191,17 @@ put_an_object(Pid, N) ->
                % every 5 items indexed together
                {"field3_int", N - (N rem 5)}
               ],
-    put_an_object(Pid, Key, Data, Indexes).
+    put_an_object(Pid, Bucket, Key, Data, Indexes).
 
-put_an_object(Pid, Key, Data, Indexes) when is_list(Indexes) ->
-    lager:info("Putting object ~p", [Key]),
+put_an_object(Pid, Bucket, Key, Data, Indexes) when is_list(Indexes) ->
+    lager:debug("Putting object ~p", [Key]),
     MetaData = dict:from_list([{<<"index">>, Indexes}]),
-    Robj0 = riakc_obj:new(?BUCKET, Key),
+    Robj0 = riakc_obj:new(Bucket, Key),
     Robj1 = riakc_obj:update_value(Robj0, Data),
     Robj2 = riakc_obj:update_metadata(Robj1, MetaData),
     riakc_pb_socket:put(Pid, Robj2);
-put_an_object(Pid, Key, IntIndex, BinIndex) when is_integer(IntIndex), is_binary(BinIndex) ->
-    put_an_object(Pid, Key, Key, [{"field1_bin", BinIndex},{"field2_int", IntIndex}]).
+put_an_object(Pid, Bucket, Key, IntIndex, BinIndex) when is_integer(IntIndex), is_binary(BinIndex) ->
+    put_an_object(Pid, Bucket, Key, Key, [{"field1_bin", BinIndex},{"field2_int", IntIndex}]).
 
 int_to_key(N) ->
     case N < 100 of
@@ -200,12 +214,12 @@ int_to_key(N) ->
 int_to_field1_bin(N) ->
     list_to_binary(io_lib:format("val~p", [N])).
 
-stream_pb(Pid, Q) ->
-    pb_query(Pid, Q, [stream]),
+stream_pb(Pid, Bucket, Q) ->
+    pb_query(Pid, Bucket, Q, [stream]),
     stream_loop().
 
-stream_pb(Pid, Q, Opts) ->
-    pb_query(Pid, Q, [stream|Opts]),
+stream_pb(Pid, Bucket, Q, Opts) ->
+    pb_query(Pid, Bucket, Q, [stream|Opts]),
     stream_loop().
 
 stream_loop() ->
@@ -230,29 +244,29 @@ stream_loop(Acc) ->
             stream_loop(Acc)
     end.
 
-pb_query(Pid, {Field, Val}, Opts) ->
-    riakc_pb_socket:get_index_eq(Pid, ?BUCKET, Field, Val, Opts);
-pb_query(Pid, {Field, Start, End}, Opts) ->
-    riakc_pb_socket:get_index_range(Pid, ?BUCKET, Field, Start, End, Opts).
+pb_query(Pid, Bucket, {Field, Val}, Opts) ->
+    riakc_pb_socket:get_index_eq(Pid, Bucket, Field, Val, Opts);
+pb_query(Pid, Bucket, {Field, Start, End}, Opts) ->
+    riakc_pb_socket:get_index_range(Pid, Bucket, Field, Start, End, Opts).
 
-http_stream(NodePath, Query, Opts) ->
-    http_query(NodePath, Query, [{stream, true} | Opts], stream).
+http_stream(NodePath, Bucket, Query, Opts) ->
+    http_query(NodePath, Bucket, Query, [{stream, true} | Opts], stream).
 
-http_query(NodePath, Q) ->
-    http_query(NodePath, Q, []).
+http_query(NodePath, Bucket, Q) ->
+    http_query(NodePath, Bucket, Q, []).
 
-http_query(NodePath, Query, Opts) ->
-    http_query(NodePath, Query, Opts, undefined).
+http_query(NodePath, Bucket, Query, Opts) ->
+    http_query(NodePath, Bucket, Query, Opts, undefined).
 
-http_query(NodePath, {Field, Value}, Opts, Pid) ->
+http_query(NodePath, Bucket, {Field, Value}, Opts, Pid) ->
     QString = opts_to_qstring(Opts, []),
     Flag = case is_integer(Value) of true -> "w"; false -> "s" end,
-    Url = url("~s/buckets/~s/index/~s/~"++Flag++"~s", [NodePath, ?BUCKET, Field, Value, QString]),
+    Url = url("~s/buckets/~s/index/~s/~"++Flag++"~s", [NodePath, Bucket, Field, Value, QString]),
     http_get(Url, Pid);
-http_query(NodePath, {Field, Start, End}, Opts, Pid) ->
+http_query(NodePath, Bucket, {Field, Start, End}, Opts, Pid) ->
     QString = opts_to_qstring(Opts, []),
     Flag = case is_integer(Start) of true -> "w"; false -> "s" end,
-    Url = url("~s/buckets/~s/index/~s/~"++Flag++"/~"++Flag++"~s", [NodePath, ?BUCKET, Field, Start, End, QString]),
+    Url = url("~s/buckets/~s/index/~s/~"++Flag++"/~"++Flag++"~s", [NodePath, Bucket, Field, Start, End, QString]),
     http_get(Url, Pid).
 
 url(Format, Elements) ->
