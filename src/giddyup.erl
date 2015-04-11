@@ -27,6 +27,7 @@
 get_suite(Platform) ->
     Schema = get_schema(Platform),
     Name = kvc:path('project.name', Schema),
+    Version = rt_config:get_default_version_number(),
     lager:info("Retrieved Project: ~s", [Name]),
     Tests = kvc:path('project.tests', Schema),
     TestProps  =
@@ -39,7 +40,7 @@ get_suite(Platform) ->
                      X -> binary_to_atom(X, utf8)
                  end},
                 {platform, list_to_binary(Platform)},
-                {version, rt:get_version()},
+                {version, Version},
                 {project, Name}
             ] ++
             case kvc:path('tags.upgrade_version', Test) of
@@ -58,8 +59,8 @@ get_schema(Platform) ->
 
 get_schema(Platform, Retries) ->
     Host = rt_config:get(giddyup_host),
-    Project = rt_config:get(giddyup_project),
-    Version = rt:get_version(),
+    Project = rt_config:get_default_version_product(),
+    Version = rt_config:get_default_version_number(),
     URL = lists:flatten(io_lib:format("http://~s/projects/~s?platform=~s&version=~s", [Host, Project, Platform, Version])),
     lager:info("giddyup url: ~s", [URL]),
 

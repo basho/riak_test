@@ -27,6 +27,8 @@
          config_or_os_env/2,
          convert_to_string/1,
          get_default_version/0,
+         get_default_version_product/0,
+         get_default_version_number/0,
          get_previous_version/0,
          get_legacy_version/0,
          get_os_env/1,
@@ -45,7 +47,6 @@
 -define(CONFIG_NAMESPACE, riak_test).
 -define(RECEIVE_WAIT_TIME_KEY, rt_max_receive_wait_time).
 -define(GIDDYUP_PLATFORM_KEY, giddyup_platform).
--define(GIDDYUP_PROJECT_KEY, giddyup_project).
 -define(VERSION_KEY, versions).
 -define(DEFAULT_VERSION_KEY, default).
 -define(PREVIOUS_VERSION_KEY, previous).
@@ -116,9 +117,6 @@ get(rt_max_wait_time) ->
 get(platform) ->
     lager:info("platform is deprecated. Please use giddyup_platform instead."),
     rt_config:get(?GIDDYUP_PLATFORM_KEY);
-get(rt_project) ->
-    lager:info("rt_project is deprecated. Please use giddyup_project instead."),
-    rt_config:get(?GIDDYUP_PROJECT_KEY);
 get(?CONTINUE_ON_FAIL_KEY) ->
     get(?CONTINUE_ON_FAIL_KEY, ?DEFAULT_CONTINUE_ON_FAIL);
 get(Key) ->
@@ -143,6 +141,18 @@ get(Key, Default) ->
 -spec get_default_version() -> string().
 get_default_version() ->
     get_version(?DEFAULT_VERSION_KEY).
+
+%% @doc Return the default product from the version
+-spec get_default_version_product() -> string().
+get_default_version_product() ->
+    DefaultVersion = get_version(?DEFAULT_VERSION_KEY),
+    string:sub_word(DefaultVersion, 1, $-).
+
+%% @doc Return the default version number
+-spec get_default_version_number() -> string().
+get_default_version_number() ->
+    DefaultVersion = get_version(?DEFAULT_VERSION_KEY),
+    string:sub_word(DefaultVersion, 2, $-).
 
 %% @doc Return the default version
 -spec get_previous_version() -> string().
