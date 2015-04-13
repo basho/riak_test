@@ -17,6 +17,11 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
+
+%% @doc Tests if the java VM can be started and polled. A config option
+%% 'jmx_verify_wait' (or JMX_VERIFY_WAIT if set via os env) delays the
+%% initial check of the jvm by that many milliseconds. It defaults to
+%% 3000, though most faster machines can set it to 0.
 -module(jmx_verify).
 -behavior(riak_test).
 -export([confirm/0, test_supervision/0]).
@@ -40,6 +45,13 @@ confirm() ->
 
     JMXDumpCmd = jmx_dump_cmd(IP, JMXPort),
 
+    WaitTimeout = case rt_config:config_or_os_env(jmx_verify_wait, 3000) of
+        N when is_integer(N) ->
+            N;
+        N when is_list(N) ->
+            list_to_integer(N)
+    end,
+    timer:sleep(WaitTimeout),
     JMX1 = jmx_dump(JMXDumpCmd),
 
     %% make sure a set of stats have valid values
