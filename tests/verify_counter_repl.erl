@@ -94,17 +94,31 @@ rand_amt() ->
 repl_power_activate(ClusterA, ClusterB) ->
     lager:info("repl power...ACTIVATE!"),
     LeaderA = get_leader(hd(ClusterA)),
+    info("got leader A"),
     LeaderB = get_leader(hd(ClusterB)),
+    info("Got leader B"),
     MgrPortA = get_mgr_port(hd(ClusterA)),
+    info("Got manager port A"),
     MgrPortB = get_mgr_port(hd(ClusterB)),
+    info("Got manager port B"),
+    info("connecting A to B"),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", MgrPortB),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
+    info("A connected to B"),
+    info("connecting B to A"),
     repl_util:connect_cluster(LeaderB, "127.0.0.1", MgrPortA),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderB, "A")),
+    info("B connected to A"),
+    info("Enabling Fullsync bi-directional"),
     repl_util:enable_fullsync(LeaderA, "B"),
+    info("Enabled A->B"),
     repl_util:enable_fullsync(LeaderB, "A"),
+    info("Enabled B->A"),
+    info("Awaiting fullsync completion"),
     repl_util:start_and_wait_until_fullsync_complete(LeaderA),
-    repl_util:start_and_wait_until_fullsync_complete(LeaderB).
+    info("A->B complete"),
+    repl_util:start_and_wait_until_fullsync_complete(LeaderB),
+    info("B->A complete").
 
 get_leader({_, Node}) ->
     rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
@@ -113,3 +127,6 @@ get_mgr_port({_, Node}) ->
     {ok, {_IP, Port}} = rpc:call(Node, application, get_env,
                                  [riak_core, cluster_mgr]),
     Port.
+
+info(Message) ->
+    lager:info(Message).
