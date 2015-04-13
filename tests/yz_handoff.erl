@@ -33,9 +33,11 @@
         [
          {riak_core,
           [
-           {ring_creation_size, 16},
-           {handoff_concurrency, 11},
-           {claimant_tick, 1000}
+           {ring_creation_size, 16}
+          ]},
+         {riak_kv,
+          [
+           {handoff_rejected_max, infinity}
           ]},
          {yokozuna,
           [
@@ -94,11 +96,7 @@ confirm() ->
 
     States = [#trial_state{solr_url_before = SolrURL,
                            solr_url_after = internal_solr_url(Host, SolrPort2, ?INDEX, Shards2Rest),
-                           leave_node = Node1},
-              #trial_state{solr_url_before = internal_solr_url(Host, SolrPort2, ?INDEX, Shards2Rest),
-                           solr_url_after = SolrURL,
-                           join_node = Node1,
-                           admin_node = Node2}],
+                           leave_node = Node1}],
 
     %% Run Shell Script to count/test # of replicas and leave/join
     %% nodes from the cluster
