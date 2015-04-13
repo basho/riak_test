@@ -302,18 +302,25 @@ wait_for_connection(Node, Name) ->
                             [] ->
                                 false;
                             [Pid] ->
-                                try riak_core_cluster_conn:status(Pid, 2) of                                    {Pid, status, _} ->
+                                try riak_core_cluster_conn:status(Pid, 2000) of                                    {Pid, status, _} ->
                                         true;
                                     _ ->
                                         false
                                 catch
-                                    _W:_Y ->
+                                    %% Handle case where there is a 2.X gen_fsm but the call to riak_core_cluster_conn:status timed out
+                                    exit:{timeout,{gen_fsm,sync_send_event,_}} ->
+                                        false;
+                                    W:Y ->
+                                        lager:info("WAIT_FOR_CONNECTION W: ~p, Y: ~p", [W, Y]),
                                         Pid ! {self(), status},
                                         receive
                                             {Pid, status, _} ->
                                                 true;
                                             {Pid, connecting, _} ->
                                                 false
+                                        %% Never wait forever for the response. Allow wait_until to work.
+                                        after 2000 ->
+                                            false
                                         end
                                 end
                         end;
