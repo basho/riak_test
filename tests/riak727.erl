@@ -47,15 +47,13 @@ confirm() ->
     pass.
 
 %% @private check that the default bucket props for both <<"default">>
-%% typed, and custome typed buckets are as expected.
+%% typed, and custom typed buckets are as expected.
 -spec verify_default_bucket_props(node(), binary()) -> ok | no_return().
 verify_default_bucket_props(Node, Type) ->
     rt:create_and_activate_bucket_type(Node, Type, [{nonsense, <<"value">>}]),
 
     DefProps = get_props(Node, <<"default">>),
     TypeProps = get_props(Node, Type),
-
-    lager:info("~p", [DefProps]),
 
     ?assertEqual(false, proplists:get_value(allow_mult, DefProps)),
     ?assertEqual(false, proplists:get_value(dvv_enabled, DefProps)),
@@ -67,7 +65,7 @@ verify_default_bucket_props(Node, Type) ->
 -spec add_one_four_config(node()) -> ok.
 add_one_four_config(Node) ->
     rt:stop_and_wait(Node),
-    ok = copy(app_config_file(), node_etc_dir(Node)),
+    ok = copy(app_config_file(), node_config_file(Node)),
     rt:start_and_wait(Node).
 
 -spec copy(file:filename(), file:filename()) -> ok.
@@ -81,8 +79,8 @@ app_config_file() ->
     filename:join(rt:priv_dir(), ?DEF_APP_CONF).
 
 %% @private get the etc config directory for the given node.
--spec node_etc_dir(node()) -> file:filename().
-node_etc_dir(Node) ->
+-spec node_config_file(node()) -> file:filename().
+node_config_file(Node) ->
     ConfPath = ?HARNESS:get_riak_conf(Node),
     filename:join(filename:dirname(ConfPath), ?APP_CONF).
 
