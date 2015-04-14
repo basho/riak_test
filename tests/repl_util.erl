@@ -294,6 +294,7 @@ disconnect_cluster(Node, Name) ->
 wait_for_connection(Node, Name) ->
     rt:wait_until(Node,
         fun(_) ->
+                lager:info("Waiting for repl connection to cluster named ~p on node ~p", [Name, Node]),
                 case rpc:call(Node, riak_core_cluster_mgr,
                         get_connections, []) of
                     {ok, Connections} ->
@@ -302,16 +303,13 @@ wait_for_connection(Node, Name) ->
                             [] ->
                                 false;
                             [Pid] ->
-                                try riak_core_cluster_conn:status(Pid, 2000) of                                    {Pid, status, _} ->
+                                try riak_core_cluster_conn:status(Pid, 2000) of
+                                    {Pid, status, _} ->
                                         true;
                                     _ ->
                                         false
                                 catch
-                                    %% Handle case where there is a 2.X gen_fsm but the call to riak_core_cluster_conn:status timed out
-                                    exit:{timeout,{gen_fsm,sync_send_event,_}} ->
-                                        false;
-                                    W:Y ->
-                                        lager:info("WAIT_FOR_CONNECTION W: ~p, Y: ~p", [W, Y]),
+                                    _W:_Y ->
                                         Pid ! {self(), status},
                                         receive
                                             {Pid, status, _} ->
