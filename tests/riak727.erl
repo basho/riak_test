@@ -78,7 +78,6 @@ copy(File, DestDir) ->
 app_config_file() ->
     filename:join(rt:priv_dir(), ?DEF_APP_CONF).
 
-%% @private get the etc config directory for the given node.
 -spec node_config_file(node()) -> file:filename().
 node_config_file(Node) ->
     ConfPath = ?HARNESS:get_riak_conf(Node),
