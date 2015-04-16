@@ -34,9 +34,9 @@
         ]).
 
 confirm() ->
-    rt_config:set_advanced_conf(all, ?CONF(5)),
+    rt:set_advanced_conf(all, ?CONF(5)),
 
-    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
     rt:wait_for_cluster_service(BNodes, riak_repl),
@@ -84,7 +84,7 @@ confirm() ->
     BIndicies = length(rpc:call(LeaderB,
                                 riak_core_ring,
                                 my_indices,
-                                [rt_ring:get_ring(LeaderB)])),
+                                [rt:get_ring(LeaderB)])),
 
     lager:warning("BIndicies: ~p", [BIndicies]),
 
@@ -102,7 +102,7 @@ confirm() ->
     repl_util:validate_completed_fullsync(LeaderA, BFirst, "B", 1,
                                           ?NUM_KEYS, ?TEST_BUCKET),
 
-    rt_cluster:clean_cluster(ANodes),
-    rt_cluster:clean_cluster(BNodes),
+    rt:clean_cluster(ANodes),
+    rt:clean_cluster(BNodes),
 
     pass.

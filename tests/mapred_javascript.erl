@@ -43,7 +43,7 @@
                       }">>).
 
 confirm() ->
-    Nodes = rt_cluster:build_cluster(3),
+    Nodes = rt:build_cluster(3),
 
     load_test_data(Nodes),
     
@@ -67,7 +67,7 @@ load_test_data([Node|_]) ->
     Map = riakc_obj:new(?JS_BUCKET, <<"map">>, ?MAP_JS, "text/plain"),
     Red = riakc_obj:new(?JS_BUCKET, <<"reduce">>, ?REDUCE_JS, "text/plain"),
 
-    C = rt_pb:pbc(Node),
+    C = rt:pbc(Node),
     ok = riakc_pb_socket:put(C, Map),
     ok = riakc_pb_socket:put(C, Red),
     riakc_pb_socket:stop(C).

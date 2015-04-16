@@ -60,9 +60,9 @@ confirm() ->
 %% @doc Perform a fullsync, with given latency injected via intercept
 %%      and return times for each fullsync time.
 fullsync_test(Strategy, Latency) ->
-    rt_config:set_advanced_conf(all, ?CONF(Strategy)),
+    rt:set_advanced_conf(all, ?CONF(Strategy)),
 
-    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
     rt:wait_for_cluster_service(BNodes, riak_repl),
@@ -125,32 +125,32 @@ fullsync_test(Strategy, Latency) ->
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
 
     %% Perform fullsync of an empty cluster.
-    rt_aae:wait_until_aae_trees_built(ANodes ++ BNodes),
+    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     {EmptyTime, _} = timer:tc(repl_util,
                               start_and_wait_until_fullsync_complete,
                               [LeaderA]),
 
     %% Write keys and perform fullsync.
     repl_util:write_to_cluster(AFirst, 0, ?FULL_NUM_KEYS, ?TEST_BUCKET),
-    rt_aae:wait_until_aae_trees_built(ANodes ++ BNodes),
+    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     {FullTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
 
     %% Rewrite first 10% keys and perform fullsync.
     repl_util:write_to_cluster(AFirst, 0, ?DIFF_NUM_KEYS, ?TEST_BUCKET),
-    rt_aae:wait_until_aae_trees_built(ANodes ++ BNodes),
+    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     {DiffTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
 
     %% Write no keys, and perform the fullsync.
-    rt_aae:wait_until_aae_trees_built(ANodes ++ BNodes),
+    rt:wait_until_aae_trees_built(ANodes ++ BNodes),
     {NoneTime, _} = timer:tc(repl_util,
                              start_and_wait_until_fullsync_complete,
                              [LeaderA]),
 
-    rt_cluster:clean_cluster(ANodes),
-    rt_cluster:clean_cluster(BNodes),
+    rt:clean_cluster(ANodes),
+    rt:clean_cluster(BNodes),
 
     {EmptyTime, FullTime, DiffTime, NoneTime}.

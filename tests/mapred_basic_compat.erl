@@ -41,13 +41,13 @@
 -define(BUCKET_TYPE, <<"mytype">>).
 
 confirm() ->
-    Nodes = rt_cluster:build_cluster(3),
+    Nodes = rt:build_cluster(3),
 
     [Node1|_] = Nodes,
     %% create a new type
-    rt_bucket_types:create_and_activate_bucket_type(Node1, ?BUCKET_TYPE, [{n_val, 3}]),
-    rt_bucket_types:wait_until_bucket_type_status(?BUCKET_TYPE, active, Nodes),
-    rt_bucket_types:wait_until_bucket_type_visible(Nodes, ?BUCKET_TYPE),
+    rt:create_and_activate_bucket_type(Node1, ?BUCKET_TYPE, [{n_val, 3}]),
+    rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Nodes),
+    rt:wait_until_bucket_type_visible(Nodes, ?BUCKET_TYPE),
 
     load_test_data(Nodes),
     rt:load_modules_on_nodes([?MODULE], Nodes),
@@ -89,7 +89,7 @@ load_test_data([Node|_]) ->
            [{<<"link 1">>, [{?LINK_BUCKET, <<"nokey-1">>}]},
             {<<"link 2">>, [{?LINK_BUCKET, <<"nokey-2">>}]}]),
 
-    C = rt_pb:pbc(Node),
+    C = rt:pbc(Node),
     ok = riakc_pb_socket:put(C, riakc_obj:update_metadata(Obj, MD)),
 
     %% Some bucket type entries {mytype,foonum}/bar{1..10}

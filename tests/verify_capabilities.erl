@@ -264,3 +264,4 @@ restart_capability_server(Node) ->
             end
         end,
     rt:wait_until(Node, HasNewPid).
+

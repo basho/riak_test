@@ -44,7 +44,7 @@ confirm() ->
                {riak_core, [ {ring_creation_size, 16},
                              {vnode_management_timer, 1000} ]}],
 
-    [N1, N2]=Nodes = rt_cluster:build_cluster(2, Config),
+    [N1, N2]=Nodes = rt:build_cluster(2, Config),
 
     create_bucket_types(Nodes, ?TYPES),
 
@@ -72,7 +72,7 @@ confirm() ->
 
     lager:info("Partition cluster in two."),
 
-    PartInfo = rt_node:partition([N1], [N2]),
+    PartInfo = rt:partition([N1], [N2]),
 
     lager:info("Modify data on side 1"),
     %% Modify one side
@@ -135,7 +135,7 @@ confirm() ->
     %% Check both sides
     %% heal
     lager:info("Heal and check merged values"),
-    ok = rt_node:heal(PartInfo),
+    ok = rt:heal(PartInfo),
     ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree
@@ -192,14 +192,14 @@ store_map(Client, Map) ->
 
 create_pb_clients(Nodes) ->
     [begin
-         C = rt_pb:pbc(N),
+         C = rt:pbc(N),
          riakc_pb_socket:set_options(C, [queue_if_disconnected]),
          C
      end || N <- Nodes].
 
 create_bucket_types([N1|_], Types) ->
     lager:info("Creating bucket types with datatypes: ~p", [Types]),
-    [rt_bucket_types:create_and_activate_bucket_type(N1, Name, [{datatype, Type}, {allow_mult, true}])
+    [rt:create_and_activate_bucket_type(N1, Name, [{datatype, Type}, {allow_mult, true}])
      || {Name, Type} <- Types ].
 
 bucket_type_ready_fun(Name) ->

@@ -26,7 +26,7 @@ confirm() ->
     Node = hd(Nodes),
 
     lager:info("Creating/activating 'strong' bucket type"),
-    rt_bucket_types:create_and_activate_bucket_type(Node, <<"strong">>,
+    rt:create_and_activate_bucket_type(Node, <<"strong">>,
                                        [{consistent, true}, {n_val, NVal}]),
 
     Bucket = {<<"strong">>, <<"test">>},
@@ -46,10 +46,10 @@ verify_ensemble_delete_support(Node, Bucket, Index) ->
     Keys = [<<N:64/integer>> || N <- lists:seq(1,2000),
         not lists:any(fun(E) -> E > 127 end,binary_to_list(<<N:64/integer>>))],
 
-    PBC = rt_pb:pbc(Node),
+    PBC = rt:pbc(Node),
 
     lager:info("Writing ~p keys", [length(Keys)]),
-    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key, "text/plain") || Key <- Keys],
+    [ok = rt:pbc_write(PBC, Bucket, Key, Key, "text/plain") || Key <- Keys],
 
     %% soft commit wait, then check that last key is indexed
     lager:info("Search for keys to verify they exist"),
@@ -88,10 +88,10 @@ verify_ensemble_delete_support(Node, Bucket, Index) ->
 %% node when adding yokozuna and ensemble support. Waiting for yokozuna
 %% to load on each node allows join_cluster to complete consistently
 build_cluster_with_yz_support(Num, Config, NVal) ->
-    Nodes = rt_cluster:deploy_nodes(Num, Config),
+    Nodes = rt:deploy_nodes(Num, Config),
     [rt:wait_for_cluster_service([N], yokozuna) || N <- Nodes],
     Node = hd(Nodes),
-    rt_cluster:join_cluster(Nodes),
+    rt:join_cluster(Nodes),
     ensemble_util:wait_until_cluster(Nodes),
     ensemble_util:wait_for_membership(Node),
     ensemble_util:wait_until_stable(Node, NVal),

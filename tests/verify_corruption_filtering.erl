@@ -65,7 +65,7 @@ confirm() ->
     pass.
 
 get_put_mix(Node) ->
-    PB = rt_pb:pbc(Node),
+    PB = rt:pbc(Node),
     [begin
          Key = random:uniform(1000),
          case random:uniform(2) of
@@ -90,7 +90,7 @@ get_put_mix(Node) ->
     || _ <- lists:seq(1, 2000)].
 
 load_cluster(Node) -> 
-    PB = rt_pb:pbc(Node),
+    PB = rt:pbc(Node),
     [riakc_pb_socket:put(PB, 
                          riakc_obj:new(<<"foo">>, <<X>>,
                                        <<X:4096>>))

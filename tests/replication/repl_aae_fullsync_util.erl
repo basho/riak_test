@@ -71,10 +71,10 @@ prepare_cluster_data(TestBucket, NumKeysAOnly, _NumKeysBoth, [AFirst|_] = ANodes
     %% check that the keys we wrote initially aren't replicated yet, because
     %% we've disabled fullsync_on_connect
     lager:info("Check keys written before repl was connected are not present"),
-    Res2 = rt_systest:read(BFirst, 1, NumKeysAOnly, TestBucket, 1, <<>>, true),
+    Res2 = rt:systest_read(BFirst, 1, NumKeysAOnly, TestBucket, 1, <<>>, true),
     ?assertEqual(NumKeysAOnly, length(Res2)),
 
     %% wait for the AAE trees to be built so that we don't get a not_built error
-    rt_aae:wait_until_aae_trees_built(ANodes),
-    rt_aae:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
     ok.

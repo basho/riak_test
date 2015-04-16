@@ -39,14 +39,14 @@ confirm() ->
     {ok, _} = riak_ensemble_client:kget(Node, root, testerooni, 1000),
 
     lager:info("Creating/activating 'strong' bucket type"),
-    rt_bucket_types:create_and_activate_bucket_type(Node, <<"strong">>,
+    rt:create_and_activate_bucket_type(Node, <<"strong">>,
                                        [{consistent, true}, {n_val, NVal}]),
     ensemble_util:wait_until_stable(Node, NVal),
     Bucket = {<<"strong">>, <<"test">>},
     Key = <<"testkey">>,
-    PBC = rt_pb:pbc(Node),
-    ok = rt_pb:pbc_write(PBC, Bucket, Key, testval),
-    Val1 = rt_pb:pbc_read(PBC, Bucket, Key),
+    PBC = rt:pbc(Node),
+    ok = rt:pbc_write(PBC, Bucket, Key, testval),
+    Val1 = rt:pbc_read(PBC, Bucket, Key),
     ?assertEqual(element(1, Val1), riakc_obj),
 
     %% Don't allow node deletions in riak_ensemble. This should prevent the
@@ -61,12 +61,12 @@ confirm() ->
         end}}]}),
 
     lager:info("Removing Nodes 2 and 3 from the cluster"),
-    rt_node:leave(Node2),
+    rt:leave(Node2),
     ok = ensemble_util:wait_until_stable(Node, NVal),
-    rt_node:leave(Node3),
+    rt:leave(Node3),
     ok = ensemble_util:wait_until_stable(Node, NVal),
     Remaining = Nodes -- [Node2, Node3],
-    rt_node:wait_until_nodes_agree_about_ownership(Remaining), 
+    rt:wait_until_nodes_agree_about_ownership(Remaining), 
 
     %% TODO: How do we wait indefinitely for nodes to never exit here? A 30s
     %% sleep?
@@ -80,7 +80,7 @@ confirm() ->
     %% We should still be able to read from k/v ensembles, but the nodes should
     %% never exit
     lager:info("Reading From SC Bucket"),
-    Val2 = rt_pb:pbc_read(PBC, Bucket, Key),
+    Val2 = rt:pbc_read(PBC, Bucket, Key),
     ?assertEqual(element(1, Val2), riakc_obj),
     
     ok = ensemble_util:wait_until_stable(Node, NVal),

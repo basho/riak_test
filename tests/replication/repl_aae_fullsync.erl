@@ -90,8 +90,8 @@ simple_test() ->
     read_from_cluster(BFirst, 1, ?NUM_KEYS, ?NUM_KEYS),
 
     %% Wait for trees to compute.
-    rt_aae:wait_until_aae_trees_built(ANodes),
-    rt_aae:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     lager:info("Test fullsync from cluster A leader ~p to cluster B",
                [LeaderA]),
@@ -113,7 +113,7 @@ simple_test() ->
     %% intercepts are removed.
     validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
 
-    rt_cluster:clean_cluster(Nodes),
+    rt:clean_cluster(Nodes),
 
     pass.
 
@@ -185,9 +185,9 @@ dual_test() ->
     rt:wait_until_ring_converged(ANodes),
 
     %% Wait for trees to compute.
-    rt_aae:wait_until_aae_trees_built(ANodes),
-    rt_aae:wait_until_aae_trees_built(BNodes),
-    rt_aae:wait_until_aae_trees_built(CNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(CNodes),
 
     %% Flush AAE trees to disk.
     perform_sacrifice(AFirst),
@@ -277,7 +277,7 @@ bidirectional_test() ->
     perform_sacrifice(AFirst),
 
     %% Wait for trees to compute.
-    rt_aae:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(ANodes),
 
     %% Verify A replicated to B.
     validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
@@ -290,13 +290,13 @@ bidirectional_test() ->
     perform_sacrifice(BFirst),
 
     %% Wait for trees to compute.
-    rt_aae:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     %% Verify B replicated to A.
     validate_completed_fullsync(LeaderB, AFirst, "A", ?NUM_KEYS + 1, ?NUM_KEYS + ?NUM_KEYS),
 
     %% Clean.
-    rt_cluster:clean_cluster(Nodes),
+    rt:clean_cluster(Nodes),
 
     pass.
 
@@ -339,8 +339,8 @@ difference_test() ->
     connect_cluster(LeaderA, BPort, "B"),
 
     %% Get PBC connections.
-    APBC = rt_pb:pbc(LeaderA),
-    BPBC = rt_pb:pbc(LeaderB),
+    APBC = rt:pbc(LeaderA),
+    BPBC = rt:pbc(LeaderB),
 
     %% Write key.
     ok = riakc_pb_socket:put(APBC,
@@ -349,8 +349,8 @@ difference_test() ->
                              [{timeout, 4000}]),
 
     %% Wait for trees to compute.
-    rt_aae:wait_until_aae_trees_built(ANodes),
-    rt_aae:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     lager:info("Test fullsync from cluster A leader ~p to cluster B",
                [LeaderA]),
@@ -388,7 +388,7 @@ difference_test() ->
                                   [{timeout, 4000}]),
     ?assertEqual([<<"baz">>, <<"baz2">>], lists:sort(riakc_obj:get_values(O2))),
 
-    rt_cluster:clean_cluster(Nodes),
+    rt:clean_cluster(Nodes),
 
     pass.
 
@@ -435,8 +435,8 @@ deadlock_test() ->
     [ok = rt_intercept:add(Target, Intercept) || Target <- ANodes],
 
     %% Wait for trees to compute.
-    rt_aae:wait_until_aae_trees_built(ANodes),
-    rt_aae:wait_until_aae_trees_built(BNodes),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
 
     lager:info("Test fullsync from cluster A leader ~p to cluster B",
                [LeaderA]),
@@ -457,7 +457,7 @@ deadlock_test() ->
     lager:info("Status result: ~p", [Result]),
     ?assertNotEqual({badrpc, timeout}, Result),
 
-    rt_cluster:clean_cluster(Nodes),
+    rt:clean_cluster(Nodes),
 
     pass.
 
@@ -516,7 +516,7 @@ validate_intercepted_fullsync(InterceptTarget,
     NumIndicies = length(rpc:call(InterceptTarget,
                                   riak_core_ring,
                                   my_indices,
-                                  [rt_ring:get_ring(InterceptTarget)])),
+                                  [rt:get_ring(InterceptTarget)])),
     lager:info("~p owns ~p indices",
                [InterceptTarget, NumIndicies]),
 
@@ -566,15 +566,15 @@ validate_intercepted_fullsync(InterceptTarget,
                         NumIndicies),
 
     %% Reboot node.
-    rt_node:stop_and_wait(InterceptTarget),
-    rt_node:start_and_wait(InterceptTarget),
+    rt:stop_and_wait(InterceptTarget),
+    rt:start_and_wait(InterceptTarget),
 
     %% Wait for riak_kv and riak_repl to initialize.
     rt:wait_for_service(InterceptTarget, riak_kv),
     rt:wait_for_service(InterceptTarget, riak_repl),
 
     %% Wait until AAE trees are compueted on the rebooted node.
-    rt_aae:wait_until_aae_trees_built([InterceptTarget]).
+    rt:wait_until_aae_trees_built([InterceptTarget]).
 
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.
@@ -607,5 +607,5 @@ write_to_cluster(Node, Start, End) ->
 %%      of errors.
 read_from_cluster(Node, Start, End, Errors) ->
     lager:info("Reading ~p keys from node ~p.", [End - Start, Node]),
-    Res2 = rt_systest:read(Node, Start, End, ?TEST_BUCKET, 1),
+    Res2 = rt:systest_read(Node, Start, End, ?TEST_BUCKET, 1),
     ?assertEqual(Errors, length(Res2)).

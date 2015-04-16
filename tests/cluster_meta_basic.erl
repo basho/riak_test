@@ -18,11 +18,10 @@
 %%
 %% -------------------------------------------------------------------
 -module(cluster_meta_basic).
--export([properties/0, confirm/2, object_count/2]).
-
+-behavior(riak_test).
+-export([confirm/0, object_count/2]).
 -include_lib("eunit/include/eunit.hrl").
 
--include("rt.hrl").
 -define(PREFIX1, {a, b}).
 -define(PREFIX2, {fold, prefix}).
 -define(KEY1, key1).
@@ -30,11 +29,8 @@
 -define(VAL1, val1).
 -define(VAL2, val2).
 
-properties() ->
-    rt_properties:new([{node_count, 5}]).
-
-confirm(Properties, _MD) ->
-    Nodes = rt_properties:get(nodes, Properties),
+confirm() ->
+    Nodes = rt:build_cluster(5),
     ok = test_fold_full_prefix(Nodes),
     ok = test_metadata_conflicts(Nodes),
     ok = test_writes_after_partial_cluster_failure(Nodes),
@@ -54,13 +50,13 @@ test_writes_after_partial_cluster_failure([N1 | _]=Nodes) ->
     StopNodes = eager_peers(N1, N1),
     AliveNodes = Nodes -- StopNodes,
     lager:info("stopping nodes: ~p remaining nodes: ~p", [StopNodes, AliveNodes]),
-    [rt_node:stop(N) || N <- StopNodes],
+    [rt:stop(N) || N <- StopNodes],
 
     metadata_put(N1, ?PREFIX1, ?KEY1, ?VAL2),
     wait_until_metadata_value(AliveNodes, ?PREFIX1, ?KEY1, ?VAL2),
 
     lager:info("bring stopped nodes back up: ~p", [StopNodes]),
-    [rt_node:start(N) || N <- StopNodes],
+    [rt:start(N) || N <- StopNodes],
     wait_until_metadata_value(Nodes, ?PREFIX1, ?KEY1, ?VAL2),
     ok.
 

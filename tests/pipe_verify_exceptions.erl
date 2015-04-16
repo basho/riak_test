@@ -45,7 +45,9 @@
 %% @doc riak_test callback
 confirm() ->
     lager:info("Build ~b node cluster", [?NODE_COUNT]),
-    Nodes = rt_cluster:build_cluster(?NODE_COUNT),
+    Nodes = rt:build_cluster(?NODE_COUNT),
+
+    [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
 
     [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
 

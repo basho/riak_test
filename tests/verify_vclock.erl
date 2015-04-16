@@ -113,12 +113,12 @@ force_encoding(Node, EncodingMethod) ->
                       }
                     ],
 
-                   rt_config:update_app_config(Node, OverrideData)
+                   rt:update_app_config(Node, OverrideData)
 
     end.
 
 stopall(Nodes) ->
-    lists:foreach(fun(N) -> rt_node:brutal_kill(N) end, Nodes).
+    lists:foreach(fun(N) -> rt:brutal_kill(N) end, Nodes).
 
 make_kv(N, VSuffix) -> 
     K = <<N:32/integer>>,
@@ -134,10 +134,10 @@ our_pbc_write(Node, Size, Suffix) ->
     our_pbc_write(Node, 1, Size, <<"systest">>, Suffix).
 
 our_pbc_write(Node, Start, End, Bucket, VSuffix) ->
-    PBC = rt_pb:pbc(Node),
+    PBC = rt:pbc(Node),
     F = fun(N, Acc) ->
                 {K, V} = make_kv(N, VSuffix),
-                try rt_pb:pbc_write(PBC, Bucket, K, V) of
+                try rt:pbc_write(PBC, Bucket, K, V) of
                     ok ->
                         Acc;
                     Other ->
@@ -156,7 +156,7 @@ our_pbc_read(Node, Size, Suffix) ->
     our_pbc_read(Node, 1, Size, <<"systest">>, Suffix).
 
 our_pbc_read(Node, Start, End, Bucket, VSuffix) ->
-    PBC = rt_pb:pbc(Node),
+    PBC = rt:pbc(Node),
 
     %% Trundle along through the list, collecting mismatches:
     F = fun(N, Acc) ->
@@ -193,12 +193,12 @@ our_pbc_read(Node, Start, End, Bucket, VSuffix) ->
 
 %% For some testing purposes, making these limits smaller is helpful:
 deploy_test_nodes(false, N) -> 
-    rt_cluster:deploy_nodes(N);
+    rt:deploy_nodes(N);
 deploy_test_nodes(true,  N) ->
     lager:info("NOTICE: Using turbo settings for testing."),
     Config = [{riak_core, [{forced_ownership_handoff, 8},
                            {handoff_concurrency, 8},
                            {vnode_inactivity_timeout, 1000},
                            {gossip_limit, {10000000, 60000}}]}],
-    rt_cluster:deploy_nodes(N, Config).
+    rt:deploy_nodes(N, Config).
 

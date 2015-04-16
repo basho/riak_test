@@ -39,10 +39,10 @@ confirm() ->
     lager:info("Building cluster of ~p nodes", [?NUM_NODES]),
     SpamDir = rt_config:config_or_os_env(spam_dir),
     Config = [{riak_search, [{enabled, true}]}],
-    [Node0 | _RestNodes] = Nodes = rt_cluster:build_cluster(?NUM_NODES, Config),
+    [Node0 | _RestNodes] = Nodes = rt:build_cluster(?NUM_NODES, Config),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
     rt:wait_until_ring_converged(Nodes),
-    PbcPid = rt_pb:pbc(Node0),
+    PbcPid = rt:pbc(Node0),
     Searches =
         [
           {<<"ZiaSun">>, 1},
@@ -57,7 +57,7 @@ confirm() ->
     AllTerms = lists:foldl(ConcatBin, <<"">>, Searches),
 
     lager:info("Indexing data for search from ~p", [SpamDir]),
-    rt_pb:pbc_put_dir(PbcPid, ?SEARCH_BUCKET, SpamDir),
+    rt:pbc_put_dir(PbcPid, ?SEARCH_BUCKET, SpamDir),
     ExtraKey = <<"Extra1">>, 
     riakc_pb_socket:put(PbcPid, 
                         riakc_obj:new(?SEARCH_BUCKET, 
@@ -82,7 +82,7 @@ confirm() ->
 
     lager:info("Backing up the data to ~p", [BackupFile]),
     Cookie = "riak",
-    rt_cmd_line:admin(Node0, ["backup", atom_to_list(Node0), Cookie, BackupFile, "all"]),
+    rt:admin(Node0, ["backup", atom_to_list(Node0), Cookie, BackupFile, "all"]),
 
     lager:info("Modifying data on cluster"),
     ModF = fun(N) ->
@@ -98,7 +98,7 @@ confirm() ->
                          {last, ?NUM_MOD+?NUM_DEL}]),
     lager:info("Deleting extra search doc"),
     riakc_pb_socket:delete(PbcPid, ?SEARCH_BUCKET, ExtraKey),
-    rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PbcPid,
+    rt:wait_until(fun() -> rt:pbc_really_deleted(PbcPid,
                                                  ?SEARCH_BUCKET,
                                                  [ExtraKey])
         end),
@@ -114,7 +114,7 @@ confirm() ->
     verify_searches(PbcPid, Searches, 0),
 
     lager:info("Restoring from backup ~p", [BackupFile]),
-    rt_cmd_line:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
+    rt:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
     rt:wait_until_no_pending_changes(Nodes),
 
     %% When allow_mult=false, the mods overwrite the restored data.  When
@@ -135,13 +135,13 @@ confirm() ->
 
     lager:info("Wipe out entire cluster and start fresh"),
     riakc_pb_socket:stop(PbcPid),
-    rt_cluster:clean_cluster(Nodes),
+    rt:clean_cluster(Nodes),
     lager:info("Rebuilding the cluster"),
-    rt_cluster:build_cluster(?NUM_NODES, Config),
+    rt:build_cluster(?NUM_NODES, Config),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
     rt:wait_until_ring_converged(Nodes),
     rt:wait_until_no_pending_changes(Nodes),
-    PbcPid2 = rt_pb:pbc(Node0),
+    PbcPid2 = rt:pbc(Node0),
 
     lager:info("Verify no data in cluster"),
     [?assertEqual([], read_some(Node, [{last, ?NUM_KEYS},
@@ -150,7 +150,7 @@ confirm() ->
     verify_searches(PbcPid2, EmptySearches, 0),
 
     lager:info("Restoring from backup ~p again", [BackupFile]),
-    rt_cmd_line:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
+    rt:admin(Node0, ["restore", atom_to_list(Node0), Cookie, BackupFile]),
     rt:enable_search_hook(Node0, ?SEARCH_BUCKET),
 
     lager:info("Verifying data is back to original backup"),
@@ -198,7 +198,7 @@ write_some(PBC, Props) ->
                     end
                 end,
             ?assertEqual([], lists:foldl(DelFun, [], Keys)),
-            rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, Keys1) end);
+            rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, Keys1) end);
         _ ->
             ok
     end,
@@ -283,7 +283,7 @@ delete_some(PBC, Props) ->
             end
         end,
     lists:foldl(F, [], Keys),
-    rt:wait_until(fun() -> rt_pb:pbc_really_deleted(PBC, Bucket, Keys) end),
+    rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, Bucket, Keys) end),
     ok.
 
 verify_search_count(Pid, SearchQuery, Count) ->

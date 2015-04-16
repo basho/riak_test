@@ -29,7 +29,7 @@ confirm() ->
     %% we will be using two of the nodes to perform an
     %% update and then a reset (one on each node) of a bucket's properties.
     %% All nodes are checked to make sure the reset is affected on them
-    [Node1, Node2, Node3] = Nodes = rt_cluster:build_cluster(3),
+    [Node1, Node2, Node3] = Nodes = rt:build_cluster(3),
 
     DefaultProps = get_current_bucket_props(Nodes, ?BUCKET),
 
@@ -43,7 +43,7 @@ confirm() ->
 
 
     update_props(DefaultProps, Node1, Nodes),
-    C = rt_pb:pbc(Node3),
+    C = rt:pbc(Node3),
     lager:info("Resetting bucket properties for bucket ~p on node ~p via pbc",
                [?BUCKET, Node3]),
     ok = riakc_pb_socket:reset_bucket(C, ?BUCKET),

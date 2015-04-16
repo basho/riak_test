@@ -33,7 +33,7 @@
 confirm() ->
     Key = <<"a">>,
 
-    [N1, N2, N3, N4]=Nodes = rt_cluster:build_cluster(4),
+    [N1, N2, N3, N4]=Nodes = rt:build_cluster(4),
     [C1, C2, C3, C4]=Clients =  [ rt:httpc(N) || N <- Nodes ],
 
     set_allow_mult_true(Nodes),
@@ -50,7 +50,7 @@ confirm() ->
 
     lager:info("Partition cluster in two."),
 
-    PartInfo = rt_node:partition([N1, N2], [N3, N4]),
+    PartInfo = rt:partition([N1, N2], [N3, N4]),
 
     %% increment one side
     increment_counter(C1, Key, 5),
@@ -68,7 +68,7 @@ confirm() ->
 
     %% heal
     lager:info("Heal and check merged values"),
-    ok = rt_node:heal(PartInfo),
+    ok = rt:heal(PartInfo),
     ok = rt:wait_for_cluster_service(Nodes, riak_kv),
 
     %% verify all nodes agree

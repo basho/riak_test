@@ -24,7 +24,7 @@
 -define(CM_PREFIX, {test, cm}).
 
 confirm() ->
-    rt_config:set_conf(all, [{"ring_size", "128"}]),
+    rt:set_conf(all, [{"ring_size", "128"}]),
     Seed = erlang:now(),
     lager:info("SEED: ~p", [Seed]),
     random:seed(Seed),
@@ -59,10 +59,10 @@ run(NumNodes, NumRounds, StableRounds) ->
     exit(Pid, kill),
     %% start all the down nodes so we can clean them :(
     [rt:start(Node) || Node <- DownNodes],
-    rt_cluster:clean_cluster(AllNodes).
+    rt:clean_cluster(AllNodes).
 
 setup_nodes(NumNodes) ->
-    Nodes = rt_cluster:build_cluster(NumNodes),
+    Nodes = rt:build_cluster(NumNodes),
     [begin
          ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
          ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
@@ -108,7 +108,7 @@ run_rounds(Round, StableRound, SendFun, ConsistentFun, [SenderNode | _]=UpNodes,
 fail_node(Round, OtherNodes) ->
     Failed = lists:nth(random:uniform(length(OtherNodes)), OtherNodes),
     lager:info("round: ~p (unstable): shutting down ~p", [Round, Failed]),
-    rt_node:stop(Failed),
+    rt:stop(Failed),
     {Failed, lists:delete(Failed, OtherNodes)}.
 
 calc_stuff(AllNodes, NumNodes, NumRounds) ->

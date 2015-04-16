@@ -25,7 +25,7 @@ confirm() ->
 
     NodeConfig = [{FromVersion, Conf} || _ <- lists:seq(1, NumNodes)],
 
-    Nodes = rt_cluster:deploy_nodes(NodeConfig),
+    Nodes = rt:deploy_nodes(NodeConfig, [riak_kv, riak_repl]),
 
     NodeUpgrades = case UpgradeOrder of
         "forwards" ->
@@ -66,7 +66,7 @@ confirm() ->
     ok = lists:foreach(fun(Node) ->
                                lager:info("Upgrade node: ~p", [Node]),
                                rt:log_to_nodes(Nodes, "Upgrade node: ~p", [Node]),
-                               rt:upgrade(Node, current),
+                               rtdev:upgrade(Node, current),
                                rt:wait_until_pingable(Node),
                                rt:wait_for_service(Node, [riak_kv, riak_pipe, riak_repl]),
                                [rt:wait_until_ring_converged(N) || N <- [ANodes, BNodes]],

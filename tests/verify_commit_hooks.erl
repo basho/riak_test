@@ -23,7 +23,7 @@
 -export([confirm/0]).
 
 confirm() ->
-    [Node] = rt_cluster:deploy_nodes(1),
+    [Node] = rt:deploy_nodes(1),
     lager:info("Loading the hooks module into ~p", [Node]),
     rt:load_modules_on_nodes([hooks], [Node]),
 
@@ -34,36 +34,36 @@ confirm() ->
     ?assertEqual(ok, rpc:call(Node, hooks, set_hooks, [])),
 
     lager:info("Checking precommit atom failure reason."),
-    HTTP = rt_http:httpc(Node),
+    HTTP = rt:httpc(Node),
     ?assertMatch({error, {ok, "500", _, _}},
-                 rt_http:httpc_write(HTTP, <<"failatom">>, <<"key">>, <<"value">>)),
+                 rt:httpc_write(HTTP, <<"failatom">>, <<"key">>, <<"value">>)),
 
     lager:info("Checking Bug 1145 - string failure reason"),
     ?assertMatch({error, {ok, "403", _, _}},
-                 rt_http:httpc_write(HTTP, <<"failstr">>, <<"key">>, <<"value">>)),
+                 rt:httpc_write(HTTP, <<"failstr">>, <<"key">>, <<"value">>)),
 
     lager:info("Checking Bug 1145 - binary failure reason"),
     ?assertMatch({error, {ok, "403", _, _}},
-                 rt_http:httpc_write(HTTP, <<"failbin">>, <<"key">>, <<"value">>)),
+                 rt:httpc_write(HTTP, <<"failbin">>, <<"key">>, <<"value">>)),
 
     lager:info("Checking that bucket without commit hooks passes."),
-    ?assertEqual(ok, rt_http:httpc_write(HTTP, <<"fail">>, <<"key">>, <<"value">>)),
+    ?assertEqual(ok, rt:httpc_write(HTTP, <<"fail">>, <<"key">>, <<"value">>)),
 
     lager:info("Checking that bucket with passing precommit passes."),
-    ?assertEqual(ok, rt_http:httpc_write(HTTP, <<"failkey">>, <<"key">>, <<"value">>)),
+    ?assertEqual(ok, rt:httpc_write(HTTP, <<"failkey">>, <<"key">>, <<"value">>)),
 
     lager:info("Checking that bucket with failing precommit fails."),
     ?assertMatch({error, {ok, "403", _, _}},
-                 rt_http:httpc_write(HTTP, <<"failkey">>, <<"fail">>, <<"value">>)),
+                 rt:httpc_write(HTTP, <<"failkey">>, <<"fail">>, <<"value">>)),
 
     lager:info("Checking fix for BZ1244 - riak_kv_wm_object makes call to riak_client:get/3 with invalid type for key"),
     %% riak_kv_wm_object:ensure_doc will return {error, not_found}, leading to 404.
     %% see https://github.com/basho/riak_kv/pull/237 for details of the fix.
     ?assertMatch({error, {ok, "404", _, _}},
-                 rt_http:httpc_write(HTTP, <<"bz1244bucket">>, undefined, <<"value">>)),
+                 rt:httpc_write(HTTP, <<"bz1244bucket">>, undefined, <<"value">>)),
 
     lager:info("Checking that postcommit fires."),
-    ?assertMatch(ok, rt_http:httpc_write(HTTP, <<"postcommit">>, <<"key">>, <<"value">>)),
+    ?assertMatch(ok, rt:httpc_write(HTTP, <<"postcommit">>, <<"key">>, <<"value">>)),
 
     receive
         {wrote, _Bucket, _Key}=Msg ->

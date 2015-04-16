@@ -29,10 +29,10 @@
 -define(FOO, <<"foo">>).
 
 confirm() ->
-    Nodes = rt_cluster:build_cluster(3),
+    Nodes = rt:build_cluster(3),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
-    PBPid = rt_pb:pbc(hd(Nodes)),
+    PBPid = rt:pbc(hd(Nodes)),
 
     [put_an_object(PBPid, N) || N <- lists:seq(0, 200)],
 

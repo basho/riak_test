@@ -32,7 +32,7 @@ confirm() ->
     Node = hd(Nodes),
 
     lager:info("Creating/activating 'strong' bucket type"),
-    rt_bucket_types:create_and_activate_bucket_type(Node, <<"strong">>,
+    rt:create_and_activate_bucket_type(Node, <<"strong">>,
                                        [{consistent, true}, {n_val, NVal}]),
     ensemble_util:wait_until_stable(Node, NVal),
     Bucket = {<<"strong">>, <<"test">>},
@@ -48,20 +48,20 @@ confirm() ->
     PartitionedVN = lists:sublist(Other, Minority),
     Partitioned = [VNode || {_, VNode} <- PartitionedVN],
 
-    PBC = rt_pb:pbc(Node),
+    PBC = rt:pbc(Node),
 
     lager:info("Partitioning quorum minority: ~p", [Partitioned]),
-    Part = rt_node:partition(Nodes -- Partitioned, Partitioned),
+    Part = rt:partition(Nodes -- Partitioned, Partitioned),
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [manual]),
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Writing ~p consistent keys", [1000]),
-    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
 
     lager:info("Read keys to verify they exist"),
-    [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
+    [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     lager:info("Healing partition"),
-    rt_node:heal(Part),
+    rt:heal(Part),
 
     pass.

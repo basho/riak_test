@@ -39,9 +39,9 @@ confirm() ->
     fullsync_enabled_and_started().
 
 fullsync_enabled_and_started() ->
-    rt_config:set_advanced_conf(all, ?CONF),
+    rt:set_advanced_conf(all, ?CONF),
 
-    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
     rt:wait_for_cluster_service(BNodes, riak_repl),
@@ -102,7 +102,7 @@ fullsync_enabled_and_started() ->
             fail
     end,
 
-    rt_cluster:clean_cluster(ANodes),
-    rt_cluster:clean_cluster(BNodes),
+    rt:clean_cluster(ANodes),
+    rt:clean_cluster(BNodes),
 
     Result.

@@ -27,8 +27,8 @@
 
 confirm() ->
     %% Bring up a small cluster
-    %% Config = [{riak_snmp, [{polling_interval, 1000}]}],
-    [Node1] = rt_cluster:deploy_nodes(1),
+    Config = [{riak_snmp, [{polling_interval, 1000}]}],
+    [Node1] = rt:deploy_nodes(1, Config),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
 
     Keys = [{vnodeGets,<<"vnode_gets">>},
@@ -60,8 +60,8 @@ confirm() ->
 
     lager:info("Doing some reads and writes to record some stats."),
 
-    rt_systest:write(Node1, 10),
-    rt_systest:read(Node1, 10),
+    rt:systest_write(Node1, 10),
+    rt:systest_read(Node1, 10),
 
     lager:info("Waiting for HTTP Stats to be non-zero"),
     ?assertEqual(ok, 

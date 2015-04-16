@@ -169,32 +169,32 @@ get_console_stats(Node) ->
     %% Temporary workaround: use os:cmd/1 when in 'rtdev' (needs some cheats
     %% in order to find the right path etc.)
     try
-  Stats =
-      case rt_config:get(rt_harness) of
-    rtdev ->
-        N = rtdev:node_id(Node),
-        Path = rtdev:relpath(rtdev:node_version(N)),
-        Cmd = rtdev:riak_admin_cmd(Path, N, ["status"]),
-        lager:info("Cmd = ~p~n", [Cmd]),
-        os:cmd(Cmd);
-    _ ->
-        rt:admin(Node, "status")
-      end,
-  [S || {_,_} = S <-
-      [list_to_tuple(re:split(L, " : ", []))
-       || L <- tl(tl(string:tokens(Stats, "\n")))]]
+	Stats =
+	    case rt_config:get(rt_harness) of
+		rtdev ->
+		    N = rtdev:node_id(Node),
+		    Path = rtdev:relpath(rtdev:node_version(N)),
+		    Cmd = rtdev:riak_admin_cmd(Path, N, ["status"]),
+		    lager:info("Cmd = ~p~n", [Cmd]),
+		    os:cmd(Cmd);
+		_ ->
+		    rt:admin(Node, "status")
+	    end,
+	[S || {_,_} = S <-
+		  [list_to_tuple(re:split(L, " : ", []))
+		   || L <- tl(tl(string:tokens(Stats, "\n")))]]
     catch
-  error:Reason ->
-      lager:info("riak-admin status ERROR: ~p~n~p~n",
-           [Reason, erlang:get_stacktrace()]),
-      []
+	error:Reason ->
+	    lager:info("riak-admin status ERROR: ~p~n~p~n",
+		       [Reason, erlang:get_stacktrace()]),
+	    []
     end.
 
 compare_http_and_console_stats(Stats1, Stats2) ->
     OnlyInHttp = [S || {K,_} = S <- Stats1,
-           not lists:keymember(K, 1, Stats2)],
+		       not lists:keymember(K, 1, Stats2)],
     OnlyInAdmin = [S || {K,_} = S <- Stats2,
-      not lists:keymember(K, 1, Stats1)],
+			not lists:keymember(K, 1, Stats1)],
     maybe_log_stats_keys(OnlyInHttp, "Keys missing from riak-admin"),
     maybe_log_stats_keys(OnlyInAdmin, "Keys missing from HTTP"),
     ?assertEqual([], OnlyInHttp),

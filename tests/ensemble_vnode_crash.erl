@@ -35,7 +35,7 @@ confirm() ->
     ensemble_util:wait_until_stable(Node, NVal),
 
     lager:info("Creating/activating 'strong' bucket type"),
-    rt_bucket_types:create_and_activate_bucket_type(Node, <<"strong">>,
+    rt:create_and_activate_bucket_type(Node, <<"strong">>,
                                        [{consistent, true}, {n_val, NVal}]),
     ensemble_util:wait_until_stable(Node, NVal),
     Bucket = {<<"strong">>, <<"test">>},
@@ -46,13 +46,13 @@ confirm() ->
     PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
     {{Key1Idx, Key1Node}, _} = hd(PL),
 
-    PBC = rt_pb:pbc(Node),
+    PBC = rt:pbc(Node),
 
     lager:info("Writing ~p consistent keys", [1000]),
-    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
 
     lager:info("Read keys to verify they exist"),
-    [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
+    [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     %% Setting up intercept to ensure that
     %% riak_kv_ensemble_backend:handle_down/4 gets called when a vnode or vnode
@@ -79,7 +79,7 @@ confirm() ->
     lager:info("Wait for stable ensembles"),
     ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Re-reading keys"),
-    [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
+    [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     lager:info("Killing Vnode Proxy for Key1"),
     Proxy = rpc:call(Key1Node, riak_core_vnode_proxy, reg_name, [riak_kv_vnode,
@@ -95,7 +95,7 @@ confirm() ->
     lager:info("Wait for stable ensembles"),
     ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Re-reading keys"),
-    [rt_pb:pbc_read(PBC, Bucket, Key) || Key <- Keys],
+    [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     pass.
 

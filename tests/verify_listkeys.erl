@@ -138,11 +138,11 @@ list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass
     lager:info("Listing keys using undefined bucket type ~p on ~p using ~p. Attempt #~p",
                [?UNDEFINED_BUCKET_TYPE, Node, Interface, Attempt]),
     case ShouldPass of
-    true -> ok;
-    _ ->
-        {Status, Message} = Mod:list_keys(Pid, { ?UNDEFINED_BUCKET_TYPE, Bucket }),
-        ?assertEqual(error, Status),
-        ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
+	true -> ok;
+	_ ->
+	    {Status, Message} = Mod:list_keys(Pid, { ?UNDEFINED_BUCKET_TYPE, Bucket }),
+	    ?assertEqual(error, Status),
+	    ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
     end,
 
     case Interface of
@@ -195,30 +195,30 @@ list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
 
 list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass) ->
     case Interface of
-    pbc ->
-        Pid = rt:pbc(Node),
-        Mod = riakc_pb_socket;
-    http ->
-        Pid = rt:httpc(Node),
-        Mod = rhc
+	pbc ->
+	    Pid = rt:pbc(Node),
+	    Mod = riakc_pb_socket;
+	http ->
+	    Pid = rt:httpc(Node),
+	    Mod = rhc
     end,
 
     lager:info("Listing buckets on ~p for undefined bucket type ~p using ~p.  Attempt ~p.",
-           [Node, ?UNDEFINED_BUCKET_TYPE, Interface, Attempt]),
+	       [Node, ?UNDEFINED_BUCKET_TYPE, Interface, Attempt]),
 
     case ShouldPass of
-    true -> ok;
-    _ ->
-        {Status, Message} = Mod:list_buckets(Pid, ?UNDEFINED_BUCKET_TYPE, []),
-        lager:info("Received status ~p and message ~p", [Status, Message]),
-        ?assertEqual(error, Status),
-        ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
+	true -> ok;
+	_ ->
+	    {Status, Message} = Mod:list_buckets(Pid, ?UNDEFINED_BUCKET_TYPE, []),
+	    lager:info("Received status ~p and message ~p", [Status, Message]),
+	    ?assertEqual(error, Status),
+	    ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
     end,
 
     case Interface of
-    pbc ->
-        riakc_pb_socket:stop(Pid);
-    _ -> ok
+	pbc ->
+	    riakc_pb_socket:stop(Pid);
+	_ -> ok
     end.
 
 assert_equal(Expected, Actual) ->
@@ -247,3 +247,4 @@ check_a_node(Node, Interface, ShouldPass) ->
      || Attempt <- [1,2,3] ], 
     [list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass)
      || Attempt <- [1,2,3] ].
+

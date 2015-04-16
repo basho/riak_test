@@ -69,7 +69,7 @@ config_aae(true) ->
                {anti_entropy_tick, 100},
                {anti_entropy, {on, []}},
                {anti_entropy_timeout, 5000},
-           {storage_backend, riak_kv_memory_backend}]};
+	       {storage_backend, riak_kv_memory_backend}]};
 config_aae(false) ->
     {riak_kv, [{anti_entropy, {off, []}}]}.
 

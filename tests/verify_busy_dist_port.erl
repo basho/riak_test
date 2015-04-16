@@ -47,7 +47,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    [Node1, Node2] = rt_cluster:build_cluster(2),
+    [Node1, Node2] = rt:build_cluster(2),
     lager:info("deployed 2 nodes"),
 
     rt:load_modules_on_nodes([cause_bdp, verify_bdp_event_handler,

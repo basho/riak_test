@@ -59,7 +59,7 @@
 confirm() ->
 
     %% test requires allow_mult=false
-    rt_config:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     NumNodes = rt_config:get(num_nodes, 6),
     ClusterASize = rt_config:get(cluster_a_size, (NumNodes div 2)),
@@ -369,9 +369,9 @@ test_connection(Left, Right, false) ->
 test_connection({Node1, Config1}, {Node2, Config2}) ->
     repl_util:disconnect_cluster(Node1, "B"),
     repl_util:wait_for_disconnect(Node1, "B"),
-    rt_config:update_app_config(Node2, Config2),
+    rt:update_app_config(Node2, Config2),
     rt:wait_until_pingable(Node2),
-    rt_config:update_app_config(Node1, Config1),
+    rt:update_app_config(Node1, Config1),
     rt:wait_until_pingable(Node1),
     rt:wait_for_service(Node1, [riak_kv, riak_repl]),
     rt:wait_for_service(Node2, [riak_kv, riak_repl]),

@@ -33,7 +33,7 @@ confirm() ->
     vnode_util:load(Nodes),
 
     lager:info("Creating/activating 'strong' bucket type"),
-    rt_bucket_types:create_and_activate_bucket_type(Node, <<"strong">>,
+    rt:create_and_activate_bucket_type(Node, <<"strong">>,
                                        [{consistent, true}, {n_val, NVal}]),
     ensemble_util:wait_until_stable(Node, NVal),
 
@@ -97,7 +97,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     {AfterVN,   _}      = lists:split(NumValid,   Valid3),
 
     io:format("PL: ~p~n", [PL]),
-    PBC = rt_pb:pbc(Node),
+    PBC = rt:pbc(Node),
     Options = [{timeout, 2000}],
 
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [manual]),
@@ -107,11 +107,11 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
 
     %% Write data while minority is partitioned
     lager:info("Writing ~p consistent keys", [1000]),
-    [ok = rt_pb:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
 
     lager:info("Read keys to verify they exist"),
-    [rt_pb:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys],
-    rt_node:heal(Part),
+    [rt:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys],
+    rt:heal(Part),
 
     %% Suspend desired number of valid vnodes
     S1 = [vnode_util:suspend_vnode(VNode, VIdx) || {VIdx, VNode} <- SuspendVN],
@@ -133,7 +133,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Checking that key results match scenario"),
-    [rt_pb:pbc_read_check(PBC, Bucket, Key, Expect, Options) || Key <- Keys],
+    [rt:pbc_read_check(PBC, Bucket, Key, Expect, Options) || Key <- Keys],
 
     lager:info("Re-enabling AAE"),
     rpc:multicall(Nodes, riak_kv_entropy_manager, enable, []),
@@ -150,7 +150,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
             ok;
         false ->
             lager:info("Re-reading keys to verify they exist"),
-            [rt_pb:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys]
+            [rt:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys]
     end,
 
     lager:info("Scenario passed"),

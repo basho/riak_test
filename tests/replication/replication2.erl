@@ -376,7 +376,7 @@ network_partition_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 %%        Verify that the original real time keys did not replicate
 %%        Verify that the No replication bucket didn't replicate.
 bucket_sync_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
-
+    
     TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     FullsyncOnly = <<TestHash/binary, "-fullsync_only">>,
     RealtimeOnly = <<TestHash/binary, "-realtime_only">>,

@@ -8,7 +8,7 @@
 confirm() ->
     application:start(inets),
     lager:info("Deploy some nodes"),
-    Nodes = rt_cluster:build_cluster(4),
+    Nodes = rt:build_cluster(4),
 
     %% calculate the preflist for foo/bar
     {ok, Ring} = rpc:call(hd(Nodes), riak_core_ring_manager, get_my_ring, []),
@@ -68,7 +68,7 @@ confirm() ->
     ?assertMatch({ok, _},
         C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
 
-    rt_node:stop_and_wait(Node),
+    rt:stop_and_wait(Node),
 
     %% there's now a fallback in the preflist, so PR/PW won't be satisfied
     %% anymore
@@ -98,7 +98,7 @@ confirm() ->
     ?assertEqual({error, timeout}, C:put(Obj, [{pw, quorum}])),
 
     %% restart the node
-    rt_node:start_and_wait(Node),
+    rt:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
 
     %% we can make quorum again
@@ -110,8 +110,8 @@ confirm() ->
     ?assertEqual({error, timeout}, C:put(Obj, [{pw, all}])),
 
     %% reboot the node
-    rt_node:stop_and_wait(Node2),
-    rt_node:start_and_wait(Node2),
+    rt:stop_and_wait(Node2),
+    rt:start_and_wait(Node2),
     rt:wait_for_service(Node2, riak_kv),
 
     %% everything is happy again

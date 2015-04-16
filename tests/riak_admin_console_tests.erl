@@ -154,7 +154,7 @@ riak_admin_tests(Node) ->
 confirm() ->
     %% Deploy a node to test against
     lager:info("Deploy node to test riak command line"),
-    [Node] = rt_cluster:deploy_nodes(1),
+    [Node] = rt:deploy_nodes(1),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
     rt_intercept:add(Node,
                      {riak_core_console,
@@ -233,7 +233,7 @@ confirm() ->
 check_admin_cmd(Node, Cmd) ->
     S = string:tokens(Cmd, " "),
     lager:info("Testing riak-admin ~s on ~s", [Cmd, Node]),
-    {ok, Out} = rt_cmd_line:admin(Node, S),
+    {ok, Out} = rt:admin(Node, S),
     ?assertEqual("pass", Out).
 
 %% Recently we've started calling riak_core_console twice from the
@@ -242,5 +242,5 @@ check_admin_cmd(Node, Cmd) ->
 check_admin_cmd_2x(Node, Cmd) ->
     S = string:tokens(Cmd, " "),
     lager:info("Testing riak-admin ~s on ~s", [Cmd, Node]),
-    {ok, Out} = rt_cmd_line:admin(Node, S),
+    {ok, Out} = rt:admin(Node, S),
     ?assertEqual("passpass", Out).

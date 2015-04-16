@@ -45,9 +45,9 @@ simple_test() ->
               {rt_heartbeat_timeout, ?HB_TIMEOUT}
              ]}],
 
-    rt_config:set_advanced_conf(all, Conf),
+    rt:set_advanced_conf(all, Conf),
 
-    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
     rt:wait_for_cluster_service(BNodes, riak_repl),
@@ -114,9 +114,9 @@ disconnect_test() ->
               {rt_heartbeat_timeout, ?HB_TIMEOUT}
              ]}],
 
-    rt_config:set_advanced_conf(all, Conf),
+    rt:set_advanced_conf(all, Conf),
 
-    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
@@ -159,8 +159,8 @@ disconnect_test() ->
     lager:info("Verifying disconnect from B to A."),
     [verify_disconnect(Node, "A") || Node <- BNodes],
 
-    rt_cluster:clean_cluster(ANodes),
-    rt_cluster:clean_cluster(BNodes),
+    rt:clean_cluster(ANodes),
+    rt:clean_cluster(BNodes),
 
     pass.
 
@@ -182,9 +182,9 @@ error_cleanup_test() ->
               {cm_cancellation_interval, 5 * 1000}
              ]}],
 
-    rt_config:set_advanced_conf(all, Conf),
+    rt:set_advanced_conf(all, Conf),
 
-    [ANodes, BNodes] = rt_cluster:build_clusters([3, 3]),
+    [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
@@ -236,8 +236,8 @@ error_cleanup_test() ->
     lager:info("Verifying connection from A to B"),
     [verify_connectivity(Node, "B") || Node <- ANodes],
 
-    rt_cluster:clean_cluster(ANodes),
-    rt_cluster:clean_cluster(BNodes),
+    rt:clean_cluster(ANodes),
+    rt:clean_cluster(BNodes),
 
     pass.
 

@@ -97,10 +97,10 @@ make_replicate_test_fun(From, To) ->
 make_clusters() ->
     Conf = [{riak_repl, [{fullsync_on_connect, false},
                          {fullsync_interval, disabled}]},
-           {riak_core, [{default_bucket_props,
-                         [{dvv_enabled, true},
-                          {allow_mult, true}]}]}],
-    Nodes = rt_cluster:deploy_nodes(6, Conf),
+            {riak_core, [{default_bucket_props,
+                          [{dvv_enabled, true},
+                           {allow_mult, true}]}]}],
+    Nodes = rt:deploy_nodes(6, Conf, [riak_kv, riak_repl]),
     {ClusterA, ClusterB} = lists:split(3, Nodes),
     A = make_cluster(ClusterA, "A"),
     B = make_cluster(ClusterB, "B"),
@@ -110,7 +110,7 @@ make_cluster(Nodes, Name) ->
     repl_util:make_cluster(Nodes),
     repl_util:name_cluster(hd(Nodes), Name),
     repl_util:wait_until_leader_converge(Nodes),
-    C = rt_pb:pbc(hd(Nodes)),
+    C = rt:pbc(hd(Nodes)),
     riakc_pb_socket:set_options(C, [queue_if_disconnected]),
     {C, Nodes}.
 
