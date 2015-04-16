@@ -100,10 +100,12 @@
          post_result/2,
          product/1,
          priv_dir/0,
+         random_sublist/2,
          remove/2,
          riak/2,
          riak_repl/2,
          rpc_get_env/2,
+         select_random/1,
          set_backend/1,
          set_backend/2,
          set_conf/2,
@@ -1132,7 +1134,7 @@ product(Node) ->
        HasRiak -> riak;
        true -> unknown
     end.
-   
+
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
     plan_and_commit(Node1);
@@ -1897,12 +1899,33 @@ is_control_gui_route_loaded(Routes) ->
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
 
+-spec select_random([any()]) -> any().
+select_random(List) ->
+    Length = length(List),
+    Idx = random:uniform(Length),
+    lists:nth(Idx, List).
+
+%% @doc Returns a random element from a given list.
+-spec random_sublist([any()], integer()) -> [any()].
+random_sublist(List, N) ->
+    % Properly seeding the process.
+    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
+    random:seed({A, B, C}),
+    % Assign a random value for each element in the list.
+    List1 = [{random:uniform(), E} || E <- List],
+    % Sort by the random number.
+    List2 = lists:sort(List1),
+    % Take the first N elements.
+    List3 = lists:sublist(List2, N),
+    % Remove the random numbers.
+    [ E || {_,E} <- List3].
+
 -ifdef(TEST).
 
 verify_product(Applications, ExpectedApplication) ->
     ?_test(begin
                meck:new(rpc, [unstick]),
-               meck:expect(rpc, call, fun([], application, which_applications, []) -> 
+               meck:expect(rpc, call, fun([], application, which_applications, []) ->
                                            Applications end),
                ?assertMatch(ExpectedApplication, product([])),
                meck:unload(rpc)
@@ -1917,5 +1940,5 @@ product_test_() ->
       verify_product([riak_repl, riak_kv], riak_ee),
       verify_product([riak_kv], riak),
       verify_product([kernel], unknown)]}.
-   
+
 -endif.
