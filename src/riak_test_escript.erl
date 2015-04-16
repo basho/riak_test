@@ -26,100 +26,38 @@
 -export([main/1]).
 -export([add_deps/1]).
 
--define(HEADER, [<<"Test">>, <<"Result">>, <<"Reason">>, <<"Test Duration">>]).
-
 main(Args) ->
     %% TODO Should we use clique? -jsb
     %% Parse command line arguments ...
-    {ParsedArgs, HarnessArgs, Tests, NonTests} = parse_args(Args),
+    {ParsedArgs, _NonOptionArgs} = parse_args(Args),
+    load_initial_config(ParsedArgs),
 
     %% Configure logging ...
     OutDir = proplists:get_value(outdir, ParsedArgs, "log"),
     ensure_dir(OutDir),
-
     lager_setup(OutDir),
-    
+
+    {Tests, NonTests} = generate_test_lists(ParsedArgs),
+
     ok = prepare(ParsedArgs, Tests, NonTests),
-    Results = execute(Tests, ParsedArgs, HarnessArgs),
+    Results = execute(Tests, OutDir, ParsedArgs),
     finalize(Results, ParsedArgs).
 
-prepare(ParsedArgs, Tests, NonTests) ->
-    lager:notice("Test to run: ~p", [[rt_test_plan:get_module(Test) || Test <- Tests]]),
-    case NonTests of
-        [] ->
-            ok;
+% @doc Validate the command-line options
+parse_args(Args) ->
+    validate_args(getopt:parse(cli_options(), Args)).
+
+validate_args({ok, {[], _}}) ->
+    print_help();
+validate_args({ok, {ParsedArgs, NonOptionArgs}}) ->
+    case proplists:is_defined(help, ParsedArgs) of
+        true ->
+            print_help();
         _ ->
-            lager:notice("Test not to run: ~p", [[rt_test_plan:get_module(Test) || Test <- NonTests]])
-    end,
-    ok = erlang_setup(ParsedArgs),
-    test_setup().
-
-execute(TestPlans, ParsedArgs, _HarnessArgs) ->
-    OutDir = proplists:get_value(outdir, ParsedArgs),
-    Report = report(ParsedArgs),
-    UpgradeList = upgrade_list(
-                    proplists:get_value(upgrade_path, ParsedArgs)),
-
-    {ok, Executor} = riak_test_executor:start_link(TestPlans,
-                                                   OutDir,
-                                                   Report,
-                                                   UpgradeList,
-                                                   self()),
-    wait_for_results(Executor, [], length(TestPlans), 0).
-
-
-report_results(Results, Verbose) ->
-    %% TODO: Good place to also do giddyup reporting and provide a
-    %% place for extending to any other reporting sources that might
-    %% be useful.
-
-    ModuleResults = [{rt_test_plan:get_module(TestPlan), PassFail, Duration} || {TestPlan, PassFail, Duration} <- Results],
-    print_summary(ModuleResults, undefined, Verbose),
-    ok.
-
-    %% TestResults = run_tests(Tests, Outdir, Report, HarnessArgs),
-    %% lists:filter(fun results_filter/1, TestResults).
-
-%% run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
-%%     rt_cover:maybe_start(Test),
-%%     SingleTestResult = riak_test_runner:run(Test, Outdir, TestMetaData, HarnessArgs),
-
-    %% case NumTests of
-    %%     1 -> keep_them_up;
-    %%     _ -> rt_cluster:teardown()
-    %% end,
-
-%% TODO: Do this in the test runner
-%%     CoverDir = rt_config:get(cover_output, "coverage"),
-%% CoverFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
-%% publish_report(SingleTestResult, CoverFile, Report),
-
-%%     [{coverdata, CoverFile} | SingleTestResult].
-
-%% TODO: Use `TestCount' and `Completed' to display progress output
-wait_for_results(Executor, TestResults, TestCount, Completed) ->
-    receive
-        {Executor, {test_result, Result}} ->
-            wait_for_results(Executor, [Result | TestResults], TestCount, Completed+1);
-        {Executor, done} ->
-            rt_cover:stop(),
-            TestResults;
-        _ ->
-            wait_for_results(Executor, TestResults, TestCount, Completed)
-    end.
-
-finalize(TestResults, Args) ->
-    %% TODO: Fixup coverage reporting
-    %% [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) ||
-    %%     R <- TestResults],
-    %% CoverDir = rt_config:get(cover_output, "coverage"),
-    %% Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
-    Verbose = proplists:is_defined(verbose, Args),
-    report_results(TestResults, Verbose),
-
-    Teardown = not proplists:get_value(keep, Args, false),
-    maybe_teardown(Teardown, TestResults),
-    ok.
+            {ParsedArgs, NonOptionArgs}
+    end;
+validate_args(_) ->
+    print_help().
 
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
 cli_options() ->
@@ -136,7 +74,7 @@ cli_options() ->
  {backend,                $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
  {upgrade_path,           $u, "upgrade-path", atom,   "comma-separated list representing an upgrade path (e.g. riak-1.3.4,riak_ee-1.4.12,riak_ee-2.0.0)"},
  {keep,            undefined, "keep",     boolean,    "do not teardown cluster"},
- {continue_on_fail,undefined, "continue", boolean,    "continues executing tests on failure"},
+ {continue_on_fail,       $n, "continue", boolean,    "continues executing tests on failure"},
  {report,                 $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1404-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
  {file,                   $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
 ].
@@ -144,6 +82,135 @@ cli_options() ->
 print_help() ->
     getopt:usage(cli_options(), escript:script_name()),
     halt(0).
+
+report_platform(ParsedArgs) ->
+    case proplists:get_value(report, ParsedArgs, undefined) of
+        undefined ->
+            undefined;
+        "config" ->
+            rt_config:get(giddyup_platform, undefined);
+        R ->
+            R
+    end.
+
+%% @doc Print help string if it's specified, otherwise parse the arguments
+generate_test_lists(ParsedArgs) ->
+    %% Have to load the `riak_test' config prior to assembling the
+    %% test metadata
+
+    TestData = compose_test_data(ParsedArgs),
+    Backend = proplists:get_value(backend, ParsedArgs, bitcask),
+    {Tests, NonTests} = wrap_test_in_test_plan(report_platform(ParsedArgs), Backend, TestData),
+    Offset = rt_config:get(offset, undefined),
+    Workers = rt_config:get(workers, undefined),
+    shuffle_tests(Tests, NonTests, Offset, Workers).
+
+%% @doc Set values in the configuration with values specified on the command line
+maybe_override_setting(Argument, Value, Arguments) ->
+    maybe_override_setting(proplists:is_defined(Argument, Arguments), Argument,
+        Value, Arguments).
+
+maybe_override_setting(true, Argument, Value, Arguments) ->
+    rt_config:set(Argument, proplists:get_value(Argument, Arguments, Value));
+maybe_override_setting(false, _Argument, _Value, _Arguments) ->
+    ok.
+
+load_initial_config(ParsedArgs) ->
+    %% Loads application defaults
+    application:load(riak_test),
+
+    %% Loads from ~/.riak_test.config
+    rt_config:load(proplists:get_value(config, ParsedArgs),
+        proplists:get_value(file, ParsedArgs)),
+
+    %% Override any command-line settings in config
+    maybe_override_setting(continue_on_fail, true, ParsedArgs).
+
+%% @doc Shuffle the order in which tests are scheduled
+shuffle_tests([], _, _, _) ->
+    lager:error("No tests are scheduled to run~n"),
+    halt(1);
+shuffle_tests(Tests, NonTests, undefined, _) ->
+    {Tests, NonTests};
+shuffle_tests(Tests, NonTests, _, undefined) ->
+    {Tests, NonTests};
+shuffle_tests(Tests, NonTests, Offset, Workers) ->
+    TestCount = length(Tests),
+    %% Avoid dividing by zero, computers hate that
+    Denominator = case Workers rem (TestCount+1) of
+                      0 -> 1;
+                      D -> D
+                  end,
+    ActualOffset = ((TestCount div Denominator) * Offset) rem (TestCount+1),
+    {TestA, TestB} = lists:split(ActualOffset, Tests),
+    lager:info("Offsetting ~b tests by ~b (~b workers, ~b offset)",
+        [TestCount, ActualOffset, Workers, Offset]),
+    {TestB ++ TestA, NonTests}.
+
+prepare(ParsedArgs, Tests, NonTests) ->
+    lager:notice("Test to run: ~p", [[rt_test_plan:get_module(Test) || Test <- Tests]]),
+    case NonTests of
+        [] ->
+            ok;
+        _ ->
+            lager:notice("Test not to run: ~p", [[rt_test_plan:get_module(Test) || Test <- NonTests]])
+    end,
+    ok = erlang_setup(ParsedArgs),
+    test_setup().
+
+execute(TestPlans, OutDir, ParsedArgs) ->
+    UpgradeList = upgrade_list(
+                    proplists:get_value(upgrade_path, ParsedArgs)),
+
+    {ok, Executor} = riak_test_executor:start_link(TestPlans,
+                                                   OutDir,
+                                                   report_platform(ParsedArgs),
+                                                   UpgradeList,
+                                                   self()),
+    wait_for_results(Executor, [], length(TestPlans), 0).
+
+%% TestResults = run_tests(Tests, Outdir, Report, HarnessArgs),
+%% lists:filter(fun results_filter/1, TestResults).
+
+%% run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
+%%     rt_cover:maybe_start(Test),
+%%     SingleTestResult = riak_test_runner:run(Test, Outdir, TestMetaData, HarnessArgs),
+
+%% case NumTests of
+%%     1 -> keep_them_up;
+%%     _ -> rt_cluster:teardown()
+%% end,
+
+%% TODO: Do this in the test runner
+%%     CoverDir = rt_config:get(cover_output, "coverage"),
+%% CoverFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
+%% publish_report(SingleTestResult, CoverFile, Report),
+
+%%     [{coverdata, CoverFile} | SingleTestResult].
+
+%% TODO: Use `TestCount' and `Completed' to display progress output
+wait_for_results(Executor, TestResults, TestCount, Completed) ->
+    receive
+        {_Executor, {test_result, Result}} ->
+            wait_for_results(Executor, [Result | TestResults], TestCount, Completed+1);
+        {_Executor, done} ->
+            rt_cover:stop(),
+            TestResults;
+        _ ->
+            wait_for_results(Executor, TestResults, TestCount, Completed)
+    end.
+
+finalize(TestResults, Args) ->
+    %% TODO: Fixup coverage reporting
+    %% [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) ||
+    %%     R <- TestResults],
+    %% CoverDir = rt_config:get(cover_output, "coverage"),
+    %% Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
+    %% Verbose = proplists:is_defined(verbose, Args),
+
+    Teardown = not proplists:get_value(keep, Args, false),
+    maybe_teardown(Teardown, TestResults),
+    ok.
 
 add_deps(Path) ->
     lager:debug("Adding dep path ~p", [Path]),
@@ -178,83 +245,6 @@ upgrade_list(undefined) ->
     undefined;
 upgrade_list(Path) ->
     string:tokens(Path, ",").
-
-report(ParsedArgs) ->
-    case proplists:get_value(report, ParsedArgs, undefined) of
-        undefined ->
-            undefined;
-        "config" ->
-            rt_config:get(giddyup_platform, undefined);
-        R ->
-            R
-    end.
-
-parse_args(Args) ->
-    help_or_parse_args(getopt:parse(cli_options(), Args)).
-
-%% @doc Print help string if it's specified, otherwise parse the arguments
-help_or_parse_args({ok, {[], _}}) ->
-    print_help();
-help_or_parse_args({ok, {ParsedArgs, HarnessArgs}}) ->
-    help_or_parse_tests(ParsedArgs,
-                        HarnessArgs,
-                        lists:member(help, ParsedArgs));
-help_or_parse_args(_) ->
-    print_help().
-
-help_or_parse_tests(_, _, true) ->
-    print_help();
-help_or_parse_tests(ParsedArgs, HarnessArgs, false) ->
-    %% Have to load the `riak_test' config prior to assembling the
-    %% test metadata
-    load_initial_config(ParsedArgs),
-
-    maybe_override_setting(continue_on_fail, true, ParsedArgs),
-
-    TestData = compose_test_data(ParsedArgs),
-    Backend = proplists:get_value(backend, ParsedArgs, bitcask),
-    {Tests, NonTests} = wrap_test_in_test_plan(report(ParsedArgs), Backend, TestData),
-    Offset = rt_config:get(offset, undefined),
-    Workers = rt_config:get(workers, undefined),
-    shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, Offset, Workers).
-
-maybe_override_setting(Argument, Value, Arguments) ->
-    maybe_override_setting(proplists:is_defined(Argument, Arguments), Argument, 
-                           Value, Arguments).
-
-maybe_override_setting(true, Argument, Value, Arguments) ->
-    rt_config:set(Argument, proplists:get_value(Argument, Arguments, Value));
-maybe_override_setting(false, _Argument, _Value, _Arguments) ->
-    ok.
-
-load_initial_config(ParsedArgs) ->
-    %% Loads application defaults
-    application:load(riak_test),
-
-    %% Loads from ~/.riak_test.config
-    rt_config:load(proplists:get_value(config, ParsedArgs),
-                   proplists:get_value(file, ParsedArgs)).
-
-shuffle_tests(_, _, [], _, _, _) ->
-    io:format("No tests are scheduled to run~n"),
-    lager:error("No tests are scheduled to run~n"),
-    halt(1);
-shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, undefined, _) ->
-    {ParsedArgs, HarnessArgs, Tests, NonTests};
-shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, _, undefined) ->
-    {ParsedArgs, HarnessArgs, Tests, NonTests};
-shuffle_tests(ParsedArgs, HarnessArgs, Tests, NonTests, Offset, Workers) ->
-    TestCount = length(Tests),
-    %% Avoid dividing by zero, computers hate that
-    Denominator = case Workers rem (TestCount+1) of
-                      0 -> 1;
-                      D -> D
-                  end,
-    ActualOffset = ((TestCount div Denominator) * Offset) rem (TestCount+1),
-    {TestA, TestB} = lists:split(ActualOffset, Tests),
-    lager:info("Offsetting ~b tests by ~b (~b workers, ~b offset)",
-               [TestCount, ActualOffset, Workers, Offset]),
-    {ParsedArgs, HarnessArgs, TestB ++ TestA, NonTests}.
 
 erlang_setup(_ParsedArgs) ->
     register(riak_test, self()),
@@ -479,98 +469,6 @@ parse_webhook(Props) ->
             lager:error("Invalid configuration for webhook : ~p", Props),
             undefined
     end.
-
-test_summary_format_time(Milliseconds) ->
-    Mills = trunc(((Milliseconds / 1000000) - (Milliseconds div 1000000)) * 1000000),
-    TotalSecs = (Milliseconds - Mills) div 1000000,
-    TotalMins = TotalSecs div 60,
-    Hours = TotalSecs div 3600,
-    Secs = TotalSecs - (TotalMins * 60),
-    Mins = TotalMins - (Hours * 60),
-    list_to_binary(io_lib:format("~ph ~pm ~p.~ps", [Hours, Mins, Secs, Mills])).
-
-
-test_summary_fun({Test, pass, _}, {{Pass, _Fail, _Skipped}, Width}) ->
-    TestNameLength = length(atom_to_list(Test)),
-    UpdWidth =
-        case TestNameLength > Width of
-            true ->
-                TestNameLength;
-            false ->
-                Width
-        end,
-    {{Pass+1, _Fail, _Skipped}, UpdWidth};
-test_summary_fun({Test, {fail, _}, _}, {{_Pass, Fail, _Skipped}, Width}) ->
-    TestNameLength = length(atom_to_list(Test)),
-    UpdWidth =
-        case TestNameLength > Width of
-            true ->
-                TestNameLength;
-            false ->
-                Width
-        end,
-    {{_Pass, Fail+1, _Skipped}, UpdWidth};
-test_summary_fun({Test, {skipped, _}, _}, {{_Pass, _Fail, Skipped}, Width}) ->
-    TestNameLength = length(atom_to_list(Test)),
-    UpdWidth =
-        case TestNameLength > Width of
-            true ->
-                TestNameLength;
-            false ->
-                Width
-        end,
-    {{_Pass, _Fail, Skipped+1}, UpdWidth}.
-
-format_test_row({Test, Result, Duration}, _Width) ->
-    TestString = atom_to_list(Test),
-    case Result of
-        {Status, Reason} ->
-            [TestString, Status, Reason, test_summary_format_time(Duration)];
-        pass ->
-            [TestString, "pass", "N/A", test_summary_format_time(Duration)]
-    end.
-
-print_summary(TestResults, _CoverResult, Verbose) ->
-    %% TODO Log vs console output ... -jsb
-    io:format("~nTest Results:~n~n"),
-
-    {StatusCounts, Width} = lists:foldl(fun test_summary_fun/2, {{0,0,0}, 0}, TestResults),
-
-    case Verbose of
-        true ->
-            Rows =
-                [format_test_row(Result, Width) || Result <- TestResults],
-            %% TODO: Remove once clique table is fixed
-            [lager:debug("ROW ~p", [Row]) || Row <- Rows],
-            Table = clique_table:autosize_create_table(?HEADER, Rows),
-            io:format("~ts~n", [Table]);
-        false ->
-            ok
-    end,
-
-    {PassCount, FailCount, SkippedCount} = StatusCounts,
-    io:format("---------------------------------------------~n"),
-    io:format("~w Tests Failed~n", [FailCount]),
-    io:format("~w Tests Skipped~n", [SkippedCount]),
-    io:format("~w Tests Passed~n", [PassCount]),
-    Percentage = case PassCount == 0 andalso FailCount == 0 of
-        true -> 0;
-        false -> (PassCount / (PassCount + FailCount + SkippedCount)) * 100
-    end,
-    io:format("That's ~w% for those keeping score~n", [Percentage]),
-
-    %% case CoverResult of
-    %%     cover_disabled ->
-    %%         ok;
-    %%     {Coverage, AppCov} ->
-    %%         io:format("Coverage : ~.1f%~n", [Coverage]),
-    %%         [io:format("    ~s : ~.1f%~n", [App, Cov])
-    %%          || {App, Cov, _} <- AppCov]
-    %% end,
-    ok.
-
-test_name_width(Results) ->
-    lists:max([ length(X) || [X | _T] <- Results ]).
 
 backend_list(Backend) when is_atom(Backend) ->
     atom_to_list(Backend);

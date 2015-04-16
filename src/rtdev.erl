@@ -49,7 +49,8 @@
          set_conf/2,
          set_advanced_conf/2,
          rm_dir/1,
-         validate_config/1]).
+         validate_config/1,
+         get_node_logs/1]).
 
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -962,13 +963,30 @@ devpaths() ->
 %% versions() ->
 %%     proplists:get_keys(rt_config:get(rtdev_path)) -- [root].
 
-get_node_logs() ->
+% @doc Get the list of log files and config files and pass them back
+get_node_logs(DestDir) ->
     Root = filename:absname(?PATH),
     RootLen = length(Root) + 1, %% Remove the leading slash
-    [ begin
-          {ok, Port} = file:open(Filename, [read, binary]),
-          {lists:nthtail(RootLen, Filename), Port}
-      end || Filename <- filelib:wildcard(Root ++ "/*/dev*/log/*") ].
+    Fun = get_node_log_fun(DestDir, RootLen),
+    [ Fun(Filename) || Filename <- filelib:wildcard(Root ++ "/*/dev*/log/*") ++
+                                   filelib:wildcard(Root ++ "/*/dev*/etc/*.conf*") ].
+
+% @doc Either open a port for uploading each file to GiddyUp or
+%      Copy each file to a local directory
+get_node_log_fun(giddyup, RootLen) ->
+    fun(Filename) ->
+        {ok, Port} = file:open(Filename, [read, binary]),
+        {lists:nthtail(RootLen, Filename), Port}
+    end;
+get_node_log_fun(DestDir, RootLen) ->
+    DestRoot = filename:absname(DestDir),
+    lager:debug("Copying log files to ~p", [DestRoot]),
+    fun(Filename) ->
+        Target = filename:join([DestRoot, lists:nthtail(RootLen, Filename)]),
+        ok = filelib:ensure_dir(Target),
+        {ok, _BytesWritten} = file:copy(Filename, Target),
+        Filename
+    end.
 
 -type node_tuple() :: {list(), atom()}.
 

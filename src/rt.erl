@@ -64,7 +64,7 @@
          expect_in_log/2,
          get_deps/0,
          get_ip/1,
-         get_node_logs/0,
+         get_node_logs/1,
          get_replica/5,
          get_ring/1,
          get_version/0,
@@ -99,7 +99,6 @@
          pbc_put_file/4,
          pbc_really_deleted/3,
          pmap/2,
-         post_result/2,
          product/1,
          priv_dir/0,
          remove/2,
@@ -1363,10 +1362,11 @@ pmap(F, L) ->
 setup_harness(_Test, _Args) ->
     rt_harness:setup().
 
-%% @doc Downloads any extant log files from the harness's running
-%%   nodes.
-get_node_logs() ->
-    rt2:get_node_logs().
+%% @doc Copy all of the nodes' log files to a local dir or
+%% open a port to each file to upload to GiddyUp
+-spec(get_node_logs(string() | giddyup) -> list()).
+get_node_logs(DestDir) ->
+    rt2:get_node_logs(DestDir).
 
 check_ibrowse() ->
     rt2:check_ibrowse().

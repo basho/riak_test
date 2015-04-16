@@ -34,15 +34,17 @@
          new/1,
          get/2,
          get_module/1,
+         get_name/1,
          set/2,
          set/3]).
 
 -record(rt_test_plan_v1, {
     id=-1 :: integer(),
     module :: atom(),
-    project :: atom() | binary(),
+    project=rt_config:get_default_version_product() :: atom() | binary(),
     platform :: string(),
-    backend=riak_kv_bitcask_backend :: rt_properties2:storage_backend(),
+    version=rt_config:get_default_version_number() :: string(),
+    backend=bitcask :: atom(),
     upgrade_path=[] :: [rt_properties2:product_version()],
     properties :: rt_properties2:properties()
 }).
@@ -85,6 +87,15 @@ get(Field, TestPlan) ->
 -spec get_module(test_plan()) -> term() | {error, atom()}.
 get_module(TestPlan) ->
     get(module, TestPlan, validate_request(module, TestPlan)).
+
+% @doc Get the value of the name and backend from a test plan record. An error
+%% is returned if `TestPlan' is not a valid `rt_test_plan' record
+%% or if the field requested is not a valid field.
+-spec get_name(test_plan()) -> term() | {error, atom()}.
+get_name(TestPlan) ->
+    Module = get(module, TestPlan, validate_request(module, TestPlan)),
+    Backend = get(backend, TestPlan, validate_request(backend, TestPlan)),
+    atom_to_list(Module) ++ "-" ++ atom_to_list(Backend).
 
 %% @doc Set the value for a field in a test plan record. An error
 %% is returned if `TestPlan' is not a valid `rt_test_plan' record
@@ -190,6 +201,8 @@ field_index(project) ->
     ?RT_TEST_PLAN.project;
 field_index(platform) ->
     ?RT_TEST_PLAN.platform;
+field_index(version) ->
+    ?RT_TEST_PLAN.version;
 field_index(backend) ->
     ?RT_TEST_PLAN.backend;
 field_index(upgrade_path) ->

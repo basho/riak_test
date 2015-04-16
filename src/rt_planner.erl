@@ -144,7 +144,7 @@ number_of_non_runable_plans() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok.
 stop() ->
-    gen_server:call(?MODULE, stop).
+    gen_server:call(?MODULE, stop, infinity).
 
 %%%===================================================================
 %%% gen_server callbacks

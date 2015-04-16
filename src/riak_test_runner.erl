@@ -24,7 +24,7 @@
 -behavior(gen_fsm).
 
 %% API
--export([start/3,
+-export([start/4,
          send_event/2,
          stop/0]).
 
@@ -69,7 +69,8 @@
                 current_version :: string(),
                 remaining_versions :: [string()],
                 test_results :: [term()],
-                continue_on_fail :: boolean()}).
+                continue_on_fail :: boolean(),
+                reporter_pid :: pid()}).
 
 -deprecated([{metadata,0,next_major_release}]).
 
@@ -77,9 +78,9 @@
 %%% API
 %%%===================================================================
 
-%% @doc Start the test executor
-start(TestPlan, Properties, ContinueOnFail) ->
-    Args = [TestPlan, Properties, ContinueOnFail],
+%% @doc Start the test runner
+start(TestPlan, Properties, ContinueOnFail, ReporterPid) ->
+    Args = [TestPlan, Properties, ContinueOnFail, ReporterPid],
     gen_fsm:start_link(?MODULE, Args, []).
 
 send_event(Pid, Msg) ->
@@ -102,7 +103,7 @@ metadata() ->
 
 %% @doc Read the storage schedule and go to idle.
 %% compose_test_datum(Version, Project, undefined, undefined) ->
-init([TestPlan, Properties, ContinueOnFail]) ->
+init([TestPlan, Properties, ContinueOnFail, ReporterPid]) ->
     lager:debug("Started riak_test_runnner with pid ~p (continue on fail: ~p)", [self(), ContinueOnFail]),
     Project = list_to_binary(rt_config:get(rt_project, "undefined")),
     Backend = rt_test_plan:get(backend, TestPlan),
@@ -142,7 +143,8 @@ init([TestPlan, Properties, ContinueOnFail]) ->
                    backend_check=BackendCheck,
                    prereq_check=PreReqCheck,
                    group_leader=group_leader(),
-                   continue_on_fail=ContinueOnFail},
+                   continue_on_fail=ContinueOnFail,
+                   reporter_pid=ReporterPid},
     {ok, setup, State, 0}.
 
 %% @doc there are no all-state events for this fsm
@@ -173,12 +175,10 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Asynchronous call handling functions for each FSM state
 
 setup(timeout, State=#state{backend_check=false}) ->
-    cleanup(State),
-    notify_executor({skipped, invalid_backend}, State),
+    report_cleanup_and_notify({skipped, invalid_backend}, State),
     {stop, normal, State};
 setup(timeout, State=#state{prereq_check=false}) ->
-    cleanup(State),
-    notify_executor({fail, prereq_check_failed}, State),
+    report_cleanup_and_notify({fail, prereq_check_failed}, State),
     {stop, normal, State};
 setup(timeout, State=#state{test_type=TestType,
                             test_module=TestModule,
@@ -269,8 +269,7 @@ wait_for_completion(timeout, State=#state{test_module=TestModule,
                            test_type=TestType,
                            group_leader=GroupLeader,
                            end_time=os:timestamp()},
-    cleanup(UpdState),
-    notify_executor(timeout, UpdState),
+    report_cleanup_and_notify(timeout, UpdState),
     {stop, normal, UpdState};
 wait_for_completion({test_result, {fail, Reason}}, State=#state{test_module=TestModule,
                                                         test_type=TestType,
@@ -286,8 +285,7 @@ wait_for_completion({test_result, {fail, Reason}}, State=#state{test_module=Test
                            continue_on_fail=ContinueOnFail,
                            end_time=os:timestamp()},
     lager:debug("ContinueOnFail: ~p", [ContinueOnFail]),
-    maybe_cleanup(ContinueOnFail, UpdState),
-    notify_executor(Result, UpdState),
+    report_cleanup_and_notify(Result, ContinueOnFail, UpdState),
     {stop, normal, UpdState};
 wait_for_completion({test_result, Result}, State=#state{test_module=TestModule,
                                                         test_type=TestType,
@@ -301,8 +299,7 @@ wait_for_completion({test_result, Result}, State=#state{test_module=TestModule,
                            test_type=TestType,
                            group_leader=GroupLeader,
                            end_time=os:timestamp()},
-    cleanup(UpdState),
-    notify_executor(Result, UpdState),
+    report_cleanup_and_notify(Result, UpdState),
     {stop, normal, UpdState};
 wait_for_completion({test_result, Result}, State) ->
     #state{backend=Backend,
@@ -494,6 +491,26 @@ notify_fun(Pid) ->
             ?MODULE:send_event(Pid, X)
     end.
 
+%% @doc Send the results report, cleanup the nodes and
+%% Notify the executor that we are done with the test run
+%% @end
+report_cleanup_and_notify(Result, State) ->
+    report_cleanup_and_notify(Result, true, State).
+
+%% @doc Send the results report, cleanup the nodes (optionally) and
+%% Notify the executor that we are done with the test run
+%% @end
+-spec(report_cleanup_and_notify(tuple(), boolean(), term()) -> ok).
+report_cleanup_and_notify(Result, CleanUp, State=#state{test_plan=TestPlan,
+                                                        start_time=Start,
+                                                        end_time=End}) ->
+    Duration = now_diff(End, Start),
+    ResultMessage = test_result_message(Result),
+    rt_reporter:send_result(test_result({TestPlan, ResultMessage, Duration})),
+    maybe_cleanup(CleanUp, State),
+    Notification = {test_complete, TestPlan, self(), ResultMessage},
+    riak_test_executor:send_event(Notification).
+
 maybe_cleanup(true, State) ->
     cleanup(State);
 maybe_cleanup(false, _State) ->
@@ -519,30 +536,15 @@ cleanup(#state{test_module=TestModule,
     node_manager:return_nodes(rt_properties:get(node_ids, Properties)),
     riak_test_group_leader:tidy_up(OldGroupLeader).
 
-notify_executor(timeout, #state{test_plan=TestPlan,
-                                start_time=Start,
-                                end_time=End}) ->
-    Duration = timer:now_diff(End, Start),
-    Notification = {test_complete, TestPlan, self(), {fail, timeout}, Duration},
-    riak_test_executor:send_event(Notification);
-notify_executor(fail, #state{test_plan=TestPlan,
-                                start_time=Start,
-                                end_time=End}) ->
-    Duration = timer:now_diff(End, Start),
-    Notification = {test_complete, TestPlan, self(), {fail, unknown}, Duration},
-    riak_test_executor:send_event(Notification);
-notify_executor(pass, #state{test_plan=TestPlan,
-                             start_time=Start,
-                             end_time=End}) ->
-    Duration = timer:now_diff(End, Start),
-    Notification = {test_complete, TestPlan, self(), pass, Duration},
-    riak_test_executor:send_event(Notification);
-notify_executor(FailResult, #state{test_plan=TestPlan,
-                                   start_time=Start,
-                                   end_time=End}) ->
-    Duration = now_diff(End, Start),
-    Notification = {test_complete, TestPlan, self(), FailResult, Duration},
-    riak_test_executor:send_event(Notification).
+% @doc Convert test result into report message
+test_result_message(timeout) ->
+    {fail, timeout};
+test_result_message(fail) ->
+    {fail, unknown};
+test_result_message(pass) ->
+    pass;
+test_result_message(FailResult) ->
+    FailResult.
 
 test_versions(Properties) ->
     StartVersion = rt_properties:get(start_version, Properties),

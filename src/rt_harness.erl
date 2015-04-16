@@ -37,7 +37,7 @@
          cmd/2,
          setup/0,
          get_deps/0,
-         get_node_logs/0,
+         get_node_logs/1,
          get_version/0,
          get_version/1,
          get_backends/0,
@@ -107,8 +107,8 @@ get_version(Node) ->
 get_backends() ->
     ?HARNESS_MODULE:get_backends().
 
-get_node_logs() ->
-    ?HARNESS_MODULE:get_node_logs().
+get_node_logs(DestDir) ->
+    ?HARNESS_MODULE:get_node_logs(DestDir).
 
 set_backend(Backend) ->
     ?HARNESS_MODULE:set_backend(Backend).

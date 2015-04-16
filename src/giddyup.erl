@@ -83,12 +83,40 @@ post_result(TestResult) ->
     URL = "http://" ++ Host ++ "/test_results",
     lager:info("giddyup url: ~s", [URL]),
     rt:check_ibrowse(),
-    case rt:post_result(TestResult, #rt_webhook{name="GiddyUp", url=URL, headers=[basic_auth()]}) of
+    case post_result(TestResult, #rt_webhook{name="GiddyUp", url=URL, headers=[basic_auth()]}) of
         {ok, RC, Headers} ->
             {_, Location} = lists:keyfind("Location", 1, Headers),
             lager:info("Test Result successfully POSTed to GiddyUp! ResponseCode: ~s, URL: ~s", [RC, Location]),
             {ok, Location};
         error ->
+            error
+    end.
+
+-spec(post_result(proplists:proplist(), term()) -> tuple()|error).
+post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
+    try ibrowse:send_req(URL,
+        [{"Content-Type", "application/json"}],
+        post,
+        mochijson2:encode(TestResult),
+        [{content_type, "application/json"}] ++ HookHeaders,
+        300000) of  %% 5 minute timeout
+
+        {ok, RC=[$2|_], Headers, _Body} ->
+            {ok, RC, Headers};
+        {ok, ResponseCode, Headers, Body} ->
+            lager:info("Test Result did not generate the expected 2XX HTTP response code."),
+            lager:debug("Post"),
+            lager:debug("Response Code: ~p", [ResponseCode]),
+            lager:debug("Headers: ~p", [Headers]),
+            lager:debug("Body: ~p", [Body]),
+            error;
+        X ->
+            lager:warning("Some error POSTing test result: ~p", [X]),
+            error
+    catch
+        Class:Reason ->
+            lager:error("Error reporting to ~s. ~p:~p", [Name, Class, Reason]),
+            lager:error("Payload: ~p", [TestResult]),
             error
     end.
 

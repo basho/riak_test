@@ -27,12 +27,12 @@ ln -s $RESULTS $RESULTS_SYMLINK
 RT_OPTS="-v --continue -c $1"
 
 echo "Running bitcask regression tests using the following test cases: $BITCASK_BACKEND_TEST_CASES"
-./riak_test $RT_OPTS -t $BITCASK_BACKEND_TEST_CASES &> $RESULTS_DIR/bitcask_results.log
+./riak_test $RT_OPTS -t $BITCASK_BACKEND_TEST_CASES -o $RESULTS_DIR &> $RESULTS_DIR/bitcask_results.log
 
 echo "Running leveldb regression tests using the following test cases: $ELEVELDB_BACKEND_TEST_CASES"
-./riak_test $RT_OPTS -t $ELEVELDB_BACKEND_TEST_CASES -b eleveldb &> $RESULTS_DIR/leveldb_results.log
+./riak_test $RT_OPTS -t $ELEVELDB_BACKEND_TEST_CASES -b eleveldb -o $RESULTS_DIR &> $RESULTS_DIR/leveldb_results.log
 
 echo "Running memory regression tests using the following test cases: $MEMORY_BACKEND_TEST_CASES"
-./riak_test $RT_OPTS -t $MEMORY_BACKEND_TEST_CASES -b memory &> $RESULTS_DIR/memory_results.log
+./riak_test $RT_OPTS -t $MEMORY_BACKEND_TEST_CASES -b memory -o $RESULTS_DIR &> $RESULTS_DIR/memory_results.log
 
 echo "Results of the test run written to $RESULTS_DIR"

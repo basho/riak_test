@@ -39,7 +39,7 @@
          expect_in_log/2,
          get_deps/0,
          get_ip/1,
-         get_node_logs/0,
+         get_node_logs/1,
          get_replica/5,
          get_version/0,
          is_mixed_cluster/1,
@@ -47,7 +47,6 @@
          log_to_nodes/2,
          log_to_nodes/3,
          pmap/2,
-         post_result/2,
          priv_dir/0,
          product/1,
          rpc_get_env/2,
@@ -612,8 +611,8 @@ setup_harness(Test, Args) ->
 
 %% @doc Downloads any extant log files from the harness's running
 %%   nodes.
-get_node_logs() ->
-    rt_harness:get_node_logs().
+get_node_logs(DestDir) ->
+    rt_harness:get_node_logs(DestDir).
 
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
@@ -626,33 +625,6 @@ check_ibrowse() ->
         application:start(ibrowse)
     end.
 
-post_result(TestResult, #rt_webhook{url=URL, headers=HookHeaders, name=Name}) ->
-    lager:info("Posting result to ~s ~s", [Name, URL]),
-    try ibrowse:send_req(URL,
-        [{"Content-Type", "application/json"}],
-        post,
-        mochijson2:encode(TestResult),
-        [{content_type, "application/json"}] ++ HookHeaders,
-        300000) of  %% 5 minute timeout
-
-    {ok, RC=[$2|_], Headers, _Body} ->
-        {ok, RC, Headers};
-    {ok, ResponseCode, Headers, Body} ->
-        lager:info("Test Result did not generate the expected 2XX HTTP response code."),
-        lager:debug("Post"),
-        lager:debug("Response Code: ~p", [ResponseCode]),
-        lager:debug("Headers: ~p", [Headers]),
-        lager:debug("Body: ~p", [Body]),
-        error;
-    X ->
-        lager:warning("Some error POSTing test result: ~p", [X]),
-        error
-    catch
-    Class:Reason ->
-        lager:error("Error reporting to ~s. ~p:~p", [Name, Class, Reason]),
-        lager:error("Payload: ~p", [TestResult]),
-        error
-    end.
 
 %%%===================================================================
 %%% Bucket Types Functions
