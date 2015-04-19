@@ -27,8 +27,6 @@
          wait_until_bucket_type_status/3,
          wait_until_bucket_props/3]).
 
--include("rt.hrl").
-
 %% Specify the bucket_types field for the properties record. The list
 %% of bucket types may have two forms, a bucket_type or a pair
 %% consisting of an integer and a bucket_type. The latter form

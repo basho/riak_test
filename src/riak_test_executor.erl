@@ -63,11 +63,11 @@ init([Tests, LogDir, Platform, UpgradeList, NotifyPid]) ->
 
     ContinueOnFail = rt_config:get(continue_on_fail),
 
-    LogLocation = case Platform of
-                      undefined -> LogDir;
-                      _ -> giddyup
+    UploadToGiddyUp = case Platform of
+                      undefined -> false;
+                      _ -> true
                   end,
-    {ok, Reporter} = rt_reporter:start_link(LogLocation, NotifyPid),
+    {ok, Reporter} = rt_reporter:start_link(UploadToGiddyUp, LogDir, NotifyPid),
 
     lager:notice("Starting the Riak Test executor in ~p execution mode", [ExecutionMode]),
     State = #state{pending_tests=Tests,
@@ -169,14 +169,15 @@ launch_test({nodes, Nodes, NodeMap}, State) ->
            runner_pids=Pids,
            running_tests=Running,
            continue_on_fail=ContinueOnFail,
-           reporter_pid=ReporterPid} = State,
+           reporter_pid=ReporterPid,
+           log_dir=LogDir} = State,
     NextTestModule = rt_test_plan:get_module(NextTestPlan),
     lager:debug("Executing test ~p in mode ~p", [NextTestModule, ExecutionMode]),
     {NextTestPlan, TestProps} = lists:keyfind(NextTestPlan, 1, PropertiesList),
     UpdTestProps = rt_properties:set([{node_map, NodeMap}, {node_ids, Nodes}],
                                      TestProps),
     {RunnerPids, RunningTests} = run_test(ExecutionMode, NextTestPlan, UpdTestProps,
-                                          Pids, Running, ContinueOnFail, ReporterPid),
+                                          Pids, Running, ContinueOnFail, ReporterPid, LogDir),
     UpdState = State#state{pending_tests=RestPending,
                            execution_mode=ExecutionMode,
                            runner_pids=RunnerPids,
@@ -318,11 +319,11 @@ override_props(State) ->
             [{upgrade_path, UpgradeList}]
     end.
 
--spec run_test(parallel | serial, atom(), proplists:proplist(), [pid()], [rt_test_plan:test_plan()], boolean(), pid()) -> {[pid()], [atom()]}.
-run_test(parallel, TestPlan, Properties, RunningPids, RunningTests, ContinueOnFail, ReporterPid) ->
-    Pid = spawn_link(riak_test_runner, start, [TestPlan, Properties, ContinueOnFail, ReporterPid]),
+-spec run_test(parallel | serial, atom(), proplists:proplist(), [pid()], [rt_test_plan:test_plan()], boolean(), pid(), string()) -> {[pid()], [atom()]}.
+run_test(parallel, TestPlan, Properties, RunningPids, RunningTests, ContinueOnFail, ReporterPid, LogDir) ->
+    Pid = spawn_link(riak_test_runner, start, [TestPlan, Properties, ContinueOnFail, ReporterPid, LogDir]),
     {[Pid | RunningPids], [TestPlan | RunningTests]};
-run_test(serial, TestPlan, Properties, RunningPids, RunningTests, ContinueOnFail, ReporterPid) ->
-    riak_test_runner:start(TestPlan, Properties, ContinueOnFail, ReporterPid),
+run_test(serial, TestPlan, Properties, RunningPids, RunningTests, ContinueOnFail, ReporterPid, LogDir) ->
+    riak_test_runner:start(TestPlan, Properties, ContinueOnFail, ReporterPid, LogDir),
     {RunningPids, RunningTests}.
 

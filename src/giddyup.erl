@@ -21,7 +21,12 @@
 
 -export([get_suite/1, post_result/1, post_artifact/2]).
 -define(STREAM_CHUNK_SIZE, 8192).
--include("rt.hrl").
+
+-record(rt_webhook, {
+    name :: string(),
+    url :: string(),
+    headers=[] :: [{atom(), string()}]
+}).
 
 -spec get_suite(string()) -> [{atom(), term()}].
 get_suite(Platform) ->

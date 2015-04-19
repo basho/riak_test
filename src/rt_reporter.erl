@@ -32,7 +32,7 @@
 -define(HEADER, [<<"Test">>, <<"Result">>, <<"Reason">>, <<"Test Duration">>]).
 
 %% API
--export([start_link/2,
+-export([start_link/3,
          stop/0,
          send_result/1]).
 
@@ -50,8 +50,10 @@
     % Collection of log files
     % Running summary of test results: {test, pass/fail, duration}
     summary :: list(),
-    log_dir :: string() | giddyup,
-    % PID of escript used to update results
+    log_dir :: string(),
+    %% True if results should be uploaded to GiddyUp
+    giddyup :: boolean(),
+    %% PID of escript used to update results
     notify_pid :: pid()
 }).
 
@@ -65,10 +67,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(string() | giddyup, pid()) ->
+-spec(start_link(boolean(), string(), pid()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(LogDir, NotifyPid) ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [LogDir, NotifyPid], []).
+start_link(UploadToGiddyUp, LogDir, NotifyPid) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [UploadToGiddyUp, LogDir, NotifyPid], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,9 +118,10 @@ send_result(Msg) ->
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([LogDir, NotifyPid]) ->
+init([UploadToGiddyUp, LogDir, NotifyPid]) ->
     {ok, #state{summary=[],
                 log_dir=LogDir,
+                giddyup=UploadToGiddyUp,
                 notify_pid=NotifyPid}}.
 
 %%--------------------------------------------------------------------
@@ -137,13 +140,11 @@ init([LogDir, NotifyPid]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_call({test_result, Result}, From, State) ->
-    lager:debug("Sending test_result to ~p from ~p", [State#state.notify_pid, From]),
     Results = State#state.summary,
     State#state.notify_pid ! {From, {test_result, Result}},
-    report_and_gather_logs(State#state.log_dir, Result),
+    report_and_gather_logs(State#state.giddyup, State#state.log_dir, Result),
     {reply, ok, State#state{summary=[Result|Results]}};
 handle_call(done, From, State) ->
-    lager:debug("Sending done to ~p from ~p", [State#state.notify_pid, From]),
     State#state.notify_pid ! {From, done},
     print_summary(State#state.summary, undefined, true),
     {reply, ok, State};
@@ -295,18 +296,8 @@ format_test_row({TestPlan, Result, Duration}) ->
             [TestString, "pass", "N/A", test_summary_format_time(Duration)]
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gather all of the log files from the nodes and either upload to
-%% GiddyUp or copy them to the directory of your choice. Also upload
-%% latest test result, if necessary.
-%%
-%% @spec report_and_gather_logs(Directory) -> ok
-%% @end
-%%--------------------------------------------------------------------
-%% -spec(report_and_gather_logs(giddyup|string(), term()) -> ok).
-report_and_gather_logs(giddyup, TestResult) ->
+-spec(report_to_giddyup(term(), list()) -> list).
+report_to_giddyup(TestResult, Logs) ->
     {TestPlan, Reason, _Duration} = TestResult,
     Status = case Reason of
                  pass -> pass;
@@ -324,11 +315,30 @@ report_and_gather_logs(giddyup, TestResult) ->
     case giddyup:post_result(GiddyupResult) of
         error -> woops;
         {ok, Base} ->
-            [giddyup:post_artifact(Base, File) || File <- rt:get_node_logs(giddyup)]
-    end;
-report_and_gather_logs(LogDir, {TestPlan, _, _}) ->
+            [giddyup:post_artifact(Base, File) || File <- Logs]
+    end.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gather all of the log files from the nodes and either upload to
+%% GiddyUp or copy them to the directory of your choice. Also upload
+%% latest test result, if necessary.
+%%
+%% @spec report_and_gather_logs(Directory) -> ok
+%% @end
+%%--------------------------------------------------------------------
+-spec(report_and_gather_logs(boolean(), string(), term()) -> ok).
+report_and_gather_logs(UploadToGiddyUp, LogDir, TestResult = {TestPlan, _, _}) ->
     SubDir = filename:join([LogDir, rt_test_plan:get_name(TestPlan)]),
-    rt:get_node_logs(SubDir).
+    LogFile = filename:join([SubDir, "riak_test.log"]),
+    Logs = rt:get_node_logs(UploadToGiddyUp, LogFile, SubDir),
+    case UploadToGiddyUp of
+        true ->
+            report_to_giddyup(TestResult, Logs);
+        _ ->
+            Logs
+    end.
+
 %%
 %% RetList = [{test, TestModule}, {status, Status}, {log, Log}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
 %% case Status of

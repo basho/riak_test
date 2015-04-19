@@ -18,7 +18,6 @@
 %%
 %% -------------------------------------------------------------------
 -module(rt_ring).
--include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([assert_nodes_agree_about_ownership/1,

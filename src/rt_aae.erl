@@ -23,8 +23,6 @@
 
 -export([wait_until_aae_trees_built/1]).
 
--include("rt.hrl").
-
 wait_until_aae_trees_built(Nodes) ->
     lager:info("Wait until AAE builds all partition trees across ~p", [Nodes]),
     BuiltFun = fun() -> lists:foldl(aae_tree_built_fun(), true, Nodes) end,

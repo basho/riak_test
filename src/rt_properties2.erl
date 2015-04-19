@@ -22,8 +22,6 @@
 %% @doc Implements a set of functions for accessing and manipulating
 %% an `rt_properties2' record.
 
--include("rt.hrl").
-
 -record(rt_cluster_topology_v1, {
     name :: atom(),
     connected_to :: [] | [atom()],

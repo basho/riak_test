@@ -27,8 +27,6 @@
 -module(rt_test_plan).
 -author("Brett Hazen").
 
--include("rt.hrl").
-
 %% API
 -export([new/0,
          new/1,

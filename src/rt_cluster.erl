@@ -34,8 +34,6 @@
 
 -export([maybe_wait_for_transfers/3]).
 
--include("rt.hrl").
-
 %% @doc Default properties used if a riak_test module does not specify
 %% a custom properties function.
 -spec properties() -> rt_properties:properties().

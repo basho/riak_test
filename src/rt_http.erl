@@ -12,7 +12,6 @@
 %%
 %% -------------------------------------------------------------------
 -module(rt_http).
--include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([http_url/1,

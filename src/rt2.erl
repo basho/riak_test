@@ -24,7 +24,6 @@
 %% Please extend this module with new functions that prove useful between
 %% multiple independent tests.
 -module(rt2).
--include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
@@ -39,7 +38,7 @@
          expect_in_log/2,
          get_deps/0,
          get_ip/1,
-         get_node_logs/1,
+         get_node_logs/3,
          get_replica/5,
          get_version/0,
          is_mixed_cluster/1,
@@ -611,8 +610,8 @@ setup_harness(Test, Args) ->
 
 %% @doc Downloads any extant log files from the harness's running
 %%   nodes.
-get_node_logs(DestDir) ->
-    rt_harness:get_node_logs(DestDir).
+get_node_logs(UploadToGiddyUp, LogFile, DestDir) ->
+    rt_harness:get_node_logs(UploadToGiddyUp, LogFile, DestDir).
 
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
@@ -630,6 +629,7 @@ check_ibrowse() ->
 %%% Bucket Types Functions
 %%%===================================================================
 
+%% TODO: Determine if this can leverage riak_test_runner:start_lager_backend/2
 %% @doc Set up in memory log capture to check contents in a test.
 setup_log_capture(Nodes) when is_list(Nodes) ->
     rt:load_modules_on_nodes([riak_test_lager_backend], Nodes),

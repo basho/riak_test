@@ -24,7 +24,7 @@
 -behavior(gen_fsm).
 
 %% API
--export([start/4,
+-export([start/5,
          send_event/2,
          stop/0]).
 
@@ -48,7 +48,6 @@
          terminate/3,
          code_change/4]).
 
--include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -type test_type() :: {new | old}.
@@ -70,7 +69,8 @@
                 remaining_versions :: [string()],
                 test_results :: [term()],
                 continue_on_fail :: boolean(),
-                reporter_pid :: pid()}).
+                log_dir :: string(),
+                reporter_pids :: pid()}).
 
 -deprecated([{metadata,0,next_major_release}]).
 
@@ -79,8 +79,8 @@
 %%%===================================================================
 
 %% @doc Start the test runner
-start(TestPlan, Properties, ContinueOnFail, ReporterPid) ->
-    Args = [TestPlan, Properties, ContinueOnFail, ReporterPid],
+start(TestPlan, Properties, ContinueOnFail, ReporterPids, LogDir) ->
+    Args = [TestPlan, Properties, ContinueOnFail, ReporterPids, LogDir],
     gen_fsm:start_link(?MODULE, Args, []).
 
 send_event(Pid, Msg) ->
@@ -103,7 +103,7 @@ metadata() ->
 
 %% @doc Read the storage schedule and go to idle.
 %% compose_test_datum(Version, Project, undefined, undefined) ->
-init([TestPlan, Properties, ContinueOnFail, ReporterPid]) ->
+init([TestPlan, Properties, ContinueOnFail, ReporterPid, LogDir]) ->
     lager:debug("Started riak_test_runnner with pid ~p (continue on fail: ~p)", [self(), ContinueOnFail]),
     Project = list_to_binary(rt_config:get(rt_project, "undefined")),
     Backend = rt_test_plan:get(backend, TestPlan),
@@ -144,7 +144,8 @@ init([TestPlan, Properties, ContinueOnFail, ReporterPid]) ->
                    prereq_check=PreReqCheck,
                    group_leader=group_leader(),
                    continue_on_fail=ContinueOnFail,
-                   reporter_pid=ReporterPid},
+                   reporter_pids=ReporterPid,
+                   log_dir=LogDir},
     {ok, setup, State, 0}.
 
 %% @doc there are no all-state events for this fsm
@@ -219,12 +220,14 @@ setup(_Event, _State) ->
     ok.
 
 execute({nodes_deployed, _}, State) ->
-    #state{test_module=TestModule,
+    #state{test_plan=TestPlan,
+           test_module=TestModule,
            test_type=TestType,
            properties=Properties,
            setup_modfun=SetupModFun,
            confirm_modfun=ConfirmModFun,
-           test_timeout=TestTimeout} = State,
+           test_timeout=TestTimeout,
+           log_dir=OutDir} = State,
     lager:notice("Running ~s", [TestModule]),
     lager:notice("Properties: ~p", [Properties]),
     
@@ -232,6 +235,7 @@ execute({nodes_deployed, _}, State) ->
     %% Perform test setup which includes clustering of the nodes if
     %% required by the test properties. The cluster information is placed
     %% into the properties record and returned by the `setup' function.
+    start_lager_backend(rt_test_plan:get_name(TestPlan), OutDir),
     SetupResult = maybe_setup_test(TestModule, TestType, SetupModFun, Properties),
     UpdState = maybe_execute_test(SetupResult, TestModule, TestType, ConfirmModFun, StartTime, State),
 
@@ -451,10 +455,22 @@ function_name(FunName, TestModule, Arity, Default) when is_atom(TestModule) ->
             {Default, FunName}
     end.
 
-%% remove_lager_backend() ->
-%%     gen_event:delete_handler(lager_event, lager_file_backend, []),
-%%     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
+start_lager_backend(TestName, Outdir) ->
+    LogLevel = rt_config:get(lager_level, info),
+    case Outdir of
+        undefined -> ok;
+        _ ->
+            gen_event:add_handler(lager_event, lager_file_backend,
+                {filename:join([Outdir, TestName, "riak_test.log"]),
+                    LogLevel, 10485760, "$D0", 1}),
+            lager:set_loglevel(lager_file_backend, LogLevel)
+    end,
+    gen_event:add_handler(lager_event, riak_test_lager_backend, [LogLevel, false]),
+    lager:set_loglevel(riak_test_lager_backend, LogLevel).
 
+stop_lager_backend() ->
+    gen_event:delete_handler(lager_event, lager_file_backend, []),
+    gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
 %% A return of `fail' must be converted to a non normal exit since
 %% status is determined by `rec_loop'.
@@ -508,6 +524,8 @@ report_cleanup_and_notify(Result, CleanUp, State=#state{test_plan=TestPlan,
     ResultMessage = test_result_message(Result),
     rt_reporter:send_result(test_result({TestPlan, ResultMessage, Duration})),
     maybe_cleanup(CleanUp, State),
+    {ok, Logs} = stop_lager_backend(),
+    _Log = unicode:characters_to_binary(Logs),
     Notification = {test_complete, TestPlan, self(), ResultMessage},
     riak_test_executor:send_event(Notification).
 

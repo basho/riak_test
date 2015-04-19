@@ -18,7 +18,6 @@
 %%
 %% -------------------------------------------------------------------
 -module(rt_pb).
--include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([pbc/1,

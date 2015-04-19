@@ -31,8 +31,6 @@
          console/2
         ]).
 
--include("rt.hrl").
-
 -define(HARNESS, (rt_config:get(rt_harness))).
 
 %% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'

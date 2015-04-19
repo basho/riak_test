@@ -18,7 +18,6 @@
 %%
 %% -------------------------------------------------------------------
 -module(rt_node).
--include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([start/2,

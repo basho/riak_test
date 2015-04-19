@@ -20,7 +20,6 @@
 
 %% @private
 -module(riak_test_escript).
--include("rt.hrl").
 %% TODO: Temporary build workaround, remove!!
 -compile(export_all).
 -export([main/1]).
@@ -426,49 +425,7 @@ match_group_attributes(Attributes, Groups) ->
 %%                             TestCount) ||
 %%                       {Test, TestMetaData} <- Tests],
 
-publish_report(_SingleTestResult, _CoverFile, undefined) ->
-    ok;
-publish_report(SingleTestResult, CoverFile, _Report) ->
-    {value, {log, Log}, TestResult} = lists:keytake(log, 1, SingleTestResult),
-    publish_artifacts(TestResult,
-                      Log,
-                      CoverFile,
-                      giddyup:post_result(TestResult)).
 
-publish_artifacts(_TestResult, _Log, _CoverFile, error) ->
-    whoomp; %% there it is
-publish_artifacts(TestResult, Log, CoverFile, {ok, Base}) ->
-            %% Now push up the artifacts, starting with the test log
-            giddyup:post_artifact(Base, {"riak_test.log", Log}),
-            [giddyup:post_artifact(Base, File) || File <- rt:get_node_logs()],
-            post_cover_artifact(Base, CoverFile),
-            ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
-            [rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks()].
-
-post_cover_artifact(_Base, cover_disabled) ->
-    ok;
-post_cover_artifact(Base, CoverFile) ->
-    CoverArchiveName = filename:basename(CoverFile) ++ ".gz",
-    CoverArchive = zlib:gzip(element(2, file:read_file(CoverFile))),
-    giddyup:post_artifact(Base, {CoverArchiveName, CoverArchive}).
-
-get_webhooks() ->
-    Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
-                        [],
-                        rt_config:get(webhooks, [])),
-    lists:filter(fun(E) -> E =/= undefined end, Hooks).
-
-parse_webhook(Props) ->
-    Url = proplists:get_value(url, Props),
-    case is_list(Url) of
-        true ->
-            #rt_webhook{url= Url,
-                        name=proplists:get_value(name, Props, "Webhook"),
-                        headers=proplists:get_value(headers, Props, [])};
-        false ->
-            lager:error("Invalid configuration for webhook : ~p", Props),
-            undefined
-    end.
 
 backend_list(Backend) when is_atom(Backend) ->
     atom_to_list(Backend);
