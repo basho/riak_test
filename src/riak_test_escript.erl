@@ -152,12 +152,12 @@ shuffle_tests(Tests, NonTests, Offset, Workers) ->
     {TestB ++ TestA, NonTests}.
 
 prepare(ParsedArgs, Tests, NonTests) ->
-    lager:notice("Test to run: ~p", [[rt_test_plan:get_module(Test) || Test <- Tests]]),
+    [lager:notice("Test to run: ~p", [rt_test_plan:get_name(Test)]) || Test <- Tests],
     case NonTests of
         [] ->
             ok;
         _ ->
-            lager:notice("Test not to run: ~p", [[rt_test_plan:get_module(Test) || Test <- NonTests]])
+            [lager:notice("Test not to run: ~p", [rt_test_plan:get_name(Test)]) || Test <- NonTests]
     end,
     ok = erlang_setup(ParsedArgs),
     test_setup().
