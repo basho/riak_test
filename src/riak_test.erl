@@ -1,3 +1,4 @@
+-module(riak_test).
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2013 Basho Technologies, Inc.
@@ -18,7 +19,7 @@
 %%
 %% -------------------------------------------------------------------
 
--module(riak_test).
 
 %% Define the riak_test behavior
+%% -callback confirm(rt_properties:properties()) -> pass | fail.
 -callback confirm() -> pass | fail.

@@ -22,7 +22,7 @@ VERSION="2.0"
 NUM_NODES=5
 
 usage() {
-  echo "Resets the current riak_test environment by rebuilding riak and riak_test using rtdev-current.sh"
+  echo "Resets the current riak_test environment by rebuilding riak and riak_test using rtdev-install.sh"
   echo "  -c: Perform a devclean on the riak and clean on riak_test projects (default: $FULL_CLEAN)"
   echo "  -n: Number of nodes on which to test (default: $NUM_NODES)"
   echo "  -v: The Riak version to test.  The Riak home is calculated as $RT_HOME/riak-<version> (default: $VERSION)"
@@ -35,8 +35,7 @@ while getopts chn:v: opt; do
        ;;
     v) VERSION=$OPTARG
        ;;
-    n) echo "parsing num nodes"
-       NUM_NODES=$OPTARG
+    n) NUM_NODES=$OPTARG
        ;;
     h) usage
        exit 0
@@ -46,14 +45,14 @@ done
 
 shift $(($OPTIND-1))
 
-RIAK_HOME=$RT_HOME/riak-$VERSION
+RIAK_HOME=$RT_HOME/$VERSION
 
 if ! [[ -d $RIAK_HOME || -h $RIAK_HOME ]]; then
   echo "Riak home $RIAK_HOME does not exist."
   exit 1
 fi
 
-echo "Reseting the riak_test environment using RIAK_HOME=$RIAK_HOME, RT_HOME=$RT_HOME, NUM_NODES=$NUM_NODES, VERSION=$VERSION, and FULL_CLEAN=$FULL_CLEAN"
+echo "Resetting the riak_test environment using RIAK_HOME=$RIAK_HOME, RT_HOME=$RT_HOME, NUM_NODES=$NUM_NODES, VERSION=$VERSION, and FULL_CLEAN=$FULL_CLEAN"
 
 cd $RIAK_HOME
 rm -rf current
@@ -64,7 +63,6 @@ if [ "$FULL_CLEAN" = true ] ; then
   make distclean
 fi
 
-
 echo "Removing previous stagedevrel instance from $RIAK_HOME and rebuilding ..."
 make devclean
 
@@ -72,7 +70,7 @@ make devclean
 echo "Building Riak stagedevrel with $NUM_NODES nodes in $RIAK_HOME ..."
 make stagedevrel DEVNODES=$NUM_NODES
 
-$RT_HOME/bin/rtdev-current.sh
+$RT_HOME/bin/rtdev-install.sh
 
 cd $RT_HOME
 

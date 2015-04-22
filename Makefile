@@ -1,11 +1,6 @@
 .PHONY: deps
 
-APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
-	xmerl webtool eunit syntax_tools compiler hipe mnesia public_key \
-	observer wx gs
-PLT = $(HOME)/.riak-test_dialyzer_plt
-
-all: deps compile
+all: deps compile testcases
 	./rebar skip_deps=true escriptize
 	SMOKE_TEST=1 ./rebar skip_deps=true escriptize
 
@@ -18,7 +13,7 @@ docsclean:
 compile: deps
 	./rebar compile
 
-clean:
+clean: clean_testcases
 	@./rebar clean
 
 distclean: clean
@@ -27,6 +22,12 @@ distclean: clean
 quickbuild:
 	./rebar skip_deps=true compile
 	./rebar escriptize
+
+testcases:
+	@(cd search-corpus; tar fx spam.0.1.tar.gz)
+
+clean_testcases:
+	@rm -rf search-corpus/spam.0/
 
 ##################
 # Dialyzer targets

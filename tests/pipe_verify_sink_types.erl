@@ -43,6 +43,8 @@ confirm() ->
 
     [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
 
+    [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
+
     verify_raw(Nodes),
     verify_fsm(Nodes),
     verify_fsm_timeout(Nodes),

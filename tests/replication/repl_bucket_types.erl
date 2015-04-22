@@ -429,7 +429,6 @@ value_unchanged(Pid, Bucket, Key, Bin) ->
     end,
     timer:sleep(?ENSURE_READ_INTERVAL).
 
-
 assert_bucket_not_found(Pid, Bucket, Key) ->
     case riakc_pb_socket:get(Pid, Bucket, Key) of
         {error, notfound} ->

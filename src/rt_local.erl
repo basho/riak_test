@@ -115,6 +115,6 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
         {Port, {exit_status, Status}} ->
             catch port_close(Port),
             {Status, Buffer}
-    after rt_config:get(rt_max_wait_time) ->
+    after rt_config:get(rt_max_receive_wait_time) ->
             {-1, Buffer}
     end.

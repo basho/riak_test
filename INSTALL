@@ -25,7 +25,8 @@
 	 {rt_deps, ["/usr/local/basho/evan/riak2.0/deps"]},
 	 %% should be really long to allow full bitcasks to 
 	 %% come up
-	 {rt_max_wait_time, 600000000000000},
+	 {rt_max_receive_wait_time, 600000000000000},
+	 {test_timeout, 600000000000000},
 	 {basho_bench, "/usr/local/basho/evan/basho_bench/"},
 	 {basho_bench_statedir, "/tmp/bb_seqstate/"},
 	 {rt_retry_delay, 500},
@@ -39,6 +40,6 @@
 
   at least right now.  this will problably change as the configuration
   stuff gets sorted out.  some of these may not be necessary.
-  rt_max_wait_time is (could maybe be set to infinity?  maybe by the
+  rt_max_receive_wait_time is (could maybe be set to infinity?  maybe by the
   harness?), perf_* and basho_bench* are also critical.  rt_deps
   should maybe be dynamic?

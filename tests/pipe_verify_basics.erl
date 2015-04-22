@@ -44,6 +44,8 @@ confirm() ->
 
     [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
 
+    [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
+
     rt:load_modules_on_nodes([?MODULE], Nodes),
 
     verify_order(Nodes),

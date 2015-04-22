@@ -20,7 +20,42 @@
 
 %% @private
 -module(rt_cs_dev).
--compile(export_all).
+-behaviour(test_harness).
+
+-export([start/1,
+         stop/1,
+         deploy_clusters/1,
+         clean_data_dir/2,
+         create_dirs/1,
+         spawn_cmd/1,
+         spawn_cmd/2,
+         cmd/1,
+         cmd/2,
+         setup_harness/2,
+         get_version/0,
+         get_backends/0,
+         get_deps/0,
+         set_backend/1,
+         whats_up/0,
+         get_ip/1,
+         node_id/1,
+         node_version/1,
+         admin/2,
+         admin/3,
+         riak/2,
+         attach/2,
+         attach_direct/2,
+         console/2,
+         update_app_config/2,
+         teardown/0,
+         set_conf/2,
+         set_advanced_conf/2,
+         upgrade/2,
+         deploy_nodes/1,
+         versions/0,
+         get_node_logs/0,
+         get_node_logs/1]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
@@ -29,7 +64,13 @@
 -define(SRC_PATHS, (rt_config:get(src_paths))).
 
 get_deps() ->
-    lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
+    lists:flatten(io_lib:format("~s/dev1/lib", [relpath(rt_config:get_default_version())])).
+
+deploy_clusters(ClusterConfig) ->
+    rt_harness_util:deploy_clusters(ClusterConfig).
+
+get_ip(Node) ->
+    rt_harness_util:get_ip(Node).
 
 setup_harness(_Test, _Args) ->
     confirm_build_type(rt_config:get(build_type, oss)),
@@ -76,10 +117,6 @@ relpath(Vsn) ->
     Path = ?BUILD_PATHS,
     path(Vsn, Path).
 
-srcpath(Vsn) ->
-    Path = ?SRC_PATHS,
-    path(Vsn, Path).
-
 path(Vsn, Paths=[{_,_}|_]) ->
     orddict:fetch(Vsn, orddict:from_list(Paths));
 path(current, Path) ->
@@ -99,11 +136,11 @@ upgrade(Node, NewVersion) ->
     NewPath = relpath(NewVersion),
 
     Commands = [
-        io_lib:format("cp -p -P -R \"~s/dev/dev~b/data\" \"~s/dev/dev~b\"",
+        io_lib:format("cp -p -P -R \"~s/dev~b/data\" \"~s/dev~b\"",
                        [OldPath, N, NewPath, N]),
-        io_lib:format("rm -rf ~s/dev/dev~b/data/*",
+        io_lib:format("rm -rf ~s/dev~b/data/*",
                        [OldPath, N]),
-        io_lib:format("cp -p -P -R \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
+        io_lib:format("cp -p -P -R \"~s/dev~b/etc\" \"~s/dev~b\"",
                        [OldPath, N, NewPath, N])
     ],
     [ begin
@@ -120,7 +157,7 @@ all_the_app_configs(DevPath) ->
     lager:error("The dev path is ~p", [DevPath]),
     case filelib:is_dir(DevPath) of
         true ->
-            Devs = filelib:wildcard(DevPath ++ "/dev/dev*"),
+            Devs = filelib:wildcard(DevPath ++ "/dev*"),
             [ Dev ++ "/etc/app.config" || Dev <- Devs];
         _ ->
             lager:debug("~s is not a directory.", [DevPath]),
@@ -133,7 +170,7 @@ update_app_config(all, Config) ->
 update_app_config(Node, Config) when is_atom(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
-    FileFormatString = "~s/dev/dev~b/etc/~s.config",
+    FileFormatString = "~s/dev~b/etc/~s.config",
 
     AppConfigFile = io_lib:format(FileFormatString, [Path, N, "app"]),
     AdvConfigFile = io_lib:format(FileFormatString, [Path, N, "advanced"]),
@@ -178,7 +215,7 @@ get_backends() ->
 node_path(Node) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
-    lists:flatten(io_lib:format("~s/dev/dev~b", [Path, N])).
+    lists:flatten(io_lib:format("~s/dev~b", [Path, N])).
 
 create_dirs(Nodes) ->
     Snmp = [node_path(Node) ++ "/data/snmp/agent/db" || Node <- Nodes],
@@ -193,19 +230,6 @@ rm_dir(Dir) ->
     ?assertCmd("rm -rf " ++ Dir),
     ?assertEqual(false, filelib:is_dir(Dir)).
 
-add_default_node_config(Nodes) ->
-    case rt_config:get(rt_default_config, undefined) of
-        undefined -> ok;
-        Defaults when is_list(Defaults) ->
-            rt:pmap(fun(Node) ->
-                            update_app_config(Node, Defaults)
-                    end, Nodes),
-            ok;
-        BadValue ->
-            lager:error("Invalid value for rt_default_config : ~p", [BadValue]),
-            throw({invalid_config, {rt_default_config, BadValue}})
-    end.
-
 deploy_nodes(NodeConfig) ->
     Path = relpath(root),
     lager:info("Riak path: ~p", [Path]),
@@ -217,14 +241,14 @@ deploy_nodes(NodeConfig) ->
     VersionMap = lists:zip(NodesN, Versions),
 
     %% Check that you have the right versions available
-    [ check_node(Version) || Version <- VersionMap ],
+    [ rt_harness_util:check_node(Version) || Version <- VersionMap ],
     rt_config:set(rt_nodes, NodeMap),
     rt_config:set(rt_versions, VersionMap),
 
     create_dirs(Nodes),
 
     %% Set initial config
-    add_default_node_config(Nodes),
+    rt_harness_util:add_default_node_config(Nodes),
     rt:pmap(fun({_, default}) ->
                     ok;
                ({Node, Config}) ->
@@ -249,7 +273,7 @@ deploy_nodes(NodeConfig) ->
     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
 
     %% Ensure nodes are singleton clusters
-    [ok = rt:check_singleton_node(?DEV(N)) || {N, Version} <- VersionMap,
+    [ok = rt_ring:check_singleton_node(?DEV(N)) || {N, Version} <- VersionMap,
                                               Version /= "0.14.2"],
 
     lager:info("Deployed nodes: ~p", [Nodes]),
@@ -379,30 +403,34 @@ interactive_loop(Port, Expected) ->
             %% We've met every expectation. Yay! If not, it means we've exited before
             %% something expected happened.
             ?assertEqual([], Expected)
-        after rt_config:get(rt_max_wait_time) ->
+        after rt_config:get(rt_max_receive_wait_time) ->
             %% interactive_loop is going to wait until it matches expected behavior
             %% If it doesn't, the test should fail; however, without a timeout it
             %% will just hang forever in search of expected behavior. See also: Parenting
             ?assertEqual([], Expected)
     end.
 
+%% TODO is the correct implementation for admin/2 -- added to pass compilation by jsb
+admin(Node, Args) ->
+    admin(Node, Args, []).
+
 admin(Node, Args, Options) ->
-    N = node_id(Node),
-    Path = relpath(node_version(N)),
-    Cmd = rtdev:riak_admin_cmd(Path, N, Args),
-    lager:info("Running: ~s", [Cmd]),
-    Result = execute_admin_cmd(Cmd, Options),
-    lager:info("~s", [Result]),
-    {ok, Result}.
+     N = node_id(Node),
+     Path = relpath(node_version(N)),
+     Cmd = rtdev:riak_admin_cmd(Path, N, Args),
+     lager:info("Running: ~s", [Cmd]),
+     Result = execute_admin_cmd(Cmd, Options),
+     lager:info("~s", [Result]),
+     {ok, Result}.
 
 execute_admin_cmd(Cmd, Options) ->
-    {_ExitCode, Result} = FullResult = wait_for_cmd(spawn_cmd(Cmd)),
-    case lists:member(return_exit_code, Options) of
-        true ->
-            FullResult;
-        false ->
-            Result
-    end.
+     {_ExitCode, Result} = FullResult = wait_for_cmd(spawn_cmd(Cmd)),
+     case lists:member(return_exit_code, Options) of
+         true ->
+             FullResult;
+         false ->
+             Result
+     end.
 
 riak(Node, Args) ->
     N = node_id(Node),
@@ -459,14 +487,6 @@ get_cmd_result(Port, Acc) ->
             timeout
     end.
 
-check_node({_N, Version}) ->
-    case proplists:is_defined(Version, rt_config:get(build_paths)) of
-        true -> ok;
-        _ ->
-            lager:error("You don't have Riak ~s installed or configured", [Version]),
-            erlang:error("You don't have Riak " ++ atom_to_list(Version) ++ " installed or configured")
-    end.
-
 set_backend(Backend) ->
     lager:info("rtdev:set_backend(~p)", [Backend]),
     update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
@@ -508,4 +528,10 @@ get_node_logs(Base) ->
     [ begin
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
-      end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+      end || Filename <- filelib:wildcard(Root ++ "/*/dev*/log/*") ].
+
+set_advanced_conf(Node, NameValuePairs) ->
+    rt_harness_util:set_advanced_conf(Node, NameValuePairs).
+
+set_conf(Node, NameValuePairs) ->
+    rt_harness_util:set_conf(Node, NameValuePairs).

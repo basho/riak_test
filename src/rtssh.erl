@@ -1,6 +1,39 @@
 -module(rtssh).
+-behaviour(test_harness).
+
+-export([start/1,
+         stop/1,
+         deploy_clusters/1,
+         clean_data_dir/2,
+         spawn_cmd/1,
+         spawn_cmd/2,
+         cmd/1,
+         cmd/2,
+         setup_harness/2,
+         get_deps/0,
+         get_version/0,
+         get_backends/0,
+         set_backend/1,
+         whats_up/0,
+         get_ip/1,
+         node_id/1,
+         node_version/1,
+         admin/2,
+         riak/2,
+         attach/2,
+         attach_direct/2,
+         console/2,
+         update_app_config/2,
+         teardown/0,
+         set_conf/2,
+         set_advanced_conf/2,
+         validate_config/1]).
+
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
+
+admin(Node, Args) ->
+    rt_harness_util:admin(Node, Args).
 
 get_version() ->
     unknown.
@@ -88,7 +121,7 @@ get_backend(Host, AppConfig) ->
     Str = binary_to_list(Bin),
     {ok, ErlTok, _} = erl_scan:string(Str),
     {ok, Term} = erl_parse:parse_term(ErlTok),
-    rt:get_backend(Term).
+    rt_backend:get_backend(Term).
 
 cmd(Cmd) ->
     cmd(Cmd, []).
@@ -117,6 +150,22 @@ node_to_host(Node) ->
         ["riak", Host] -> Host;
         _ ->
             throw(io_lib:format("rtssh:node_to_host couldn't figure out the host of ~p", [Node]))
+    end.
+
+
+nodes(Count) ->
+    Hosts = rt_config:get(rtssh_hosts),
+    %% NumNodes = length(NodeConfig),
+    NodeConfig = busted_stuff,
+    NumNodes = Count,
+    NumHosts = length(Hosts),
+    case NumNodes > NumHosts of
+        true ->
+            erlang:error("Not enough hosts available to deploy nodes",
+                         [NumNodes, NumHosts]);
+        false ->
+            Hosts2 = lists:sublist(Hosts, NumNodes),
+            deploy_nodes(NodeConfig, Hosts2)
     end.
 
 deploy_nodes(NodeConfig, Hosts) ->
@@ -205,7 +254,7 @@ deploy_nodes(NodeConfig, Hosts) ->
     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
 
     %% Ensure nodes are singleton clusters
-    [ok = rt:check_singleton_node(N) || {N, Version} <- VersionMap,
+    [ok = rt_ring:check_singleton_node(N) || {N, Version} <- VersionMap,
                                         Version /= "0.14.2"],
 
     Nodes.
@@ -300,29 +349,6 @@ remote_cmd(Node, Cmd) ->
     {0, Result} = ssh_cmd(Node, Cmd),
     {ok, Result}.
 
-admin(Node, Args) ->
-    Cmd = riak_admin_cmd(Node, Args),
-    lager:info("Running: ~s :: ~s", [get_host(Node), Cmd]),
-    {0, Result} = ssh_cmd(Node, Cmd),
-    lager:info("~s", [Result]),
-    {ok, Result}.
-
-admin(Node, Args, Options) ->
-    Cmd = riak_admin_cmd(Node, Args),
-    lager:info("Running: ~s :: ~s", [get_host(Node), Cmd]),
-    Result = execute_admin_cmd(Node, Cmd, Options),
-    lager:info("~s", [Result]),
-    {ok, Result}.
-
-execute_admin_cmd(Node, Cmd, Options) ->
-    {_ExitCode, Result} = FullResult = ssh_cmd(Node, Cmd),
-    case lists:member(return_exit_code, Options) of
-        true ->
-            FullResult;
-        false ->
-            Result
-    end.
-
 riak(Node, Args) ->
     Result = run_riak(Node, Args),
     lager:info("~s", [Result]),
@@ -350,6 +376,7 @@ load_hosts() ->
     Hosts = lists:sort(HostsIn),
     rt_config:set(rtssh_hosts, Hosts),
     rt_config:set(rtssh_aliases, Aliases),
+    rt_config:set(rtssh_nodes, length(Hosts)),
     Hosts.
 
 read_hosts_file(File) ->
@@ -652,10 +679,10 @@ scp_from(Host, RemotePath, Path) ->
 %%% Riak devrel path utilities
 %%%===================================================================
 
--define(PATH, (rt_config:get(rtdev_path))).
+-define(PATH, (rt_config:get(root_path))).
 
 dev_path(Path, N) ->
-    format("~s/dev/dev~b", [Path, N]).
+    format("~s/dev~b", [Path, N]).
 
 dev_bin_path(Path, N) ->
     dev_path(Path, N) ++ "/bin".
@@ -692,8 +719,32 @@ node_id(_Node) ->
     %% orddict:fetch(Node, NodeMap).
     1.
 
+set_backend(Backend) ->
+    set_backend(Backend, []).
+
+set_backend(Backend, OtherOpts) ->
+    lager:info("rtssh:set_backend(~p, ~p)", [Backend, OtherOpts]),
+    Opts = [{storage_backend, Backend} | OtherOpts],
+    update_app_config(all, [{riak_kv, Opts}]),
+    get_backends().
+
+whats_up() ->
+    io:format("Here's what's running...~n"),
+
+    Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
+    [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
+
 node_version(Node) ->
-    orddict:fetch(Node, rt_config:get(rt_versions)).
+    rt_harness_util:node_version(Node).
+
+attach(Node, Expected) ->
+    rt_harness_util:attach(Node, Expected).
+
+attach_direct(Node, Expected) ->
+    rt_harness_util:attach_direct(Node, Expected).
+
+console(Node, Expected) ->
+    rt_harness_util:console(Node, Expected).
 
 %%%===================================================================
 %%% Local command spawning
@@ -780,6 +831,24 @@ stop_all(Host, DevPath) ->
 
 teardown() ->
     stop_all(rt_config:get(rt_hostnames)).
+
+%% @doc Check to make sure that all versions specified in the config file actually exist
+-spec validate_config([term()]) -> ok | no_return().
+validate_config(Versions) ->
+    Hosts = load_hosts(),
+    Root = rt_config:get(root_path),
+    Validate = fun(Host, Vsn) ->
+        Cmd = "ls " ++ filename:join([Root, Vsn, "dev1/bin/riak"]),
+        Result = wait_for_cmd(spawn_ssh_cmd(atom_to_list(Host), Cmd, [], true)),
+        io:format("Result = ~p~n", [Result]),
+        case Result of
+            {0, _} -> ok;
+            _ ->
+                erlang:error("Could not find specified devrel version", [Host, Vsn])
+        end
+    end,
+    [[Validate(Host, Vsn) || Vsn <- Versions] ||  Host <- Hosts],
+    ok.
 
 %%%===================================================================
 %%% Utilities
