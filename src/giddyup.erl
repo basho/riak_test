@@ -266,12 +266,12 @@ fetch_all_test_plans(Platform, Product, VersionNumber, DefaultVersion, Host) ->
             Id = kvc:path(id, Test),
             Module = binary_to_atom(kvc:path(name, Test), utf8),
             Plan0 = rt_test_plan:new([{id, Id}, {module, Module}, {project, Project}, {platform, Platform}, {version, VersionNumber}]),
-            Plan1 = case kvc:path('tags.backend', Test) of
-                          [] -> Plan0;
-                          X -> rt_test_plan:set(backend, binary_to_atom(X, utf8), Plan0)
+            {ok, Plan1} = case kvc:path('tags.backend', Test) of
+                          [] -> {ok, Plan0};
+                          Backend -> rt_test_plan:set(backend, binary_to_atom(Backend, utf8), Plan0)
                       end,
-            Plan2 = case kvc:path('tags.upgrade_version', Test) of
-                [] -> Plan1;
+            {ok, Plan2} = case kvc:path('tags.upgrade_version', Test) of
+                [] -> {ok, Plan1};
                 UpgradeVsn ->
                     UpgradeVersion = case UpgradeVsn of
                                          <<"legacy">> -> rt_config:get_legacy_version();
@@ -285,6 +285,7 @@ fetch_all_test_plans(Platform, Product, VersionNumber, DefaultVersion, Host) ->
             %%    [] -> Plan1;
             %%    MultiConfig -> rt_test_plan:set(multi_config, binary_to_atom(MultiConfig, utf8), Plan2)
             %%end,
+            lager:debug("Giddyup Module ~p using TestPlan ~p", [Module, Plan2]),
             Plan2
         end,
     [ TestProps(Test) || Test <- Tests].

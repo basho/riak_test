@@ -161,13 +161,13 @@ set_fields(_, _, {error, _}=Error) ->
 validate_request(Field, TestPlan) ->
     validate_field(Field, validate_record(TestPlan)).
 
--spec validate_record(test_plan()) -> ok | {error, invalid_properties}.
+-spec validate_record(test_plan()) -> ok | {error, invalid_test_plan}.
 validate_record(Record) ->
     case is_valid_record(Record) of
         true ->
             ok;
         false ->
-            {error, invalid_properties}
+            {error, invalid_test_plan}
     end.
 
 -spec validate_field(atom(), ok | {error, atom()}) -> ok | {error, invalid_field}.

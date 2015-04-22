@@ -187,23 +187,26 @@ init([]) ->
 %% If none are specified, run everything
 handle_call({load_from_giddyup, Backends, CommandLineTests}, _From, State) ->
     AllGiddyupTests = giddyup:get_test_plans(),
-    FilteredNames = case CommandLineTests of
+    {Included, Excluded} = case CommandLineTests of
         [] ->
-            AllGiddyupTests;
+            {AllGiddyupTests, []};
         _ ->
-            [TestPlan || TestPlan <- AllGiddyupTests,
-                                     CName <- CommandLineTests,
-                                     rt_test_plan:get_module(TestPlan) =:= CName]
+            Inc = [TestPlan || TestPlan <- AllGiddyupTests,
+                               CName <- CommandLineTests,
+                               rt_test_plan:get_module(TestPlan) =:= CName],
+            {Inc, lists:filter(fun(Elem) -> not lists:member(Elem, Inc) end, AllGiddyupTests)}
         end,
-    FilteredTests = case Backends of
+    {Included1, Excluded1} = case Backends of
         undefined ->
-            FilteredNames;
+            {Included, Excluded};
         _ ->
-            [TestPlan || TestPlan <- FilteredNames,
-                                     lists:member(rt_test_plan:get(backend, TestPlan), Backends)]
+            Inc1 = [TestPlan || TestPlan <- Included,
+                                            lists:member(rt_test_plan:get(backend, TestPlan), Backends)],
+            {Inc1, lists:filter(fun(Elem) -> not lists:member(Elem, Inc1) end, AllGiddyupTests)}
         end,
-    State1 = lists:foldl(fun sort_and_queue/2, State, FilteredTests),
-    {reply, ok, State1};
+    State1 = lists:foldl(fun sort_and_queue/2, State, Included1),
+    State2 = lists:foldl(fun exclude_test_plan/2, State1, Excluded1),
+    {reply, ok, State2};
 %% Add a single test plan to the queue
 handle_call({add_test_plan, Module, Platform, Backends, _Version, _Properties}, _From, State) ->
     State1 = lists:foldl(fun(Backend, AccState) ->
@@ -330,3 +333,13 @@ is_runnable_test_plan(TestPlan) ->
     code:ensure_loaded(Mod),
     erlang:function_exported(Mod, Fun, 0) orelse
         erlang:function_exported(Mod, Fun, 1).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Add a unused test to the list of non_runnable_test_plans
+%% @end
+%%--------------------------------------------------------------------
+exclude_test_plan(TestPlan, State) ->
+    QNR = queue:in(TestPlan, State#state.non_runnable_test_plans),
+    State#state{non_runnable_test_plans=QNR}.
