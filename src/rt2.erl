@@ -38,7 +38,7 @@
          expect_in_log/2,
          get_deps/0,
          get_ip/1,
-         get_node_logs/3,
+         get_node_logs/2,
          get_replica/5,
          get_version/0,
          is_mixed_cluster/1,
@@ -610,8 +610,8 @@ setup_harness(Test, Args) ->
 
 %% @doc Downloads any extant log files from the harness's running
 %%   nodes.
-get_node_logs(UploadToGiddyUp, LogFile, DestDir) ->
-    rt_harness:get_node_logs(UploadToGiddyUp, LogFile, DestDir).
+get_node_logs(LogFile, DestDir) ->
+    rt_harness:get_node_logs(LogFile, DestDir).
 
 check_ibrowse() ->
     try sys:get_status(ibrowse) of

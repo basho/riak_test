@@ -299,24 +299,9 @@ format_test_row({TestPlan, Result, Duration}) ->
 -spec(report_to_giddyup(term(), list()) -> list).
 report_to_giddyup(TestResult, Logs) ->
     {TestPlan, Reason, _Duration} = TestResult,
-    Status = case Reason of
-                 pass -> pass;
-                 _ -> fail
-             end,
-    GiddyupResult = [
-        {test, rt_test_plan:get_module(TestPlan)},
-        {status, Status},
-        {backend, rt_test_plan:get(backend, TestPlan)},
-        {id, rt_test_plan:get(id, TestPlan)},
-        {platform, rt_test_plan:get(platform, TestPlan)},
-        {version, rt_test_plan:get(version, TestPlan)},
-        {project, rt_test_plan:get(project, TestPlan)}
-    ],
-    case giddyup:post_result(GiddyupResult) of
-        error -> woops;
-        {ok, Base} ->
-            [giddyup:post_artifact(Base, File) || File <- Logs]
-    end.
+    giddyup:post_result(TestPlan, Reason),
+    [giddyup:post_artifact(TestPlan, Label, Filename) || {Label, Filename} <- Logs].
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -331,7 +316,7 @@ report_to_giddyup(TestResult, Logs) ->
 report_and_gather_logs(UploadToGiddyUp, LogDir, TestResult = {TestPlan, _, _}) ->
     SubDir = filename:join([LogDir, rt_test_plan:get_name(TestPlan)]),
     LogFile = filename:join([SubDir, "riak_test.log"]),
-    Logs = rt:get_node_logs(UploadToGiddyUp, LogFile, SubDir),
+    Logs = rt:get_node_logs(LogFile, SubDir),
     case UploadToGiddyUp of
         true ->
             report_to_giddyup(TestResult, Logs);

@@ -50,7 +50,7 @@
          set_advanced_conf/2,
          rm_dir/1,
          validate_config/1,
-         get_node_logs/3]).
+         get_node_logs/2]).
 
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -964,24 +964,23 @@ devpaths() ->
 %%     proplists:get_keys(rt_config:get(rtdev_path)) -- [root].
 
 % @doc Get the list of log files and config files and pass them back
--spec(get_node_logs(boolean(), string(), string()) -> list()).
-get_node_logs(UploadToGiddyUp, LogFile, DestDir) ->
+-spec(get_node_logs(string(), string()) -> list()).
+get_node_logs(LogFile, DestDir) ->
     Root = filename:absname(?PATH),
     RootLen = length(Root) + 1, %% Remove the leading slash
-    Fun = get_node_log_fun(UploadToGiddyUp, DestDir, RootLen),
+    Fun = get_node_log_fun(DestDir, RootLen),
     NodeLogs = [ Fun(Filename) || Filename <- filelib:wildcard(Root ++ "/*/dev*/log/*") ++
                                               filelib:wildcard(Root ++ "/*/dev*/etc/*.conf*") ],
     %% Trim the Lager file path slightly differently
     LagerFile = filename:absname(LogFile),
     LagerLen = length(filename:dirname(LagerFile)) + 1,
-    LagerFun = get_node_log_fun(UploadToGiddyUp, DestDir, LagerLen),
+    LagerFun = get_node_log_fun(DestDir, LagerLen),
     LagerLog = LagerFun(LagerFile),
     lists:append([LagerLog], NodeLogs).
 
-% @doc Either open a port for uploading each file to GiddyUp or
-%      Copy each file to a local directory
--spec(get_node_log_fun(boolean(), string(), integer()) -> fun()).
-get_node_log_fun(UploadToGiddyUp, DestDir, RootLen) ->
+% @doc Copy each file to a local directory
+-spec(get_node_log_fun(string(), integer()) -> fun()).
+get_node_log_fun(DestDir, RootLen) ->
     DestRoot = filename:absname(DestDir),
     lager:debug("Copying log files to ~p", [DestRoot]),
     fun(Filename) ->
@@ -994,14 +993,7 @@ get_node_log_fun(UploadToGiddyUp, DestDir, RootLen) ->
                 lager:debug("Copying ~p to ~p", [Filename, Target]),
                 {ok, _BytesWritten} = file:copy(Filename, Target)
         end,
-        %% Open a port if this is to be uploaded to GiddyUp
-        case UploadToGiddyUp of
-            true ->
-                {ok, Port} = file:open(Target, [read, binary]),
-                {lists:nthtail(RootLen, Filename), Port};
-            _ ->
-                Target
-        end
+        {lists:nthtail(RootLen, Filename), Target}
     end.
 
 -type node_tuple() :: {list(), atom()}.

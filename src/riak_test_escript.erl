@@ -36,11 +36,19 @@ main(Args) ->
     ensure_dir(OutDir),
     lager_setup(OutDir),
 
-    {Tests, NonTests} = generate_test_lists(ParsedArgs),
+    %% Do we use GiddyUp for this run?
+    Platform = report_platform(ParsedArgs),
+    UseGiddyUp = case Platform of
+                     undefined -> false;
+                     _ -> true
+                 end,
+    start_giddyup(Platform),
+    {Tests, NonTests} = generate_test_lists(UseGiddyUp, ParsedArgs),
 
     ok = prepare(ParsedArgs, Tests, NonTests),
     Results = execute(Tests, OutDir, ParsedArgs),
-    finalize(Results, ParsedArgs).
+    finalize(Results, ParsedArgs),
+    stop_giddyup(UseGiddyUp).
 
 % @doc Validate the command-line options
 parse_args(Args) ->
@@ -64,14 +72,11 @@ cli_options() ->
  {help,                   $h, "help",     undefined,  "Print this usage page"},
  {config,                 $c, "conf",     string,     "specifies the project configuration"},
  {tests,                  $t, "tests",    string,     "specifies which tests to run"},
- {suites,                 $s, "suites",   string,     "which suites to run"},
- {groups,                 $g, "groups",   string,     "specifiy a list of test groups to run"},
  {dir,                    $d, "dir",      string,     "run all tests in the specified directory"},
  {skip,                   $x, "skip",     string,     "list of tests to skip in a directory"},
  {verbose,                $v, "verbose",  undefined,  "verbose output"},
  {outdir,                 $o, "outdir",   string,     "output directory"},
  {backend,                $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
- {upgrade_path,           $u, "upgrade-path", atom,   "comma-separated list representing an upgrade path (e.g. riak-1.3.4,riak_ee-1.4.12,riak_ee-2.0.0)"},
  {keep,            undefined, "keep",     boolean,    "do not teardown cluster"},
  {continue_on_fail,       $n, "continue", boolean,    "continues executing tests on failure"},
  {report,                 $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1404-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
@@ -93,13 +98,13 @@ report_platform(ParsedArgs) ->
     end.
 
 %% @doc Print help string if it's specified, otherwise parse the arguments
-generate_test_lists(ParsedArgs) ->
+generate_test_lists(UseGiddyUp, ParsedArgs) ->
     %% Have to load the `riak_test' config prior to assembling the
     %% test metadata
 
     TestData = compose_test_data(ParsedArgs),
-    Backend = proplists:get_value(backend, ParsedArgs, bitcask),
-    {Tests, NonTests} = wrap_test_in_test_plan(report_platform(ParsedArgs), Backend, TestData),
+    Backends = [proplists:get_value(backend, ParsedArgs, bitcask)],
+    {Tests, NonTests} = wrap_test_in_test_plan(UseGiddyUp, Backends, TestData),
     Offset = rt_config:get(offset, undefined),
     Workers = rt_config:get(workers, undefined),
     shuffle_tests(Tests, NonTests, Offset, Workers).
@@ -168,24 +173,6 @@ execute(TestPlans, OutDir, ParsedArgs) ->
                                                    self()),
     wait_for_results(Executor, [], length(TestPlans), 0).
 
-%% TestResults = run_tests(Tests, Outdir, Report, HarnessArgs),
-%% lists:filter(fun results_filter/1, TestResults).
-
-%% run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
-%%     rt_cover:maybe_start(Test),
-%%     SingleTestResult = riak_test_runner:run(Test, Outdir, TestMetaData, HarnessArgs),
-
-%% case NumTests of
-%%     1 -> keep_them_up;
-%%     _ -> rt_cluster:teardown()
-%% end,
-
-%% TODO: Do this in the test runner
-%%     CoverDir = rt_config:get(cover_output, "coverage"),
-%% CoverFile = rt_cover:maybe_export_coverage(Test, CoverDir, erlang:phash2(TestMetaData)),
-%% publish_report(SingleTestResult, CoverFile, Report),
-
-%%     [{coverdata, CoverFile} | SingleTestResult].
 
 %% TODO: Use `TestCount' and `Completed' to display progress output
 wait_for_results(Executor, TestResults, TestCount, Completed) ->
@@ -249,9 +236,6 @@ erlang_setup(_ParsedArgs) ->
     register(riak_test, self()),
     maybe_add_code_path("./ebin"),
 
-    %% ibrowse
-    load_and_start(ibrowse),
-
     %% Sets up extra paths earlier so that tests can be loadable
     %% without needing the -d flag.
     code:add_paths(rt_config:get(test_paths, [])),
@@ -273,10 +257,6 @@ maybe_add_code_path(Path, true) ->
     code:add_patha(Path);
 maybe_add_code_path(_, false) ->
     meh.
-
-load_and_start(Application) ->
-    application:load(Application),
-    application:start(Application).
 
 ensure_dir(undefined) ->
     ok;
@@ -358,21 +338,18 @@ extract_test_names(Test, {CodePaths, TestNames}) ->
 %% @doc Determine which tests to run based on command-line argument
 %%      If the platform is defined, consult GiddyUp, otherwise just shovel
 %%      the whole thing into the Planner
--spec(load_up_test_planner(string() | undefined, string(), list()) -> list()).
-load_up_test_planner(undefined, Backend, CommandLineTests) ->
-    [rt_planner:add_test_plan(Name, undefined, Backend, undefined, undefined) || Name <- CommandLineTests];
-%% GiddyUp Flavor
-load_up_test_planner(Platform, Backend, CommandLineTests) ->
-    rt_planner:load_from_giddyup(Platform, Backend, CommandLineTests).
+-spec(load_up_test_planner(boolean(), [string()], list()) -> list()).
+load_up_test_planner(true, Backends, CommandLineTests) ->
+    rt_planner:load_from_giddyup(Backends, CommandLineTests);
+load_up_test_planner(_, Backends, CommandLineTests) ->
+    [rt_planner:add_test_plan(Name, undefined, Backends, undefined, undefined) || Name <- CommandLineTests].
 
 %% @doc Push all of the test into the Planner for now and wrap them in an `rt_test_plan'
 %% TODO: Let the Planner do the work, not the riak_test_executor
--spec(wrap_test_in_test_plan(string(), string(), [atom()]) -> {list(), list()}).
-wrap_test_in_test_plan(Platform, Backend, CommandLineTests) ->
-    %% ibrowse neededfor GiddyUp
-    load_and_start(ibrowse),
+-spec(wrap_test_in_test_plan(boolean(), [string()], [atom()]) -> {list(), list()}).
+wrap_test_in_test_plan(UseGiddyUp, Backends, CommandLineTests) ->
     {ok, _Pid} = rt_planner:start_link(),
-    load_up_test_planner(Platform, Backend, CommandLineTests),
+    load_up_test_planner(UseGiddyUp, Backends, CommandLineTests),
     TestPlans = [rt_planner:fetch_test_plan() || _ <- lists:seq(1, rt_planner:number_of_plans())],
     NonRunnableTestPlans = [rt_planner:fetch_test_non_runnable_plan() || _ <- lists:seq(1, rt_planner:number_of_non_runable_plans())],
     rt_planner:stop(),
@@ -406,26 +383,6 @@ match_group_attributes(Attributes, Groups) ->
                          [ TestType == list_to_atom(Group)
                            || Group <- Groups, TestType <- TestTypes ])
     end.
-
-%% run_tests(Tests, Outdir, Report, HarnessArgs) ->
-    %% Need properties for tests prior to getting here Need server to
-    %% manage the aquisition of nodes and to handle comparison of test
-    %% `node_count' property with resources available. Also handle
-    %% notification of test completion. Hmm, maybe test execution
-    %% should be handled by a `gen_fsm' at this point to distinguish
-    %% the case when there are tests left to be tried with available
-    %% resources versus all have been tried or resources are
-    %% exhausted.
-
-%% [run_test(Test,
-%%                             Outdir,
-%%                             TestMetaData,
-%%                             Report,
-%%                             HarnessArgs,
-%%                             TestCount) ||
-%%                       {Test, TestMetaData} <- Tests],
-
-
 
 backend_list(Backend) when is_atom(Backend) ->
     atom_to_list(Backend);
@@ -493,3 +450,22 @@ so_kill_riak_maybe() ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
     end.
+
+%% @doc Start the GiddyUp reporting service if the report is defined
+start_giddyup(undefined) ->
+    ok;
+start_giddyup(Platform) ->
+    {ok, _Pid} = giddyup:start_link(Platform,
+                                    rt_config:get_default_version_product(),
+                                    rt_config:get_default_version_number(),
+                                    rt_config:get_default_version(),
+                                    rt_config:get(giddyup_host),
+                                    rt_config:get(giddyup_user),
+                                    rt_config:get(giddyup_password)).
+
+%% @doc Stop the GiddyUp reporting service if the report is defined
+stop_giddyup(true) ->
+    giddyup:stop();
+stop_giddyup(_) ->
+    ok.
+

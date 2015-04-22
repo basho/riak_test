@@ -36,7 +36,7 @@
 
 %% API
 -export([start_link/0,
-         load_from_giddyup/3,
+         load_from_giddyup/2,
          add_test_plan/5,
          fetch_test_plan/0,
          fetch_test_non_runnable_plan/0,
@@ -82,9 +82,9 @@ start_link() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(load_from_giddyup(string(), string() | undefined, list()) -> ok).
-load_from_giddyup(Platform, Backend, CommandLineTests) ->
-    gen_server:call(?MODULE, {load_from_giddyup, Platform, Backend, CommandLineTests}).
+-spec(load_from_giddyup([string()] | undefined, list()) -> ok).
+load_from_giddyup(Backends, CommandLineTests) ->
+    gen_server:call(?MODULE, {load_from_giddyup, Backends, CommandLineTests}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -92,9 +92,9 @@ load_from_giddyup(Platform, Backend, CommandLineTests) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(add_test_plan(string(), string(), rt_properties2:storage_backend(), rt_properties2:product_version(), rt_properties2:properties()) -> ok).
-add_test_plan(Module, Platform, Backend, Version, Properties) ->
-    gen_server:call(?MODULE, {add_test_plan, Module, Platform, Backend, Version, Properties}).
+-spec(add_test_plan(string(), string(), [string()], rt_properties2:product_version(), rt_properties2:properties()) -> ok).
+add_test_plan(Module, Platform, Backends, Version, Properties) ->
+    gen_server:call(?MODULE, {add_test_plan, Module, Platform, Backends, Version, Properties}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -185,22 +185,33 @@ init([]) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 %% Run only those GiddyUp tests which are specified on the command line
 %% If none are specified, run everything
-handle_call({load_from_giddyup, Platform, _Backend, CommandLineTests}, _From, State) ->
-    AllGiddyupTests = giddyup:get_suite(Platform),
-    FilteredTests = case CommandLineTests of
+handle_call({load_from_giddyup, Backends, CommandLineTests}, _From, State) ->
+    AllGiddyupTests = giddyup:get_test_plans(),
+    FilteredNames = case CommandLineTests of
         [] ->
-            [test_plan_from_giddyup(Test) || Test <- AllGiddyupTests];
+            AllGiddyupTests;
         _ ->
-            [test_plan_from_giddyup({GName, GMetaData}) || {GName, GMetaData} <- AllGiddyupTests,
-                                                                        CName <- CommandLineTests,
-                                                                        GName =:= CName]
+            [TestPlan || TestPlan <- AllGiddyupTests,
+                                     CName <- CommandLineTests,
+                                     rt_test_plan:get_module(TestPlan) =:= CName]
+        end,
+    FilteredTests = case Backends of
+        undefined ->
+            FilteredNames;
+        _ ->
+            [TestPlan || TestPlan <- FilteredNames,
+                                     lists:member(rt_test_plan:get(backend, TestPlan), Backends)]
         end,
     State1 = lists:foldl(fun sort_and_queue/2, State, FilteredTests),
     {reply, ok, State1};
 %% Add a single test plan to the queue
-handle_call({add_test_plan, Module, Platform, Backend, _Version, _Properties}, _From, State) ->
-    TestPlan = rt_test_plan:new([{module, Module}, {platform, Platform}, {backend, Backend}]),
-    {reply, ok, sort_and_queue(TestPlan, State)};
+handle_call({add_test_plan, Module, Platform, Backends, _Version, _Properties}, _From, State) ->
+    State1 = lists:foldl(fun(Backend, AccState) ->
+            TestPlan = rt_test_plan:new([{module, Module}, {platform, Platform}, {backend, Backend}]),
+            sort_and_queue(TestPlan, AccState)
+        end,
+        State, Backends),
+    {reply, ok, State1};
 handle_call(fetch_test_plan, _From, State) ->
     Q = State#state.runnable_test_plans,
     {Item, Q1} = queue:out(Q),
@@ -291,37 +302,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Translate GiddyUp Output into an `rt_test_plan' record
-%%
-%% @end
-%%--------------------------------------------------------------------
-
--spec(set_giddyup_field(atom(), {proplists:proplist(), rt_test_plan:test_plan()}) -> rt_test_plan:test_plan()).
-set_giddyup_field(Field, {MetaData, TestPlan}) ->
-    {ok, TestPlan1} = case proplists:is_defined(Field, MetaData) of
-        true ->
-            rt_test_plan:set(Field, proplists:get_value(Field, MetaData), TestPlan);
-        _ ->
-            {ok, TestPlan}
-    end,
-    {MetaData, TestPlan1}.
-
--spec(test_plan_from_giddyup({atom(), term()}) -> rt_test_plan:test_plan()).
-test_plan_from_giddyup({Name, MetaData}) ->
-    Plan0 = rt_test_plan:new([{module, Name}]),
-    GiddyUpFields = [id, backend, platform, project],
-    {_, Plan1} = lists:foldl(fun set_giddyup_field/2, {MetaData, Plan0}, GiddyUpFields),
-    %% Special treatment for the upgrade path
-    {ok, Plan2} = case proplists:is_defined(upgrade_version, MetaData) of
-        true ->
-            rt_test_plan:set(upgrade_path, [rt_config:get_version(proplists:get_value(upgrade_version, MetaData)), rt_config:get_default_version()], Plan1);
-        _ ->
-            {ok, Plan1}
-    end,
-    Plan2.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -350,10 +330,3 @@ is_runnable_test_plan(TestPlan) ->
     code:ensure_loaded(Mod),
     erlang:function_exported(Mod, Fun, 0) orelse
         erlang:function_exported(Mod, Fun, 1).
-
--ifdef(TEST).
-set_giddyup_field_test() ->
-    S = {#state{runnable_test_plans =queue:new()},[]},
-    T = test_plan_from_giddyup({test, [{id, 5},{backend,riak_kv_eleveldb_backend}, {platform, "os-x"}, {version, "2.0.5"},{project,<<"riak_ee">>}]}, S),
-    ?assertEqual(T, {#state{runnable_test_plans = {[{rt_test_plan_v1,5,test,<<"riak_ee">>,"os-x",riak_kv_eleveldb_backend,[],undefined}], []}},[]}).
--endif.

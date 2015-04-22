@@ -178,7 +178,7 @@ get_version(Vsn) ->
 resolve_version(Vsn, Versions) ->
     case find_atom_or_string(Vsn, Versions) of
         undefined ->
-            erlang:error("Could not find version", [Vsn]);
+            erlang:error("Could not find Riak version", [Vsn]);
         {Product, Tag} ->
             convert_to_string(Product) ++ "-" ++ convert_to_string(Tag);
         Version ->
