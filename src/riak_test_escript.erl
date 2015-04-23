@@ -92,7 +92,7 @@ report_platform(ParsedArgs) ->
         undefined ->
             undefined;
         "config" ->
-            rt_config:get(giddyup_platform, undefined);
+            rt_config:get(giddyup_platform);
         R ->
             R
     end.
@@ -132,7 +132,8 @@ load_initial_config(ParsedArgs) ->
 
 %% @doc Shuffle the order in which tests are scheduled
 shuffle_tests([], _, _, _) ->
-    lager:error("No tests are scheduled to run~n"),
+    io:format("ERROR: No tests are scheduled to run~n"),
+    lager:error("No tests are scheduled to run"),
     halt(1);
 shuffle_tests(Tests, NonTests, undefined, _) ->
     {Tests, NonTests};
