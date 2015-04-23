@@ -1899,6 +1899,7 @@ is_control_gui_route_loaded(Routes) ->
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
 
+%% @doc Choose random in cluster, for example.
 -spec select_random([any()]) -> any().
 select_random(List) ->
     Length = length(List),
