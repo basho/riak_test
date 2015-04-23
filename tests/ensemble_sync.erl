@@ -22,10 +22,13 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(INTERCEPT_TAB, intercept_leader_tick_counts).
+
 confirm() ->
     NVal = 5,
     Config = ensemble_util:fast_config(NVal),
     Nodes = ensemble_util:build_cluster(8, Config, NVal),
+    lists:foreach(fun init_intercepts/1, Nodes),
     Node = hd(Nodes),
     vnode_util:load(Nodes),
 
@@ -99,6 +102,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
 
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [manual]),
     Part = rt:partition(Nodes -- Partitioned, Partitioned),
+    wait_for_leader_tick_changes(Nodes),
     ensemble_util:wait_until_stable(Node, Quorum),
 
     %% Write data while minority is partitioned
@@ -116,6 +120,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     [vnode_util:kill_vnode(VN) || VN <- KillVN],
     [vnode_util:rebuild_vnode(VN) || VN <- KillVN],
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [automatic]),
+    wait_for_leader_tick_changes(Nodes),
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Disabling AAE"),
@@ -124,6 +129,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
 
     %% Suspend remaining valid vnodes to ensure data comes from repaired vnodes
     S2 = [vnode_util:suspend_vnode(VNode, VIdx) || {VIdx, VNode} <- AfterVN],
+    wait_for_leader_tick_changes(Nodes),
     ensemble_util:wait_until_stable(Node, Quorum),
 
     lager:info("Checking that key results match scenario"),
@@ -134,6 +140,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
 
     lager:info("Resuming all vnodes"),
     [vnode_util:resume_vnode(Pid) || Pid <- S1 ++ S2],
+    wait_for_leader_tick_changes(Nodes),
     ensemble_util:wait_until_stable(Node, NVal),
 
     %% Check that for other than the "all bets are off" failure case,
@@ -149,3 +156,59 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     lager:info("Scenario passed"),
     lager:info("-----------------------------------------------------"),
     ok.
+
+%% The following code is used so that we can wait for ensemble leader ticks to fire.
+%% This allows us to fix a kind of race condition that we were dealing with in the
+%% previous version of this test, where we were relying on ensemble_util:wait_until_stable
+%% after making certain changes to the cluster.
+init_intercepts(Node) ->
+    make_intercepts_tab(Node),
+    rt_intercept:add(Node, {riak_ensemble_peer, [{{leader_tick, 1}, count_leader_ticks}]}).
+
+make_intercepts_tab(Node) ->
+    SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
+    Opts = [named_table, public, set, {heir, SupPid, {}}],
+    ?INTERCEPT_TAB = rpc:call(Node, ets, new, [?INTERCEPT_TAB, Opts]).
+
+get_leader_tick_counts(Nodes) ->
+    AllCounts = [get_leader_tick_counts_for_node(N) || N <- Nodes],
+    lists:append(AllCounts).
+
+get_leader_tick_counts_for_node(Node) ->
+    Ensembles = rpc:call(Node, riak_kv_ensembles, local_ensembles, []),
+    Leaders = rpc:call(Node, lists, map, [fun riak_ensemble_manager:get_leader_pid/1, Ensembles]),
+    LocalLeaders = [P || P <- Leaders, node(P) =:= Node],
+    LookupFun = fun(P) ->
+                        [Res] = rpc:call(Node, ets, lookup, [?INTERCEPT_TAB, P]),
+                        Res
+                end,
+    lists:map(LookupFun, LocalLeaders).
+
+wait_for_leader_tick_changes(Nodes) ->
+    Counts = get_leader_tick_counts(Nodes),
+    lists:foreach(fun wait_for_leader_tick_change/1, Counts).
+
+wait_for_leader_tick_change({Pid, Count}) ->
+    F = fun() -> leader_tick_count_exceeds(Pid, Count) end,
+    ?assertEqual(ok, rt:wait_until(F)).
+
+leader_tick_count_exceeds(Pid, Count) ->
+    Node = node(Pid),
+    case rpc:call(Node, ets, lookup, [?INTERCEPT_TAB, Pid]) of
+        [{Pid, NewCount}] when NewCount > Count ->
+            true;
+        Res ->
+            %% If the count hasn't incremented, it may be because the leader
+            %% already stepped down, so check for that scenario as well:
+            case rpc:call(Node, sys, get_state, [Pid]) of
+                {leading, _} ->
+                    Res;
+                Res2 = {badrpc, _} ->
+                    {Res, Res2};
+                {_, _} ->
+                    %% Would be nice if there was a more explicit way to match
+                    %% this, but if it's not a badrpc and we're not leading, we
+                    %% must be in some other state
+                    true
+            end
+    end.

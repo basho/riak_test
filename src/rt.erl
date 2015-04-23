@@ -100,6 +100,7 @@
          post_result/2,
          product/1,
          priv_dir/0,
+         random_sublist/2,
          remove/2,
          riak/2,
          riak_repl/2,
@@ -1094,6 +1095,10 @@ join_cluster(Nodes) ->
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
 
+    %% Potential fix for BTA-116 and other similar "join before nodes ready" issues.
+    %% TODO: Investigate if there is an actual race in Riak relating to cluster joins.
+    [ok = wait_for_service(Node, riak_kv) || Node <- Nodes],
+
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
     case OtherNodes of
@@ -1895,10 +1900,26 @@ wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
     [wait_for_control(Vsn, Node) || {Vsn, Node} <- VersionedNodes].
 
 %% @doc Choose random in cluster, for example.
+-spec select_random([any()]) -> any().
 select_random(List) ->
     Length = length(List),
     Idx = random:uniform(Length),
     lists:nth(Idx, List).
+
+%% @doc Returns a random element from a given list.
+-spec random_sublist([any()], integer()) -> [any()].
+random_sublist(List, N) ->
+    % Properly seeding the process.
+    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
+    random:seed({A, B, C}),
+    % Assign a random value for each element in the list.
+    List1 = [{random:uniform(), E} || E <- List],
+    % Sort by the random number.
+    List2 = lists:sort(List1),
+    % Take the first N elements.
+    List3 = lists:sublist(List2, N),
+    % Remove the random numbers.
+    [ E || {_,E} <- List3].
 
 -ifdef(TEST).
 

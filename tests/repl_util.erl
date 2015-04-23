@@ -294,6 +294,7 @@ disconnect_cluster(Node, Name) ->
 wait_for_connection(Node, Name) ->
     rt:wait_until(Node,
         fun(_) ->
+                lager:info("Waiting for repl connection to cluster named ~p on node ~p", [Name, Node]),
                 case rpc:call(Node, riak_core_cluster_mgr,
                         get_connections, []) of
                     {ok, Connections} ->
@@ -302,7 +303,8 @@ wait_for_connection(Node, Name) ->
                             [] ->
                                 false;
                             [Pid] ->
-                                try riak_core_cluster_conn:status(Pid, 2) of                                    {Pid, status, _} ->
+                                try riak_core_cluster_conn:status(Pid, 2000) of
+                                    {Pid, status, _} ->
                                         true;
                                     _ ->
                                         false
@@ -314,6 +316,9 @@ wait_for_connection(Node, Name) ->
                                                 true;
                                             {Pid, connecting, _} ->
                                                 false
+                                        %% Never wait forever for the response. Allow wait_until to work.
+                                        after 2000 ->
+                                            false
                                         end
                                 end
                         end;

@@ -33,6 +33,7 @@ confirm() ->
     pass.
 
 simple_test() ->
+    lager:info("Running simple_test()~n"),
     Conf = [{riak_repl,
              [
               %% turn off fullsync
@@ -92,12 +93,16 @@ simple_test() ->
     [verify_connectivity(Node, "B") || Node <- ANodes],
     [verify_connectivity(Node, "A") || Node <- BNodes],
 
+    lager:info("Cleaning cluster A"),
     rt:clean_cluster(ANodes),
+    lager:info("Cleaning cluster B"),
     rt:clean_cluster(BNodes),
+    lager:info("Test passed"),
 
     pass.
 
 disconnect_test() ->
+    lager:info("Running disconnect_test()~n"),
     Conf = [{riak_repl,
              [
               %% turn off fullsync
@@ -160,6 +165,7 @@ disconnect_test() ->
     pass.
 
 error_cleanup_test() ->
+    lager:info("Running error_cleanup_test()~n"),
     NumNodes = rt_config:get(num_nodes, 6),
 
     lager:info("Deploy ~p nodes", [NumNodes]),
