@@ -23,7 +23,7 @@ stop_vnode_after_bloom_fold_request_succeeds(IndexNode, Req, Sender, VMaster) ->
                     %% Simulate what happens when a VNode completes handoff between command_returning_vnode
                     %% and the fold attempting to start - other attempts to intercept and slow
                     %% certain parts of Riak to invoke the particular race condition were unsuccessful
-                    ?I_INFO("Replaced VNode with spawned funciton in command_returning_vnode"),
+                    ?I_INFO("Replaced VNode with spawned function in command_returning_vnode"),
                     VNodePid = spawn(fun() -> timer:sleep(100),
                                    exit(normal)
                           end),
