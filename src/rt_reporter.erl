@@ -237,7 +237,7 @@ print_summary(TestResults, _CoverResult, Verbose) ->
             %% TODO: Remove once clique table is fixed
             [lager:debug("ROW ~p", [Row]) || Row <- Rows],
             Table = clique_table:autosize_create_table(?HEADER, Rows),
-            lager:notice("~ts", [Table]);
+            [lager:notice(string:tokens(lists:flatten(FormattedRow), "\n")) || FormattedRow <- Table];
         false ->
             ok
     end,
@@ -290,7 +290,7 @@ format_test_row({TestPlan, Result, Duration}) ->
     TestName = rt_test_plan:get_name(TestPlan),
     case Result of
         {Status, Reason} ->
-            [TestName, Status, Reason, test_summary_format_time(Duration)];
+            [TestName, Status, lists:flatten(Reason), test_summary_format_time(Duration)];
         pass ->
             [TestName, "pass", "N/A", test_summary_format_time(Duration)]
     end.
