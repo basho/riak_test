@@ -25,6 +25,21 @@ slow_handle_command(Req, Sender, State) ->
     timer:sleep(500),
     ?M:handle_command_orig(Req, Sender, State).
 
+stuck_handle_command(Req, Sender, State) ->
+    %% <<A, B, C, _/binary>> = chash:key_of(self()),
+    %% case (A* 65536+B*256+C) rem 3 of
+    %%     0 ->
+    %%         lager:log(info, self(), "sleep triggered ~p", [node()]),
+    %%         timer:sleep(15000);
+    %%     _I ->
+    timer:sleep(random:uniform(15000)),
+    %%         %% lager:log(info, self(), "sleep not triggered ~p", [_I]),
+    %%         ok
+    %% end,
+    R = ?M:handle_command_orig(Req, Sender, State),
+    %% lager:log(info, self(), "stuck_handle_command> from ~p => ~p", [Sender, R]),
+    R.
+
 %% @doc Return wrong_node error because ownership transfer is happening
 %%      when trying to get the hashtree pid for a partition.
 wrong_node(_Partition) ->
