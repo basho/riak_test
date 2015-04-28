@@ -52,9 +52,13 @@
 -define(PREVIOUS_VERSION_KEY, previous).
 -define(LEGACY_VERSION_KEY, legacy).
 -define(DEFAULT_VERSION, head).
+-define(DEFAULT_ACTUAL_VERSION, {riak_ee, "2.1.0"}).
+-define(DEFAULT_ACTUAL_VERSION_TAG, "riak_ee-2.1.0").
 -define(UPGRADE_KEY, upgrade_paths).
--define(PREVIOUS_VERSION, "1.4.12").
--define(LEGACY_VERSION, "1.3.4").
+-define(PREVIOUS_VERSION, {riak_ee, "1.4.12"}).
+-define(PREVIOUS_VERSION_TAG, "riak_ee-1.4.12").
+-define(LEGACY_VERSION, {riak_ee, "1.3.4"}).
+-define(LEGACY_VERSION_TAG, "riak_ee-1.3.4").
 -define(CONTINUE_ON_FAIL_KEY, continue_on_fail).
 -define(DEFAULT_CONTINUE_ON_FAIL, false).
 
@@ -317,17 +321,15 @@ get_rt_max_wait_time_default_test() ->
     ?assertEqual(ExpectedWaitTime, get(rt_max_wait_time, DefaultWaitTime)).
 
 get_version_path_test() ->
-    clear(?DEFAULT_VERSION_KEY),
-    clear(?PREVIOUS_VERSION_KEY),
-    clear(?LEGACY_VERSION_KEY),
+    Versions = [{?DEFAULT_VERSION_KEY, ?DEFAULT_VERSION},
+                {?DEFAULT_VERSION, ?DEFAULT_ACTUAL_VERSION},
+                {?PREVIOUS_VERSION_KEY, ?PREVIOUS_VERSION},
+                {?LEGACY_VERSION_KEY, ?LEGACY_VERSION}],
+    ok = rt_config:set(?VERSION_KEY, Versions),
 
-    set(?DEFAULT_VERSION_KEY, ?DEFAULT_VERSION),
-    set(?PREVIOUS_VERSION_KEY, ?PREVIOUS_VERSION),
-    set(?LEGACY_VERSION_KEY, ?LEGACY_VERSION),
-
-    ?assertEqual(version_to_tag(?DEFAULT_VERSION_KEY), ?DEFAULT_VERSION),
-    ?assertEqual(version_to_tag(?PREVIOUS_VERSION_KEY), ?PREVIOUS_VERSION),
-    ?assertEqual(version_to_tag(?LEGACY_VERSION_KEY), ?LEGACY_VERSION).
+    ?assertEqual(version_to_tag(?DEFAULT_VERSION_KEY), ?DEFAULT_ACTUAL_VERSION_TAG),
+    ?assertEqual(version_to_tag(?PREVIOUS_VERSION_KEY), ?PREVIOUS_VERSION_TAG),
+    ?assertEqual(version_to_tag(?LEGACY_VERSION_KEY), ?LEGACY_VERSION_TAG).
 
 get_continue_on_fail_test() ->
     clear(?CONTINUE_ON_FAIL_KEY),
