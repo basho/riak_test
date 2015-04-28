@@ -54,6 +54,7 @@
          connection_info/1,
          console/2,
          create_and_activate_bucket_type/3,
+         del_dir/1,
          deploy_nodes/1,
          deploy_nodes/2,
          deploy_nodes/3,
@@ -168,6 +169,7 @@
          whats_up/0
         ]).
 
+-type strings() :: [string(),...] | [].
 -define(HARNESS, (rt_config:get(rt_harness))).
 
 priv_dir() ->
@@ -623,7 +625,14 @@ wait_until(Fun) when is_function(Fun) ->
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
 wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
-    wait_until(fun() -> Fun(Node) end).
+    wait_until(fun() -> Fun(Node) end);
+
+%% @doc Wrapper to verify `F' against multiple nodes. The function `F' is passed
+%%      one of the `Nodes' as argument and must return a `boolean()' declaring
+%%      whether the success condition has been met or not.
+wait_until(Nodes, Fun) when is_list(Nodes), is_function(Fun) ->
+    [?assertEqual(ok, wait_until(Node, Fun)) || Node <- Nodes],
+    ok.
 
 %% @doc Retry `Fun' until it returns `Retry' times, waiting `Delay'
 %% milliseconds between retries. This is our eventual consistency bread
@@ -1920,6 +1929,34 @@ random_sublist(List, N) ->
     List3 = lists:sublist(List2, N),
     % Remove the random numbers.
     [ E || {_,E} <- List3].
+
+%% @doc Recusively delete files in a directory.
+-spec del_dir(string()) -> strings().
+del_dir(Dir) ->
+    lists:foreach(fun(D) ->
+                          ok = file:del_dir(D)
+                  end, del_all_files([Dir], [])).
+
+-spec del_all_files(strings(), strings()) -> strings().
+del_all_files([], EmptyDirs) ->
+   EmptyDirs;
+del_all_files([Dir | T], EmptyDirs) ->
+    {ok, FilesInDir} = file:list_dir(Dir),
+    {Files, Dirs} = lists:foldl(
+                      fun(F, {Fs, Ds}) ->
+                              Path = Dir ++ "/" ++ F,
+                              case filelib:is_dir(Path) of
+                                  true ->
+                                      {Fs, [Path | Ds]};
+                                  false ->
+                                      {[Path | Fs], Ds}
+                              end
+                      end, {[],[]}, FilesInDir),
+    lists:foreach(fun(F) ->
+                          ok = file:delete(F)
+                  end, Files),
+    del_all_files(T ++ Dirs, [Dir | EmptyDirs]).
+
 
 -ifdef(TEST).
 
