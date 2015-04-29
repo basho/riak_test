@@ -53,6 +53,7 @@
          cmd/2,
          connection_info/1,
          console/2,
+         count_calls/2,
          create_and_activate_bucket_type/3,
          del_dir/1,
          deploy_nodes/1,
@@ -62,6 +63,7 @@
          down/2,
          enable_search_hook/2,
          expect_in_log/2,
+         get_call_count/2,
          get_deps/0,
          get_ip/1,
          get_node_logs/0,
@@ -122,6 +124,7 @@
          start_and_wait/1,
          status_of_according_to/2,
          stop/1,
+         stop_tracing/0,
          stop_and_wait/1,
          str/2,
          systest_read/2,
@@ -171,6 +174,8 @@
 
 -type strings() :: [string(),...] | [].
 -define(HARNESS, (rt_config:get(rt_harness))).
+-define(RT_ETS, rt_ets).
+-define(RT_ETS_OPTS, [public, named_table, {write_concurrency, true}]).
 
 priv_dir() ->
     LocalPrivDir = "./priv",
@@ -624,6 +629,7 @@ wait_until(Fun) when is_function(Fun) ->
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
+-spec wait_until([node()], fun((node()) -> boolean())) -> ok.
 wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
     wait_until(fun() -> Fun(Node) end);
 
@@ -1956,6 +1962,63 @@ del_all_files([Dir | T], EmptyDirs) ->
                           ok = file:delete(F)
                   end, Files),
     del_all_files(T ++ Dirs, [Dir | EmptyDirs]).
+
+%% @doc Get call count from ETS table, key being a {Module, Fun, Arity}.
+-spec get_call_count([node()], {atom(), atom(), non_neg_integer()}) ->
+                            non_neg_integer().
+get_call_count(Cluster, MFA) when is_list(Cluster) ->
+    case ets:lookup(?RT_ETS, MFA) of
+        [{_,Count}] ->
+            Count;
+        [] ->
+            0
+    end.
+
+%% @doc Count calls in a dbg:tracer process for various {Module, Fun, Arity}
+%%      traces.
+-spec count_calls([node()], [{atom(), atom(), non_neg_integer()}]) -> ok.
+count_calls(Cluster, MFAs) when is_list(Cluster) ->
+    lager:info("count all calls to MFA ~p across the cluster ~p",
+               [MFAs, Cluster]),
+    RiakTestNode = node(),
+    maybe_create_ets(),
+    dbg:tracer(process, {fun trace_count/2, {RiakTestNode, Cluster}}),
+    [{ok, Node} = dbg:n(Node) || Node <- Cluster],
+    dbg:p(all, call),
+    [{ok, _} = dbg:tpl(M, F, A, [{'_', [], [{return_trace}]}]) || {M, F, A} <- MFAs],
+    ok.
+
+%% @doc Maybe create an ETS table for storing function calls and counts.
+-spec maybe_create_ets() -> ok.
+maybe_create_ets() ->
+    case ets:info(?RT_ETS) of
+        undefined ->
+            ets:new(?RT_ETS, ?RT_ETS_OPTS),
+            ok;
+        _ ->
+            ets:delete(?RT_ETS),
+            ets:new(?RT_ETS, ?RT_ETS_OPTS),
+            ok
+    end.
+
+%% @doc Stop dbg tracing.
+-spec stop_tracing() -> ok.
+stop_tracing() ->
+    lager:info("stop all dbg tracing"),
+    dbg:stop_clear(),
+    ok.
+
+%% @doc Trace fun calls and store their count state into an ETS table.
+-spec trace_count({trace, pid(), call|return_from,
+                   {atom(), atom(), non_neg_integer()}}, {node(), [node()]}) ->
+                         {node(), [node()]}.
+trace_count({trace, _Pid, call, {_M, _F, _A}}, Acc) ->
+    Acc;
+trace_count({trace, _Pid, return_from, MFA, _Result}, {RTNode, Cluster}) ->
+    Count = get_call_count(Cluster, MFA),
+    Count2 = Count + 1,
+    rpc:call(RTNode, ets, insert, [?RT_ETS, {MFA, Count2}]),
+    {RTNode, Cluster}.
 
 
 -ifdef(TEST).

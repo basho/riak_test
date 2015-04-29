@@ -71,16 +71,7 @@ confirm() ->
     KeyCount = length(Keys),
 
     Pid = rt:pbc(Node2),
-    riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
-
-    %% Create a search index and associate with a bucket
-    ok = riakc_pb_socket:create_search_index(Pid, ?INDEX),
-    ok = riakc_pb_socket:set_search_index(Pid, ?BUCKET, ?INDEX),
-    timer:sleep(1000),
-
-    %% Write keys and wait for soft commit
-    lager:info("Writing ~p keys", [KeyCount]),
-    [ok = rt:pbc_write(Pid, ?BUCKET, Key, Key, "text/plain") || Key <- Keys],
+    yz_rt:write_data(Pid, ?INDEX, ?BUCKET, Keys),
     timer:sleep(1100),
 
     %% Separate out shards for multiple runs
