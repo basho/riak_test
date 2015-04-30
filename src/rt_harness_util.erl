@@ -89,9 +89,17 @@ deploy_nodes(NodeIds, NodeMap, Version, Config, Services) ->
     create_dirs(Version, NodeIds),
 
     %% Set initial config
+    %% TODO: Cuttlefish should not need to have Nodes be atoms explicitly
     ConfigUpdateFun =
-        fun(Node) ->
-                rt_harness:update_app_config(Node, Version, Config)
+        case Config of
+            {cuttlefish, CuttleConfig} ->
+                fun(Node) ->
+                    rt_harness:set_conf(list_to_atom(Node), CuttleConfig)
+                end;
+            _ ->
+                fun(Node) ->
+                    rt_harness:update_app_config(Node, Version, Config)
+                end
         end,
     rt2:pmap(ConfigUpdateFun, NodeIds),
 
