@@ -35,6 +35,7 @@ main(Args) ->
     OutDir = proplists:get_value(outdir, ParsedArgs, "log"),
     ensure_dir(OutDir),
     lager_setup(OutDir),
+    ok = erlang_setup(ParsedArgs),
 
     %% Do we use GiddyUp for this run?
     Platform = report_platform(ParsedArgs),
@@ -45,7 +46,7 @@ main(Args) ->
     start_giddyup(Platform),
     {Tests, NonTests} = generate_test_lists(UseGiddyUp, ParsedArgs),
 
-    ok = prepare(ParsedArgs, Tests, NonTests),
+    ok = prepare_tests(Tests, NonTests),
     Results = execute(Tests, OutDir, ParsedArgs),
     finalize(Results, ParsedArgs),
     stop_giddyup(UseGiddyUp).
@@ -152,7 +153,7 @@ shuffle_tests(Tests, NonTests, Offset, Workers) ->
         [TestCount, ActualOffset, Workers, Offset]),
     {TestB ++ TestA, NonTests}.
 
-prepare(ParsedArgs, Tests, NonTests) ->
+prepare_tests(Tests, NonTests) ->
     [lager:notice("Test to run: ~p", [rt_test_plan:get_name(Test)]) || Test <- Tests],
     case NonTests of
         [] ->
@@ -160,7 +161,6 @@ prepare(ParsedArgs, Tests, NonTests) ->
         _ ->
             [lager:notice("Test not to run: ~p", [rt_test_plan:get_name(Test)]) || Test <- NonTests]
     end,
-    ok = erlang_setup(ParsedArgs),
     test_setup().
 
 execute(TestPlans, OutDir, ParsedArgs) ->
