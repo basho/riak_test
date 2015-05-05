@@ -393,8 +393,9 @@ post_result(TestPlan, TestResult, #rt_webhook{url=URL, headers=HookHeaders, name
 post_artifact(BaseURL, Label, Filename, User, Password) ->
     %% First compute the path of where to post the artifact
     URL = artifact_url(BaseURL, Label),
-    {ok, Body} = file:open(Filename, [read, binary]),
-    ReqBody = make_req_body(Body),
+    {ok, BodyIoDevice} = file:open(Filename, [read, binary]),
+    ReqBody = make_req_body(BodyIoDevice),
+    ok = file:close(BodyIoDevice),
     CType = guess_ctype(Label),
     BasicAuth = {basic_auth, {User, Password}},
 
