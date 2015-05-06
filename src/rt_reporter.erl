@@ -288,12 +288,15 @@ test_summary_fun(Result = {_, {skipped, _}, _}, {{_Pass, _Fail, Skipped}, Rows})
 %% @doc Format a row for clique
 format_test_row({TestPlan, Result, Duration}) ->
     TestName = rt_test_plan:get_name(TestPlan),
-    case Result of
-        {Status, Reason} ->
-            [TestName, Status, lists:flatten(Reason), test_summary_format_time(Duration)];
+    {Status, Reason} = case Result of
+        {FailOrSkip, Failure} when is_list(Failure) ->
+            {FailOrSkip, lists:flatten(Failure)};
+        {FailOrSkip, Failure} ->
+            {FailOrSkip, lists:flatten(io_lib:format("~p", [Failure]))};
         pass ->
-            [TestName, "pass", "N/A", test_summary_format_time(Duration)]
-    end.
+            {"pass", "N/A"}
+    end,
+    [TestName, Status, Reason, test_summary_format_time(Duration)].
 
 -spec(report_to_giddyup(term(), list()) -> list).
 report_to_giddyup(TestResult, Logs) ->
