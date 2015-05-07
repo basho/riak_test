@@ -30,6 +30,10 @@
 -behaviour(gen_server).
 
 -define(HEADER, [<<"Test">>, <<"Result">>, <<"Reason">>, <<"Test Duration">>]).
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 
 %% API
 -export([start_link/3,
@@ -263,16 +267,19 @@ print_summary(TestResults, _CoverResult, Verbose) ->
     %% end,
     ok.
 
-%% @doc Convert Milliseconds into human-readable string
+%% @doc Convert Microseconds into human-readable string
 -spec(test_summary_format_time(integer()) -> string()).
-test_summary_format_time(Milliseconds) ->
-    Mills = trunc(((Milliseconds / 1000000) - (Milliseconds div 1000000)) * 1000000),
-    TotalSecs = (Milliseconds - Mills) div 1000000,
+test_summary_format_time(Microseconds) ->
+    Micros = trunc(((Microseconds / 1000000) - (Microseconds div 1000000)) * 1000000),
+    TotalSecs = (Microseconds - Micros) div 1000000,
     TotalMins = TotalSecs div 60,
     Hours = TotalSecs div 3600,
     Secs = TotalSecs - (TotalMins * 60),
     Mins = TotalMins - (Hours * 60),
-    list_to_binary(io_lib:format("~ph ~pm ~p.~ps", [Hours, Mins, Secs, Mills])).
+    Decimal = lists:flatten(io_lib:format("~6..0B", [Micros])),
+    FirstDigit = string:left(Decimal, 1),
+    Fractional = string:strip(tl(Decimal), right, $0),
+    list_to_binary(io_lib:format("~ph ~pm ~p.~s~ss", [Hours, Mins, Secs, FirstDigit, Fractional])).
 
 %% @doc Count the number of passed, failed and skipped tests
 test_summary_fun(Result = {_, pass, _}, {{Pass, _Fail, _Skipped}, Rows}) ->
@@ -294,7 +301,7 @@ format_test_row({TestPlan, Result, Duration}) ->
         {FailOrSkip, Failure} ->
             {FailOrSkip, lists:flatten(io_lib:format("~p", [Failure]))};
         pass ->
-            {"pass", "N/A"}
+            {pass, "N/A"}
     end,
     [TestName, Status, Reason, test_summary_format_time(Duration)].
 
@@ -332,3 +339,45 @@ report_and_gather_logs(UploadToGiddyUp, LogDir, TestResult = {TestPlan, _, _}) -
 %% fail -> RetList ++ [{reason, iolist_to_binary(io_lib:format("~p", [Reason]))}];
 %% _ -> RetList
 %% end.
+
+-ifdef(TEST).
+
+format_result_row_pass_test() ->
+    %% Need to prime the config with any old default version
+    rt_config:set(versions, [{default, {riak_ee, "1.3.4"}}]),
+    Plan = rt_test_plan:new([{module,test},{backend,bitcask}]),
+    ?assertEqual(["test-bitcask", pass, "N/A", <<"0h 0m 0.012345s">>], format_test_row({Plan, pass, 12345})).
+
+format_result_row_fail_atom_test() ->
+    %% Need to prime the config with any old default version
+    rt_config:set(versions, [{default, {riak_ee, "1.3.4"}}]),
+    Plan = rt_test_plan:new([{module,test},{backend,bitcask}]),
+    ?assertEqual(["test-bitcask", fail, "timeout", <<"0h 0m 0.012345s">>], format_test_row({Plan, {fail,timeout}, 12345})).
+
+format_result_row_fail_string_test() ->
+    %% Need to prime the config with any old default version
+    rt_config:set(versions, [{default, {riak_ee, "1.3.4"}}]),
+    Plan = rt_test_plan:new([{module,test},{backend,bitcask}]),
+    ?assertEqual(["test-bitcask", fail, "some reason", <<"0h 0m 0.012345s">>], format_test_row({Plan, {fail,"some reason"}, 12345})).
+
+format_result_row_fail_list_test() ->
+    %% Need to prime the config with any old default version
+    rt_config:set(versions, [{default, {riak_ee, "1.3.4"}}]),
+    Plan = rt_test_plan:new([{module,test},{backend,bitcask}]),
+    ?assertEqual(["test-bitcask", fail, "nested", <<"0h 0m 0.012345s">>], format_test_row({Plan, {fail,[[$n],[$e],[[$s]],[$t],$e,$d]}, 12345})).
+
+format_time_microsecond_test() ->
+    ?assertEqual(<<"0h 0m 0.000001s">>, test_summary_format_time(1)).
+
+format_time_millisecond_test() ->
+    ?assertEqual(<<"0h 0m 0.001s">>, test_summary_format_time(1000)).
+
+format_time_second_test() ->
+    ?assertEqual(<<"0h 0m 1.0s">>, test_summary_format_time(1000000)).
+
+format_time_minute_test() ->
+    ?assertEqual(<<"0h 1m 0.0s">>, test_summary_format_time(60000000)).
+
+format_time_hour_test() ->
+    ?assertEqual(<<"1h 0m 0.0s">>, test_summary_format_time(3600000000)).
+-endif.
