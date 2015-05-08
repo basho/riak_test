@@ -391,17 +391,17 @@ test_fun(ConfirmFun, NotifyPid) ->
         %% Store the FSM Pid for use in unported tests
         put(test_runner_fsm, NotifyPid),
         %% Exceptions and their handling sucks, but eunit throws
-            %% errors `erlang:error' so here we are
-            try ConfirmFun() of
-                TestResult ->
-                    ?MODULE:send_event(NotifyPid, test_result(TestResult))
-            catch
-                Error:Reason ->
-                    lager:error("Failed to execute confirm function ~p due to ~p with reason ~p (trace: ~p)", 
-                                [ConfirmFun, Error, Reason, erlang:get_stacktrace()]),
-                    TestResult = format_eunit_error(Reason),
-                    ?MODULE:send_event(NotifyPid, test_result(TestResult))
-            end
+        %% errors `erlang:error' so here we are
+        try ConfirmFun() of
+            TestResult ->
+                ?MODULE:send_event(NotifyPid, test_result(TestResult))
+        catch
+            Error:Reason ->
+                lager:error("Failed to execute confirm function ~p due to ~p with reason ~p (trace: ~p)",
+                            [ConfirmFun, Error, Reason, erlang:get_stacktrace()]),
+                TestResult = format_eunit_error(Reason),
+                ?MODULE:send_event(NotifyPid, test_result(TestResult))
+        end
     end.
 
 format_eunit_error({assertion_failed, InfoList}) ->

@@ -29,18 +29,26 @@
 -define(NUMRUNSTATES, 1).
 -define(SEQMAX, 1000).
 -define(TESTCYCLE, 20).
+-define(N, 3).
 -define(CFG,
         [
          {riak_core,
           [
-           {ring_creation_size, 16}
+           {ring_creation_size, 16},
+           {n_val, ?N},
+           {handoff_concurrency, 10},
+           {vnode_management_timer, 1000}
           ]},
          {riak_kv,
           [
+           %% allow AAE to build trees and exchange rapidly
+           {anti_entropy_build_limit, {100, 1000}},
+           {anti_entropy_concurrency, 8},
            {handoff_rejected_max, infinity}
           ]},
          {yokozuna,
           [
+           {anti_entropy_tick, 1000},
            {enabled, true}
           ]}
         ]).
@@ -54,15 +62,13 @@
 
 confirm() ->
     %% Setup cluster initially
-    Nodes = rt:build_cluster(5, ?CFG),
+    [Node1, Node2, _Node3, _Node4, _Node5] = Nodes = rt:build_cluster(5, ?CFG),
 
-    %% We're going to always keep Node2 in the cluster.
-    [Node1, Node2, _Node3, _Node4, _Node5] = Nodes,
     rt:wait_for_cluster_service(Nodes, yokozuna),
 
     ConnInfo = ?GET(Node2, rt:connection_info([Node2])),
     {Host, Port} = ?GET(http, ConnInfo),
-    Shards = [begin {ok, P} = node_solr_port(Node), {Node, P} end || Node <- Nodes],
+    Shards = [{N, node_solr_port(N)} || N <- Nodes],
 
     %% Generate keys, YZ only supports UTF-8 compatible keys
     Keys = [<<N:64/integer>> || N <- lists:seq(1, ?SEQMAX),
@@ -71,16 +77,7 @@ confirm() ->
     KeyCount = length(Keys),
 
     Pid = rt:pbc(Node2),
-    riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
-
-    %% Create a search index and associate with a bucket
-    ok = riakc_pb_socket:create_search_index(Pid, ?INDEX),
-    ok = riakc_pb_socket:set_search_index(Pid, ?BUCKET, ?INDEX),
-    timer:sleep(1000),
-
-    %% Write keys and wait for soft commit
-    lager:info("Writing ~p keys", [KeyCount]),
-    [ok = rt:pbc_write(Pid, ?BUCKET, Key, Key, "text/plain") || Key <- Keys],
+    yz_rt:write_data(Pid, ?INDEX, ?BUCKET, Keys),
     timer:sleep(1100),
 
     %% Separate out shards for multiple runs
@@ -92,16 +89,20 @@ confirm() ->
     SearchURL = search_url(Host, Port, ?INDEX),
 
     lager:info("Verify Replicas Count = (3 * docs/keys) count"),
-    verify_count(SolrURL, KeyCount * 3),
+    verify_count(SolrURL, (KeyCount * ?N)),
 
     States = [#trial_state{solr_url_before = SolrURL,
                            solr_url_after = internal_solr_url(Host, SolrPort2, ?INDEX, Shards2Rest),
-                           leave_node = Node1}],
+                           leave_node = Node1},
+              #trial_state{solr_url_before = internal_solr_url(Host, SolrPort2, ?INDEX, Shards2Rest),
+                           solr_url_after = SolrURL,
+                           join_node = Node1,
+                           admin_node = Node2}],
 
     %% Run Shell Script to count/test # of replicas and leave/join
     %% nodes from the cluster
     [[begin
-          check_data(State, KeyCount, BucketURL, SearchURL),
+          check_data(Nodes, KeyCount, BucketURL, SearchURL, State),
           check_counts(Pid, KeyCount, BucketURL)
       end || State <- States]
      || _ <- lists:seq(1,?NUMRUNSTATES)],
@@ -113,8 +114,9 @@ confirm() ->
 %%%===================================================================
 
 node_solr_port(Node) ->
-    riak_core_util:safe_rpc(Node, application, get_env,
-                            [yokozuna, solr_port]).
+    {ok, P} = riak_core_util:safe_rpc(Node, application, get_env,
+                                      [yokozuna, solr_port]),
+    P.
 
 internal_solr_url(Host, Port, Index) ->
     ?FMT("http://~s:~B/internal_solr/~s", [Host, Port, Index]).
@@ -137,7 +139,8 @@ verify_count(Url, ExpectedCount) ->
         fun() ->
                 {ok, "200", _, DBody} = ibrowse:send_req(Url, [], get, []),
                 FoundCount = get_count(DBody),
-                lager:info("FoundCount: ~b, ExpectedCount: ~b", [FoundCount, ExpectedCount]),
+                lager:info("FoundCount: ~b, ExpectedCount: ~b",
+                           [FoundCount, ExpectedCount]),
                 ExpectedCount =:= FoundCount
         end,
     ?assertEqual(ok, rt:wait_until(AreUp)),
@@ -153,43 +156,53 @@ get_keys_count(BucketURL) ->
     length(kvc:path([<<"keys">>], Struct)).
 
 check_counts(Pid, InitKeyCount, BucketURL) ->
-    PBCounts   = [begin {ok, Resp} = riakc_pb_socket:search(Pid, ?INDEX, <<"*:*">>),
+    PBCounts   = [begin {ok, Resp} = riakc_pb_socket:search(
+                                       Pid, ?INDEX, <<"*:*">>),
                         Resp#search_results.num_found
                   end || _ <- lists:seq(1,?TESTCYCLE)],
-    HTTPCounts = [begin {ok, "200", _, RBody} = ibrowse:send_req(BucketURL, [], get, []),
+    HTTPCounts = [begin {ok, "200", _, RBody} = ibrowse:send_req(
+                                                  BucketURL, [], get, []),
                         Struct = mochijson2:decode(RBody),
                         length(kvc:path([<<"keys">>], Struct))
                   end || _ <- lists:seq(1,?TESTCYCLE)],
     MinPBCount = lists:min(PBCounts),
     MinHTTPCount = lists:min(HTTPCounts),
-    lager:info("Before-Node-Leave PB: ~b, After-Node-Leave PB: ~b", [InitKeyCount, MinPBCount]),
+    lager:info("Before-Node-Leave PB: ~b, After-Node-Leave PB: ~b",
+               [InitKeyCount, MinPBCount]),
     ?assertEqual(InitKeyCount, MinPBCount),
-    lager:info("Before-Node-Leave PB: ~b, After-Node-Leave HTTP: ~b", [InitKeyCount, MinHTTPCount]),
+    lager:info("Before-Node-Leave PB: ~b, After-Node-Leave HTTP: ~b",
+               [InitKeyCount, MinHTTPCount]),
     ?assertEqual(InitKeyCount, MinHTTPCount).
 
-check_data(S, KeyCount, BucketURL, SearchURL) ->
-    CheckCount        = KeyCount * 3,
+check_data(Cluster, KeyCount, BucketURL, SearchURL, S) ->
+    CheckCount        = KeyCount * ?N,
     KeysBefore        = get_keys_count(BucketURL),
 
-    leave_or_join(S),
+    UpdatedCluster = leave_or_join(Cluster, S),
+
+    yz_rt:wait_for_aae(UpdatedCluster),
 
     KeysAfter = get_keys_count(BucketURL),
     lager:info("KeysBefore: ~b, KeysAfter: ~b", [KeysBefore, KeysAfter]),
     ?assertEqual(KeysBefore, KeysAfter),
 
     lager:info("Verify Search Docs Count =:= key count"),
+    lager:info("Run Search URL: ~s", [SearchURL]),
     verify_count(SearchURL, KeysAfter),
     lager:info("Verify Replicas Count = (3 * docs/keys) count"),
+    lager:info("Run Search URL: ~s", [S#trial_state.solr_url_after]),
     verify_count(S#trial_state.solr_url_after, CheckCount).
 
-leave_or_join(S=#trial_state{join_node=undefined}) ->
+leave_or_join(Cluster, S=#trial_state{join_node=undefined}) ->
     Node = S#trial_state.leave_node,
     rt:leave(Node),
-    ?assertEqual(ok, rt:wait_until_unpingable(Node));
-leave_or_join(S=#trial_state{leave_node=undefined}) ->
+    ?assertEqual(ok, rt:wait_until_unpingable(Node)),
+    Cluster -- [Node];
+leave_or_join(Cluster, S=#trial_state{leave_node=undefined}) ->
     Node = S#trial_state.join_node,
     NodeAdmin = S#trial_state.admin_node,
     ok = rt:start_and_wait(Node),
     ok = rt:join(Node, NodeAdmin),
-    ?assertEqual(ok, rt:wait_until_nodes_ready([NodeAdmin, Node])),
-    ?assertEqual(ok, rt:wait_until_no_pending_changes([NodeAdmin, Node])).
+    ?assertEqual(ok, rt:wait_until_nodes_ready(Cluster)),
+    ?assertEqual(ok, rt:wait_until_no_pending_changes(Cluster)),
+    Cluster ++ [Node].

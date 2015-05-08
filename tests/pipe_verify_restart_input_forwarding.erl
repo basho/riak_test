@@ -56,8 +56,6 @@ confirm() ->
 
     [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
 
-    [rt:wait_for_service(Node, riak_pipe) || Node <- Nodes],
-
     rt:load_modules_on_nodes([?MODULE, rt_pipe], Nodes),
 
     verify_worker_restart_failure_input_forwarding(Nodes),

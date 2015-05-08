@@ -21,9 +21,20 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--define(CFG, [{yokozuna, [{enabled, true}]}]).
+-define(CFG, [{riak_kv,
+               [
+                %% allow AAE to build trees and exchange rapidly
+                {anti_entropy_build_limit, {100, 1000}},
+                {anti_entropy_concurrency, 4}
+               ]},
+              {yokozuna,
+               [
+                {enabled, true},
+                {anti_entropy_tick, 1000}
+               ]}]).
 -define(INDEX, <<"test_idx_core">>).
--define(BUCKET, <<"test_bkt_core">>).
+-define(TYPE, <<"data">>).
+-define(BUCKET, {?TYPE, <<"test_bkt_core">>}).
 -define(SEQMAX, 100).
 
 confirm() ->
@@ -48,7 +59,9 @@ confirm() ->
     %% Create a search index and associate with a bucket
     lager:info("Create and set Index ~p for Bucket ~p~n", [?INDEX, ?BUCKET]),
     ok = riakc_pb_socket:create_search_index(Pid, ?INDEX),
-    ok = riakc_pb_socket:set_search_index(Pid, ?BUCKET, ?INDEX),
+    ok = rt:create_and_activate_bucket_type(Node,
+                                            ?TYPE,
+                                            [{search_index, ?INDEX}]),
     timer:sleep(1000),
 
     %% Write keys and wait for soft commit
@@ -58,19 +71,48 @@ confirm() ->
 
     verify_count(Pid, KeyCount),
 
-    %% Remove core.properties from the selected subset
-    remove_core_props(RandNodes),
+    lager:info("Remove core.properties file in each index data dir"),
+    remove_core_props(RandNodes, ?INDEX),
 
-    wait_until(RandNodes,
-               fun(N) ->
-                       rpc:call(N, yz_index, exists, [?INDEX])
-               end),
+    check_exists(Cluster, ?INDEX),
 
     lager:info("Write one more piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"foo">>, <<"foo">>, "text/plain"),
     timer:sleep(1100),
 
     verify_count(Pid, KeyCount + 1),
+
+    lager:info("Remove index directories on each node and let them recreate/reindex"),
+    remove_index_dirs(RandNodes, ?INDEX),
+
+    check_exists(Cluster, ?INDEX),
+
+    yz_rt:expire_trees(Cluster),
+    yz_rt:wait_for_aae(Cluster),
+
+    lager:info("Write second piece of data"),
+    ok = rt:pbc_write(Pid, ?BUCKET, <<"food">>, <<"foody">>, "text/plain"),
+    timer:sleep(1100),
+
+    verify_count(Pid, KeyCount + 2),
+
+    lager:info("Remove segment info files in each index data dir"),
+    remove_segment_infos(RandNodes, ?INDEX),
+
+    lager:info("To fix, we remove index directories on each node and let them recreate/reindex"),
+
+    remove_index_dirs(RandNodes, ?INDEX),
+
+    check_exists(Cluster, ?INDEX),
+
+    yz_rt:expire_trees(Cluster),
+    yz_rt:wait_for_aae(Cluster),
+
+    lager:info("Write third piece of data"),
+    ok = rt:pbc_write(Pid, ?BUCKET, <<"baz">>, <<"bar">>, "text/plain"),
+    timer:sleep(1100),
+
+    verify_count(Pid, KeyCount + 3),
 
     riakc_pb_socket:stop(Pid),
 
@@ -88,9 +130,9 @@ verify_count(Pid, ExpectedKeyCount) ->
     end.
 
 %% @doc Remove core properties file on nodes.
-remove_core_props(Nodes) ->
-    IndexDirs = [rpc:call(Node, yz_index, index_dir, [?INDEX]) ||
-                Node <- Nodes],
+remove_core_props(Nodes, IndexName) ->
+    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+                    Node <- Nodes],
     PropsFiles = [filename:join([IndexDir, "core.properties"]) ||
                      IndexDir <- IndexDirs],
     lager:info("Remove core.properties files: ~p, on nodes: ~p~n",
@@ -98,11 +140,31 @@ remove_core_props(Nodes) ->
     [file:delete(PropsFile) || PropsFile <- PropsFiles],
     ok.
 
-%% @doc Wrapper around `rt:wait_until' to verify `F' against multiple
-%%      nodes.  The function `F' is passed one of the `Nodes' as
-%%      argument and must return a `boolean()' delcaring whether the
-%%      success condition has been met or not.
--spec wait_until([node()], fun((node()) -> boolean())) -> ok.
-wait_until(Nodes, F) ->
-    [?assertEqual(ok, rt:wait_until(Node, F)) || Node <- Nodes],
-    ok.
+%% @doc Check if index/core exists in metadata, disk via yz_index:exists.
+check_exists(Nodes, IndexName) ->
+    rt:wait_until(Nodes,
+                  fun(N) ->
+                          rpc:call(N, yz_index, exists, [IndexName])
+                  end).
+
+%% @doc Remove index directories, removing the index.
+remove_index_dirs(Nodes, IndexName) ->
+    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+                    Node <- Nodes],
+    lager:info("Remove index dirs: ~p, on nodes: ~p~n",
+               [IndexDirs, Nodes]),
+    [rt:stop(ANode) || ANode <- Nodes],
+    [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
+    [rt:start(ANode) || ANode <- Nodes].
+
+%% @doc Remove lucence segment info files to check if reindexing will occur
+%%      on re-creation/re-indexing.
+remove_segment_infos(Nodes, IndexName) ->
+    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+                    Node <- Nodes],
+    SiPaths = [binary_to_list(filename:join([IndexDir, "data/index/*.si"])) ||
+                                     IndexDir <- IndexDirs],
+    SiFiles = lists:append([filelib:wildcard(Path) || Path <- SiPaths]),
+    lager:info("Remove segment info files: ~p, on in dirs: ~p~n",
+               [SiFiles, IndexDirs]),
+    [file:delete(SiFile) || SiFile <- SiFiles].
