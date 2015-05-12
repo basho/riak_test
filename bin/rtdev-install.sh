@@ -100,7 +100,6 @@ for i in `ls`; do cp -p -P -R $i $RT_DEST_DIR/$RT_VERSION/; done
         cat > .gitignore <<EOF
 # Don't check in large binaries
 bin/
-lib/
 EOF
 
         ## Some versions of git and/or OS require these fields
