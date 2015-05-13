@@ -267,7 +267,8 @@ fetch_all_test_plans(Platform, Product, VersionNumber, DefaultVersion, Host) ->
             Module = binary_to_atom(kvc:path(name, Test), utf8),
             Plan0 = rt_test_plan:new([{id, Id}, {module, Module}, {project, Project}, {platform, Platform}, {version, VersionNumber}]),
             {ok, Plan1} = case kvc:path('tags.backend', Test) of
-                          [] -> {ok, Plan0};
+                          %% Bitcask is the default version
+                          [] -> rt_test_plan:set(backend, bitcask, Plan0);
                           Backend -> rt_test_plan:set(backend, binary_to_atom(Backend, utf8), Plan0)
                       end,
             {ok, Plan2} = case kvc:path('tags.upgrade_version', Test) of

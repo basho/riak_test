@@ -42,7 +42,7 @@
     project=rt_config:get_default_version_product() :: atom() | binary(),
     platform :: string(),
     version=rt_config:get_default_version_number() :: string(),
-    backend=bitcask :: atom(),
+    backend=undefined :: atom(),
     upgrade_path=[] :: [rt_properties2:product_version()],
     properties :: rt_properties2:properties()
 }).

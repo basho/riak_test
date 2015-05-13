@@ -25,6 +25,10 @@
 -export([main/1]).
 -export([add_deps/1]).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 main(Args) ->
     %% TODO Should we use clique? -jsb
     %% Parse command line arguments ...
@@ -77,7 +81,7 @@ cli_options() ->
  {skip,                   $x, "skip",     string,     "list of tests to skip in a directory"},
  {verbose,                $v, "verbose",  undefined,  "verbose output"},
  {outdir,                 $o, "outdir",   string,     "output directory"},
- {backend,                $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
+ {backend,                $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb | multi]"},
  {keep,            undefined, "keep",     boolean,    "do not teardown cluster"},
  {continue_on_fail,       $n, "continue", boolean,    "continues executing tests on failure"},
  {report,                 $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1404-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
@@ -104,11 +108,24 @@ generate_test_lists(UseGiddyUp, ParsedArgs) ->
     %% test metadata
 
     TestData = compose_test_data(ParsedArgs),
-    Backends = [proplists:get_value(backend, ParsedArgs, bitcask)],
+    CmdLineBackends = rt_util:backend_to_atom_list(proplists:get_value(backend, ParsedArgs)),
+    Backends = determine_backends(CmdLineBackends, UseGiddyUp),
     {Tests, NonTests} = wrap_test_in_test_plan(UseGiddyUp, Backends, TestData),
     Offset = rt_config:get(offset, undefined),
     Workers = rt_config:get(workers, undefined),
     shuffle_tests(Tests, NonTests, Offset, Workers).
+
+%% @doc Which backends should be tested?
+%% Use the command-line specified backend, otherwise default to bitcask
+%% If running under GiddyUp, then default to ALL backends
+%% First argument is a list of command-line backends and second is whether or not in GiddyUp mode
+-spec(determine_backends(atom(), boolean()) -> list()).
+determine_backends(undefined, true) ->
+    [memory, bitcask, eleveldb, multi];
+determine_backends(undefined, _) ->
+    [bitcask];
+determine_backends(Backends, _) ->
+    Backends.
 
 %% @doc Set values in the configuration with values specified on the command line
 maybe_override_setting(Argument, Value, Arguments) ->
@@ -385,16 +402,6 @@ match_group_attributes(Attributes, Groups) ->
                            || Group <- Groups, TestType <- TestTypes ])
     end.
 
-backend_list(Backend) when is_atom(Backend) ->
-    atom_to_list(Backend);
-backend_list(Backends) when is_list(Backends) ->
-    FoldFun = fun(X, []) ->
-                      atom_to_list(X);
-                 (X, Acc) ->
-                      Acc ++ "," ++ atom_to_list(X)
-              end,
-    lists:foldl(FoldFun, [], Backends).
-
 load_tests_in_dir(Dir, Groups, SkipTests) ->
     case filelib:is_dir(Dir) of
         true ->
@@ -470,3 +477,19 @@ stop_giddyup(true) ->
 stop_giddyup(_) ->
     ok.
 
+-ifdef(TEST).
+%% Make sure that bitcask is the default backend
+default_backend_test() ->
+    ?assertEqual([bitcask], determine_backends(undefined, false)).
+
+%% Make sure that GiddyUp supports all backends
+default_giddyup_backend_test() ->
+    ?assertEqual([bitcask, eleveldb, memory], lists:sort(determine_backends(undefined, true))).
+
+%% Command-line backends should always rule
+cmdline_backend_test() ->
+    ?assertEqual([memory], determine_backends([memory], false)),
+    ?assertEqual([memory], determine_backends([memory], true)),
+    ?assertEqual([eleveldb, memory], lists:sort(determine_backends([memory, eleveldb], false))),
+    ?assertEqual([eleveldb, memory], lists:sort(determine_backends([memory, eleveldb], true))).
+-endif.

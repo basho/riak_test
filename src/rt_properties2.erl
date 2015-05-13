@@ -51,7 +51,7 @@
 -type topology() :: #rt_cluster_topology_v1{}.
 -type feature_flag() :: strong_consistency | yokozuna | jmx | snmp | security.
 -type product_version() :: string() | atom().
--type storage_backend() :: all | riak_kv_bitcask_backend | riak_kv_eleveldb_backend | riak_kv_memory_backend | riak_kv_multi_backend.
+-type storage_backend() :: all | bitcask | eleveldb | memory | multi.
 -type index() :: {binary(), binary(), binary()}.
 
 -export_type([properties/0,

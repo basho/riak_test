@@ -92,7 +92,7 @@ load_from_giddyup(Backends, CommandLineTests) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(add_test_plan(string(), string(), [string()], rt_properties2:product_version(), rt_properties2:properties()) -> ok).
+-spec(add_test_plan(string(), string(), [atom()], rt_properties2:product_version(), rt_properties2:properties()) -> ok).
 add_test_plan(Module, Platform, Backends, Version, Properties) ->
     gen_server:call(?MODULE, {add_test_plan, Module, Platform, Backends, Version, Properties}).
 
@@ -183,7 +183,8 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-%% Run only those GiddyUp tests which are specified on the command line
+%% Run only those GiddyUp tests which are specified on the command line and are
+%% included in the specified backends.
 %% If none are specified, run everything
 handle_call({load_from_giddyup, Backends, CommandLineTests}, _From, State) ->
     AllGiddyupTests = giddyup:get_test_plans(),
@@ -207,7 +208,7 @@ handle_call({load_from_giddyup, Backends, CommandLineTests}, _From, State) ->
     State1 = lists:foldl(fun sort_and_queue/2, State, Included1),
     State2 = lists:foldl(fun exclude_test_plan/2, State1, Excluded1),
     {reply, ok, State2};
-%% Add a single test plan to the queue
+%% Add a single test plan for each backend to the queue
 handle_call({add_test_plan, Module, Platform, Backends, _Version, _Properties}, _From, State) ->
     State1 = lists:foldl(fun(Backend, AccState) ->
             TestPlan = rt_test_plan:new([{module, Module}, {platform, Platform}, {backend, Backend}]),
@@ -326,6 +327,7 @@ sort_and_queue(TestPlan, State) ->
                 non_runnable_test_plans=QNR2}.
 
 %% Check for api compatibility
+%% TODO: Move into "harness" or "driver" since it might be on a remote node.
 is_runnable_test_plan(TestPlan) ->
     TestModule = rt_test_plan:get_module(TestPlan),
     {Mod, Fun} = riak_test_runner:function_name(confirm, TestModule),
