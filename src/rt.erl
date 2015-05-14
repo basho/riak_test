@@ -32,6 +32,8 @@
          admin/2,
          admin/3,
          assert_nodes_agree_about_ownership/1,
+         assert_capability/3,
+         assert_supported/3,
          async_start/1,
          attach/2,
          attach_direct/2,
@@ -173,6 +175,7 @@
         ]).
 
 -type strings() :: [string(),...] | [].
+-type capability() :: atom() | {atom(), atom()}.
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(RT_ETS, rt_ets).
 -define(RT_ETS_OPTS, [public, named_table, {write_concurrency, true}]).
@@ -2015,6 +2018,22 @@ trace_count({trace, _Pid, return_from, MFA, _Result}, {RTNode, Cluster}) ->
     Count2 = Count + 1,
     rpc:call(RTNode, ets, insert, [?RT_ETS, {MFA, Count2}]),
     {RTNode, Cluster}.
+
+-spec assert_capability(node(), capability(), atom()|[atom()]) -> ok.
+assert_capability(CNode, Capability, Value) ->
+    lager:info("Checking Capability Setting ~p =:= ~p on ~p",
+               [Capability, Value, CNode]),
+    ?assertEqual(ok, rt:wait_until_capability(CNode, Capability, Value)),
+    ok.
+
+-spec assert_supported([capability()], capability(), atom()|[atom()]) -> ok.
+assert_supported(Capabilities, Capability, Value) ->
+    lager:info("Checking Capability Supported Values ~p =:= ~p",
+               [Capability, Value]),
+    ?assertEqual(Value, proplists:get_value(
+                          Capability,
+                          proplists:get_value('$supported', Capabilities))),
+    ok.
 
 
 -ifdef(TEST).
