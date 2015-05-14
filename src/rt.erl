@@ -662,10 +662,16 @@ claimant_according_to(Node) ->
 %% @doc Safely construct a new cluster and return a list of the deployed nodes
 %% @todo Add -spec and update doc to reflect mult-version changes
 build_cluster(Versions) when is_list(Versions) ->
-    UpdatedVersions = [{rt_config:version_to_tag(Vsn), Cfg} || {Vsn, Cfg} <- Versions],
+    UpdatedVersions = [build_version_config(Vsn) || Vsn <- Versions],
     build_cluster(length(Versions), UpdatedVersions, rt_properties:default_config());
 build_cluster(NumNodes) ->
     build_cluster(NumNodes, rt_properties:default_config()).
+
+%% @doc Use the default configuration when a configuration is not specified
+build_version_config(Vsn) when not is_tuple(Vsn) ->
+    {rt_config:version_to_tag(Vsn), rt_properties:default_config()};
+build_version_config({Vsn, Cfg}) ->
+    {rt_config:version_to_tag(Vsn), Cfg}.
 
 %% @doc Safely construct a `NumNode' size cluster using
 %%      `InitialConfig'. Return a list of the deployed nodes.

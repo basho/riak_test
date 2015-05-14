@@ -238,8 +238,6 @@ print_summary(TestResults, _CoverResult, Verbose) ->
 
     case Verbose of
         true ->
-            %% TODO: Remove once clique table is fixed
-            [lager:debug("ROW ~p", [Row]) || Row <- Rows],
             Table = clique_table:autosize_create_table(?HEADER, Rows),
             [lager:notice(string:tokens(lists:flatten(FormattedRow), "\n")) || FormattedRow <- Table];
         false ->
