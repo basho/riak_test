@@ -17,24 +17,30 @@
 %% under the License.
 %%
 %%-------------------------------------------------------------------
--module(yz_rt).
+-module(yokozuna_rt).
 
--type index_name() :: binary().
--type bucket() :: binary() | {riak_core_bucket_type:bucket_type(), binary()}.
+-include_lib("eunit/include/eunit.hrl").
+-include("yokozuna_rt.hrl").
 
 -export([expire_trees/1,
          rolling_upgrade/2,
+         rolling_upgrade/3,
          wait_for_aae/1,
-         write_data/4]).
+         wait_for_full_exchange_round/2,
+         write_data/5]).
 
 %% @doc Write `Keys' via the PB inteface to a `Bucket' and have them
 %%      searchable in an `Index'.
--spec write_data(pid(), index_name(), bucket(), [binary()]) -> ok.
-write_data(Pid, Index, Bucket, Keys) ->
+-spec write_data([node()], pid(), index_name(), bucket(), [binary()]) -> ok.
+write_data(Cluster, Pid, Index, Bucket, Keys) ->
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
 
     %% Create a search index and associate with a bucket
-    ok = riakc_pb_socket:create_search_index(Pid, Index),
+    riakc_pb_socket:create_search_index(Pid, Index),
+
+    %% For possible legacy upgrade reasons, wrap create index in a wait
+    wait_for_index(Cluster, Index),
+
     ok = riakc_pb_socket:set_search_index(Pid, Bucket, Index),
     timer:sleep(1000),
 
@@ -47,25 +53,45 @@ write_data(Pid, Index, Bucket, Keys) ->
 %%      on current | previous | legacy.
 -spec rolling_upgrade([node()], current | previous | legacy) -> ok.
 rolling_upgrade(Cluster, Vsn) ->
+    rolling_upgrade(Cluster, Vsn, []).
+
+-spec rolling_upgrade([node()], current | previous | legacy, proplists:proplist()) -> ok.
+rolling_upgrade(Cluster, Vsn, YZCfgChanges) ->
     lager:info("Perform rolling upgrade on cluster ~p", [Cluster]),
     SolrPorts = lists:seq(11000, 11000 + length(Cluster) - 1),
     Cluster2 = lists:zip(SolrPorts, Cluster),
     [begin
          Cfg = [{riak_kv, [{anti_entropy, {on, [debug]}},
-                           {anti_entropy_concurrency, 12},
-                           {anti_entropy_build_limit, {6,500}}
+                           {anti_entropy_concurrency, 8},
+                           {anti_entropy_build_limit, {100, 1000}}
                           ]},
                 {yokozuna, [{anti_entropy, {on, [debug]}},
-                            {anti_entropy_concurrency, 12},
-                            {anti_entropy_build_limit, {6,500}},
+                            {anti_entropy_concurrency, 8},
+                            {anti_entropy_build_limit, {100, 1000}},
                             {anti_entropy_tick, 1000},
                             {enabled, true},
                             {solr_port, SolrPort}]}],
-         rt:upgrade(Node, Vsn, Cfg),
+         MergeC = config_merge(Cfg, YZCfgChanges),
+         rt:upgrade(Node, Vsn, MergeC),
          rt:wait_for_service(Node, riak_kv),
          rt:wait_for_service(Node, yokozuna)
      end || {SolrPort, Node} <- Cluster2],
     ok.
+
+-spec config_merge(proplists:proplist(), proplists:proplist()) ->
+                          orddict:orddict() | proplists:proplist().
+config_merge(DefaultCfg, NewCfg) when NewCfg /= [] ->
+    orddict:update(yokozuna,
+                   fun(V) ->
+                           orddict:merge(fun(_, _X, Y) -> Y end,
+                                         orddict:from_list(V),
+                                         orddict:from_list(
+                                           orddict:fetch(
+                                             yokozuna, NewCfg)))
+                   end,
+                   DefaultCfg);
+config_merge(DefaultCfg, _NewCfg) ->
+    DefaultCfg.
 
 %% @doc Use AAE status to verify that exchange has occurred for all
 %%      partitions since the time this function was invoked.
@@ -111,11 +137,22 @@ wait_for_full_exchange_round(Cluster, Timestamp) ->
     rt:wait_until(Cluster, AllExchanged),
     ok.
 
+%% @doc Wait for index creation. This is to handle *legacy* versions of yokozuna
+%%      in upgrade tests
+-spec wait_for_index(list(), index_name()) -> ok.
+wait_for_index(Cluster, Index) ->
+    IsIndexUp =
+        fun(Node) ->
+                lager:info("Waiting for index ~s to be avaiable on node ~p",
+                           [Index, Node]),
+                rpc:call(Node, yz_solr, ping, [Index])
+        end,
+    [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster],
+    ok.
+
 %% @doc Expire YZ trees
 -spec expire_trees([node()]) -> ok.
 expire_trees(Cluster) ->
-    lager:info("Expire all trees and verify exchange still happens"),
-
     lager:info("Expire all trees"),
     _ = [ok = rpc:call(Node, yz_entropy_mgr, expire_trees, [])
          || Node <- Cluster],

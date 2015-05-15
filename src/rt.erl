@@ -175,7 +175,7 @@
         ]).
 
 -type strings() :: [string(),...] | [].
--type capability() :: atom() | {atom(), atom()}.
+-type capability() :: atom() | {atom(), tuple()}.
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(RT_ETS, rt_ets).
 -define(RT_ETS_OPTS, [public, named_table, {write_concurrency, true}]).
@@ -2019,7 +2019,7 @@ trace_count({trace, _Pid, return_from, MFA, _Result}, {RTNode, Cluster}) ->
     rpc:call(RTNode, ets, insert, [?RT_ETS, {MFA, Count2}]),
     {RTNode, Cluster}.
 
--spec assert_capability(node(), capability(), atom()|[atom()]) -> ok.
+-spec assert_capability(node(), capability(), atom()) -> ok.
 assert_capability(CNode, Capability, Value) ->
     lager:info("Checking Capability Setting ~p =:= ~p on ~p",
                [Capability, Value, CNode]),

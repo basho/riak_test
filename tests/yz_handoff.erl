@@ -77,7 +77,7 @@ confirm() ->
     KeyCount = length(Keys),
 
     Pid = rt:pbc(Node2),
-    yz_rt:write_data(Pid, ?INDEX, ?BUCKET, Keys),
+    yokozuna_rt:write_data(Nodes, Pid, ?INDEX, ?BUCKET, Keys),
     timer:sleep(1100),
 
     %% Separate out shards for multiple runs
@@ -180,7 +180,7 @@ check_data(Cluster, KeyCount, BucketURL, SearchURL, S) ->
 
     UpdatedCluster = leave_or_join(Cluster, S),
 
-    yz_rt:wait_for_aae(UpdatedCluster),
+    yokozuna_rt:wait_for_aae(UpdatedCluster),
 
     KeysAfter = get_keys_count(BucketURL),
     lager:info("KeysBefore: ~b, KeysAfter: ~b", [KeysBefore, KeysAfter]),

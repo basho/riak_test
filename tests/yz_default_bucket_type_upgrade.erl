@@ -22,6 +22,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
+-define(N, 3).
 -define(YZ_CAP, {yokozuna, handle_legacy_default_bucket_type_aae}).
 -define(INDEX, <<"test_upgrade_idx">>).
 -define(BUCKET, <<"test_upgrade_bucket">>).
@@ -30,6 +31,7 @@
         [{riak_core,
           [
            {ring_creation_size, 16},
+           {default_bucket_props, [{n_val, ?N}]},
            {anti_entropy_build_limit, {100, 1000}},
            {anti_entropy_concurrency, 8}
           ]},
@@ -47,9 +49,7 @@ confirm() ->
     [_, Node|_] = Cluster = rt:build_cluster(lists:duplicate(4, {OldVsn, ?CFG})),
     rt:wait_for_cluster_service(Cluster, yokozuna),
 
-    %% Use when we can specify a specific version to upgrade from or skip test
-    %% accordingly.
-    %% rt:assert_capability(Node, ?YZ_CAP, {unknown_capability, ?YZ_CAP}),
+    [rt:assert_capability(ANode, ?YZ_CAP, {unknown_capability, ?YZ_CAP}) || ANode <- Cluster],
 
     %% Generate keys, YZ only supports UTF-8 compatible keys
     GenKeys = [<<N:64/integer>> || N <- lists:seq(1, ?SEQMAX),
@@ -61,34 +61,40 @@ confirm() ->
 
     OldPid = rt:pbc(Node),
 
-    yz_rt:write_data(OldPid, ?INDEX, ?BUCKET, GenKeys),
+    yokozuna_rt:write_data(Cluster, OldPid, ?INDEX, ?BUCKET, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
-    assert_num_found_query(OldPid, ?INDEX, KeyCount),
+    verify_num_found_query(Cluster, ?INDEX, KeyCount),
 
     %% Upgrade
-    yz_rt:rolling_upgrade(Cluster, current),
+    yokozuna_rt:rolling_upgrade(Cluster, current),
 
-    CurrentCapabilities = rt:capability(Node, all),
-    rt:assert_capability(Node, ?YZ_CAP, v1),
-    rt:assert_supported(CurrentCapabilities, ?YZ_CAP, [v1, v0]),
+    [rt:assert_capability(ANode, ?YZ_CAP, v1) || ANode <- Cluster],
+    [rt:assert_supported(rt:capability(ANode, all), ?YZ_CAP, [v1, v0]) || ANode <- Cluster],
 
-    yz_rt:wait_for_aae(Cluster),
+    verify_num_found_query(Cluster, ?INDEX, KeyCount),
 
-    %% test query count again
+    lager:info("Write one more piece of data"),
     Pid = rt:pbc(Node),
-    assert_num_found_query(Pid, ?INDEX, KeyCount),
+    ok = rt:pbc_write(Pid, ?BUCKET, <<"foo">>, <<"foo">>, "text/plain"),
+    timer:sleep(1100),
 
-    yz_rt:expire_trees(Cluster),
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:expire_trees(Cluster),
+    verify_num_found_query(Cluster, ?INDEX, KeyCount + 1),
 
-    assert_num_found_query(Pid, ?INDEX, KeyCount),
+    [ok = rpc:call(ANode, application, set_env, [riak_kv, anti_entropy_build_limit, {100, 1000}])
+     || ANode <- Cluster],
 
     pass.
 
-assert_num_found_query(Pid, Index, ExpectedCount) ->
-    {ok, {_, _, _, NumFound}} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),
-    lager:info("Check Count, Expected: ~p | Actual: ~p~n",
-               [ExpectedCount, NumFound]),
-    ?assertEqual(ExpectedCount, NumFound).
+verify_num_found_query(Cluster, Index, ExpectedCount) ->
+    F = fun(Node) ->
+                Pid = rt:pbc(Node),
+                {ok, {_, _, _, NumFound}} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),
+                lager:info("Check Count, Expected: ~p | Actual: ~p~n",
+                           [ExpectedCount, NumFound]),
+                ExpectedCount =:= NumFound
+        end,
+    rt:wait_until(Cluster, F),
+    ok.

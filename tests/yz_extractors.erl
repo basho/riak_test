@@ -60,9 +60,7 @@ confirm() ->
     [_, Node|_] = Cluster = rt:build_cluster(lists:duplicate(4, {OldVsn, ?CFG})),
     rt:wait_for_cluster_service(Cluster, yokozuna),
 
-    %% Use when we can specify a specific version to upgrade from or skip test
-    %% accordingly.
-    %% rt:assert_capability(Node, ?YZ_CAP, {unknown_capability, ?YZ_CAP}),
+    [rt:assert_capability(ANode, ?YZ_CAP, {unknown_capability, ?YZ_CAP}) || ANode <- Cluster],
 
     OldPid = rt:pbc(Node),
 
@@ -75,7 +73,7 @@ confirm() ->
 
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA]),
 
-    yz_rt:write_data(OldPid, ?INDEX1, ?BUCKET1, GenKeys),
+    yokozuna_rt:write_data(Cluster, OldPid, ?INDEX1, ?BUCKET1, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
@@ -89,7 +87,7 @@ confirm() ->
     ?assertEqual(KeyCount * N, PrevGetMapCC),
 
     %% test query count
-    assert_num_found_query(OldPid, ?INDEX1, KeyCount),
+    verify_num_found_query(Cluster, ?INDEX1, KeyCount),
     riakc_pb_socket:stop(OldPid),
 
     {RingVal1, MDVal1} = get_ring_and_cmd_vals(Node, ?YZ_META_EXTRACTORS,
@@ -109,21 +107,19 @@ confirm() ->
     ?assertEqual(?EXTRACTMAPEXPECT, ExtractMap),
 
     %% Upgrade
-    yz_rt:rolling_upgrade(Cluster, current),
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:rolling_upgrade(Cluster, current),
 
-    CurrentCapabilities = rt:capability(Node, all),
-    rt:assert_capability(Node, ?YZ_CAP, true),
-    rt:assert_supported(CurrentCapabilities, ?YZ_CAP, [true, false]),
+    [rt:assert_capability(ANode, ?YZ_CAP, true) || ANode <- Cluster],
+    [rt:assert_supported(rt:capability(ANode, all), ?YZ_CAP, [true, false]) || ANode <- Cluster],
 
     %% test query count again
-    Pid = rt:pbc(Node),
-    assert_num_found_query(Pid, ?INDEX1, KeyCount),
+    verify_num_found_query(Cluster, ?INDEX1, KeyCount),
 
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA,
                              ?GET_MAP_READTHROUGH_MFA]),
 
-    yz_rt:write_data(Pid, ?INDEX2, ?BUCKET2, GenKeys),
+    Pid = rt:pbc(Node),
+    yokozuna_rt:write_data(Cluster, Pid, ?INDEX2, ?BUCKET2, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
@@ -169,9 +165,16 @@ get_ring_and_cmd_vals(Node, Prefix, Key) ->
     RingVal = ring_meta_get(Node, Key, Ring),
     {RingVal, MDVal}.
 
-assert_num_found_query(Pid, Index, ExpectedCount) ->
-    {ok, Results} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),
-    ?assertEqual(ExpectedCount, Results#search_results.num_found).
+verify_num_found_query(Cluster, Index, ExpectedCount) ->
+    F = fun(Node) ->
+                Pid = rt:pbc(Node),
+                {ok, {_, _, _, NumFound}} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),
+                lager:info("Check Count, Expected: ~p | Actual: ~p~n",
+                           [ExpectedCount, NumFound]),
+                ExpectedCount =:= NumFound
+        end,
+    rt:wait_until(Cluster, F),
+    ok.
 
 metadata_get(Node, Prefix, Key) ->
     rpc:call(Node, riak_core_metadata, get, [Prefix, Key, []]).

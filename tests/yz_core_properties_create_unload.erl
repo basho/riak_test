@@ -87,8 +87,8 @@ confirm() ->
 
     check_exists(Cluster, ?INDEX),
 
-    yz_rt:expire_trees(Cluster),
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:expire_trees(Cluster),
+    yokozuna_rt:wait_for_aae(Cluster),
 
     lager:info("Write second piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"food">>, <<"foody">>, "text/plain"),
@@ -105,8 +105,8 @@ confirm() ->
 
     check_exists(Cluster, ?INDEX),
 
-    yz_rt:expire_trees(Cluster),
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:expire_trees(Cluster),
+    yokozuna_rt:wait_for_aae(Cluster),
 
     lager:info("Write third piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"baz">>, <<"bar">>, "text/plain"),
