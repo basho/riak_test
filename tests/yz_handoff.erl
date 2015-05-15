@@ -71,7 +71,7 @@ confirm() ->
     KeyCount = length(Keys),
 
     Pid = rt:pbc(Node2),
-    yz_rt:write_data(Pid, ?INDEX, ?BUCKET, Keys),
+    yokozuna_rt:write_data(Pid, ?INDEX, ?BUCKET, Keys),
     timer:sleep(1100),
 
     %% Separate out shards for multiple runs

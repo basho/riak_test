@@ -75,7 +75,7 @@ confirm() ->
 
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA]),
 
-    yz_rt:write_data(OldPid, ?INDEX1, ?BUCKET1, GenKeys),
+    yokozuna_rt:write_data(OldPid, ?INDEX1, ?BUCKET1, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
@@ -109,8 +109,8 @@ confirm() ->
     ?assertEqual(?EXTRACTMAPEXPECT, ExtractMap),
 
     %% Upgrade
-    yz_rt:rolling_upgrade(Cluster, current),
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:rolling_upgrade(Cluster, current),
+    yokozuna_rt:wait_for_aae(Cluster),
 
     CurrentCapabilities = rt:capability(Node, all),
     rt:assert_capability(Node, ?YZ_CAP, true),
@@ -123,7 +123,7 @@ confirm() ->
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA,
                              ?GET_MAP_READTHROUGH_MFA]),
 
-    yz_rt:write_data(Pid, ?INDEX2, ?BUCKET2, GenKeys),
+    yokozuna_rt:write_data(Pid, ?INDEX2, ?BUCKET2, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 

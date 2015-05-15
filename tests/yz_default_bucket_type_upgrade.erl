@@ -61,27 +61,27 @@ confirm() ->
 
     OldPid = rt:pbc(Node),
 
-    yz_rt:write_data(OldPid, ?INDEX, ?BUCKET, GenKeys),
+    yokozuna_rt:write_data(OldPid, ?INDEX, ?BUCKET, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
     assert_num_found_query(OldPid, ?INDEX, KeyCount),
 
     %% Upgrade
-    yz_rt:rolling_upgrade(Cluster, current),
+    yokozuna_rt:rolling_upgrade(Cluster, current),
 
     CurrentCapabilities = rt:capability(Node, all),
     rt:assert_capability(Node, ?YZ_CAP, v1),
     rt:assert_supported(CurrentCapabilities, ?YZ_CAP, [v1, v0]),
 
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:wait_for_aae(Cluster),
 
     %% test query count again
     Pid = rt:pbc(Node),
     assert_num_found_query(Pid, ?INDEX, KeyCount),
 
-    yz_rt:expire_trees(Cluster),
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:expire_trees(Cluster),
+    yokozuna_rt:wait_for_aae(Cluster),
 
     assert_num_found_query(Pid, ?INDEX, KeyCount),
 
