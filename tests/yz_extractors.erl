@@ -27,7 +27,7 @@
 -define(BUCKET1, <<"test_bkt1">>).
 -define(INDEX2, <<"test_idx2">>).
 -define(BUCKET2, <<"test_bkt2">>).
--define(YZ_CAP, {yokozuna,extractor_map_in_cmd}).
+-define(YZ_CAP, {yokozuna, extractor_map_in_cmd}).
 -define(GET_MAP_RING_MFA, {yz_extractor, get_map, 1}).
 -define(GET_MAP_MFA, {yz_extractor, get_map, 0}).
 -define(GET_MAP_READTHROUGH_MFA, {yz_extractor, get_map_read_through, 0}).
@@ -60,7 +60,9 @@ confirm() ->
     [_, Node|_] = Cluster = rt:build_cluster(lists:duplicate(4, {OldVsn, ?CFG})),
     rt:wait_for_cluster_service(Cluster, yokozuna),
 
-    assert_capability(Node, ?YZ_CAP, {unknown_capability, ?YZ_CAP}),
+    %% Use when we can specify a specific version to upgrade from or skip test
+    %% accordingly.
+    %% rt:assert_capability(Node, ?YZ_CAP, {unknown_capability, ?YZ_CAP}),
 
     OldPid = rt:pbc(Node),
 
@@ -73,7 +75,7 @@ confirm() ->
 
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA]),
 
-    yz_rt:write_data(OldPid, ?INDEX1, ?BUCKET1, GenKeys),
+    yokozuna_rt:write_data(OldPid, ?INDEX1, ?BUCKET1, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
@@ -107,12 +109,12 @@ confirm() ->
     ?assertEqual(?EXTRACTMAPEXPECT, ExtractMap),
 
     %% Upgrade
-    yz_rt:rolling_upgrade(Cluster, current),
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:rolling_upgrade(Cluster, current),
+    yokozuna_rt:wait_for_aae(Cluster),
 
     CurrentCapabilities = rt:capability(Node, all),
-    assert_capability(Node, ?YZ_CAP, true),
-    assert_supported(CurrentCapabilities, ?YZ_CAP, [true, false]),
+    rt:assert_capability(Node, ?YZ_CAP, true),
+    rt:assert_supported(CurrentCapabilities, ?YZ_CAP, [true, false]),
 
     %% test query count again
     Pid = rt:pbc(Node),
@@ -121,7 +123,7 @@ confirm() ->
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA,
                              ?GET_MAP_READTHROUGH_MFA]),
 
-    yz_rt:write_data(Pid, ?INDEX2, ?BUCKET2, GenKeys),
+    yokozuna_rt:write_data(Pid, ?INDEX2, ?BUCKET2, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
@@ -166,18 +168,6 @@ get_ring_and_cmd_vals(Node, Prefix, Key) ->
     MDVal = metadata_get(Node, Prefix, Key),
     RingVal = ring_meta_get(Node, Key, Ring),
     {RingVal, MDVal}.
-
-assert_capability(CNode, Capability, Value) ->
-    lager:info("Checking Capability Setting ~p =:= ~p on ~p",
-               [Capability, Value, CNode]),
-    ?assertEqual(ok, rt:wait_until_capability(CNode, Capability, Value)).
-
-assert_supported(Capabilities, Capability, Value) ->
-    lager:info("Checking Capability Supported Values ~p =:= ~p",
-               [Capability, Value]),
-    ?assertEqual(Value, proplists:get_value(
-                          Capability,
-                          proplists:get_value('$supported', Capabilities))).
 
 assert_num_found_query(Pid, Index, ExpectedCount) ->
     {ok, Results} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),

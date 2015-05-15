@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %%-------------------------------------------------------------------
--module(yz_rt).
+-module(yokozuna_rt).
 
 -type index_name() :: binary().
 -type bucket() :: binary() | {riak_core_bucket_type:bucket_type(), binary()}.
