@@ -1112,7 +1112,9 @@ join_cluster(Nodes) ->
 
     %% Potential fix for BTA-116 and other similar "join before nodes ready" issues.
     %% TODO: Investigate if there is an actual race in Riak relating to cluster joins.
-    [ok = wait_for_service(Node, riak_kv) || Node <- Nodes],
+    Service = rt_config:get(rt_wait_for_service, riak_kv),
+    lager:info("Waiting for service to start: ~p", [Service]),
+    [ok = wait_for_service(Node, Service) || Node <- Nodes],
 
     %% Join nodes
     [Node1|OtherNodes] = Nodes,
