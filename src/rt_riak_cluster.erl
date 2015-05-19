@@ -18,10 +18,11 @@
          is_mixed/1,
          join/2,
          leave/2,
+         name/1,
          nodes/1,
          partition/3,
-         staged_join/2,
          start/1,
+         start_link/2,
          stop/1,
          wait_until_all_members/1,
          wait_until_connected/1,
@@ -33,17 +34,23 @@
          upgrade/2]).
 
 %% gen_fsm callbacks
--export([init/1, state_name/2, state_name/3, handle_event/3, start_link/3,
+-export([init/1, state_name/2, state_name/3, handle_event/3,
          handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 -define(SERVER, ?MODULE).
 
+-type node_attribute() :: {name, atom()} | {version, rt_util:version()} |
+                          {hostname, rt_host:hostname()} | {config, term()} |
+                          {type, proplists:proplist()}.
+-type node_definition() :: [node_attribute()].
+
 -record(state, {name :: cluster_name(),
-                bucket_types :: [atom()],   %% should this be a string?
+                bucket_types :: [term()],   %% should this be a string?
                 indexes :: [atom()],        %% should this be a string?
                 nodes :: [node()],
-                version :: version()
-         }).
+                version :: rt_util:version(),
+                config :: term(),
+                is_mixed=false :: boolean()}).
 
 %%%===================================================================
 %%% API
@@ -51,10 +58,6 @@
 -type cluster_name() :: atom().
 -type cluster_id() :: pid().
 %% -type partition() :: [node()].
-
-%% TODO Move to the rt_version module
--type product_type() :: riak | riak_ee | riak_cs.
--type version() :: {product_type(), string()}.
 
 -spec activate_bucket_type(cluster_id(), atom()) -> rt_util:result().
 activate_bucket_type(Cluster, BucketType) ->
@@ -78,36 +81,29 @@ create_bucket_type(Cluster, BucketType, Properties) ->
 
 -spec is_mixed(cluster_id()) -> boolean().
 is_mixed(Cluster) ->
-    gen_fsm:sync_send_event(Cluster, is_mixed).
+    gen_fsm:sync_send_all_state_event(Cluster, is_mixed).
 
 %% @doc Joins a node, `Node', to the cluster, `Cluster'
 -spec join(cluster_id(), node()) -> rt_util:result().
 join(Cluster, Node) ->
     gen_fsm:sync_send_event(Cluster, {join, Node}).
 
-
 -spec leave(cluster_id(), node()) -> rt_util:result().
 leave(Cluster, Node) ->
     gen_fsm:sync_send_event(Cluster, {leave, Node}).
 
+-spec name(cluster_id()) -> atom().
+name(Cluster) ->
+    gen_fsm:sync_send_all_state_event(Cluster, name).
+
 %% @doc Returns the list of nodes in the cluster
 -spec nodes(cluster_id()) -> [node()].
 nodes(Cluster) ->
-    gen_fsm:sync_send_event(Cluster, nodes).
+    gen_fsm:sync_send_all_state_event(Cluster, nodes).
 
 %% -spec partition(cluster_id(), partition(), partition()) -> [atom(), atom(), partition(), partition()] | rt_util:error().
 partition(Cluster, P1, P2) ->
     gen_fsm:sync_send_event(Cluster, {partition, P1, P2}).
-
-%% @doc Starts the FSM initializing the state with the passed `Name', `Nodes', and `Config'
--spec start_link(cluster_name(), [node()], proplists:proplist()) -> {cluster_name(), cluster_id()} | rt_util:error().
-start_link(Name, Nodes, Config) ->
-    lager:error("provision(~p, ~p, ~p) not implemented.", [Name, Nodes, Config]),
-    ok.
-
--spec staged_join(cluster_id(), node()) -> rt_util:result().
-staged_join(Cluster, Node) ->
-    gen_fsm:sync_send_event(Cluster, {staged_join, Node}).
 
 %% @doc Starts each node in the cluster
 -spec start(cluster_id()) -> rt_util:result().
@@ -144,12 +140,12 @@ wait_until_ring_converged(Cluster) ->
     gen_fsm:sync_send_event(Cluster, wait_until_ring_converged).
 
 %% @doc Returns the version of the cluster, `Cluster'
--spec version(cluster_id()) -> version().
+-spec version(cluster_id()) -> rt_util:version().
 version(Cluster) ->
-    gen_fsm:sync_send_event(Cluster, version).
+    gen_fsm:sync_send_all_state_event(Cluster, version).
 
 %% @doc Performs a rolling upgrade of the cluster, `Cluster', to version, `NewVersion'.
--spec upgrade(cluster_id(), version()) -> rt_util:result().
+-spec upgrade(cluster_id(), rt_util:version()) -> rt_util:result().
 upgrade(Cluster, NewVersion) ->
     gen_fsm:sync_send_event(Cluster, {upgrade, NewVersion}).
 
@@ -166,8 +162,10 @@ upgrade(Cluster, NewVersion) ->
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-%%start_link() ->
-%%    gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
+%%-spec start_link([cluster_name(), [{node(), rt_util:version()}], term()]) -> {ok, pid()} | ignore | rt_util:error().
+-spec start_link(cluster_name(), [node_definition()]) -> {ok, pid()} | ignore | rt_util:error().
+start_link(Name, NodeDefinitions) ->
+    gen_fsm:start_link(?MODULE, [Name, NodeDefinitions], []).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -186,8 +184,21 @@ upgrade(Cluster, NewVersion) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
-    {ok, state_name, #state{}}.
+init([Name, NodeDefinitions]) ->
+    %% TODO Calculate the mixed flag
+    Nodes = lists:foldl(fun(NodeDefinition, Nodes) ->
+                                Hostname = proplists:get_value(hostname, NodeDefinition),
+                                Type = proplists:get_value(type, NodeDefinition),
+                                Config = proplists:get_value(config, NodeDefinition),
+                                Version = proplists:get_value(version, NodeDefinition),
+
+                                {ok, NodeName} = rt_riak_node:start_link(Hostname, Type, 
+                                                                         Config, Version),
+                                                                         
+                                lists:apped(NodeName, Nodes)
+                        end, [], NodeDefinitions),
+                      
+    {ok, allocated, #state{name=Name, nodes=Nodes}}.
 
 %%--------------------------------------------------------------------
 %% @private

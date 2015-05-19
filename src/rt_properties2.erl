@@ -22,55 +22,51 @@
 %% @doc Implements a set of functions for accessing and manipulating
 %% an `rt_properties2' record.
 
+-type cluster_name() :: atom().
 -record(rt_cluster_topology_v1, {
-    name :: atom(),
-    connected_to :: [] | [atom()],
-    nodes :: [product_version()]
+    name :: cluster_name(),
+    %% TODO: Account for full sync/real time connection types, ssl, repl protocol version
+    connected_to :: [] | [cluster_name()],
+    nodes :: pos_integer() | [rt_util:version_selector()]
 }).
--define(RT_CLUSTER_TOPOLOGY, #rt_cluster_topology_v1).
 
--record(rt_properties_v2, {
+
+-record(rt_properties_v2, { 
     description :: string(),
-    supported_products :: [atom()],
-    minimum_version :: string(),
-    maximum_version :: string(),
-    supported_backends=all :: [storage_backend()],
-    wait_for_transfers=false :: boolean(),
-    bucket_types=[] :: rt_bucket_types:bucket_types(),
-    indexes=[] :: [index()],
-    ring_size=auto :: [atom() | non_neg_integer()],
-    features :: feature_flag(),
-    required_services=[riak_kv] :: [atom()],
+    supported_products=riak :: [rt_util:products()],
+    minimum_version=any :: any | rt_util:release(),
+    maximum_version=any :: any | rt_util:release(),
     cluster_topology=default_topology(3) :: [topology()],
-    default_version=rt_config:get_default_version() :: product_version(),
-    upgrade_path :: [product_version()],
-    config=default_config() :: term()
+    groups=[] :: [atom()],
+    driver_configuration=rt_driver:new_configuration() :: rt_driver:configuration(),
+    %% TODO Do we need these two properties since the versions are specified in the topology
+    %% and default will be used when is specified and the upgrade pathes are specified in
+    %% the configuration ...
+    default_version=rt_config:get_default_version() :: rt_util:version(),
+    upgrade_path :: [rt_util:version_selector()]
 }).
+
+%% What if we moved the Riak specific bits to an rt_riak_driver module
+%% and provided some additional callback functions for product
+%% specific extension points ...
 
 -type properties() :: #rt_properties_v2{}.
 -type topology() :: #rt_cluster_topology_v1{}.
--type feature_flag() :: strong_consistency | yokozuna | jmx | snmp | security.
--type product_version() :: string() | atom().
--type storage_backend() :: all | bitcask | eleveldb | memory | multi.
--type index() :: {binary(), binary(), binary()}.
-
 -export_type([properties/0,
-              feature_flag/0,
-              product_version/0,
-              storage_backend/0,
-              index/0]).
+              topology/0]).
 
-
+-define(RT_CLUSTER_TOPOLOGY, #rt_cluster_topology_v1).
 -define(RT_PROPERTIES, #rt_properties_v2).
 -define(RECORD_FIELDS, record_info(fields, rt_properties_v2)).
 
 -export([new/0,
     new/1,
     get/2,
+    get_configuration_key/2,
     set/2,
     set/3,
-    default_topology/1,
-    default_config/0]).
+    set_configuration_key/3,
+    default_topology/1]).
 
 %% @doc Create a new properties record with all fields initialized to
 %% the default values.
@@ -110,7 +106,6 @@ set(PropertyList, Properties) when is_list(PropertyList) ->
 -spec set(atom(), term(), properties()) -> {ok, properties()} | {error, atom()}.
 set(Property, Value, Properties) ->
     set_property(Property, Value, Properties, validate_request(Property, Properties)).
-
 
 -spec get(atom(), properties(), ok | {error, atom()}) ->
     term() | {error, atom()}.
@@ -157,6 +152,16 @@ set_properties(PropertyList, Properties, ok) ->
 set_properties(_, _, {error, _}=Error) ->
     Error.
 
+-spec get_configuration_key(atom(), properties()) -> term() | {error, string()}.
+get_configuration_key(Key, Properties) ->
+    DriverConfiguration = get(driver_configuration, Properties),
+    rt_driver:get_configuration_key(DriverConfiguration, Key).
+
+-spec set_configuration_key(atom(), term(), properties()) -> {ok, term()} | {error, string()}.
+set_configuration_key(Key, Value, Properties) ->
+    DriverConfiguration = get(driver_configuration, Properties),
+    rt_driver:set_configuration_key(Key, Value, DriverConfiguration).
+
 -spec validate_request(atom(), term()) -> ok | {error, atom()}.
 validate_request(Property, Properties) ->
     validate_property(Property, validate_record(Properties)).
@@ -181,12 +186,6 @@ validate_property(Property, ok) ->
 validate_property(_Property, {error, _}=Error) ->
     Error.
 
--spec default_config() -> [term()].
-default_config() ->
-    [{riak_core, [{handoff_concurrency, 11}]},
-        {riak_search, [{enabled, true}]},
-        {riak_pipe, [{worker_limit, 200}]}].
-
 %% @doc Create a single default cluster topology with default node versions
 -spec default_topology(pos_integer()) -> [topology()].
 default_topology(N) ->
@@ -206,27 +205,9 @@ field_index(description) ->
     ?RT_PROPERTIES.description;
 field_index(supported_products) ->
     ?RT_PROPERTIES.supported_products;
-field_index(minimum_version) ->
-    ?RT_PROPERTIES.minimum_version;
-field_index(supported_backends) ->
-    ?RT_PROPERTIES.supported_backends;
-field_index(wait_for_transfers) ->
-    ?RT_PROPERTIES.wait_for_transfers;
-field_index(bucket_types) ->
-    ?RT_PROPERTIES.bucket_types;
-field_index(indexes) ->
-    ?RT_PROPERTIES.indexes;
 field_index(upgrade_path) ->
     ?RT_PROPERTIES.upgrade_path;
-field_index(ring_size) ->
-    ?RT_PROPERTIES.ring_size;
-field_index(features) ->
-    ?RT_PROPERTIES.features;
-field_index(required_services) ->
-    ?RT_PROPERTIES.required_services;
 field_index(cluster_topology) ->
     ?RT_PROPERTIES.cluster_topology;
 field_index(default_version) ->
-    ?RT_PROPERTIES.default_version;
-field_index(config) ->
-    ?RT_PROPERTIES.config.
+    ?RT_PROPERTIES.default_version.

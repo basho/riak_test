@@ -23,7 +23,6 @@
 %% TODO: Temporary build workaround, remove!!
 -compile(export_all).
 -export([main/1]).
--export([add_deps/1]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -216,17 +215,6 @@ finalize(TestResults, Args) ->
     maybe_teardown(Teardown, TestResults),
     ok.
 
-add_deps(Path) ->
-    lager:debug("Adding dep path ~p", [Path]),
-    case file:list_dir(Path) of
-        {ok, Deps} ->
-            [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
-            ok;
-        {error, Reason} ->
-            lager:error("Failed to add dep path ~p due to ~p.", [Path, Reason]),
-            erlang:error(Reason)
-    end.
-
 test_setup() ->
     %% Prepare the test harness
     {NodeIds, NodeMap, VersionMap} = rt_harness:setup(),
@@ -259,10 +247,10 @@ erlang_setup(_ParsedArgs) ->
     code:add_paths(rt_config:get(test_paths, [])),
 
     %% Two hard-coded deps...
-    add_deps(rt:get_deps()),
-    add_deps("deps"),
+    rt_util:add_deps(rt:get_deps()),
+    rt_util:add_deps("deps"),
 
-    [add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
+    [rt_util:add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
     [] = os:cmd("epmd -daemon"),
     net_kernel:start([rt_config:get(rt_nodename, 'riak_test@127.0.0.1')]),
     erlang:set_cookie(node(), rt_config:get(rt_cookie, riak)),
