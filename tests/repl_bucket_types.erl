@@ -39,7 +39,13 @@ setup(Type) ->
             rt:wait_until_bucket_type_status(DefinedType, active, BNodes),
             rt:wait_until_bucket_type_visible(BNodes, DefinedType);
         mixed ->
-            ok
+            ok;
+        aae ->
+            rt:create_and_activate_bucket_type(LeaderB,
+                                               DefinedType,
+                                               [{n_val, 3}, {allow_mult, false}]),
+            rt:wait_until_bucket_type_status(DefinedType, active, BNodes),
+            rt:wait_until_bucket_type_visible(BNodes, DefinedType)
     end,
 
     rt:create_and_activate_bucket_type(LeaderA,
@@ -69,6 +75,9 @@ confirm() ->
     realtime_test(SetupData),
     fullsync_test(SetupData),
     cleanup(SetupData, true),
+    AAESetupData = setup(aae),
+    aae_fullsync_test(AAESetupData),
+    cleanup(AAESetupData, true),
 
     %% Test a cluster of the current version replicating to a cluster
     %% of the previous version
@@ -255,6 +264,87 @@ fullsync_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     lager:info("checking to ensure the bucket contents were not updated."),
     ensure_bucket_not_updated(PBB, BucketTyped, KeyTyped, Bin).
 
+aae_fullsync_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
+    {LeaderA, LeaderB, ANodes, BNodes} = ClusterNodes,
+    {DefinedType, UndefType} = BucketTypes,
+
+    lager:info("Enabling AAE fullsync between ~p and ~p", [LeaderA, LeaderB]),
+    enable_fullsync(LeaderA, ANodes),
+
+    Bin = <<"data data data">>,
+    Key = <<"key">>,
+    Bucket = <<"fullsync-kicked">>,
+    DefaultObj = riakc_obj:new(Bucket, Key, Bin),
+    lager:info("doing untyped put on A, bucket:~p", [Bucket]),
+    riakc_pb_socket:put(PBA, DefaultObj, [{w,3}]),
+
+    BucketTyped = {DefinedType, <<"fullsync-typekicked">>},
+    KeyTyped = <<"keytyped">>,
+    ObjTyped = riakc_obj:new(BucketTyped, KeyTyped, Bin),
+
+    lager:info("doing typed put on A, bucket:~p", [BucketTyped]),
+    riakc_pb_socket:put(PBA, ObjTyped, [{w,3}]),
+
+    UndefBucketTyped = {UndefType, <<"fullsync-badtype">>},
+    UndefKeyTyped = <<"badkeytyped">>,
+    UndefObjTyped = riakc_obj:new(UndefBucketTyped, UndefKeyTyped, Bin),
+
+    lager:info("doing typed put on A where type is not "
+               "defined on B, bucket:~p",
+               [UndefBucketTyped]),
+
+    riakc_pb_socket:put(PBA, UndefObjTyped, [{w,3}]),
+
+    lager:info("waiting for AAE trees to build on all nodes"),
+    rt:wait_until_aae_trees_built(ANodes),
+    rt:wait_until_aae_trees_built(BNodes),
+
+    perform_sacrifice(LeaderA),
+
+    {SyncTime1, _} = timer:tc(repl_util,
+                              start_and_wait_until_fullsync_complete,
+                              [LeaderA]),
+
+    lager:info("AAE Fullsync completed in ~p seconds", [SyncTime1/1000/1000]),
+
+    ReadResult1 =  riakc_pb_socket:get(PBB, Bucket, Key),
+    ReadResult2 =  riakc_pb_socket:get(PBB, BucketTyped, KeyTyped),
+    ReadResult3 =  riakc_pb_socket:get(PBB, UndefBucketTyped, UndefKeyTyped),
+
+    ?assertMatch({ok, _}, ReadResult1),
+    ?assertMatch({ok, _}, ReadResult2),
+    ?assertMatch({error, _}, ReadResult3),
+
+    {ok, ReadObj1} = ReadResult1,
+    {ok, ReadObj2} = ReadResult2,
+
+    ?assertEqual(Bin, riakc_obj:get_value(ReadObj1)),
+    ?assertEqual(Bin, riakc_obj:get_value(ReadObj2)),
+    ?assertEqual({error, <<"no_type">>}, ReadResult3),
+
+    DefaultProps = get_current_bucket_props(BNodes, DefinedType),
+    ?assertEqual({n_val, 3}, lists:keyfind(n_val, 1, DefaultProps)),
+
+    update_props(DefinedType,  [{n_val, 1}], LeaderB, BNodes),
+    ok = rt:wait_until(fun() ->
+            UpdatedProps = get_current_bucket_props(BNodes, DefinedType),
+            {n_val, 1} =:= lists:keyfind(n_val, 1, UpdatedProps)
+        end),
+
+    UnequalObjBin = <<"unequal props val">>,
+    UnequalPropsObj = riakc_obj:new(BucketTyped, KeyTyped, UnequalObjBin),
+    lager:info("doing put of typed bucket on A where bucket properties (n_val 3 versus n_val 1) are not equal on B"),
+    riakc_pb_socket:put(PBA, UnequalPropsObj, [{w,3}]),
+
+    {SyncTime2, _} = timer:tc(repl_util,
+                              start_and_wait_until_fullsync_complete,
+                              [LeaderA]),
+
+    lager:info("AAE Fullsync completed in ~p seconds", [SyncTime2/1000/1000]),
+
+    lager:info("checking to ensure the bucket contents were not updated."),
+    ensure_bucket_not_updated(PBB, BucketTyped, KeyTyped, Bin).
+
 fullsync_mixed_version_test({ClusterNodes, BucketTypes, PBA, PBB}) ->
     {LeaderA, LeaderB, ANodes, _BNodes} = ClusterNodes,
     {DefinedType, _UndefType} = BucketTypes,
@@ -332,6 +422,31 @@ connect_clusters(LeaderA, LeaderB) ->
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")).
 
+cluster_conf_aae() ->
+    [
+     {riak_core,
+            [
+             {ring_creation_size, 8}
+            ]
+        },
+        {riak_kv,
+            [
+             %% Specify fast building of AAE trees
+             {anti_entropy, {on, []}},
+             {anti_entropy_build_limit, {100, 1000}},
+             {anti_entropy_concurrency, 100}
+            ]
+        },
+        {riak_repl,
+         [
+          {fullsync_strategy, aae},
+          {fullsync_on_connect, false},
+          {fullsync_interval, disabled},
+          {max_fssource_soft_retries, 10},
+          {max_fssource_retries, infinity}
+         ]}
+        ].
+
 cluster_conf() ->
     [
      {riak_repl,
@@ -348,6 +463,8 @@ cluster_conf() ->
 
 deploy_nodes(NumNodes, current) ->
     rt:deploy_nodes(NumNodes, cluster_conf(), [riak_kv, riak_repl]);
+deploy_nodes(NumNodes, aae) ->
+    rt:deploy_nodes(NumNodes, cluster_conf_aae(), [riak_kv, riak_repl]);
 deploy_nodes(_, mixed) ->
     Conf = cluster_conf(),
     rt:deploy_nodes([{current, Conf}, {previous, Conf}], [riak_kv, riak_repl]).
@@ -467,3 +584,9 @@ ensure_rtq_drained(ANodes) ->
                     end, ANodes),
     Expected = [true || _ <- lists:seq(1, length(ANodes))],
     ?assertEqual(Expected, Got).
+
+%% @doc Required for 1.4+ Riak, write sacrificial keys to force AAE
+%%      trees to flush to disk.
+perform_sacrifice(Node) ->
+    ?assertEqual([], repl_util:do_write(Node, 1, 2000,
+                                        <<"sacrificial">>, 1)).
