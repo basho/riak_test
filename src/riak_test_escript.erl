@@ -81,6 +81,7 @@ cli_options() ->
  {verbose,                $v, "verbose",  undefined,  "verbose output"},
  {outdir,                 $o, "outdir",   string,     "output directory"},
  {backend,                $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb | multi]"},
+ {upgrade_path,           $u, "upgrade",  atom,       "which user-defined upgrade path to use [ e.g. previous | legacy ]"},
  {keep,            undefined, "keep",     boolean,    "do not teardown cluster"},
  {continue_on_fail,       $n, "continue", boolean,    "continues executing tests on failure"},
  {report,                 $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1404-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
@@ -107,9 +108,10 @@ generate_test_lists(UseGiddyUp, ParsedArgs) ->
     %% test metadata
 
     TestData = compose_test_data(ParsedArgs),
-    CmdLineBackends = rt_util:backend_to_atom_list(proplists:get_value(backend, ParsedArgs)),
+    CmdLineBackends = rt_util:convert_to_atom_list(proplists:get_value(backend, ParsedArgs)),
     Backends = determine_backends(CmdLineBackends, UseGiddyUp),
-    {Tests, NonTests} = wrap_test_in_test_plan(UseGiddyUp, Backends, TestData),
+    UpgradeList = rt_util:convert_to_atom_list(proplists:get_value(upgrade_path, ParsedArgs)),
+    {Tests, NonTests} = wrap_test_in_test_plan(UseGiddyUp, Backends, UpgradeList, TestData),
     Offset = rt_config:get(offset, undefined),
     Workers = rt_config:get(workers, undefined),
     shuffle_tests(Tests, NonTests, Offset, Workers).
@@ -180,13 +182,14 @@ prepare_tests(Tests, NonTests) ->
     test_setup().
 
 execute(TestPlans, OutDir, ParsedArgs) ->
-    UpgradeList = upgrade_list(
-                    proplists:get_value(upgrade_path, ParsedArgs)),
+    %% TODO: Clean up upgrade paths. Living in test plans at the moment.
+    %% UpgradeList = upgrade_list(
+    %%                 proplists:get_value(upgrade_path, ParsedArgs)),
 
     {ok, Executor} = riak_test_executor:start_link(TestPlans,
                                                    OutDir,
                                                    report_platform(ParsedArgs),
-                                                   UpgradeList,
+                                                   undefined,
                                                    self()),
     wait_for_results(Executor, [], length(TestPlans), 0).
 
@@ -231,12 +234,6 @@ test_setup() ->
                         [ErrorReason])
     end,
     ok.
-
--spec upgrade_list(undefined | string()) -> undefined | [string()].
-upgrade_list(undefined) ->
-    undefined;
-upgrade_list(Path) ->
-    string:tokens(Path, ",").
 
 erlang_setup(_ParsedArgs) ->
     register(riak_test, self()),
@@ -344,18 +341,18 @@ extract_test_names(Test, {CodePaths, TestNames}) ->
 %% @doc Determine which tests to run based on command-line argument
 %%      If the platform is defined, consult GiddyUp, otherwise just shovel
 %%      the whole thing into the Planner
--spec(load_up_test_planner(boolean(), [string()], list()) -> list()).
-load_up_test_planner(true, Backends, CommandLineTests) ->
+-spec(load_up_test_planner(boolean(), [string()], undefined | [string()], list()) -> list()).
+load_up_test_planner(true, Backends, _UpgradePaths, CommandLineTests) ->
     rt_planner:load_from_giddyup(Backends, CommandLineTests);
-load_up_test_planner(_, Backends, CommandLineTests) ->
-    [rt_planner:add_test_plan(Name, undefined, Backends, undefined, undefined) || Name <- CommandLineTests].
+load_up_test_planner(_, Backends, UpgradePaths, CommandLineTests) ->
+    [rt_planner:add_test_plan(Name, undefined, Backends, UpgradePaths, undefined) || Name <- CommandLineTests].
 
 %% @doc Push all of the test into the Planner for now and wrap them in an `rt_test_plan'
 %% TODO: Let the Planner do the work, not the riak_test_executor
--spec(wrap_test_in_test_plan(boolean(), [string()], [atom()]) -> {list(), list()}).
-wrap_test_in_test_plan(UseGiddyUp, Backends, CommandLineTests) ->
+-spec(wrap_test_in_test_plan(boolean(), [atom()], undefined | [atom()], [atom()]) -> {list(), list()}).
+wrap_test_in_test_plan(UseGiddyUp, Backends, UpgradeList, CommandLineTests) ->
     {ok, _Pid} = rt_planner:start_link(),
-    load_up_test_planner(UseGiddyUp, Backends, CommandLineTests),
+    load_up_test_planner(UseGiddyUp, Backends, UpgradeList, CommandLineTests),
     TestPlans = [rt_planner:fetch_test_plan() || _ <- lists:seq(1, rt_planner:number_of_plans())],
     NonRunnableTestPlans = [rt_planner:fetch_test_non_runnable_plan() || _ <- lists:seq(1, rt_planner:number_of_non_runable_plans())],
     rt_planner:stop(),
@@ -472,7 +469,7 @@ default_backend_test() ->
 
 %% Make sure that GiddyUp supports all backends
 default_giddyup_backend_test() ->
-    ?assertEqual([bitcask, eleveldb, memory], lists:sort(determine_backends(undefined, true))).
+    ?assertEqual([bitcask, eleveldb, memory, multi], lists:sort(determine_backends(undefined, true))).
 
 %% Command-line backends should always rule
 cmdline_backend_test() ->

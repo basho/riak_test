@@ -50,7 +50,8 @@
          set_advanced_conf/2,
          rm_dir/1,
          validate_config/1,
-         get_node_logs/2]).
+         get_node_logs/2,
+         get_node_logs/0]).
 
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -843,10 +844,16 @@ riak_repl(Node, Args) ->
     {ok, Result}.
 
 %% @doc Find the node number from the full name
+%% Certain tests are storing short names (dev1) and some are storing integers
 -spec node_id(atom()) -> integer().
 node_id(Node) ->
     NodeMap = rt_config:get(rt_nodes),
-    orddict:fetch(Node, NodeMap).
+    NodeNumber = orddict:fetch(Node, NodeMap),
+    case is_integer(NodeNumber) of
+        true -> NodeNumber;
+        _ ->
+            list_to_integer(string:right(lists:flatten(NodeNumber), 1))
+    end.
 
 %% @doc Find the short dev node name from the full name
 -spec node_short_name(atom() | list()) -> atom().
@@ -995,6 +1002,19 @@ get_node_log_fun(DestDir, RootLen) ->
         end,
         {lists:nthtail(RootLen, Filename), Target}
     end.
+
+%% @doc Open all of the nodes' log files to a list of {filename, port}
+%% OBSOLETE
+-spec(get_node_logs() -> list()).
+get_node_logs() ->
+    Root = filename:absname(?PATH),
+    lager:debug("ROOT ~p", [Root]),
+    RootLen = length(Root) + 1, %% Remove the leading slash
+    [ begin
+          {ok, Port} = file:open(Filename, [read, binary]),
+          lager:debug("Opening ~p", [lists:nthtail(RootLen, Filename)]),
+          {lists:nthtail(RootLen, Filename), Port}
+      end || Filename <- filelib:wildcard(Root ++ "/*/dev*/log/*") ].
 
 -type node_tuple() :: {list(), atom()}.
 

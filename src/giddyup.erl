@@ -167,7 +167,7 @@ init([Platform, Product, VersionNumber, Version, GiddyUpHost, GiddyUpUser, Giddy
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_call(get_test_plans, _From, State) ->
-    TestPlans = fetch_all_test_plans(State#state.platform, State#state.default_product, State#state.default_version_number, State#state.default_version, State#state.giddyup_host),
+    TestPlans = fetch_all_test_plans(State#state.platform, State#state.default_product, State#state.default_version_number, State#state.giddyup_host),
     {reply, TestPlans, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -253,8 +253,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec fetch_all_test_plans(string(), string(), string(), string(), string()) -> [rt_test_plan:test_plan()].
-fetch_all_test_plans(Platform, Product, VersionNumber, DefaultVersion, Host) ->
+-spec fetch_all_test_plans(string(), string(), string(),  string()) -> [rt_test_plan:test_plan()].
+fetch_all_test_plans(Platform, Product, VersionNumber, Host) ->
     %% Make sure ibrowse is up and running
     rt:check_ibrowse(),
     Schema = get_schema(Platform, Product, VersionNumber, Host),
@@ -274,12 +274,7 @@ fetch_all_test_plans(Platform, Product, VersionNumber, DefaultVersion, Host) ->
             {ok, Plan2} = case kvc:path('tags.upgrade_version', Test) of
                 [] -> {ok, Plan1};
                 UpgradeVsn ->
-                    UpgradeVersion = case UpgradeVsn of
-                                         <<"legacy">> -> rt_config:get_legacy_version();
-                                         <<"previous">> -> rt_config:get_previous_version();
-                                         _ -> rt_config:get_version(binary_to_list(UpgradeVsn))
-                                     end,
-                    rt_test_plan:set(upgrade_path, [UpgradeVersion, DefaultVersion], Plan1)
+                    rt_test_plan:set(upgrade_path, binary_to_atom(UpgradeVsn, utf8), Plan1)
             end,
             %% TODO: Remove? No tests currently use this multi_config setting
             %% Plan3 = case kvc:path('tags.multi_config', Test) of

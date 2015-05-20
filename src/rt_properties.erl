@@ -45,7 +45,7 @@
           rolling_upgrade=false :: boolean(),
           start_version=rt_config:get_default_version() :: string(),
           current_version :: string(),
-          upgrade_path :: [string()],
+          upgrade_path=undefined :: [atom()],
           wait_for_transfers=false :: boolean(),
           valid_backends=all :: all | [atom()],
           make_cluster=true :: boolean(),

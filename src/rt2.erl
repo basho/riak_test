@@ -613,6 +613,9 @@ setup_harness(Test, Args) ->
 get_node_logs(LogFile, DestDir) ->
     rt_harness:get_node_logs(LogFile, DestDir).
 
+get_node_logs() ->
+    rt_harness:get_node_logs().
+
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
     {status, _Pid, {module, gen_server} ,_} -> ok

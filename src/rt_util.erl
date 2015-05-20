@@ -23,6 +23,7 @@
               wait_result/0]).
 
 -export([add_deps/1,
+         convert_to_atom_list/1,
          base_dir_for_version/2,
          ip_addr_to_string/1,
          maybe_append_when_not_endswith/2,
@@ -40,9 +41,30 @@
          wait_until_no_pending_changes/2]).
 
 -ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
 -export([setup_test_env/0,
          test_success_fun/0]).
 -endif.
+
+%% @doc Convert string or atom to list of atoms
+-spec(convert_to_atom_list(atom()|string()) -> undefined | list()).
+convert_to_atom_list(undefined) ->
+    undefined;
+convert_to_atom_list(Values) when is_atom(Values) ->
+    ListOfValues = atom_to_list(Values),
+    case lists:member($, , ListOfValues) of
+        true ->
+            [list_to_atom(X) || X <- string:tokens(ListOfValues, ", ")];
+        _ ->
+            [Values]
+    end;
+convert_to_atom_list(Values) when is_list(Values) ->
+    case lists:member($, , Values) of
+        true ->
+            [list_to_atom(X) || X <- string:tokens(Values, ", ")];
+        _ ->
+            [list_to_atom(Values)]
+    end.
 
 -spec add_deps(filelib:dirname()) -> ok.
 add_deps(Path) ->
@@ -189,6 +211,14 @@ wait_until(Fun, Retry, Delay) when Retry > 0 ->
     end.
 
 -ifdef(TEST).
+
+%% Properly covert backends to atoms
+convert_to_atom_list_test() ->
+    ?assertEqual(undefined, convert_to_atom_list(undefined)),
+    ?assertEqual([memory], convert_to_atom_list(memory)),
+    ?assertEqual([memory], convert_to_atom_list("memory")),
+    ?assertEqual([bitcask, eleveldb, memory], lists:sort(convert_to_atom_list("memory, bitcask,eleveldb"))),
+    ?assertEqual([bitcask, eleveldb, memory], lists:sort(convert_to_atom_list('memory, bitcask,eleveldb'))).
 
 -spec wait_until_no_pending_changes(rt_host:host(), [node()]) -> ok | fail.
 wait_until_no_pending_changes(Host, Nodes) ->

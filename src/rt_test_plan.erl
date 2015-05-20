@@ -41,9 +41,9 @@
     module :: atom(),
     project=rt_config:get_default_version_product() :: atom() | binary(),
     platform :: string(),
-    version=rt_config:get_default_version_number() :: string(),
+    version=rt_config:get_default_version() :: string(),
     backend=undefined :: atom(),
-    upgrade_path=[] :: [rt_properties2:product_version()],
+    upgrade_path=undefined :: [rt_properties2:product_version()],
     properties :: rt_properties2:properties()
 }).
 
@@ -86,14 +86,19 @@ get(Field, TestPlan) ->
 get_module(TestPlan) ->
     get(module, TestPlan, validate_request(module, TestPlan)).
 
-% @doc Get the value of the name and backend from a test plan record. An error
+%% @doc Get the value of the name, backend and upgrade from a test plan record. An error
 %% is returned if `TestPlan' is not a valid `rt_test_plan' record
 %% or if the field requested is not a valid field.
 -spec get_name(test_plan()) -> term() | {error, atom()}.
 get_name(TestPlan) ->
     Module = get(module, TestPlan, validate_request(module, TestPlan)),
     Backend = get(backend, TestPlan, validate_request(backend, TestPlan)),
-    atom_to_list(Module) ++ "-" ++ atom_to_list(Backend).
+    ModBackend = atom_to_list(Module) ++ "-" ++ atom_to_list(Backend),
+    Upgrade = get(upgrade_path, TestPlan, validate_request(upgrade_path, TestPlan)),
+    case Upgrade of
+        undefined -> ModBackend;
+        _ -> ModBackend ++ "-" ++ rt_config:convert_to_string(Upgrade)
+    end.
 
 %% @doc Set the value for a field in a test plan record. An error
 %% is returned if `TestPlan' is not a valid `rt_test_plan' record

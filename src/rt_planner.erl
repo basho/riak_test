@@ -92,9 +92,9 @@ load_from_giddyup(Backends, CommandLineTests) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(add_test_plan(string(), string(), [atom()], rt_properties2:product_version(), rt_properties2:properties()) -> ok).
-add_test_plan(Module, Platform, Backends, Version, Properties) ->
-    gen_server:call(?MODULE, {add_test_plan, Module, Platform, Backends, Version, Properties}).
+-spec(add_test_plan(string(), string(), [atom()], [rt_properties2:product_version()], rt_properties2:properties()) -> ok).
+add_test_plan(Module, Platform, Backends, UpgradePaths, Version) ->
+    gen_server:call(?MODULE, {add_test_plan, Module, Platform, Backends, UpgradePaths, Version}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -209,11 +209,20 @@ handle_call({load_from_giddyup, Backends, CommandLineTests}, _From, State) ->
     State2 = lists:foldl(fun exclude_test_plan/2, State1, Excluded1),
     {reply, ok, State2};
 %% Add a single test plan for each backend to the queue
-handle_call({add_test_plan, Module, Platform, Backends, _Version, _Properties}, _From, State) ->
+handle_call({add_test_plan, Module, Platform, Backends, UpgradePaths, _Version}, _From, State) ->
     State1 = lists:foldl(fun(Backend, AccState) ->
-            TestPlan = rt_test_plan:new([{module, Module}, {platform, Platform}, {backend, Backend}]),
-            sort_and_queue(TestPlan, AccState)
-        end,
+            case UpgradePaths of
+                undefined ->
+                    TestPlan = rt_test_plan:new([{module, Module}, {platform, Platform}, {backend, Backend}]),
+                    sort_and_queue(TestPlan, AccState);
+                UpgradePaths ->
+                    lists:foldl(fun(UpgradePath, AccState1) ->
+                        TestPlan = rt_test_plan:new([{module, Module}, {platform, Platform}, {backend, Backend}, {upgrade_path, UpgradePath}]),
+                        sort_and_queue(TestPlan, AccState1)
+                        end,
+                    AccState, UpgradePaths)
+            end
+            end,
         State, Backends),
     {reply, ok, State1};
 handle_call(fetch_test_plan, _From, State) ->
@@ -306,6 +315,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Add a single test plan
+%%
+%% @end
+%%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
 %% @private

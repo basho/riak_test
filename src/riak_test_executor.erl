@@ -201,7 +201,9 @@ launch_test(Event, State) ->
     ok.
 
 maybe_reserve_nodes(NextTestPlan, TestProps) ->
-    VersionsToTest = versions_to_test(TestProps),
+    %% TODO: Clean up upgrade resolution.  Go either with executor or test plan.
+    %% VersionsToTest = versions_to_test(TestProps),
+    VersionsToTest = [rt_config:convert_to_string(rt_test_plan:get(version, NextTestPlan))],
     maybe_reserve_nodes(erlang:function_exported(rt_test_plan:get_module(NextTestPlan), confirm, 1),
                         NextTestPlan, VersionsToTest, TestProps).
 
@@ -209,12 +211,12 @@ maybe_reserve_nodes(true, NextTest, VersionsToTest, TestProps) ->
     NodeCount = rt_properties:get(node_count, TestProps),
     
     %% Send async request to node manager
-    lager:notice("Requesting ~p nodes for the next test, ~p", [NodeCount, rt_test_plan:get_module(NextTest)]),
+    lager:notice("Requesting ~p nodes for the next test, ~p", [NodeCount, rt_test_plan:get_name(NextTest)]),
     node_manager:reserve_nodes(NodeCount,
                                VersionsToTest,
                                reservation_notify_fun());
 maybe_reserve_nodes(false, NextTest, VersionsToTest, _TestProps) ->
-    lager:warning("~p is an old style test that requires conversion.", [rt_test_plan:get_module(NextTest)]),
+    lager:warning("~p is an old style test that requires conversion.", [rt_test_plan:get_name(NextTest)]),
     node_manager:reserve_nodes(0, VersionsToTest, reservation_notify_fun()),
     ok.
 
@@ -291,23 +293,23 @@ test_property_fun(OverrideProps) ->
             [{TestPlan, Properties} | Acc]
     end.
 
-versions_to_test(Properties) ->
-    versions_to_test(Properties, rt_properties:get(rolling_upgrade, Properties)).
-
 %% An `upgrade_path' specified on the command line overrides the test
 %% property setting. If the `rolling_upgrade' property is is `false'
 %% then the `start_version' property of the test is the only version
 %% tested.
-versions_to_test(Properties, true) ->
-    case rt_properties:get(upgrade_path, Properties) of
-        undefined ->
-            versions_to_test(Properties, false);
-        UpgradePath ->
-            [rt_config:convert_to_string(Upgrade) || Upgrade <- UpgradePath]
-    end;
-versions_to_test(Properties, false) ->
-    InitialVersion = rt_properties:get(start_version, Properties),
-    [rt_config:convert_to_string(InitialVersion)].
+%% versions_to_test(Properties) ->
+%%     versions_to_test(Properties, rt_properties:get(rolling_upgrade, Properties)).
+%%
+%% versions_to_test(Properties, true) ->
+%%     case rt_properties:get(upgrade_path, Properties) of
+%%         undefined ->
+%%             versions_to_test(Properties, false);
+%%         UpgradePath ->
+%%             [rt_config:convert_to_string(Upgrade) || Upgrade <- UpgradePath]
+%%     end;
+%% versions_to_test(Properties, false) ->
+%%     InitialVersion = rt_properties:get(start_version, Properties),
+%%     [rt_config:convert_to_string(InitialVersion)].
 
 %% Function to abstract away the details of what properties
 %% can be overridden on the command line.

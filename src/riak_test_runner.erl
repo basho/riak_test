@@ -108,11 +108,19 @@ init([TestPlan, Properties, ContinueOnFail, ReporterPid, LogDir]) ->
     Project = list_to_binary(rt_config:get(rt_project, "undefined")),
     Backend = rt_test_plan:get(backend, TestPlan),
     TestModule = rt_test_plan:get_module(TestPlan),
-    MetaData = [{id, -1},
+    %% Populate metadata for backwards-compatiblity
+    MetaData0 = [{id, -1},
                 {platform, <<"local">>},
                 {version, rt:get_version()},
                 {backend, Backend},
                 {project, Project}],
+    %% Upgrade Version is legacy for 'previous' or 'legacy' to 'current' upgrade
+    %% For old tests, keep those labels.  Converted tests could use an arbitrary name.
+    UpgradePath = rt_test_plan:get(upgrade_path, TestPlan),
+    MetaData = case UpgradePath of
+        undefined -> MetaData0;
+        _ -> MetaData0 ++ [{upgrade_version, UpgradePath}]
+    end,
 
     %% TODO: Remove after all tests ported 2.0 -- workaround to support
     %% backend command line argument fo v1 cluster provisioning -jsb
