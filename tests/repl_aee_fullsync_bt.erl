@@ -6,7 +6,6 @@
 -module(repl_aae_fullsync_bt).
 -behaviour(riak_test).
 -export([confirm/0]).
-% -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(ENSURE_READ_ITERATIONS, 5).
