@@ -307,7 +307,7 @@ Directory to root of the built Yokozuna tree.  This will go away once Yokozuna t
 This are [lager](https://github.com/basho/lager)-specific settings.  By default they are set to `info`.
 
 ##### load_workers
-Number of concurrent processes used to load the system in the `overload` test.
+Number of concurrent processes used to load the system in the `loaded_upgrade` test.
 
 ##### conn_fail_time
 A magic value to override the default timeout in `replication2_ssl`.
@@ -360,6 +360,7 @@ This is an example test result JSON message posted to a webhook:
   "giddyup_url": "http://giddyup.basho.com/test_results/53" }
 ```
 Notice that the giddyup URL is not the page for the test result, but a resource from which you can GET information about the test in JSON.
+
 ### Running riak_test for the first time
 
 Run a test! After running `make` from the root of your `riak_test`
