@@ -14,7 +14,7 @@ contents of `$HOME/rt/riak` might look something like this:
 
 ```
 $ ls $HOME/rt/riak
-riak-head riak-1.3.2 riak-1.4.12
+riak-head riak-1.4.12 riak-2.0.5 riak-2.1.1
 ```
 
 Inside each of these directories is a series `dev[0-9]+` directories, typically
@@ -81,7 +81,8 @@ a bad state.
 This script is going to do the following:
 
 1. Download the source for the past three major Riak versions (e.g.
-   1.3.2, 1.4.12 and master)
+   1.4.12, 2.0.5 and 2.1.1)
+1. Any additional, test-specific versions required to run all tests (e.g. `kv679_mixed` needs 2.0.2 and 2.0.4)
 1. Build the proper version of Erlang that release was built with,
    using **kerl** (which it will also download)
 1. Build those releases of Riak.
@@ -112,7 +113,7 @@ building for a little while.
 To use `riak_ee` instead of `riak` set [`$RT_USE_EE`](https://github.com/basho/riak_test/blob/master/bin/rtdev-all.sh#L46)
 to any non-empty string.
 
-**Note**: There is a bug in 1.3.x `leveldb` which does not properly resolve
+**Historical Note**: There is a bug in 1.3.x `leveldb` which does not properly resolve
 the location of `pthread.h` when building on Macintosh OS X 10.9, aka
 Mavericks, and 10.10 (Yosemite).  This has been fixed in subsequent releases,
 but for now a fix is to manually add `#include <pthread.h>` to the top of
@@ -137,7 +138,7 @@ so all your Riak builds are in one place.
 
 `rtdev-migrate.sh` will convert existing devrels installed in `$RT_DEST_DIR`
 from the legacy format to the new format.  It also will reset the local
-Git repo.  It is only necessary to run this script once.
+Git repo.  It is only necessary to run this script once.  WORK IN PROGRESS.
 
 
 ###  reset-current-env.sh
@@ -175,26 +176,41 @@ to tell riak_test about them. The method of choice is to create a
     {giddyup_host, "localhost:5000"},
     {giddyup_user, "user"},
     {giddyup_password, "password"},
+    {giddyup_platform, "osx-64"},
     {test_timeout, 1800000},
     {rt_max_receive_wait_time, 600000},
     {rt_retry_delay, 1000},
     {rt_harness, rtdev},
     {rt_scratch_dir, "/tmp/riak_test_scratch"},
     {basho_bench, "/home/you/basho/basho_bench"},
-    {spam_dir, "/home/you/basho/riak_test/search-corpus"},
-    {platform, "osx-64"},
+    {spam_dir, "/home/you/basho/riak_test/search-corpus/spam.0"},
     {load_workers, 3},
+    {test_paths, ["/home/you/basho/riak_test/ebin"]},
+    {lager_console_level, debug},
+    {lager_level, debug},
+    {conn_fail_time, 60000},
     {offset, 2},
     {workers, 5}
 ]}.
 
 {rtdev, [
-    {rt_project, "riak"},
-    {root_path, "/home/you/rt/riak"},
-    {default_version, head},
-    {previous_version, "1.4.12"},
-    {legacy_version, "1.3.4"}
-]}.
+    {yz_dir, ["/home/you/basho/riak_ee/deps/yokozuna"]},
+    {test_paths, ["/home/you/basho/riak_ee/yokozuna/riak_test/ebin"]},
+    {root_path, "/home/you/basho/rt/riak"},
+    {versions, [
+        {'latest_1.4_ee', {riak_ee, "1.4.12"}},
+        {'latest_2.0_ee', {riak_ee, "2.0.5"}},
+        {'latest_2.1_ee', {riak_ee, "2.1.1"}},
+        {default, 'latest_2.1_ee'},
+        {previous, 'latest_2.0_ee'},
+        {legacy, 'latest_1.4_ee'}
+    ]},
+    {upgrade_paths, [
+        {full, ['latest_1.4_ee', 'latest_2.0_ee', 'latest_2.1_ee']},
+        {previous, ['latest_2.0_ee', 'latest_2.1_ee']}
+        {legacy, ['latest_1.4_ee', 'latest_2.1_ee']}
+    ]}
+]}
 ```
 
 The `default` section of the config file will be overridden by the config
@@ -222,13 +238,13 @@ String used as a password when communicating with Giddyup.
 #### giddyup_user
 String used to identify the user when communicating with Giddyup.
 
-#### platform
+#### giddyup_platform
 String identifying the current testing platform when reporting to Giddyup.
 Current values include `centos-5-64`, `centos-6-64`, `fedora-17-64`,
 `freebsd-9-64`, `osx-64`, `solaris-10u9-64`, `ubuntu-1004-64`, `ubuntu-1204-64`
 
 #### spam_dir
-Name of a `tar` file containing ancientSPAM e-mail used as a data load
+Name of a `tar` file containing ancient SPAM e-mail used as a data load
 for a few tests.
 
 #### rt_harness
@@ -253,34 +269,52 @@ Number of milliseconds allowed for a single test to run.
 #### rtdev
 This is the devrel configuration section.
 
-##### rt_project
-The name of the current project name; used in reporting to Giddyup.
-
 ##### root_path
 Path to the top of the installed devrel instances.
 
-##### default_version
+##### default
 If specific versions of Riak are not specified, this one is tested.
 The default value is `head` which is typically the head of `develop`.
 
-##### previous_version
-Previous version of Riak EE, if not specified defaults to `1.4.12`.
+##### previous
+Previous version of Riak EE, if not specified defaults to `2.0.5`.
 Will be removed after tests have been ported.
 
-##### legacy_version
-Ancient version of Riak EE, if not specified defaults to `1.3.4`.
+##### legacy
+Ancient version of Riak EE, if not specified defaults to `1.4.12`.
 Will be removed after tests have been ported.
 
 ##### rt_default_config
 Default configuration parameters that will be used for nodes deployed by riak_test.  Tests can
 override these.
-
 ```erlang
 {rtdev, [
     { rt_default_config,
         [ {riak_core, [ {ring_creation_size, 16} ]} ] }
 ]}
 ```
+
+##### upgrade_paths
+Definitions of lists of versions for programatic upgrades.  The names `legacy` and `previous` support tests which have not yet been updated to the current framework.
+
+##### test_paths
+List of directorys to search for tests.  Currently used to help support Yokozuna tests.
+
+##### yz_dir
+Directory to root of the built Yokozuna tree.  This will go away once Yokozuna tests join the main herd under `riak`.
+
+##### lager_console_level and lager_level
+This are [lager](https://github.com/basho/lager)-specific settings.  By default they are set to `info`.
+
+##### load_workers
+Number of concurrent processes used to load the system in the `overload` test.
+
+##### conn_fail_time
+A magic value to override the default timeout in `replication2_ssl`.
+
+##### offset/workers
+Values used to reproducably shuffle the order in which tests are executed.
+
 #### Coverage
 You can generate a coverage report for a test run through [Erlang Cover](http://www.erlang.org/doc/apps/tools/cover_chapter.html).
 Coverage information for all **current** code run on any Riak node started by any of the tests in the run will be output as HTML in the coverage directory.
