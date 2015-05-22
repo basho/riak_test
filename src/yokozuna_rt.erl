@@ -25,6 +25,7 @@
 -export([expire_trees/1,
          rolling_upgrade/2,
          rolling_upgrade/3,
+         verify_num_found_query/3,
          wait_for_aae/1,
          wait_for_full_exchange_round/2,
          write_data/5]).
@@ -159,4 +160,15 @@ expire_trees(Cluster) ->
 
     %% The expire is async so just give it a moment
     timer:sleep(100),
+    ok.
+
+verify_num_found_query(Cluster, Index, ExpectedCount) ->
+    F = fun(Node) ->
+                Pid = rt:pbc(Node),
+                {ok, {_, _, _, NumFound}} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),
+                lager:info("Check Count, Expected: ~p | Actual: ~p~n",
+                           [ExpectedCount, NumFound]),
+                ExpectedCount =:= NumFound
+        end,
+    rt:wait_until(Cluster, F),
     ok.

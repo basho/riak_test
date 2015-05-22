@@ -65,7 +65,7 @@ confirm() ->
     %% wait for solr soft commit
     timer:sleep(1100),
 
-    verify_num_found_query(Cluster, ?INDEX, KeyCount),
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount),
 
     %% Upgrade
     yokozuna_rt:rolling_upgrade(Cluster, current),
@@ -73,7 +73,7 @@ confirm() ->
     [rt:assert_capability(ANode, ?YZ_CAP, v1) || ANode <- Cluster],
     [rt:assert_supported(rt:capability(ANode, all), ?YZ_CAP, [v1, v0]) || ANode <- Cluster],
 
-    verify_num_found_query(Cluster, ?INDEX, KeyCount),
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount),
 
     lager:info("Write one more piece of data"),
     Pid = rt:pbc(Node),
@@ -81,20 +81,6 @@ confirm() ->
     timer:sleep(1100),
 
     yokozuna_rt:expire_trees(Cluster),
-    verify_num_found_query(Cluster, ?INDEX, KeyCount + 1),
-
-    [ok = rpc:call(ANode, application, set_env, [riak_kv, anti_entropy_build_limit, {100, 1000}])
-     || ANode <- Cluster],
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 1),
 
     pass.
-
-verify_num_found_query(Cluster, Index, ExpectedCount) ->
-    F = fun(Node) ->
-                Pid = rt:pbc(Node),
-                {ok, {_, _, _, NumFound}} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),
-                lager:info("Check Count, Expected: ~p | Actual: ~p~n",
-                           [ExpectedCount, NumFound]),
-                ExpectedCount =:= NumFound
-        end,
-    rt:wait_until(Cluster, F),
-    ok.
