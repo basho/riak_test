@@ -46,8 +46,6 @@
 : ${RT_USE_EE:=""}
 # Number of devrel installs to build on the local machine
 : ${RT_DEVRELS:=1}
-# Maximum number of nodes on each devrel
-: ${RT_MAX_NODES:=10}
 
 ORIGDIR=`pwd`
 pushd `dirname $0` > /dev/null
@@ -178,7 +176,7 @@ build()
     fi
     echo " - $SRCDIR built."
     for i in `seq 1 ${RT_DEVRELS}`; do
-        $RUN $SCRIPT_DIR/rtdev-devrel.sh $i $NUM_NODES
+        $RUN DEVNODES=${NUM_NODES} $SCRIPT_DIR/rtdev-devrel.sh $i
         $SCRIPT_DIR/rtdev-install.sh $i
     done
     cd ..
@@ -213,17 +211,17 @@ echo
 
 echo
 if [ -z "$RT_USE_EE" ]; then
-    build "riak-1.4.12" $R15B01 5
+    build "riak-1.4.12" $R15B01 6
     build "riak-2.0.2" $R16B02 8
     build "riak-2.0.4" $R16B02 8
     build "riak-2.0.5" $R16B02 8
     build "riak-2.1.1" $R16B02 8
 else
-    build "riak_ee-1.4.12" $R15B01 5
     if [ "${DEFAULT_VERSION}" == "riak-head" ]; then
         DEFAULT_VERSION="riak_ee-head"
     fi
     echo "Default version: $DEFAULT_VERSION"
+    build "riak_ee-1.4.12" $R15B01 6
     build "riak_ee-2.0.2" $R16B02 8
     build "riak_ee-2.0.4" $R16B02 8
     build "riak_ee-2.0.5" $R16B02 8
