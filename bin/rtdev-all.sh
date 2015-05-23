@@ -18,7 +18,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# You need to use this script once to build a set of stagedevrels for prior
+# You need to use this script once to build a set of devrels for prior
 # releases of Riak (for mixed version / upgrade testing). You should
 # create a directory and then run this script from within that directory.
 # I have ~/test-releases that I created once, and then re-use for testing.
@@ -44,6 +44,10 @@
 # By default the Open Source version of Riak will be used, but for internal
 # testing you can override this variable to use `riak_ee` instead
 : ${RT_USE_EE:=""}
+# Number of devrel installs to build on the local machine
+: ${RT_DEVRELS:=1}
+# Maximum number of nodes on each devrel
+: ${RT_MAX_NODES:=10}
 
 ORIGDIR=`pwd`
 pushd `dirname $0` > /dev/null
@@ -118,11 +122,12 @@ kerl()
     fi
 }
 
-# Build stagedevrels for testing
+# Build devrels for testing
 build()
 {
     SRCDIR=$1
     ERLROOT=$2
+    NUM_NODES=$3
     if [ -z "$RT_USE_EE" ]; then
         GITURL=$GITURL_RIAK
     else
@@ -153,73 +158,32 @@ build()
     RUN="env PATH=$ERLROOT/bin:$ERLROOT/lib/erlang/bin:$PATH \
              C_INCLUDE_PATH=$ERLROOT/usr/include \
              LD_LIBRARY_PATH=$ERLROOT/usr/lib"
-    fix_riak_1_3 $SRCDIR "$RUN"
 
-    echo " - Building stagedevrel in $SRCDIR (this could take a while)"
+    echo " - Building devrel in $SRCDIR (this could take a while)"
     cd $SRCDIR
 
     # For non-tagged builds (i.e. head), use make deps.  Otherwise, use
     # make locked-deps for tagged builds ...
     if [ -n "`echo ${SRCDIR} | grep head`" ]; then
-        make deps
+        $RUN make deps
     else
         $RUN make locked-deps
     fi
 
-    $RUN make all stagedevrel
+    $RUN make all
     RES=$?
     if [ "$RES" -ne 0 ]; then
-        echo "[ERROR] make stagedevrel failed"
+        echo "[ERROR] make all failed"
         exit 1
     fi
     echo " - $SRCDIR built."
-    $SCRIPT_DIR/rtdev-install.sh
+    for i in `seq 1 ${RT_DEVRELS}`; do
+        $RUN $SCRIPT_DIR/rtdev-devrel.sh $i $NUM_NODES
+        $SCRIPT_DIR/rtdev-install.sh $i
+    done
     cd ..
 }
 
-# Riak 1.3 has a few artifacts which need to be updated in order to build
-# properly
-fix_riak_1_3()
-{
-	SRCDIR=$1
-	RUN="$2"
-
-    if [ "`echo $SRCDIR | cut -d- -f2 | cut -d. -f1-2`" != "1.3" ]; then
-        return 0
-    fi
-
-    echo "- Patching Riak 1.3.x"
-    cd $SRCDIR
-    if [ "$SRCDIR" == "riak-1.3.2" ]; then
-		cat <<EOF | patch
---- rebar.config
-+++ rebar.config
-@@ -12,6 +12,7 @@
- {deps, [
-        {lager_syslog, "1.2.2", {git, "git://github.com/basho/lager_syslog", {tag, "1.2.2"}}},
-        {cluster_info, "1.2.3", {git, "git://github.com/basho/cluster_info", {tag, "1.2.3"}}},
-+       {meck, "0.7.2", {git, "git://github.com/eproxus/meck", {tag, "0.7.2"}}},
-        {riak_kv, "1.3.2", {git, "git://github.com/basho/riak_kv", {tag, "1.3.2"}}},
-        {riak_search, "1.3.0", {git, "git://github.com/basho/riak_search",
-                                  {tag, "1.3.2"}}},
-EOF
-	fi
-	$RUN make locked-deps
-	$RUN make deps
-    cd deps/eleveldb/c_src/leveldb/include/leveldb
-    cat <<EOF | patch
---- env.h
-+++ env.h
-@@ -17,6 +17,7 @@
- #include <string>
- #include <vector>
- #include <stdint.h>
-+#include <pthread.h>
- #include "leveldb/perf_count.h"
- #include "leveldb/status.h"
-EOF
-    cd ../../../../../../..
-}
 
 if [ -n "$DEBUG_RTDEV" ]; then
     echo "= Configuration ================================================="
@@ -249,17 +213,22 @@ echo
 
 echo
 if [ -z "$RT_USE_EE" ]; then
-    build "riak-1.3.2" $R15B01
-    build "riak-1.4.12" $R15B01
+    build "riak-1.4.12" $R15B01 5
+    build "riak-2.0.2" $R16B02 8
+    build "riak-2.0.4" $R16B02 8
+    build "riak-2.0.5" $R16B02 8
+    build "riak-2.1.1" $R16B02 8
 else
-    build "riak_ee-1.3.4" $R15B01
-    build "riak_ee-1.4.12" $R15B01
+    build "riak_ee-1.4.12" $R15B01 5
     if [ "${DEFAULT_VERSION}" == "riak-head" ]; then
         DEFAULT_VERSION="riak_ee-head"
     fi
     echo "Default version: $DEFAULT_VERSION"
+    build "riak_ee-2.0.2" $R16B02 8
+    build "riak_ee-2.0.4" $R16B02 8
+    build "riak_ee-2.0.5" $R16B02 8
+    build "riak_ee-2.1.1" $R16B02 8
 fi
-build $DEFAULT_VERSION $R16B02
-
+#build $DEFAULT_VERSION $R16B02 8
 echo
 echo "= Build complete! ==============================================="

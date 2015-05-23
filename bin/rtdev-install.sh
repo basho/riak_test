@@ -23,6 +23,18 @@ set -e
 
 : ${RT_DEST_DIR:="$HOME/rt/riak"}
 
+# If there is a command-line argument, it will be the number
+# of the devrel built.  It would assume to have have a numbered
+# subdirectory of RT_DEST_DIR.  If there is no argument, it is
+# assumed to be simply right in RT_DEST_DIR
+if [ -z "$1" ]; then
+    RT_DEVREL=""
+    RT_TARGET="$RT_DEST_DIR"
+else
+    RT_DEVREL="devrel$1"
+    RT_TARGET="$RT_DEST_DIR/$RT_DEVREL"
+fi
+
 cwd=$(pwd)
 echo -n " - Determining version: "
 if [ -z "${RT_VERSION+xxx}" ] || ([ -z "$RT_VERSION" ] && [ "${RT_VERSION+xxx}" = "xxx" ]); then
@@ -57,21 +69,21 @@ if [ -z "${RT_VERSION+xxx}" ] || ([ -z "$RT_VERSION" ] && [ "${RT_VERSION+xxx}" 
 fi
 echo "Version: ${RT_VERSION}"
 
-# Create the RT_DEST_DIR directory if it does not yet exist
-if [ ! -d $RT_DEST_DIR ]; then
-    mkdir -p $RT_DEST_DIR
+# Create the RT_TARGET directory if it does not yet exist
+if [ ! -d $RT_TARGET ]; then
+    mkdir -p $RT_TARGET
 fi
 
 # Reinitialize the Git repo if it already exists,
 # including removing untracked files
-cd $RT_DEST_DIR
+cd $RT_TARGET
 if [ -d ".git" ]; then
-    echo " - Resetting existing $RT_DEST_DIR"
+    echo " - Resetting existing $RT_TARGET"
     git reset HEAD --hard > /dev/null 2>&1
     git clean -fd > /dev/null 2>&1
 fi
 
-RT_VERSION_DIR=$RT_DEST_DIR/$RT_VERSION
+RT_VERSION_DIR=$RT_TARGET/$RT_VERSION
 echo " - Removing and recreating $RT_VERSION_DIR"
 rm -rf $RT_VERSION_DIR
 mkdir $RT_VERSION_DIR
@@ -84,29 +96,29 @@ fi
 cd dev
 
 # Clone the existing dev directory into RT_DEST_DIR
-for i in `ls`; do cp -p -P -R $i $RT_DEST_DIR/$RT_VERSION/; done
+for i in `ls`; do cp -p -P -R $i $RT_TARGET/$RT_VERSION/; done
 
-    VERSION_FILE=$RT_VERSION_DIR/VERSION
-    echo " - Writing $VERSION_FILE"
-    echo -n $RT_VERSION > $VERSION_FILE
+VERSION_FILE=$RT_VERSION_DIR/VERSION
+echo " - Writing $VERSION_FILE"
+echo -n $RT_VERSION > $VERSION_FILE
 
-    cd $RT_DEST_DIR
-    if [ -d ".git" ]; then
-        echo " - Reinitializing git state"
-        git add --ignore-removal -f .
-        git commit -a -m "riak_test init" --amend > /dev/null 2>&1
-    else
-        git init
-        cat > .gitignore <<EOF
+cd $RT_TARGET
+if [ -d ".git" ]; then
+    echo " - Reinitializing git state"
+    git add --ignore-removal -f .
+    git commit -a -m "riak_test init" --amend > /dev/null 2>&1
+else
+    git init
+    cat > .gitignore <<EOF
 # Don't check in large binaries
 bin/
 EOF
 
-        ## Some versions of git and/or OS require these fields
-        git config user.name "Riak Test"
-        git config user.email "dev@basho.com"
+    ## Some versions of git and/or OS require these fields
+    git config user.name "Riak Test"
+    git config user.email "dev@basho.com"
 
-        git add --ignore-removal .
-        git commit -a -m "riak_test init" > /dev/null
-        echo " - Successfully completed initial git commit of $RT_DEST_DIR"
-    fi
+    git add --ignore-removal .
+    git commit -a -m "riak_test init" > /dev/null
+    echo " - Successfully completed initial git commit of $RT_TARGET"
+fi
