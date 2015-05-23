@@ -46,8 +46,6 @@
 : ${RT_USE_EE:=""}
 # Number of devrel installs to build on the local machine
 : ${RT_DEVRELS:=1}
-# Maximum number of nodes on each devrel
-: ${RT_MAX_NODES:=10}
 
 ORIGDIR=`pwd`
 pushd `dirname $0` > /dev/null
