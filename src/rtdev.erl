@@ -563,7 +563,7 @@ configure_nodes(Nodes, Configs) ->
             lists:zip(Nodes, Configs)).
 
 deploy_nodes(NodeConfig) ->
-    Path = relpath(""),
+    Path = rt_config:get(root_path),
     lager:info("Riak path: ~p", [Path]),
     NumNodes = length(NodeConfig),
     %% TODO: The starting index should not be fixed to 1
