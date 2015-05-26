@@ -117,7 +117,6 @@ delete_datadir({{Idx, Node}, Type}) ->
     DataRoot = rpc:call(Node, app_helper, get_env, [BackendName, data_root]),
     %% get datadir from Idx
     Path = filename:join([rtdev:relpath(current),
-                          "dev",
                           "dev"++ integer_to_list(rtdev:node_id(Node)),
                           DataRoot,
                           integer_to_list(Idx)]),

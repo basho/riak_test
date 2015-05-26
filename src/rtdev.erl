@@ -225,7 +225,8 @@ setup_harness() ->
 -spec relpath(Vsn :: string()) -> string().
 relpath(Vsn) ->
     Path = ?PATH,
-    relpath(Vsn, Path).
+    ActualVersion = rt_config:version_to_tag(Vsn),
+    relpath(ActualVersion, Path).
 
 %% @doc Tack the version onto the end of the root path
 -spec relpath(Vsn :: string(), Path :: string()) -> string().
