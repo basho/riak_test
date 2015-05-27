@@ -87,7 +87,7 @@ confirm() ->
     ?assertEqual(KeyCount * N, PrevGetMapCC),
 
     %% test query count
-    verify_num_found_query(Cluster, ?INDEX1, KeyCount),
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX1, KeyCount),
     riakc_pb_socket:stop(OldPid),
 
     {RingVal1, MDVal1} = get_ring_and_cmd_vals(Node, ?YZ_META_EXTRACTORS,
@@ -113,7 +113,7 @@ confirm() ->
     [rt:assert_supported(rt:capability(ANode, all), ?YZ_CAP, [true, false]) || ANode <- Cluster],
 
     %% test query count again
-    verify_num_found_query(Cluster, ?INDEX1, KeyCount),
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX1, KeyCount),
 
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA,
                              ?GET_MAP_READTHROUGH_MFA]),
@@ -164,17 +164,6 @@ get_ring_and_cmd_vals(Node, Prefix, Key) ->
     MDVal = metadata_get(Node, Prefix, Key),
     RingVal = ring_meta_get(Node, Key, Ring),
     {RingVal, MDVal}.
-
-verify_num_found_query(Cluster, Index, ExpectedCount) ->
-    F = fun(Node) ->
-                Pid = rt:pbc(Node),
-                {ok, {_, _, _, NumFound}} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),
-                lager:info("Check Count, Expected: ~p | Actual: ~p~n",
-                           [ExpectedCount, NumFound]),
-                ExpectedCount =:= NumFound
-        end,
-    rt:wait_until(Cluster, F),
-    ok.
 
 metadata_get(Node, Prefix, Key) ->
     rpc:call(Node, riak_core_metadata, get, [Prefix, Key, []]).
