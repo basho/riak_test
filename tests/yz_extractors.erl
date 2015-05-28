@@ -27,7 +27,7 @@
 -define(BUCKET1, <<"test_bkt1">>).
 -define(INDEX2, <<"test_idx2">>).
 -define(BUCKET2, <<"test_bkt2">>).
--define(YZ_CAP, {yokozuna,extractor_map_in_cmd}).
+-define(YZ_CAP, {yokozuna, extractor_map_in_cmd}).
 -define(GET_MAP_RING_MFA, {yz_extractor, get_map, 1}).
 -define(GET_MAP_MFA, {yz_extractor, get_map, 0}).
 -define(GET_MAP_READTHROUGH_MFA, {yz_extractor, get_map_read_through, 0}).
@@ -60,7 +60,7 @@ confirm() ->
     [_, Node|_] = Cluster = rt:build_cluster(lists:duplicate(4, {OldVsn, ?CFG})),
     rt:wait_for_cluster_service(Cluster, yokozuna),
 
-    assert_capability(Node, ?YZ_CAP, {unknown_capability, ?YZ_CAP}),
+    [rt:assert_capability(ANode, ?YZ_CAP, {unknown_capability, ?YZ_CAP}) || ANode <- Cluster],
 
     OldPid = rt:pbc(Node),
 
@@ -73,7 +73,7 @@ confirm() ->
 
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA]),
 
-    yz_rt:write_data(OldPid, ?INDEX1, ?BUCKET1, GenKeys),
+    yokozuna_rt:write_data(Cluster, OldPid, ?INDEX1, ?BUCKET1, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
@@ -87,7 +87,7 @@ confirm() ->
     ?assertEqual(KeyCount * N, PrevGetMapCC),
 
     %% test query count
-    assert_num_found_query(OldPid, ?INDEX1, KeyCount),
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX1, KeyCount),
     riakc_pb_socket:stop(OldPid),
 
     {RingVal1, MDVal1} = get_ring_and_cmd_vals(Node, ?YZ_META_EXTRACTORS,
@@ -107,21 +107,19 @@ confirm() ->
     ?assertEqual(?EXTRACTMAPEXPECT, ExtractMap),
 
     %% Upgrade
-    yz_rt:rolling_upgrade(Cluster, current),
-    yz_rt:wait_for_aae(Cluster),
+    yokozuna_rt:rolling_upgrade(Cluster, current),
 
-    CurrentCapabilities = rt:capability(Node, all),
-    assert_capability(Node, ?YZ_CAP, true),
-    assert_supported(CurrentCapabilities, ?YZ_CAP, [true, false]),
+    [rt:assert_capability(ANode, ?YZ_CAP, true) || ANode <- Cluster],
+    [rt:assert_supported(rt:capability(ANode, all), ?YZ_CAP, [true, false]) || ANode <- Cluster],
 
     %% test query count again
-    Pid = rt:pbc(Node),
-    assert_num_found_query(Pid, ?INDEX1, KeyCount),
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX1, KeyCount),
 
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA,
                              ?GET_MAP_READTHROUGH_MFA]),
 
-    yz_rt:write_data(Pid, ?INDEX2, ?BUCKET2, GenKeys),
+    Pid = rt:pbc(Node),
+    yokozuna_rt:write_data(Cluster, Pid, ?INDEX2, ?BUCKET2, GenKeys),
     %% wait for solr soft commit
     timer:sleep(1100),
 
@@ -129,8 +127,13 @@ confirm() ->
     CurrGetMapRingCC = rt:get_call_count(Cluster, ?GET_MAP_RING_MFA),
     CurrGetMapCC = rt:get_call_count(Cluster, ?GET_MAP_MFA),
     CurrGetMapRTCC = rt:get_call_count(Cluster, ?GET_MAP_READTHROUGH_MFA),
-    ?assertEqual(1, CurrGetMapRingCC),
-    ?assertEqual(KeyCount * N, CurrGetMapCC),
+
+    lager:info("Number of calls to get the map from the ring - current: ~p~n, previous: ~p~n",
+              [CurrGetMapRingCC, PrevGetMapRingCC]),
+    ?assert(CurrGetMapRingCC < PrevGetMapRingCC),
+    lager:info("Number of calls to get the map - current: ~p~n, previous: ~p~n",
+               [CurrGetMapCC, PrevGetMapCC]),
+    ?assert(CurrGetMapCC =< PrevGetMapCC),
     lager:info("Number of calls to get_map_read_through/0: ~p~n, Number of calls to get_map/0: ~p~n",
               [CurrGetMapRTCC, CurrGetMapCC]),
     ?assert(CurrGetMapRTCC < CurrGetMapCC),
@@ -166,22 +169,6 @@ get_ring_and_cmd_vals(Node, Prefix, Key) ->
     MDVal = metadata_get(Node, Prefix, Key),
     RingVal = ring_meta_get(Node, Key, Ring),
     {RingVal, MDVal}.
-
-assert_capability(CNode, Capability, Value) ->
-    lager:info("Checking Capability Setting ~p =:= ~p on ~p",
-               [Capability, Value, CNode]),
-    ?assertEqual(ok, rt:wait_until_capability(CNode, Capability, Value)).
-
-assert_supported(Capabilities, Capability, Value) ->
-    lager:info("Checking Capability Supported Values ~p =:= ~p",
-               [Capability, Value]),
-    ?assertEqual(Value, proplists:get_value(
-                          Capability,
-                          proplists:get_value('$supported', Capabilities))).
-
-assert_num_found_query(Pid, Index, ExpectedCount) ->
-    {ok, Results} = riakc_pb_socket:search(Pid, Index, <<"*:*">>),
-    ?assertEqual(ExpectedCount, Results#search_results.num_found).
 
 metadata_get(Node, Prefix, Key) ->
     rpc:call(Node, riak_core_metadata, get, [Prefix, Key, []]).
