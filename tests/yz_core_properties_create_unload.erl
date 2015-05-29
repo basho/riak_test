@@ -71,6 +71,15 @@ confirm() ->
 
     verify_count(Pid, KeyCount),
 
+    test_core_props_removal(Cluster, RandNodes, KeyCount, Pid),
+    test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid),
+    test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid),
+
+    riakc_pb_socket:stop(Pid),
+
+    pass.
+
+test_core_props_removal(Cluster, RandNodes, KeyCount, Pid) ->
     lager:info("Remove core.properties file in each index data dir"),
     remove_core_props(RandNodes, ?INDEX),
 
@@ -80,8 +89,9 @@ confirm() ->
     ok = rt:pbc_write(Pid, ?BUCKET, <<"foo">>, <<"foo">>, "text/plain"),
     timer:sleep(1100),
 
-    verify_count(Pid, KeyCount + 1),
+    verify_count(Pid, KeyCount + 1).
 
+test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid) ->
     lager:info("Remove index directories on each node and let them recreate/reindex"),
     remove_index_dirs(RandNodes, ?INDEX),
 
@@ -94,8 +104,9 @@ confirm() ->
     ok = rt:pbc_write(Pid, ?BUCKET, <<"food">>, <<"foody">>, "text/plain"),
     timer:sleep(1100),
 
-    verify_count(Pid, KeyCount + 2),
+    verify_count(Pid, KeyCount + 2).
 
+test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
     lager:info("Remove segment info files in each index data dir"),
     remove_segment_infos(RandNodes, ?INDEX),
 
@@ -112,11 +123,7 @@ confirm() ->
     ok = rt:pbc_write(Pid, ?BUCKET, <<"baz">>, <<"bar">>, "text/plain"),
     timer:sleep(1100),
 
-    verify_count(Pid, KeyCount + 3),
-
-    riakc_pb_socket:stop(Pid),
-
-    pass.
+    verify_count(Pid, KeyCount + 3).
 
 %% @doc Verify search count.
 verify_count(Pid, ExpectedKeyCount) ->
