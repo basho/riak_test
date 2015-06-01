@@ -109,7 +109,6 @@ build()
     RUN="env PATH=$ERLROOT/bin:$ERLROOT/lib/erlang/bin:$PATH \
              C_INCLUDE_PATH=$ERLROOT/usr/include \
              LD_LIBRARY_PATH=$ERLROOT/usr/lib"
-    fix_riak_1_3 $SRCDIR $TAG "$RUN"
 
     echo " - Building stagedevrel in $SRCDIR (this could take a while)"
     cd $SRCDIR
@@ -124,53 +123,10 @@ build()
     echo " - $SRCDIR built."
 }
 
-# Riak 1.3 has a few artifacts which need to be updated in order to build
-# properly
-fix_riak_1_3()
-{
-	SRCDIR=$1
-	TAG="$2"
-	RUN="$3"
 
-    if [ "`echo $TAG | cut -d . -f1-2`" != "1.3" ]; then
-        return 0
-    fi
-
-    echo "- Patching Riak 1.3.x"
-    cd $SRCDIR
-    cat <<EOF | patch
---- rebar.config
-+++ rebar.config
-@@ -12,6 +12,7 @@
- {deps, [
-        {lager_syslog, "1.2.2", {git, "git://github.com/basho/lager_syslog", {tag, "1.2.2"}}},
-        {cluster_info, "1.2.3", {git, "git://github.com/basho/cluster_info", {tag, "1.2.3"}}},
-+       {meck, "0.7.2", {git, "git://github.com/eproxus/meck", {tag, "0.7.2"}}},
-        {riak_kv, "1.3.2", {git, "git://github.com/basho/riak_kv", {tag, "1.3.2"}}},
-        {riak_search, "1.3.0", {git, "git://github.com/basho/riak_search",
-                                  {tag, "1.3.2"}}},
-EOF
-    $RUN make deps
-    cd deps/eleveldb/c_src/leveldb/include/leveldb
-    cat <<EOF | patch
---- env.h
-+++ env.h
-@@ -17,6 +17,7 @@
- #include <string>
- #include <vector>
- #include <stdint.h>
-+#include <pthread.h>
- #include "leveldb/perf_count.h"
- #include "leveldb/status.h"
-EOF
-    cd ../../../../../../..
-}
-
-build "riak-1.4.10" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.4/1.4.10/riak-1.4.10.tar.gz
-echo
-if [ -z "$RT_USE_EE" ]; then
-	build "riak-1.3.2" $R15B01 1.3.2
-else
-	build "riak-1.3.4" $R15B01 1.3.4
-fi
+build "riak-1.4.12" $R15B01 1.4.12
+build "riak-2.0.2" $R16B02 2.0.2
+build "riak-2.0.4" $R16B02 2.0.4
+build "riak-2.0.5" $R16B02 2.0.5
+build "riak-2.1.1" $R16B02 2.1.1
 echo
