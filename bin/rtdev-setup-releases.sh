@@ -24,7 +24,8 @@ then
         echo " - Initializing $RT_DEST_DIR/$vsn"
         mkdir -p "$RT_DEST_DIR/$vsn"
         cp -p -P -R "$rel" "$RT_DEST_DIR/$vsn"
-        (cd "$rel"; VERSION=`git describe --tags`; echo $VERSION > $RT_DEST_DIR/$vsn/VERSION)
+        # Route out the version (not product) from Git
+        (cd "$rel"; VERSION=`git describe --tags | cut -d- -f2`; echo $VERSION > $RT_DEST_DIR/$vsn/VERSION)
     done
 else
     # This is useful when only testing with 'current'
@@ -41,6 +42,6 @@ git init
 git config user.name "Riak Test"
 git config user.email "dev@basho.com"
 
-git add .
+git add --ignore-removal .
 git commit -a -m "riak_test init" > /dev/null
 echo " - Successfully completed initial git commit of $RT_DEST_DIR"
