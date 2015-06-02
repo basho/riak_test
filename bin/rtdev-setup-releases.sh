@@ -24,6 +24,7 @@ then
         echo " - Initializing $RT_DEST_DIR/$vsn"
         mkdir -p "$RT_DEST_DIR/$vsn"
         cp -p -P -R "$rel" "$RT_DEST_DIR/$vsn"
+        (cd "$rel"; VERSION=`git describe --tags`; echo $VERSION > $RT_DEST_DIR/$vsn/VERSION)
     done
 else
     # This is useful when only testing with 'current'
