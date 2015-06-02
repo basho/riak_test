@@ -22,14 +22,37 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("yokozuna_rt.hrl").
 
--export([expire_trees/1,
+-export([check_exists/2,
+         expire_trees/1,
+         host_entries/1,
+         remove_index_dirs/2,
          rolling_upgrade/2,
          rolling_upgrade/3,
+         search/4,
+         search/5,
+         search_expect/5,
+         search_expect/6,
+         search_expect/7,
          verify_num_found_query/3,
          wait_for_aae/1,
          wait_for_index/2,
          wait_for_full_exchange_round/2,
-         write_data/5]).
+         wait_for_index/2,
+         wait_for_schema/2,
+         wait_for_schema/3,
+         write_data/5,
+         write_data/6]).
+
+-type host() :: string().
+-type portnum() :: integer().
+-type count() :: non_neg_integer().
+-type json_string() :: atom | string() | binary().
+
+-define(FMT(S, Args), lists:flatten(io_lib:format(S, Args))).
+
+-spec host_entries(rt:conn_info()) -> [{host(), portnum()}].
+host_entries(ClusterConnInfo) ->
+    [riak_http(I) || {_,I} <- ClusterConnInfo].
 
 %% @doc Write `Keys' via the PB inteface to a `Bucket' and have them
 %%      searchable in an `Index'.
@@ -37,13 +60,23 @@
 write_data(Cluster, Pid, Index, Bucket, Keys) ->
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
 
-    %% Create a search index and associate with a bucket
-    riakc_pb_socket:create_search_index(Pid, Index),
+    create_and_set_index(Cluster, Pid, Index, Bucket),
+    timer:sleep(1000),
 
-    %% For possible legacy upgrade reasons, wrap create index in a wait
-    wait_for_index(Cluster, Index),
+    %% Write keys
+    lager:info("Writing ~p keys", [length(Keys)]),
+    [ok = rt:pbc_write(Pid, Bucket, Key, Key, "text/plain") || Key <- Keys],
+    ok.
 
-    ok = riakc_pb_socket:set_search_index(Pid, Bucket, Index),
+-spec write_data([node()], pid(), index_name(), {schema_name(), raw_schema()},
+                 bucket(), [binary()]) -> ok.
+write_data(Cluster, Pid, Index, {SchemaName, SchemaData},
+           Bucket, Keys) ->
+    riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
+
+    riakc_pb_socket:create_search_schema(Pid, SchemaName, SchemaData),
+
+    create_and_set_index(Cluster, Pid, Bucket, Index, SchemaName),
     timer:sleep(1000),
 
     %% Write keys
@@ -79,21 +112,6 @@ rolling_upgrade(Cluster, Vsn, YZCfgChanges) ->
          rt:wait_for_service(Node, yokozuna)
      end || {SolrPort, Node} <- Cluster2],
     ok.
-
--spec config_merge(proplists:proplist(), proplists:proplist()) ->
-                          orddict:orddict() | proplists:proplist().
-config_merge(DefaultCfg, NewCfg) when NewCfg /= [] ->
-    orddict:update(yokozuna,
-                   fun(V) ->
-                           orddict:merge(fun(_, _X, Y) -> Y end,
-                                         orddict:from_list(V),
-                                         orddict:from_list(
-                                           orddict:fetch(
-                                             yokozuna, NewCfg)))
-                   end,
-                   DefaultCfg);
-config_merge(DefaultCfg, _NewCfg) ->
-    DefaultCfg.
 
 %% @doc Use AAE status to verify that exchange has occurred for all
 %%      partitions since the time this function was invoked.
@@ -152,6 +170,38 @@ wait_for_index(Cluster, Index) ->
     [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster],
     ok.
 
+%% @see wait_for_schema/3
+wait_for_schema(Cluster, Name) ->
+    wait_for_schema(Cluster, Name, ignore).
+
+%% @doc Wait for the schema `Name' to be read by all nodes in
+%% `Cluster' before returning.  If `Content' is binary data when
+%% verify the schema bytes exactly match `Content'.
+-spec wait_for_schema([node()], schema_name(), ignore | raw_schema()) -> ok.
+wait_for_schema(Cluster, Name, Content) ->
+    F = fun(Node) ->
+                lager:info("Attempt to read schema ~s from node ~p",
+                           [Name, Node]),
+                {Host, Port} = riak_pb(hd(rt:connection_info([Node]))),
+                {ok, PBConn} = riakc_pb_socket:start_link(Host, Port),
+                R = riakc_pb_socket:get_search_schema(PBConn, Name),
+                riakc_pb_socket:stop(PBConn),
+                case R of
+                    {ok, PL} ->
+                        case Content of
+                            ignore ->
+                                Name == proplists:get_value(name, PL);
+                            _ ->
+                                (Name == proplists:get_value(name, PL)) and
+                                    (Content == proplists:get_value(content, PL))
+                        end;
+                    _ ->
+                        false
+                end
+        end,
+    rt:wait_until(Cluster,  F),
+    ok.
+
 %% @doc Expire YZ trees
 -spec expire_trees([node()]) -> ok.
 expire_trees(Cluster) ->
@@ -163,6 +213,27 @@ expire_trees(Cluster) ->
     timer:sleep(100),
     ok.
 
+%% @doc Remove index directories, removing the index.
+-spec remove_index_dirs([node()], index_name()) -> ok.
+remove_index_dirs(Nodes, IndexName) ->
+    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+                    Node <- Nodes],
+    lager:info("Remove index dirs: ~p, on nodes: ~p~n",
+               [IndexDirs, Nodes]),
+    [rt:stop(ANode) || ANode <- Nodes],
+    [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
+    [rt:start(ANode) || ANode <- Nodes],
+    ok.
+
+%% @doc Check if index/core exists in metadata, disk via yz_index:exists.
+-spec check_exists([node()], index_name()) -> ok.
+check_exists(Nodes, IndexName) ->
+    rt:wait_until(Nodes,
+                  fun(N) ->
+                          rpc:call(N, yz_index, exists, [IndexName])
+                  end).
+
+-spec verify_num_found_query([node()], index_name(), count()) -> ok.
 verify_num_found_query(Cluster, Index, ExpectedCount) ->
     F = fun(Node) ->
                 Pid = rt:pbc(Node),
@@ -173,3 +244,120 @@ verify_num_found_query(Cluster, Index, ExpectedCount) ->
         end,
     rt:wait_until(Cluster, F),
     ok.
+
+search_expect(HP, Index, Name, Term, Expect) ->
+    search_expect(yokozuna, HP, Index, Name, Term, Expect).
+
+search_expect(Type, HP, Index, Name, Term, Expect) ->
+    {ok, "200", _, R} = search(Type, HP, Index, Name, Term),
+    verify_count_http(Expect, R).
+
+search_expect(solr, {Host, Port}, Index, Name0, Term0, Shards, Expect)
+  when is_list(Shards), length(Shards) > 0 ->
+    Name = quote_unicode(Name0),
+    Term = quote_unicode(Term0),
+    URL = internal_solr_url(Host, Port, Index, Name, Term, Shards),
+    lager:info("Run search ~s", [URL]),
+    Opts = [{response_format, binary}],
+    {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts),
+    verify_count_http(Expect, R).
+
+search(HP, Index, Name, Term) ->
+    search(yokozuna, HP, Index, Name, Term).
+
+search(Type, {Host, Port}, Index, Name, Term) when is_integer(Port) ->
+    search(Type, {Host, integer_to_list(Port)}, Index, Name, Term);
+
+search(Type, {Host, Port}, Index, Name0, Term0) ->
+    Name = quote_unicode(Name0),
+    Term = quote_unicode(Term0),
+    FmtStr = case Type of
+                 solr ->
+                     "http://~s:~s/internal_solr/~s/select?q=~s:~s&wt=json";
+                 yokozuna ->
+                     "http://~s:~s/search/query/~s?q=~s:~s&wt=json"
+             end,
+    URL = ?FMT(FmtStr, [Host, Port, Index, Name, Term]),
+    lager:info("Run search ~s", [URL]),
+    Opts = [{response_format, binary}],
+    ibrowse:send_req(URL, [], get, [], Opts).
+
+%%%===================================================================
+%%% Private
+%%%===================================================================
+
+-spec verify_count_http(count(), json_string()) -> boolean().
+verify_count_http(Expected, Resp) ->
+    Count = get_count_http(Resp),
+    lager:info("Expected: ~p, Actual: ~p", [Expected, Count]),
+    Expected == Count.
+
+-spec get_count_http(json_string()) -> count().
+get_count_http(Resp) ->
+    Struct = mochijson2:decode(Resp),
+    kvc:path([<<"response">>, <<"numFound">>], Struct).
+
+-spec riak_http({node(), rt:interfaces()} | rt:interfaces()) ->
+                       {host(), portnum()}.
+riak_http({_Node, ConnInfo}) ->
+    riak_http(ConnInfo);
+riak_http(ConnInfo) ->
+    proplists:get_value(http, ConnInfo).
+
+-spec riak_pb({node(), rt:interfaces()} | rt:interfaces()) ->
+                     {host(), portnum()}.
+riak_pb({_Node, ConnInfo}) ->
+    riak_pb(ConnInfo);
+riak_pb(ConnInfo) ->
+    proplists:get_value(pb, ConnInfo).
+
+-spec config_merge(proplists:proplist(), proplists:proplist()) ->
+                          orddict:orddict() | proplists:proplist().
+config_merge(DefaultCfg, NewCfg) when NewCfg /= [] ->
+    orddict:update(yokozuna,
+                   fun(V) ->
+                           orddict:merge(fun(_, _X, Y) -> Y end,
+                                         orddict:from_list(V),
+                                         orddict:from_list(
+                                           orddict:fetch(
+                                             yokozuna, NewCfg)))
+                   end,
+                   DefaultCfg);
+config_merge(DefaultCfg, _NewCfg) ->
+    DefaultCfg.
+
+-spec create_and_set_index([node()], pid(), bucket(), index_name()) -> ok.
+create_and_set_index(Cluster, Pid, Bucket, Index) ->
+    %% Create a search index and associate with a bucket
+    lager:info("Create a search index ~s and associate it with bucket ~s",
+               [Index, Bucket]),
+    ok = riakc_pb_socket:create_search_index(Pid, Index),
+    %% For possible legacy upgrade reasons, wrap create index in a wait
+    wait_for_index(Cluster, Index),
+    set_index(Pid, Bucket, Index).
+-spec create_and_set_index([node()], pid(), bucket(), index_name(),
+                           schema_name()) -> ok.
+create_and_set_index(Cluster, Pid, Bucket, Index, Schema) ->
+    %% Create a search index and associate with a bucket
+    lager:info("Create a search index ~s with a custom schema named ~s and
+               associate it with bucket ~s", [Index, Schema, Bucket]),
+    ok = riakc_pb_socket:create_search_index(Pid, Index, Schema, []),
+    %% For possible legacy upgrade reasons, wrap create index in a wait
+    wait_for_index(Cluster, Index),
+    set_index(Pid, Bucket, Index).
+
+-spec set_index(pid(), bucket(), index_name()) -> ok.
+set_index(Pid, Bucket, Index) ->
+    ok = riakc_pb_socket:set_search_index(Pid, Bucket, Index).
+
+internal_solr_url(Host, Port, Index) ->
+    ?FMT("http://~s:~B/internal_solr/~s", [Host, Port, Index]).
+internal_solr_url(Host, Port, Index, Name, Term, Shards) ->
+    Ss = [internal_solr_url(Host, ShardPort, Index)
+          || {_, ShardPort} <- Shards],
+    ?FMT("http://~s:~B/internal_solr/~s/select?wt=json&q=~s:~s&shards=~s",
+         [Host, Port, Index, Name, Term, string:join(Ss, ",")]).
+
+quote_unicode(Value) ->
+    mochiweb_util:quote_plus(binary_to_list(
+                               unicode:characters_to_binary(Value))).
