@@ -35,7 +35,9 @@
          copy_logs/2,
          get_ring/1,
          ip/1,
+         is_invalid/1,
          is_ready/1,
+         is_started/1,
          is_stopped/1,
          host/1,
          join/2,
@@ -78,16 +80,57 @@
 -define(SERVER, ?MODULE).
 -define(TIMEOUT, infinity).
 
--type node_id() :: pos_integer().
--type node_type() :: {devrel, filelib:dirname()}.
-
-%% TODO Document the purpose of the directory_overlay
+%% @doc The directory overlay describes the layout of the various
+%% directories on the node.  While the paths are absolute, they
+%% are agnostic of a local/remote installation.  The values in
+%% this structure correspond to the directory locations in the 
+%% Riak 2.x+ riak.conf file.  Use of this structure allows paths
+%% to commands and files to be calculated in an installation/transport
+%% neutral manner.
+%%
+%% For devrel-based installations, the layout will be calculated 
+%% relative to the root_path provided in the node_type.
+%%
+%% When support for package-based installations is implemented,
+%% the directories will correspond to those used by the package
+%% to deploy Riak on the host OS. 
+%%
+%% @since 1.1.0
 -record(directory_overlay, {bin_dir :: filelib:dirname(),
                             conf_dir :: filelib:dirname(),
                             data_dir :: filelib:dirname(),
                             home_dir :: filelib:dirname(),
                             lib_dir :: filelib:dirname(),
                             log_dir :: filelib:dirname()}).
+
+%% @doc Defines the following metadata elements required to initialize 
+%% and control a Riak devrel node:
+%%
+%%     * id: The devrel atom
+%%     * root_path: The absolute path to the root directory to
+%%                  the available version/node sets
+%%     * node_id: The number of the devrel node to be managed by
+%%                the FSM process (e.g. 1).  This number is
+%%                used to form the base path of node as
+%%                <root_path>/<version>/dev<node_id>
+%%
+%% @since 1.1.0
+-type devrel_node_type() :: [{root_path, filelib:dirname()} |
+                             {id, devrel} |
+                             {node_id, pos_integer()}].
+
+%% @doc This record bundles the pieces required to provision a node
+%% and attach orchestration to it.  
+%% 
+%% @since 1.1.0 
+-record(definition, {config=[] :: proplists:proplist(),
+                     hostname=localhost :: rt_host:hostname(),
+                     name :: node(),
+                     type :: devrel_node_type(),
+                     version :: rt_util:version()}).
+
+-type(node_definition() :: #definition{}).
+-exporttype(node_definition/0).
 
 -record(state, {host :: rt_host:host(),
                 id :: node_id(),
@@ -121,7 +164,7 @@ admin(Node, Args, Options) ->
 
 %% @doc Runs `riak attach' on a specific node, and tests for the expected behavoir.
 %%      Here's an example: ```
-%%      rt_cmd_line:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
+%%      rt_riak_node:attach(Node, [{expect, "erlang.pipe.1 \(^D to exit\)"},
 %%                       {send, "riak_core_ring_manager:get_my_ring()."},
 %%                       {expect, "dict,"},
 %%                       {send, [4]}]), %% 4 = Ctrl + D'''
@@ -131,6 +174,7 @@ admin(Node, Args, Options) ->
 %%      `{send, String}' sends the string to the console.
 %%         Once a send is encountered, the buffer is discarded, and the next
 %%         expect will process based on the output following the sent data.
+%%       ```
 %%
 %% @since 1.1.0
 -spec attach(node(), {expect, list()} | {send, list()}) -> {ok, term()} | rt_util:error().
@@ -145,6 +189,11 @@ attach(Node, Expected) ->
 attach_direct(Node, Expected) ->
     gen_fsm:sync_send_event(Node, {attach_direct, Expected}, ?TIMEOUT).
 
+%% @doc Kills any Riak processes running on the passed `Node', and resets the
+%%      the state of the FSM to `stopped'.  Therefore, this function is the means
+%%      to reset/resync the state of a Riak node FSM with a running Riak node.
+%%
+%% @since 1.1.0 
 -spec brutal_kill(node()) -> rt_util:result().
 brutal_kill(Node) ->
     gen_fsm:sync_send_all_state_event(Node, brutal_kill, ?TIMEOUT).
@@ -172,7 +221,7 @@ clean_data_dir(Node) ->
 clean_data_dir(Node, SubDir) ->
     gen_fsm:sync_send_event(Node, {clean_data_dir, SubDir}, ?TIMEOUT).
 
-%% @doc Runs `riak console' on a specific node
+%% @doc Runs `riak console' on a the passed `Node'
 %% @see rt_riak_node:attach/2
 %%
 %% @since 1.1.0
@@ -180,10 +229,16 @@ clean_data_dir(Node, SubDir) ->
 console(Node, Expected) ->
     geb_fsm:sync_send_event(Node, {console, Expected}, ?TIMEOUT).
 
+%% @doc Commits changes to a cluster using the passed `Node'
+%%
+%% @since 1.1.0
 -spec commit(node()) -> rt_util:result().
 commit(Node) ->
     gen_fsm:sync_send_event(Node, commit, ?TIMEOUT).
 
+%% @doc Retrieves the Erlang cookie current of the passed `Node'
+%%
+%% @since 1.1.0
 -spec cookie(node()) -> atom() | rt_util:error().
 cookie(Node) ->
     gen_fsm:sync_send_event(Node, cookie, ?TIMEOUT).
@@ -202,14 +257,33 @@ copy_logs(Node, ToDir) ->
 get_ring(Node) ->
     gen_fsm:sync_send_event(Node, get_ring, ?TIMEOUT).
 
+%% @doc Returns the IP address of the passed `Node'
+%%
+%% @since 1.1.0
 -spec ip(node() | string()) -> string(). 
 ip(Node) ->
     gen_fsm:sync_send_all_state_event(Node, ip, ?TIMEOUT).
 
+is_invalid(Node) ->
+    gen_fsm:sync_send_all_state_event(Node, is_invalid, ?TIMEOUT).
+
+%% @doc Returns `true' if the passed node, `Node', is ready to
+%%      accept requests.  If the node is not ready or stopped,
+%5      this function returns `false'.
+%%
+%% @since 1.1.0
 -spec is_ready(node()) -> boolean().
 is_ready(Node) ->
     gen_fsm:sync_send_all_state_event(Node, is_ready, ?TIMEOUT).
 
+is_started(Node) ->
+    gen_fsm:sync_send_all_state_event(Node, is_started, ?TIMEOUT).
+
+%% @doc Returns `true' if the passed node, `Node', is not running.  
+%%      If the node is started, ready, or invalid, this function 
+%%      returns `false'.
+%%
+%% @since 1.1.0
 -spec is_stopped(node()) -> boolean().
 is_stopped(Node) ->
     gen_fsm:sync_send_all_state_event(Node, is_stopped, ?TIMEOUT).
@@ -310,9 +384,9 @@ start(Node, false) ->
 %% @doc Starts a gen_fsm process to configure, start, and
 %% manage a Riak node on the `Host' identified by `NodeId'
 %% and `NodeName' using Riak `Version' ({product, release})
--spec start_link(rt_host:hostname(), node_type(), node_id(), proplists:proplist(), rt_util:version()) -> 
+-spec start_link(rt_host:hostname(), node_definition(), node_id(), proplists:proplist(), rt_util:version()) -> 
                         {ok, node()} | ignore | rt_util:error().
-start_link(Hostname, NodeType, NodeId, Config, Version) ->
+start_link(Hostname, NodeDefinition, NodeId, Config, Version) ->
     %% TODO Re-implement node naming when 1.x and 2.x configuration is propely implemented
     %% NodeName = list_to_atom(string:join([dev(NodeId), atom_to_list(Hostname)], "@")),
     NodeName = list_to_atom(string:join([dev(NodeId), "127.0.0.1"], "@")),
@@ -632,9 +706,17 @@ handle_sync_event(host, _From, StateName, State=#state{host=Host}) ->
     {reply, Host, StateName, State};
 handle_sync_event(ip, _From, StateName, State=#state{host=Host}) ->
     {reply, rt_host:ip_addr(Host), StateName, State};
+handle_sync_event(is_invalid, _From, invalid, State) ->
+    {reply, true, invalid, State};
+handle_sync_event(is_invalid, _From, StateName, State) ->
+    {reply, false, StateName, State};
 handle_sync_event(is_ready, _From, ready, State) ->
     {reply, true, ready, State};
 handle_sync_event(is_ready, _From, StateName, State) ->
+    {reply, false, StateName, State};
+handle_sync_event(is_started, _From, started, State) ->
+    {reply, true, started, State};
+handle_sync_event(is_started, _From, StateName, State) ->
     {reply, false, StateName, State};
 handle_sync_event(is_stopped, _From, stopped, State) ->
     {reply, true, stopped, State};
@@ -1171,7 +1253,9 @@ verify_sync_start(Node) ->
     ?debugFmt("Started node synchronously ~p with result ~p", [Node, Result]),
 
     ?assertEqual(ok, Result),
+    ?assertEqual(false, is_invalid(Node)),
     ?assertEqual(false, is_stopped(Node)),
+    ?assertEqual(false, is_started(Node)),
     ?assertEqual(true, is_ready(Node)),
     Result.
     
@@ -1182,6 +1266,8 @@ verify_sync_stop(Node) ->
     ?assertEqual(ok, Result),
     ?assertEqual(true, is_stopped(Node)),
     ?assertEqual(false, is_ready(Node)),
+    ?assertEqual(false, is_invalid(Node)),
+    ?assertEqual(false, is_started(Node)),
     Result.
 
 async_start_test_() ->
