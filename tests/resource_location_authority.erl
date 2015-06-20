@@ -37,6 +37,14 @@
 confirm() ->
     [N1, N2] = rt:build_cluster(2),
 
+    assert_with_patience([N1, get_backends, []], []),
+    assert_with_patience([N1, register_backend, [riak_core_metadata_rla_backend]], ok),
+    assert_with_patience([N1, get_backends, []], [riak_core_metadata_rla_backend]),
+
+    assert_with_patience([N2, get_backends, []], []),
+    assert_with_patience([N2, register_backend, [riak_core_metadata_rla_backend]], ok),
+    assert_with_patience([N2, get_backends, []], [riak_core_metadata_rla_backend]),
+
     %% test_Op1_Op(Node1, Node2) means Op1 is performed on Node1,
     %% Op2, on Node2
     ok = test_register_lookup(N1, N1),
@@ -55,36 +63,35 @@ confirm() ->
     ok = test_register_purge(N2, N1),
     ok = test_register_purge(N2, N2),
 
+    assert_with_patience([N1, unregister_backend, [riak_core_metadata_rla_backend]], ok),
+    assert_with_patience([N2, unregister_backend, [riak_core_metadata_rla_backend]], ok),
+
     pass.
 
 test_register_lookup(Na, Nb) ->
-    lager:info("testing RLA register-lookup cycle on nodes ~p, ~p", [Na, Nb]),
     assert_with_patience([Na, register, [?URL1, ?EPLIST1]], ok),
     assert_with_patience([Nb, lookup, [?URL1]], {ok, ?EPLIST1}),
-    lager:info("RLA register-lookup cycle passed on nodes ~p, ~p", [Na, Nb]),
+    lager:info(" passed register-lookup cycle on nodes ~p, ~p", [Na, Nb]),
     ok.
 
 test_register_deregister(Na, Nb) ->
-    lager:info("testing RLA register-deregister cycle on nodes ~p, ~p", [Na, Nb]),
     assert_with_patience([Na, register, [?URL1, ?EPLIST1]], ok),
     assert_with_patience([Nb, deregister, [?URL1]], ok),
     assert_with_patience([Nb, lookup, [?URL1]], {error, not_found}),
     assert_with_patience([Na, lookup, [?URL1]], {error, not_found}),
-    lager:info("RLA register-deregister cycle passed on nodes ~p, ~p", [Na, Nb]),
+    lager:info(" passed register-deregister cycle on nodes ~p, ~p", [Na, Nb]),
     ok.
 
 test_register_list(Na, Nb) ->
-    lager:info("testing RLA register-list cycle on nodes ~p, ~p", [Na, Nb]),
     assert_with_patience([Na, register, [?URL1, ?EPLIST1]], ok),
     assert_with_patience([Na, register, [?URL2, ?EPLIST2]], ok),
     assert_with_patience([Nb, list, [?P1]], {ok, [?P2a, ?P2b]}),
     assert_with_patience([Nb, deregister, [?URL1]], ok),
     assert_with_patience([Nb, list, [?P1]], {ok, [?P2b]}),
-    lager:info("RLA register-list cycle passed on nodes ~p, ~p", [Na, Nb]),
+    lager:info(" passed register-list cycle on nodes ~p, ~p", [Na, Nb]),
     ok.
 
 test_register_purge(Na, Nb) ->
-    lager:info("testing RLA register-list cycle on nodes ~p, ~p", [Na, Nb]),
     assert_with_patience([Na, register, [?URL1, ?EPLIST1]], ok),
     assert_with_patience([Na, register, [?URL2, ?EPLIST2]], ok),
     assert_with_patience([Nb, list, [?P1]], {ok, [?P2a, ?P2b]}),
@@ -95,7 +102,7 @@ test_register_purge(Na, Nb) ->
     assert_with_patience([Na, lookup, [?URL2]], {error, not_found}),
     assert_with_patience([Nb, list, [?P1]], {ok, []}),
     assert_with_patience([Na, list, [?P1]], {ok, []}),
-    lager:info("RLA register-list cycle passed on nodes ~p, ~p", [Na, Nb]),
+    lager:info(" passed register-list cycle on nodes ~p, ~p", [Na, Nb]),
     ok.
 
 
