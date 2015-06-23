@@ -32,9 +32,15 @@
 -define(EPLIST2, [{"8.8.2.2", 1793}, {"VIP.9", 77777, tcp}]).
 
 -define(BACKEND, riak_core_metadata_rla_backend).
+%% this is the only 'canonical' backend currently offered, and the
+%% principal one intended for production.
+
 -define(ATTEMPTS, 20).
 -define(BETWEEN_MSEC, 200).
-
+%% 200 msec is just small enough for a testing two-node cluster to
+%% sometimes elicit the metadata gossip lagging behind: a metadata
+%% update effected on node1 sometimes does not get propagated to node2
+%% within 200 msec, triggering a faulty read on node2.
 
 confirm() ->
     [N1, N2] = rt:build_cluster(2),
@@ -108,10 +114,9 @@ test_register_purge(Na, Nb) ->
     ok.
 
 
-%% The main spot of bother in this test is to catch the initial
-%% latency between RLA coming up as a service, and the moment it
-%% starts responding to client requests with proper operational values
-%% other than not_ready.  Hence these timed calls machinery.
+%% The main spot of bother in this test is to catch, and tolerate,
+%% the lag of propagation of changes between nodes due to metadata
+%% gossip.  Hence these timed calls machinery.
 
 assert_with_patience(RpcSig, Expect) ->
     assert_with_patience_(RpcSig, Expect, ?ATTEMPTS, ?BETWEEN_MSEC, 0).
