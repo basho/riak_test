@@ -18,6 +18,10 @@
 %%
 %%-------------------------------------------------------------------
 
+%% @doc Test that checks if we're caching the extractor map and that
+%%      creating custom extractors is doable via protobufs.
+%% @end
+
 -module(yz_extractors).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").

@@ -17,6 +17,13 @@
 %% under the License.
 %%
 %%--------------------------------------------------------------------
+
+%% @doc Test that checks to make sure that default bucket_types
+%%      do not lose data when expiring/clearing AAE trees when
+%%      trees are rebuilt for comparison.
+%% @end
+
+
 -module(yz_default_bucket_type_upgrade).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
