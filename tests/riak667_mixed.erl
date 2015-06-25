@@ -76,8 +76,10 @@ confirm() ->
             ?KEY,
             riakc_map:to_op(Map2)),
 
-    %% Upgrade one node.
+    %% Upgrade one node and wait until the ring has converged so the correct
+    %% capabilities will be negotiated
     upgrade(Node2, "2.0.4"),
+    rt:wait_until_ring_converged([Node1, Node2]),
 
     lager:notice("running mixed 2.0.2 and 2.0.4"),
 
