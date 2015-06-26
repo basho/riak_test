@@ -113,7 +113,7 @@ verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG) ->
     lager:info("Verifying Control loads."),
     Command = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null", 
                             [rt:http_url(Node), "/admin"]),
-    ?assertEqual("200", os:cmd(Command)),
+    ?assertEqual("200", log_cmd(Command)),
 
     rt:stop_and_wait(Node),
 
@@ -129,14 +129,14 @@ verify_authentication(current, ?RC_AUTH_NONE_CONFIG_FORCE_SSL) ->
     lager:info("Verifying redirect to SSL."),
     RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null", 
                                     [rt:http_url(Node), "/admin"]),
-    ?assertEqual("303", os:cmd(RedirectCommand)),
+    ?assertEqual("303", log_cmd(RedirectCommand)),
 
     %% TODO: Temporarily disabled because of OTP R16B02 SSL bug.
     %% Assert that we can access resource over the SSL port.
-    % lager:info("Verifying Control loads over SSL."),
-    % AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p", 
-    %                               [rt:https_url(Node), "/admin"]),
-    % ?assertEqual("200", os:cmd(AccessCommand)),
+    lager:info("Verifying Control loads over SSL."),
+    AccessCommand = io_lib:format("curl --insecure --ciphers RC4-SHA -sL -w %{http_code} ~s~p -o /dev/null", 
+                                  [rt:https_url(Node), "/admin"]),
+    ?assertEqual("200", log_cmd(AccessCommand)),
 
     rt:stop_and_wait(Node),
 
@@ -151,19 +151,19 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG) ->
     lager:info("Verifying redirect to SSL."),
     RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null", 
                                     [rt:http_url(Node), "/admin"]),
-    ?assertEqual("303", os:cmd(RedirectCommand)),
+    ?assertEqual("303", log_cmd(RedirectCommand)),
 
     %% Assert that we can access resource over the SSL port.
     lager:info("Verifying Control loads over SSL."),
-    AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    AccessCommand = io_lib:format("curl --insecure --ciphers RC4-SHA -sL -w %{http_code} ~s~p -o /dev/null", 
                                   [rt:https_url(Node), "/admin"]),
-    ?assertEqual("401", os:cmd(AccessCommand)),
+    ?assertEqual("401", log_cmd(AccessCommand)),
 
     %% Assert that we can access resource over the SSL port.
     lager:info("Verifying Control loads with credentials."),
-    AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    AuthCommand = io_lib:format("curl -u user:pass --insecure --ciphers RC4-SHA -sL -w %{http_code} ~s~p -o /dev/null", 
                                 [rt:https_url(Node), "/admin"]),
-    ?assertEqual("200", os:cmd(AuthCommand)),
+    ?assertEqual("200", log_cmd(AuthCommand)),
 
     rt:stop_and_wait(Node),
 
@@ -178,21 +178,21 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL) ->
     lager:info("Verifying redirect to SSL."),
     RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null", 
                                     [rt:http_url(Node), "/admin"]),
-    ?assertEqual("303", os:cmd(RedirectCommand)),
+    ?assertEqual("303", log_cmd(RedirectCommand)),
 
     %% TODO: Temporarily disabled because of OTP R16B02 SSL bug.
     %% Assert that we can access resource over the SSL port.
     % lager:info("Verifying Control loads over SSL."),
-    % AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    % AccessCommand = io_lib:format("curl --insecure -sL --ciphers RC4-SHA -w %{http_code} ~s~p -o /dev/null", 
     %                               [rt:https_url(Node), "/admin"]),
-    % ?assertEqual("401", os:cmd(AccessCommand)),
+    % ?assertEqual("401", log_cmd(AccessCommand)),
 
     %% TODO: Temporarily disabled because of OTP R16B02 SSL bug.
     %% Assert that we can access resource over the SSL port.
     % lager:info("Verifying Control loads with credentials."),
-    % AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    % AuthCommand = io_lib:format("curl -u user:pass --insecure --ciphers RC4-SHA -sL -w %{http_code} ~s~p -o /dev/null", 
     %                             [rt:https_url(Node), "/admin"]),
-    % ?assertEqual("200", os:cmd(AuthCommand)),
+    % ?assertEqual("200", log_cmd(AuthCommand)),
 
     rt:stop_and_wait(Node),
 
@@ -207,13 +207,13 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
     lager:info("Verifying Control loads over SSL."),
     AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
                                   [rt:http_url(Node), "/admin"]),
-    ?assertEqual("401", os:cmd(AccessCommand)),
+    ?assertEqual("401", log_cmd(AccessCommand)),
 
     %% Assert that we can access resource over the SSL port.
     lager:info("Verifying Control loads with credentials."),
     AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null",
                                 [rt:http_url(Node), "/admin"]),
-    ?assertEqual("200", os:cmd(AuthCommand)),
+    ?assertEqual("200", log_cmd(AuthCommand)),
 
     rt:stop_and_wait(Node),
 
@@ -238,3 +238,9 @@ build_singleton_cluster(Vsn, Config) ->
 
     lager:info("Build ~p, nodes: ~p.", [Vsn, Nodes]),
     Nodes.
+
+log_cmd(Cmd) ->
+    lager:info("RUNNING: ~s\n", [Cmd]),
+    Res = os:cmd(Cmd),
+    lager:info("RESULT: ~s\n", [Res]),
+    Res.
