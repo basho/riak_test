@@ -110,6 +110,7 @@ main(Args) ->
             notice
     end,
 
+    application:set_env(lager, error_logger_hwm, 250), %% helpful for debugging
     application:set_env(lager, handlers, [{lager_console_backend, ConsoleLagerLevel},
                                           {lager_file_backend, [{file, "log/test.log"},
                                                                 {level, ConsoleLagerLevel}]}]),
