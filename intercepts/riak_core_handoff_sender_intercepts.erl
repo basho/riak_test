@@ -6,3 +6,7 @@
 delayed_visit_item_3(K, V, Acc) ->
     timer:sleep(100),
     ?M:visit_item_orig(K, V, Acc).
+
+slightly_delayed_visit_item_3(K, V, Acc) ->
+    timer:sleep(1),
+    ?M:visit_item_orig(K, V, Acc).
