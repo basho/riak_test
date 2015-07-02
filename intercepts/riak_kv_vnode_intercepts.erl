@@ -39,8 +39,9 @@ slow_handle_coverage(Req, Filter, Sender, State) ->
     ?M:handle_coverage_orig(Req, Filter, Sender, State).
 
 count_handoff_w1c_puts(#riak_kv_w1c_put_req_v1{}=Req, Sender, State) ->
+    Val = ?M:handle_handoff_command_orig(Req, Sender, State),
     ets:update_counter(intercepts_tab, w1c_put_counter, 1),
-    ?M:handle_handoff_command_orig(Req, Sender, State);
+    Val;
 count_handoff_w1c_puts(Req, Sender, State) ->
     ?M:handle_handoff_command_orig(Req, Sender, State).
 
