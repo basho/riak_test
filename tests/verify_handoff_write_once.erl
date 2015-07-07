@@ -135,23 +135,25 @@ loop(#state{node=Node, sender=Sender, state=RunningState, k=K, n=N} = State) ->
                 {true, State};
             _ -> {false, State}
         after 10 ->
-            case RunningState of
-                running ->
-                    %lager:info("Asynchronously sending ~p entries.", [N]),
-                    rt:systest_write(Node, K, K + N, ?BUCKET, 1),
-                    {false, State#state{k=K + N}};
-                _ ->
-                    {false, State}
+            if K < 10000 ->
+                case RunningState of
+                    running ->
+                        rt:systest_write(Node, K, K + N, ?BUCKET, 1),
+                        {false, State#state{k=K + N}};
+                        _ ->
+                            {false, State}
+                end;
+            true -> {true, State}
             end
     end,
     case Done of
-        true ->  Sender ! K;
+        true ->  #state{k=K2} = NewState, Sender ! K2;
         false -> loop(NewState)
     end.
 
 
 stop_proc() ->
-    global:send(start_fold_started_proc, stop),
+    catch global:send(start_fold_started_proc, stop),
     receive
         K -> K
     end.
