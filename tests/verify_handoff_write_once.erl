@@ -22,6 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 -define(BUCKET_TYPE, <<"write_once">>).
+-define(BUCKET, {?BUCKET_TYPE, <<"write_once">>}).
 
 %% We've got a separate test for capability negotiation and other mechanisms, so the test here is fairly
 %% straightforward: get a list of different versions of nodes and join them into a cluster, making sure that
@@ -39,31 +40,34 @@ run_test(NTestItems, NTestNodes) ->
     lager:info("Testing handoff (items ~p, encoding: default)", [NTestItems]),
 
     lager:info("Spinning up test nodes"),
-    [RootNode | TestNodes] = Nodes = deploy_test_nodes(NTestNodes),
+    [RootNode | TestNodes] = deploy_test_nodes(NTestNodes),
 
     rt:wait_for_service(RootNode, riak_kv),
 
     make_intercepts_tab(RootNode),
 
-    %% Insert delay into handoff folding to test the efficacy of the
-    %% handoff heartbeat addition
-    [rt_intercept:add(N, {riak_core_handoff_sender,
-                          [{{visit_item, 3}, delayed_visit_item_3}]})
-     || N <- Nodes],
+    %% Insert delay into handoff folding to test the efficacy of the handle_handoff command
+    rt_intercept:add(
+        RootNode, {riak_core_handoff_sender, [{{visit_item, 3}, delayed_visit_item_3_1ms}]}
+    ),
+    % signal when a fold starts
+    rt_intercept:add(
+        RootNode, {riak_core_handoff_sender, [{{start_fold, 5}, start_fold_global_send}]}
+    ),
+    %% Count everytime riak_kv_vnode:handle_handoff_command/3 is called with a write_once message
+    rt_intercept:add(
+        RootNode, {riak_kv_vnode, [{{handle_handoff_command, 3}, count_handoff_w1c_puts}]}
+    ),
 
-    %% Count everytime riak_kv_vnode:handle_overload_command/3 is called with a
-    %% ts_puts tuple
-    [rt_intercept:add(N, {riak_kv_vnode,
-                          [{{handle_handoff_command, 3}, count_handoff_w1c_puts}]})
-     || N <- Nodes],
+    %% Force handoff to always continue on the receiver
+    %[rt_intercept:add(
+    %    Node, {riak_core_vnode, [{{mark_handoff_complete, 5}, mark_handoff_complete_always_continue}]}
+    %) || Node <- TestNodes],
 
     lager:info("Populating root node."),
-    %% write one object with a bucket type
     rt:create_and_activate_bucket_type(RootNode, ?BUCKET_TYPE, [{write_once, true}]),
-    %% allow cluster metadata some time to propogate
-    rt:systest_write(RootNode, 1, NTestItems, {?BUCKET_TYPE, <<"bucket">>}, 1),
+    rt:systest_write(RootNode, 1, NTestItems, ?BUCKET, 1),
 
-    %% Test handoff on each node:
     lager:info("Testing handoff for cluster."),
     lists:foreach(fun(TestNode) -> test_handoff(RootNode, TestNode, NTestItems) end, TestNodes).
 
@@ -77,19 +81,20 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     true = rpc:call(RootNode, ets, insert, [intercepts_tab, {w1c_put_counter, 0}]),
 
     lager:info("Joining new node with cluster."),
+    start_proc(RootNode, NTestItems),
+    timer:sleep(1000),
     rt:join(NewNode, RootNode),
+    %timer:sleep(1000),
     ?assertEqual(ok, rt:wait_until_nodes_ready([RootNode, NewNode])),
-    spawn(fun() ->
-              rt:systest_write(RootNode, NTestItems + 1, NTestItems + 1000, {?BUCKET_TYPE, <<"bucket">>}, 1)
-          end),
-    rt:wait_until_no_pending_changes([RootNode, NewNode]),
+    rt:wait_until_transfers_complete([RootNode, NewNode]),
+    TotalSent = stop_proc(),
 
     %% See if we get the same data back from the joined node that we added to the root node.
     %%  Note: systest_read() returns /non-matching/ items, so getting nothing back is good:
-    lager:info("Validating data after handoff:"),
-    Results2 = rt:systest_read(NewNode, 1, NTestItems + 1000, {?BUCKET_TYPE, <<"bucket">>}, 1),
-    ?assertEqual(0, length(Results2)),
-    lager:info("Data looks ok."),
+    lager:info("Validating data after handoff..."),
+    Results2 = rt:systest_read(NewNode, 1, TotalSent, ?BUCKET, 1),
+    ?assertEqual([], Results2),
+    lager:info("Data looks good.  Read ~p entries.", [TotalSent]),
     [{_, Count}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
     ?assert(Count > 0),
     lager:info("Looking Good. We handled ~p write_once puts during handoff.", [Count]).
@@ -106,3 +111,47 @@ make_intercepts_tab(Node) ->
     SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
     intercepts_tab = rpc:call(Node, ets, new, [intercepts_tab, [named_table,
                 public, set, {heir, SupPid, {}}]]).
+
+
+-record(state, {
+    state = waiting, node, sender, k, n
+}).
+
+start_proc(Node, NTestItems) ->
+    Self = self(),
+    Pid = spawn_link(fun() -> loop(#state{state=running, node=Node, sender=Self, k=NTestItems+1, n=1}) end),
+    global:register_name(start_fold_started_proc, Pid).
+
+loop(#state{node=Node, sender=Sender, state=RunningState, k=K, n=N} = State) ->
+    {Done, NewState} =
+        receive
+            start ->
+                case RunningState of
+                    waiting ->
+                         {false, State#state{state=running}};
+                    _ -> {false, State}
+                end;
+            stop ->
+                {true, State};
+            _ -> {false, State}
+        after 10 ->
+            case RunningState of
+                running ->
+                    %lager:info("Asynchronously sending ~p entries.", [N]),
+                    rt:systest_write(Node, K, K + N, ?BUCKET, 1),
+                    {false, State#state{k=K + N}};
+                _ ->
+                    {false, State}
+            end
+    end,
+    case Done of
+        true ->  Sender ! K;
+        false -> loop(NewState)
+    end.
+
+
+stop_proc() ->
+    global:send(start_fold_started_proc, stop),
+    receive
+        K -> K
+    end.
