@@ -173,6 +173,8 @@
          wait_until_bucket_type_status/3,
          whats_up/0
         ]).
+-export_type([interfaces/0,
+              conn_info/0]).
 
 -type strings() :: [string(),...] | [].
 -type capability() :: atom() | {atom(), tuple()}.
