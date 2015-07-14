@@ -71,8 +71,8 @@ confirm() ->
 
     enable_rt(AFirst, ANodes),
 
-    [verify_connectivity(Node) || Node <- ANodes],
-    [verify_sinks(Node) || Node <- BNodes],
+    [?assertEqual(ok,verify_connectivity(Node)) || Node <- ANodes],
+    [?assertEqual(ok,verify_sinks(Node)) || Node <- BNodes],
 
     rt:stop(BFirst),
     ?assertEqual(ok, rt:wait_until_unpingable(BFirst)),
@@ -85,7 +85,7 @@ confirm() ->
     timer:sleep(10000),
     lager:info("Sleeping again to allow realtime repl to connect"),
 
-    [verify_sinks(Node) || Node <- BNodes],
+    [?assertEqual(ok,verify_sinks(Node)) || Node <- BNodes],
     [check_for_badrecord(Node) || Node <- ANodes],
 
     pass.
