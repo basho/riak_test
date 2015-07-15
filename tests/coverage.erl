@@ -33,6 +33,7 @@ confirm() ->
     Node1 = lists:nth(1, Nodes),
     Node2 = lists:nth(2, Nodes),
     Node4 = lists:nth(4, Nodes),
+    Node5 = lists:nth(5, Nodes),
 
     Pb1 = rt:pbc(Node1),
     Pb2 = rt:pbc(Node2),
@@ -41,38 +42,52 @@ confirm() ->
     {ok, PartitionChunks} = riakc_pb_socket:get_coverage(Pb1, ?BUCKET, 0),
 
     %% Identify chunks attached to dev1
-    ReplaceMe = find_matches(PartitionChunks, 10017),
+    ReplaceMe = find_matches(PartitionChunks, Node1),
     %% Stop dev1
     rt:stop_and_wait(Node1),
 
     %% Ask dev2 for replacements
     NoNode1 = replace_subpartition_chunks(ReplaceMe, Pb2),
     %% Make sure none of the replacements are from dev1
-    ?assertEqual(0, length(find_matches(NoNode1, 10017))),
+    ?assertEqual(0, length(find_matches(NoNode1, Node1))),
     ?assertEqual(length(ReplaceMe), length(NoNode1)),
 
-    SampleNode5 = hd(find_matches(PartitionChunks, 10057)),
+    %% Extract a cover context for node 5
+    SampleNode5 = hd(find_matches(PartitionChunks, Node5)),
 
     %% Ask dev4 to replace dev1 and dev5.
     NoNode1_5 = replace_subpartition_chunks(ReplaceMe, [SampleNode5], Pb4),
 
-    ?assertEqual(0, length(find_matches(NoNode1_5, 10017))),
-    ?assertEqual(0, length(find_matches(NoNode1_5, 10057))),
+    ?assertEqual(0, length(find_matches(NoNode1_5, Node1))),
+    ?assertEqual(0, length(find_matches(NoNode1_5, Node5))),
     ?assertEqual(length(ReplaceMe), length(NoNode1_5)),
-
     pass.
 
-find_matches(Coverage, Port) ->
-    lists:filtermap(fun(#rpbcoverageentry{port=P, cover_context=C}) when P == Port -> {true, C};
-                    (_) -> false end,
-                 Coverage).
+find_matches(Coverage, Node) ->
+    lists:filtermap(fun(#rpbcoverageentry{cover_context=C}) ->
+                            {ok, Plist} = riak_kv_pb_coverage:checksum_binary_to_term(C),
+                            case proplists:get_value(node, Plist) == Node of
+                                true ->
+                                    {true, C};
+                                false ->
+                                    false
+                            end;
+                       (C) ->
+                            {ok, Plist} = riak_kv_pb_coverage:checksum_binary_to_term(C),
+                            case proplists:get_value(node, Plist) == Node of
+                                true ->
+                                    {true, C};
+                                false ->
+                                    false
+                            end
+                    end, Coverage).
 
 replace_subpartition_chunks(Replace, PbPid) ->
     replace_subpartition_chunks(Replace, [], PbPid).
 
 replace_subpartition_chunks(Replace, Extra, PbPid) ->
     lists:map(fun(R) ->
-                      {ok, NewChunk} =
+                      {ok, [NewChunk]} =
                           riakc_pb_socket:replace_coverage(PbPid, ?BUCKET, R, Extra),
                       NewChunk
               end, Replace).
