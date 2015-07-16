@@ -30,6 +30,57 @@ confirm() ->
     Nodes = rt:build_cluster(5),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
+    RingSize = ring_size(hd(Nodes)),
+    ObservedRingSize = test_partitions(Nodes),
+    ?assertEqual(RingSize, ObservedRingSize),
+
+    %% Test other NVals
+    test_traditional(4, Nodes, RingSize),
+    test_traditional(5, Nodes, RingSize),
+    pass.
+
+create_nval_bucket_type(Node, Nodes, NVal, Type) ->
+    %% n_val setup shamelessly stolen from bucket_types.erl
+    TypeProps = [{n_val, NVal}],
+    lager:info("Create bucket type ~p, wait for propagation", [Type]),
+    rt:create_and_activate_bucket_type(Node, Type, TypeProps),
+    rt:wait_until_bucket_type_status(Type, active, Nodes),
+    rt:wait_until_bucket_props(Nodes, {Type, <<"bucket">>}, TypeProps).
+
+
+
+test_traditional(NVal, Nodes, RingSize) ->
+    Node1 = lists:nth(1, Nodes),
+    Pb1 = rt:pbc(Node1),
+    %% create type with nval NVal
+    TypeName = unicode:characters_to_binary(lists:flatten(io_lib:format("~s~B", ["N", NVal]))),
+    create_nval_bucket_type(Node1, Nodes, NVal, TypeName),
+    {ok, TradChunks} = riakc_pb_socket:get_coverage(Pb1, {TypeName, ?BUCKET}),
+
+    CountedRingSize = count_traditional(NVal, TradChunks),
+    ?assertEqual(RingSize, CountedRingSize),
+    ok.
+
+count_traditional(NVal, Coverage) ->
+    lists:foldl(
+      fun(#rpbcoverageentry{cover_context=C}, Tally) ->
+              {ok, Details} = riak_kv_pb_coverage:checksum_binary_to_term(C),
+              partition_count_from_filters(NVal,
+                                           proplists:get_value(filters, Details, []))
+                  + Tally
+      end,
+      0, Coverage).
+
+%% In a traditional coverage plan, no filters means use n_val
+%% partitions from this vnode, while a non-empty list of filters means
+%% use only those partitions
+partition_count_from_filters(NVal, []) ->
+    NVal;
+partition_count_from_filters(_NVal, Filters) ->
+    length(Filters).
+
+
+test_partitions(Nodes) ->
     Node1 = lists:nth(1, Nodes),
     Node2 = lists:nth(2, Nodes),
     Node4 = lists:nth(4, Nodes),
@@ -61,7 +112,11 @@ confirm() ->
     ?assertEqual(0, length(find_matches(NoNode1_5, Node1))),
     ?assertEqual(0, length(find_matches(NoNode1_5, Node5))),
     ?assertEqual(length(ReplaceMe), length(NoNode1_5)),
-    pass.
+
+    rt:start_and_wait(Node1),
+
+    %% Caller wants to know ring size
+    length(PartitionChunks).
 
 find_matches(Coverage, Node) ->
     lists:filtermap(fun(#rpbcoverageentry{cover_context=C}) ->
@@ -91,3 +146,7 @@ replace_subpartition_chunks(Replace, Extra, PbPid) ->
                           riakc_pb_socket:replace_coverage(PbPid, ?BUCKET, R, Extra),
                       NewChunk
               end, Replace).
+
+ring_size(Node) ->
+    {ok, R} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
+    riak_core_ring:num_partitions(R).
