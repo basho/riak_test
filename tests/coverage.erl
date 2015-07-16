@@ -28,7 +28,6 @@
 %% Things to test:
 %%   2i works with externally-provided coverage plans
 %%   Replace chunks in traditional plan
-%%   Error handling when primary partitions aren't available
 
 
 confirm() ->
@@ -47,6 +46,10 @@ confirm() ->
     %% Test other NVals
     test_traditional(4, Nodes, RingSize),
     test_traditional(5, Nodes, RingSize),
+
+    %% Make sure we get replacement errors when primary partitions
+    %% aren't available
+    test_failure(Nodes, RingSize),
     pass.
 
 create_nval_bucket_type(Node, Nodes, NVal, Type) ->
@@ -56,6 +59,35 @@ create_nval_bucket_type(Node, Nodes, NVal, Type) ->
     rt:create_and_activate_bucket_type(Node, Type, TypeProps),
     rt:wait_until_bucket_type_status(Type, active, Nodes),
     rt:wait_until_bucket_props(Nodes, {Type, <<"bucket">>}, TypeProps).
+
+test_failure(Nodes, RingSize) ->
+    %% Setting up a bucket type with n_val 1 should be sufficient to
+    %% generate primary partition errors when asking for a
+    %% replacement. Test with the relevant node both down and up
+    Type = <<"tcob1">>,
+    Node1 = lists:nth(1, Nodes),
+    Node3 = lists:nth(3, Nodes),
+    Pb1 = rt:pbc(Node1),
+    create_nval_bucket_type(Node1, Nodes, 1, Type),
+    {ok, TradChunks} = riakc_pb_socket:get_coverage(Pb1, {Type, ?BUCKET}),
+    %% With n=1, should be one chunk per vnode
+    ?assertEqual(RingSize, length(TradChunks)),
+    rt:stop_and_wait(Node3),
+    Dev3Chunks = find_matches(TradChunks, Node3),
+    lists:foreach(
+      fun(C) ->
+              ?assertMatch({error, _},
+                           riakc_pb_socket:replace_coverage(Pb1, {Type, ?BUCKET}, C))
+      end, Dev3Chunks),
+    rt:start_and_wait(Node3),
+    lists:foreach(
+      fun(C) ->
+              ?assertMatch({error, _},
+                           riakc_pb_socket:replace_coverage(Pb1, {Type, ?BUCKET}, C))
+      end, Dev3Chunks).
+
+
+
 
 
 %%
