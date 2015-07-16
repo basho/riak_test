@@ -23,6 +23,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riak_pb/include/riak_kv_pb.hrl").
 -define(BUCKET, <<"coverbucket">>).
+-define(BUCKET2i, <<"2ibucket">>).
+-import(secondary_index_tests, [put_an_object/2, stream_pb/3]).
 
 
 %% Things to test:
@@ -33,6 +35,7 @@
 confirm() ->
     inets:start(),
 
+    rt:set_backend(eleveldb),
     Nodes = rt:build_cluster(5),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
@@ -61,8 +64,111 @@ confirm() ->
     %% downed nodes
     test_down(Nodes),
 
+    %% All of this is meaningless if we can't actually issue queries
+    %% leveraging the coverage plans. Do some 2i, please
+    KeyCount = populate_data(Nodes),
+    test_2i(KeyCount, Nodes),
+    test_2i(KeyCount, Nodes, lists:nth(3, Nodes)),
 
     pass.
+
+populate_data(Nodes) ->
+    Pb1 = rt:pbc(hd(Nodes)),
+    NumKeys = length([put_an_object(Pb1, N) || N <- lists:seq(0, 99)]),
+    connstop(Pb1),
+    NumKeys.
+
+
+test_2i(KeyCount, Nodes) ->
+    Pb1 = rt:pbc(hd(Nodes)),
+
+    lager:info("Requesting coverage plans for 2i search"),
+    %% This won't be the same bucket name as the one in
+    %% `secondary_index_tests' but all that matters for coverage
+    %% generation is whether they evaluate to the same n_val
+    {ok, TradCoverage} =
+        riakc_pb_socket:get_coverage(Pb1, ?BUCKET),
+    {ok, SubpCoverage} =
+        riakc_pb_socket:get_coverage(Pb1, ?BUCKET, 300),
+    connstop(Pb1),
+    count_2i(KeyCount, TradCoverage),
+
+    count_2i(KeyCount, SubpCoverage).
+
+test_2i(KeyCount, Nodes, DownNode) ->
+    Pb1 = rt:pbc(hd(Nodes)),
+    lager:info("Requesting coverage plans for 2i search"),
+    {ok, TradCoverage} =
+        riakc_pb_socket:get_coverage(Pb1, ?BUCKET),
+    {ok, SubpCoverage} =
+        riakc_pb_socket:get_coverage(Pb1, ?BUCKET, 300),
+    rt:stop_and_wait(DownNode),
+
+    SubpCoverage2 = swap_chunks(SubpCoverage, DownNode, Pb1),
+    TradCoverage2 = swap_chunks(TradCoverage, DownNode, Pb1),
+    connstop(Pb1),
+
+    count_2i(KeyCount, TradCoverage2),
+    count_2i(KeyCount, SubpCoverage2).
+
+map_pids(CoverageList) ->
+    Pids =
+        lists:foldl(fun(#rpbcoverageentry{ip=IP, port=Port}, Dict) ->
+                            {ok, Pid} = riakc_pb_socket:start(binary_to_list(IP), Port),
+                            dict:store({IP, Port}, Pid, Dict)
+                    end,
+                    dict:new(),
+                    CoverageList),
+
+    {Pids,
+     lists:map(fun(#rpbcoverageentry{ip=IP, port=Port, cover_context=C}) ->
+                       {dict:fetch({IP, Port}, Pids), Port, C}
+               end, CoverageList)
+    }.
+
+count_2i(KeyCount, Coverage) ->
+    lager:info("Count 2i"),
+    {Pids, PbCoverage} = map_pids(Coverage),
+
+    lager:info("Starting queries"),
+    Keys = lists:flatmap(fun({Pid, Port, Cover}) ->
+                                 lager:info("Executing stream on port ~B", [Port]),
+                                 %% lager:info("~p / ~p / ~p",
+                                 %%            [Pid, Port, Cover]),
+                                 %% timer:sleep(500),
+                                 {ok, PBRes} = stream_pb(Pid, {<<"$bucket">>, ?BUCKET2i}, [{cover_context, Cover}]),
+                                 proplists:get_value(keys, PBRes, [])
+                         end, PbCoverage),
+    ?assertEqual(KeyCount, length(Keys)),
+    dict:fold(fun(_, Pid, _Acc) -> connstop(Pid) end,
+              0,
+              Pids).
+
+
+connstop(Pid) ->
+    riakc_pb_socket:stop(Pid).
+
+maybe_swap_chunk(#rpbcoverageentry{cover_context=C}=Entry, DownNode, Pb) ->
+    {ok, Details} = riak_kv_pb_coverage:checksum_binary_to_term(C),
+    maybe_swap_chunk(Entry, C,
+                     proplists:get_value(node, Details),
+                     DownNode, Pb).
+
+maybe_swap_chunk(_Entry, Cover, DownNode, DownNode, Pb) ->
+    {ok, NewEntries} =
+        riakc_pb_socket:replace_coverage(Pb, ?BUCKET, Cover),
+    NewEntries;
+maybe_swap_chunk(Entry, _Cover, _EntryNode, _DownNode, _Pb) ->
+    [Entry].
+
+
+swap_chunks(Coverage, Node, Pb) ->
+    %% Subpartition replacement will be a list of a single entry,
+    %% while traditional replacement will often be a list of multiple
+    %% entries. Use flatmap to handle both cases
+    lists:flatmap(fun(E) -> maybe_swap_chunk(E, Node, Pb) end,
+                  Coverage).
+
 
 test_down(Nodes) ->
     Node2 = lists:nth(2, Nodes),
@@ -75,7 +181,8 @@ test_down(Nodes) ->
     {ok, SubPartChunks} = riakc_pb_socket:get_coverage(Pb4, ?BUCKET, 1000),
     ?assertEqual(0, length(find_matches(SubPartChunks, Node2))),
 
-    rt:start_and_wait(Node2).
+    rt:start_and_wait(Node2),
+    connstop(Pb4).
 
 
 create_nval_bucket_type(Node, Nodes, NVal, Type) ->
@@ -110,7 +217,8 @@ test_failure(Nodes, RingSize) ->
       fun(C) ->
               ?assertMatch({error, _},
                            riakc_pb_socket:replace_coverage(Pb1, {Type, ?BUCKET}, C))
-      end, Dev3Chunks).
+      end, Dev3Chunks),
+    connstop(Pb1).
 
 
 
@@ -129,6 +237,7 @@ test_traditional(NVal, Nodes, RingSize) ->
 
     CountedRingSize = count_traditional(NVal, TradChunks),
     ?assertEqual(RingSize, CountedRingSize),
+    connstop(Pb1),
     ok.
 
 count_traditional(NVal, Coverage) ->
@@ -168,6 +277,7 @@ test_subpartitions(Nodes, Granularity) ->
     ReplaceMe = find_matches(PartitionChunks, Node1),
     lager:info("Found ~B subpartitions assigned to dev1", [length(ReplaceMe)]),
     %% Stop dev1
+    connstop(Pb1),
     rt:stop_and_wait(Node1),
 
     %% Ask dev2 for replacements
@@ -187,6 +297,9 @@ test_subpartitions(Nodes, Granularity) ->
     ?assertEqual(length(ReplaceMe), length(NoNode1_5)),
 
     rt:start_and_wait(Node1),
+
+    connstop(Pb2),
+    connstop(Pb4),
 
     %% Caller wants to know size of results
     length(PartitionChunks).
