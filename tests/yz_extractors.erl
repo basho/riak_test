@@ -18,6 +18,10 @@
 %%
 %%-------------------------------------------------------------------
 
+%% @doc Test that checks if we're caching the extractor map and that
+%%      creating custom extractors is doable via protobufs.
+%% @end
+
 -module(yz_extractors).
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
@@ -54,8 +58,9 @@
         ]).
 
 confirm() ->
-    TestMetaData = riak_test_runner:metadata(),
-    OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
+    %% This test explicitly requires an upgrade from 2.0.5 to test a
+    %% new capability
+    OldVsn = "2.0.5",
 
     [_, Node|_] = Cluster = rt:build_cluster(lists:duplicate(4, {OldVsn, ?CFG})),
     rt:wait_for_cluster_service(Cluster, yokozuna),
