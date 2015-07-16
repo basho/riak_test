@@ -37,20 +37,46 @@ confirm() ->
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
     RingSize = ring_size(hd(Nodes)),
+
+    %% Generate a subpartition plan where each subpartition is equal
+    %% to one partition. Run some replacement tests.
     ObservedRingSize = test_subpartitions(Nodes, 0),
     ?assertEqual(RingSize, ObservedRingSize),
 
+    %% Run the same set of tests against a very fine-grained
+    %% subpartition plan of 65536 chunks
     StupidlyGranularTest = test_subpartitions(Nodes, 64000),
     ?assertEqual(1 bsl 16, StupidlyGranularTest),
 
-    %% Test other NVals
+    %% Run coverage plan size tests against less-common NVals with a
+    %% traditional coverage plan
     test_traditional(4, Nodes, RingSize),
     test_traditional(5, Nodes, RingSize),
 
     %% Make sure we get replacement errors when primary partitions
     %% aren't available
     test_failure(Nodes, RingSize),
+
+    %% Make sure a coverage plan is generated from scratch without any
+    %% downed nodes
+    test_down(Nodes),
+
+
     pass.
+
+test_down(Nodes) ->
+    Node2 = lists:nth(2, Nodes),
+    Node4 = lists:nth(4, Nodes),
+    rt:stop_and_wait(Node2),
+    Pb4 = rt:pbc(Node4),
+
+    {ok, TradChunks} = riakc_pb_socket:get_coverage(Pb4, ?BUCKET),
+    ?assertEqual(0, length(find_matches(TradChunks, Node2))),
+    {ok, SubPartChunks} = riakc_pb_socket:get_coverage(Pb4, ?BUCKET, 1000),
+    ?assertEqual(0, length(find_matches(SubPartChunks, Node2))),
+
+    rt:start_and_wait(Node2).
+
 
 create_nval_bucket_type(Node, Nodes, NVal, Type) ->
     %% n_val setup shamelessly stolen from bucket_types.erl
