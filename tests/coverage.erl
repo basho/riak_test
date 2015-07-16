@@ -24,6 +24,13 @@
 -include_lib("riak_pb/include/riak_kv_pb.hrl").
 -define(BUCKET, <<"coverbucket">>).
 
+
+%% Things to test:
+%%   2i works with externally-provided coverage plans
+%%   Replace chunks in traditional plan
+%%   Error handling when primary partitions aren't available
+
+
 confirm() ->
     inets:start(),
 
@@ -31,8 +38,11 @@ confirm() ->
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
     RingSize = ring_size(hd(Nodes)),
-    ObservedRingSize = test_partitions(Nodes),
+    ObservedRingSize = test_subpartitions(Nodes, 0),
     ?assertEqual(RingSize, ObservedRingSize),
+
+    StupidlyGranularTest = test_subpartitions(Nodes, 64000),
+    ?assertEqual(1 bsl 16, StupidlyGranularTest),
 
     %% Test other NVals
     test_traditional(4, Nodes, RingSize),
@@ -48,7 +58,9 @@ create_nval_bucket_type(Node, Nodes, NVal, Type) ->
     rt:wait_until_bucket_props(Nodes, {Type, <<"bucket">>}, TypeProps).
 
 
-
+%%
+%% Create a traditional coverage plan and tally the components to
+%% compare against ring size
 test_traditional(NVal, Nodes, RingSize) ->
     Node1 = lists:nth(1, Nodes),
     Pb1 = rt:pbc(Node1),
@@ -79,8 +91,9 @@ partition_count_from_filters(NVal, []) ->
 partition_count_from_filters(_NVal, Filters) ->
     length(Filters).
 
-
-test_partitions(Nodes) ->
+%%
+%% Create a
+test_subpartitions(Nodes, Granularity) ->
     Node1 = lists:nth(1, Nodes),
     Node2 = lists:nth(2, Nodes),
     Node4 = lists:nth(4, Nodes),
@@ -90,10 +103,12 @@ test_partitions(Nodes) ->
     Pb2 = rt:pbc(Node2),
     Pb4 = rt:pbc(Node4),
 
-    {ok, PartitionChunks} = riakc_pb_socket:get_coverage(Pb1, ?BUCKET, 0),
+    {ok, PartitionChunks} =
+        riakc_pb_socket:get_coverage(Pb1, ?BUCKET, Granularity),
 
     %% Identify chunks attached to dev1
     ReplaceMe = find_matches(PartitionChunks, Node1),
+    lager:info("Found ~B subpartitions assigned to dev1", [length(ReplaceMe)]),
     %% Stop dev1
     rt:stop_and_wait(Node1),
 
@@ -115,7 +130,7 @@ test_partitions(Nodes) ->
 
     rt:start_and_wait(Node1),
 
-    %% Caller wants to know ring size
+    %% Caller wants to know size of results
     length(PartitionChunks).
 
 find_matches(Coverage, Node) ->
