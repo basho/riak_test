@@ -76,9 +76,8 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     start_proc(RootNode, NTestItems),
     timer:sleep(1000),
     rt:join(NewNode, RootNode),
-    %timer:sleep(1000),
     ?assertEqual(ok, rt:wait_until_nodes_ready([RootNode, NewNode])),
-    rt:wait_until_transfers_complete([RootNode, NewNode]),
+    rt:wait_until_no_pending_changes([RootNode, NewNode]),
     TotalSent = stop_proc(),
 
     %% See if we get the same data back from the joined node that we added to the root node.
@@ -128,6 +127,7 @@ loop(#state{node=Node, sender=Sender, state=RunningState, k=K, n=N} = State) ->
                 {true, State};
             {write, Pid} ->
                 rt:systest_write(Node, K, K + 1, ?BUCKET, 1),
+                lager:info("Asynchronously wrote event ~p during handoff.", [K + 1]),
                 Pid ! ok,
                 {false, State#state{k=K + 1}};
             _ -> {false, State}
