@@ -46,23 +46,15 @@ run_test(NTestItems, NTestNodes) ->
 
     make_intercepts_tab(RootNode),
 
-    %% Insert delay into handoff folding to test the efficacy of the handle_handoff command
+    % This intercept will tell the backround process (below) to send an event for each
+    % vnode that is being handed off (there will be 4 such vnodes, in this test case)
     rt_intercept:add(
-        RootNode, {riak_core_handoff_sender, [{{visit_item, 3}, delayed_visit_item_3_1ms}]}
-    ),
-    % signal when a fold starts
-    rt_intercept:add(
-        RootNode, {riak_core_handoff_sender, [{{start_fold, 5}, start_fold_global_send}]}
+        RootNode, {riak_kv_worker, [{{handle_work, 3}, handle_work_intercept}]}
     ),
     %% Count everytime riak_kv_vnode:handle_handoff_command/3 is called with a write_once message
     rt_intercept:add(
         RootNode, {riak_kv_vnode, [{{handle_handoff_command, 3}, count_handoff_w1c_puts}]}
     ),
-
-    %% Force handoff to always continue on the receiver
-    %[rt_intercept:add(
-    %    Node, {riak_core_vnode, [{{mark_handoff_complete, 5}, mark_handoff_complete_always_continue}]}
-    %) || Node <- TestNodes],
 
     lager:info("Populating root node."),
     rt:create_and_activate_bucket_type(RootNode, ?BUCKET_TYPE, [{write_once, true}]),
@@ -103,8 +95,9 @@ deploy_test_nodes(N) ->
     Config = [{riak_core, [{default_bucket_props, [{n_val, 1}]},
                            {ring_creation_size, 8},
                            {handoff_acksync_threshold, 20},
-                           {handoff_concurrency, 2},
-                           {handoff_receive_timeout, 2000}]}],
+                           {handoff_concurrency, 4},
+                           {handoff_receive_timeout, 2000},
+                           {vnode_management_timer, 1000}]}],
     rt:deploy_nodes(N, Config).
 
 make_intercepts_tab(Node) ->
@@ -119,7 +112,7 @@ make_intercepts_tab(Node) ->
 
 start_proc(Node, NTestItems) ->
     Self = self(),
-    Pid = spawn_link(fun() -> loop(#state{state=running, node=Node, sender=Self, k=NTestItems+1, n=1}) end),
+    Pid = spawn_link(fun() -> loop(#state{state=waiting, node=Node, sender=Self, k=NTestItems+1, n=1}) end),
     global:register_name(start_fold_started_proc, Pid).
 
 loop(#state{node=Node, sender=Sender, state=RunningState, k=K, n=N} = State) ->
@@ -133,6 +126,10 @@ loop(#state{node=Node, sender=Sender, state=RunningState, k=K, n=N} = State) ->
                 end;
             stop ->
                 {true, State};
+            {write, Pid} ->
+                rt:systest_write(Node, K, K + 1, ?BUCKET, 1),
+                Pid ! ok,
+                {false, State#state{k=K + 1}};
             _ -> {false, State}
         after 10 ->
             if K < 10000 ->
