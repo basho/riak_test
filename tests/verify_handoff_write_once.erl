@@ -106,48 +106,27 @@ make_intercepts_tab(Node) ->
 
 
 -record(state, {
-    state = waiting, node, sender, k, n
+    node, sender, k
 }).
 
 start_proc(Node, NTestItems) ->
     Self = self(),
-    Pid = spawn_link(fun() -> loop(#state{state=waiting, node=Node, sender=Self, k=NTestItems+1, n=1}) end),
+    Pid = spawn_link(fun() -> loop(#state{node=Node, sender=Self, k=NTestItems}) end),
     global:register_name(start_fold_started_proc, Pid).
 
-loop(#state{node=Node, sender=Sender, state=RunningState, k=K, n=N} = State) ->
-    {Done, NewState} =
-        receive
-            start ->
-                case RunningState of
-                    waiting ->
-                         {false, State#state{state=running}};
-                    _ -> {false, State}
-                end;
-            stop ->
-                {true, State};
-            {write, Pid} ->
-                rt:systest_write(Node, K, K + 1, ?BUCKET, 1),
-                lager:info("Asynchronously wrote event ~p during handoff.", [K + 1]),
-                Pid ! ok,
-                {false, State#state{k=K + 1}};
-            _ -> {false, State}
-        after 10 ->
-            if K < 10000 ->
-                case RunningState of
-                    running ->
-                        rt:systest_write(Node, K, K + N, ?BUCKET, 1),
-                        {false, State#state{k=K + N}};
-                        _ ->
-                            {false, State}
-                end;
-            true -> {true, State}
-            end
-    end,
-    case Done of
-        true ->  #state{k=K2} = NewState, Sender ! K2;
-        false -> loop(NewState)
+loop(#state{node=Node, sender=Sender, k=K} = State) ->
+    receive
+        stop ->
+            Sender ! K;
+        {write, Pid} ->
+            rt:systest_write(Node, K, K + 1, ?BUCKET, 1),
+            lager:info("Asynchronously wrote event ~p during handoff.", [K + 1]),
+            Pid ! ok,
+            loop(State#state{k=K + 1});
+        Msg ->
+            lager:warning("~p: Unexpected Message: ~p.  Ignoring...", [?MODULE, Msg]),
+            loop(State)
     end.
-
 
 stop_proc() ->
     catch global:send(start_fold_started_proc, stop),
