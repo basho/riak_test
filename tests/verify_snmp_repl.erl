@@ -52,7 +52,6 @@ intercept_riak_snmp_stat_poller(Node) ->
            {[RiakTestProcess],
             fun(Table, Indexes, Cols, IndexCol)
               when Table =:= replRealtimeStatusTable; Table =:= replFullsyncStatusTable ->
-                lager:log(info, self(), "JVOEGELE> set_rows(~p, ~p, ~p, ~p)", [Table, Indexes, Cols, IndexCol]),
                 try
                     riak_snmp_stat_poller_orig:set_rows_orig(Table, Indexes, Cols, IndexCol),
                     RiakTestProcess ! pass
