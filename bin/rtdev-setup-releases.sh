@@ -42,6 +42,6 @@ git init
 git config user.name "Riak Test"
 git config user.email "dev@basho.com"
 
-git add --ignore-removal .
+git add .
 git commit -a -m "riak_test init" > /dev/null
 echo " - Successfully completed initial git commit of $RT_DEST_DIR"
