@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# You need to use this script once to build a set of devrels for prior
+# You need to use this script once to build a set of stagedevrels for prior
 # releases of Riak (for mixed version / upgrade testing). You should
 # create a directory and then run this script from within that directory.
 # I have ~/test-releases that I created once, and then re-use for testing.
@@ -110,23 +110,25 @@ build()
              C_INCLUDE_PATH=$ERLROOT/usr/include \
              LD_LIBRARY_PATH=$ERLROOT/usr/lib"
 
-    echo " - Building devrel in $SRCDIR (this could take a while)"
+    echo " - Building stagedevrel in $SRCDIR (this could take a while)"
     cd $SRCDIR
 
-    $RUN make all devrel
+    $RUN make locked-deps
+    $RUN make all stagedevrel
     RES=$?
     if [ "$RES" -ne 0 ]; then
-        echo "[ERROR] make devrel failed"
+        echo "[ERROR] make stagedevrel failed"
         exit 1
     fi
     cd ..
     echo " - $SRCDIR built."
 }
 
-
-build "riak-1.4.12" $R15B01 1.4.12
-build "riak-2.0.2" $R16B02 2.0.2
-build "riak-2.0.4" $R16B02 2.0.4
-build "riak-2.0.5" $R16B02 2.0.5
-build "riak-2.1.1" $R16B02 2.1.1
+build riak-1.4.12 $R15B01 1.4.12
+echo
+build riak-2.0.2 $R16B02 2.0.2
+echo
+build riak-2.0.4 $R16B02 2.0.4
+echo
+build riak-2.0.6 $R16B02 2.0.6
 echo
