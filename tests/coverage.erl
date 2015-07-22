@@ -82,7 +82,6 @@ populate_data(Nodes) ->
 test_2i(KeyCount, Nodes) ->
     Pb1 = rt:pbc(hd(Nodes)),
 
-    lager:info("Requesting coverage plans for 2i search"),
     %% This won't be the same bucket name as the one in
     %% `secondary_index_tests' but all that matters for coverage
     %% generation is whether they evaluate to the same n_val
@@ -91,25 +90,27 @@ test_2i(KeyCount, Nodes) ->
     {ok, SubpCoverage} =
         riakc_pb_socket:get_coverage(Pb1, ?BUCKET, 300),
     connstop(Pb1),
-    count_2i(KeyCount, TradCoverage),
+    count_2i(KeyCount, TradCoverage, trad_all_up),
 
-    count_2i(KeyCount, SubpCoverage).
+    count_2i(KeyCount, SubpCoverage, sub_all_up).
 
+%% Tests whether we get correct results when we ask for replacement
+%% coverage to exclude a node. Originally intended to drop the node,
+%% but that introduces too much uncertainty (handoffs take too long,
+%% and we get too few results if we don't wait)
 test_2i(KeyCount, Nodes, DownNode) ->
     Pb1 = rt:pbc(hd(Nodes)),
-    lager:info("Requesting coverage plans for 2i search"),
     {ok, TradCoverage} =
         riakc_pb_socket:get_coverage(Pb1, ?BUCKET),
     {ok, SubpCoverage} =
         riakc_pb_socket:get_coverage(Pb1, ?BUCKET, 300),
-    rt:stop_and_wait(DownNode),
 
     SubpCoverage2 = swap_chunks(SubpCoverage, DownNode, Pb1),
     TradCoverage2 = swap_chunks(TradCoverage, DownNode, Pb1),
     connstop(Pb1),
 
-    count_2i(KeyCount, TradCoverage2),
-    count_2i(KeyCount, SubpCoverage2).
+    count_2i(KeyCount, SubpCoverage2, sub_one_down),
+    count_2i(KeyCount, TradCoverage2, trad_one_down).
 
 map_pids(CoverageList) ->
     Pids =
@@ -126,24 +127,30 @@ map_pids(CoverageList) ->
                end, CoverageList)
     }.
 
-count_2i(KeyCount, Coverage) ->
-    lager:info("Count 2i"),
+count_2i(KeyCount, Coverage, Label) ->
     {Pids, PbCoverage} = map_pids(Coverage),
 
-    lager:info("Starting queries"),
-    Keys = lists:flatmap(fun({Pid, Port, Cover}) ->
-                                 lager:info("Executing stream on port ~B", [Port]),
-                                 %% lager:info("~p / ~p / ~p",
-                                 %%            [Pid, Port, Cover]),
-                                 %% timer:sleep(500),
+    Keys = lists:flatmap(fun({Pid, _Port, Cover}) ->
                                  {ok, PBRes} = stream_pb(Pid, {<<"$bucket">>, ?BUCKET2i}, [{cover_context, Cover}]),
                                  proplists:get_value(keys, PBRes, [])
                          end, PbCoverage),
-    ?assertEqual(KeyCount, length(Keys)),
+    ?assert(all_keys_present(KeyCount, Keys, Label)),
     dict:fold(fun(_, Pid, _Acc) -> connstop(Pid) end,
               0,
               Pids).
 
+all_keys_present(Count, Keys, WhichTest) ->
+    KeyPresent =
+        lists:map(fun(C) -> Key = secondary_index_tests:int_to_key(C),
+                            case lists:member(Key, Keys) of
+                                true ->
+                                    true;
+                                false ->
+                                    lager:error("Missing ~s from ~s", [Key, WhichTest]),
+                                    false
+                            end
+                  end, lists:seq(0, Count-1)),
+    not lists:member(false, KeyPresent).
 
 connstop(Pid) ->
     riakc_pb_socket:stop(Pid).
@@ -188,7 +195,7 @@ test_down(Nodes) ->
 create_nval_bucket_type(Node, Nodes, NVal, Type) ->
     %% n_val setup shamelessly stolen from bucket_types.erl
     TypeProps = [{n_val, NVal}],
-    lager:info("Create bucket type ~p, wait for propagation", [Type]),
+
     rt:create_and_activate_bucket_type(Node, Type, TypeProps),
     rt:wait_until_bucket_type_status(Type, active, Nodes),
     rt:wait_until_bucket_props(Nodes, {Type, <<"bucket">>}, TypeProps).
@@ -275,7 +282,7 @@ test_subpartitions(Nodes, Granularity) ->
 
     %% Identify chunks attached to dev1
     ReplaceMe = find_matches(PartitionChunks, Node1),
-    lager:info("Found ~B subpartitions assigned to dev1", [length(ReplaceMe)]),
+
     %% Stop dev1
     connstop(Pb1),
     rt:stop_and_wait(Node1),
