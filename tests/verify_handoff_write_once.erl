@@ -105,12 +105,12 @@ run_test(Config, AsyncWrites) ->
     rt:create_and_activate_bucket_type(RootNode, ?BUCKET_TYPE, [{write_once, true}, {n_val, 1}]),
     NTestItems = 1000,
     RingSize = proplists:get_value(ring_creation_size, proplists:get_value(riak_core, Config)),
-    rt:systest_write(RootNode, 1, NTestItems, ?BUCKET, 1),
+    [] = rt:systest_write(RootNode, 1, NTestItems, ?BUCKET, 1),
     %%
     %% Start an asynchronous proc which will send puts into riak during handoff.
     %%
     lager:info("Joining new node with cluster..."),
-    start_proc(RootNode, NTestItems),
+    start_proc(RootNode, NTestItems, RingSize div 2),
     timer:sleep(1000),
     rt:join(NewNode, RootNode),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Cluster)),
@@ -165,23 +165,30 @@ make_intercepts_tab(Node) ->
 %%
 
 -record(state, {
-    node, sender, k
+    node, sender, k, pids=[], expected
 }).
 
-start_proc(Node, NTestItems) ->
+start_proc(Node, NTestItems, Expected) ->
     Self = self(),
-    Pid = spawn_link(fun() -> loop(#state{node=Node, sender=Self, k=NTestItems}) end),
+    Pid = spawn_link(fun() -> loop(#state{node=Node, sender=Self, k=NTestItems, expected=NTestItems+Expected}) end),
     global:register_name(rt_ho_w1c_proc, Pid).
 
-loop(#state{node=Node, sender=Sender, k=K} = State) ->
+loop(#state{node=Node, sender=Sender, k=K, pids=Pids, expected=Expected} = State) ->
     receive
         stop ->
             Sender ! K;
         {write, Pid} ->
-            rt:systest_write(Node, K, K + 1, ?BUCKET, 1),
+            ThePids = [Pid | Pids],
+            NumWritten = K + 1,
+            [] = rt:systest_write(Node, K, NumWritten, ?BUCKET, 1),
             lager:info("Asynchronously wrote event ~p during handoff.", [K + 1]),
-            Pid ! ok,
-            loop(State#state{k=K + 1});
+            case NumWritten of
+                Expected ->
+                    lager:info("Handoff may now complete.  Sending ok's back to ~p vnodes", [length(ThePids)]),
+                    [ThePid ! ok || ThePid <- ThePids];
+                _ -> ok
+            end,
+            loop(State#state{k=NumWritten, pids=ThePids});
         Msg ->
             lager:warning("~p: Unexpected Message: ~p.  Ignoring...", [?MODULE, Msg]),
             loop(State)
