@@ -174,11 +174,68 @@ confirm_rww(Nodes) ->
 %% async puts as a capability which can be arbitrated through the multi backend.
 %%
 confirm_async_put(Node) ->
+    %%
+    %% Set up the intercepts on the singleton node in cluster2
+    %%
+    make_intercepts_tab(Node),
+    rt_intercept:add(
+        Node, {riak_kv_vnode, [
+            %% Count everytime riak_kv_vnode:handle_handoff_command/3 is called with a write_once message
+            {{handle_command, 3}, count_w1c_handle_command}
+        ]}
+    ),
+    %%
+    %% Create the bucket type
+    %%
     rt:create_and_activate_bucket_type(Node, ?ASYNC_PUT_BUCKET_TYPE, [{write_once, true}, {backend, myeleveldb}]),
     rt:wait_until_bucket_type_status(?ASYNC_PUT_BUCKET_TYPE, active, [Node]),
     lager:info("Created ~p bucket type on ~p", [?ASYNC_PUT_BUCKET_TYPE, Node]),
+    %%
+    %% Clear the intercept counters
+    %%
+    true = rpc:call(Node, ets, insert, [intercepts_tab, {w1c_async_replies, 0}]),
+    true = rpc:call(Node, ets, insert, [intercepts_tab, {w1c_sync_replies, 0}]),
 
     ok = verify_put(Node, ?ASYNC_PUT_BUCKET, <<"confirm_async_put_key">>, <<"confirm_async_put_value">>),
+    %%
+    %% verify that we have handled 3 asynchronous writes and 0 synchronous writes
+    %%
+    [{_, W1CAsyncReplies}] = rpc:call(Node, ets, lookup, [intercepts_tab, w1c_async_replies]),
+    [{_, W1CSyncReplies}]  = rpc:call(Node, ets, lookup, [intercepts_tab, w1c_sync_replies]),
+    ?assertEqual(0, W1CSyncReplies),
+    ?assertEqual(3, W1CAsyncReplies),
+    %%
+    %% reconfigure the node to force use of synchronous writes with leveldb
+    %%
+    rt:update_app_config(Node, [{riak_kv, [{allow_async_put, false}]}]),
+    rt:start(Node),
+    %%
+    %% Set up the intercepts on the singleton node in cluster2
+    %%
+    make_intercepts_tab(Node),
+    rt_intercept:add(
+        Node, {riak_kv_vnode, [
+            %% Count everytime riak_kv_vnode:handle_handoff_command/3 is called with a write_once message
+            {{handle_command, 3}, count_w1c_handle_command}
+        ]}
+    ),
+    %%
+    %% Clear the intercept counters
+    %%
+    true = rpc:call(Node, ets, insert, [intercepts_tab, {w1c_async_replies, 0}]),
+    true = rpc:call(Node, ets, insert, [intercepts_tab, {w1c_sync_replies, 0}]),
+
+    ok = verify_put(Node, ?ASYNC_PUT_BUCKET, <<"confirm_async_put_key">>, <<"confirm_async_put_value">>),
+    %%
+    %% verify that we have handled 0 asynchronous writes and 3 synchronous writes, instead
+    %%
+    [{_, W1CAsyncReplies2}] = rpc:call(Node, ets, lookup, [intercepts_tab, w1c_async_replies]),
+    [{_, W1CSyncReplies2}]  = rpc:call(Node, ets, lookup, [intercepts_tab, w1c_sync_replies]),
+    ?assertEqual(3, W1CSyncReplies2),
+    ?assertEqual(0, W1CAsyncReplies2),
+    %%
+    %% done!
+    %%
     lager:info("confirm_async_put...ok"),
     pass.
 
@@ -269,3 +326,8 @@ parse(Binary) ->
     {ok, Tokens, _} = erl_scan:string(binary_to_list(Binary) ++ "."),
     {ok, Term} = erl_parse:parse_term(Tokens),
     Term.
+
+make_intercepts_tab(Node) ->
+    SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
+    intercepts_tab = rpc:call(Node, ets, new, [intercepts_tab, [named_table,
+        public, set, {heir, SupPid, {}}]]).

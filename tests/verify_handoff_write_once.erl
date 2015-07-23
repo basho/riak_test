@@ -84,6 +84,7 @@ run_test(Config, AsyncWrites) ->
     lager:info("Populating root node..."),
     rt:create_and_activate_bucket_type(RootNode, ?BUCKET_TYPE, [{write_once, true}, {n_val, 1}]),
     NTestItems = 1000,
+    RingSize = proplists:get_value(ring_creation_size, proplists:get_value(riak_core, Config)),
     rt:systest_write(RootNode, 1, NTestItems, ?BUCKET, 1),
     %%
     %% Start an asynchronous proc which will send puts into riak during handoff.
@@ -104,17 +105,18 @@ run_test(Config, AsyncWrites) ->
     ?assertEqual([], Results2),
     lager:info("Read ~p entries.", [TotalSent]),
     [{_, Count}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
-    ?assert(Count > 0),
+    ?assertEqual(RingSize div 2, Count),
     lager:info("We handled ~p write_once puts during handoff.", [Count]),
     [{_, W1CAsyncReplies}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_async_replies]),
     [{_, W1CSyncReplies}]  = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_sync_replies]),
+    %% NB. We should expect RingSize replies, because 4 handoffs should run in both directions
     case AsyncWrites of
         true ->
-            %?assertEqual(1008, W1CAsyncReplies),
+            ?assertEqual(NTestItems + RingSize, W1CAsyncReplies),
             ?assertEqual(0, W1CSyncReplies);
         false ->
-            ?assertEqual(0, W1CAsyncReplies)
-            %?assertEqual(1008, W1CSyncReplies)
+            ?assertEqual(0, W1CAsyncReplies),
+            ?assertEqual(NTestItems + RingSize, W1CSyncReplies)
     end,
     %%
     Cluster.
