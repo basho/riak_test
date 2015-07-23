@@ -188,7 +188,7 @@ loop(#state{node=Node, sender=Sender, k=K} = State) ->
     end.
 
 stop_proc() ->
-    catch global:send(start_fold_started_proc, stop),
+    catch global:send(rt_ho_w1c_proc, stop),
     receive
         K -> K
     end.
