@@ -25,7 +25,27 @@
 -define(BUCKET, {?BUCKET_TYPE, <<"write_once">>}).
 
 
-%% @doc
+%% @doc This test will run a handoff in the case of write_once buckets, verifying
+%% that write-once entries are properly handed off as part of ownership handoff,
+%% but more importantly, that riak_kv_vnode properly handles data being written into
+%% riak while ownership handoff is taking place.
+%%
+%% This test will create two nodes each with a ring size of 8, and populate one node
+%% with 1k entries.  It will then join the two nodes to make a cluster of size 2, which
+%% will result in ownership handoff of four of the nodes (in each direction).
+%%
+%% We have intercepted the riak_kv_worker, which handles handoff for an individual vnode,
+%% to ensure what we can send data through Riak while the cluster is in the handoff state,
+%% thus ensuring that the riak_kv_vnode:handle_handoff_command callback is exercised in
+%% the case of write_once buckets.
+%%
+%% We install intercepts at key points in the vnode to measure how many time various key
+%% parts of the code are called.
+%%
+%% We run the above test twice, once in the case where we are doing asynchronous writes on the
+%% back end, and once when we are using synchronous writes.  Currently, this is toggled via
+%% the use of a back end that can support async writes (currently, only leveldb)
+%%
 confirm() ->
 
     AsyncConfig  = create_config(riak_kv_eleveldb_backend),
@@ -130,6 +150,20 @@ make_intercepts_tab(Node) ->
                 public, set, {heir, SupPid, {}}]]).
 
 
+%%
+%% Notes on the background process and corresponding intercepts.
+%%
+%% The code below is used to spawn a background process that is globally
+%% registered with the name rt_ho_w1c_proc.  This process will
+%% wait for a message from the riak_kv_worker handle_work intercept,
+%% telling this proc to write a message into Riak.  The timing of the
+%% intercept is such that the write is guaranteed to take place while
+%% handoff is in progress, but before the vnode has been told to finish.
+%% Sending this message will trigger this background process to do a
+%% write into Riak, which in turn will force the vnode's
+%% handle_handoff_command to be called.
+%%
+
 -record(state, {
     node, sender, k
 }).
@@ -137,7 +171,7 @@ make_intercepts_tab(Node) ->
 start_proc(Node, NTestItems) ->
     Self = self(),
     Pid = spawn_link(fun() -> loop(#state{node=Node, sender=Self, k=NTestItems}) end),
-    global:register_name(start_fold_started_proc, Pid).
+    global:register_name(rt_ho_w1c_proc, Pid).
 
 loop(#state{node=Node, sender=Sender, k=K} = State) ->
     receive

@@ -17,7 +17,7 @@
 %
 handle_work_intercept({fold, FoldFun, FinishFun}, Sender, State) ->
     FinishWrapperFun = fun(X) ->
-        catch global:send(start_fold_started_proc, {write, self()}),
+        catch global:send(rt_ho_w1c_proc, {write, self()}),
         receive
             ok -> ok
         end,
