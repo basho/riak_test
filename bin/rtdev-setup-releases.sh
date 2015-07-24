@@ -24,8 +24,8 @@ then
         echo " - Initializing $RT_DEST_DIR/$vsn"
         mkdir -p "$RT_DEST_DIR/$vsn"
         cp -p -P -R "$rel" "$RT_DEST_DIR/$vsn"
-        # Route out the version (not product) from Git
-        (cd "$rel"; VERSION="$(git describe --tags | cut -d- -f2)"; echo -n $VERSION > $RT_DEST_DIR/$vsn/VERSION)
+        # Route out the product and version from Git
+        (cd "$rel"; VERSION="$(git describe --tags)"; echo -n $VERSION > $RT_DEST_DIR/$vsn/VERSION)
     done
 else
     # This is useful when only testing with 'current'
