@@ -91,7 +91,7 @@ run_test(Config, AsyncWrites) ->
         RootNode, {riak_kv_vnode, [
             %% Count everytime riak_kv_vnode:handle_handoff_command/3 is called with a write_once message
             {{handle_handoff_command, 3}, count_handoff_w1c_puts},
-            %% Count everytime riak_kv_vnode:handle_handoff_command/3 is called with a write_once message
+            %% Count everytime riak_kv_vnode:handle_command/3 is called with a write_once message
             {{handle_command, 3}, count_w1c_handle_command}
         ]}
     ),
@@ -116,7 +116,6 @@ run_test(Config, AsyncWrites) ->
     ?assertMatch(ok, rt:wait_until_nodes_ready(Cluster)),
     rt:wait_until_no_pending_changes(Cluster),
     rt:wait_until_transfers_complete(Cluster),
-    %TotalSent = stop_proc(),
     %%
     %% Verify the results
     %%
@@ -137,7 +136,6 @@ run_test(Config, AsyncWrites) ->
             ?assertEqual(0, W1CAsyncReplies),
             ?assertEqual(NTestItems + RingSize div 2, W1CSyncReplies)
     end,
-    %%
     Cluster.
 
 make_intercepts_tab(Node) ->
