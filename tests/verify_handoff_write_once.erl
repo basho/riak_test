@@ -75,7 +75,7 @@ run_test(Config, AsyncWrites) ->
     %% Deploy 2 nodes based on config.  Wait for K/V to start on each node.
     %%
     lager:info("Deploying 2 nodes..."),
-    Cluster = [RootNode, NewNode] = deploy_test_nodes(2, Config),
+    Cluster = [RootNode, NewNode] = rt:deploy_nodes(2, Config),
     [rt:wait_for_service(Node, riak_kv) || Node <- [RootNode, NewNode]],
     %%
     %% Set up the intercepts
@@ -103,7 +103,7 @@ run_test(Config, AsyncWrites) ->
     %%
     lager:info("Populating root node..."),
     rt:create_and_activate_bucket_type(RootNode, ?BUCKET_TYPE, [{write_once, true}, {n_val, 1}]),
-    NTestItems = 1000,
+    NTestItems = 100,
     RingSize = proplists:get_value(ring_creation_size, proplists:get_value(riak_core, Config)),
     [] = rt:systest_write(RootNode, 1, NTestItems, ?BUCKET, 1),
     %%
@@ -111,38 +111,34 @@ run_test(Config, AsyncWrites) ->
     %%
     lager:info("Joining new node with cluster..."),
     start_proc(RootNode, NTestItems, RingSize div 2),
-    timer:sleep(1000),
     rt:join(NewNode, RootNode),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Cluster)),
+    TotalSent = wait_until_async_writes_complete(),
+    ?assertMatch(ok, rt:wait_until_nodes_ready(Cluster)),
     rt:wait_until_no_pending_changes(Cluster),
     rt:wait_until_transfers_complete(Cluster),
-    TotalSent = stop_proc(),
+    %TotalSent = stop_proc(),
     %%
     %% Verify the results
     %%
     lager:info("Validating data after handoff..."),
     Results2 = rt:systest_read(NewNode, 1, TotalSent, ?BUCKET, 1),
-    ?assertEqual([], Results2),
+    ?assertMatch([], Results2),
     lager:info("Read ~p entries.", [TotalSent]),
     [{_, Count}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
     ?assertEqual(RingSize div 2, Count),
     lager:info("We handled ~p write_once puts during handoff.", [Count]),
     [{_, W1CAsyncReplies}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_async_replies]),
     [{_, W1CSyncReplies}]  = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_sync_replies]),
-    %% NB. We should expect RingSize replies, because 4 handoffs should run in both directions
     case AsyncWrites of
         true ->
-            ?assertEqual(NTestItems + RingSize, W1CAsyncReplies),
+            ?assertEqual(NTestItems + RingSize div 2, W1CAsyncReplies),
             ?assertEqual(0, W1CSyncReplies);
         false ->
             ?assertEqual(0, W1CAsyncReplies),
-            ?assertEqual(NTestItems + RingSize, W1CSyncReplies)
+            ?assertEqual(NTestItems + RingSize div 2, W1CSyncReplies)
     end,
     %%
     Cluster.
-
-deploy_test_nodes(N, Config) ->
-    rt:deploy_nodes(N, Config).
 
 make_intercepts_tab(Node) ->
     SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
@@ -165,37 +161,48 @@ make_intercepts_tab(Node) ->
 %%
 
 -record(state, {
-    node, sender, k, pids=[], expected
+    node, sender, k, pids=[], expected, init=true
 }).
 
 start_proc(Node, NTestItems, Expected) ->
     Self = self(),
-    Pid = spawn_link(fun() -> loop(#state{node=Node, sender=Self, k=NTestItems, expected=NTestItems+Expected}) end),
-    global:register_name(rt_ho_w1c_proc, Pid).
+    Pid = spawn_link(fun() -> loop(#state{node=Node, sender=Self, k=NTestItems, expected=Expected}) end),
+    global:register_name(rt_ho_w1c_proc, Pid),
+    receive ok -> ok end.
 
-loop(#state{node=Node, sender=Sender, k=K, pids=Pids, expected=Expected} = State) ->
+loop(#state{node=Node, sender=Sender, k=K, pids=Pids, expected=Expected, init=Init} = State) ->
+    case Init of
+        true ->
+            Sender ! ok;
+        _ -> ok
+    end,
     receive
-        stop ->
-            Sender ! K;
         {write, Pid} ->
             ThePids = [Pid | Pids],
-            NumWritten = K + 1,
-            [] = rt:systest_write(Node, K, NumWritten, ?BUCKET, 1),
-            lager:info("Asynchronously wrote event ~p during handoff.", [K + 1]),
-            case NumWritten of
+            NumPids = length(ThePids),
+            case NumPids of
                 Expected ->
-                    lager:info("Handoff may now complete.  Sending ok's back to ~p vnodes", [length(ThePids)]),
-                    [ThePid ! ok || ThePid <- ThePids];
-                _ -> ok
-            end,
-            loop(State#state{k=NumWritten, pids=ThePids});
-        Msg ->
-            lager:warning("~p: Unexpected Message: ~p.  Ignoring...", [?MODULE, Msg]),
-            loop(State)
+                    %%
+                    %% The number of expected vnodes are now in the handoff state.  Do some writes, and send ok's
+                    %% back to the waiting vnodes.  Once they get the ok back, they will complete handoff.  At this
+                    %% point, we are done, so we can tell the test to proceed and wait for handoff to complete.
+                    %%
+                    [] = rt:systest_write(Node, K + 1, K + Expected, ?BUCKET, 1),
+                    lager:info(
+                        "Asynchronously wrote entries [~p..~p] during handoff.  Sending ok's back to ~p waiting vnode(s)...",
+                        [K + 1, K + Expected, NumPids]
+                    ),
+                    [ThePid ! ok || ThePid <- ThePids],
+                    Sender ! (K + Expected);
+                _ ->
+                    loop(State#state{pids=ThePids, init=false})
+            end
     end.
 
-stop_proc() ->
-    catch global:send(rt_ho_w1c_proc, stop),
+
+wait_until_async_writes_complete() ->
     receive
         K -> K
+    after 60000 ->
+        throw("Timed out after 60s waiting for async writes to complete.")
     end.
