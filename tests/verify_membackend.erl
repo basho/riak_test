@@ -152,11 +152,9 @@ check_put_delete(Node) ->
     Mem = get_used_space(Pid, Node),
 
     %% this is meh, but the value isn't always the same length.
-    %% It seems to be the size of a Riak Object
-    case (Mem == MemBaseline - 1146) orelse
-        (Mem == MemBaseline - 1145) orelse
-        (Mem == MemBaseline - 1142) orelse
-        (Mem == MemBaseline - 1141) of
+    %% It seems to be the size of a Riak Object put some overhead
+    case (MemBaseline - Mem >= 1142) andalso
+        (MemBaseline - Mem =< 1150) of
         true ->
             ok;
         false ->
