@@ -152,8 +152,9 @@ check_put_delete(Node) ->
     Mem = get_used_space(Pid, Node),
 
     %% this is meh, but the value isn't always the same length.
-    case (Mem == MemBaseline - 1142) orelse 
-        (Mem == MemBaseline - 1141) of
+    %% It seems to be the size of a Riak Object put some overhead
+    case (MemBaseline - Mem >= 1142) andalso
+        (MemBaseline - Mem =< 1150) of
         true ->
             ok;
         false ->
@@ -252,35 +253,55 @@ get_remote_vnode_pid(Node) ->
                                all_vnodes, [riak_kv_vnode]),
     VNode.
 
-%% this is silly fragile
+%% @doc Crack open the VNode state record to find
+%% the hidden number of used bytes within the
+%% riak_kv_memory_backend:state record.
+-spec parse_regular_state_fun(integer()) -> fun().
+parse_regular_state_fun(Offset) ->
+    fun(X) ->
+        element(Offset, element(4, element(2, X)))
+    end.
+
+%% @doc Crack open the VNode state record to find
+%% the hidden number of used bytes within the
+%% riak_kv_memory_backend:state record for a multi-
+%% backend
+-spec parse_multi_state_fun(integer()) -> fun().
+parse_multi_state_fun(Offset) ->
+    fun(X) ->
+        element(
+            3, lists:nth(
+                1, element(
+                    2, element(
+                        Offset, element(
+                            4, element(2, X))))))
+    end.
+
+%% this is silly fragile and only works for Riak 2.0+
 get_used_space(VNode, Node) ->
     S = rpc:call(Node, sys, get_state, [VNode]),
     Mode = get(mode),
     Version = rt:get_version(),
     %% lager:info("version mode ~p", [{Version, Mode}]),
-    TwoOhReg =
-        fun(X) -> 
-                element(4, element(4, element(2, X)))
-        end,
-    TwoOhMulti =
-        fun(X) -> 
-                element(
-                  3, lists:nth(
-                       1, element(
-                            2, element(
-                                 4, element(
-                                      4, element(2, X))))))
-        end,
-    Extract = 
+
+    Extract =
         case {Version, Mode} of
             {<<"riak-2.0",_/binary>>, regular} ->
-                TwoOhReg;
+                parse_regular_state_fun(4);
             {<<"riak_ee-2.0",_/binary>>, regular} ->
-                TwoOhReg;
+                parse_regular_state_fun(4);
             {<<"riak-2.0",_/binary>>, multi} ->
-                TwoOhMulti;
+                parse_multi_state_fun(4);
             {<<"riak_ee-2.0",_/binary>>, multi} ->
-                TwoOhMulti;
+                parse_multi_state_fun(4);
+            {<<"riak-2.1",_/binary>>, regular} ->
+                parse_regular_state_fun(5);
+            {<<"riak_ee-2.1",_/binary>>, regular} ->
+                parse_regular_state_fun(5);
+            {<<"riak-2.1",_/binary>>, multi} ->
+                parse_multi_state_fun(5);
+            {<<"riak_ee-2.1",_/binary>>, multi} ->
+                parse_multi_state_fun(5);
             _Else ->
                 lager:error("didn't understand version/mode tuple ~p",
                             [{Version, Mode}]),
