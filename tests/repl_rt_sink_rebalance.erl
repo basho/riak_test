@@ -76,14 +76,15 @@ confirm() ->
 
     rt:stop(BFirst),
     ?assertEqual(ok, rt:wait_until_unpingable(BFirst)),
-    lager:info("Let sleep for 10s"),
-    timer:sleep(10000),
     rt:start(BFirst),
     ?assertEqual(ok, rt:wait_until_nodes_ready([BFirst])),
     ?assertEqual(ok, rt:wait_until_all_members(BNodes)),
     ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
-    timer:sleep(10000),
-    lager:info("Sleeping again to allow realtime repl to connect"),
+    rt:wait_until(AFirst, fun(Node) ->
+        Whereis = rpc:call(Node, erlang, whreis, [riak_core_connection_manager]),
+        is_pid(Whereis)
+    end),
+    repl_util:wait_for_connection(AFirst, "B"),
 
     [?assertEqual(ok,verify_sinks(Node)) || Node <- BNodes],
     [check_for_badrecord(Node) || Node <- ANodes],
