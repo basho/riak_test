@@ -55,8 +55,12 @@ kerl()
     RELEASE=$1
     BUILDNAME=$2
 
+    if [[ $(uname -s) -eq "Darwin" ]]; then
+        export KERL_CONFIGURE_OPTIONS='--without-hipe --without-odbc'
+    fi
+
     echo " - Building Erlang $RELEASE (this could take a while)"
-    ./kerl build $RELEASE $BUILDNAME  > /dev/null 2>&1
+    $KERL_FLAGS ./kerl build $RELEASE $BUILDNAME  > /dev/null 2>&1
     RES=$?
     if [ "$RES" -ne 0 ]; then
         echo "[ERROR] Kerl build $BUILDNAME failed"
