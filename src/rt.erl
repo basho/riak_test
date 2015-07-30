@@ -173,9 +173,13 @@
          wait_until_bucket_type_status/3,
          whats_up/0
         ]).
+-export_type([interfaces/0,
+              conn_info/0,
+              predicate/1]).
 
 -type strings() :: [string(),...] | [].
 -type capability() :: atom() | {atom(), tuple()}.
+-type predicate(A) :: fun((A) -> boolean()).
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(RT_ETS, rt_ets).
 -define(RT_ETS_OPTS, [public, named_table, {write_concurrency, true}]).
