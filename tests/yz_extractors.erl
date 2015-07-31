@@ -79,13 +79,17 @@ confirm() ->
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA]),
 
     yokozuna_rt:write_data(Cluster, OldPid, ?INDEX1, ?BUCKET1, GenKeys),
+
+    ok = rt:stop_tracing(),
+
     %% wait for solr soft commit
     timer:sleep(1100),
 
     {ok, BProps} = riakc_pb_socket:get_bucket(OldPid, ?BUCKET1),
     N = proplists:get_value(n_val, BProps),
 
-    ok = rt:stop_tracing(),
+    riakc_pb_socket:stop(OldPid),
+
     PrevGetMapRingCC = rt:get_call_count(Cluster, ?GET_MAP_RING_MFA),
     PrevGetMapCC = rt:get_call_count(Cluster, ?GET_MAP_MFA),
     ?assertEqual(KeyCount * N, PrevGetMapRingCC),
@@ -93,7 +97,6 @@ confirm() ->
 
     %% test query count
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX1, KeyCount),
-    riakc_pb_socket:stop(OldPid),
 
     {RingVal1, MDVal1} = get_ring_and_cmd_vals(Node, ?YZ_META_EXTRACTORS,
                                                ?YZ_EXTRACTOR_MAP),
@@ -120,15 +123,19 @@ confirm() ->
     %% test query count again
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX1, KeyCount),
 
+    Pid = rt:pbc(Node),
+
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA,
                              ?GET_MAP_READTHROUGH_MFA]),
 
-    Pid = rt:pbc(Node),
     yokozuna_rt:write_data(Cluster, Pid, ?INDEX2, ?BUCKET2, GenKeys),
+    riakc_pb_socket:stop(Pid),
+
+    ok = rt:stop_tracing(),
+
     %% wait for solr soft commit
     timer:sleep(1100),
 
-    ok = rt:stop_tracing(),
     CurrGetMapRingCC = rt:get_call_count(Cluster, ?GET_MAP_RING_MFA),
     CurrGetMapCC = rt:get_call_count(Cluster, ?GET_MAP_MFA),
     CurrGetMapRTCC = rt:get_call_count(Cluster, ?GET_MAP_READTHROUGH_MFA),
@@ -142,8 +149,6 @@ confirm() ->
     lager:info("Number of calls to get_map_read_through/0: ~p~n, Number of calls to get_map/0: ~p~n",
               [CurrGetMapRTCC, CurrGetMapCC]),
     ?assert(CurrGetMapRTCC < CurrGetMapCC),
-
-    riakc_pb_socket:stop(Pid),
 
     {_RingVal2, MDVal2} = get_ring_and_cmd_vals(Node, ?YZ_META_EXTRACTORS,
                                                 ?YZ_EXTRACTOR_MAP),
