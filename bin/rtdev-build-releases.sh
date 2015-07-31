@@ -24,6 +24,7 @@
 : ${RT_USE_EE:=""}
 GITURL_RIAK="git://github.com/basho/riak"
 GITURL_RIAK_EE="git@github.com:basho/riak_ee"
+GITDIR="riak-src"
 
 
 checkbuild()
@@ -77,12 +78,27 @@ build()
     SRCDIR=$1
     ERLROOT=$2
     TAG="$3"
+    if [ -z $4 ]; then
+        LOCKED=true
+    else
+        LOCKED=$4
+    fi
+
     if [ -z "$RT_USE_EE" ]; then
         GITURL=$GITURL_RIAK
         GITTAG=riak-$TAG
     else
         GITURL=$GITURL_RIAK_EE
         GITTAG=riak_ee-$TAG
+    fi
+
+    echo "Getting sources from github"
+    if [ ! -d $GITDIR ]; then
+        git clone $GITURL $GITDIR
+    else
+        cd $GITDIR
+        git pull origin master
+        cd ..
     fi
 
     echo "Building $SRCDIR:"
@@ -94,37 +110,52 @@ build()
         kerl $RELEASE $BUILDNAME
     fi
 
-    GITRES=1
-    echo " - Cloning $GITURL"
-    rm -rf $SRCDIR
-    git clone $GITURL $SRCDIR
-    GITRES=$?
-    if [ $GITRES -eq 0 -a -n "$TAG" ]; then
-        cd $SRCDIR
-        git checkout $GITTAG
+    if [ ! -d $SRCDIR ]
+    then
+        GITRES=1
+        echo " - Cloning $GITURL"
+        git clone $GITDIR $SRCDIR
         GITRES=$?
-        cd ..
+        if [ $GITRES -eq 0 -a -n "$TAG" ]; then
+            cd $SRCDIR
+            git checkout $GITTAG
+            GITRES=$?
+            cd ..
+        fi
     fi
 
-    RUN="env PATH=$ERLROOT/bin:$ERLROOT/lib/erlang/bin:$PATH \
+    if [ ! -f "$SRCDIR/built" ]
+    then
+
+        RUN="env PATH=$ERLROOT/bin:$ERLROOT/lib/erlang/bin:$PATH \
              C_INCLUDE_PATH=$ERLROOT/usr/include \
              LD_LIBRARY_PATH=$ERLROOT/usr/lib"
 
-    echo " - Building devrel in $SRCDIR (this could take a while)"
-    cd $SRCDIR
+        echo " - Building devrel in $SRCDIR (this could take a while)"
+        cd $SRCDIR
 
-    $RUN make all devrel
-    RES=$?
-    if [ "$RES" -ne 0 ]; then
-        echo "[ERROR] make devrel failed"
-        exit 1
+        if $LOCKED
+        then
+            CMD="make locked-deps devrel"
+        else
+            CMD="make all devrel"
+        fi
+
+        $RUN $CMD
+        RES=$?
+        if [ "$RES" -ne 0 ]; then
+            echo "[ERROR] make devrel failed"
+            exit 1
+        fi
+        touch built
+        cd ..
+        echo " - $SRCDIR built."
+    else
+        echo " - already built"
     fi
-    cd ..
-    echo " - $SRCDIR built."
 }
 
-
-build "riak-1.4.12" $R15B01 1.4.12
+build "riak-1.4.12" $R15B01 1.4.12 false
 build "riak-2.0.2" $R16B02 2.0.2
 build "riak-2.0.4" $R16B02 2.0.4
 build "riak-2.0.5" $R16B02 2.0.5
