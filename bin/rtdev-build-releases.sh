@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# You need to use this script once to build a set of devrels for prior
+# You need to use this script once to build a set of stagedevrels for prior
 # releases of Riak (for mixed version / upgrade testing). You should
 # create a directory and then run this script from within that directory.
 # I have ~/test-releases that I created once, and then re-use for testing.
@@ -45,7 +45,7 @@ checkbuild()
                     echo "You need 'curl' to be able to run this script, exiting"
                     exit 1
                 fi
-                curl -O https://raw.github.com/spawngrid/kerl/master/kerl > /dev/null 2>&1; chmod a+x kerl
+                curl -O https://raw.githubusercontent.com/spawngrid/kerl/master/kerl > /dev/null 2>&1; chmod a+x kerl
             fi
         fi
     fi
