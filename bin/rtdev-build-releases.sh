@@ -55,12 +55,18 @@ kerl()
     RELEASE=$1
     BUILDNAME=$2
 
-    if [[ $(uname -s) -eq "Darwin" ]]; then
-        export KERL_CONFIGURE_OPTIONS='--without-hipe --without-odbc'
+    BUILDFLAGS="--disable-hipe --enable-smp-support --without-odbc"
+    if [ $(uname -s) = "Darwin" ]; then
+        BUILDFLAGS="$BUILDFLAGS --enable-darwin-64bit --with-dynamic-trace=dtrace"
+    else
+        BUILDFLAGS="$BUILDFLAGS --enable-m64-build"
     fi
 
+    KERL_ENV="KERL_CONFIGURE_OPTIONS=${BUILDFLAGS}"
+    MAKE="make -j10"
+
     echo " - Building Erlang $RELEASE (this could take a while)"
-    $KERL_FLAGS ./kerl build $RELEASE $BUILDNAME  > /dev/null 2>&1
+    env "$KERL_ENV" "MAKE=$MAKE" ./kerl build $RELEASE $BUILDNAME  > /dev/null 2>&1
     RES=$?
     if [ "$RES" -ne 0 ]; then
         echo "[ERROR] Kerl build $BUILDNAME failed"
