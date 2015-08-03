@@ -77,7 +77,7 @@ kerl()
     if [ "$RELEASE" == "R15B01" ]; then
         env "$KERL_ENV" "MAKE=$MAKE" ./kerl build git git://github.com/basho/otp.git basho_OTP_R15B01p $BUILDNAME
     elif [ "$RELEASE" == "R16B02" ]; then
-        env "$KERL_ENV" "MAKE=$MAKE" ./kerl build git git://github.com/basho/otp.git r16 $BUILDNAME
+        env "$KERL_ENV" "MAKE=$MAKE" ./kerl build git git://github.com/basho/otp.git OTP_R16B02_basho9 $BUILDNAME
     else
         env "$KERL_ENV" "MAKE=$MAKE" ./kerl build $RELEASE $BUILDNAME
     fi
