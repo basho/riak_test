@@ -56,8 +56,14 @@ kerl()
     RELEASE=$1
     BUILDNAME=$2
 
+    export CFLAGS="-g -O2"
+    export LDFLAGS="-g"
+    if [ -n "`uname -r | grep el6`" ]; then
+        export CFLAGS="-g -DOPENSSL_NO_EC=1"
+    fi
     BUILDFLAGS="--disable-hipe --enable-smp-support --without-odbc"
     if [ $(uname -s) = "Darwin" ]; then
+        export CFLAGS="-g -O0"
         BUILDFLAGS="$BUILDFLAGS --enable-darwin-64bit --with-dynamic-trace=dtrace"
     else
         BUILDFLAGS="$BUILDFLAGS --enable-m64-build"
@@ -67,7 +73,14 @@ kerl()
     MAKE="make -j10"
 
     echo " - Building Erlang $RELEASE (this could take a while)"
-    env "$KERL_ENV" "MAKE=$MAKE" ./kerl build $RELEASE $BUILDNAME  > /dev/null 2>&1
+    # Use the Basho-patched version of Erlang 
+    if [ "$RELEASE" == "R15B01" ]; then
+        env "$KERL_ENV" "MAKE=$MAKE" ./kerl build git git://github.com/basho/otp.git basho_OTP_R15B01p $BUILDNAME
+    elif [ "$RELEASE" == "R16B02" ]; then
+        env "$KERL_ENV" "MAKE=$MAKE" ./kerl build git git://github.com/basho/otp.git r16 $BUILDNAME
+    else
+        env "$KERL_ENV" "MAKE=$MAKE" ./kerl build $RELEASE $BUILDNAME
+    fi
     RES=$?
     if [ "$RES" -ne 0 ]; then
         echo "[ERROR] Kerl build $BUILDNAME failed"
@@ -89,9 +102,9 @@ build()
     ERLROOT=$2
     TAG="$3"
     if [ -z $4 ]; then
-        LOCKED=true
+        LOCKED_DEPS=true
     else
-        LOCKED=$4
+        LOCKED_DEPS=$4
     fi
 
     if [ -z "$RT_USE_EE" ]; then
@@ -107,7 +120,7 @@ build()
         git clone $GITURL $GITDIR
     else
         cd $GITDIR
-        git pull origin master
+        git pull origin develop
         cd ..
     fi
 
@@ -144,7 +157,7 @@ build()
         echo " - Building devrel in $SRCDIR (this could take a while)"
         cd $SRCDIR
 
-        if $LOCKED
+        if $LOCKED_DEPS
         then
             CMD="make locked-deps devrel"
         else
