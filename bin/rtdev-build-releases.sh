@@ -19,6 +19,13 @@
 : ${R15B01:=$HOME/erlang-R15B01}
 : ${R16B02:=$HOME/erlang-R16B02}
 
+# These are the default tags to use when building basho OTP releases.
+# Export different tags to get a different build. N.B. You will need to
+# remove the builds from kerl (e.g., kerl delete build $BUILDNAME) and
+# possibly remove the directories above.
+: ${R16_TAG:="OTP_R16B02_basho9"}
+: ${R15_TAG:="basho_OTP_R15B01p"}
+
 # By default the Open Source version of Riak will be used, but for internal
 # testing you can override this variable to use `riak_ee` instead
 : ${RT_USE_EE:=""}
@@ -75,12 +82,13 @@ kerl()
     echo " - Building Erlang $RELEASE (this could take a while)"
     # Use the Basho-patched version of Erlang 
     if [ "$RELEASE" == "R15B01" ]; then
-        env "$KERL_ENV" "MAKE=$MAKE" ./kerl build git git://github.com/basho/otp.git basho_OTP_R15B01p $BUILDNAME
+        BUILD_CMD="./kerl build git git://github.com/basho/otp.git $R15_TAG $BUILDNAME"
     elif [ "$RELEASE" == "R16B02" ]; then
-        env "$KERL_ENV" "MAKE=$MAKE" ./kerl build git git://github.com/basho/otp.git OTP_R16B02_basho9 $BUILDNAME
+        BUILD_CMD="./kerl build git git://github.com/basho/otp.git $R16_TAG $BUILDNAME"
     else
-        env "$KERL_ENV" "MAKE=$MAKE" ./kerl build $RELEASE $BUILDNAME
+        BUILD_CMD="./kerl build $RELEASE $BUILDNAME"
     fi
+    env "$KERL_ENV" "MAKE=$MAKE" $BUILD_CMD
     RES=$?
     if [ "$RES" -ne 0 ]; then
         echo "[ERROR] Kerl build $BUILDNAME failed"
@@ -88,7 +96,7 @@ kerl()
     fi
 
     echo " - Installing $RELEASE into $HOME/$BUILDNAME"
-    ./kerl install $BUILDNAME $HOME/$BUILDNAME  > /dev/null 2>&1
+    ./kerl install $BUILDNAME "$HOME/$BUILDNAME" > /dev/null 2>&1
     RES=$?
     if [ "$RES" -ne 0 ]; then
         echo "[ERROR] Kerl install $BUILDNAME failed"
