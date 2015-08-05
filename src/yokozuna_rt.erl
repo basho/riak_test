@@ -35,7 +35,6 @@
          search_expect/7,
          verify_num_found_query/3,
          wait_for_aae/1,
-         wait_for_index/2,
          wait_for_full_exchange_round/2,
          wait_for_index/2,
          wait_for_schema/2,
@@ -60,7 +59,7 @@ host_entries(ClusterConnInfo) ->
 write_data(Cluster, Pid, Index, Bucket, Keys) ->
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
 
-    create_and_set_index(Cluster, Pid, Index, Bucket),
+    create_and_set_index(Cluster, Pid, Bucket, Index),
     timer:sleep(1000),
 
     %% Write keys
