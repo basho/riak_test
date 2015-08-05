@@ -59,7 +59,7 @@ host_entries(ClusterConnInfo) ->
 write_data(Cluster, Pid, Index, Bucket, Keys) ->
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
 
-    create_and_set_index(Cluster, Pid, Index, Bucket),
+    create_and_set_index(Cluster, Pid, Bucket, Index),
     timer:sleep(1000),
 
     %% Write keys
