@@ -81,7 +81,7 @@ confirm() ->
     ?assertEqual(ok, rt:wait_until_all_members(BNodes)),
     ?assertEqual(ok, rt:wait_until_ring_converged(BNodes)),
     rt:wait_until(AFirst, fun(Node) ->
-        Whereis = rpc:call(Node, erlang, whreis, [riak_core_connection_manager]),
+        Whereis = rpc:call(Node, erlang, whereis, [riak_core_connection_manager]),
         is_pid(Whereis)
     end),
     repl_util:wait_for_connection(AFirst, "B"),
