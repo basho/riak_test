@@ -72,6 +72,7 @@
          get_replica/5,
          get_ring/1,
          get_version/0,
+         get_version/1,
          heal/1,
          http_url/1,
          https_url/1,
@@ -1661,6 +1662,12 @@ get_backend(AppConfigProplist) ->
         [] -> error;
         Backend -> Backend
     end.
+
+%% @doc Gets the string flavor of the version tag specified
+%% (e.g. current, legacy, previous, etc).
+-spec(get_version(atom()) -> binary()).
+get_version(Vsn) ->
+    ?HARNESS:get_version(Vsn).
 
 %% @doc Gets the current version under test. In the case of an upgrade test
 %%      or something like that, it's the version you're upgrading to.

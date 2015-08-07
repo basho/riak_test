@@ -85,23 +85,45 @@
 %% @doc Confirm all authentication methods work for the three supported
 %%      releases.
 confirm() ->
-    %% Verify authentication method 'none'.
-    verify_authentication(legacy,   ?RC_AUTH_NONE_CONFIG),
-    verify_authentication(previous, ?RC_AUTH_NONE_CONFIG),
+    TestVersions = [current, previous, legacy],
+    [determine_test_suite(Vsn) || Vsn <- TestVersions],
+    pass.
 
-    %% Verify authentication method 'userlist'.
-    verify_authentication(legacy,   ?RC_AUTH_USERLIST_CONFIG),
-    verify_authentication(previous, ?RC_AUTH_USERLIST_CONFIG),
+%% @doc Determine if current, legacy or previous is a Riak 2.0+
+%% version or not and test accordingly.
+-spec(determine_test_suite(atom()) -> fun()).
+determine_test_suite(Vsn) ->
+    VersionBinary = rt:get_version(Vsn),
+    case VersionBinary of
+        <<"riak_ee-2.", _/binary>> ->
+            verify_authentication_post20(Vsn);
+        <<"riak-2.", _/binary>> ->
+            verify_authentication_post20(Vsn);
+        _ ->
+            verify_authentication_pre20(Vsn)
+    end.
 
+%% @doc Test authentication methods for versions since Riak 2.0
+-spec(verify_authentication_post20(atom()) -> ok).
+verify_authentication_post20(Vsn) ->
     %% Verify authentication none, and then with forced SSL.
-    verify_authentication(current,  ?RC_AUTH_NONE_CONFIG),
-    verify_authentication(current,  ?RC_AUTH_NONE_CONFIG_FORCE_SSL),
+    verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG),
+    verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG_FORCE_SSL),
 
     %% Verify authentication userlist, without SSL and then with SSL.
-    verify_authentication(current,  ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL),
-    verify_authentication(current,  ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL),
+    verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL),
+    verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL),
+    ok.
 
-    pass.
+%% @doc Test authentication methods for versions before Riak 2.0
+-spec(verify_authentication_pre20(atom()) -> ok).
+verify_authentication_pre20(Vsn) ->
+    %% Verify authentication method 'none'.
+    verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG),
+
+    %% Verify authentication method 'userlist'.
+    verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG),
+    ok.
 
 %% @doc Verify the disabled authentication method works.
 verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG) ->
@@ -119,9 +141,9 @@ verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG) ->
 
     pass;
 %% @doc Verify the disabled authentication method works with force SSL.
-verify_authentication(current, ?RC_AUTH_NONE_CONFIG_FORCE_SSL) ->
-    lager:info("Verifying auth 'none', 'force_ssl' 'true', current."),
-    Nodes =   build_singleton_cluster(current, 
+verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG_FORCE_SSL) ->
+    lager:info("Verifying auth 'none', 'force_ssl' 'true', ~p.", [Vsn]),
+    Nodes =   build_singleton_cluster(Vsn,
                                       ?RC_AUTH_NONE_CONFIG_FORCE_SSL),
     Node =    lists:nth(1, Nodes),
 
@@ -169,9 +191,9 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG) ->
 
     pass;
 %% @doc Verify the userlist authentication method works.
-verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL) ->
-    lager:info("Verifying auth 'userlist', 'force_ssl' 'true', current."),
-    Nodes =   build_singleton_cluster(current, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL),
+verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL) ->
+    lager:info("Verifying auth 'userlist', 'force_ssl' 'true', ~p.", [Vsn]),
+    Nodes =   build_singleton_cluster(Vsn, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL),
     Node =    lists:nth(1, Nodes),
 
     %% Assert that we get redirected if we hit the HTTP port.
@@ -198,9 +220,9 @@ verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL) ->
 
     pass;
 %% @doc Verify the userlist authentication method works.
-verify_authentication(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
-    lager:info("Verifying auth 'userlist', 'force_ssl' 'false', current."),
-    Nodes =   build_singleton_cluster(current, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL),
+verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
+    lager:info("Verifying auth 'userlist', 'force_ssl' 'false', ~p.", [Vsn]),
+    Nodes =   build_singleton_cluster(Vsn, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL),
     Node =    lists:nth(1, Nodes),
 
     %% Assert that we can access resource over the SSL port.
