@@ -37,26 +37,36 @@
                      {"RIAK_KV_SERVERS","127.0.0.1:8087"}}]).
 
 confirm() ->
-    NumNodes = 3,
-    lager:info("Building cluster and waiting for ensemble to stablize"),
-    [Node1, Node2, Node3] = build_cluster(NumNodes),
+    ClusterSize = 3,
+    lager:info("Building cluster"),
+    _Nodes = [Node1, Node2, Node3] = build_cluster(ClusterSize),
 
     %% add a service
     ok = service_added(Node1, ?S1_NAME, ?S1_TYPE, ?S1_CONFIG),
     ok = wait_services(Node1, {[], [?S1_NAME]}),
     lager:info("Service ~p (~s) added", [?S1_NAME, ?S1_TYPE]),
 
-    %% 1st arg is the node the service is configured to run,
-    %% start/stop to be called from nodes given in args 2/3
-    ok = test_cross_node_start_stop(Node1, Node1, Node2),
-    ok = test_cross_node_start_stop(Node1, Node1, Node1),
-    ok = test_cross_node_start_stop(Node1, Node2, Node2),
-    ok = test_cross_node_start_stop(Node1, Node3, Node1),
+    ok = test_service_manager(Node1, Node1, Node1, "all on one"),
+    ok = test_service_manager(Node1, Node2, Node2, "start/stop on same"),
+    ok = test_service_manager(Node1, Node2, Node3, "one-two-three"),
 
-    ok = test_cross_node_start_stop(Node2, Node1, Node2),
-    ok = test_cross_node_start_stop(Node2, Node1, Node1),
-    ok = test_cross_node_start_stop(Node2, Node2, Node2),
-    ok = test_cross_node_start_stop(Node2, Node3, Node1),
+    %% remove_ensemble_node(Node1, Node3),
+    %% ensemble_util:wait_until_cluster(Nodes -- [Node3]),
+    %% rt:leave(Node3),
+    %% rt:wait_until_no_pending_changes(Nodes -- [Node3]),
+
+    ok = test_service_manager(Node1, Node1, Node1, "all on one"),
+    ok = test_service_manager(Node1, Node2, Node2, "start/stop on same"),
+    ok = test_service_manager(Node3, Node2, Node3, "3-two-3"),
+
+    %% rt:leave(Node2),
+    %% rt:wait_until_no_pending_changes(Nodes -- [Node3, Node2]),
+    %% remove_ensemble_node(Node1, Node2),
+    %% ensemble_util:wait_until_cluster(Nodes -- [Node3, Node2]),
+
+    %% ok = test_service_manager(Node1, Node1, Node1, "all on one"),
+    %% ok = test_service_manager(Node1, Node5, Node5, "one-five-five"),
+    %% ok = test_service_manager(Node1, Node5, Node3, "one-five-three"),
 
     ok = service_removed(Node2, ?S1_NAME),
     lager:info("Service removed"),
@@ -64,19 +74,52 @@ confirm() ->
     pass.
 
 %% copied from ensemble_util.erl
-build_cluster(N) ->
-    Nodes = rt:deploy_nodes(N),
-    Node = hd(Nodes),
+build_cluster(Size) ->
+    Nodes = rt:deploy_nodes(Size),
     rt:join_cluster(Nodes),
     ensemble_util:wait_until_cluster(Nodes),
-    ensemble_util:wait_for_membership(Node),
-    ensemble_util:wait_until_stable(Node, N),
+    lager:info("Waiting until stable"),
+    ensemble_util:wait_until_quorum(hd(Nodes), root),
+    lager:info("....is stable"),
     Nodes.
+
+
+
+%% remove_ensemble_node(ByNode, NodeToRemove) ->
+%%     ok = rpc:call(ByNode, riak_ensemble_manager, remove,
+%%                   [ByNode, NodeToRemove]).
+
+
+
+%% Use three nodes in various combinations to assign a service to run
+%% on, to execute a start from, and execute stop.
+test_service_manager(NodeA, NodeB, NodeC, Desc) ->
+    lager:info("Battery ~p: startingy", [Desc]),
+    %% 1st arg is the node the service is configured to run,
+    %% start/stop to be called from nodes given in args 2/3
+    ok = test_cross_node_start_stop(NodeA, NodeA, NodeB),
+    ok = test_cross_node_start_stop(NodeA, NodeA, NodeA),
+    ok = test_cross_node_start_stop(NodeA, NodeB, NodeB),
+    ok = test_cross_node_start_stop(NodeA, NodeC, NodeA),
+    lager:info("Battery ~p: midway", [Desc]),
+
+    ok = test_cross_node_start_stop(NodeB, NodeA, NodeB),
+    ok = test_cross_node_start_stop(NodeB, NodeA, NodeA),
+    ok = test_cross_node_start_stop(NodeB, NodeB, NodeB),
+    ok = test_cross_node_start_stop(NodeB, NodeC, NodeA),
+    lager:info("Battery ~p: completed", [Desc]),
+    ok.
 
 
 get_services(Node) ->
     {Running_, Available_} =
-        rpc:call(Node, data_platform_global_state, services, []),
+        case rpc:call(Node, data_platform_global_state, services, []) of
+            {error, timeout} ->
+                lager:info("RPC call to ~p timed out", [Node]),
+                ?assert(false);
+            Result ->
+                Result
+        end,
     {Running, Available} =
         {lists:sort([SName || {_Type, SName, _Node} <- Running_]),
          lists:sort([SName || {SName, _Type, _Conf} <- Available_])},
@@ -131,9 +174,9 @@ service_stopped(Node, ServiceNode, Group, ConfigName) ->
 test_cross_node_start_stop(ServiceNode, Node1, Node2) ->
     %% start it, on Node1
     ok = service_started(Node1, ServiceNode, ?S1_TYPE, ?S1_NAME),
-    lager:info("Service ~p started on ~p", [?S1_NAME, Node1]),
+    lager:info("Service ~p up   on ~p", [?S1_NAME, Node1]),
 
     %% stop it, on Node2
     ok = service_stopped(Node2, ServiceNode, ?S1_TYPE, ?S1_NAME),
-    lager:info("Service ~p stopped on ~p", [?S1_NAME, Node2]),
+    lager:info("Service ~p down on ~p", [?S1_NAME, Node2]),
     ok.
