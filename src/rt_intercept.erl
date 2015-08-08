@@ -53,7 +53,7 @@ load_intercepts(Nodes, Globs) ->
     end.
 
 load_code(Node) ->
-    load_code(Node, default_intercept_path_glob()).
+    load_code(Node, default_intercept_path_globs()).
 
 load_code(Node, Globs) ->
     rt:wait_until_pingable(Node),
