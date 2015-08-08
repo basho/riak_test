@@ -21,7 +21,7 @@
 %%      service, then perform a start/stop cycle on various
 %%      combinations of starting, stopping and execution nodes
 
--module(bdp_service_manager).
+-module(bdp_sm_startstop).
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
