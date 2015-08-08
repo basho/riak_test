@@ -108,7 +108,7 @@ start_data_collectors(Nodes) ->
     PrepDir = "/tmp/perf-"++OSPid,
     file:make_dir(PrepDir),
     {ok, Hostname} = inet:gethostname(),
-    P = observer:watch(Nodes, {Hostname, 65001, PrepDir}),
+    P = rt_observer:watch(Nodes, {Hostname, 65001, PrepDir}),
     lager:info("started data collector: ~p", [P]),
     P.
 
