@@ -22,13 +22,53 @@
 -module(bdp_util).
 
 -export([build_cluster/1,
+         service_added/4, service_removed/2, service_started/4, service_stopped/4,
          make_node_leave/2, make_node_join/2]).
 -export([get_services/1, wait_services/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 
+-type group_name() :: string().
+-type config_name() :: string().
+-type service_type() :: string().
+-type service_config() :: [{string(), string()}].
+-type service() :: {group_name(), config_name(), node()}.
+-type package() :: {config_name(), service_type(), service_config()}.
 
+-define(SM_RPC_RETRIES, 20).
+
+%% @ignore
+%% This is a workaround for the nasty habit of Service Manager to kick
+%% back with an {error, timeout} in response to any call (in
+%% particular, any rpc calls from riak_test over to dev1).  The error
+%% is returned immediately, which is weird, but goes away after some 8
+%% seconds of trying.  It's reasonable to stick that to SM itself and
+%% get it fixed there; for the time being, this workaround is here.
+
+call_with_patience(Node, M, F, A) ->
+    call_with_patience_(Node, M, F, A, ?SM_RPC_RETRIES).
+call_with_patience_(_Node, _M, _F, _A, 0) ->
+    lager:error("Exhausted ~b retries for an RPC call to ~p ~p:~p/~b",
+                [?SM_RPC_RETRIES, _Node, _M, _F, length(_A)]),
+    ?assert(false);
+call_with_patience_(Node, M, F, A, Retries) ->
+    case rpc:call(Node, M, F, A) of
+        {badrpc, Reason} ->
+            lager:error("RPC call to ~p failed with reason: ~p", [Node, Reason]),
+            ?assert(false);
+        {error, timeout} ->
+            lager:warning("RPC call to ~p:~p/~b on ~p timed out, ~b attempts remaining",
+                          [M, F, length(A), Node, Retries]),
+            timer:sleep(2000),
+            call_with_patience_(Node, M, F, A, Retries - 1);
+        Result ->
+            Result
+    end.
+
+
+%% @ignore
 %% copied from ensemble_util.erl
+-spec build_cluster(non_neg_integer()) -> [node()].
 build_cluster(Size) ->
     Nodes = rt:deploy_nodes(Size),
     rt:join_cluster(Nodes),
@@ -36,24 +76,17 @@ build_cluster(Size) ->
     Nodes.
 
 
+-spec get_services(node()) -> {[service()], [package()]}.
 get_services(Node) ->
     {Running_, Available_} =
-        case rpc:call(Node, data_platform_global_state, services, []) of
-            {error, timeout} ->
-                lager:info("RPC call to ~p timed out", [Node]),
-                ?assert(false);
-            {badrpc, Reason} ->
-                lager:info("RPC call to ~p failed with reason: ~p", [Node, Reason]),
-                ?assert(false);
-            Result ->
-                Result
-        end,
+        call_with_patience(Node, data_platform_global_state, services, []),
     {Running, Available} =
         {lists:sort([SName || {_Type, SName, _Node} <- Running_]),
          lists:sort([SName || {SName, _Type, _Conf} <- Available_])},
     lager:debug("Services running: ~p, available: ~p", [Running, Available]),
     {Running, Available}.
 
+-spec wait_services(node(), {[config_name()], [config_name()]}) -> ok.
 wait_services(Node, Services) ->
     wait_services_(Node, Services, 20).
 wait_services_(_Node, _Services, SecsToWait) when SecsToWait =< 0 ->
@@ -68,11 +101,50 @@ wait_services_(Node, Services, SecsToWait) ->
     end.
 
 
+-spec service_added(node(), config_name(), service_type(), service_config()) -> ok.
+service_added(Node, ServiceName, ServiceType, Config) ->
+    {Rnn0, Avl0} = get_services(Node),
+    ok = call_with_patience(
+           Node, data_platform_global_state, add_service_config,
+           [ServiceName, ServiceType, Config, false]),
+    Avl1 = lists:usort(Avl0 ++ [ServiceName]),
+    ok = wait_services(Node, {Rnn0, Avl1}).
+
+-spec service_removed(node(), config_name()) -> ok.
+service_removed(Node, ServiceName) ->
+    {Rnn0, Avl0} = get_services(Node),
+    ok = call_with_patience(
+           Node, data_platform_global_state, remove_service,
+           [ServiceName]),
+    Avl1 = lists:usort(Avl0 -- [ServiceName]),
+    ok = wait_services(Node, {Rnn0, Avl1}).
+
+
+-spec service_started(node(), node(), config_name(), service_type()) -> ok.
+service_started(Node, ServiceNode, ServiceName, Group) ->
+    {Rnn0, Avl0} = get_services(Node),
+    ok = call_with_patience(
+           Node, data_platform_global_state, start_service,
+           [Group, ServiceName, ServiceNode]),
+    Rnn1 = lists:usort(Rnn0 ++ [ServiceName]),
+    ok = wait_services(Node, {Rnn1, Avl0}).
+
+-spec service_stopped(node(), node(), config_name(), service_type()) -> ok.
+service_stopped(Node, ServiceNode, ServiceName, Group) ->
+    {Rnn0, Avl0} = get_services(Node),
+    ok = call_with_patience(
+           Node, data_platform_global_state, stop_service,
+           [Group, ServiceName, ServiceNode]),
+    Rnn1 = lists:usort(Rnn0 -- [ServiceName]),
+    ok = wait_services(Node, {Rnn1, Avl0}).
+
 
 
 %% Makeshift SM API: node join/leave.
 %% Bits of code copied here from data_platform_console
 %% This really calls for implementing proper SM API in data_platform_*.
+
+%% TODO: make behave
 
 make_node_leave(Node, FromNode) ->
     lager:info("away goes ~p", [Node]),
