@@ -22,16 +22,15 @@
 -module(bdp_spark).
 -behavior(riak_test).
 -export([confirm/0]).
--include_lib("eunit/include/eunit.hrl").
 
 -define(SPARK_SERVICE_TYPE, "cache-proxy").
 -define(SPARK_SERVICE_NAME, "spark-fail-recovery-test").
--define(SPARK_SERVICE_CONFIG, [{{"CACHE_PROXY_PORT","11211"},
-                                {"CACHE_PROXY_STATS_PORT","22123"},
-                                {"CACHE_TTL","15s"},
-                                {"HOST","0.0.0.0"},
-                                {"REDIS_SERVERS","127.0.0.1:6379"},
-                                {"RIAK_KV_SERVERS","127.0.0.1:8087"}}]).
+-define(SPARK_SERVICE_CONFIG, [{"CACHE_PROXY_PORT","11211"},
+                               {"CACHE_PROXY_STATS_PORT","22123"},
+                               {"CACHE_TTL","15s"},
+                               {"HOST","0.0.0.0"},
+                               {"REDIS_SERVERS","127.0.0.1:6379"},
+                               {"RIAK_KV_SERVERS","127.0.0.1:8087"}]).
 
 confirm() ->
     ClusterSize = 3,
@@ -71,6 +70,9 @@ confirm() ->
 %%    as the first arg.
 
 -define(TICK_ALLOWANCE, 1000).
+%% However, with realistic values (more precisely, after first firing
+%% of the tick), all rpc calls return {error, timeout}.
+
 service_added(Node, ServiceName, ServiceType, Config) ->
     {Rnn0, Avl0} = bdp_util:get_services(Node),
     ok = rpc:call(Node, data_platform_global_state, add_service_config,

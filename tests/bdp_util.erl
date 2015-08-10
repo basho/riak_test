@@ -38,9 +38,12 @@ build_cluster(Size) ->
 
 get_services(Node) ->
     {Running_, Available_} =
-        case rpc:call(Node, data_platform_global_state, services, [], 10000) of
+        case rpc:call(Node, data_platform_global_state, services, []) of
             {error, timeout} ->
                 lager:info("RPC call to ~p timed out", [Node]),
+                ?assert(false);
+            {badrpc, Reason} ->
+                lager:info("RPC call to ~p failed with reason: ~p", [Node, Reason]),
                 ?assert(false);
             Result ->
                 Result
@@ -69,6 +72,7 @@ wait_services_(Node, Services, SecsToWait) ->
 
 %% Makeshift SM API: node join/leave.
 %% Bits of code copied here from data_platform_console
+%% This really calls for implementing proper SM API in data_platform_*.
 
 make_node_leave(Node, FromNode) ->
     lager:info("away goes ~p", [Node]),
@@ -76,9 +80,9 @@ make_node_leave(Node, FromNode) ->
       fun() -> ok == do_leave(Node, FromNode) end).
 
 do_leave(Node, FromNode) ->
-    F = fun(M, F, A) -> rpc:call(FromNode, M, F, A, 10000) end,
+    F = fun(M, F, A) -> rpc:call(FromNode, M, F, A) end,
     RootLeader = F(riak_ensemble_manager, rleader_pid, []),
-    case F(riak_ensemble_peer, update_members, [RootLeader, [{del, {root, Node}}], 10000]) of
+    case F(riak_ensemble_peer, update_members, [RootLeader, [{del, {root, Node}}]]) of
         ok ->
             case wait_for_root_leave(F, Node, 30) of
                 ok ->
@@ -119,7 +123,7 @@ make_node_join(Node, ToNode) ->
     lager:info("Join ~p", [Node]),
     %% ring-readiness and transfer-complete status is of no
     %% consequence for our tests, so just proceed
-    case rpc:call(ToNode, riak_ensemble_manager, join, [Node, ToNode], 10000) of
+    case rpc:call(ToNode, riak_ensemble_manager, join, [Node, ToNode]) of
         ok ->
             ok;
         remote_not_enabled ->
