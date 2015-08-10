@@ -727,11 +727,18 @@ set_backend(Backend, OtherOpts) ->
     update_app_config(all, [{riak_kv, Opts}]),
     get_backends().
 
-get_version() ->
-    case file:read_file(relpath(current) ++ "/VERSION") of
+%% @doc Read the VERSION file from an arbitrarily tagged
+%% version (e.g. current,
+-spec(get_version(atom()) -> binary()).
+get_version(Vsn) ->
+    case file:read_file(relpath(Vsn) ++ "/VERSION") of
         {error, enoent} -> unknown;
         {ok, Version} -> Version
     end.
+
+%% @doc Read the VERSION file for the `current` version
+get_version() ->
+    get_version(current).
 
 teardown() ->
     rt_cover:maybe_stop_on_nodes(),

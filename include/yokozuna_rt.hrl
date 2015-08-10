@@ -18,4 +18,6 @@
 %%
 %% -------------------------------------------------------------------
 -type index_name() :: binary().
+-type schema_name() :: string().
+-type raw_schema() :: binary().
 -type bucket() :: bucket() | {bucket(), bucket()}.
