@@ -37,8 +37,11 @@ confirm() ->
     %% Gossip messages can be triggered by sending 'reset_tokens'
     %% message to riak_core_gossip
 
-    Config = [{riak_core, [{gossip_limit, ?NEVER_LIMIT}]}], 
-    [Node1, Node2] = Nodes = rt:deploy_nodes(2, Config),
+    Configs = [
+               [{riak_core, [{gossip_limit, ?NEVER_LIMIT}]}],
+               [{riak_core, [{gossip_limit, ?NEVER_LIMIT},{delayed_start, 2500}]}]
+              ],
+    [Node1, Node2] = Nodes = rt:deploy_nodes(2, Configs),
 
     %% Speed failure up a bit
     rt_config:set(rt_max_wait_time, timer:seconds(120)),
@@ -49,8 +52,8 @@ confirm() ->
     give_token(Node2), % allow the join message to reach
     ok = rt:plan_and_commit(Node1),
 
-    lager:info("setting bogus capability on both sides"),
-    [set_bogus_cap(N) || N <- Nodes],
+    %% lager:info("setting bogus capability on both sides"),
+    %% [set_bogus_cap(N) || N <- Nodes],
 
     %% Make sure the ring is *not* ready on all nodes
     [?assertEqual(false, rt:is_ring_ready(N)) || N <- Nodes],
@@ -81,5 +84,5 @@ set_gossip_limit(Node, Limit) ->
     ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, Limit]),
     reset_tokens = rpc:call(Node, erlang, send, [{riak_core_gossip, Node}, reset_tokens]).
 
-set_bogus_cap(Node) ->
-    ok = rpc:call(Node, riak_core_capability, register, [{riak_core, herding},[goats,cats],cats]).
+%% set_bogus_cap(Node) ->
+%%     ok = rpc:call(Node, riak_core_capability, register, [{riak_core, herding},[goats,cats],cats]).

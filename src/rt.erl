@@ -328,6 +328,9 @@ deploy_nodes(Versions, Services) ->
                                               Service <- Services ],
     Nodes.
 
+deploy_nodes(NumNodes, InitialConfig, Services) when is_list(hd(InitialConfig)), is_integer(NumNodes) ->
+    NodeConfig = [{current, Config} || Config <- InitialConfig],
+    deploy_nodes(NodeConfig, Services);
 deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
     NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
     deploy_nodes(NodeConfig, Services).
