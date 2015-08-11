@@ -1,4 +1,3 @@
-%%
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -18,6 +17,50 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
+%% @doc EQC test for secondary indexing using eqc_fsm to generate
+%% sequences of indexing and query commands.
+%%
+%% The state machine is very simple. Mostly it:
+%% - Indexes a bunch of keys under a single integer or binary term.
+%% - Indexes a bunch of keys under an equal number of consecutive integer
+%%   or binary terms.
+%% - Deletes a single item and all its associated index entries.
+%% - Generates random queries and verifies results match the model.
+%%   Notice how we are only checking against the entire set of results and
+%%   not against each page of the results. I suggest that as an improvement.
+%%
+%% A couple of dummy states exist just to ensure that each run starts by
+%% first creating a bunch of clients, then choosing a new unique bucket.
+%%
+%% The test model stores a list of keys
+%% and index data for a configurable number of fields. The keys are all
+%% numeric for simpler presentation and get converted to and from binary
+%% as needed. For example, if two objects are created and indexed like this:
+%%
+%% - key 10, "i1_int" -> 1, "i1_bin" -> "a"
+%% - key 20, "i1_int" -> 1, "i1_bin" -> "b"
+%%
+%% The model data would look like this:
+%%
+%% keys = [10, 20]
+%% indexes = 
+%%   [
+%%     {{bin, "i1"}, [
+%%                      {<<"a">>, [10]},
+%%                      {<<"b">>, [20]}
+%%                   ]},
+%%     {{int, "i1"}, [
+%%                      {1, [10, 20]}
+%%                   ]}
+%%   ]       
+%%
+%% All lists in the indexes field are sorted and manipulated using orddict.
+%% The indexes data structure is an orddict that maps a typed field to
+%% an orddict mapping terms to lists of keys.
+%% As in Riak, here "i1_int" and "i1_bin" are the fields, and the values
+%% such as 1 or "a" are called terms.
+%%
+%% -------------------------------------------------------------------
 -module(verify_2i_eqc).
 -compile(export_all).
 
@@ -30,29 +73,22 @@
 -behaviour(riak_test).
 -export([confirm/0]).
 
--define(NUM_TESTS, 5).
 -define(MAX_CLUSTER_SIZE, 1).
--define(MAX_BUCKETS, 1).
--define(BUCKETS, [iolist_to_binary(["bucket", integer_to_binary(N)])
-                  || N <- lists:seq(1, ?MAX_BUCKETS)]).
 -define(MAX_FIELDS, 1).
 -define(FIELDS, ["i" ++ integer_to_list(N) || N <- lists:seq(1, ?MAX_FIELDS)]).
--define(VALUE, <<"v">>).
+-define(CLIENT_TYPES, [pb]).
 
 -type index_field() :: {int | bin, binary()}.
 -type index_value() :: binary().
 -type index_pair() :: {index_term(), [index_value()]}.
 -type index_data() :: {index_field(), [index_pair()]}.
 
--record(bucket_data, {
-          keys = [] :: [key()],
-          indexes = [] :: list(index_data())
-         }).
 -record(state, {
           nodes = [],
-          clients,
+          clients = [],
           bucket,
-          data = #bucket_data{}
+          keys = [] :: [key()],
+          indexes = [] :: list(index_data())
          }).
 
 -record(query, {
@@ -64,29 +100,25 @@
           continuation
          }).
 
-%% Initialize counter used to use a different bucket per run.
-init_bucket_counter() ->
-    ets:new(bucket_table, [named_table, public]),
-    ets:insert_new(bucket_table, [{bucket_number, 0}]).
-
 confirm() ->
+    %% Set up monotonic bucket name generator.
     init_bucket_counter(),
     Size = random:uniform(?MAX_CLUSTER_SIZE),
+    %% Run for 2 minutes by default.
     TestingTime = rt_config:get(eqc_testing_time, 120),
     lager:info("Will run in cluster of size ~p for ~p seconds.",
                [Size, TestingTime]),
     Nodes = rt:build_cluster(Size),
-    %% Run for 2 minutes by default.
     ?assert(eqc:quickcheck(
-              eqc_statem:show_states(
-                eqc:testing_time(TestingTime, ?MODULE:prop_test(Nodes))))),
+              eqc:testing_time(TestingTime, ?MODULE:prop_test(Nodes)))),
     pass.
 
 %% ====================================================================
 %% EQC Properties
 %% ====================================================================
 prop_test(Nodes) ->
-    ?FORALL(Cmds, noshrink(commands(?MODULE)),
+    InitState = #state{nodes = Nodes},
+    ?FORALL(Cmds, commands(?MODULE, {initial_state(), InitState}),
             ?WHENFAIL(
                begin
                    _ = lager:error("*********************** FAILED!!!!"
@@ -97,84 +129,96 @@ prop_test(Nodes) ->
                       lager:info("========================"
                                  " Will run commands with Nodes:~p:", [Nodes]),
                       [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
-                      {H, _S, Res} = run_commands(?MODULE, Cmds,
-                                                  [{nodelist, Nodes}]),
+                      {H, {_SName, S}, Res} = run_commands(?MODULE, Cmds),
                       lager:info("======================== Ran commands"),
+                      %% Each run creates a new pool of clients. Clean up.
+                      close_clients(S#state.clients),
+                      %% Record stats on what commands were generated on
+                      %% successful runs. This is printed after the test
+                      %% finishes.
                       aggregate(zip(state_names(H),command_names(Cmds)), 
                           equals(Res, ok))
                  end))).
 
 %% ====================================================================
-%% Value generators
+%% Value generators and utilities.
 %% ====================================================================
 
-gen_bucket() ->
-    oneof(?BUCKETS).
+gen_node(S) ->
+    oneof(S#state.nodes).
 
+gen_client_id(S) ->
+    {oneof(S#state.nodes), oneof(?CLIENT_TYPES)}.
+
+%% Generates a key in the range 0-999.
+%% TODO: How to determine an optimal range for coverage?
+%% If too large, we wouldn't update the same key very often, for example.
+gen_key() ->
+    choose(0, 999).
+
+%% Pick one of a fixed list of possible base field names.
 gen_field() ->
     oneof(?FIELDS).
 
-gen_int_term() ->
-    choose(0, 9999).
-
-gen_bin_term() ->
-    binary().
-
-gen_key() ->
-    gen_int_term().
-
-to_bin_key(N) ->
-    iolist_to_binary(io_lib:format("~5..0b", [N])).
-
+%% Produces either a binary or integer term value.
 gen_term() ->
     oneof([gen_int_term(), gen_bin_term()]).
 
-gen_page_size() ->
-    oneof([undefined, gen_small_page_size(), choose(1, 10000)]).
+%% Generates, with equal likelihood, either a smallish or a largish integer.
+gen_int_term() ->
+    oneof([int(), largeint()]).
 
+%% Generates a random binary.
+gen_bin_term() ->
+    binary().
+
+%% Generates a list of integer keys without duplicates.
+gen_key_list() ->
+    ?LET(L, non_empty(list(gen_key())), lists:usort(L)).
+
+%% Generates non-empty lists of {Key, Field, Term} triplets.
+gen_key_field_terms() ->
+    non_empty(list({gen_key(), gen_field(), gen_term()})).
+
+%% Produces, with equal likelihood, either no page size, a smallish one or 
+%% a largish one.
+gen_page_size() ->
+    oneof([undefined, gen_small_page_size(), gen_large_page_size()]).
+
+%% Based on EQC's nat() so numbers tend to be smallish.
+%% Adjusting with LET to avoid zero, which is invalid.
 gen_small_page_size() ->
     ?LET(N, nat(), N + 1).
 
-%% Generate a {bucket, key} for an existing object.
-%% Will fail if no objects exist, so the command will not be generated
-%% if no key exists.
-gen_existing_key(#state{data = #bucket_data {keys = Keys}}) ->
+%% Adjusts largeint() to make the result strictly positive.
+gen_large_page_size() ->
+    choose(1, 16#ffffFFFF).
+
+%% Chooses one of the keys in the model at random.
+gen_existing_key(#state{keys = Keys}) ->
     oneof(Keys).
 
-new_query(Bucket, Field, Term1, Term2, PageSize) when Term1 > Term2 ->
-    #query{bucket = Bucket, field = Field,
-           start_term = Term2, end_term = Term1,
-           page_size = PageSize};
-new_query(Bucket, Field, Term1, Term2, PageSize) ->
-    #query{bucket = Bucket, field = Field,
-           start_term = Term1, end_term = Term2,
-           page_size = PageSize}.
-
-gen_query(S) ->
+%% Generates either a query on an integer or binary field that:
+%% - Uses a couple of existing terms  as start/ends
+%% - Includes all terms in the index
+%% - Generates start/end terms randomly, which may not span any existing items.
+gen_range_query(S) ->
     oneof([gen_some_query(S), gen_all_query(S), gen_random_query(S)]).
 
 gen_random_query(#state{bucket = Bucket}) ->
     oneof([gen_int_query(Bucket), gen_bin_query(Bucket)]).
 
-first_term(TermKeys) ->
-    {Term, _} = hd(TermKeys),
-    Term.
-
-last_term(TermKeys) ->
-    {Term, _} = lists:last(TermKeys),
-    Term.
-
 %% Query that includes all terms for a given field.
-gen_all_query(#state{bucket = Bucket, data = BData}) ->
+gen_all_query(#state{bucket = Bucket, indexes = Idx}) ->
     ?LET({{{_Type, Field}, Terms}, PageSize},
-         {oneof(BData#bucket_data.indexes), gen_page_size()},
+         {oneof(Idx), gen_page_size()},
          new_query(Bucket, Field, first_term(Terms), last_term(Terms),
                       PageSize)).
 
-%% Start from an existing term and end on another.
-gen_some_query(#state{bucket = Bucket, data = BData}) ->
+%% Chooses two existing terms as start and end.
+gen_some_query(#state{bucket = Bucket, indexes = Idx}) ->
     ?LET({{{_Type, Field}, Terms}, PageSize},
-         {oneof(BData#bucket_data.indexes), gen_page_size()},
+         {oneof(Idx), gen_page_size()},
          ?LET({{Term1, _}, {Term2, _}}, {oneof(Terms), oneof(Terms)},
               new_query(Bucket, Field, Term1, Term2, PageSize))).
 
@@ -188,6 +232,28 @@ gen_bin_query(Bucket) ->
          {gen_field(), gen_bin_term(), gen_bin_term(), gen_page_size()},
          new_query(Bucket, Field, Term1, Term2, PageSize)).
 
+%% Populates a new query record. For convenience, corrects the order of the
+%% start and end terms so that start is always less than or equal to end.
+%% That way we don't need any generator tricks for those.
+new_query(Bucket, Field, Term1, Term2, PageSize) when Term1 > Term2 ->
+    #query{bucket = Bucket, field = Field,
+           start_term = Term2, end_term = Term1,
+           page_size = PageSize};
+new_query(Bucket, Field, Term1, Term2, PageSize) ->
+    #query{bucket = Bucket, field = Field,
+           start_term = Term1, end_term = Term2,
+           page_size = PageSize}.
+
+%% First term in a term to keys orddict.
+first_term(TermKeys) ->
+    {Term, _} = hd(TermKeys),
+    Term.
+
+%% Last term in a term to keys orddict.
+last_term(TermKeys) ->
+    {Term, _} = lists:last(TermKeys),
+    Term.
+
 %% ======================================================
 %% States spec
 %% ======================================================
@@ -197,83 +263,81 @@ initial_state() ->
 initial_state_data() ->
     #state{}.
 
-pre_setup_state1(_S) ->
-    [{pre_setup_state2, {call, ?MODULE, create_clients, [{var, nodelist}]}}].
+pre_setup_state1(S) ->
+    #state{nodes = Nodes} = S,
+    [{pre_setup_state2, {call, ?MODULE, tx_create_clients, [Nodes]}}].
 
 pre_setup_state2(_S) ->
-    [{default_state, {call, ?MODULE, choose_bucket, []}}].
+    [{default_state, {call, ?MODULE, tx_next_bucket, []}}].
 
 default_state(S) ->
-    #state{clients = Clients, nodes = Nodes, bucket = Bucket} = S,
+    #state{clients = Clients, bucket = Bucket} = S,
     [
-     {default_state, {call, ?MODULE, index_objects,
-                      [Clients, Nodes, Bucket, gen_key(), choose(1, 100), 
-                       gen_field(), gen_term()]}},
-     {default_state, {call, ?MODULE, index_objects2,
-                      [Clients, Nodes, Bucket, gen_key(), choose(1, 100), 
-                       gen_field(), gen_term()]}},
-     {default_state, {call, ?MODULE, delete_one,
-                      [Clients, Nodes, Bucket, gen_existing_key(S)]}},
-     {default_state, {call, ?MODULE, query_range,
-                      [Clients, Nodes, gen_query(S)]}}
+     {default_state, {call, ?MODULE, tx_index_single_term,
+                      [Clients, gen_client_id(S), Bucket,
+                       gen_key_list(), gen_field(), gen_term()]}},
+     {default_state, {call, ?MODULE, tx_index_multi_term,
+                      [Clients, gen_client_id(S), Bucket,
+                       gen_key_field_terms()]}},
+     {default_state, {call, ?MODULE, tx_delete_one,
+                      [Clients, gen_client_id(S), Bucket,
+                       gen_existing_key(S)]}},
+     {default_state, {call, ?MODULE, tx_query_range,
+                      [Clients, gen_client_id(S), gen_range_query(S)]}}
     ].
 
-%% Deletes are rare. Queries are less frequent than indexing objects.
-weight(default_state, default_state, {call, _, delete_one, _}) ->
+%% Tweak transition weights such that deletes are rare.
+%% Indexing a bunch or querying a bunch of items are equally likely.
+weight(default_state, default_state, {call, _, tx_delete_one, _}) ->
     1;
 weight(_, _, _) ->
     100.
 
-next_state_data(_, _, S, Clients, {call, _, create_clients, [Nodes]}) ->
-    S#state{nodes = Nodes, clients = Clients};
-next_state_data(_, _, S, Bucket, {call, _, choose_bucket, []}) ->
+%% State data mutations for each transition.
+next_state_data(_, _, S, Clients, {call, _, tx_create_clients, [_]}) ->
+    S#state{clients = Clients};
+next_state_data(_, _, S, Bucket, {call, _, tx_next_bucket, []}) ->
     S#state{bucket = Bucket};
 next_state_data(default_state, default_state, S, _,
-                {call, _, index_objects,
-                 [_, _, _Bucket, IntKey, NKeys, Field, Term]}) ->
-    #state{data = BData0} = S,
-    #bucket_data{keys = Keys0, indexes = Idx0} = BData0,
-    TField = to_tfield(Field, Term),
-    Keys1 = to_key_list(IntKey, NKeys),
-    Keys2 = lists:umerge(Keys0, Keys1),
-    Idx2 = orddict:update(TField, update_fterm_fn(Term, Keys1),
-                          [{Term, Keys1}], Idx0),
-    BData1 = BData0#bucket_data{keys = Keys2, indexes = Idx2},
-    S1 = S#state{data = BData1},
-    S1;
+                {call, _, tx_index_single_term,
+                 [_, _, _, NewKeys, Field, Term]}) ->
+    #state{keys = Keys0, indexes = Idx0} = S,
+    Keys1 = lists:umerge(NewKeys, Keys0),
+    Idx1 = model_index(NewKeys, Field, Term, Idx0),
+    S#state{keys = Keys1, indexes = Idx1};
 next_state_data(default_state, default_state, S, _,
-                {call, _, index_objects2,
-                 [_, _, _Bucket, IntKey, NKeys, Field, Term]}) ->
-    #state{data = BData0} = S,
-    #bucket_data{keys = Keys0, indexes = Idx0} = BData0,
-    TField = to_tfield(Field, Term),
-    Keys1 = to_key_list(IntKey, NKeys),
-    Keys2 = lists:umerge(Keys0, Keys1),
-    TermKeys = to_term_keys(NKeys, IntKey, Term),
-    Idx2 = orddict:update(TField, update_fterm2_fn(TermKeys),
-                          TermKeys, Idx0),
-    BData1 = BData0#bucket_data{keys = Keys2, indexes = Idx2},
-    S1 = S#state{data = BData1},
-    S1;
+                {call, _, tx_index_multi_term,
+                 [_, _, _, KeyFieldTerms]}) ->
+    #state{keys = Keys0, indexes = Idx0} = S,
+    %% Add to list of keys and dedupe.
+    NewKeys = [K || {K, _, _} <- KeyFieldTerms],
+    Keys1 = lists:umerge(NewKeys, Keys0),
+    Idx1 = model_index(KeyFieldTerms, Idx0),
+    S#state{keys = Keys1, indexes = Idx1};
 next_state_data(default_state, default_state, S, _,
-                {call, _, delete_one, [_, _, _Bucket, Key]}) ->
-    #state{data = BData0} = S,
-    #bucket_data{keys = Keys0, indexes = Idx0} = BData0,
+                {call, _, tx_delete_one, [_, _, _, Key]}) ->
+    #state{keys = Keys0, indexes = Idx0} = S,
     Keys1 = lists:delete(Key, Keys0),
-    Idx1 = delete_key_from_idx(Key, Idx0),
-    BData1 = BData0#bucket_data{keys = Keys1, indexes = Idx1},
-    S#state{data = BData1};
+    Idx1 = model_delete_key(Key, Idx0),
+    S#state{keys = Keys1, indexes = Idx1};
 next_state_data(_, _, S, _, _) ->
-    %% Assume anything not handled leaves the state unchanged.
+    %% Any other transition leaves state unchanged.
     S.
 
+%% No precondition checks. Among other things, that means that shrinking may
+%% end up issuing deletes to keys that do not exist, which is harmless.
+%% Any indexing, deleting or querying command can be issued at any point
+%% in the sequence. 
 precondition(_From, _To, _S, {call, _, _, _}) ->
     true.
 
-postcondition(_, _, S, {call, _, query_range, [_, _, Query]}, {error, Err}) ->
+%% Signal a test failure if there is an explicit error from the query or
+%% if the results do not match what is in the model.
+postcondition(_, _, S, {call, _, tx_query_range, [_, _, Query]}, {error, Err}) ->
     {state, S, query, Query, error, Err};
-postcondition(_, _, S, {call, _, query_range, [_, _, Query]}, Keys) ->
-    ExpectedKeys = query_state(S, Query),
+postcondition(_, _, S, {call, _, tx_query_range, [_, _, Query]}, Keys) ->
+    #state{indexes = Idx} = S,
+    ExpectedKeys = model_query_range(Query, Idx),
     case lists:usort(Keys) =:= ExpectedKeys of
         true -> true;
         false -> {state, S, query, Query, expected, ExpectedKeys, actual, Keys}
@@ -282,64 +346,196 @@ postcondition(_, _, _, _Call, _) ->
     true.
 
 %% ======================================================
-%% Internal
+%% State transition functions.
 %% ======================================================
 
-to_key_list(BaseKey, N) ->
-    [Key || Key <- lists:seq(BaseKey, BaseKey + N)].
+%% Returns a dictionary that stores a client object per each node
+%% and client type.
+%% {Node, Type} -> {Type, Client}
+tx_create_clients(Nodes) ->
+    orddict:from_list([{{N, T}, {T, create_client(N, T)}}
+                    || N <- Nodes, T <- ?CLIENT_TYPES]).
 
-update_keys_fn(NewKeys) ->
-    fun(OldKeys) ->
-            lists:umerge(OldKeys, NewKeys)
+%% Returns a different bucket name each time it's called.
+tx_next_bucket() ->
+    N = ets:update_counter(bucket_table, bucket_number, 1),
+    NBin = integer_to_binary(N),
+    <<"bucket", NBin/binary>>.
+
+%% Index a bunch of keys under the same field/term.
+tx_index_single_term(Clients, ClientId, Bucket, Keys, Field, Term) ->
+    Client = get_client(ClientId, Clients),
+    lager:info("Indexing in ~p under (~p, ~p) using client ~p: ~p",
+               [Bucket, Field, Term, ClientId, Keys]),
+    [index_object(Client, Bucket, Key, Field, Term) || Key <- Keys],
+    ok.
+
+%% Index a number of keys each under a different term.
+tx_index_multi_term(Clients, ClientId, Bucket, KeyFieldTerms) ->
+    Client = get_client(ClientId, Clients),
+    lager:info("Indexing in ~p with client ~p: ~p",
+               [Bucket, ClientId, KeyFieldTerms]),
+    [index_object(Client, Bucket, Key, Field, Term)
+     || {Key, Field, Term} <- KeyFieldTerms],
+    ok.
+
+%% Delete a single object and all its associated index entries.
+tx_delete_one(Clients, ClientId, Bucket, IntKey) ->
+    Client = get_client(ClientId, Clients),
+    lager:info("Deleting key ~p from bucket ~p using ~p",
+               [IntKey, Bucket, ClientId]),
+    delete_key(Client, Bucket, IntKey),
+    ok.
+    
+tx_query_range(Clients, ClientId, Query) ->
+    Client = get_client(ClientId, Clients),
+    Keys = lists:sort(query_range(Client, Query, [])),
+    lager:info("Query ~p, ~p  from ~p to  ~p, page = ~p, returned ~p keys.",
+               [Query#query.bucket, Query#query.field, Query#query.start_term,
+                Query#query.end_term, Query#query.page_size, length(Keys)]),
+    %% Re-run with page sizes 1 -> 100, verify it's always the same result.
+    PageChecks =
+    [begin
+         Q2 = Query#query{page_size = PSize},
+         OKeys = lists:sort(query_range(Client, Q2, [])),
+         OKeys =:= Keys
+     end || PSize <- lists:seq(1, 100)],
+    case lists:all(fun is_true/1, PageChecks) of
+        true ->
+            Keys;
+        false ->
+            {error, mismatch_when_paged}
     end.
 
-update_fterm_fn(Term, Keys) ->
-    fun(TermKeys) ->
-            orddict:update(Term, update_keys_fn(Keys), Keys, TermKeys)
+%% ======================================================
+%% Client utilities.
+%% ======================================================
+
+create_client(Node, pb) ->
+    rt:pbc(Node);
+create_client(Node, http) ->
+    rt:httpc(Node).
+
+get_client(ClientId, Clients) ->
+    orddict:fetch(ClientId, Clients).
+
+%% Convert field/term pair to pb client argument format.
+pb_field_term(Field, Term) when is_integer(Term) ->
+    {Field ++ "_int", Term};
+pb_field_term(Field, Term) when is_binary(Term) ->
+    {Field ++ "_bin", Term}.
+
+pb_field(Field, Term) when is_integer(Term) ->
+    {integer_index, Field};
+pb_field(Field, Term) when is_binary(Term) ->
+    {binary_index, Field}.
+
+index_object({pb, PB}, Bucket, Key0, Field, Term) ->
+    Key = to_bin_key(Key0),
+    FT = pb_field_term(Field, Term),
+    Obj =
+    case riakc_pb_socket:get(PB, Bucket, Key) of
+        {ok, O} ->
+            %% Existing object, add index tag and de-duplicate.
+            MD = riakc_obj:get_metadata(O),
+            IndexMD2 =
+            case dict:find(<<"index">>, MD) of
+                {ok, IndexMD} ->
+                    lists:usort([FT | IndexMD]);
+                error ->
+                    [FT]
+            end,
+            MD2 = dict:store(<<"index">>, IndexMD2, MD),
+            riakc_obj:update_metadata(O, MD2);
+        {error, notfound} ->
+            %% New object, just add index tag.
+            O = riakc_obj:new(Bucket, Key, Key),
+            MD = dict:from_list([{<<"index">>, [FT]}]),
+            riakc_obj:update_metadata(O, MD)
+    end,
+    ok = riakc_pb_socket:put(PB, Obj),
+    ok.
+
+delete_key({pb, PB}, Bucket, IntKey) ->
+    Key = to_bin_key(IntKey),
+    ok = riakc_pb_socket:delete(PB, Bucket, Key),
+    %% Wait until all tombstones have been reaped.
+    ok = rt:wait_until(fun() -> rt:pbc_really_deleted(PB, Bucket, [Key]) end);
+delete_key({http, C}, Bucket, IntKey) ->
+    Key = to_bin_key(IntKey),
+    ok = rhc:delete(C, Bucket, Key),
+    %% Wait until all tombstones have been reaped.
+    ok = rt:wait_until(fun() -> rt:httpc_really_deleted(C, Bucket, [Key]) end).
+
+%% Execute range query using a client, fetching multiple pages if necessary.
+query_range({pb, PB} = Client,
+            #query { bucket = Bucket, field = FieldName,
+                     start_term = Start, end_term = End,
+                     page_size = PageSize, continuation = Cont } = Query,
+            AccKeys) ->
+    Field = pb_field(FieldName, Start),
+    case riakc_pb_socket:get_index_range(PB, Bucket, Field, Start, End,
+                                         [{max_results, PageSize},
+                                          {continuation, Cont}]) of
+        {ok, ?INDEX_RESULTS{keys = Keys, continuation = undefined}} ->
+            AccKeys ++ Keys;
+        {ok, ?INDEX_RESULTS{keys = Keys, continuation = Cont1}} ->
+            Query1 = Query#query{continuation = Cont1},
+            query_range(Client, Query1, AccKeys ++ Keys)
     end.
 
-update_fterm2_fn(NewTermKeys) ->
-    fun(TermKeys) ->
-            orddict:merge(fun(_K, Keys1, Keys2) ->
-                                  lists:umerge(Keys1, Keys2)
-                          end, TermKeys, NewTermKeys)
-    end.
+%% Close all clients, ignore errors.
+close_clients(Clients) ->
+    [catch riakc_pb_socket:stop(Client) || {pb, Client} <- Clients],
+    ok.
 
-update_ft_add_fn(Term, Key) ->
-    fun(OldTermKeys) ->
-            orddict:update(Term, update_termkey_add_fn(Key), OldTermKeys)
-    end.
+%% ======================================================
+%% Model data utilities
+%% ======================================================
 
-update_termkey_add_fn(Key) ->
-    fun(OldKeys) ->
-            lists:usort([Key|OldKeys])
-    end.
+model_index([], Idx) ->
+    Idx;
+model_index([{Keys, Field, Term} | More], Idx) ->
+    Idx1 = model_index(Keys, Field, Term, Idx),
+    model_index(More, Idx1).
 
+model_index(NewKeys0, Field, Term, Idx) when is_list(NewKeys0) ->
+    TField = to_tfield(Field, Term),
+    NewKeys = lists:usort(NewKeys0),
+    TermKeys1 =
+    case orddict:find(TField, Idx) of
+        {ok, TermKeys0} ->
+            case orddict:find(Term, TermKeys0) of
+                {ok, Keys0} ->
+                    MergedKeys = lists:umerge(NewKeys, Keys0),
+                    orddict:store(Term, MergedKeys, TermKeys0);
+                _ ->
+                    orddict:store(Term, NewKeys, TermKeys0)
+            end;
+        _ ->
+            [{Term, NewKeys}]
+    end,
+    orddict:store(TField, TermKeys1, Idx);
+model_index(NewKey, Field, Term, Idx) ->
+    model_index([NewKey], Field, Term, Idx).
+
+model_delete_key(Key, Idx) ->
+    [{Field, delete_key_from_term_keys(Key, TermKeys)}
+     || {Field, TermKeys} <- Idx].
+
+delete_key_from_term_keys(Key, TermKeys) ->
+    [{Term, lists:delete(Key, Keys)} || {Term, Keys} <- TermKeys].
+
+%% Produces a typed field id. For example, "i1"/43 -> {int, "i1"}
 to_tfield(FieldName, Term) ->
     case is_integer(Term) of
         true -> {int, FieldName};
         false -> {bin, FieldName}
     end.
 
-to_term_keys(Count, Key, Term) when is_integer(Term) ->
-    [{Term + N, [Key]} || N <- lists:seq(0, Count - 1)];
-to_term_keys(Count, Key, Term) when is_binary(Term) ->
-    [begin
-         Suffix = iolist_to_binary(io_lib:format("~0..5b", [N])),
-         {<<Term/binary, Suffix/binary>>, [Key]}
-     end || N <- lists:seq(0, Count - 1)].
-
-delete_key_from_term_keys(Key, TermKeys) ->
-    [{Term, lists:delete(Key, Keys)} || {Term, Keys} <- TermKeys].
-
-delete_key_from_idx(Key, Idx) ->
-    [{Field, delete_key_from_term_keys(Key, TermKeys)}
-     || {Field, TermKeys} <- Idx].
-
 %% Query against the modeled data.
-query_state(#state{ data = #bucket_data{indexes = Idx}},
-            #query{ field = Field,
-                    start_term = Start, end_term = End }) ->
+model_query_range(Query, Idx) ->
+    #query{ field = Field, start_term = Start, end_term = End } = Query,
     TField = to_tfield(Field, Start),
     %% Collect all keys with terms within the given range, ignore others.
     Scanner = fun({Term, Keys}, Acc) when Term >= Start, End >= Term ->
@@ -356,137 +552,22 @@ query_state(#state{ data = #bucket_data{indexes = Idx}},
             [to_bin_key(Key) || Key <- IntKeys]
     end.
 
-pb_field_term(Field, Term) when is_integer(Term) ->
-    {Field ++ "_int", Term};
-pb_field_term(Field, Term) when is_binary(Term) ->
-    {Field ++ "_bin", Term}.
-
-pb_field(Field, Term) when is_integer(Term) ->
-    {integer_index, Field};
-pb_field(Field, Term) when is_binary(Term) ->
-    {binary_index, Field}.
-
 %% ======================================================
-%% Transition functions.
+%% Internal
 %% ======================================================
-create_clients(Nodes) ->
-    dict:from_list([{Node, rt:pbc(Node)} || Node <- Nodes]).
 
-%% Returns a different bucket name each time it's called.
-choose_bucket() ->
-    N = ets:update_counter(bucket_table, bucket_number, 1),
-    NBin = integer_to_binary(N),
-    <<"bucket", NBin/binary>>.
-
-index_objects(Clients, Nodes, Bucket, Key0, NKeys, Field, Term) ->
-    Node = hd(Nodes),
-    lager:info("Indexing ~p in ~p starting at key ~p "
-               "under (~p, ~p) on node ~p",
-               [NKeys, Bucket, Key0, Field, Term, Node]),
-    PB = dict:fetch(Node, Clients),
-    FT = pb_field_term(Field, Term),
-    [begin
-         Key = to_bin_key(N),
-         Obj =
-         case riakc_pb_socket:get(PB, Bucket, Key) of
-             {ok, O} ->
-                 MD = riakc_obj:get_metadata(O),
-                 IndexMD2 =
-                 case dict:find(<<"index">>, MD) of
-                     {ok, IndexMD} ->
-                         lists:usort([FT | IndexMD]);
-                     error ->
-                         [FT]
-                 end,
-                 MD2 = dict:store(<<"index">>, IndexMD2, MD),
-                 riakc_obj:update_metadata(O, MD2);
-             {error, notfound} ->
-                 O = riakc_obj:new(Bucket, Key, Key),
-                 MD = dict:from_list([{<<"index">>, [FT]}]),
-                 riakc_obj:update_metadata(O, MD)
-         end,
-         ok = riakc_pb_socket:put(PB, Obj)
-     end || N <- to_key_list(Key0, NKeys)],
-    ok.
-
-index_objects2(Clients, Nodes, Bucket, Key0, NKeys, Field, Term0) ->
-    Node = hd(Nodes),
-    lager:info("Indexing (2) ~p in ~p starting at key ~p, term ~p "
-               "under ~p, on node ~p",
-               [NKeys, Bucket, Key0, Term0, Field, Node]),
-    PB = dict:fetch(Node, Clients),
-    [begin
-         Key = to_bin_key(N),
-         FT = pb_field_term(Field, Term),
-         Obj =
-         case riakc_pb_socket:get(PB, Bucket, Key) of
-             {ok, O} ->
-                 MD = riakc_obj:get_metadata(O),
-                 IndexMD2 =
-                 case dict:find(<<"index">>, MD) of
-                     {ok, IndexMD} ->
-                         lists:usort([FT | IndexMD]);
-                     error ->
-                         [FT]
-                 end,
-                 MD2 = dict:store(<<"index">>, IndexMD2, MD),
-                 riakc_obj:update_metadata(O, MD2);
-             {error, notfound} ->
-                 O = riakc_obj:new(Bucket, Key, Key),
-                 MD = dict:from_list([{<<"index">>, [FT]}]),
-                 riakc_obj:update_metadata(O, MD)
-         end,
-         ok = riakc_pb_socket:put(PB, Obj)
-     end || {Term, [N]} <- to_term_keys(NKeys, Key0, Term0)],
-    ok.
-
-delete_one(Clients, Nodes, Bucket, IntKey) ->
-    Key = to_bin_key(IntKey),
-    Node = hd(Nodes),
-    PB = dict:fetch(Node, Clients),
-    lager:info("Deleting key ~p from bucket ~p", [Key, Bucket]),
-    ok = riakc_pb_socket:delete(PB, Bucket, Key),
-    ok = rt:wait_until(fun() -> rt:pbc_really_deleted(PB, Bucket, [Key]) end),
-    ok.
-    
 is_true(true) -> true;
 is_true(_) -> false.
 
-query_range(Clients, Nodes, Query) ->
-    Node = hd(Nodes),
-    PB = dict:fetch(Node, Clients),
-    Keys = lists:sort(query_range_pb(PB, Query, [])),
-    lager:info("Query ~p, ~p  from ~p to  ~p, page = ~p, returned ~p keys.",
-               [Query#query.bucket, Query#query.field, Query#query.start_term,
-                Query#query.end_term, Query#query.page_size, length(Keys)]),
-    %% Re-run with page sizes 1 -> 100, verify it's always the same result.
-    PageChecks =
-    [begin
-         Q2 = Query#query{page_size = PSize},
-         OKeys = lists:sort(query_range_pb(PB, Q2, [])),
-         OKeys =:= Keys
-     end || PSize <- lists:seq(1, 100)],
-    case lists:all(fun is_true/1, PageChecks) of
-        true ->
-            Keys;
-        false ->
-            {error, mismatch_when_paged}
-    end.
+%% Initialize counter used to use a different bucket per run.
+init_bucket_counter() ->
+    ets:new(bucket_table, [named_table, public]),
+    ets:insert_new(bucket_table, [{bucket_number, 0}]).
 
-query_range_pb(PB,
-               #query { bucket = Bucket, field = FieldName,
-                        start_term = Start, end_term = End,
-                        page_size = PageSize, continuation = Cont } = Query,
-               AccKeys) ->
-    Field = pb_field(FieldName, Start),
-    case riakc_pb_socket:get_index_range(PB, Bucket, Field, Start, End,
-                                         [{max_results, PageSize},
-                                          {continuation, Cont}]) of
-        {ok, ?INDEX_RESULTS{keys = Keys, continuation = undefined}} ->
-            AccKeys ++ Keys;
-        {ok, ?INDEX_RESULTS{keys = Keys, continuation = Cont1}} ->
-            Query1 = Query#query{continuation = Cont1},
-            query_range_pb(PB, Query1, AccKeys ++ Keys)
-    end.
+%% Convert integer object key to binary form.
+to_bin_key(N) when is_integer(N) ->
+    iolist_to_binary(io_lib:format("~5..0b", [N]));
+to_bin_key(Key) when is_binary(Key) ->
+    Key.
 
 -endif.
