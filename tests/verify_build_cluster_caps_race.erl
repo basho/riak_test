@@ -28,6 +28,7 @@
 %% We have to define our own deploy_nodes to force a race condition
 -define(HARNESS, (rt_config:get(rt_harness))).
 
+
 deploy_nodes(InitialConfig) ->
     NodeConfig = [{current, Config} || Config <- InitialConfig],
     Nodes = ?HARNESS:deploy_nodes(NodeConfig),
@@ -46,8 +47,9 @@ confirm() ->
     %% the join will be disallowed if init is not yet complete
     Configs = [
                [{riak_core, []}],
-               [{riak_core, [{delayed_start, 2500}]}]
+               [{riak_core, [{delayed_start, 20000}]}]
               ],
+
     [Node1, Node2] = deploy_nodes(Configs),
 
     lager:info("joining Node 2 to the cluster..."),
