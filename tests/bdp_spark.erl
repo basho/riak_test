@@ -22,91 +22,40 @@
 -module(bdp_spark).
 -behavior(riak_test).
 -export([confirm/0]).
--include_lib("eunit/include/eunit.hrl").
 
--define(SPARK_SERVICE_TYPE, "cache-proxy").
 -define(SPARK_SERVICE_NAME, "spark-fail-recovery-test").
--define(SPARK_SERVICE_CONFIG, [{{"CACHE_PROXY_PORT","11211"},
-                                {"CACHE_PROXY_STATS_PORT","22123"},
-                                {"CACHE_TTL","15s"},
-                                {"HOST","0.0.0.0"},
-                                {"REDIS_SERVERS","127.0.0.1:6379"},
-                                {"RIAK_KV_SERVERS","127.0.0.1:8087"}}]).
+-define(SPARK_SERVICE_TYPE, "cache-proxy").
+-define(SPARK_SERVICE_CONFIG, [{"CACHE_PROXY_PORT","11211"},
+                               {"CACHE_PROXY_STATS_PORT","22123"},
+                               {"CACHE_TTL","15s"},
+                               {"HOST","0.0.0.0"},
+                               {"REDIS_SERVERS","127.0.0.1:6379"},
+                               {"RIAK_KV_SERVERS","127.0.0.1:8087"}]).
 
 confirm() ->
     ClusterSize = 3,
     lager:info("Building cluster"),
-    _Nodes = [Node1, _Node2, _Node3] = bdp_util:build_cluster(ClusterSize),
+    _Nodes = [Node1, _Node2, _Node3] =
+        bdp_util:build_cluster(ClusterSize),
 
     %% add a service
-    ok = service_added(Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE, ?SPARK_SERVICE_CONFIG),
+    ok = bdp_util:service_added(Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE, ?SPARK_SERVICE_CONFIG),
     ok = bdp_util:wait_services(Node1, {[], [?SPARK_SERVICE_NAME]}),
     lager:info("Service ~p (~s) added", [?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE]),
 
-    ok = service_started(Node1, Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE),
+    ok = bdp_util:service_started(Node1, Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE),
     lager:info("Service ~p up   on ~p", [?SPARK_SERVICE_NAME, Node1]),
 
     ok = test_spark_fail_recovery(),
 
-    ok = service_stopped(Node1, Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE),
+    ok = bdp_util:service_stopped(Node1, Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE),
     lager:info("Service ~p down on ~p", [?SPARK_SERVICE_NAME, Node1]),
 
-    ok = service_removed(Node1, ?SPARK_SERVICE_NAME),
+    ok = bdp_util:service_removed(Node1, ?SPARK_SERVICE_NAME),
     ok = bdp_util:wait_services(Node1, {[], []}),
     lager:info("Service ~p removed", [?SPARK_SERVICE_NAME]),
 
     pass.
-
-
-%% The following functions are our makeshift Service Manager API, with
-%% some caveats:
-%%
-%% 1. The actual involvement of erlexec happens at ticks firing
-%%    periodically (every 2 sec) within data_platform_manager, where
-%%    reconcile_global_state/0 checks which services need to run.
-%%    Hence we insert appropriate delays after each call.
-%%
-%% 2. Because we call the actual data_platform_global_state functions
-%%    via RPC, we supply the node at which the calls are to be made,
-%%    as the first arg.
-
--define(TICK_ALLOWANCE, 1000).
-service_added(Node, ServiceName, ServiceType, Config) ->
-    {Rnn0, Avl0} = bdp_util:get_services(Node),
-    ok = rpc:call(Node, data_platform_global_state, add_service_config,
-                  [ServiceName, ServiceType, Config, false]),
-    Avl1 = lists:usort(Avl0 ++ [ServiceName]),
-    ok = bdp_util:wait_services(Node, {Rnn0, Avl1}),
-    timer:sleep(?TICK_ALLOWANCE),
-    ok.
-
-service_removed(Node, ServiceName) ->
-    {Rnn0, Avl0} = bdp_util:get_services(Node),
-    ok = rpc:call(Node, data_platform_global_state, remove_service,
-                  [ServiceName]),
-    Avl1 = lists:usort(Avl0 -- [ServiceName]),
-    ok = bdp_util:wait_services(Node, {Rnn0, Avl1}),
-    timer:sleep(?TICK_ALLOWANCE),
-    ok.
-
-
-service_started(Node, ServiceNode, ServiceName, Group) ->
-    {Rnn0, Avl0} = bdp_util:get_services(Node),
-    ok = rpc:call(Node, data_platform_global_state, start_service,
-                  [Group, ServiceName, ServiceNode]),
-    Rnn1 = lists:usort(Rnn0 ++ [ServiceName]),
-    ok = bdp_util:wait_services(Node, {Rnn1, Avl0}),
-    timer:sleep(?TICK_ALLOWANCE),
-    ok.
-
-service_stopped(Node, ServiceNode, ServiceName, Group) ->
-    {Rnn0, Avl0} = bdp_util:get_services(Node),
-    ok = rpc:call(Node, data_platform_global_state, stop_service,
-                  [Group, ServiceName, ServiceNode]),
-    Rnn1 = lists:usort(Rnn0 -- [ServiceName]),
-    ok = bdp_util:wait_services(Node, {Rnn1, Avl0}),
-    timer:sleep(?TICK_ALLOWANCE),
-    ok.
 
 
 test_spark_fail_recovery() ->
