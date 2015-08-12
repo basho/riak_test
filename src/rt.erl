@@ -413,7 +413,13 @@ join(Node, PNode) ->
 
 %% @doc Have `Node' send a join request to `PNode'
 staged_join(Node, PNode) ->
-    R = rpc:call(Node, riak_core, staged_join, [PNode]),
+    %% `riak_core:staged_join/1' can now return an `{error,
+    %% node_still_starting}' tuple which indicates retry. `wait_until'
+    %% isn't smart enough to retry only on that tuple, but it's good
+    %% enough
+    R = wait_until(fun() -> lager:info("Trying staged_join"),
+                            rpc:call(Node, riak_core, staged_join,
+                                     [PNode]) == ok end),
     lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
     ?assertEqual(ok, R),
     ok.
