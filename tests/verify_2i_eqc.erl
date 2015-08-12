@@ -76,6 +76,11 @@
 -define(MAX_CLUSTER_SIZE, 1).
 -define(MAX_FIELDS, 1).
 -define(FIELDS, ["i" ++ integer_to_list(N) || N <- lists:seq(1, ?MAX_FIELDS)]).
+%% Enabling the use of http clients requires a lot more work, as things
+%% do not work the same as with PB. Binaries are not encoced, empty binaries
+%% have a special meaning, it's not inclusive on the end term like PB.
+%% Who knows what else. :(
+%%-define(CLIENT_TYPES, [pb, http]).
 -define(CLIENT_TYPES, [pb]).
 
 -type index_field() :: {int | bin, binary()}.
@@ -170,7 +175,25 @@ gen_int_term() ->
 
 %% Generates a random binary.
 gen_bin_term() ->
+    %% The riak HTTP interface does not like empty binaries.
+    %% To enable the use of the http client, which does not encode
+    %% binaries at freaking all, you would need something like this:
+    %%    iolist_to_binary(http_uri:encode(binary_to_list(B))).
+    %% You also need to prevent empty binaries, which through http
+    %% mean "no term"
+    %%?LET(B, non_empty(binary()), sanitize_binary(B)).
     binary().
+
+sanitize_binary(B) ->
+    B2 = base64:encode(B),
+    sanitize_binary(B2, <<>>).
+
+sanitize_binary(<<>>, B) ->
+    B;
+sanitize_binary(<<"=", Rest/binary>>, Out) ->
+    sanitize_binary(Rest, <<Out/binary, "-">>);
+sanitize_binary(<<C, Rest/binary>>, Out) ->
+    sanitize_binary(Rest, <<Out/binary, C>>).
 
 %% Generates a list of integer keys without duplicates.
 gen_key_list() ->
@@ -335,12 +358,13 @@ precondition(_From, _To, _S, {call, _, _, _}) ->
 %% if the results do not match what is in the model.
 postcondition(_, _, S, {call, _, tx_query_range, [_, _, Query]}, {error, Err}) ->
     {state, S, query, Query, error, Err};
-postcondition(_, _, S, {call, _, tx_query_range, [_, _, Query]}, Keys) ->
+postcondition(_, _, S, {call, _, tx_query_range, [_, Client, Query]}, Keys) ->
     #state{indexes = Idx} = S,
     ExpectedKeys = model_query_range(Query, Idx),
     case lists:usort(Keys) =:= ExpectedKeys of
         true -> true;
-        false -> {state, S, query, Query, expected, ExpectedKeys, actual, Keys}
+        false -> {state, S, client, Client, query, Query,
+                  expected, ExpectedKeys, actual, Keys}
     end;
 postcondition(_, _, _, _Call, _) ->
     true.
@@ -365,7 +389,7 @@ tx_next_bucket() ->
 %% Index a bunch of keys under the same field/term.
 tx_index_single_term(Clients, ClientId, Bucket, Keys, Field, Term) ->
     Client = get_client(ClientId, Clients),
-    lager:info("Indexing in ~p under (~p, ~p) using client ~p: ~p",
+    lager:info("Indexing in ~p under (~p, ~p) using client ~p: ~w",
                [Bucket, Field, Term, ClientId, Keys]),
     [index_object(Client, Bucket, Key, Field, Term) || Key <- Keys],
     ok.
@@ -390,9 +414,11 @@ tx_delete_one(Clients, ClientId, Bucket, IntKey) ->
 tx_query_range(Clients, ClientId, Query) ->
     Client = get_client(ClientId, Clients),
     Keys = lists:sort(query_range(Client, Query, [])),
-    lager:info("Query ~p, ~p  from ~p to  ~p, page = ~p, returned ~p keys.",
+    lager:info("Query ~p, ~p  from ~p to  ~p, page = ~p, using ~p "
+               "returned ~p keys.",
                [Query#query.bucket, Query#query.field, Query#query.start_term,
-                Query#query.end_term, Query#query.page_size, length(Keys)]),
+                Query#query.end_term, Query#query.page_size, ClientId,
+                length(Keys)]),
     %% Re-run with page sizes 1 -> 100, verify it's always the same result.
     PageChecks =
     [begin
@@ -420,52 +446,74 @@ get_client(ClientId, Clients) ->
     orddict:fetch(ClientId, Clients).
 
 %% Convert field/term pair to pb client argument format.
-pb_field_term(Field, Term) when is_integer(Term) ->
-    {Field ++ "_int", Term};
-pb_field_term(Field, Term) when is_binary(Term) ->
-    {Field ++ "_bin", Term}.
+to_field_id_term(Field, Term) ->
+    {to_field_id(Field, Term), [Term]}.
 
-pb_field(Field, Term) when is_integer(Term) ->
+to_field_id(Field, Term) when is_integer(Term) ->
     {integer_index, Field};
-pb_field(Field, Term) when is_binary(Term) ->
+to_field_id(Field, Term) when is_binary(Term) ->
     {binary_index, Field}.
 
-index_object({pb, PB}, Bucket, Key0, Field, Term) ->
+to_field_id_term_http(Field, Term) ->
+    {to_field_id_http(Field, Term), [Term]}.
+
+to_field_id_http(Field, Term) when is_integer(Term) ->
+    iolist_to_binary([Field, "_int"]);
+to_field_id_http(Field, Term) when is_binary(Term) ->
+    iolist_to_binary([Field, "_bin"]).
+
+index_object({pb, C}, Bucket, Key0, Field, Term) ->
     Key = to_bin_key(Key0),
-    FT = pb_field_term(Field, Term),
-    Obj =
-    case riakc_pb_socket:get(PB, Bucket, Key) of
-        {ok, O} ->
-            %% Existing object, add index tag and de-duplicate.
-            MD = riakc_obj:get_metadata(O),
-            IndexMD2 =
-            case dict:find(<<"index">>, MD) of
-                {ok, IndexMD} ->
-                    lists:usort([FT | IndexMD]);
-                error ->
-                    [FT]
-            end,
-            MD2 = dict:store(<<"index">>, IndexMD2, MD),
-            riakc_obj:update_metadata(O, MD2);
-        {error, notfound} ->
-            %% New object, just add index tag.
-            O = riakc_obj:new(Bucket, Key, Key),
-            MD = dict:from_list([{<<"index">>, [FT]}]),
-            riakc_obj:update_metadata(O, MD)
-    end,
-    ok = riakc_pb_socket:put(PB, Obj),
+    FT = to_field_id_term(Field, Term),
+    Obj0 = case riakc_pb_socket:get(C, Bucket, Key) of
+               {ok, O} ->
+                   O;
+               {error, notfound} ->
+                   riakc_obj:new(Bucket, Key, Key)
+           end,
+    MD0 = riakc_obj:get_update_metadata(Obj0),
+    MD1 = riakc_obj:add_secondary_index(MD0, [FT]),
+    Obj1 = riakc_obj:update_metadata(Obj0, MD1),
+    ok = riakc_pb_socket:put(C, Obj1, [{dw, 3}]),
+    ok;
+index_object({http, C}, Bucket, Key0, Field, Term) ->
+    Key = to_bin_key(Key0),
+    FT = to_field_id_term_http(Field, Term),
+    Obj0 = case rhc:get(C, Bucket, Key) of
+               {ok, O} ->
+                   O;
+               {error, notfound} ->
+                   riakc_obj:new(Bucket, Key, Key)
+           end,
+    MD0 = riakc_obj:get_update_metadata(Obj0),
+    MD1 = riakc_obj:add_secondary_index(MD0, [FT]),
+    Obj1 = riakc_obj:update_metadata(Obj0, MD1),
+    ok = rhc:put(C, Obj1, [{dw, 3}]),
     ok.
 
 delete_key({pb, PB}, Bucket, IntKey) ->
     Key = to_bin_key(IntKey),
-    ok = riakc_pb_socket:delete(PB, Bucket, Key),
+    case riakc_pb_socket:get(PB, Bucket, Key) of
+        {ok, O} ->
+            ok = riakc_pb_socket:delete_obj(PB, O, [{dw, 3}]);
+        {error, notfound} ->
+            ok = riakc_pb_socket:delete(PB, Bucket, Key, [{dw, 3}])
+    end,
     %% Wait until all tombstones have been reaped.
-    ok = rt:wait_until(fun() -> rt:pbc_really_deleted(PB, Bucket, [Key]) end);
+    %% TODO: Do we need to reap tombstones for this test? I think now.
+    %% ok = rt:wait_until(fun() -> rt:pbc_really_deleted(PB, Bucket, [Key]) end);
+    ok;
 delete_key({http, C}, Bucket, IntKey) ->
     Key = to_bin_key(IntKey),
-    ok = rhc:delete(C, Bucket, Key),
+    case rhc:get(C, Bucket, Key) of
+        {ok, O} ->
+            ok = rhc:delete_obj(C, O, [{dw, 3}]);
+        {error, notfound} ->
+            ok = rhc:delete(C, Bucket, Key, [{dw, 3}])
+    end,
     %% Wait until all tombstones have been reaped.
-    ok = rt:wait_until(fun() -> rt:httpc_really_deleted(C, Bucket, [Key]) end).
+    %%ok = rt:wait_until(fun() -> rt:httpc_really_deleted(C, Bucket, [Key]) end).
+    ok.
 
 %% Execute range query using a client, fetching multiple pages if necessary.
 query_range({pb, PB} = Client,
@@ -473,10 +521,25 @@ query_range({pb, PB} = Client,
                      start_term = Start, end_term = End,
                      page_size = PageSize, continuation = Cont } = Query,
             AccKeys) ->
-    Field = pb_field(FieldName, Start),
+    Field = to_field_id(FieldName, Start),
     case riakc_pb_socket:get_index_range(PB, Bucket, Field, Start, End,
                                          [{max_results, PageSize},
                                           {continuation, Cont}]) of
+        {ok, ?INDEX_RESULTS{keys = Keys, continuation = undefined}} ->
+            AccKeys ++ Keys;
+        {ok, ?INDEX_RESULTS{keys = Keys, continuation = Cont1}} ->
+            Query1 = Query#query{continuation = Cont1},
+            query_range(Client, Query1, AccKeys ++ Keys)
+    end;
+query_range({http, C} = Client,
+            #query { bucket = Bucket, field = FieldName,
+                     start_term = Start, end_term = End,
+                     page_size = PageSize, continuation = Cont } = Query,
+            AccKeys) ->
+    Field = to_field_id(FieldName, Start),
+    case rhc:get_index(C, Bucket, Field, {Start, End},
+                       [{max_results, PageSize},
+                        {continuation, Cont}]) of
         {ok, ?INDEX_RESULTS{keys = Keys, continuation = undefined}} ->
             AccKeys ++ Keys;
         {ok, ?INDEX_RESULTS{keys = Keys, continuation = Cont1}} ->
