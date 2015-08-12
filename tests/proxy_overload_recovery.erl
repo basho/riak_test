@@ -42,15 +42,23 @@ confirm() ->
     Opts = [{riak_kv, [{anti_entropy, {off, []}}]}],
     Nodes = [Node1] = rt:deploy_nodes(1, Opts),
 
-    %% Distribute this code to the remote and add EQC
-    rt:load_modules_on_nodes([?MODULE], Nodes),
-    add_eqc_apps(Nodes),
+    case setup_eqc(Nodes) of
+        ok ->
+            %% Distribute this code to the remote and add EQC
+            rt:load_modules_on_nodes([?MODULE], Nodes),
 
-    TestingTime = rt_config:get(eqc_testing_time, 120),
-    lager:info("Running vnode proxy overload property for ~p seconds\n",
-               [TestingTime]),
-    ?assertEqual(true, rpc:call(Node1, ?MODULE, rtrun, [TestingTime])),
-    pass.
+            TestingTime = rt_config:get(eqc_testing_time, 120),
+            lager:info("Running vnode proxy overload property for ~p seconds\n",
+                       [TestingTime]),
+            ?assertEqual(true, rpc:call(Node1, ?MODULE, rtrun, [TestingTime])),
+            pass;
+        _ ->
+            lager:warning("EQC was unavailable on this machine - PASSing "
+                          "the test, but it did not run. Wish we could skip.\n", []),
+            pass
+    end.
+
+
 
 
 -record(tstate, {
@@ -402,9 +410,33 @@ kill_and_wait(Pid) ->
             ok
     end.
 
+%%
+%% Check if EQC is available on the local node, then add to remotes if needed
+%% This could be refactored out if many tests need it.
+setup_eqc(Nodes) ->
+    try
+        _ = eqc:reserved_until(), % will throw exception if problems
+        add_eqc_apps(Nodes)
+    catch
+        _:Err ->
+            lager:info("EQC unavailable: ~p\n", [Err]),
+            {error, unavailable}
+    end.
+
+
 %% Add the QuickCheck in the r_t runner to the list of Nodes
 add_eqc_apps(Nodes) ->
     Apps = [eqc, pulse, pulse_otp],
-    [true = rpc:call(Node, code, add_pathz, [code:lib_dir(App, ebin)], 60000) ||
-        App <- Apps, Node <- Nodes],
+    [begin
+         %% Check if the remote node has EQC installed
+         case rpc:call(Node, code, priv_dir, [eqc]) of
+             %% If not, add EQC to embedded node from rt host. 
+             %% Assume same filesystem. Sorry rtssh.
+             {error, bad_name} ->
+                 [rpc:call(Node, code, add_pathz,
+                           [code:lib_dir(App, ebin)], 60000) || App <- Apps];
+             Path when is_list(Path) ->
+                 ok
+         end
+     end || Node <- Nodes],
     ok.
