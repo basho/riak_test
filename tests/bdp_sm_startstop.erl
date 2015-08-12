@@ -87,14 +87,12 @@ test_service_manager(NodeA, NodeB, NodeC, Desc) ->
     ok = test_cross_node_start_stop(NodeA, NodeB, NodeB),
     ok = test_cross_node_start_stop(NodeA, NodeC, NodeA),
     lager:info("Battery ~p: midway", [Desc]),
-    timer:sleep(1000),
 
     ok = test_cross_node_start_stop(NodeB, NodeA, NodeB),
     ok = test_cross_node_start_stop(NodeB, NodeA, NodeA),
     ok = test_cross_node_start_stop(NodeB, NodeB, NodeB),
     ok = test_cross_node_start_stop(NodeB, NodeC, NodeA),
     lager:info("Battery ~p: completed", [Desc]),
-    timer:sleep(1500),
     ok.
 
 
