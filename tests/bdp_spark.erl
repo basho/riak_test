@@ -25,12 +25,14 @@
 
 -define(SPARK_SERVICE_NAME, "spark-fail-recovery-test").
 -define(SPARK_SERVICE_TYPE, "cache-proxy").
--define(SPARK_SERVICE_CONFIG, [{"CACHE_PROXY_PORT","11211"},
-                               {"CACHE_PROXY_STATS_PORT","22123"},
-                               {"CACHE_TTL","15s"},
-                               {"HOST","0.0.0.0"},
-                               {"REDIS_SERVERS","127.0.0.1:6379"},
-                               {"RIAK_KV_SERVERS","127.0.0.1:8087"}]).
+-define(SPARK_SERVICE_CONFIG, [%% {"CACHE_PROXY_PORT","11211"},
+                               %% {"CACHE_PROXY_STATS_PORT","22123"},
+
+                               %% TODO: please fill out any env vars
+                               %% needed to run spark following the
+                               %% example commented above
+
+                               ]).
 
 confirm() ->
     ClusterSize = 3,
