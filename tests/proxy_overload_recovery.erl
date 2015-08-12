@@ -25,6 +25,10 @@
 %% On failure you can re-run counter examples *and* print out the internal
 %% state with the run.
 %%   proxy_overload_recovery:check(). 
+%%
+%% TODO/Questions:
+%% 1) Is there a better way to do the initialization step?
+%% 2) Remove the riak_kv dependency so it's a pure riak_core test.
 
 -module(proxy_overload_recovery).
 -include_lib("eqc/include/eqc.hrl").
