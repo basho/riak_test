@@ -35,7 +35,6 @@
          search_expect/7,
          verify_num_found_query/3,
          wait_for_aae/1,
-         wait_for_index/2,
          wait_for_full_exchange_round/2,
          wait_for_index/2,
          wait_for_schema/2,
