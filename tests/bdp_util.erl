@@ -104,18 +104,24 @@ wait_services_(Node, Services, SecsToWait) ->
 -spec service_added(node(), config_name(), service_type(), service_config()) -> ok.
 service_added(Node, ServiceName, ServiceType, Config) ->
     {Rnn0, Avl0} = get_services(Node),
-    ok = call_with_patience(
-           Node, data_platform_global_state, add_service_config,
-           [ServiceName, ServiceType, Config, false]),
+    Res = call_with_patience(
+            Node, data_platform_global_state, add_service_config,
+            [ServiceName, ServiceType, Config, false]),
+    ?assert(Res == ok orelse Res == {error, config_already_exists}),
+    Res == {error, config_already_exists} andalso
+        begin lager:warning("Adding a service ~p that already exists", [ServiceName]) end,
     Avl1 = lists:usort(Avl0 ++ [ServiceName]),
     ok = wait_services(Node, {Rnn0, Avl1}).
 
 -spec service_removed(node(), config_name()) -> ok.
 service_removed(Node, ServiceName) ->
     {Rnn0, Avl0} = get_services(Node),
-    ok = call_with_patience(
-           Node, data_platform_global_state, remove_service,
-           [ServiceName]),
+    Res = call_with_patience(
+            Node, data_platform_global_state, remove_service,
+            [ServiceName]),
+    ?assert(Res == ok orelse Res == {error, config_not_found}),
+    Res == {error, config_not_found} andalso
+        begin lager:warning("Removing a service ~p that does not exists", [ServiceName]) end,
     Avl1 = lists:usort(Avl0 -- [ServiceName]),
     ok = wait_services(Node, {Rnn0, Avl1}).
 
@@ -123,18 +129,24 @@ service_removed(Node, ServiceName) ->
 -spec service_started(node(), node(), config_name(), service_type()) -> ok.
 service_started(Node, ServiceNode, ServiceName, Group) ->
     {Rnn0, Avl0} = get_services(Node),
-    ok = call_with_patience(
+    Res = call_with_patience(
            Node, data_platform_global_state, start_service,
            [Group, ServiceName, ServiceNode]),
+    ?assert(Res == ok orelse Res == {error, already_running}),
+    Res == {error, already_running} andalso
+        begin lager:warning("Starting a service ~p that's already running", [ServiceName]) end,
     Rnn1 = lists:usort(Rnn0 ++ [ServiceName]),
     ok = wait_services(Node, {Rnn1, Avl0}).
 
 -spec service_stopped(node(), node(), config_name(), service_type()) -> ok.
 service_stopped(Node, ServiceNode, ServiceName, Group) ->
     {Rnn0, Avl0} = get_services(Node),
-    ok = call_with_patience(
-           Node, data_platform_global_state, stop_service,
-           [Group, ServiceName, ServiceNode]),
+    Res = call_with_patience(
+            Node, data_platform_global_state, stop_service,
+            [Group, ServiceName, ServiceNode]),
+    ?assert(Res == ok orelse Res == {error, service_not_found}),
+    Res == {error, service_not_found} andalso
+        begin lager:warning("Stopping a service ~p that's not running", [ServiceName]) end,
     Rnn1 = lists:usort(Rnn0 -- [ServiceName]),
     ok = wait_services(Node, {Rnn1, Avl0}).
 
