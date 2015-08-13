@@ -15,7 +15,7 @@
 %%
 %% Whenever the vnode is resumed, the test checks the message queues are
 %% cleared and the model is reset.  The main goal is to advance the proxy
-%% into interestign new states.
+%% into interesting new states.
 %%
 %% This test can be run outside of riak_test while working on it. 
 %% Symlink the source into a release build and run
@@ -260,11 +260,15 @@ resume_args(#tstate{rt = RT}) ->
 
 resume(#rt{ppid = PPid, vpid = VPid}) ->
     sys:resume(VPid),
+    %% Use the sys:get_status call to force a synchronous call
+    %% against the vnode proxy to ensure all messages sent by
+    %% this process have been serviced and there are no pending
+    %% 'ping's in the vnode before we continue.
+    %% Then drain the vnode to make sure any pending pongs have
+    %% been sent.
     ok = drain(VPid),
-    %% make sure all messages have been processed and there
-    %% is no pending 'ping' in the vnode before we continue.
-    sys:get_status(PPid),
-    sys:get_status(VPid).
+    _ = sys:get_status(VPid),
+    _ = sys:get_status(PPid).
 
 resume_next(S, _V, _A) ->
     S#tstate{vnode_running = true, proxy_msgs = 0, direct_msgs = 0}.
@@ -317,7 +321,7 @@ overloaded_args(#tstate{vnode_running = Running, rt = RT}) ->
 overloaded(Running, #rt{ppid = PPid, vpid = VPid}) ->
     case Running of
         true ->
-            ok = drain(PPid), % make sure all proxy msgs procesed/dropped
+            ok = drain(PPid), % make sure all proxy msgs processed/dropped
             ok = drain(VPid); % make sure any pending ping/pongs are processed
         _ ->
             ok
@@ -383,7 +387,8 @@ prep_env(Var, Val) ->
 
 %%
 %% Wait until all messages are drained by the Pid. No guarantees
-%% about future messages being sent.
+%% about future messages being sent, or that responses for the
+%% last message consumed have been transmitted.
 %%
 drain(Pid) ->
     case erlang:process_info(Pid, message_queue_len) of
@@ -426,17 +431,16 @@ setup_eqc(Nodes) ->
 
 %% Add the QuickCheck in the r_t runner to the list of Nodes
 add_eqc_apps(Nodes) ->
-    Apps = [eqc, pulse, pulse_otp],
-    [begin
-         %% Check if the remote node has EQC installed
-         case rpc:call(Node, code, priv_dir, [eqc]) of
-             %% If not, add EQC to embedded node from rt host. 
-             %% Assume same filesystem. Sorry rtssh.
-             {error, bad_name} ->
-                 [rpc:call(Node, code, add_pathz,
-                           [code:lib_dir(App, ebin)], 60000) || App <- Apps];
-             Path when is_list(Path) ->
-                 ok
-         end
-     end || Node <- Nodes],
+    Apps = [eqc, pulse, pulse_otp, eqc_mcerlang],
+    [case code:lib_dir(App, ebin) of
+         {error, bad_name} -> % EQC component not installed locally
+             ok;
+         Path when is_list(Path) ->
+             case rpc:call(Node, code, priv_dir, [App]) of
+                 {error, bad_name} ->
+                     true = rpc:call(Node, code, add_pathz, [Path], 60000);
+                 _ ->
+                     ok
+             end
+     end || App <- Apps, Node <- Nodes],
     ok.
