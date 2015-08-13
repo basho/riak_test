@@ -25,7 +25,7 @@
                [
                 %% allow AAE to build trees and exchange rapidly
                 {anti_entropy_build_limit, {100, 1000}},
-                {anti_entropy_concurrency, 4}
+                {anti_entropy_concurrency, 8}
                ]},
               {yokozuna,
                [
@@ -84,7 +84,7 @@ test_core_props_removal(Cluster, RandNodes, KeyCount, Pid) ->
     lager:info("Remove core.properties file in each index data dir"),
     remove_core_props(RandNodes, ?INDEX),
 
-    check_exists(Cluster, ?INDEX),
+    yokozuna_rt:check_exists(Cluster, ?INDEX),
 
     lager:info("Write one more piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"foo">>, <<"foo">>, "text/plain"),
@@ -94,9 +94,9 @@ test_core_props_removal(Cluster, RandNodes, KeyCount, Pid) ->
 
 test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid) ->
     lager:info("Remove index directories on each node and let them recreate/reindex"),
-    remove_index_dirs(RandNodes, ?INDEX),
+    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX),
 
-    check_exists(Cluster, ?INDEX),
+    yokozuna_rt:check_exists(Cluster, ?INDEX),
 
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:wait_for_aae(Cluster),
@@ -113,9 +113,9 @@ test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
 
     lager:info("To fix, we remove index directories on each node and let them recreate/reindex"),
 
-    remove_index_dirs(RandNodes, ?INDEX),
+    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX),
 
-    check_exists(Cluster, ?INDEX),
+    yokozuna_rt:check_exists(Cluster, ?INDEX),
 
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:wait_for_aae(Cluster),
@@ -147,23 +147,6 @@ remove_core_props(Nodes, IndexName) ->
                [PropsFiles, Nodes]),
     [file:delete(PropsFile) || PropsFile <- PropsFiles],
     ok.
-
-%% @doc Check if index/core exists in metadata, disk via yz_index:exists.
-check_exists(Nodes, IndexName) ->
-    rt:wait_until(Nodes,
-                  fun(N) ->
-                          rpc:call(N, yz_index, exists, [IndexName])
-                  end).
-
-%% @doc Remove index directories, removing the index.
-remove_index_dirs(Nodes, IndexName) ->
-    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
-                    Node <- Nodes],
-    lager:info("Remove index dirs: ~p, on nodes: ~p~n",
-               [IndexDirs, Nodes]),
-    [rt:stop(ANode) || ANode <- Nodes],
-    [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
-    [rt:start(ANode) || ANode <- Nodes].
 
 %% @doc Remove lucence segment info files to check if reindexing will occur
 %%      on re-creation/re-indexing.
