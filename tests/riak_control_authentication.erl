@@ -28,11 +28,11 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--define(RC_AUTH_NONE_CONFIG, 
-        [{riak_control, [{enabled, true}, 
+-define(RC_AUTH_NONE_CONFIG,
+        [{riak_control, [{enabled, true},
                          {auth, none}]}]).
 
--define(RC_AUTH_NONE_CONFIG_FORCE_SSL, 
+-define(RC_AUTH_NONE_CONFIG_FORCE_SSL,
         [{riak_api, [{https, [{"127.0.0.1", 8069}]}]},
          {riak_core,
           [{https, [{"127.0.0.1", 8069}]},
@@ -40,11 +40,11 @@
             [{certfile, "./etc/cert.pem"},
              {keyfile, "./etc/key.pem"}
             ]}]},
-         {riak_control, [{enabled, true}, 
-                         {auth, none}, 
+         {riak_control, [{enabled, true},
+                         {auth, none},
                          {force_ssl, true}]}]).
 
--define(RC_AUTH_USERLIST_CONFIG, 
+-define(RC_AUTH_USERLIST_CONFIG,
         [{riak_api, [{https, [{"127.0.0.1", 8069}]}]},
          {riak_core,
           [{https, [{"127.0.0.1", 8069}]},
@@ -52,11 +52,11 @@
             [{certfile, "./etc/cert.pem"},
              {keyfile, "./etc/key.pem"}
             ]}]},
-         {riak_control, [{enabled, true}, 
+         {riak_control, [{enabled, true},
                          {auth, userlist},
                          {userlist, [{"user", "pass"}]}]}]).
 
--define(RC_AUTH_USERLIST_CONFIG_FORCE_SSL, 
+-define(RC_AUTH_USERLIST_CONFIG_FORCE_SSL,
         [{riak_api, [{https, [{"127.0.0.1", 8069}]}]},
          {riak_core,
           [{https, [{"127.0.0.1", 8069}]},
@@ -64,12 +64,12 @@
             [{certfile, "./etc/cert.pem"},
              {keyfile, "./etc/key.pem"}
             ]}]},
-         {riak_control, [{enabled, true}, 
+         {riak_control, [{enabled, true},
                          {force_ssl, true},
                          {auth, userlist},
                          {userlist, [{"user", "pass"}]}]}]).
 
--define(RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL, 
+-define(RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL,
         [{riak_api, [{https, [{"127.0.0.1", 8069}]}]},
          {riak_core,
           [{https, [{"127.0.0.1", 8069}]},
@@ -77,7 +77,7 @@
             [{certfile, "./etc/cert.pem"},
              {keyfile, "./etc/key.pem"}
             ]}]},
-         {riak_control, [{enabled, true}, 
+         {riak_control, [{enabled, true},
                          {force_ssl, false},
                          {auth, userlist},
                          {userlist, [{"user", "pass"}]}]}]).
@@ -133,9 +133,11 @@ verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG) ->
 
     %% Assert that we can load the main page.
     lager:info("Verifying Control loads."),
-    Command = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null", 
+    Command = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null",
                             [rt:http_url(Node), "/admin"]),
     ?assertEqual("200", os:cmd(Command)),
+
+    rt:stop_and_wait(Node),
 
     pass;
 %% @doc Verify the disabled authentication method works with force SSL.
@@ -147,16 +149,18 @@ verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG_FORCE_SSL) ->
 
     %% Assert that we get redirected if we hit the HTTP port.
     lager:info("Verifying redirect to SSL."),
-    RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null", 
+    RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null",
                                     [rt:http_url(Node), "/admin"]),
     ?assertEqual("303", os:cmd(RedirectCommand)),
 
     %% TODO: Temporarily disabled because of OTP R16B02 SSL bug.
     %% Assert that we can access resource over the SSL port.
     % lager:info("Verifying Control loads over SSL."),
-    % AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p", 
+    % AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p",
     %                               [rt:https_url(Node), "/admin"]),
     % ?assertEqual("200", os:cmd(AccessCommand)),
+
+    rt:stop_and_wait(Node),
 
     pass;
 %% @doc Verify the userlist authentication method works.
@@ -167,21 +171,23 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG) ->
 
     %% Assert that we get redirected if we hit the HTTP port.
     lager:info("Verifying redirect to SSL."),
-    RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null", 
+    RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null",
                                     [rt:http_url(Node), "/admin"]),
     ?assertEqual("303", os:cmd(RedirectCommand)),
 
     %% Assert that we can access resource over the SSL port.
     lager:info("Verifying Control loads over SSL."),
-    AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null",
                                   [rt:https_url(Node), "/admin"]),
     ?assertEqual("401", os:cmd(AccessCommand)),
 
     %% Assert that we can access resource over the SSL port.
     lager:info("Verifying Control loads with credentials."),
-    AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null",
                                 [rt:https_url(Node), "/admin"]),
     ?assertEqual("200", os:cmd(AuthCommand)),
+
+    rt:stop_and_wait(Node),
 
     pass;
 %% @doc Verify the userlist authentication method works.
@@ -192,23 +198,25 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL) ->
 
     %% Assert that we get redirected if we hit the HTTP port.
     lager:info("Verifying redirect to SSL."),
-    RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null", 
+    RedirectCommand = io_lib:format("curl -sL -w %{http_code} ~s~p -o /dev/null",
                                     [rt:http_url(Node), "/admin"]),
     ?assertEqual("303", os:cmd(RedirectCommand)),
 
     %% TODO: Temporarily disabled because of OTP R16B02 SSL bug.
     %% Assert that we can access resource over the SSL port.
     % lager:info("Verifying Control loads over SSL."),
-    % AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    % AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null",
     %                               [rt:https_url(Node), "/admin"]),
     % ?assertEqual("401", os:cmd(AccessCommand)),
 
     %% TODO: Temporarily disabled because of OTP R16B02 SSL bug.
     %% Assert that we can access resource over the SSL port.
     % lager:info("Verifying Control loads with credentials."),
-    % AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    % AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null",
     %                             [rt:https_url(Node), "/admin"]),
     % ?assertEqual("200", os:cmd(AuthCommand)),
+
+    rt:stop_and_wait(Node),
 
     pass;
 %% @doc Verify the userlist authentication method works.
@@ -219,7 +227,7 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
 
     %% Assert that we can access resource over the SSL port.
     lager:info("Verifying Control loads over SSL."),
-    AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
+    AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p -o /dev/null",
                                   [rt:http_url(Node), "/admin"]),
     ?assertEqual("401", os:cmd(AccessCommand)),
 
@@ -228,6 +236,8 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
     AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null",
                                 [rt:http_url(Node), "/admin"]),
     ?assertEqual("200", os:cmd(AuthCommand)),
+
+    rt:stop_and_wait(Node),
 
     pass.
 
@@ -241,7 +251,6 @@ build_singleton_cluster(Vsn, Config) ->
     %% the supervisor starts, we need to restart to ensure settings
     %% take effect.
     Node = lists:nth(1, Nodes),
-    rt:stop_and_wait(Node),
     rt:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
 
