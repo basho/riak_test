@@ -22,19 +22,6 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--import(rt, [wait_until_nodes_ready/1,
-             wait_until_no_pending_changes/1]).
-
-%% We have to define our own deploy_nodes to force a race condition
--define(HARNESS, (rt_config:get(rt_harness))).
-
-
-deploy_nodes(InitialConfig) ->
-    NodeConfig = [{current, Config} || Config <- InitialConfig],
-    Nodes = ?HARNESS:deploy_nodes(NodeConfig),
-    lager:info("Start nodes ~p without waiting for services", [Nodes]),
-    Nodes.
-
 staged_join(InitiatingNode, DestinationNode) ->
     rpc:call(InitiatingNode, riak_core, staged_join,
              [DestinationNode]).
@@ -43,15 +30,16 @@ confirm() ->
     %% Deploy a set of new nodes
     lager:info("Deploying nodes"),
 
-    %% We want riak_core to be slow to start on node 2 to verify that
-    %% the join will be disallowed if init is not yet complete
-    Configs = [
-               [{riak_core, []}],
-               [{riak_core, [{delayed_start, 20000}]}]
-              ],
+    [Node1, Node2] = rt:deploy_nodes(2),
 
-    [Node1, Node2] = deploy_nodes(Configs),
+    configure_intercept(Node2),
 
     lager:info("joining Node 2 to the cluster..."),
     ?assertMatch({error, _}, staged_join(Node2, Node1)),
     pass.
+
+%% init must return `starting' status for join to fail
+configure_intercept(Node) ->
+    lager:info("Doing unspeakably evil things to the VM"),
+    rt_intercept:add(Node, {init,
+                            [{{get_status,0}, get_status}]}).
