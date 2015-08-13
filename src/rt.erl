@@ -404,24 +404,42 @@ slow_upgrade(Node, NewVersion, Nodes) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
     ok.
 
+%% Ideally we'd use `wait_until' for join retries, but it isn't
+%% currently flexible enough to only retry on a specific error
+%% tuple. Rather than rework all of the various arities, steal the
+%% concept and worry about this later if the need arises.
+join_with_retry(Fun) ->
+    MaxTime = rt_config:get(rt_max_wait_time),
+    Delay = rt_config:get(rt_retry_delay),
+    Retry = MaxTime div Delay,
+    join_retry(Fun(), Fun, Retry, Delay).
+
+join_retry(ok, _Fun, _Retry, _Delay) ->
+    ok;
+join_retry({error, node_still_starting}, _Fun, 0, _Delay) ->
+    lager:warning("Too many retries, join failed"),
+    {error, too_many_retries};
+join_retry({error, node_still_starting}, Fun, RetryCount, Delay) ->
+    lager:warning("Join error because node is not yet ready, retrying after ~Bms", [Delay]),
+    timer:sleep(Delay),
+    join_retry(Fun(), Fun, RetryCount - 1, Delay);
+join_retry(Error, _Fun, _Retry, _Delay) ->
+    Error.
+
 %% @doc Have `Node' send a join request to `PNode'
 join(Node, PNode) ->
-    R = rpc:call(Node, riak_core, join, [PNode]),
-    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
-    ?assertEqual(ok, R),
+    Fun = fun() -> rpc:call(Node, riak_core, join, [PNode]) end,
+    lager:info("[join] ~p to (~p)", [Node, PNode]),
+    ?assertEqual(ok, join_with_retry(Fun)),
     ok.
 
 %% @doc Have `Node' send a join request to `PNode'
 staged_join(Node, PNode) ->
     %% `riak_core:staged_join/1' can now return an `{error,
-    %% node_still_starting}' tuple which indicates retry. `wait_until'
-    %% isn't smart enough to retry only on that tuple, but it's good
-    %% enough
-    R = wait_until(fun() -> lager:info("Trying staged_join"),
-                            rpc:call(Node, riak_core, staged_join,
-                                     [PNode]) == ok end),
-    lager:info("[join] ~p to (~p): ~p", [Node, PNode, R]),
-    ?assertEqual(ok, R),
+    %% node_still_starting}' tuple which indicates retry.
+    Fun = fun() -> rpc:call(Node, riak_core, staged_join, [PNode]) end,
+    lager:info("[join] ~p to (~p)", [Node, PNode]),
+    ?assertEqual(ok, join_with_retry(Fun)),
     ok.
 
 plan_and_commit(Node) ->
