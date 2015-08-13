@@ -7,14 +7,6 @@
 
 -define(BUCKET, <<"ttl_test">>).
 
-%% from 2.0, but should be valid for 1.1+
--record(state, {data_ref :: ets:tid(),
-                index_ref :: ets:tid(),
-                time_ref :: ets:tid(),
-                max_memory :: undefined | integer(),
-                used_memory=0 :: integer(),
-                ttl :: integer()}).
-
 confirm() ->
     Tests = [ttl, max_memory, combo],
     [Res1, Res2] = 
@@ -67,7 +59,7 @@ combo(Mode) ->
  
     %% Make sure that expiry is updating used_memory correctly
     Pid = get_remote_vnode_pid(NodeA),
-    0 = get_used_space(Pid, NodeA),
+    {0, _} = get_used_space(Pid),
 
     ?assertEqual(ok, check_put_delete(NodeA)),
 
@@ -141,7 +133,7 @@ check_put_delete(Node) ->
     lager:info("checking that used mem is reclaimed on delete"),
     Pid = get_remote_vnode_pid(Node),
     
-    {MemBaseline, Key} = put_until_changed(Pid, Node, 1000),
+    {MemBaseline, PutSize, Key} = put_until_changed(Pid, Node, 1000),
 
     {ok, C} = riak:client_connect(Node),
 
@@ -149,11 +141,12 @@ check_put_delete(Node) ->
     
     timer:sleep(timer:seconds(5)),
 
-    Mem = get_used_space(Pid, Node),
+    {Mem, _PutSize} = get_used_space(Pid),
 
-    %% this is meh, but the value isn't always the same length.
-    case (Mem == MemBaseline - 1142) orelse 
-        (Mem == MemBaseline - 1141) of
+    %% The size of the encoded Riak Object varies a bit based on
+    %% the included metadata, so we consult the riak_kv_memory_backend
+    %% to determine the actual size of the object written
+    case (MemBaseline - Mem) =:= PutSize of
         true ->
             ok;
         false ->
@@ -165,17 +158,18 @@ check_put_consistent(Node) ->
     lager:info("checking that used mem doesn't change on re-put"),
     Pid = get_remote_vnode_pid(Node),
     
-    {MemBaseline, Key} = put_until_changed(Pid, Node, 1000),
+    {MemBaseline, _PutSize, Key} = put_until_changed(Pid, Node, 1000),
 
     {ok, C} = riak:client_connect(Node),
 
+    %% Write a slightly larger object than before
     ok = C:put(riak_object:new(?BUCKET, <<Key:32/integer>>, <<0:8192>>)),
     
     {ok, _} = C:get(?BUCKET, <<Key:32/integer>>),
 
     timer:sleep(timer:seconds(2)),
 
-    Mem = get_used_space(Pid, Node),
+    {Mem, _} = get_used_space(Pid),
 
     case abs(Mem - MemBaseline) < 3 of
         true -> ok;
@@ -184,18 +178,22 @@ check_put_consistent(Node) ->
     end,
     ok.
 
+%% @doc Keep putting objects until the memory used changes
+%% Also return the size of the object after it's been encoded
+%% and send to the memory backend.
+-spec(put_until_changed(pid(), node(), term()) -> {integer(), integer(), term()}).
 put_until_changed(Pid, Node, Key) ->
     {ok, C} = riak:client_connect(Node),
-    UsedSpace = get_used_space(Pid, Node),
+    {UsedSpace, _} = get_used_space(Pid),
 
     C:put(riak_object:new(?BUCKET, <<Key:32/integer>>, <<0:8192>>)),
-    
+
     timer:sleep(100),
 
-    UsedSpace1 = get_used_space(Pid, Node),
+    {UsedSpace1, PutObjSize} = get_used_space(Pid),
     case UsedSpace < UsedSpace1 of
         true ->
-            {UsedSpace1, Key};
+            {UsedSpace1, PutObjSize, Key};
         false ->
             put_until_changed(Pid, Node, Key+1)
     end.
@@ -252,41 +250,22 @@ get_remote_vnode_pid(Node) ->
                                all_vnodes, [riak_kv_vnode]),
     VNode.
 
-%% this is silly fragile
-get_used_space(VNode, Node) ->
-    S = rpc:call(Node, sys, get_state, [VNode]),
-    Mode = get(mode),
-    Version = rt:get_version(),
-    %% lager:info("version mode ~p", [{Version, Mode}]),
-    TwoOhReg =
-        fun(X) -> 
-                element(4, element(4, element(2, X)))
-        end,
-    TwoOhMulti =
-        fun(X) -> 
-                element(
-                  3, lists:nth(
-                       1, element(
-                            2, element(
-                                 4, element(
-                                      4, element(2, X))))))
-        end,
-    Extract = 
-        case {Version, Mode} of
-            {<<"riak-2.0",_/binary>>, regular} ->
-                TwoOhReg;
-            {<<"riak_ee-2.0",_/binary>>, regular} ->
-                TwoOhReg;
-            {<<"riak-2.0",_/binary>>, multi} ->
-                TwoOhMulti;
-            {<<"riak_ee-2.0",_/binary>>, multi} ->
-                TwoOhMulti;
-            _Else ->
-                lager:error("didn't understand version/mode tuple ~p",
-                            [{Version, Mode}]),
-                throw(boom)
-        end,
-    State = Extract(S),
-    Mem = State#state.used_memory,
-    lager:info("got ~p used memory", [Mem]),
-    Mem.
+%% @doc Interrogate the VNode to determine the memory used
+-spec(get_used_space(pid()) -> {integer(), integer()}).
+get_used_space(VNodePid) ->
+    {_Mod, State} = riak_core_vnode:get_modstate(VNodePid),
+    {Mod, ModState} = riak_kv_vnode:get_modstate(State),
+    Status = case Mod of
+        riak_kv_memory_backend ->
+            riak_kv_memory_backend:status(ModState);
+        riak_kv_multi_backend ->
+            [{_Name, Stat}] = riak_kv_multi_backend:status(ModState),
+            Stat;
+        _Else ->
+            lager:error("didn't understand backend ~p", [Mod]),
+            throw(boom)
+    end,
+    Mem = proplists:get_value(used_memory, Status),
+    PutObjSize = proplists:get_value(put_obj_size, Status),
+    lager:info("got ~p used memory, ~p put object size", [Mem, PutObjSize]),
+    {Mem, PutObjSize}.

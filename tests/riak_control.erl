@@ -86,21 +86,6 @@ verify_upgrade_fold({FromVsn, Node}, VersionedNodes0) ->
 
     VersionedNodes.
 
-verify_control({current, Node}, VersionedNodes) ->
-    lager:info("Verifying control on node ~p vsn current.", [Node]),
-
-    %% Verify node resource.
-    {struct,
-     [{<<"nodes">>, Nodes}]} = verify_resource(Node, "/admin/nodes"),
-    validate_nodes(Node, Nodes, VersionedNodes, any),
-
-    %% Verify partitions resource.
-    {struct,
-     [{<<"partitions">>, Partitions},
-      {<<"default_n_val">>, _}]} = verify_resource(Node, "/admin/partitions"),
-    validate_partitions({current, Node}, Partitions, VersionedNodes),
-
-    ok;
 verify_control({Vsn, Node}, VersionedNodes) ->
     lager:info("Verifying control on node ~p vsn ~p.", [Vsn, Node]),
 
@@ -110,11 +95,27 @@ verify_control({Vsn, Node}, VersionedNodes) ->
     validate_nodes(Node, Nodes, VersionedNodes, any),
 
     %% Verify partitions resource.
-    {struct,
-     [{<<"partitions">>, Partitions}]} = verify_resource(Node, "/admin/partitions"),
-    validate_partitions({previous, Node}, Partitions, VersionedNodes),
+    VersionBinary = rt:get_version(Vsn),
+    Partitions = case VersionBinary of
+        <<"riak_ee-2.", _/binary>> ->
+            {struct,
+                [{<<"partitions">>, NodePartitions},
+                 {<<"default_n_val">>, _}]} = verify_resource(Node, "/admin/partitions"),
+                NodePartitions;
+        <<"riak-2.", _/binary>> ->
+            {struct,
+                [{<<"partitions">>, NodePartitions},
+                 {<<"default_n_val">>, _}]} = verify_resource(Node, "/admin/partitions"),
+            NodePartitions;
+        _ ->
+            {struct,
+                [{<<"partitions">>, NodePartitions}]} = verify_resource(Node, "/admin/partitions"),
+            NodePartitions
+    end,
+    validate_partitions({Vsn, Node}, Partitions, VersionedNodes),
 
     ok.
+
 verify_control(VersionedNodes) ->
     [verify_control(NodeVsn, VersionedNodes) || NodeVsn <- VersionedNodes].
 
@@ -184,33 +185,39 @@ wait_for_control_cycle(Node) when is_atom(Node) ->
         end).
 
 %% @doc Validate partitions response.
-validate_partitions({current, _}, _ResponsePartitions, _VersionedNodes) ->
+validate_partitions({ControlVsn, _}, ResponsePartitions, VersionedNodes) ->
+    VersionBinary = rt:get_version(ControlVsn),
     %% The newest version of the partitions display can derive the
     %% partition state without relying on data from rpc calls -- it can
     %% use just the ring to do this.  Don't test anything specific here
     %% yet.
-    ok;
-validate_partitions({ControlVsn, _}, ResponsePartitions, VersionedNodes) ->
-    MixedCluster = mixed_cluster(VersionedNodes),
-    lager:info("Mixed cluster: ~p.", [MixedCluster]),
+    case VersionBinary of
+        <<"riak_ee-2.", _/binary>> ->
+            ok;
+        <<"riak-2.", _/binary>> ->
+            ok;
+        _ ->
+            MixedCluster = mixed_cluster(VersionedNodes),
+            lager:info("Mixed cluster: ~p.", [MixedCluster]),
 
-    lists:map(fun({struct, Partition}) ->
+            lists:map(fun({struct, Partition}) ->
 
-                %% Parse JSON further.
-                BinaryName = proplists:get_value(<<"node">>, Partition),
-                Status = proplists:get_value(<<"status">>, Partition),
-                Name = list_to_existing_atom(binary_to_list(BinaryName)),
+                        %% Parse JSON further.
+                        BinaryName = proplists:get_value(<<"node">>, Partition),
+                        Status = proplists:get_value(<<"status">>, Partition),
+                        Name = list_to_existing_atom(binary_to_list(BinaryName)),
 
-                %% Find current Vsn of node we are validating, and the
-                %% vsn of the node running Riak Control that we've
-                %% queried.
-                {NodeVsn, _} = lists:keyfind(Name, 2, VersionedNodes),
+                        %% Find current Vsn of node we are validating, and the
+                        %% vsn of the node running Riak Control that we've
+                        %% queried.
+                        {NodeVsn, _} = lists:keyfind(Name, 2, VersionedNodes),
 
-                %% Validate response.
-                ?assertEqual(true,
-                             valid_status(MixedCluster, ControlVsn,
-                                          NodeVsn, Status))
-        end, ResponsePartitions).
+                        %% Validate response.
+                        ?assertEqual(true,
+                                     valid_status(MixedCluster, ControlVsn,
+                                                  NodeVsn, Status))
+                end, ResponsePartitions)
+    end.
 
 %% @doc Validate status based on Vsn.
 valid_status(false, current, current, <<"incompatible">>) ->
