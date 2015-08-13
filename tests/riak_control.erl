@@ -112,7 +112,7 @@ verify_control({Vsn, Node}, VersionedNodes) ->
                 [{<<"partitions">>, NodePartitions}]} = verify_resource(Node, "/admin/partitions"),
             NodePartitions
     end,
-    validate_partitions({previous, Node}, Partitions, VersionedNodes),
+    validate_partitions({Vsn, Node}, Partitions, VersionedNodes),
 
     ok.
 
