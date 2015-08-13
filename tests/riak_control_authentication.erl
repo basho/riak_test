@@ -137,6 +137,8 @@ verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG) ->
                             [rt:http_url(Node), "/admin"]),
     ?assertEqual("200", os:cmd(Command)),
 
+    rt:stop_and_wait(Node),
+
     pass;
 %% @doc Verify the disabled authentication method works with force SSL.
 verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG_FORCE_SSL) ->
@@ -157,6 +159,8 @@ verify_authentication(Vsn, ?RC_AUTH_NONE_CONFIG_FORCE_SSL) ->
     % AccessCommand = io_lib:format("curl --insecure -sL -w %{http_code} ~s~p", 
     %                               [rt:https_url(Node), "/admin"]),
     % ?assertEqual("200", os:cmd(AccessCommand)),
+
+    rt:stop_and_wait(Node),
 
     pass;
 %% @doc Verify the userlist authentication method works.
@@ -182,6 +186,8 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG) ->
     AuthCommand = io_lib:format("curl -u user:pass --insecure -sL -w %{http_code} ~s~p -o /dev/null", 
                                 [rt:https_url(Node), "/admin"]),
     ?assertEqual("200", os:cmd(AuthCommand)),
+
+    rt:stop_and_wait(Node),
 
     pass;
 %% @doc Verify the userlist authentication method works.
@@ -210,6 +216,8 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_FORCE_SSL) ->
     %                             [rt:https_url(Node), "/admin"]),
     % ?assertEqual("200", os:cmd(AuthCommand)),
 
+    rt:stop_and_wait(Node),
+
     pass;
 %% @doc Verify the userlist authentication method works.
 verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
@@ -229,6 +237,8 @@ verify_authentication(Vsn, ?RC_AUTH_USERLIST_CONFIG_NO_FORCE_SSL) ->
                                 [rt:http_url(Node), "/admin"]),
     ?assertEqual("200", os:cmd(AuthCommand)),
 
+    rt:stop_and_wait(Node),
+
     pass.
 
 %% @doc Build a one node cluster.
@@ -241,7 +251,6 @@ build_singleton_cluster(Vsn, Config) ->
     %% the supervisor starts, we need to restart to ensure settings
     %% take effect.
     Node = lists:nth(1, Nodes),
-    rt:stop_and_wait(Node),
     rt:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
 
