@@ -31,6 +31,9 @@
 %% 2) Remove the riak_kv dependency so it's a pure riak_core test.
 
 -module(proxy_overload_recovery).
+-behaviour(riak_test).
+
+-ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_statem.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -444,3 +447,13 @@ add_eqc_apps(Nodes) ->
              end
      end || App <- Apps, Node <- Nodes],
     ok.
+
+-else.  %% no EQC
+
+-export([confirm/0]).
+
+confirm() ->
+    lager:info("EQC not enabled, skipping test"),
+    pass.
+
+-endif.
