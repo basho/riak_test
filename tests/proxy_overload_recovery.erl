@@ -31,6 +31,8 @@
 %% 2) Remove the riak_kv dependency so it's a pure riak_core test.
 
 -module(proxy_overload_recovery).
+-behaviour(riak_test).
+
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_statem.hrl").
