@@ -42,6 +42,12 @@
 
 -define(COVER_SERVER, cover_server).
 
+-ifdef(namespaced_types).
+-type rt_dict() :: dict().
+-else.
+-type rt_dict() :: dict:dict().
+-endif.
+
 -record(cover_info, {module :: atom(),
                      coverage :: undefined | {integer(), integer()},
                      output_file :: undefined | string()}).
@@ -280,7 +286,7 @@ acc_cov(CovList) when is_list(CovList) ->
     end,
     lists:foldl(AddCov, {0, 0}, CovList).
 
--spec group_by_app(ModCovList:: [#cover_info{}], Mod2App :: dict()) ->
+-spec group_by_app(ModCovList:: [#cover_info{}], Mod2App :: rt_dict()) ->
     [{string(), number(), [#cover_info{}]}].
 group_by_app(ModCovList, Mod2App) ->
     D1 = lists:foldl(fun(ModCov = #cover_info{module=Mod}, Acc) ->
