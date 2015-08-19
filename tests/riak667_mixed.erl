@@ -85,7 +85,7 @@ confirm() ->
 
     %% Create PB connection.
     Pid2 = rt:pbc(Node2),
-    riakc_pb_socket:set_options(Pid2, [queue_if_disconnected]),
+    riakc_pb_socket:set_options(Pid2, [queue_if_disconnected, auto_reconnect]),
 
     %% Read value.
     ?assertMatch({error, <<"Error processing incoming message: error:{badrecord,dict}", _/binary>>},
