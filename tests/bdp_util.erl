@@ -95,7 +95,6 @@ wait_services_(_Node, _Services, SecsToWait) when SecsToWait =< 0 ->
 wait_services_(Node, Services, SecsToWait) ->
     case get_services(Node) of
         Services ->
-            lager:info("what I go on dem waiting: ~p", [Services]),
             ok;
         _Incomplete ->
             timer:sleep(1000),
