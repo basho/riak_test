@@ -27,24 +27,35 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(S1_NAME, "service-one").
+-define(S2_NAME, "service-two").
 -define(S1_TYPE, "cache-proxy").
--define(S1_CONFIG, [{"CACHE_PROXY_PORT","11211"},
-                    {"CACHE_PROXY_STATS_PORT","22123"},
-                    {"CACHE_TTL","15s"},
-                    {"HOST","0.0.0.0"},
-                    {"REDIS_SERVERS","127.0.0.1:6379"},
+-define(S2_TYPE, "cache-proxy").  %% same as S1
+-define(S1_CONFIG, [{"CACHE_PROXY_PORT","10201"},
+                    {"RIAK_KV_SERVERS","127.0.0.1:8087"}]).
+-define(S2_CONFIG, [{"CACHE_PROXY_PORT","10201"},
                     {"RIAK_KV_SERVERS","127.0.0.1:8087"}]).
 
 confirm() ->
     ClusterSize = 3,
     lager:info("Building cluster"),
-    _Nodes = [Node1, Node2, Node3] = bdp_util:build_cluster(ClusterSize),
+    _Nodes = [Node1, Node2, Node3] =
+        bdp_util:build_cluster(
+          ClusterSize),
 
     %% add a service
     ok = bdp_util:service_added(Node1, ?S1_NAME, ?S1_TYPE, ?S1_CONFIG),
     ok = bdp_util:wait_services(Node1, {[], [?S1_NAME]}),
     lager:info("Service ~p (~s) added", [?S1_NAME, ?S1_TYPE]),
+    %% add another
+    ok = bdp_util:service_added(Node1, ?S2_NAME, ?S2_TYPE, ?S2_CONFIG),
+    ok = bdp_util:wait_services(Node1, {[], [?S1_NAME, ?S2_NAME]}),
+    lager:info("Service ~p (~s) added", [?S2_NAME, ?S2_TYPE]),
 
+    %% start S2 separately
+    ok = bdp_util:service_started(Node1, Node3, ?S2_NAME, ?S2_TYPE),
+    lager:info("Service ~p up   on ~p", [?S2_NAME, Node3]),
+
+    %% run the main battery
     ok = test_service_manager(Node1, Node1, Node1, "111"),
     ok = test_service_manager(Node1, Node2, Node2, "122"),
     ok = test_service_manager(Node1, Node2, Node3, "123"),
@@ -68,9 +79,16 @@ confirm() ->
     ok = test_service_manager(Node1, Node2, Node2, "122"),
     ok = test_service_manager(Node1, Node2, Node3, "123"),
 
+    %% start S2 separately
+    ok = bdp_util:service_stopped(Node1, Node3, ?S2_NAME, ?S2_TYPE),
+    lager:info("Service ~p up   on ~p", [?S2_NAME, Node3]),
+
     ok = bdp_util:service_removed(Node2, ?S1_NAME),
+    ok = bdp_util:wait_services(Node1, {[], [?S2_NAME]}),
+    lager:info("Service ~p removed", [?S1_NAME]),
+    ok = bdp_util:service_removed(Node3, ?S2_NAME),
     ok = bdp_util:wait_services(Node1, {[], []}),
-    lager:info("Service removed"),
+    lager:info("Service ~p removed", [?S2_NAME]),
 
     pass.
 
