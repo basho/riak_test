@@ -24,6 +24,7 @@
 -export([build_cluster/1,
          service_added/4, service_removed/2, service_started/4, service_stopped/4,
          make_node_leave/2, make_node_join/2]).
+-export([add_service/4, remove_service/2, start_service/4, stop_service/4]).
 -export([get_services/1, wait_services/2]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -94,13 +95,18 @@ wait_services_(_Node, _Services, SecsToWait) when SecsToWait =< 0 ->
 wait_services_(Node, Services, SecsToWait) ->
     case get_services(Node) of
         Services ->
+            lager:info("what I go on dem waiting: ~p", [Services]),
             ok;
         _Incomplete ->
             timer:sleep(1000),
             wait_services_(Node, Services, SecsToWait - 1)
     end.
 
+add_service(Node, ServiceName, ServiceType, Config) ->
+    service_added(Node, ServiceName, ServiceType, Config).
 
+%% @doc This function is named very poorly. We are adding a service, not seeing
+%% what was added. TODO rename to reflect what the function actually does.
 -spec service_added(node(), config_name(), service_type(), service_config()) -> ok.
 service_added(Node, ServiceName, ServiceType, Config) ->
     {Rnn0, Avl0} = get_services(Node),
@@ -112,6 +118,9 @@ service_added(Node, ServiceName, ServiceType, Config) ->
         begin lager:warning("Adding a service ~p that already exists", [ServiceName]) end,
     Avl1 = lists:usort(Avl0 ++ [ServiceName]),
     ok = wait_services(Node, {Rnn0, Avl1}).
+
+remove_service(Node, ServiceName) ->
+    service_removed(Node, ServiceName).
 
 -spec service_removed(node(), config_name()) -> ok.
 service_removed(Node, ServiceName) ->
@@ -125,6 +134,8 @@ service_removed(Node, ServiceName) ->
     Avl1 = lists:usort(Avl0 -- [ServiceName]),
     ok = wait_services(Node, {Rnn0, Avl1}).
 
+start_service(Node, ServiceNode, ServiceName, Group) ->
+    service_started(Node, ServiceNode, ServiceName, Group).
 
 -spec service_started(node(), node(), config_name(), service_type()) -> ok.
 service_started(Node, ServiceNode, ServiceName, Group) ->
@@ -137,6 +148,9 @@ service_started(Node, ServiceNode, ServiceName, Group) ->
         begin lager:warning("Starting a service ~p that's already running", [ServiceName]) end,
     Rnn1 = lists:usort(Rnn0 ++ [ServiceName]),
     ok = wait_services(Node, {Rnn1, Avl0}).
+
+stop_service(Node, ServiceNode, ServiceName, Group) ->
+    service_stopped(Node, ServiceNode, ServiceName, Group).
 
 -spec service_stopped(node(), node(), config_name(), service_type()) -> ok.
 service_stopped(Node, ServiceNode, ServiceName, Group) ->
