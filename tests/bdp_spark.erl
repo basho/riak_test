@@ -24,15 +24,8 @@
 -export([confirm/0]).
 
 -define(SPARK_SERVICE_NAME, "spark-fail-recovery-test").
--define(SPARK_SERVICE_TYPE, "cache-proxy").
--define(SPARK_SERVICE_CONFIG, [%% {"CACHE_PROXY_PORT","11211"},
-                               %% {"CACHE_PROXY_STATS_PORT","22123"},
-
-                               %% TODO: please fill out any env vars
-                               %% needed to run spark following the
-                               %% example commented above
-
-                               ]).
+-define(SPARK_SERVICE_TYPE, "spark-master").
+-define(SPARK_SERVICE_CONFIG, [{"HOST", "localhost"}]).
 
 confirm() ->
     ClusterSize = 3,
@@ -48,6 +41,8 @@ confirm() ->
     ok = bdp_util:service_started(Node1, Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE),
     lager:info("Service ~p up   on ~p", [?SPARK_SERVICE_NAME, Node1]),
 
+    lager:info("Waiting 2 minutes..."),
+    timer:sleep(120000),
     ok = test_spark_fail_recovery(),
 
     ok = bdp_util:service_stopped(Node1, Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE),
