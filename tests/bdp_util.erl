@@ -21,7 +21,7 @@
 
 -module(bdp_util).
 
--export([build_cluster/1,
+-export([build_cluster/1, build_cluster/2,
          service_added/4, service_removed/2, service_started/4, service_stopped/4,
          make_node_leave/2, make_node_join/2]).
 -export([get_services/1, wait_services/2]).
@@ -70,9 +70,12 @@ call_with_patience_(Node, M, F, A, Retries) ->
 %% copied from ensemble_util.erl
 -spec build_cluster(non_neg_integer()) -> [node()].
 build_cluster(Size) ->
-    Nodes = rt:deploy_nodes(Size),
+    build_cluster(Size, []).
+-spec build_cluster(non_neg_integer(), list()) -> [node()].
+build_cluster(Size, Config) ->
+    Nodes = rt:deploy_nodes(Size, Config),
     rt:join_cluster(Nodes),
-    ensemble_util:wait_until_cluster(Nodes),
+    %% ensemble_util:wait_until_cluster(Nodes),
     Nodes.
 
 

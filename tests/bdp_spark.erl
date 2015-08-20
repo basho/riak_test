@@ -38,7 +38,8 @@ confirm() ->
     ClusterSize = 3,
     lager:info("Building cluster"),
     _Nodes = [Node1, _Node2, _Node3] =
-        bdp_util:build_cluster(ClusterSize),
+        bdp_util:build_cluster(
+          ClusterSize, [{lager, [{handlers, [{file, "console.log"}, {level, debug}] }]}]),
 
     %% add a service
     ok = bdp_util:service_added(Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE, ?SPARK_SERVICE_CONFIG),
