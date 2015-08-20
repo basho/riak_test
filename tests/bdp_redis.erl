@@ -21,7 +21,7 @@
 %%      service, then perform a start/stop cycle on various
 %%      combinations of starting, stopping and execution nodes
 
--module(bdp_redis_start).
+-module(bdp_redis).
 -behavior(riak_test).
 
 -export([confirm/0]).
