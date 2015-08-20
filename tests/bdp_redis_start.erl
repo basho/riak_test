@@ -28,24 +28,54 @@
 
 -spec confirm() -> 'pass' | 'fail'.
 confirm() ->
-    Cluster = build_cluster(3),
+    Cluster = bdp_util:build_cluster(3),
     [Node1 | _] = Cluster,
-    ConfigArgs = ["r1", redis, [], false],
-    lager:info("Adding and running redis on ~p", [Node1]),
-    ok = rpc:call(Node1, data_platform_global_state, add_service_config, ConfigArgs),
-    ok = rpc:call(Node1, data_platform_global_state, start_service, ["g1", "r1", Node1]),
-    [ADevPath | _] = rtdev:devpaths(),
-    RedisCli = ADevPath ++ "/dev/dev1/lib/data_platform/priv/redis/bin/redis-cli",
-    Cmd = RedisCli ++ " ping",
-    Got = os:cmd(Cmd),
-    <<"PONG\n">> = Got.
+    [DevPath | _] = rtdev:devpaths(),
+    RedisCliPath = DevPath ++ "/dev/dev1/lib/data_platform/priv/redis/bin/redis-cli",
 
-%% copied from ensemble_util.erl
-build_cluster(N) ->
-    Nodes = rt:deploy_nodes(N),
-    Node = hd(Nodes),
-    rt:join_cluster(Nodes),
-    ensemble_util:wait_until_cluster(Nodes),
-    ensemble_util:wait_for_membership(Node),
-    ensemble_util:wait_until_stable(Node, N),
-    Nodes.
+    ok = redis_start_test(Node1, RedisCliPath),
+
+    ok = redis_crash_test(Node1, RedisCliPath),
+
+    ok = redis_stop_test(Node1, RedisCliPath),
+
+    pass.
+
+redis_start_test(Node, RedisCli) ->
+    lager:info("=== START REDIS ==="),
+    ok = bdp_util:add_service(Node, "r1", "redis", []),
+    ok = bdp_util:start_service(Node, Node, "r1", "g1"),
+
+    ok = rt:wait_until(Node, fun(_N) ->
+        case rpc:call(Node, data_platform_service_sup, services, []) of
+            [_ProllyRedis] ->
+                true;
+            _ ->
+                false
+        end
+    end),
+
+    PingCmd = RedisCli ++ " ping",
+    Pong = os:cmd(PingCmd),
+    "PONG\n" = Pong,
+    ok.
+
+redis_crash_test(Node, RedisCli) ->
+    lager:info("=== CRASH REDIS ==="),
+    Services = rpc:call(Node, data_platform_service_sup, services, []),
+    Name = {"g1", "r1", Node},
+    {Name, Pid} = lists:keyfind(Name, 1, Services),
+    OsPid = rpc:call(Node, data_platform_service, os_pid, [Pid]),
+    [] = os:cmd("kill -9 " ++ integer_to_list(OsPid)),
+    PingCmd = RedisCli ++ " ping",
+    rt:wait_until(fun() ->
+        "PONG\n" =:= os:cmd(PingCmd)
+    end).
+
+redis_stop_test(Node, RedisCli) ->
+    lager:info("=== STOP REDIS ==="),
+    ok = bdp_util:stop_service(Node, Node, "r1", "g1"),
+    PingCmd = RedisCli ++ " ping",
+    rt:wait_until(fun() ->
+        "PONG\n" =/= os:cmd(PingCmd)
+    end).
