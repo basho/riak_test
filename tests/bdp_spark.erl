@@ -23,11 +23,17 @@
 -behavior(riak_test).
 -export([confirm/0]).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -define(SERVICE_1, "spark-service-one").
 -define(SERVICE_2, "spark-service-two").
 -define(SPARK_MASTER_TYPE, "spark-master").
--define(SERVICE_CONFIG_1, [{"SPARK_MASTER_PORT", "7077"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", "/tmp/service1"}]).
--define(SERVICE_CONFIG_2, [{"SPARK_MASTER_PORT", "7078"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", "/tmp/service2"}]).
+-define(SPARK_IDENT_STRING, "bdp_spark_test").
+-define(HOSTNAME, "test").
+-define(SPARK1_PID_DIR, "/tmp/service1").
+-define(SPARK2_PID_DIR, "/tmp/service2").
+-define(SERVICE_CONFIG_1, [{"SPARK_MASTER_PORT", "7077"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", ?SPARK1_PID_DIR}, {"SPARK_IDENT_STRING", ?SPARK_IDENT_STRING}, {"HOSTNAME", ?HOSTNAME}]).
+-define(SERVICE_CONFIG_2, [{"SPARK_MASTER_PORT", "7078"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", ?SPARK2_PID_DIR}, {"SPARK_IDENT_STRING", ?SPARK_IDENT_STRING}, {"HOSTNAME", ?HOSTNAME}]).
 
 confirm() ->
     ClusterSize = 3,
@@ -107,4 +113,32 @@ test_spark_fail_recovery() ->
     %% Verify that in the standby master’s logs that you tail there are entries like
     %% 15/07/09 02:13:46 INFO RiakEnsembleLeaderElectionAgent: We have gained leadership
     %% 15/07/09 02:13:46 INFO Master: I have been elected leader! New state: RECOVERING
+
+    [DevPath | _] = rtdev:devpaths(),
+
+    Node1Path = DevPath ++ "/dev/dev" ++ integer_to_list(1),
+    Node2Path = DevPath ++ "/dev/dev" ++ integer_to_list(2),
+
+    lager:info("Node1 path = ~s, Node2 path = ~s", [Node1Path, Node2Path]),
+
+    LogSubPath = "/lib/data_platform-1/priv/spark-master/logs/spark-" ++ ?SPARK_IDENT_STRING ++ "-org.apache.spark.deploy.master.Master-1-" ++ ?HOSTNAME ++  ".out",
+    Spark1LogFile = Node1Path ++ LogSubPath,
+    Spark2LogFile = Node2Path ++ LogSubPath,
+
+    lager:info("Spark service one log path ~s", [Spark1LogFile]),
+    lager:info("Spark service two log path ~s", [Spark2LogFile]),
+
+    Spark1PidFile = ?SPARK1_PID_DIR ++ "/spark-" ++ ?SPARK_IDENT_STRING ++ "-org.apache.spark.deploy.master.Master-1.pid",
+    Spark2PidFile = ?SPARK2_PID_DIR ++ "/spark-" ++ ?SPARK_IDENT_STRING ++ "-org.apache.spark.deploy.master.Master-1.pid",
+
+    lager:info("Spark service one pid file ~s", [Spark1PidFile]),
+    lager:info("Spark service one pid file ~s", [Spark2PidFile]),
+
+    lager:info("ls -l"),
+    lager:info(os:cmd("ls -l ../priv/bdp_spark_test")),
+
+    os:cmd("chmod +x ../priv/bdp_spark_test/leader_election_check.sh"),
+    Command = "../priv/bdp_spark_test/leader_election_check.sh " ++ Spark1LogFile ++ " " ++ Spark2LogFile ++ " " ++  Spark1PidFile ++ " " ++ Spark2PidFile,
+    Res = os:cmd(Command),
+    ?assert(Res == "ok"),
     ok.
