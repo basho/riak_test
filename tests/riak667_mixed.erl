@@ -92,7 +92,9 @@ confirm() ->
                  riakc_pb_socket:fetch_type(Pid2, ?BUCKET, ?KEY)),
 
     lager:notice("Can't read a 2.0.2 map from 2.0.4 node"),
-
+    riakc_pb_socket:stop(Pid2),
+    %% auto_reconnect/queue_if_disconnected doesn't work correctly - open a new connection instead
+    Pid2_2 = rt:pbc(Node2),
     %% Write some 2.0.4 data.
     Oh4Map = riakc_map:update(
             {<<"names">>, set},
@@ -109,7 +111,7 @@ confirm() ->
                             end, Oh4Map),
 
     ok = riakc_pb_socket:update_type(
-            Pid2,
+            Pid2_2,
             ?BUCKET,
             ?KEY2,
             riakc_map:to_op(Oh4Map2)),
@@ -121,9 +123,11 @@ confirm() ->
                  riakc_pb_socket:fetch_type(Pid, ?BUCKET, ?KEY2)),
 
     lager:notice("Can't read 2.0.4 map from 2.0.2 node"),
+    riakc_pb_socket:stop(Pid),
+    Pid1_2 = rt:pbc(Node1),
 
     %% upgrade 2.0.4 to 2.0.5
-    riakc_pb_socket:stop(Pid2),
+    riakc_pb_socket:stop(Pid2_2),
     upgrade(Node2, current),
 
     lager:notice("running mixed 2.0.2 and ~s", [CurrentVer]),
@@ -151,9 +155,9 @@ confirm() ->
 
     ok = riakc_pb_socket:update_type(Pid3, ?BUCKET, ?KEY, riakc_map:to_op(K1OU)),
     lager:notice("Updated 2.0.2 map on ~s", [CurrentVer]),
-
+    
     %% read 2.0.2 map from 2.0.2 node ?KEY Pid
-    {ok, K1OR} = riakc_pb_socket:fetch_type(Pid, ?BUCKET, ?KEY),
+    {ok, K1OR} = riakc_pb_socket:fetch_type(Pid1_2, ?BUCKET, ?KEY),
     lager:notice("Read 2.0.2 map from 2.0.2 node: ~p", [K1OR]),
 
     ?assertEqual(<<"Rita">>, orddict:fetch({<<"name">>, register},
@@ -169,7 +173,7 @@ confirm() ->
                                       end, M)
                             end, K1OR),
 
-    ok = riakc_pb_socket:update_type(Pid, ?BUCKET, ?KEY, riakc_map:to_op(K1O2)),
+    ok = riakc_pb_socket:update_type(Pid1_2, ?BUCKET, ?KEY, riakc_map:to_op(K1O2)),
     lager:notice("Updated 2.0.2 map on 2.0.2 node"),
 
     %% read it from 2.0.5 node ?KEY Pid3
@@ -189,7 +193,7 @@ confirm() ->
     lager:notice("Updated 2.0.4 map on ~s node", [CurrentVer]),
     %% upgrade 2.0.2 node
 
-    riakc_pb_socket:stop(Pid),
+    riakc_pb_socket:stop(Pid1_2),
     upgrade(Node1, current),
     lager:notice("Upgraded 2.0.2 node to ~s", [CurrentVer]),
 
