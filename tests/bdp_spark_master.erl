@@ -110,5 +110,5 @@ spark_master_stop_test(Node, _Path) ->
         {'DOWN', Mon, process, ErlPid, _} ->
             ok
     end,
-    {error, econrefused} = httpc:request("http://localhost:8080"),
+    {error, _SomeConnectionFailure} = httpc:request("http://localhost:8080"),
     ok.
