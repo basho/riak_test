@@ -23,37 +23,68 @@
 -behavior(riak_test).
 -export([confirm/0]).
 
--define(SPARK_SERVICE_NAME, "spark-fail-recovery-test").
--define(SPARK_SERVICE_TYPE, "spark-master").
--define(SPARK_SERVICE_CONFIG, [{"HOST", "localhost"}]).
+-define(SERVICE_1, "spark-service-one").
+-define(SERVICE_2, "spark-service-two").
+-define(SPARK_MASTER_TYPE, "spark-master").
+-define(SERVICE_CONFIG_1, [{"SPARK_MASTER_PORT", "7077"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", "/tmp/service1"}]).
+-define(SERVICE_CONFIG_2, [{"SPARK_MASTER_PORT", "7078"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", "/tmp/service2"}]).
 
 confirm() ->
     ClusterSize = 3,
     lager:info("Building cluster"),
-    _Nodes = [Node1, _Node2, _Node3] =
-        bdp_util:build_cluster(
-          ClusterSize, [{lager, [{handlers, [{file, "console.log"}, {level, debug}] }]}]),
+    _Nodes = [Node1, Node2, _Node3] =
+        bdp_util:build_cluster(ClusterSize),
 
-    %% add a service
-    ok = bdp_util:service_added(Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE, ?SPARK_SERVICE_CONFIG),
-    ok = bdp_util:wait_services(Node1, {[], [?SPARK_SERVICE_NAME]}),
-    lager:info("Service ~p (~s) added", [?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE]),
+    ok = create_spark_bucket_types(Node1),
 
-    ok = bdp_util:service_started(Node1, Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE),
-    lager:info("Service ~p up   on ~p", [?SPARK_SERVICE_NAME, Node1]),
+    ok = add_spark_service(Node1, ?SERVICE_1, ?SERVICE_CONFIG_1, [?SERVICE_1]),
+    ok = add_spark_service(Node1, ?SERVICE_2, ?SERVICE_CONFIG_2, [?SERVICE_1, ?SERVICE_2]),
+    ok = start_services(Node1, [{Node1, ?SERVICE_1}, {Node2, ?SERVICE_2}]),
 
-    lager:info("Waiting 2 minutes..."),
+    lager:info("Waiting 2  min..."),
     timer:sleep(120000),
     ok = test_spark_fail_recovery(),
 
-    ok = bdp_util:service_stopped(Node1, Node1, ?SPARK_SERVICE_NAME, ?SPARK_SERVICE_TYPE),
-    lager:info("Service ~p down on ~p", [?SPARK_SERVICE_NAME, Node1]),
-
-    ok = bdp_util:service_removed(Node1, ?SPARK_SERVICE_NAME),
-    ok = bdp_util:wait_services(Node1, {[], []}),
-    lager:info("Service ~p removed", [?SPARK_SERVICE_NAME]),
+    ok = stop_services(Node1, [{Node1, ?SERVICE_1}, {Node2, ?SERVICE_2}]),
+    ok = remove_spark_service(Node1, ?SERVICE_1, [?SERVICE_2]),
+    ok = remove_spark_service(Node1, ?SERVICE_2, []),
 
     pass.
+
+
+create_spark_bucket_types(Node) ->
+    rt:create_and_activate_bucket_type(Node, <<"strong">>, [{consistent, true}]),
+    rt:create_and_activate_bucket_type(Node, <<"maps">>, [{datatype, map}]),
+    lager:info("Spark bucket types 'strong' and 'maps' created"),
+    ok.
+
+
+add_spark_service(Node, ServiceName, Config, WaitServices) ->
+    ok = bdp_util:service_added(Node, ServiceName, ?SPARK_MASTER_TYPE, Config),
+    ok = bdp_util:wait_services(Node, {[], WaitServices}),
+    lager:info("Service definition ~p (~s) added to node ~p", [ServiceName, ?SPARK_MASTER_TYPE, Node]),
+    ok.
+
+
+start_services(Node, [{ServiceNode, ServiceName} | Rest]) ->
+    ok = bdp_util:service_started(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
+    lager:info("Service ~p up on ~p node", [ServiceName, ServiceNode]),
+    start_services(Node, Rest);
+start_services(_, []) -> ok.
+
+
+stop_services(Node, [{ServiceNode, ServiceName} | Rest]) ->
+    ok = bdp_util:service_stopped(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
+    lager:info("Service ~p down on ~p", [ServiceName, Node]),
+    stop_services(Node, Rest);
+stop_services(_, []) -> ok.
+
+
+remove_spark_service(Node, ServiceName, WaitServices) ->
+    ok = bdp_util:service_removed(Node, ServiceName),
+    ok = bdp_util:wait_services(Node, {[], WaitServices}),
+    lager:info("Service ~p removed from ~p", [ServiceName, Node]),
+    ok.
 
 
 test_spark_fail_recovery() ->
