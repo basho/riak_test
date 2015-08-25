@@ -346,7 +346,7 @@ write_coverage(CoverModules, CoverDir) ->
     erlang:group_leader(Pid, whereis(cover_server)),
     % First write a file per module
     prepare_output_dir(CoverDir),
-    ModCovList0 = rt:pmap(fun(Mod) -> process_module(Mod, CoverDir) end,
+    ModCovList0 = rt_util:pmap(fun(Mod) -> process_module(Mod, CoverDir) end,
                           CoverModules),
     % Create data struct with total, per app and per module coverage
     ModCovList = lists:filter(fun not_empty_file/1, ModCovList0),

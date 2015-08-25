@@ -31,7 +31,7 @@ setup_harness(_Test, _Args) ->
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
-    rt:pmap(fun(Host) ->
+    rt_util:pmap(fun(Host) ->
                     run_git(Host, Path, "reset HEAD --hard"),
                     run_git(Host, Path, "clean -fd")
             end, Hosts),
@@ -41,7 +41,7 @@ get_backends() ->
     Hosts = rt_config:get(rtssh_hosts),
     All = [{Host, DevPath} || Host <- Hosts,
                               DevPath <- devpaths()],
-    Backends = rt:pmap(fun({Host, DevPath}) ->
+    Backends = rt_util:pmap(fun({Host, DevPath}) ->
                     AllFiles = all_the_files(Host, DevPath, "etc/*.config"),
                     [get_backend(Host, File) || File <- AllFiles]
             end, All),
@@ -140,7 +140,7 @@ deploy_nodes(NodeConfig, Hosts) ->
         orddict:from_list(
             orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
 
-    rt:pmap(fun({_, default}) ->
+    rt_util:pmap(fun({_, default}) ->
                     ok;
                ({Node, {cuttlefish, Config}}) ->
                     set_conf(Node, Config);
@@ -152,7 +152,7 @@ deploy_nodes(NodeConfig, Hosts) ->
 
     case rt_config:get(cuttle, true) of
         false ->
-            rt:pmap(fun(Node) ->
+            rt_util:pmap(fun(Node) ->
                             Host = get_host(Node),
                             %%lager:info("ports ~p", [self()]),
                             Config = [{riak_api,
@@ -171,7 +171,7 @@ deploy_nodes(NodeConfig, Hosts) ->
 
             timer:sleep(500),
 
-            rt:pmap(fun(Node) ->
+            rt_util:pmap(fun(Node) ->
                             update_vm_args(Node,
                                            [{"-name", Node},
                                             {"-zddbl", "65535"},
@@ -180,7 +180,7 @@ deploy_nodes(NodeConfig, Hosts) ->
 
             timer:sleep(500);
         true ->
-            rt:pmap(fun(Node) ->
+            rt_util:pmap(fun(Node) ->
                             IP = get_ip(Node),
                             set_conf(Node,
                                      [{"listener.protobuf.internal",
@@ -193,7 +193,7 @@ deploy_nodes(NodeConfig, Hosts) ->
 
     create_dirs(Nodes),
 
-    rt:pmap(fun start/1, Nodes),
+    rt_util:pmap(fun start/1, Nodes),
 
     %% Ensure nodes started
     [ok = rt:wait_until_pingable(N) || N <- Nodes],
@@ -589,7 +589,7 @@ set_conf(all, NameValuePairs) ->
     Hosts = rt_config:get(rtssh_hosts),
     All = [{Host, DevPath} || Host <- Hosts,
                               DevPath <- devpaths()],
-    rt:pmap(fun({Host, DevPath}) ->
+    rt_util:pmap(fun({Host, DevPath}) ->
                     AllFiles = all_the_files(Host, DevPath, "etc/riak.conf"),
                     [append_to_conf_file(Host, File, NameValuePairs) || File <- AllFiles],
                     ok
@@ -604,7 +604,7 @@ set_advanced_conf(all, NameValuePairs) ->
     Hosts = rt_config:get(rtssh_hosts),
     All = [{Host, DevPath} || Host <- Hosts,
                               DevPath <- devpaths()],
-    rt:pmap(fun({Host, DevPath}) ->
+    rt_util:pmap(fun({Host, DevPath}) ->
                     AllFiles = all_the_files(Host, DevPath, "etc/advanced.config"),
                     [update_app_config_file(Host, File, NameValuePairs, undefined) || File <- AllFiles],
                     ok
@@ -755,7 +755,7 @@ stop_all(Hosts) ->
     %%                                       DevPath <- devpaths()].
     All = [{Host, DevPath} || Host <- Hosts,
                               DevPath <- devpaths()],
-    rt:pmap(fun({Host, DevPath}) ->
+    rt_util:pmap(fun({Host, DevPath}) ->
                     stop_all(Host, DevPath ++ "/dev")
             end, All).
 

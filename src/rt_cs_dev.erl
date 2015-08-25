@@ -35,7 +35,7 @@ setup_harness(_Test, _Args) ->
     confirm_build_type(rt_config:get(build_type, oss)),
     Path = relpath(root),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
+    rt_util:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
@@ -43,7 +43,7 @@ setup_harness(_Test, _Args) ->
     rtdev:run_git(Path, "clean -fd"),
 
     lager:info("Cleaning up lingering pipe directories"),
-    rt:pmap(fun(Dir) ->
+    rt_util:pmap(fun(Dir) ->
                     %% when joining two absolute paths, filename:join intentionally
                     %% throws away the first one. ++ gets us around that, while
                     %% keeping some of the security of filename:join.
@@ -197,7 +197,7 @@ add_default_node_config(Nodes) ->
     case rt_config:get(rt_default_config, undefined) of
         undefined -> ok;
         Defaults when is_list(Defaults) ->
-            rt:pmap(fun(Node) ->
+            rt_util:pmap(fun(Node) ->
                             update_app_config(Node, Defaults)
                     end, Nodes),
             ok;
@@ -225,7 +225,7 @@ deploy_nodes(NodeConfig) ->
 
     %% Set initial config
     add_default_node_config(Nodes),
-    rt:pmap(fun({_, default}) ->
+    rt_util:pmap(fun({_, default}) ->
                     ok;
                ({Node, Config}) ->
                     update_app_config(Node, Config)
@@ -237,7 +237,7 @@ deploy_nodes(NodeConfig) ->
 
     %% Start nodes
     %%[run_riak(N, relpath(node_version(N)), "start") || N <- Nodes],
-    rt:pmap(fun(N) -> rtdev:run_riak(N, relpath(node_version(N)), "start") end, NodesN),
+    rt_util:pmap(fun(N) -> rtdev:run_riak(N, relpath(node_version(N)), "start") end, NodesN),
 
     %% Ensure nodes started
     [ok = rt:wait_until_pingable(N) || N <- Nodes],
@@ -480,7 +480,7 @@ get_version() ->
 
 teardown() ->
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end,
+    rt_util:pmap(fun(X) -> stop_all(X ++ "/dev") end,
             devpaths()).
 
 whats_up() ->
