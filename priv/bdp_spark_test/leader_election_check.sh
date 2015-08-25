@@ -2,20 +2,25 @@
 
 SPARK1_LOG_FILE=${1}
 SPARK2_LOG_FILE=${2}
+if [ -z ${3} ]; then
+  TIMEOUT=60
+else 
+  TIMEOUT=${3}
+fi
 
-SPARK1_PID_FILE=${3}
-SPARK2_PID_FILE=${4}
+SPARK1_PID=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev1 | grep -v 'grep' | awk '{print $2}'`
+SPARK2_PID=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev2 | grep -v 'grep' | awk '{print $2}'`
 
 LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" "$SPARK1_LOG_FILE" | tail -1)
 if [ -n "$LOG_STR" ]; then
   leader_log=$SPARK1_LOG_FILE
-  leader_pid=$SPARK1_PID_FILE
+  leader_pid=$SPARK1_PID
   standby_log=$SPARK2_LOG_FILE
 else
   LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" "$SPARK2_LOG_FILE" | tail -1)
   if [ -n "$LOG_STR" ]; then
     leader_log=$SPARK2_LOG_FILE
-    leader_pid=$SPARK2_PID_FILE
+    leader_pid=$SPARK2_PID
     standby_log=$SPARK1_LOG_FILE
   else
     echo "No leader found"
@@ -23,17 +28,11 @@ else
   fi
 fi
 
-if [ -f "$leader_pid" ]; then
-  PID="$(cat $leader_pid)"
-  if [[ $(ps -p "$PID" -o comm=) =~ "java" ]]; then
-     kill "$PID" && rm -f "$leader_pid"
-  fi
-else
-  echo "No pid file found"
-  exit 1
+if [[ $(ps -p "$leader_pid" -o comm=) =~ "java" ]]; then
+   kill "$leader_pid"
 fi
 
-sleep 60
+sleep $TIMEOUT
 
 LOG_STR=$(grep "Master: I have been elected leader!" "$standby_log" | tail -1)
 if [ -n "$LOG_STR" ]; then

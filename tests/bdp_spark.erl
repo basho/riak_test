@@ -34,6 +34,7 @@
 -define(SPARK2_PID_DIR, "/tmp/service2").
 -define(SERVICE_CONFIG_1, [{"SPARK_MASTER_PORT", "7077"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", ?SPARK1_PID_DIR}, {"SPARK_IDENT_STRING", ?SPARK_IDENT_STRING}, {"HOSTNAME", ?HOSTNAME}]).
 -define(SERVICE_CONFIG_2, [{"SPARK_MASTER_PORT", "7078"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", ?SPARK2_PID_DIR}, {"SPARK_IDENT_STRING", ?SPARK_IDENT_STRING}, {"HOSTNAME", ?HOSTNAME}]).
+-define(TIMEOUT, "60").
 
 confirm() ->
     ClusterSize = 3,
@@ -47,8 +48,8 @@ confirm() ->
     ok = add_spark_service(Node1, ?SERVICE_2, ?SERVICE_CONFIG_2, [?SERVICE_1, ?SERVICE_2]),
     ok = start_services(Node1, [{Node1, ?SERVICE_1}, {Node2, ?SERVICE_2}]),
 
-    lager:info("Waiting 2  min..."),
-    timer:sleep(120000),
+    lager:info("Waiting 1  min..."),
+    timer:sleep(60000),
     ok = test_spark_fail_recovery(),
 
     ok = stop_services(Node1, [{Node1, ?SERVICE_1}, {Node2, ?SERVICE_2}]),
@@ -127,18 +128,11 @@ test_spark_fail_recovery() ->
 
     lager:info("Spark service one log path ~s", [Spark1LogFile]),
     lager:info("Spark service two log path ~s", [Spark2LogFile]),
-
-    Spark1PidFile = ?SPARK1_PID_DIR ++ "/spark-" ++ ?SPARK_IDENT_STRING ++ "-org.apache.spark.deploy.master.Master-1.pid",
-    Spark2PidFile = ?SPARK2_PID_DIR ++ "/spark-" ++ ?SPARK_IDENT_STRING ++ "-org.apache.spark.deploy.master.Master-1.pid",
-
-    lager:info("Spark service one pid file ~s", [Spark1PidFile]),
-    lager:info("Spark service one pid file ~s", [Spark2PidFile]),
-
-    lager:info("ls -l"),
-    lager:info(os:cmd("ls -l ../priv/bdp_spark_test")),
-
-    os:cmd("chmod +x ../priv/bdp_spark_test/leader_election_check.sh"),
-    Command = "../priv/bdp_spark_test/leader_election_check.sh " ++ Spark1LogFile ++ " " ++ Spark2LogFile ++ " " ++  Spark1PidFile ++ " " ++ Spark2PidFile,
+ 
+    os:cmd("chmod +x ./priv/bdp_spark_test/leader_election_check.sh"),
+    Command = "./priv/bdp_spark_test/leader_election_check.sh " ++ Spark1LogFile ++ " " ++ Spark2LogFile ++ " " ++ ?TIMEOUT,
+    lager:info("Running bash script: ~s", [Command]),
     Res = os:cmd(Command),
-    ?assert(Res == "ok"),
+    lager:info("Res= ~s", [Res]),
+    ?assert(Res == "ok\n"),
     ok.
