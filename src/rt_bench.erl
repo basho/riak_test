@@ -25,7 +25,7 @@ bench(Config, NodeList, TestName, Runners, Drop) ->
                         lager:info("Dropped cache for node: ~p ret: ~p",
                                    [Node, R])
                 end,
-            rt:pmap(Fun, NodeList);
+            rt_util:pmap(Fun, NodeList);
         _ -> ok
     end,
 

@@ -102,7 +102,6 @@
          pbc_put_dir/3,
          pbc_put_file/4,
          pbc_really_deleted/3,
-         pmap/2,
          post_result/2,
          product/1,
          priv_dir/0,
@@ -977,7 +976,7 @@ all_aae_trees_built(Node, Partitions) ->
     %% Notice that the process locking is spawned by the
     %% pmap. That's important! as it should die eventually
     %% so the lock is released and the test can lock the tree.
-    IndexBuilts = rt:pmap(index_built_fun(Node), Partitions),
+    IndexBuilts = rt_util:pmap(index_built_fun(Node), Partitions),
     BadOnes = [R || R <- IndexBuilts, R /= true],
     case BadOnes of
         [] ->
@@ -1728,20 +1727,6 @@ log_to_nodes(Nodes0, LFmt, LArgs) ->
                _  -> [info, Meta, "---riak_test--- " ++ LFmt, LArgs]
            end,
     [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
-
-%% @private utility function
-pmap(F, L) ->
-    Parent = self(),
-    lists:foldl(
-      fun(X, N) ->
-              spawn_link(fun() ->
-                            Parent ! {pmap, N, F(X)}
-                    end),
-              N+1
-      end, 0, L),
-    L2 = [receive {pmap, N, R} -> {N,R} end || _ <- L],
-    {_, L3} = lists:unzip(lists:keysort(1, L2)),
-    L3.
 
 %% @private
 setup_harness(Test, Args) ->
