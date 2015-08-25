@@ -92,7 +92,7 @@ setup_harness(_Test, _Args) ->
     rt_cover:maybe_stop_on_nodes(),
     Path = relpath(root),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
+    rt_util:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()),
 
     %% Reset nodes to base state
     lager:info("Resetting nodes to fresh state"),
@@ -100,7 +100,7 @@ setup_harness(_Test, _Args) ->
     _ = run_git(Path, "clean -fd"),
 
     lager:info("Cleaning up lingering pipe directories"),
-    rt:pmap(fun(Dir) ->
+    rt_util:pmap(fun(Dir) ->
                     %% when joining two absolute paths, filename:join intentionally
                     %% throws away the first one. ++ gets us around that, while
                     %% keeping some of the security of filename:join.
@@ -115,8 +115,8 @@ relpath(Vsn) ->
     Path = ?PATH,
     relpath(Vsn, Path).
 
-relpath(Vsn, Paths=[{_,_}|_]) ->
-    orddict:fetch(Vsn, orddict:from_list(Paths));
+relpath(Version, Paths=[{_,_}|_]) ->
+    rt_util:find_atom_or_string_dict(Version, orddict:from_list(Paths));
 relpath(current, Path) ->
     Path;
 relpath(root, Path) ->
@@ -289,7 +289,7 @@ get_backends() ->
         lists:flatten([ get_backends(DevPath) || DevPath <- devpaths()])).
 
 get_backends(DevPath) ->
-    rt:pmap(fun get_backend/1, all_the_app_configs(DevPath)).
+    rt_util:pmap(fun get_backend/1, all_the_app_configs(DevPath)).
 
 get_backend(AppConfig) ->
     lager:info("get_backend(~s)", [AppConfig]),
@@ -362,7 +362,7 @@ add_default_node_config(Nodes) ->
     case rt_config:get(rt_default_config, undefined) of
         undefined -> ok;
         Defaults when is_list(Defaults) ->
-            rt:pmap(fun(Node) ->
+            rt_util:pmap(fun(Node) ->
                             update_app_config(Node, Defaults)
                     end, Nodes),
             ok;
@@ -407,7 +407,7 @@ deploy_nodes(NodeConfig) ->
 
     %% Set initial config
     add_default_node_config(Nodes),
-    rt:pmap(fun({_, default}) ->
+    rt_util:pmap(fun({_, default}) ->
                     ok;
                ({Node, {cuttlefish, Config}}) ->
                     set_conf(Node, Config);
@@ -421,7 +421,7 @@ deploy_nodes(NodeConfig) ->
 
     %% Start nodes
     %%[run_riak(N, relpath(node_version(N)), "start") || N <- Nodes],
-    rt:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
+    rt_util:pmap(fun(N) -> run_riak(N, relpath(node_version(N)), "start") end, NodesN),
 
     %% Ensure nodes started
     [ok = rt:wait_until_pingable(N) || N <- Nodes],
@@ -525,7 +525,7 @@ stop_all(DevPath) ->
                         _ -> 20000
                     end,
             lager:info("Using node shutdown_time of ~w", [Tmout]),
-            rt:pmap(gen_stop_fun(Tmout), lists:zip(Devs, Nodes)),
+            rt_util:pmap(gen_stop_fun(Tmout), lists:zip(Devs, Nodes)),
             kill_stragglers(DevPath, Tmout);
         _ ->
             lager:info("~s is not a directory.", [DevPath])
@@ -671,7 +671,7 @@ node_id(Node) ->
 
 node_version(N) ->
     VersionMap = rt_config:get(rt_versions),
-    orddict:fetch(N, VersionMap).
+    rt_util:find_atom_or_string_dict(N, VersionMap).
 
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
@@ -711,11 +711,11 @@ get_cmd_result(Port, Acc) ->
     end.
 
 check_node({_N, Version}) ->
-    case proplists:is_defined(Version, rt_config:get(rtdev_path)) of
-        true -> ok;
-        _ ->
+    case rt_util:find_atom_or_string(Version, rt_config:get(rtdev_path)) of
+        undefined ->
             lager:error("You don't have Riak ~s installed or configured", [Version]),
-            erlang:error(lists:flatten(io_lib:format("You don't have Riak ~p installed or configured", [Version])))
+            erlang:error(lists:flatten(io_lib:format("You don't have Riak ~p installed or configured", [Version])));
+        _ -> ok
     end.
 
 set_backend(Backend) ->
@@ -743,7 +743,7 @@ get_version() ->
 teardown() ->
     rt_cover:maybe_stop_on_nodes(),
     %% Stop all discoverable nodes, not just nodes we'll be using for this test.
-    rt:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()).
+    rt_util:pmap(fun(X) -> stop_all(X ++ "/dev") end, devpaths()).
 
 whats_up() ->
     io:format("Here's what's running...~n"),
@@ -764,3 +764,20 @@ get_node_logs() ->
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+
+-ifdef(TEST).
+
+release_versions_test() ->
+    ok = rt_config:set(rtdev_path, [{root, "/Users/hazen/dev/rt/riak"},
+             {current, "/Users/hazen/dev/rt/riak/current"},
+             {previous, "/Users/hazen/dev/rt/riak/riak-2.0.6"},
+             {legacy, "/Users/hazen/dev/rt/riak/riak-1.4.12"},
+             {'2.0.2', "/Users/hazen/dev/rt/riak/riak-2.0.2"},
+             {"2.0.4", "/Users/hazen/dev/rt/riak/riak-2.0.4"}]),
+    ?assertEqual(ok, check_node({foo, '2.0.2'})),
+    ?assertEqual(ok, check_node({foo, "2.0.4"})),
+    ?assertEqual("/Users/hazen/dev/rt/riak/current", relpath(current)),
+    ?assertEqual("/Users/hazen/dev/rt/riak/riak-2.0.2", relpath('2.0.2')),
+    ?assertEqual("/Users/hazen/dev/rt/riak/riak-2.0.4", relpath("2.0.4")).
+
+-endif.

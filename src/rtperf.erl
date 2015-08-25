@@ -323,7 +323,7 @@ deploy_nodes(NodeConfig, Hosts) ->
         orddict:from_list(
             orddict:to_list(rt_config:get(rt_versions, orddict:new())) ++ VersionMap)),
 
-    rt:pmap(fun({Node, _}) ->
+    rt_util:pmap(fun({Node, _}) ->
                 {ok,
                  {_, _, _, _, _, [IP0|_]}} = inet:gethostbyname(
                         rtssh:node_to_host(Node)),
@@ -336,7 +336,7 @@ deploy_nodes(NodeConfig, Hosts) ->
         end, lists:zip(Nodes, Configs)),
     timer:sleep(500),
 
-    rt:pmap(fun({_, default}) ->
+    rt_util:pmap(fun({_, default}) ->
                 lager:info("Default configuration detected!"),
                 ok;
                ({Node, {cuttlefish, Config}}) ->
@@ -351,7 +351,7 @@ deploy_nodes(NodeConfig, Hosts) ->
 
     case rt_config:get(cuttle, true) of
         false ->
-            rt:pmap(fun(Node) ->
+            rt_util:pmap(fun(Node) ->
                             Host = rtssh:get_host(Node),
                             Config = [{riak_api,
                                        [{pb, fun([{_, Port}]) ->
@@ -369,7 +369,7 @@ deploy_nodes(NodeConfig, Hosts) ->
 
             timer:sleep(500),
 
-            rt:pmap(fun(Node) ->
+            rt_util:pmap(fun(Node) ->
                             rtssh:update_vm_args(Node,
                                                 [{"-name", Node},
                                                  {"-zddbl", "65535"},
@@ -382,7 +382,7 @@ deploy_nodes(NodeConfig, Hosts) ->
 
     rtssh:create_dirs(Nodes),
 
-    rt:pmap(fun start/1, Nodes),
+    rt_util:pmap(fun start/1, Nodes),
 
     %% Ensure nodes started
     [ok = rt:wait_until_pingable(N) || N <- Nodes],

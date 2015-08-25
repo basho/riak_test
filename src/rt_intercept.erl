@@ -46,8 +46,8 @@ load_intercepts(Nodes, Globs) ->
             ok;
         true ->
             Intercepts = rt_config:get(intercepts, []),
-            rt:pmap(fun(N) -> load_code(N, Globs) end, Nodes),
-            rt:pmap(fun(N) -> add(N, Intercepts) end, Nodes),
+            rt_util:pmap(fun(N) -> load_code(N, Globs) end, Nodes),
+            rt_util:pmap(fun(N) -> add(N, Intercepts) end, Nodes),
             ok
     end.
 
