@@ -68,14 +68,15 @@ wait_for_snmp_stat_poller() ->
             pass;
         {fail, Reason} ->
             lager:error("Failure in wait_for_snmp_stat_poller: ~p~n", [Reason]),
-            fail;
+            error({fail, Reason});
         X ->
             lager:error("Unknown failure in wait_for_snmp_stat_poller: ~p~n", [X]),
-            fail
+            error(X)
     after
         1000 ->
-            lager:error("Timeout failure in wait_for_snmp_stat_poller."),
-            fail
+            Message =  "Timeout waiting for snmp_stat_poller.",
+            lager:error(Message),
+            error({timeout, Message})
     end.
 
 make_nodes(NodeCount, ClusterCount, Config) ->
