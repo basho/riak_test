@@ -64,11 +64,18 @@ intercept_riak_snmp_stat_poller(Node) ->
 
 wait_for_snmp_stat_poller() ->
     receive
-        pass -> pass;
-        {fail, Reason} -> {fail, Reason};
-        X -> {fail, {unknown, X}}
+        pass ->
+            pass;
+        {fail, Reason} ->
+            lager:error("Failure in wait_for_snmp_stat_poller: ~p~n", [Reason]),
+            fail;
+        X ->
+            lager:error("Unknown failure in wait_for_snmp_stat_poller: ~p~n", [X]),
+            fail
     after
-        1000 -> {fail, timeout}
+        1000 ->
+            lager:error("Timeout failure in wait_for_snmp_stat_poller."),
+            fail
     end.
 
 make_nodes(NodeCount, ClusterCount, Config) ->
