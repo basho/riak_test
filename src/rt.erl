@@ -1802,6 +1802,10 @@ create_and_activate_bucket_type(Node, Type, Props) ->
     ok = rpc:call(Node, riak_core_bucket_type, activate, [Type]),
     wait_until_bucket_type_status(Type, active, Node).
 
+create_activate_and_wait_for_bucket_type([Node|_Rest]=Cluster, Type, Props) ->
+    create_and_activate_bucket_type(Node, Type, Props),
+    wait_until_bucket_type_visible(Cluster, Type).
+
 wait_until_bucket_type_status(Type, ExpectedStatus, Nodes) when is_list(Nodes) ->
     [wait_until_bucket_type_status(Type, ExpectedStatus, Node) || Node <- Nodes];
 wait_until_bucket_type_status(Type, ExpectedStatus, Node) ->
