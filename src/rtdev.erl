@@ -115,8 +115,8 @@ relpath(Vsn) ->
     Path = ?PATH,
     relpath(Vsn, Path).
 
-relpath(Vsn, Paths=[{_,_}|_]) ->
-    orddict:fetch(Vsn, orddict:from_list(Paths));
+relpath(Version, Paths=[{_,_}|_]) ->
+    rt_util:find_atom_or_string_dict(Version, orddict:from_list(Paths));
 relpath(current, Path) ->
     Path;
 relpath(root, Path) ->
@@ -671,7 +671,7 @@ node_id(Node) ->
 
 node_version(N) ->
     VersionMap = rt_config:get(rt_versions),
-    orddict:fetch(N, VersionMap).
+    rt_util:find_atom_or_string_dict(N, VersionMap).
 
 spawn_cmd(Cmd) ->
     spawn_cmd(Cmd, []).
@@ -711,11 +711,11 @@ get_cmd_result(Port, Acc) ->
     end.
 
 check_node({_N, Version}) ->
-    case proplists:is_defined(Version, rt_config:get(rtdev_path)) of
-        true -> ok;
-        _ ->
+    case rt_util:find_atom_or_string(Version, rt_config:get(rtdev_path)) of
+        undefined ->
             lager:error("You don't have Riak ~s installed or configured", [Version]),
-            erlang:error(lists:flatten(io_lib:format("You don't have Riak ~p installed or configured", [Version])))
+            erlang:error(lists:flatten(io_lib:format("You don't have Riak ~p installed or configured", [Version])));
+        _ -> ok
     end.
 
 set_backend(Backend) ->
@@ -764,3 +764,20 @@ get_node_logs() ->
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+
+-ifdef(TEST).
+
+release_versions_test() ->
+    ok = rt_config:set(rtdev_path, [{root, "/Users/hazen/dev/rt/riak"},
+             {current, "/Users/hazen/dev/rt/riak/current"},
+             {previous, "/Users/hazen/dev/rt/riak/riak-2.0.6"},
+             {legacy, "/Users/hazen/dev/rt/riak/riak-1.4.12"},
+             {'2.0.2', "/Users/hazen/dev/rt/riak/riak-2.0.2"},
+             {"2.0.4", "/Users/hazen/dev/rt/riak/riak-2.0.4"}]),
+    ?assertEqual(ok, check_node({foo, '2.0.2'})),
+    ?assertEqual(ok, check_node({foo, "2.0.4"})),
+    ?assertEqual("/Users/hazen/dev/rt/riak/current", relpath(current)),
+    ?assertEqual("/Users/hazen/dev/rt/riak/riak-2.0.2", relpath('2.0.2')),
+    ?assertEqual("/Users/hazen/dev/rt/riak/riak-2.0.4", relpath("2.0.4")).
+
+-endif.
