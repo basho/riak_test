@@ -57,6 +57,7 @@ intercept_riak_snmp_stat_poller(Node) ->
                     RiakTestProcess ! pass
                 catch
                     Exception:Reason ->
+                        lager:error("Failure in riak_snmp_stat_poller_orig:set_rows_orig: ~p~n", [{Exception, Reason}]),
                         RiakTestProcess ! {fail, {Exception, Reason}},
                         error({Exception, Reason})
                 end
