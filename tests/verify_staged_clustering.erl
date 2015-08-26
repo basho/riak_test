@@ -121,7 +121,11 @@ n(Atom) ->
 
 stage_join(Node, OtherNode) ->
     %% rpc:call(Node, riak_kv_console, staged_join, [[n(OtherNode)]]).
-    rt:admin(Node, ["cluster", "join", n(OtherNode)]).
+    JoinFun = fun() ->
+        {ok, Result} = rt:admin(Node, ["cluster", "join", n(OtherNode)]),
+        lists:prefix("Success:", Result)
+    end,
+    rt:wait_until(JoinFun, 5, 1000).
 
 stage_leave(Node, OtherNode) ->
     %% rpc:call(Node, riak_core_console, stage_leave, [[n(OtherNode)]]).
