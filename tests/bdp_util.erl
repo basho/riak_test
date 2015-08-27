@@ -47,15 +47,15 @@
 
 call_with_patience(Node, M, F, A) ->
     call_with_patience_(Node, M, F, A, ?SM_RPC_RETRIES).
-call_with_patience_(_Node, _M, _F, _A, 0) ->
+call_with_patience_(Node, M, F, A, 0) ->
     lager:error("Exhausted ~b retries for an RPC call to ~p ~p:~p/~b",
-                [?SM_RPC_RETRIES, _Node, _M, _F, length(_A)]),
-    ?assert(false);
+                [?SM_RPC_RETRIES, Node, M, F, length(A)]),
+    error({rpc_retries_exhausted, {Node, M, F, A}});
 call_with_patience_(Node, M, F, A, Retries) ->
     case rpc:call(Node, M, F, A) of
-        {badrpc, Reason} ->
+        {badrpc, Reason} = Error ->
             lager:error("RPC call to ~p failed with reason: ~p", [Node, Reason]),
-            ?assert(false);
+            error(Error);
         {error, timeout} ->
             lager:warning("RPC call to ~p:~p/~b on ~p timed out, ~b attempts remaining",
                           [M, F, length(A), Node, Retries]),
