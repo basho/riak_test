@@ -72,9 +72,11 @@ build_cluster(Size) ->
     build_cluster(Size, []).
 -spec build_cluster(non_neg_integer(), list()) -> [node()].
 build_cluster(Size, Config) ->
-    Nodes = rt:deploy_nodes(Size, Config),
+    [Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
     rt:join_cluster(Nodes),
-    %% ensemble_util:wait_until_cluster(Nodes),
+    ensemble_util:wait_until_cluster(Nodes),
+    ensemble_util:wait_for_membership(Node1),
+    ensemble_util:wait_until_stable(Node1, Size),
     Nodes.
 
 
