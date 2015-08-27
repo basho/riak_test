@@ -122,7 +122,7 @@ test_spark_fail_recovery() ->
 
     lager:info("Node1 path = ~s, Node2 path = ~s", [Node1Path, Node2Path]),
 
-    LogSubPath = "/lib/data_platform-1/priv/spark-master/logs/spark-" ++ ?SPARK_IDENT_STRING ++ "-org.apache.spark.deploy.master.Master-1-" ++ ?HOSTNAME ++  ".out",
+    LogSubPath = "/lib/data_platform*/priv/spark-master/logs/spark-" ++ ?SPARK_IDENT_STRING ++ "-org.apache.spark.deploy.master.Master-1-" ++ ?HOSTNAME ++  ".out",
     Spark1LogFile = Node1Path ++ LogSubPath,
     Spark2LogFile = Node2Path ++ LogSubPath,
 
@@ -133,6 +133,5 @@ test_spark_fail_recovery() ->
     Command = "./priv/bdp_spark_test/leader_election_check.sh " ++ Spark1LogFile ++ " " ++ Spark2LogFile ++ " " ++ ?TIMEOUT,
     lager:info("Running bash script: ~s", [Command]),
     Res = os:cmd(Command),
-    lager:info("Res= ~s", [Res]),
     ?assert(Res == "ok\n"),
     ok.
