@@ -67,14 +67,6 @@ confirm() ->
     %% Then, rework the make_node_leave and add the various
     %% rt:wait_until checks accordingly.
 
-    %% ok = bdp_util:make_node_leave(Node2, Node1),
-    %% rt:remove(Node1, Node2),
-    %% rt:start_and_wait(Node2),
-    %% %rt:join_cluster(Nodes),
-    %% ensemble_util:wait_until_cluster(Nodes),
-    %% ok = bdp_util:make_node_join(Node2, Node1),
-    %% ensemble_util:wait_until_cluster(Nodes),
-
     ok = test_service_manager(Node1, Node1, Node1, "111"),
     ok = test_service_manager(Node1, Node2, Node2, "122"),
     ok = test_service_manager(Node1, Node2, Node3, "123"),
