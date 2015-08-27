@@ -133,6 +133,5 @@ test_spark_fail_recovery() ->
     Command = "./priv/bdp_spark_test/leader_election_check.sh " ++ Spark1LogFile ++ " " ++ Spark2LogFile ++ " " ++ ?TIMEOUT,
     lager:info("Running bash script: ~s", [Command]),
     Res = os:cmd(Command),
-    lager:info("Res= ~s", [Res]),
     ?assert(Res == "ok\n"),
     ok.
