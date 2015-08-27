@@ -67,28 +67,28 @@ create_spark_bucket_types(Node) ->
 
 
 add_spark_service(Node, ServiceName, Config, WaitServices) ->
-    ok = bdp_util:service_added(Node, ServiceName, ?SPARK_MASTER_TYPE, Config),
+    ok = bdp_util:add_service(Node, ServiceName, ?SPARK_MASTER_TYPE, Config),
     ok = bdp_util:wait_services(Node, {[], WaitServices}),
     lager:info("Service definition ~p (~s) added to node ~p", [ServiceName, ?SPARK_MASTER_TYPE, Node]),
     ok.
 
 
 start_services(Node, [{ServiceNode, ServiceName} | Rest]) ->
-    ok = bdp_util:service_started(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
+    ok = bdp_util:start_seervice(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
     lager:info("Service ~p up on ~p node", [ServiceName, ServiceNode]),
     start_services(Node, Rest);
 start_services(_, []) -> ok.
 
 
 stop_services(Node, [{ServiceNode, ServiceName} | Rest]) ->
-    ok = bdp_util:service_stopped(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
+    ok = bdp_util:stop_service(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
     lager:info("Service ~p down on ~p", [ServiceName, Node]),
     stop_services(Node, Rest);
 stop_services(_, []) -> ok.
 
 
 remove_spark_service(Node, ServiceName, WaitServices) ->
-    ok = bdp_util:service_removed(Node, ServiceName),
+    ok = bdp_util:remove_service(Node, ServiceName),
     ok = bdp_util:wait_services(Node, {[], WaitServices}),
     lager:info("Service ~p removed from ~p", [ServiceName, Node]),
     ok.

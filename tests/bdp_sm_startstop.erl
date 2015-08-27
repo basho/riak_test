@@ -43,16 +43,16 @@ confirm() ->
           ClusterSize),
 
     %% add a service
-    ok = bdp_util:service_added(Node1, ?S1_NAME, ?S1_TYPE, ?S1_CONFIG),
+    ok = bdp_util:add_service(Node1, ?S1_NAME, ?S1_TYPE, ?S1_CONFIG),
     ok = bdp_util:wait_services(Node1, {[], [?S1_NAME]}),
     lager:info("Service ~p (~s) added", [?S1_NAME, ?S1_TYPE]),
     %% add another
-    ok = bdp_util:service_added(Node1, ?S2_NAME, ?S2_TYPE, ?S2_CONFIG),
+    ok = bdp_util:add_service(Node1, ?S2_NAME, ?S2_TYPE, ?S2_CONFIG),
     ok = bdp_util:wait_services(Node1, {[], [?S1_NAME, ?S2_NAME]}),
     lager:info("Service ~p (~s) added", [?S2_NAME, ?S2_TYPE]),
 
     %% start S2 separately
-    ok = bdp_util:service_started(Node1, Node3, ?S2_NAME, ?S2_TYPE),
+    ok = bdp_util:start_seervice(Node1, Node3, ?S2_NAME, ?S2_TYPE),
     lager:info("Service ~p up   on ~p", [?S2_NAME, Node3]),
 
     %% run the main battery
@@ -80,13 +80,13 @@ confirm() ->
     ok = test_service_manager(Node1, Node2, Node3, "123"),
 
     %% start S2 separately
-    ok = bdp_util:service_stopped(Node1, Node3, ?S2_NAME, ?S2_TYPE),
+    ok = bdp_util:stop_service(Node1, Node3, ?S2_NAME, ?S2_TYPE),
     lager:info("Service ~p up   on ~p", [?S2_NAME, Node3]),
 
-    ok = bdp_util:service_removed(Node2, ?S1_NAME),
+    ok = bdp_util:remove_service(Node2, ?S1_NAME),
     ok = bdp_util:wait_services(Node1, {[], [?S2_NAME]}),
     lager:info("Service ~p removed", [?S1_NAME]),
-    ok = bdp_util:service_removed(Node3, ?S2_NAME),
+    ok = bdp_util:remove_service(Node3, ?S2_NAME),
     ok = bdp_util:wait_services(Node1, {[], []}),
     lager:info("Service ~p removed", [?S2_NAME]),
 
@@ -116,10 +116,10 @@ test_service_manager(NodeA, NodeB, NodeC, Desc) ->
 
 test_cross_node_start_stop(ServiceNode, Node1, Node2) ->
     %% start it, on Node1
-    ok = bdp_util:service_started(Node1, ServiceNode, ?S1_NAME, ?S1_TYPE),
+    ok = bdp_util:start_seervice(Node1, ServiceNode, ?S1_NAME, ?S1_TYPE),
     lager:info("Service ~p up   on ~p", [?S1_NAME, Node1]),
 
     %% stop it, on Node2
-    ok = bdp_util:service_stopped(Node2, ServiceNode, ?S1_NAME, ?S1_TYPE),
+    ok = bdp_util:stop_service(Node2, ServiceNode, ?S1_NAME, ?S1_TYPE),
     lager:info("Service ~p down on ~p", [?S1_NAME, Node2]),
     ok.

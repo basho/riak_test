@@ -22,7 +22,7 @@
 -module(bdp_util).
 
 -export([build_cluster/1, build_cluster/2,
-         service_added/4, service_removed/2, service_started/4, service_stopped/4,
+         add_service/4, remove_service/2, start_seervice/4, stop_service/4,
          make_node_leave/2, make_node_join/2]).
 -export([get_services/1, wait_services/2]).
 
@@ -104,8 +104,8 @@ wait_services_(Node, Services, SecsToWait) ->
     end.
 
 
--spec service_added(node(), config_name(), service_type(), service_config()) -> ok.
-service_added(Node, ServiceName, ServiceType, Config) ->
+-spec add_service(node(), config_name(), service_type(), service_config()) -> ok.
+add_service(Node, ServiceName, ServiceType, Config) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
             Node, data_platform_global_state, add_service_config,
@@ -116,8 +116,8 @@ service_added(Node, ServiceName, ServiceType, Config) ->
     Avl1 = lists:usort(Avl0 ++ [ServiceName]),
     ok = wait_services(Node, {Rnn0, Avl1}).
 
--spec service_removed(node(), config_name()) -> ok.
-service_removed(Node, ServiceName) ->
+-spec remove_service(node(), config_name()) -> ok.
+remove_service(Node, ServiceName) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
             Node, data_platform_global_state, remove_service,
@@ -129,8 +129,8 @@ service_removed(Node, ServiceName) ->
     ok = wait_services(Node, {Rnn0, Avl1}).
 
 
--spec service_started(node(), node(), config_name(), service_type()) -> ok.
-service_started(Node, ServiceNode, ServiceName, Group) ->
+-spec start_seervice(node(), node(), config_name(), service_type()) -> ok.
+start_seervice(Node, ServiceNode, ServiceName, Group) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
            Node, data_platform_global_state, start_service,
@@ -141,8 +141,8 @@ service_started(Node, ServiceNode, ServiceName, Group) ->
     Rnn1 = lists:usort(Rnn0 ++ [ServiceName]),
     ok = wait_services(Node, {Rnn1, Avl0}).
 
--spec service_stopped(node(), node(), config_name(), service_type()) -> ok.
-service_stopped(Node, ServiceNode, ServiceName, Group) ->
+-spec stop_service(node(), node(), config_name(), service_type()) -> ok.
+stop_service(Node, ServiceNode, ServiceName, Group) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
             Node, data_platform_global_state, stop_service,

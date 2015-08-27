@@ -58,7 +58,7 @@ confirm() ->
     ok = test_cross_node_start_stop(Node2, Node2, Node2),
     ok = test_cross_node_start_stop(Node2, Node3, Node1),
 
-    ok = service_removed(Node2, ?S1_NAME),
+    ok = remove_service(Node2, ?S1_NAME),
     lager:info("Service removed"),
 
     pass.
@@ -96,7 +96,7 @@ wait_services_(Node, Services, SecsToWait) ->
             wait_services_(Node, Services, SecsToWait - 1)
     end.
 
-service_added(Node, ConfigName, ServiceType, Config) ->
+add_service(Node, ConfigName, ServiceType, Config) ->
     {Rnn0, Avl0} = get_services(Node),
     ok = rpc:call(Node, data_platform_global_state, add_service_config,
                   [ConfigName, ServiceType, Config, false]),
@@ -104,7 +104,7 @@ service_added(Node, ConfigName, ServiceType, Config) ->
     ok = wait_services(Node, {Rnn0, Avl1}).
 
 
-service_removed(Node, ConfigName) ->
+remove_service(Node, ConfigName) ->
     {Rnn0, Avl0} = get_services(Node),
     ok = rpc:call(Node, data_platform_global_state, remove_service,
                   [ConfigName]),
@@ -112,7 +112,7 @@ service_removed(Node, ConfigName) ->
     ok = wait_services(Node, {Rnn0, Avl1}).
 
 
-service_started(Node, ServiceNode, Group, ConfigName) ->
+start_seervice(Node, ServiceNode, Group, ConfigName) ->
     {Rnn0, Avl0} = get_services(Node),
     ok = rpc:call(Node, data_platform_global_state, start_service,
                   [Group, ConfigName, ServiceNode]),
@@ -120,7 +120,7 @@ service_started(Node, ServiceNode, Group, ConfigName) ->
     ok = wait_services(Node, {Rnn1, Avl0}).
 
 
-service_stopped(Node, ServiceNode, Group, ConfigName) ->
+stop_service(Node, ServiceNode, Group, ConfigName) ->
     {Rnn0, Avl0} = get_services(Node),
     ok = rpc:call(Node, data_platform_global_state, stop_service,
                   [Group, ConfigName, ServiceNode]),
@@ -130,10 +130,10 @@ service_stopped(Node, ServiceNode, Group, ConfigName) ->
 
 test_cross_node_start_stop(ServiceNode, Node1, Node2) ->
     %% start it, on Node1
-    ok = service_started(Node1, ServiceNode, ?S1_TYPE, ?S1_NAME),
+    ok = start_seervice(Node1, ServiceNode, ?S1_TYPE, ?S1_NAME),
     lager:info("Service ~p started on ~p", [?S1_NAME, Node1]),
 
     %% stop it, on Node2
-    ok = service_stopped(Node2, ServiceNode, ?S1_TYPE, ?S1_NAME),
+    ok = stop_service(Node2, ServiceNode, ?S1_TYPE, ?S1_NAME),
     lager:info("Service ~p stopped on ~p", [?S1_NAME, Node2]),
     ok.
