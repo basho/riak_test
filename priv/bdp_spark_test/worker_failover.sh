@@ -13,15 +13,27 @@ SPARK2_PID=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark
 
 LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" "$SPARK1_LOG_FILE" | tail -1)
 if [ -n "$LOG_STR" ]; then
-  leader_log=$SPARK1_LOG_FILE
-  leader_pid=$SPARK1_PID
-  standby_log=$SPARK2_LOG_FILE
+  worker_str=$(grep "Registering worker" "$SPARK1_LOG_FILE" | tail -1)
+  if [ -n "$worker_str" ]; then 
+    leader_log=$SPARK1_LOG_FILE
+    leader_pid=$SPARK1_PID
+    standby_log=$SPARK2_LOG_FILE
+  else 
+    echo "No worker registered with master"
+    exit 1
+  fi
 else
   LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" "$SPARK2_LOG_FILE" | tail -1)
   if [ -n "$LOG_STR" ]; then
-    leader_log=$SPARK2_LOG_FILE
-    leader_pid=$SPARK2_PID
-    standby_log=$SPARK1_LOG_FILE
+    worker_str=$(grep "Registering worker" "$SPARK2_LOG_FILE" | tail -1)
+    if [ -n "$worker_str" ]; then
+      leader_log=$SPARK2_LOG_FILE
+      leader_pid=$SPARK2_PID
+      standby_log=$SPARK1_LOG_FILE
+    else
+      echo "No worker registered with master"
+      exit 1
+    fi
   else
     echo "No leader found"
     exit 1
@@ -36,7 +48,13 @@ sleep $TIMEOUT
 
 LOG_STR=$(grep "Master: I have been elected leader!" "$standby_log" | tail -1)
 if [ -n "$LOG_STR" ]; then
-  echo ok
+   worker_str=$(grep "Worker has been re-registered" "$standby_log" | tail -1)
+    if [ -n "$worker_str" ]; then
+      echo ok
+    else 
+      echo "Worker wasn't re-registered"
+      exit 1
+    fi
 else
   echo "New leader wasn't elected"
   exit 1
