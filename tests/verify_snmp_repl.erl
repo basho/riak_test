@@ -93,7 +93,8 @@ wait_until_leader_converge({_Name, Nodes}) ->
 enable_realtime([{_, Node, _}|OtherClusters]) ->
     lists:foreach(
         fun({Cluster, _, _}) ->
-            repl_util:enable_realtime(Node, Cluster)
+            repl_util:enable_realtime(Node, Cluster),
+            timer:sleep(1000)
         end,
         OtherClusters).
 
