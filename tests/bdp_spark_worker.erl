@@ -138,5 +138,5 @@ test_spark_fail_recovery() ->
     Command = "./priv/bdp_spark_test/worker_failover.sh " ++ Spark1LogFile ++ " " ++ Spark2LogFile ++ " " ++ ?TIMEOUT,
     lager:info("Running bash script: ~s", [Command]),
     Res = os:cmd(Command),
-    ?assert(Res == "ok\n"),
+    ?assertEqual("ok\n", Res),
     ok.
