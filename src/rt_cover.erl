@@ -40,6 +40,12 @@
     stop_on_node/1
     ]).
 
+-ifdef(namespaced_types).
+-type cover_dict() :: dict:dict().
+-else.
+-type cover_dict() :: dict().
+-endif.
+
 -define(COVER_SERVER, cover_server).
 
 -record(cover_info, {module :: atom(),
@@ -280,7 +286,7 @@ acc_cov(CovList) when is_list(CovList) ->
     end,
     lists:foldl(AddCov, {0, 0}, CovList).
 
--spec group_by_app(ModCovList:: [#cover_info{}], Mod2App :: dict()) ->
+-spec group_by_app(ModCovList:: [#cover_info{}], Mod2App :: cover_dict()) ->
     [{string(), number(), [#cover_info{}]}].
 group_by_app(ModCovList, Mod2App) ->
     D1 = lists:foldl(fun(ModCov = #cover_info{module=Mod}, Acc) ->
