@@ -25,11 +25,12 @@
 files_to_mods(Files) ->
     [list_to_atom(filename:basename(F, ".erl")) || F <- Files].
 
-default_intercept_path_glob() ->
-    filename:join([rt_local:home_dir(), "intercepts", "*.erl"]).
+default_intercept_path_globs() ->
+    Globs = rt_config:get(intercept_globs, []),
+    [filename:join([rt_local:home_dir(), "intercepts", "*.erl"])] ++ Globs.
 
 intercept_files() ->
-    intercept_files([default_intercept_path_glob()]).
+    intercept_files(default_intercept_path_globs()).
 
 intercept_files(Globs) ->
     lists:concat([filelib:wildcard(Glob) || Glob <- Globs]).
@@ -37,7 +38,7 @@ intercept_files(Globs) ->
 %% @doc Load the intercepts on the nodes under test.
 -spec load_intercepts([node()]) -> ok.
 load_intercepts(Nodes) ->
-    load_intercepts(Nodes, [default_intercept_path_glob()]).
+    load_intercepts(Nodes, default_intercept_path_globs()).
 
 -spec load_intercepts([node()], [string()]) -> ok.
 load_intercepts(Nodes, Globs) ->
@@ -52,7 +53,7 @@ load_intercepts(Nodes, Globs) ->
     end.
 
 load_code(Node) ->
-    load_code(Node, [default_intercept_path_glob()]).
+    load_code(Node, default_intercept_path_globs()).
 
 load_code(Node, Globs) ->
     rt:wait_until_pingable(Node),
@@ -122,7 +123,7 @@ wait_until_loaded(Node, Tries) ->
     end.
 
 are_intercepts_loaded(Node) ->
-    are_intercepts_loaded(Node, [default_intercept_path_glob()]).
+    are_intercepts_loaded(Node, default_intercept_path_globs()).
 
 are_intercepts_loaded(Node, Globs) ->
     Results = [rpc:call(Node, code, is_loaded, [Mod])

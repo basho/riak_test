@@ -1,4 +1,4 @@
--module(observer).
+-module(rt_observer).
 -compile(export_all).
 
 -record(history, {network,

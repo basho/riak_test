@@ -51,7 +51,7 @@ get_os_env(Var, Default) ->
 
 %% @doc Load the configuration from the specified config file.
 load(Config, undefined) ->
-    load(Config, filename:join([os:getenv("HOME"), ".riak_test.config"]));
+    load(Config, filename:join([os:getenv("PWD"), ".riak_test.config"]));
 load(undefined, ConfigFile) ->
     load_dot_config("default", ConfigFile);
 load(ConfigName, ConfigFile) ->
