@@ -147,8 +147,7 @@ confirm() ->
     yokozuna_rt:write_data(Cluster, Pid, ?INDEX,
                            {?SCHEMANAME, ?TEST_SCHEMA},
                            ?BUCKET1, GenKeys),
-    timer:sleep(1100),
-
+    yokozuna_rt:commit(Cluster, ?INDEX),
     lager:info("Create and activate map-based bucket type ~s and tie it to search_index ~s",
                [?TYPE, ?INDEX]),
     rt:create_and_activate_bucket_type(Node1, ?TYPE, [{datatype, map},
@@ -165,9 +164,9 @@ confirm() ->
                              "application/json"),
 
     {ok, _ObjA} = riakc_pb_socket:put(Pid, NewObj1A, [return_head]),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
     {ok, _ObjB} = riakc_pb_socket:put(Pid, NewObj1B, [return_head]),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 2),
 
@@ -197,7 +196,7 @@ confirm() ->
            <<"keyMap1">>,
            riakc_map:to_op(Map3)),
 
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
     assert_search(Pid, Cluster, <<"0_foo_register:44ab">>, {<<"0_foo_register">>,
                                                             <<"44ab">>}, []),
 
@@ -208,8 +207,7 @@ confirm() ->
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 3),
 
-    lager:info("Overwrite schema with updated schema"),
-    override_schema(Pid, Cluster, ?INDEX, ?SCHEMANAME, ?TEST_SCHEMA_UPDATE),
+    yokozuna_rt:override_schema(Pid, Cluster, ?INDEX, ?SCHEMANAME, ?TEST_SCHEMA_UPDATE),
 
     lager:info("Write and check hello_i at integer per schema update"),
 
@@ -218,7 +216,7 @@ confirm() ->
                             "application/json"),
 
     {ok, _Obj2} = riakc_pb_socket:put(Pid, NewObj2, [return_head]),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 4),
     assert_search(Pid, Cluster, <<"hello_i:36">>, {<<"hello_i">>, <<"36">>}, []),
@@ -230,6 +228,7 @@ confirm() ->
                             "application/json"),
 
     {ok, _Obj3} = riakc_pb_socket:put(Pid, NewObj3, [return_head]),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 5),
     assert_search(Pid, Cluster, <<"age:3jlkjkl">>,
@@ -244,7 +243,7 @@ confirm() ->
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 5),
 
     HP = rt:select_random(yokozuna_rt:host_entries(rt:connection_info(Cluster))),
-    yokozuna_rt:search_expect(HP, ?INDEX, <<"age">>, <<"*">>, 2),
+    yokozuna_rt:search_expect(HP, ?INDEX, <<"age">>, <<"*">>, 3),
 
     lager:info("Re-Put because AAE won't find a diff even though the types
                have changed, as it only compares based on bkey currently.
@@ -252,7 +251,7 @@ confirm() ->
                with allow_mult=false... no siblings"),
 
     {ok, _Obj4} = riakc_pb_socket:put(Pid, NewObj1A, [return_head]),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     assert_search(Pid, Cluster, <<"age:26">>, {<<"age">>, <<"26">>}, []),
 
@@ -272,7 +271,7 @@ confirm() ->
            <<"keyMap1">>,
            riakc_map:to_op(Map5)),
 
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
     assert_search(Pid, Cluster, <<"0_foo_register:44ab">>, {<<"0_foo_register">>,
                                                             <<"44ab">>}, []),
     assert_search(Pid, Cluster, <<"1_baz_counter:10">>, {<<"1_baz_counter">>,
@@ -286,19 +285,13 @@ confirm() ->
                             "application/json"),
     {ok, _Obj5} = riakc_pb_socket:put(Pid, NewObj5, [return_head]),
 
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
     assert_search(Pid, Cluster, <<"paths.quip:88">>,
                   {<<"paths.quip">>, <<"88">>}, []),
 
     riakc_pb_socket:stop(Pid),
 
     pass.
-
-override_schema(Pid, Cluster, Index, Schema, RawUpdate) ->
-    ok = riakc_pb_socket:create_search_schema(Pid, Schema, RawUpdate),
-    yokozuna_rt:wait_for_schema(Cluster, Schema, RawUpdate),
-    [Node|_] = Cluster,
-    {ok, _} = rpc:call(Node, yz_index, reload, [Index]).
 
 assert_search(Pid, Cluster, Search, SearchExpect, Params) ->
     F = fun(_) ->

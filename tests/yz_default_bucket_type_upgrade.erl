@@ -70,8 +70,7 @@ confirm() ->
     OldPid = rt:pbc(Node),
 
     yokozuna_rt:write_data(Cluster, OldPid, ?INDEX, ?BUCKET, GenKeys),
-    %% wait for solr soft commit
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount),
 
@@ -86,7 +85,7 @@ confirm() ->
     lager:info("Write one more piece of data"),
     Pid = rt:pbc(Node),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"foo">>, <<"foo">>, "text/plain"),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 1),
