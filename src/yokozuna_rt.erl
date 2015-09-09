@@ -23,8 +23,10 @@
 -include("yokozuna_rt.hrl").
 
 -export([check_exists/2,
+         commit/2,
          expire_trees/1,
          host_entries/1,
+         override_schema/5,
          remove_index_dirs/2,
          rolling_upgrade/2,
          rolling_upgrade/3,
@@ -48,6 +50,7 @@
 -type json_string() :: atom | string() | binary().
 
 -define(FMT(S, Args), lists:flatten(io_lib:format(S, Args))).
+-define(SOFTCOMMIT, 1000).
 
 -spec host_entries(rt:conn_info()) -> [{host(), portnum()}].
 host_entries(ClusterConnInfo) ->
@@ -289,7 +292,7 @@ search(Type, {Host, Port}, Index, Name0, Term0) ->
 verify_count_http(Expected, Resp) ->
     Count = get_count_http(Resp),
     lager:info("Expected: ~p, Actual: ~p", [Expected, Count]),
-    Expected == Count.
+    ?assertEqual(Expected, Count).
 
 -spec get_count_http(json_string()) -> count().
 get_count_http(Resp) ->
@@ -338,8 +341,8 @@ create_and_set_index(Cluster, Pid, Bucket, Index) ->
                            schema_name()) -> ok.
 create_and_set_index(Cluster, Pid, Bucket, Index, Schema) ->
     %% Create a search index and associate with a bucket
-    lager:info("Create a search index ~s with a custom schema named ~s and
-               associate it with bucket ~s", [Index, Schema, Bucket]),
+    lager:info("Create a search index ~s with a custom schema named ~s and " ++
+               "associate it with bucket ~s", [Index, Schema, Bucket]),
     ok = riakc_pb_socket:create_search_index(Pid, Index, Schema, []),
     %% For possible legacy upgrade reasons, wrap create index in a wait
     wait_for_index(Cluster, Index),
@@ -360,3 +363,21 @@ internal_solr_url(Host, Port, Index, Name, Term, Shards) ->
 quote_unicode(Value) ->
     mochiweb_util:quote_plus(binary_to_list(
                                unicode:characters_to_binary(Value))).
+
+-spec commit([node()], index_name()) -> ok.
+commit(Nodes, Index) ->
+    %% Wait for yokozuna index to trigger, then force a commit
+    timer:sleep(?SOFTCOMMIT),
+    lager:info("Commit search writes to ~s at softcommit (default) ~p",
+               [Index, ?SOFTCOMMIT]),
+    rpc:multicall(Nodes, yz_solr, commit, [Index]),
+    ok.
+
+-spec override_schema(pid(), [node()], index_name(), schema_name(), string()) ->
+                             {ok, [node()]}.
+override_schema(Pid, Cluster, Index, Schema, RawUpdate) ->
+    lager:info("Overwrite schema with updated schema"),
+    ok = riakc_pb_socket:create_search_schema(Pid, Schema, RawUpdate),
+    yokozuna_rt:wait_for_schema(Cluster, Schema, RawUpdate),
+    [Node|_] = Cluster,
+    {ok, _} = rpc:call(Node, yz_index, reload, [Index]).

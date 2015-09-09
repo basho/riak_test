@@ -59,8 +59,7 @@ confirm() ->
            ?KEY,
            riakc_map:to_op(Map2)),
 
-    %% Wait for yokozuna index to trigger.
-    timer:sleep(1000),
+    yokozuna_rt:commit(Nodes, ?INDEX),
 
     %% Perform simple queries, check for register, set fields.
     {ok, {search_results, Results1a, _, _}} = riakc_pb_socket:search(

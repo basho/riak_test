@@ -78,7 +78,7 @@ confirm() ->
 
     Pid = rt:pbc(Node2),
     yokozuna_rt:write_data(Nodes, Pid, ?INDEX, ?BUCKET, Keys),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Nodes, ?INDEX),
 
     %% Separate out shards for multiple runs
     [Shard1|Shards2Rest] = Shards,
