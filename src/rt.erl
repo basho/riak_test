@@ -2187,6 +2187,11 @@ stop_tracing() ->
     dbg:stop_clear(),
     ok.
 
+get_primary_preflist(Node, Bucket, Key, NVal) ->
+    DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key}]),
+    PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
+    {ok, PL}.
+
 %% @doc Trace fun calls and store their count state into an ETS table.
 -spec trace_count({trace, pid(), call|return_from,
                    {atom(), atom(), non_neg_integer()}}, {node(), [node()]}) ->
