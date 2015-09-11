@@ -43,41 +43,42 @@ confirm() ->
     %build cluster
     lager:info("Building cluster"),
     ClusterSize = 3,
-    ClusterConfig = [{lager, [{handlers, [{file, "console.log"}, {level, debug}] }]}],
-    Nodes = [Node1, Node2, _Node3] = rt:deploy_nodes(ClusterSize, ClusterConfig),
-    rt:join_cluster(Nodes),
-    %let cluster settle down
-    lager:info("Waiting 20 seconds..."),
-    timer:sleep(20000),
+    _Nodes = [Node1, Node2, _Node3] =
+        bdp_util:build_cluster(
+          ClusterSize, [{lager, [{handlers, [{file, "console.log"}, {level, debug}] }]}]),
    
-    %% add and start master service to node1
-    ok = bdp_util:service_added(Node1, ?SPARK_MASTER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE, ?SPARK_MASTER_SERVICE_CONFIG),
-    lager:info("Service ~p (~s) added", [?SPARK_MASTER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE]),
-    lager:info("Waiting 10 seconds..."),
-    timer:sleep(10000),
-
-    ok = bdp_util:service_started(Node1, Node1, ?SPARK_MASTER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE),
-    lager:info("Service ~p up   on ~p", [?SPARK_MASTER_SERVICE_NAME, Node1]),
-    lager:info("Waiting 10 seconds..."),
-    timer:sleep(10000),
-
-    %% get master ip for worker configs
-    %%be careful
+    %% add spark master and worker services
+    lager:info("Adding Spaker Master and Spark Worker Service..."), 
+    %% add master service
+    ok = bdp_util:add_service(Node1, ?SPARK_MASTER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE, ?SPARK_MASTER_SERVICE_CONFIG),
+    ok = bdp_util:wait_services(Node1, {[], [?SPARK_MASTER_SERVICE_NAME]}),
+    %% add worker service
     SparkMasterIP = re:replace(rpc:call(Node1,os,cmd,["ipconfig getifaddr en0"]),"\\s+", "", [global,{return,list}]),
     SparkMasterAddr = "spark://"++SparkMasterIP++":7077",
     WorkerConfig = [{"MASTER_URL", SparkMasterAddr},{"SPARK_WORKER_PORT","8081"}],
 
-    %%add and start worker service
-    ok = bdp_util:service_added(Node2, ?SPARK_WORKER_SERVICE_NAME, ?SPARK_WORKER_SERVICE_TYPE, WorkerConfig),
-    lager:info("Service ~p (~s) added", [?SPARK_WORKER_SERVICE_NAME, ?SPARK_WORKER_SERVICE_TYPE]),
+    ok = bdp_util:add_service(Node2, ?SPARK_WORKER_SERVICE_NAME, ?SPARK_WORKER_SERVICE_TYPE, WorkerConfig),
+    ok = bdp_util:wait_services(Node2, {[], [?SPARK_MASTER_SERVICE_NAME, ?SPARK_WORKER_SERVICE_NAME]}),
+
+    lager:info("Service ~p (~s) added", [?SPARK_MASTER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE]),
+    %start master and worker
+    ok = bdp_util:start_service(Node1, Node1, ?SPARK_MASTER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE),
+    ok = bdp_util:wait_services(Node1, {[?SPARK_MASTER_SERVICE_NAME], [?SPARK_MASTER_SERVICE_NAME, ?SPARK_WORKER_SERVICE_NAME]}),
+    ok = bdp_util:start_service(Node2, Node2, ?SPARK_WORKER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE),
+    ok = bdp_util:wait_services(Node2, {[?SPARK_MASTER_SERVICE_NAME,?SPARK_WORKER_SERVICE_NAME], [?SPARK_MASTER_SERVICE_NAME, ?SPARK_WORKER_SERVICE_NAME]}),
+
     lager:info("Waiting 10 seconds..."),
     timer:sleep(10000),
 
-    ok = bdp_util:service_started(Node2, Node2, ?SPARK_WORKER_SERVICE_NAME, ?SPARK_WORKER_SERVICE_TYPE),
-    lager:info("Service ~p up   on ~p", [?SPARK_WORKER_SERVICE_NAME, Node2]),
-    %wait for master and worker to properly communicate (recommended 20+ seconds from expirement)
-    lager:info("Waiting 30 seconds..."),
-    timer:sleep(30000),
+    %check running services
+    {Run,Ava} = bdp_util:get_services(Node1),
+
+    MyServices = ["my-spark-master","my-spark-worker"],
+    ?assert(Run == MyServices),
+    ?assert(Ava == MyServices),
+    lager:info("~s",[MyServices]),
+    lager:info("Running: ~s", [Run]),
+    lager:info("Available: ~s", [Ava]),
 
     %%run spark job pi.py
     SparkJobSubmit1 = "./lib/data_platform-1/priv/spark-master/bin/spark-submit --master ",
@@ -88,6 +89,21 @@ confirm() ->
 
     %Test if the spark job submission worked
     ?assert(string:str(Results,"Pi is roughly") > 0),
+
+    %Assert proper cluster execution of spark job
+    WgetCall = "wget "++SparkMasterIP++":8080",
+    lager:info("wget call: ~s",[WgetCall]),
+    rpc:call(Node1,os,cmd,[WgetCall]),
+    {ok, File} = rpc:call(Node1,file,read_file,["index.html"]),
+    Content = unicode:characters_to_list(File),
+    %assert master and worker see each other
+    TestString1 = "<li><strong>Workers:</strong> 1</li>",
+    ?assert(string:str(Content,TestString1) > 0),
+    %assert job execution in cluster
+    TestString2 = "<li><strong>Applications:</strong>
+                0 Running,
+                1 Completed </li>",
+    ?assert(string:str(Content,TestString2) > 0),
 
     pass.
 

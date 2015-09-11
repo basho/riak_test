@@ -22,8 +22,7 @@
 -module(bdp_util).
 
 -export([build_cluster/1, build_cluster/2,
-         service_added/4, service_removed/2, service_started/4, service_stopped/4,
-         make_node_leave/2, make_node_join/2]).
+         add_service/4, remove_service/2, start_service/4, stop_service/4]).
 -export([get_services/1, wait_services/2]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -47,15 +46,15 @@
 
 call_with_patience(Node, M, F, A) ->
     call_with_patience_(Node, M, F, A, ?SM_RPC_RETRIES).
-call_with_patience_(_Node, _M, _F, _A, 0) ->
+call_with_patience_(Node, M, F, A, 0) ->
     lager:error("Exhausted ~b retries for an RPC call to ~p ~p:~p/~b",
-                [?SM_RPC_RETRIES, _Node, _M, _F, length(_A)]),
-    ?assert(false);
+                [?SM_RPC_RETRIES, Node, M, F, length(A)]),
+    error({rpc_retries_exhausted, {Node, M, F, A}});
 call_with_patience_(Node, M, F, A, Retries) ->
     case rpc:call(Node, M, F, A) of
-        {badrpc, Reason} ->
+        {badrpc, Reason} = Error ->
             lager:error("RPC call to ~p failed with reason: ~p", [Node, Reason]),
-            ?assert(false);
+            error(Error);
         {error, timeout} ->
             lager:warning("RPC call to ~p:~p/~b on ~p timed out, ~b attempts remaining",
                           [M, F, length(A), Node, Retries]),
@@ -73,9 +72,11 @@ build_cluster(Size) ->
     build_cluster(Size, []).
 -spec build_cluster(non_neg_integer(), list()) -> [node()].
 build_cluster(Size, Config) ->
-    Nodes = rt:deploy_nodes(Size, Config),
+    [Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
     rt:join_cluster(Nodes),
-    %% ensemble_util:wait_until_cluster(Nodes),
+    ensemble_util:wait_until_cluster(Nodes),
+    ensemble_util:wait_for_membership(Node1),
+    ensemble_util:wait_until_stable(Node1, Size),
     Nodes.
 
 
@@ -104,8 +105,8 @@ wait_services_(Node, Services, SecsToWait) ->
     end.
 
 
--spec service_added(node(), config_name(), service_type(), service_config()) -> ok.
-service_added(Node, ServiceName, ServiceType, Config) ->
+-spec add_service(node(), config_name(), service_type(), service_config()) -> ok.
+add_service(Node, ServiceName, ServiceType, Config) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
             Node, data_platform_global_state, add_service_config,
@@ -116,8 +117,8 @@ service_added(Node, ServiceName, ServiceType, Config) ->
     Avl1 = lists:usort(Avl0 ++ [ServiceName]),
     ok = wait_services(Node, {Rnn0, Avl1}).
 
--spec service_removed(node(), config_name()) -> ok.
-service_removed(Node, ServiceName) ->
+-spec remove_service(node(), config_name()) -> ok.
+remove_service(Node, ServiceName) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
             Node, data_platform_global_state, remove_service,
@@ -129,8 +130,8 @@ service_removed(Node, ServiceName) ->
     ok = wait_services(Node, {Rnn0, Avl1}).
 
 
--spec service_started(node(), node(), config_name(), service_type()) -> ok.
-service_started(Node, ServiceNode, ServiceName, Group) ->
+-spec start_service(node(), node(), config_name(), service_type()) -> ok.
+start_service(Node, ServiceNode, ServiceName, Group) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
            Node, data_platform_global_state, start_service,
@@ -141,8 +142,8 @@ service_started(Node, ServiceNode, ServiceName, Group) ->
     Rnn1 = lists:usort(Rnn0 ++ [ServiceName]),
     ok = wait_services(Node, {Rnn1, Avl0}).
 
--spec service_stopped(node(), node(), config_name(), service_type()) -> ok.
-service_stopped(Node, ServiceNode, ServiceName, Group) ->
+-spec stop_service(node(), node(), config_name(), service_type()) -> ok.
+stop_service(Node, ServiceNode, ServiceName, Group) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
             Node, data_platform_global_state, stop_service,
@@ -155,67 +156,3 @@ service_stopped(Node, ServiceNode, ServiceName, Group) ->
 
 
 
-%% Makeshift SM API: node join/leave.
-%% Bits of code copied here from data_platform_console
-%% This really calls for implementing proper SM API in data_platform_*.
-
-%% TODO: make behave
-
-make_node_leave(Node, FromNode) ->
-    lager:info("away goes ~p", [Node]),
-    rt:wait_until(
-      fun() -> ok == do_leave(Node, FromNode) end).
-
-do_leave(Node, FromNode) ->
-    F = fun(M, F, A) -> rpc:call(FromNode, M, F, A) end,
-    RootLeader = F(riak_ensemble_manager, rleader_pid, []),
-    case F(riak_ensemble_peer, update_members, [RootLeader, [{del, {root, Node}}]]) of
-        ok ->
-            case wait_for_root_leave(F, Node, 30) of
-                ok ->
-                    NewRootLeader = F(riak_ensemble_manager, rleader_pid, []),
-                    case F(riak_ensemble_manager, remove, [node(NewRootLeader), Node]) of
-                        ok ->
-                            ok;
-                        Error ->
-                            Error
-                    end;
-                Error ->
-                    Error
-            end;
-        Error ->
-            Error
-    end.
-
-wait_for_root_leave(F, Node, Timeout) ->
-    wait_for_root_leave(F, Node, 0, Timeout).
-
-wait_for_root_leave(_F, _Node, RetryCount, RetryLimit) when RetryCount =:= RetryLimit ->
-    {error, timeout_waiting_to_leave_root_ensemble};
-wait_for_root_leave(F, Node, RetryCount, RetryLimit) ->
-    case in_root_ensemble(F, Node) of
-        true ->
-            timer:sleep(1000),
-            wait_for_root_leave(F, Node, RetryCount + 1, RetryLimit);
-        false ->
-            ok
-    end.
-
-in_root_ensemble(F, Node) ->
-    RootNodes = [N || {root, N} <- F(riak_ensemble_manager, get_members, [root])],
-    lists:member(Node, RootNodes).
-
-
-make_node_join(Node, ToNode) ->
-    lager:info("Join ~p", [Node]),
-    %% ring-readiness and transfer-complete status is of no
-    %% consequence for our tests, so just proceed
-    case rpc:call(ToNode, riak_ensemble_manager, join, [Node, ToNode]) of
-        ok ->
-            ok;
-        remote_not_enabled ->
-            %% it's an error, in the context of a test run
-            lager:error("Ensemble not enabled on node ~p", [Node]);
-        Error ->
-            lager:error("Joining node ~p from ~p failed: ~p", [Node, ToNode, Error])
-    end.
