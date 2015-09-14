@@ -23,4 +23,5 @@ dialyzer_unhandled_warnings
 dialyzer_warnings
 .idea
 riak_test.iml
-
+.DS_Store
+*.iml
