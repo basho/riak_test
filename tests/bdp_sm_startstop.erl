@@ -52,7 +52,7 @@ confirm() ->
     lager:info("Service ~p (~s) added", [?S2_NAME, ?S2_TYPE]),
 
     %% start S2 separately
-    ok = bdp_util:start_seervice(Node1, Node3, ?S2_NAME, ?S2_TYPE),
+    ok = bdp_util:start_service(Node1, Node3, ?S2_NAME, ?S2_TYPE),
     lager:info("Service ~p up   on ~p", [?S2_NAME, Node3]),
 
     %% run the main battery
@@ -108,7 +108,7 @@ test_service_manager(NodeA, NodeB, NodeC, Desc) ->
 
 test_cross_node_start_stop(ServiceNode, Node1, Node2) ->
     %% start it, on Node1
-    ok = bdp_util:start_seervice(Node1, ServiceNode, ?S1_NAME, ?S1_TYPE),
+    ok = bdp_util:start_service(Node1, ServiceNode, ?S1_NAME, ?S1_TYPE),
     lager:info("Service ~p up   on ~p", [?S1_NAME, Node1]),
 
     %% stop it, on Node2

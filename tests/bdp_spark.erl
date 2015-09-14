@@ -74,7 +74,7 @@ add_spark_service(Node, ServiceName, Config, WaitServices) ->
 
 
 start_services(Node, [{ServiceNode, ServiceName} | Rest]) ->
-    ok = bdp_util:start_seervice(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
+    ok = bdp_util:start_service(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
     lager:info("Service ~p up on ~p node", [ServiceName, ServiceNode]),
     start_services(Node, Rest);
 start_services(_, []) -> ok.
