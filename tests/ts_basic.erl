@@ -24,12 +24,14 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(BUCKET, <<"ts-test-bucket-one">>).
+-define(BUCKET, <<"ts_test_bucket_one">>).
 -define(PKEY_P1, <<"sensor">>).
 -define(PKEY_P2, <<"time">>).
 
 
 confirm() ->
+    %% io:format("Data to be written: ~p\n", [make_data()]),
+
     ClusterSize = 3,
     lager:info("Building cluster"),
     _Nodes = [Node1, _Node2, _Node3] =
@@ -44,8 +46,8 @@ confirm() ->
                  " money float not null, "
                  " PRIMARY KEY((quantum(time, 10, s)), time, sensor))",
                  [?BUCKET, ?PKEY_P1, ?PKEY_P2]),
-    Props = io_lib:format("'{props: {n_val: 3, table_def: \"~s\"}}'", [TableDef]),
-    rt:admin(Node1, ["bucket-type", "create", ?BUCKET, lists:flatten(Props)]),
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
+    rt:admin(Node1, ["bucket-type", "create", binary_to_list(?BUCKET), lists:flatten(Props)]),
 
     %% 2. set up a client
     C = rt:pbc(Node1),
@@ -75,10 +77,10 @@ build_cluster(Size) ->
     build_cluster(Size, []).
 -spec build_cluster(non_neg_integer(), list()) -> [node()].
 build_cluster(Size, Config) ->
-    [Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
+    [_Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
     rt:join_cluster(Nodes),
-    ensemble_util:wait_until_cluster(Nodes),
-    ensemble_util:wait_for_membership(Node1),
+    %% ensemble_util:wait_until_cluster(Nodes),
+    %% ensemble_util:wait_for_membership(Node1),
     %%ensemble_util:wait_until_stable(Node1, Size),
     Nodes.
 
@@ -87,8 +89,8 @@ build_cluster(Size, Config) ->
 make_data() ->
     lists:foldl(
       fun(T, Q) ->
-              [[{<<?PKEY_P1/binary>>, "ZXC11"},
-                {<<?PKEY_P2/binary>>, ?LIFESPAN - T},
-                {<<"money">>, math:sin(float(T) / 100 * math:pi())}] | Q]
+              [[<<"ZXC11">>,
+                ?LIFESPAN - T,
+                math:sin(float(T) / 100 * math:pi())] | Q]
       end,
-      [], 0).
+      [], lists:seq(0, ?LIFESPAN)).
