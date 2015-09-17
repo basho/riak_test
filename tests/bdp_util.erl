@@ -22,7 +22,7 @@
 -module(bdp_util).
 
 -export([build_cluster/1, build_cluster/2,
-         add_service/4, remove_service/2, start_seervice/4, stop_service/4]).
+         add_service/4, remove_service/2, start_service/4, stop_service/4]).
 -export([get_services/1, wait_services/2]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -130,8 +130,8 @@ remove_service(Node, ServiceName) ->
     ok = wait_services(Node, {Rnn0, Avl1}).
 
 
--spec start_seervice(node(), node(), config_name(), service_type()) -> ok.
-start_seervice(Node, ServiceNode, ServiceName, Group) ->
+-spec start_service(node(), node(), config_name(), service_type()) -> ok.
+start_service(Node, ServiceNode, ServiceName, Group) ->
     {Rnn0, Avl0} = get_services(Node),
     Res = call_with_patience(
            Node, data_platform_global_state, start_service,
