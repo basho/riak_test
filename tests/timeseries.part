@@ -1,0 +1,195 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2015 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
+%% @doc A part module for riak_ts basic CREATE TABLE Actions
+
+-behavior(riak_test).
+
+-compile(export_all).
+-export([confirm/0]).
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(MAXVARCHARLEN, 1024).
+-define(MAXTIMESTAMP,  trunc(math:pow(2, 63))).
+-define(MAXFLOAT,      math:pow(2, 63)).
+
+confirm() -> 
+    case ?TYPE of
+	create   -> confirm_create(?CLUSTER);
+	activate -> confirm_activate(?CLUSTER);
+	put      -> confirm_put(?CLUSTER);
+	select   -> confirm_select(?CLUSTER)
+end.
+
+confirm_create(single) ->
+
+    ClusterSize = 1,
+    lager:info("Building cluster of 1"),
+    [Node] =build_cluster(ClusterSize),
+
+    TableDef = get_ddl(?DDL),
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
+    Got = rt:admin(Node, ["bucket-type", "create", get_bucket(?DDL), lists:flatten(Props)]),
+    ?assertEqual(?EXPECTED, Got),
+
+    pass.
+
+confirm_activate(single) ->
+    
+    [Node]  = build_cluster(1),
+    {ok, _} = create_bucket(Node, ?DDL),
+    Got     = activate_bucket(?DDL),
+    ?assertEqual(?EXPECTED, Got),
+
+    pass.
+
+
+confirm_put(single) ->
+
+    [Node]  = build_cluster(1),
+    {ok, _} = create_bucket(Node, ?DDL),
+    {ok, _} = activate_bucket(?DDL),
+
+    Obj = get_valid_obj(?DDL),
+    Ret = riakc_ts:put(self(), list_to_binary(get_bucket(?DDL)), Obj),
+    %% gg:format("Ret is ~p~n", [Ret]),
+
+    ?assertEqual(bish, bash),
+    
+    pass.
+
+confirm_select(single) ->
+
+    ?assertEqual(fish, fash),
+    
+    pass.
+
+%%
+%% Helper funs
+%%
+
+activate_bucket(DDL) ->
+    rt:admin(Node, ["bucket-type", "activate", get_bucket(DDL)]).
+
+create_bucket(Node, DDL) ->
+    TableDef = get_ddl(?DDL),
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, " ++
+			      "\\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
+    rt:admin(Node, ["bucket-type", "create", get_bucket(?DDL), 
+		    lists:flatten(Props)]).
+
+%% @ignore
+%% copied from ensemble_util.erl
+-spec build_cluster(non_neg_integer()) -> [node()].
+build_cluster(Size) ->
+    lager:info("Building cluster of ~p~n", [Size]),
+    build_cluster(Size, []).
+-spec build_cluster(non_neg_integer(), list()) -> [node()].
+build_cluster(Size, Config) ->
+    [_Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
+    rt:join_cluster(Nodes),
+    Nodes.
+
+get_bucket(_) ->
+    "GeoCheckin".
+
+%% a valid DDL - the one used in the documents
+get_ddl(docs) ->
+    _SQL = "CREATE TABLE GeoCheckin (" ++
+	"myfamily    varchar   not null, " ++
+	"myseries    varchar   not null, " ++
+	"time        timestamp not null, " ++
+	"weather     varchar   not null, " ++
+	"temperature float, " ++
+	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
+	"time, myfamily, myseries))";
+%% another valid DDL - one with all the good stuff like
+%% different types and optional blah-blah
+get_ddl(variety) ->
+    _SQL = "CREATE TABLE GeoCheckin (" ++
+	"myfamily    varchar     not null, " ++
+	"myseries    varchar     not null, " ++
+	"time        timestamp   not null, " ++
+	"myint       integer     not null, " ++
+	"myfloat     float       not null, " ++
+	"mybool      boolean     not null, " ++
+	"mytimestamp timestamp   not null, " ++
+	"myany       any         not null, " ++
+	"myoptional  integer, " ++
+	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
+	"time, myfamily, myseries))";
+%% an invalid TS DDL becuz family and series not both in key
+get_ddl(shortkey_fail) ->
+    _SQL = "CREATE TABLE GeoCheckin (" ++
+	"myfamily    varchar   not null, " ++
+	"myseries    varchar   not null, " ++
+	"time        timestamp not null, " ++
+	"weather     varchar   not null, " ++
+	"temperature float, " ++
+	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily), " ++
+	"time, myfamily))";
+%% an invalid TS DDL becuz partition and local keys dont cover the same space
+get_ddl(splitkey_fail) ->
+    _SQL = "CREATE TABLE GeoCheckin (" ++
+	"myfamily    varchar   not null, " ++
+	"myseries    varchar   not null, " ++
+	"time        timestamp not null, " ++
+	"weather     varchar   not null, " ++
+	"temperature float, " ++
+	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
+	"time, myfamily, myseries, temperature))";
+%% another invalid TS DDL because family/series must be varchar
+%% or is this total bollox???
+get_ddl(keytype_fail_mebbies_or_not_eh_check_it_properly_muppet_boy) ->
+    _SQL = "CREATE TABLE GeoCheckin (" ++
+	"myfamily    integer   not null, " ++
+	"myseries    varchar   not null, " ++
+	"time        timestamp not null, " ++
+	"weather     varchar   not null, " ++
+	"temperature float, " ++
+	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
+	"time, myfamily, myseries))".
+
+get_valid_obj(docs) ->
+    {get_varchar(),
+     get_varchar(),
+     get_timestamp(),
+     get_varchar(),
+     get_float()}.
+
+get_varchar() ->
+    Len = random:uniform(?MAXVARCHARLEN),
+    _String = get_string(Len).
+    
+get_string(Len) ->
+    get_s(Len, []).
+
+get_s(0, Acc) ->
+    Acc;
+get_s(N, Acc) when is_integer(N) andalso N > 0 ->
+    get_s(N - 1, [random:uniform(255) | Acc]).
+
+get_timestamp() ->
+    random:uniform(?MAXTIMESTAMP).
+
+get_float() ->
+    F1 = random:uniform(trunc(?MAXFLOAT)),
+    F2 = random:uniform(trunc(?MAXFLOAT)),
+    F1 - F2.
