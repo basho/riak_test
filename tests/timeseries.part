@@ -1,3 +1,4 @@
+%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -30,52 +31,54 @@
 -define(MAXTIMESTAMP,  trunc(math:pow(2, 63))).
 -define(MAXFLOAT,      math:pow(2, 63)).
 
-confirm() -> 
+confirm() ->
+    Cluster = single,
+    DDL = "fafa",
     case ?TYPE of
-	create   -> confirm_create(?CLUSTER);
-	activate -> confirm_activate(?CLUSTER);
-	put      -> confirm_put(?CLUSTER);
-	select   -> confirm_select(?CLUSTER)
+	create   -> confirm_create(Cluster, DDL);
+	activate -> confirm_activate(Cluster, DDL);
+	put      -> confirm_put(Cluster, DDL);
+	select   -> confirm_select(Cluster, DDL)
 end.
 
-confirm_create(single) ->
+confirm_create(single, DDL) ->
 
     ClusterSize = 1,
     lager:info("Building cluster of 1"),
     [Node] =build_cluster(ClusterSize),
 
-    TableDef = get_ddl(?DDL),
+    TableDef = get_ddl(DDL),
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
-    Got = rt:admin(Node, ["bucket-type", "create", get_bucket(?DDL), lists:flatten(Props)]),
+    Got = rt:admin(Node, ["bucket-type", "create", get_bucket(DDL), lists:flatten(Props)]),
     ?assertEqual(?EXPECTED, Got),
 
     pass.
 
-confirm_activate(single) ->
+confirm_activate(single, DDL) ->
     
     [Node]  = build_cluster(1),
-    {ok, _} = create_bucket(Node, ?DDL),
-    Got     = activate_bucket(?DDL),
+    {ok, _} = create_bucket(Node, DDL),
+    Got     = activate_bucket(Node, DDL),
     ?assertEqual(?EXPECTED, Got),
 
     pass.
 
 
-confirm_put(single) ->
+confirm_put(single, DDL) ->
 
     [Node]  = build_cluster(1),
-    {ok, _} = create_bucket(Node, ?DDL),
-    {ok, _} = activate_bucket(?DDL),
+    {ok, _} = create_bucket(Node, DDL),
+    {ok, _} = activate_bucket(Node, DDL),
 
-    Obj = get_valid_obj(?DDL),
-    Ret = riakc_ts:put(self(), list_to_binary(get_bucket(?DDL)), Obj),
+    Obj = get_valid_obj(DDL),
+    _Ret = riakc_ts:put(self(), list_to_binary(get_bucket(DDL)), Obj),
     %% gg:format("Ret is ~p~n", [Ret]),
 
     ?assertEqual(bish, bash),
     
     pass.
 
-confirm_select(single) ->
+confirm_select(single, _DDL) ->
 
     ?assertEqual(fish, fash),
     
@@ -85,14 +88,14 @@ confirm_select(single) ->
 %% Helper funs
 %%
 
-activate_bucket(DDL) ->
+activate_bucket(Node, DDL) ->
     rt:admin(Node, ["bucket-type", "activate", get_bucket(DDL)]).
 
 create_bucket(Node, DDL) ->
-    TableDef = get_ddl(?DDL),
+    TableDef = get_ddl(DDL),
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, " ++
 			      "\\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
-    rt:admin(Node, ["bucket-type", "create", get_bucket(?DDL), 
+    rt:admin(Node, ["bucket-type", "create", get_bucket(DDL), 
 		    lists:flatten(Props)]).
 
 %% @ignore
