@@ -27,7 +27,8 @@
 -define(BUCKET, <<"ts_test_bucket_one">>).
 -define(PKEY_P1, <<"sensor">>).
 -define(PKEY_P2, <<"time">>).
-
+-define(PVAL_P1, <<"ZXC11">>).
+-define(TIMEBASE, (10*1000*1000)).
 
 confirm() ->
     %% io:format("Data to be written: ~p\n", [make_data()]),
@@ -63,25 +64,14 @@ confirm() ->
     Query =
         lists:flatten(
           io_lib:format(
-            "select * from ~s where ~s > 19 and ~s < 80 and sensor = \"~s\"",
-           [?BUCKET, ?PKEY_P2, ?PKEY_P2, ?PKEY_P1])),
-    {ok, Selected} = fetch_with_patience(C, Query, 10),
-    ?assert(length(Selected) == 60),
+            "select * from ~s where ~s > ~b and ~s < ~b and sensor = \"~s\"",
+           [?BUCKET, ?PKEY_P2, ?TIMEBASE + 10, ?PKEY_P2, ?TIMEBASE + 20, ?PVAL_P1])),
+    io:format("Running query: ~p\n", [Query]),
+    {_Columns, Rows} = riakc_ts:query(C, Query),
+    io:format("Got ~b rows back\n", [length(Rows)]),
+    ?assertEqual(length(Rows), 10),
 
     pass.
-
-fetch_with_patience(_C, Query, 0) ->
-    io:format("Failed waiting for fetch on query ~p", [Query]),
-    {error, fetch_timed_out};
-fetch_with_patience(C, Query, Tries) ->
-    case riakc_ts:query(C, Query) of
-        {ok, Selected} ->
-            {ok, Selected};
-        NotOk ->
-            io:format("Fetch attempt ~b failed: ~p\n", [10 - Tries, NotOk]),
-            timer:sleep(1000),
-            fetch_with_patience(C, Query, Tries - 1)
-    end.
 
 
 %% @ignore
@@ -95,12 +85,12 @@ build_cluster(Size, Config) ->
     Nodes.
 
 
--define(LIFESPAN, 100).
+-define(LIFESPAN, 30).
 make_data() ->
     lists:foldl(
       fun(T, Q) ->
-              [[<<"ZXC11">>,
-                ?LIFESPAN - T + 1,
+              [[?PVAL_P1,
+                ?TIMEBASE + ?LIFESPAN - T + 1,
                 math:sin(float(T) / 100 * math:pi())] | Q]
       end,
       [], lists:seq(?LIFESPAN, 0, -1)).
