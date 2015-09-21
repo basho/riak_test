@@ -48,8 +48,6 @@ confirm() ->
     ok = add_spark_service(Node1, ?SERVICE_2, ?SERVICE_CONFIG_2),
     ok = start_services(Node1, [{Node1, ?SERVICE_1}, {Node2, ?SERVICE_2}]),
 
-    lager:info("Waiting 1  min..."),
-    timer:sleep(60000),
     ok = test_spark_fail_recovery(),
 
     ok = stop_services(Node1, [{Node1, ?SERVICE_1}, {Node2, ?SERVICE_2}]),

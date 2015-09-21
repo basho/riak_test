@@ -7,34 +7,46 @@ if [ -z ${3} ]; then
 else 
   TIMEOUT=${3}
 fi
+ATTEMPTS=3
 
-SPARK1_PID=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev1 | awk '{print $2}'`
-SPARK2_PID=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev2 | awk '{print $2}'`
+a=1
 
-LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" "$SPARK1_LOG_FILE" | tail -1)
-if [ -n "$LOG_STR" ]; then
-  leader_log=$SPARK1_LOG_FILE
-  leader_pid=$SPARK1_PID
-  standby_log=$SPARK2_LOG_FILE
-else
-  LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" "$SPARK2_LOG_FILE" | tail -1)
-  if [ -n "$LOG_STR" ]; then
-    leader_log=$SPARK2_LOG_FILE
-    leader_pid=$SPARK2_PID
-    standby_log=$SPARK1_LOG_FILE
-  else
-    echo "No leader found"
-    exit 1
+while [ $a -le "$ATTEMPTS" ]
+do
+  a=$(($a+1))
+  if [ -f $SPARK1_LOG_FILE ] && [ -f $SPARK2_LOG_FILE ]; then
+    LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" $SPARK1_LOG_FILE | tail -1)
+    if [ -n "$LOG_STR" ]; then
+      leader_log=$SPARK1_LOG_FILE
+      leader_pid=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev1 | awk '{print $2}'`
+      standby_log=$SPARK2_LOG_FILE
+      break
+    else
+      LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" $SPARK2_LOG_FILE | tail -1)
+      if [ -n "$LOG_STR" ]; then
+        leader_log=$SPARK2_LOG_FILE
+        leader_pid=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev2 | awk '{print $2}'`
+        standby_log=$SPARK1_LOG_FILE
+        break
+      fi
+    fi
   fi
+  sleep $TIMEOUT
+done
+
+if [ -z "$leader_pid" ]; then
+  echo "No leader found"
+  exit 1
 fi
 
-if [[ $(ps -p "$leader_pid" -o comm=) =~ "java" ]]; then
-   kill "$leader_pid"
+
+if [[ $(ps -p $leader_pid -o comm=) =~ "java" ]]; then
+   kill $leader_pid
 fi
 
 sleep $TIMEOUT
 
-LOG_STR=$(grep "Master: I have been elected leader!" "$standby_log" | tail -1)
+LOG_STR=$(grep "Master: I have been elected leader!" $standby_log | tail -1)
 if [ -n "$LOG_STR" ]; then
   echo ok
 else

@@ -52,8 +52,6 @@ confirm() ->
     ok = add_spark_service(Node1, ?SERVICE_WORKER_1, ?SPARK_WORKER_TYPE, ?SERVICE_WORKER_CONFIG_1),
     ok = start_services(Node1, [{Node1, ?SERVICE_1, ?SPARK_MASTER_TYPE}, {Node2, ?SERVICE_2, ?SPARK_MASTER_TYPE}, {Node1, ?SERVICE_WORKER_1, ?SPARK_WORKER_TYPE}]),
 
-    lager:info("Waiting 1  min..."),
-    timer:sleep(60000),
     ok = test_spark_fail_recovery(),
 
     ok = stop_services(Node1, [{Node1, ?SERVICE_1, ?SPARK_MASTER_TYPE}, {Node2, ?SERVICE_2, ?SPARK_MASTER_TYPE}, {Node1, ?SERVICE_WORKER_1, ?SPARK_WORKER_TYPE}]),
