@@ -7,6 +7,7 @@ if [ -z ${3} ]; then
 else 
   TIMEOUT=${3}
 fi
+
 ATTEMPTS=3
 
 a=1
@@ -17,17 +18,23 @@ do
   if [ -f $SPARK1_LOG_FILE ] && [ -f $SPARK2_LOG_FILE ]; then
     LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" $SPARK1_LOG_FILE | tail -1)
     if [ -n "$LOG_STR" ]; then
-      leader_log=$SPARK1_LOG_FILE
-      leader_pid=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev1 | awk '{print $2}'`
-      standby_log=$SPARK2_LOG_FILE
-      break
+      worker_str=$(grep "Registering worker" $SPARK1_LOG_FILE | tail -1)
+      if [ -n "$worker_str" ]; then 
+        leader_log=$SPARK1_LOG_FILE
+        leader_pid=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev1 | awk '{print $2}'`
+        standby_log=$SPARK2_LOG_FILE
+        break
+      fi
     else
       LOG_STR=$(grep "RiakEnsembleLeaderElectionAgent: We have gained leadership" $SPARK2_LOG_FILE | tail -1)
       if [ -n "$LOG_STR" ]; then
-        leader_log=$SPARK2_LOG_FILE
-        leader_pid=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev2 | awk '{print $2}'`
-        standby_log=$SPARK1_LOG_FILE
-        break
+        worker_str=$(grep "Registering worker" "$SPARK2_LOG_FILE" | tail -1)
+        if [ -n "$worker_str" ]; then
+          leader_log=$SPARK2_LOG_FILE
+          leader_pid=`ps -ef | grep 'org.apache.spark.deploy.master.Master' | grep 'Dspark' | grep dev2 | awk '{print $2}'`
+          standby_log=$SPARK1_LOG_FILE
+          break
+        fi
       fi
     fi
   fi
@@ -39,7 +46,6 @@ if [ -z "$leader_pid" ]; then
   exit 1
 fi
 
-
 if [[ $(ps -p $leader_pid -o comm=) =~ "java" ]]; then
    kill $leader_pid
 fi
@@ -48,7 +54,13 @@ sleep $TIMEOUT
 
 LOG_STR=$(grep "Master: I have been elected leader!" $standby_log | tail -1)
 if [ -n "$LOG_STR" ]; then
-  echo ok
+   worker_str=$(grep "Worker has been re-registered" $standby_log | tail -1)
+    if [ -n "$worker_str" ]; then
+      echo ok
+    else 
+      echo "Worker wasn't re-registered"
+      exit 1
+    fi
 else
   echo "New leader wasn't elected"
   exit 1

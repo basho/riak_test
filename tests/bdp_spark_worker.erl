@@ -19,21 +19,24 @@
 %% -------------------------------------------------------------------
 %% @doc A module to test Spark fail/recovery under BDP service manager.
 
--module(bdp_spark).
+-module(bdp_spark_worker).
 -behavior(riak_test).
 -export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 -define(SERVICE_1, "spark-service-one").
+-define(SERVICE_WORKER_1, "spark-service-worker-1").
 -define(SERVICE_2, "spark-service-two").
 -define(SPARK_MASTER_TYPE, "spark-master").
+-define(SPARK_WORKER_TYPE, "spark-worker").
 -define(SPARK_IDENT_STRING, "bdp_spark_test").
 -define(HOSTNAME, "test").
 -define(SPARK1_PID_DIR, "/tmp/service1").
 -define(SPARK2_PID_DIR, "/tmp/service2").
 -define(SERVICE_CONFIG_1, [{"SPARK_MASTER_PORT", "7077"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", ?SPARK1_PID_DIR}, {"SPARK_IDENT_STRING", ?SPARK_IDENT_STRING}, {"HOSTNAME", ?HOSTNAME}]).
--define(SERVICE_CONFIG_2, [{"SPARK_MASTER_PORT", "7078"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", ?SPARK2_PID_DIR}, {"SPARK_IDENT_STRING", ?SPARK_IDENT_STRING}, {"HOSTNAME", ?HOSTNAME}]).
+-define(SERVICE_WORKER_CONFIG_1, [{"MASTER_URL", "spark://localhost:7077,localhost:7078"}, {"SPARK_WORKER_PORT", "7079"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", ?SPARK2_PID_DIR}, {"SPARK_IDENT_STRING", ?SPARK_IDENT_STRING}, {"HOSTNAME", ?HOSTNAME}]).
+-define(SERVICE_CONFIG_2, [{"SPARK_MASTER_PORT", "7078"}, {"HOST", "localhost"}, {"SPARK_PID_DIR", ?SPARK1_PID_DIR}, {"SPARK_IDENT_STRING", ?SPARK_IDENT_STRING}, {"HOSTNAME", ?HOSTNAME}]).
 -define(TIMEOUT, "60").
 
 confirm() ->
@@ -44,15 +47,17 @@ confirm() ->
 
     ok = create_spark_bucket_types(Node1),
 
-    ok = add_spark_service(Node1, ?SERVICE_1, ?SERVICE_CONFIG_1),
-    ok = add_spark_service(Node1, ?SERVICE_2, ?SERVICE_CONFIG_2),
-    ok = start_services(Node1, [{Node1, ?SERVICE_1}, {Node2, ?SERVICE_2}]),
+    ok = add_spark_service(Node1, ?SERVICE_1, ?SPARK_MASTER_TYPE, ?SERVICE_CONFIG_1),
+    ok = add_spark_service(Node1, ?SERVICE_2, ?SPARK_MASTER_TYPE, ?SERVICE_CONFIG_2),
+    ok = add_spark_service(Node1, ?SERVICE_WORKER_1, ?SPARK_WORKER_TYPE, ?SERVICE_WORKER_CONFIG_1),
+    ok = start_services(Node1, [{Node1, ?SERVICE_1, ?SPARK_MASTER_TYPE}, {Node2, ?SERVICE_2, ?SPARK_MASTER_TYPE}, {Node1, ?SERVICE_WORKER_1, ?SPARK_WORKER_TYPE}]),
 
     ok = test_spark_fail_recovery(),
 
-    ok = stop_services(Node1, [{Node1, ?SERVICE_1}, {Node2, ?SERVICE_2}]),
+    ok = stop_services(Node1, [{Node1, ?SERVICE_1, ?SPARK_MASTER_TYPE}, {Node2, ?SERVICE_2, ?SPARK_MASTER_TYPE}, {Node1, ?SERVICE_WORKER_1, ?SPARK_WORKER_TYPE}]),
     ok = remove_spark_service(Node1, ?SERVICE_1),
     ok = remove_spark_service(Node1, ?SERVICE_2),
+    ok = remove_spark_service(Node1, ?SERVICE_WORKER_1),
 
     pass.
 
@@ -64,21 +69,21 @@ create_spark_bucket_types(Node) ->
     ok.
 
 
-add_spark_service(Node, ServiceName, Config) ->
-    ok = bdp_util:add_service(Node, ServiceName, ?SPARK_MASTER_TYPE, Config),
-    lager:info("Service definition ~p (~s) added to node ~p", [ServiceName, ?SPARK_MASTER_TYPE, Node]),
+add_spark_service(Node, ServiceName, ServiceType, Config) ->
+    ok = bdp_util:add_service(Node, ServiceName, ServiceType, Config),
+    lager:info("Service definition ~p (~s) added to node ~p", [ServiceName, ServiceType, Node]),
     ok.
 
 
-start_services(Node, [{ServiceNode, ServiceName} | Rest]) ->
-    ok = bdp_util:start_seervice(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
+start_services(Node, [{ServiceNode, ServiceName, ServiceType} | Rest]) ->
+    ok = bdp_util:start_seervice(Node, ServiceNode, ServiceName, ServiceType),
     lager:info("Service ~p up on ~p node", [ServiceName, ServiceNode]),
     start_services(Node, Rest);
 start_services(_, []) -> ok.
 
 
-stop_services(Node, [{ServiceNode, ServiceName} | Rest]) ->
-    ok = bdp_util:stop_service(Node, ServiceNode, ServiceName, ?SPARK_MASTER_TYPE),
+stop_services(Node, [{ServiceNode, ServiceName, ServiceType} | Rest]) ->
+    ok = bdp_util:stop_service(Node, ServiceNode, ServiceName, ServiceType),
     lager:info("Service ~p down on ~p", [ServiceName, Node]),
     stop_services(Node, Rest);
 stop_services(_, []) -> ok.
@@ -126,7 +131,7 @@ test_spark_fail_recovery() ->
     lager:info("Spark service two log path ~s", [Spark2LogFile]),
  
     os:cmd("chmod +x ./priv/bdp_spark_test/leader_election_check.sh"),
-    Command = "./priv/bdp_spark_test/leader_election_check.sh " ++ Spark1LogFile ++ " " ++ Spark2LogFile ++ " " ++ ?TIMEOUT,
+    Command = "./priv/bdp_spark_test/worker_failover.sh " ++ Spark1LogFile ++ " " ++ Spark2LogFile ++ " " ++ ?TIMEOUT,
     lager:info("Running bash script: ~s", [Command]),
     Res = os:cmd(Command),
     ?assertEqual("ok\n", Res),
