@@ -18,12 +18,10 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc A part module for riak_ts basic CREATE TABLE Actions
-
--behavior(riak_test).
+%% @doc A util module for riak_ts basic CREATE TABLE Actions
+-module(timeseries_util).
 
 -compile(export_all).
--export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -31,54 +29,44 @@
 -define(MAXTIMESTAMP,  trunc(math:pow(2, 63))).
 -define(MAXFLOAT,      math:pow(2, 63)).
 
-confirm() ->
-    Cluster = single,
-    DDL = "fafa",
-    case ?TYPE of
-	create   -> confirm_create(Cluster, DDL);
-	activate -> confirm_activate(Cluster, DDL);
-	put      -> confirm_put(Cluster, DDL);
-	select   -> confirm_select(Cluster, DDL)
-end.
-
-confirm_create(single, DDL) ->
+confirm_create(single, DDL, Expected) ->
 
     ClusterSize = 1,
     lager:info("Building cluster of 1"),
+
     [Node] =build_cluster(ClusterSize),
 
-    TableDef = get_ddl(DDL),
-    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
-    Got = rt:admin(Node, ["bucket-type", "create", get_bucket(DDL), lists:flatten(Props)]),
-    ?assertEqual(?EXPECTED, Got),
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
+    Got = rt:admin(Node, ["bucket-type", "create", get_bucket(), lists:flatten(Props)]),
+    ?assertEqual(Expected, Got),
 
     pass.
 
-confirm_activate(single, DDL) ->
+confirm_activate(single, DDL, Expected) ->
     
     [Node]  = build_cluster(1),
     {ok, _} = create_bucket(Node, DDL),
     Got     = activate_bucket(Node, DDL),
-    ?assertEqual(?EXPECTED, Got),
+    ?assertEqual(Expected, Got),
 
     pass.
 
 
-confirm_put(single, DDL) ->
+confirm_put(single, DDL, _Expected) ->
 
     [Node]  = build_cluster(1),
     {ok, _} = create_bucket(Node, DDL),
     {ok, _} = activate_bucket(Node, DDL),
 
-    Obj = get_valid_obj(DDL),
-    _Ret = riakc_ts:put(self(), list_to_binary(get_bucket(DDL)), Obj),
+    Obj = get_valid_obj(),
+    _Ret = riakc_ts:put(self(), list_to_binary(get_bucket()), Obj),
     %% gg:format("Ret is ~p~n", [Ret]),
 
     ?assertEqual(bish, bash),
     
     pass.
 
-confirm_select(single, _DDL) ->
+confirm_select(single, _DDL, _Expected) ->
 
     ?assertEqual(fish, fash),
     
@@ -88,14 +76,13 @@ confirm_select(single, _DDL) ->
 %% Helper funs
 %%
 
-activate_bucket(Node, DDL) ->
-    rt:admin(Node, ["bucket-type", "activate", get_bucket(DDL)]).
+activate_bucket(Node, _DDL) ->
+    rt:admin(Node, ["bucket-type", "activate", get_bucket()]).
 
 create_bucket(Node, DDL) ->
-    TableDef = get_ddl(DDL),
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, " ++
-			      "\\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
-    rt:admin(Node, ["bucket-type", "create", get_bucket(DDL), 
+			      "\\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
+    rt:admin(Node, ["bucket-type", "create", get_bucket(), 
 		    lists:flatten(Props)]).
 
 %% @ignore
@@ -110,7 +97,7 @@ build_cluster(Size, Config) ->
     rt:join_cluster(Nodes),
     Nodes.
 
-get_bucket(_) ->
+get_bucket() ->
     "GeoCheckin".
 
 %% a valid DDL - the one used in the documents
@@ -170,7 +157,7 @@ get_ddl(keytype_fail_mebbies_or_not_eh_check_it_properly_muppet_boy) ->
 	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
 	"time, myfamily, myseries))".
 
-get_valid_obj(docs) ->
+get_valid_obj() ->
     {get_varchar(),
      get_varchar(),
      get_timestamp(),

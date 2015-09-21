@@ -1,8 +1,17 @@
 -module(timeseries_activate_table_pass_1).
+-behavior(riak_test).
 
--define(TYPE,     activate).
--define(CLUSTER,  single).
--define(DDL,      docs).
--define(EXPECTED, {ok,"GeoCheckin has been activated\n\nWARNING: Nodes in this cluster can no longer be\ndowngraded to a version of Riak prior to 2.0\n"}).
+-export([
+	 confirm/0
+	]).
 
--include("timeseries.part").
+-import(timeseries_util, [
+			  get_ddl/1,
+			  confirm_activate/3
+			  ]).
+
+confirm() ->
+    Cluster = single,
+    DDL = get_ddl(docs),
+    Expected = {ok,"GeoCheckin has been activated\n\nWARNING: Nodes in this cluster can no longer be\ndowngraded to a version of Riak prior to 2.0\n"},
+    confirm_activate(Cluster, DDL, Expected).

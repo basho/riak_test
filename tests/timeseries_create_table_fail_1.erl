@@ -1,8 +1,18 @@
 -module(timeseries_create_table_fail_1).
 
--define(TYPE,     create).
--define(CLUSTER,  single).
--define(DDL,      shortkey_fail).
--define(EXPECTED, 'some error message, yeah?').
+-behavior(riak_test).
 
--include("timeseries.part").
+-export([
+	 confirm/0
+	]).
+
+-import(timeseries_util, [
+			  get_ddl/1,
+			  confirm_create/3
+			  ]).
+
+confirm() ->
+    Cluster = single,
+    DDL = get_ddl(shortkey_fail),
+    Expected = {ok,"some error message, yeah?"},
+    confirm_create(Cluster, DDL, Expected).
