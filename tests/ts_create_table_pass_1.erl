@@ -1,4 +1,4 @@
--module(timeseries_create_table_pass_1).
+-module(ts_create_table_pass_1).
 
 -behavior(riak_test).
 

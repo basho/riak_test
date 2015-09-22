@@ -1,4 +1,5 @@
--module(timeseries_activate_table_pass_1).
+-module(ts_activate_table_pass_1).
+
 -behavior(riak_test).
 
 -export([

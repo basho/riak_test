@@ -43,7 +43,7 @@ confirm_create(single, DDL, Expected) ->
     pass.
 
 confirm_activate(single, DDL, Expected) ->
-    
+
     [Node]  = build_cluster(1),
     {ok, _} = create_bucket(Node, DDL),
     Got     = activate_bucket(Node, DDL),
@@ -62,7 +62,7 @@ confirm_put(single, normal, DDL, Obj, Expected) ->
     C = rt:pbc(Node),
     Get = riakc_ts:put(C, Bucket, Obj),
     ?assertEqual(Expected, Get),
-    
+
     pass;
 confirm_put(single, no_ddl, _DDL, Obj, Expected) ->
     [Node]  = build_cluster(1),
@@ -71,13 +71,29 @@ confirm_put(single, no_ddl, _DDL, Obj, Expected) ->
     C = rt:pbc(Node),
     Get = riakc_ts:put(C, Bucket, Obj),
     ?assertEqual(Expected, Get),
-    
+
     pass.    
 
-confirm_select(single, _DDL, _Expected) ->
+confirm_select(single, DDL, Data, Qry, Expected) ->
+    
+    io:format("in confirm_select DDL is ~p~n- Data is ~p~n- Qry is ~p~n- Expected is ~p~n",
+	      [DDL, Data, Qry, Expected]),
+    [Node] = build_cluster(1),
+    
+    io:format("1 - Create and activate the bucket~n"),
+    {ok, _} = create_bucket(Node, DDL),
+    {ok, _} = activate_bucket(Node, DDL),
+    
+    Bucket = list_to_binary(get_bucket()),
+    io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Data]),
+    C = rt:pbc(Node),
+    ok = riakc_ts:put(C, Bucket, Data),
+    
+    io:format("3 - Now run the query ~p~n", [Qry]),
+    {Columns, Rows} = riakc_ts:query(C, Qry), 
+    io:format("Columms is ~p Rows is ~p~n", [Columns, Rows]),
 
     ?assertEqual(fish, fash),
-    
     pass.
 
 %%
@@ -107,6 +123,15 @@ build_cluster(Size, Config) ->
 
 get_bucket() ->
     "GeoCheckin".
+
+get_valid_qry() ->
+    "select * from GeoCheckin Where time > 1 and time < 10".
+
+get_valid_select_data() ->
+    Family = <<"myfamily">>,
+    Series = <<"myseries">>,
+    Times = lists:seq(1, 10),
+    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
 
 %% a valid DDL - the one used in the documents
 get_ddl(docs) ->

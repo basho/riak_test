@@ -1,4 +1,4 @@
--module(timeseries_put_pass_1).
+-module(ts_put_pass_1).
 
 -behavior(riak_test).
 

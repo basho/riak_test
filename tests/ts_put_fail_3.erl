@@ -1,7 +1,7 @@
--module(timeseries_put_fail_2).
+-module(ts_put_fail_3).
 
 %%
-%% this test tries to write duff data to a bucket
+%% this test tries to write total gibberish data to a bucket
 %%
 
 -behavior(riak_test).
@@ -12,13 +12,12 @@
 
 -import(timeseries_util, [
 			  get_ddl/1,
-			  get_invalid_obj/0,
 			  confirm_put/5
 			  ]).
 
 confirm() ->
     ClusterType = single,
     DDL = get_ddl(docs),
-    Obj = [get_invalid_obj()],
+    Obj = {[some], <<"total">>, g, i, b, {e, r, i, s, h}},
     Expected = "some error message",
     confirm_put(ClusterType, normal, DDL, Obj, Expected).

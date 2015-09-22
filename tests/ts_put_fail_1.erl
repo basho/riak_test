@@ -1,4 +1,4 @@
--module(timeseries_put_fail_1).
+-module(ts_put_fail_1).
 
 %%
 %% this test tries to write to a non-existant bucket
