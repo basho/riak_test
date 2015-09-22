@@ -117,6 +117,7 @@ confirm() ->
     test_repeat_sets(Pid, Nodes, ?BUCKET, ?INDEX, ?KEY),
     test_delete(Pid, Nodes, ?BUCKET, ?INDEX, ?KEY),
     test_delete_aae(Pid, Nodes, ?BUCKET, ?INDEX),
+    test_siblings(Pid, Nodes, ?BUCKET, ?INDEX),
 
     %% Stop PB connection.
     riakc_pb_socket:stop(Pid),
@@ -336,6 +337,145 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
                                                <<"*:*">>),
     lager:info("Search recreated map *:*: ~p~n", [Results3]),
     ?assertEqual(2, length(Results3)).
+
+test_siblings(Pid, Cluster, Bucket, Index) ->
+    Key1 = <<"Movies">>,
+    Key2 = <<"Games">>,
+    Set1 = <<"directors">>,
+    Set2 = <<"characters">>,
+
+    %% make siblings
+    {P1, P2} = lists:split(1, Cluster),
+
+    %% PB connections for accessing each side
+    Pid1 = rt:pbc(hd(P1)),
+    Pid2 = rt:pbc(hd(P2)),
+
+    %% Create an object in Partition 1 and siblings in Partition 2
+    lager:info("Create partition: ~p | ~p", [P1, P2]),
+    Partition = rt:partition(P1, P2),
+    try
+        %% P1 writes
+        lager:info("Writing to Partition 1 Set 1: Key ~p | Director ~p",
+                   [Key1, <<"Kubrick">>]),
+        M1 = riakc_map:update(
+               {Set1, set},
+               fun(S) ->
+                       riakc_set:add_element(<<"Kubrick">>, S)
+               end, riakc_map:new()),
+        ok = riakc_pb_socket:update_type(
+               Pid1,
+               Bucket,
+               Key1,
+               riakc_map:to_op(M1)),
+
+        lager:info("Writing to Partition 1 Set 1: Key ~p | Director ~p",
+                   [Key1, <<"Demme">>]),
+        M2 = riakc_map:update(
+               {Set1, set},
+               fun(S) ->
+                       riakc_set:add_element(<<"Demme">>, S)
+               end, riakc_map:new()),
+        ok = riakc_pb_socket:update_type(
+               Pid1,
+               Bucket,
+               Key1,
+               riakc_map:to_op(M2)),
+
+        %% P2 Siblings
+        lager:info("Writing to Partition 2 Set 2: Key ~p | Char ~p",
+                   [Key2, <<"Sonic">>]),
+        M3 = riakc_map:update(
+               {Set2, set},
+               fun(S) ->
+                       riakc_set:add_element(<<"Sonic">>, S)
+               end, riakc_map:new()),
+        ok = riakc_pb_socket:update_type(
+               Pid2,
+               Bucket,
+               Key2,
+               riakc_map:to_op(M3)),
+
+        lager:info("Delete key from Partition 2: Key ~p", [Key2]),
+        ok = riakc_pb_socket:delete(Pid2, Bucket, Key2),
+
+        lager:info("Writing to Partition 2 Set 2: after delete: Key ~p | Char ~p",
+                   [Key2, <<"Crash">>]),
+        M4 = riakc_map:update(
+               {Set2, set},
+               fun(S) ->
+                       riakc_set:add_element(<<"Crash">>, S)
+               end, riakc_map:new()),
+        ok = riakc_pb_socket:update_type(
+               Pid2,
+               Bucket,
+               Key2,
+               riakc_map:to_op(M4)),
+
+        lager:info("Writing to Partition 2 Set 2: Key ~p | Char ~p",
+                   [Key2, <<"Mario">>]),
+        M5 = riakc_map:update(
+               {Set2, set},
+               fun(S) ->
+                       riakc_set:add_element(<<"Mario">>, S)
+               end, riakc_map:new()),
+        ok = riakc_pb_socket:update_type(
+               Pid2,
+               Bucket,
+               Key2,
+               riakc_map:to_op(M5)),
+
+        lager:info("Writing to Partition 2 Set 1: Key ~p | Director ~p",
+                   [Key1, <<"Klimov">>]),
+        M6 = riakc_map:update(
+               {Set1, set},
+               fun(S) ->
+                       riakc_set:add_element(<<"Klimov">>, S)
+               end, riakc_map:new()),
+        ok = riakc_pb_socket:update_type(
+               Pid2,
+               Bucket,
+               Key1,
+               riakc_map:to_op(M6)),
+        ok
+    after
+        rt:heal(Partition)
+    end,
+
+    rt:wait_until_transfers_complete(Cluster),
+    yokozuna_rt:commit(Cluster, ?INDEX),
+
+    %% Verify Counts
+    lager:info("Verify counts and operations after heal + transfers + commits"),
+
+    {ok, MF1} = riakc_pb_socket:fetch_type(Pid, Bucket, Key1),
+    Keys = riakc_map:fetch_keys(MF1),
+    ?assertEqual(1, length(Keys)),
+    ?assert(riakc_map:is_key({<<"directors">>, set}, MF1)),
+    {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
+                                               Pid, Index,
+                                               <<"directors_set:*">>),
+    lager:info("Search movies map directors_set:*: ~p~n", [Results1]),
+    ?assertEqual(3, length(proplists:lookup_all(<<"directors_set">>,
+                                                ?GET(?INDEX, Results1)))),
+
+    {ok, MF2} = riakc_pb_socket:fetch_type(Pid, Bucket, Key2),
+    Keys2 = riakc_map:fetch_keys(MF2),
+    ?assertEqual(1, length(Keys2)),
+    ?assert(riakc_map:is_key({<<"characters">>, set}, MF2)),
+    {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
+                                               Pid, Index,
+                                               <<"characters_set:*">>),
+    lager:info("Search games map characters_set:*: ~p~n", [Results2]),
+    ?assertEqual(2, length(proplists:lookup_all(<<"characters_set">>,
+                                                ?GET(?INDEX, Results2)))),
+
+    {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
+                                               Pid, Index,
+                                               <<"_yz_vtag:*">>),
+    lager:info("Search vtags in search *:*: ~p~n", [Results3]),
+    ?assertEqual(0, length(Results3)).
+
 
 %% @private
 number_of_fields(Resp, Index) ->
