@@ -11,7 +11,7 @@
 			  ]).
 
 confirm() ->
-    Cluster = single,
+    ClusterType = single,
     DDL = get_ddl(docs),
     Expected = {ok,"GeoCheckin has been activated\n\nWARNING: Nodes in this cluster can no longer be\ndowngraded to a version of Riak prior to 2.0\n"},
-    confirm_activate(Cluster, DDL, Expected).
+    confirm_activate(ClusterType, DDL, Expected).

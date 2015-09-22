@@ -12,7 +12,7 @@
 			  ]).
 
 confirm() ->
-    Cluster = single,
+    ClusterType = single,
     DDL = get_ddl(shortkey_fail),
     Expected = {ok,"some error message, yeah?"},
-    confirm_create(Cluster, DDL, Expected).
+    confirm_create(ClusterType, DDL, Expected).

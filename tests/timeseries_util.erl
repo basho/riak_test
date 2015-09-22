@@ -25,7 +25,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--define(MAXVARCHARLEN, 1024).
+-define(MAXVARCHARLEN, 16).
 -define(MAXTIMESTAMP,  trunc(math:pow(2, 63))).
 -define(MAXFLOAT,      math:pow(2, 63)).
 
@@ -51,20 +51,28 @@ confirm_activate(single, DDL, Expected) ->
 
     pass.
 
-
-confirm_put(single, DDL, _Expected) ->
+confirm_put(single, normal, DDL, Obj, Expected) ->
 
     [Node]  = build_cluster(1),
     {ok, _} = create_bucket(Node, DDL),
     {ok, _} = activate_bucket(Node, DDL),
 
-    Obj = get_valid_obj(),
-    _Ret = riakc_ts:put(self(), list_to_binary(get_bucket()), Obj),
-    %% gg:format("Ret is ~p~n", [Ret]),
-
-    ?assertEqual(bish, bash),
+    Bucket = list_to_binary(get_bucket()),
+    io:format("writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
+    C = rt:pbc(Node),
+    Get = riakc_ts:put(C, Bucket, Obj),
+    ?assertEqual(Expected, Get),
     
-    pass.
+    pass;
+confirm_put(single, no_ddl, _DDL, Obj, Expected) ->
+    [Node]  = build_cluster(1),
+    Bucket = list_to_binary(get_bucket()),
+    io:format("writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
+    C = rt:pbc(Node),
+    Get = riakc_ts:put(C, Bucket, Obj),
+    ?assertEqual(Expected, Get),
+    
+    pass.    
 
 confirm_select(single, _DDL, _Expected) ->
 
@@ -158,18 +166,29 @@ get_ddl(keytype_fail_mebbies_or_not_eh_check_it_properly_muppet_boy) ->
 	"time, myfamily, myseries))".
 
 get_valid_obj() ->
-    {get_varchar(),
+    [get_varchar(),
      get_varchar(),
      get_timestamp(),
      get_varchar(),
-     get_float()}.
+     get_float()].
+
+get_invalid_obj() ->
+    [get_varchar(),
+     get_integer(),   % this is the duff field
+     get_timestamp(),
+     get_varchar(),
+     get_float()].
 
 get_varchar() ->
     Len = random:uniform(?MAXVARCHARLEN),
-    _String = get_string(Len).
-    
+    String = get_string(Len),
+    list_to_binary(String).
+
 get_string(Len) ->
     get_s(Len, []).
+
+get_integer() ->
+    get_timestamp().
 
 get_s(0, Acc) ->
     Acc;
@@ -182,4 +201,4 @@ get_timestamp() ->
 get_float() ->
     F1 = random:uniform(trunc(?MAXFLOAT)),
     F2 = random:uniform(trunc(?MAXFLOAT)),
-    F1 - F2.
+    F1 - F2 + random:uniform().
