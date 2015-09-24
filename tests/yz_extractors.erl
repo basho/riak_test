@@ -163,11 +163,7 @@ confirm() ->
 
     OldPid = rt:pbc(Node),
 
-    %% Generate keys, YZ only supports UTF-8 compatible keys
-    GenKeys = [<<N:64/integer>> || N <- lists:seq(1, ?SEQMAX),
-                                  not lists:any(
-                                        fun(E) -> E > 127 end,
-                                        binary_to_list(<<N:64/integer>>))],
+    GenKeys = yokozuna_rt:gen_keys(?SEQMAX),
     KeyCount = length(GenKeys),
 
     rt:count_calls(Cluster, [?GET_MAP_RING_MFA, ?GET_MAP_MFA]),
