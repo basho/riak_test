@@ -1,4 +1,4 @@
--module(ts_activate_table_pass_1).
+-module(ts_C_activate_table_fail_1).
 
 -behavior(riak_test).
 
@@ -12,7 +12,7 @@
 			  ]).
 
 confirm() ->
-    ClusterType = single,
+    ClusterType = one_down,
     DDL = get_ddl(docs),
-    Expected = {ok,"GeoCheckin has been activated\n\nWARNING: Nodes in this cluster can no longer be\ndowngraded to a version of Riak prior to 2.0\n"},
+    Expected = {ok,"GeoCheckin has been created but cannot be activated yet\n"},
     confirm_activate(ClusterType, DDL, Expected).

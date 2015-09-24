@@ -1,4 +1,4 @@
--module(ts_create_table_fail_1).
+-module(ts_A_create_table_fail_2).
 
 -behavior(riak_test).
 

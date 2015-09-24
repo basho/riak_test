@@ -1,4 +1,4 @@
--module(ts_select_pass_1).
+-module(ts_B_select_pass_1).
 
 -behavior(riak_test).
 
@@ -10,13 +10,12 @@
 			  get_ddl/1,
 			  get_valid_select_data/0,
 			  get_valid_qry/0,
-			  confirm_select/5
+			  confirm_select/6
 			  ]).
 
 confirm() ->
-    Cluster = single,
     DDL = get_ddl(docs),
     Data = get_valid_select_data(),
     Qry = get_valid_qry(),
     Expected = ok,
-    confirm_select(Cluster, DDL, Data, Qry, Expected).
+    confirm_select(multiple, normal, DDL, Data, Qry, Expected).

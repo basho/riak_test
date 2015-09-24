@@ -25,16 +25,14 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--define(MAXVARCHARLEN, 16).
--define(MAXTIMESTAMP,  trunc(math:pow(2, 63))).
--define(MAXFLOAT,      math:pow(2, 63)).
+-define(MAXVARCHARLEN,       16).
+-define(MAXTIMESTAMP,        trunc(math:pow(2, 63))).
+-define(MAXFLOAT,            math:pow(2, 63)).
+-define(MULTIPLECLUSTERSIZE, 3).
 
-confirm_create(single, DDL, Expected) ->
+confirm_create(ClusterType, DDL, Expected) ->
 
-    ClusterSize = 1,
-    lager:info("Building cluster of 1"),
-
-    [Node] =build_cluster(ClusterSize),
+    [Node | _] =build_cluster(ClusterType),
 
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
     Got = rt:admin(Node, ["bucket-type", "create", get_bucket(), lists:flatten(Props)]),
@@ -42,47 +40,50 @@ confirm_create(single, DDL, Expected) ->
 
     pass.
 
-confirm_activate(single, DDL, Expected) ->
+confirm_activate(ClusterType, DDL, Expected) ->
 
-    [Node]  = build_cluster(1),
+    [Node | Rest] = build_cluster(ClusterType),
+    ok = maybe_stop_a_node(ClusterType, Rest),
     {ok, _} = create_bucket(Node, DDL),
     Got     = activate_bucket(Node, DDL),
     ?assertEqual(Expected, Got),
 
     pass.
 
-confirm_put(single, normal, DDL, Obj, Expected) ->
+confirm_put(ClusterType, TestType, DDL, Obj, Expected) ->
 
-    [Node]  = build_cluster(1),
-    {ok, _} = create_bucket(Node, DDL),
-    {ok, _} = activate_bucket(Node, DDL),
-
+    [Node | _]  = build_cluster(ClusterType),
+    
+    case TestType of
+	normal ->
+	    io:format("1 - Creating and activating bucket~n"),
+	    {ok, _} = create_bucket(Node, DDL),
+	    {ok, _} = activate_bucket(Node, DDL);
+	no_ddl ->
+	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
+	    ok
+    end,
     Bucket = list_to_binary(get_bucket()),
-    io:format("writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
+    io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
     C = rt:pbc(Node),
     Get = riakc_ts:put(C, Bucket, Obj),
     ?assertEqual(Expected, Get),
 
-    pass;
-confirm_put(single, no_ddl, _DDL, Obj, Expected) ->
-    [Node]  = build_cluster(1),
-    Bucket = list_to_binary(get_bucket()),
-    io:format("writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
-    C = rt:pbc(Node),
-    Get = riakc_ts:put(C, Bucket, Obj),
-    ?assertEqual(Expected, Get),
+    pass.
 
-    pass.    
-
-confirm_select(single, DDL, Data, Qry, Expected) ->
+confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
     
-    io:format("in confirm_select DDL is ~p~n- Data is ~p~n- Qry is ~p~n- Expected is ~p~n",
-	      [DDL, Data, Qry, Expected]),
-    [Node] = build_cluster(1),
+    [Node | _] = build_cluster(ClusterType),
     
-    io:format("1 - Create and activate the bucket~n"),
-    {ok, _} = create_bucket(Node, DDL),
-    {ok, _} = activate_bucket(Node, DDL),
+    case TestType of
+	normal ->
+	    io:format("1 - Create and activate the bucket~n"),
+	    {ok, _} = create_bucket(Node, DDL),
+	    {ok, _} = activate_bucket(Node, DDL);
+	no_ddl ->
+	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
+	    ok
+    end,
     
     Bucket = list_to_binary(get_bucket()),
     io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Data]),
@@ -90,10 +91,9 @@ confirm_select(single, DDL, Data, Qry, Expected) ->
     ok = riakc_ts:put(C, Bucket, Data),
     
     io:format("3 - Now run the query ~p~n", [Qry]),
-    {Columns, Rows} = riakc_ts:query(C, Qry), 
-    io:format("Columms is ~p Rows is ~p~n", [Columns, Rows]),
-
-    ?assertEqual(fish, fash),
+    Got = riakc_ts:query(C, Qry), 
+    io:format("Got is ~p~n", [Got]),
+    ?assertEqual(Expected, Got),
     pass.
 
 %%
@@ -110,13 +110,21 @@ create_bucket(Node, DDL) ->
 		    lists:flatten(Props)]).
 
 %% @ignore
-%% copied from ensemble_util.erl
--spec build_cluster(non_neg_integer()) -> [node()].
-build_cluster(Size) ->
+maybe_stop_a_node(one_down, [H | _T]) ->
+    ok = rt:stop(H);
+maybe_stop_a_node(_, _) ->
+    ok.
+
+build_cluster(single)   -> build_c2(1);
+build_cluster(multiple) -> build_c2(?MULTIPLECLUSTERSIZE);
+build_cluster(one_down)   -> build_c2(?MULTIPLECLUSTERSIZE).
+
+-spec build_c2(non_neg_integer()) -> [node()].
+build_c2(Size) ->
     lager:info("Building cluster of ~p~n", [Size]),
-    build_cluster(Size, []).
--spec build_cluster(non_neg_integer(), list()) -> [node()].
-build_cluster(Size, Config) ->
+    build_c2(Size, []).
+-spec build_c2(non_neg_integer(), list()) -> [node()].
+build_c2(Size, Config) ->
     [_Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
     rt:join_cluster(Nodes),
     Nodes.
@@ -125,7 +133,18 @@ get_bucket() ->
     "GeoCheckin".
 
 get_valid_qry() ->
-    "select * from GeoCheckin Where time > 1 and time < 10".
+    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries'".
+
+get_invalid_qry(borked_syntax) ->
+    "selectah * from GeoCheckin Where time > 1 and time < 10";
+get_invalid_qry(key_not_covered) ->
+    "select * from GeoCheckin Where time > 1 and time < 10";
+get_invalid_qry(invalid_operator) ->
+    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather > 'bob'";
+get_invalid_qry(field_comparison) ->
+    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather = myfamily";
+get_invalid_qry(type_error) ->
+    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather = true".
 
 get_valid_select_data() ->
     Family = <<"myfamily">>,
