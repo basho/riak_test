@@ -35,12 +35,14 @@
          search_expect/5,
          search_expect/6,
          search_expect/7,
+         assert_search/6,
          verify_num_found_query/3,
          wait_for_aae/1,
          wait_for_full_exchange_round/2,
          wait_for_index/2,
          wait_for_schema/2,
          wait_for_schema/3,
+         gen_keys/1,
          write_data/5,
          write_data/6]).
 
@@ -55,6 +57,15 @@
 -spec host_entries(rt:conn_info()) -> [{host(), portnum()}].
 host_entries(ClusterConnInfo) ->
     [riak_http(I) || {_,I} <- ClusterConnInfo].
+
+%% @doc Generate `SeqMax' keys. Yokozuna supports only UTF-8 compatible keys.
+-spec gen_keys(pos_integer()) -> list().
+gen_keys(SeqMax) ->
+    [<<N:64/integer>> || N <- lists:seq(1, SeqMax),
+                         not lists:any(
+                               fun(E) -> E > 127 end,
+                               binary_to_list(<<N:64/integer>>))].
+
 
 %% @doc Write `Keys' via the PB inteface to a `Bucket' and have them
 %%      searchable in an `Index'.
@@ -76,7 +87,7 @@ write_data(Cluster, Pid, Index, {SchemaName, SchemaData},
            Bucket, Keys) ->
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
 
-    riakc_pb_socket:create_search_schema(Pid, SchemaName, SchemaData),
+    ok = riakc_pb_socket:create_search_schema(Pid, SchemaName, SchemaData),
 
     create_and_set_index(Cluster, Pid, Bucket, Index, SchemaName),
     timer:sleep(1000),
@@ -263,6 +274,20 @@ search_expect(solr, {Host, Port}, Index, Name0, Term0, Shards, Expect)
     Opts = [{response_format, binary}],
     {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts),
     verify_count_http(Expect, R).
+
+assert_search(Pid, Cluster, Index, Search, SearchExpect, Params) ->
+    F = fun(_) ->
+                lager:info("Searching ~p and asserting it exists",
+                           [SearchExpect]),
+                {ok,{search_results,[{_Index,Fields}], _Score, Found}} =
+                riakc_pb_socket:search(Pid, Index, Search, Params),
+                ?assert(lists:member(SearchExpect, Fields)),
+                case Found of
+                    1 -> true;
+                    0 -> false
+                end
+        end,
+    rt:wait_until(Cluster, F).
 
 search(HP, Index, Name, Term) ->
     search(yokozuna, HP, Index, Name, Term).
