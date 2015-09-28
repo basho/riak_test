@@ -286,7 +286,7 @@ assert_search(Pid, Cluster, Index, Search, SearchExpect, Params) ->
                             0 -> false
                         end;
                     {ok, {search_results, [], _Score, 0}} ->
-                        lager:info("Search for multivalued_field has not yet yielded data"),
+                        lager:info("Search has not yet yielded data"),
                         false
                 end
         end,
