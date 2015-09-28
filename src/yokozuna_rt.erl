@@ -25,6 +25,7 @@
 -export([check_exists/2,
          commit/2,
          expire_trees/1,
+         gen_keys/1,
          host_entries/1,
          override_schema/5,
          remove_index_dirs/2,
@@ -35,6 +36,7 @@
          search_expect/5,
          search_expect/6,
          search_expect/7,
+         assert_search/6,
          verify_num_found_query/3,
          wait_for_aae/1,
          wait_for_full_exchange_round/2,
@@ -55,6 +57,14 @@
 -spec host_entries(rt:conn_info()) -> [{host(), portnum()}].
 host_entries(ClusterConnInfo) ->
     [riak_http(I) || {_,I} <- ClusterConnInfo].
+
+%% @doc Generate `SeqMax' keys. Yokozuna supports only UTF-8 compatible keys.
+-spec gen_keys(pos_integer()) -> [binary()].
+gen_keys(SeqMax) ->
+    [<<N:64/integer>> || N <- lists:seq(1, SeqMax),
+                         not lists:any(
+                               fun(E) -> E > 127 end,
+                               binary_to_list(<<N:64/integer>>))].
 
 %% @doc Write `Keys' via the PB inteface to a `Bucket' and have them
 %%      searchable in an `Index'.
@@ -263,6 +273,24 @@ search_expect(solr, {Host, Port}, Index, Name0, Term0, Shards, Expect)
     Opts = [{response_format, binary}],
     {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts),
     verify_count_http(Expect, R).
+
+assert_search(Pid, Cluster, Index, Search, SearchExpect, Params) ->
+    F = fun(_) ->
+                lager:info("Searching ~p and asserting it exists",
+                           [SearchExpect]),
+                case riakc_pb_socket:search(Pid, Index, Search, Params) of
+                    {ok,{search_results,[{_Index,Fields}], _Score, Found}} ->
+                        ?assert(lists:member(SearchExpect, Fields)),
+                        case Found of
+                            1 -> true;
+                            0 -> false
+                        end;
+                    {ok, {search_results, [], _Score, 0}} ->
+                        lager:info("Search has not yet yielded data"),
+                        false
+                end
+        end,
+    rt:wait_until(Cluster, F).
 
 search(HP, Index, Name, Term) ->
     search(yokozuna, HP, Index, Name, Term).
