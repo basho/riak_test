@@ -68,8 +68,8 @@ confirm() ->
            [?BUCKET, ?PKEY_P2, ?TIMEBASE + 10, ?PKEY_P2, ?TIMEBASE + 20, ?PVAL_P1])),
     io:format("Running query: ~p\n", [Query]),
     {_Columns, Rows} = riakc_ts:query(C, Query),
-    io:format("Got ~b rows back\n", [length(Rows)]),
-    ?assertEqual(length(Rows), 10),
+    io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
+    ?assertEqual(length(Rows), 9),
 
     pass.
 
