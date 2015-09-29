@@ -33,9 +33,9 @@
 confirm() ->
     %% io:format("Data to be written: ~p\n", [make_data()]),
 
-    ClusterSize = 3,
+    ClusterSize = 1,
     lager:info("Building cluster"),
-    _Nodes = [Node1, _Node2, _Node3] =
+    _Nodes = [Node1|_] =
         build_cluster(
           ClusterSize),
 
