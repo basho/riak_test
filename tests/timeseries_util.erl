@@ -133,22 +133,22 @@ get_bucket() ->
     "GeoCheckin".
 
 get_valid_qry() ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries'".
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX'".
 
 get_invalid_qry(borked_syntax) ->
     "selectah * from GeoCheckin Where time > 1 and time < 10";
 get_invalid_qry(key_not_covered) ->
     "select * from GeoCheckin Where time > 1 and time < 10";
 get_invalid_qry(invalid_operator) ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather > 'bob'";
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather > 'bob'";
 get_invalid_qry(field_comparison) ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather = myfamily";
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather = family1";
 get_invalid_qry(type_error) ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather = true".
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather = true".
 
 get_valid_select_data() ->
-    Family = <<"myfamily">>,
-    Series = <<"myseries">>,
+    Family = <<"family1">>,
+    Series = <<"seriesX">>,
     Times = lists:seq(1, 10),
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
 
