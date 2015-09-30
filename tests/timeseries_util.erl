@@ -50,7 +50,7 @@ confirm_activate(ClusterType, DDL, Expected) ->
 
     pass.
 
-confirm_put(ClusterType, TestType, DDL, Obj, Expected) ->
+confirm_put(ClusterType, TestType, DDL, Obj) ->
 
     [Node | _]  = build_cluster(ClusterType),
     
@@ -66,10 +66,7 @@ confirm_put(ClusterType, TestType, DDL, Obj, Expected) ->
     Bucket = list_to_binary(get_bucket()),
     io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
     C = rt:pbc(Node),
-    Get = riakc_ts:put(C, Bucket, Obj),
-    ?assertEqual(Expected, Get),
-
-    pass.
+    riakc_ts:put(C, Bucket, Obj).
 
 confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
     

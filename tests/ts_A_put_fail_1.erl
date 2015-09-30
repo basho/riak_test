@@ -7,18 +7,20 @@
 -behavior(riak_test).
 
 -export([
-	 confirm/0
-	]).
+     confirm/0
+    ]).
 
--import(timeseries_util, [
-			  get_ddl/1,
-			  get_valid_obj/0,
-			  confirm_put/5
-			  ]).
+-include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    ClusterType = single,
-    Expected = "some error message",
-    DDL = null,
-    Obj = [get_valid_obj()],
-    confirm_put(ClusterType, no_ddl, DDL, Obj, Expected).
+    [Node | _]  = timeseries_util:build_cluster(single),
+    Bucket = list_to_binary(timeseries_util:get_bucket()),
+    Obj = [timeseries_util:get_valid_obj()],
+    io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
+    C = rt:pbc(Node),
+    ?assertMatch(
+        {error,_},
+        riakc_ts:put(C, Bucket, Obj)
+    ),
+    pass.
+
