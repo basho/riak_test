@@ -6,16 +6,10 @@
 	 confirm/0
 	]).
 
--import(timeseries_util, [
-			  get_ddl/1,
-			  get_valid_select_data/0,
-			  get_valid_qry/0,
-			  confirm_select/6
-			  ]).
 
 confirm() ->
-    DDL = get_ddl(docs),
-    Data = get_valid_select_data(),
-    Qry = get_valid_qry(),
-    Expected = ok,
+    DDL  = timeseries_util:get_ddl(docs),
+    Data = timeseries_util:get_valid_select_data(),
+    Qry  = timeseries_util:get_valid_qry(),
+    Expected = lists:map(fun list_to_tuple/1, Data),
     confirm_select(single, normal, DDL, Data, Qry, Expected).

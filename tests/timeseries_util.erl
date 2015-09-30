@@ -91,9 +91,9 @@ confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
     ok = riakc_ts:put(C, Bucket, Data),
     
     io:format("3 - Now run the query ~p~n", [Qry]),
-    Got = riakc_ts:query(C, Qry), 
+    Got = {_ColumnDescriptions, Rows} = riakc_ts:query(C, Qry),
     io:format("Got is ~p~n", [Got]),
-    ?assertEqual(Expected, Got),
+    ?assertEqual(lists:sort(Expected), lists:sort(Rows)),
     pass.
 
 %%
