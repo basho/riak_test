@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -19,6 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 %% @doc A util module for riak_ts basic CREATE TABLE Actions
+
 -module(timeseries_util).
 
 -compile(export_all).
@@ -53,15 +53,15 @@ confirm_activate(ClusterType, DDL, Expected) ->
 confirm_put(ClusterType, TestType, DDL, Obj) ->
 
     [Node | _]  = build_cluster(ClusterType),
-    
+
     case TestType of
-	normal ->
-	    io:format("1 - Creating and activating bucket~n"),
-	    {ok, _} = create_bucket(Node, DDL),
-	    {ok, _} = activate_bucket(Node, DDL);
-	no_ddl ->
-	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
-	    ok
+        normal ->
+            io:format("1 - Creating and activating bucket~n"),
+            {ok, _} = create_bucket(Node, DDL),
+            {ok, _} = activate_bucket(Node, DDL);
+        no_ddl ->
+            io:format("1 - NOT Creating or activating bucket - failure test~n"),
+            ok
     end,
     Bucket = list_to_binary(get_bucket()),
     io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
@@ -69,28 +69,28 @@ confirm_put(ClusterType, TestType, DDL, Obj) ->
     riakc_ts:put(C, Bucket, Obj).
 
 confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
-    
+
     [Node | _] = build_cluster(ClusterType),
-    
+
     case TestType of
-	normal ->
-	    io:format("1 - Create and activate the bucket~n"),
-	    {ok, _} = create_bucket(Node, DDL),
-	    {ok, _} = activate_bucket(Node, DDL);
-	no_ddl ->
-	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
-	    ok
+        normal ->
+            io:format("1 - Create and activate the bucket~n"),
+            {ok, _} = create_bucket(Node, DDL),
+            {ok, _} = activate_bucket(Node, DDL);
+        no_ddl ->
+            io:format("1 - NOT Creating or activating bucket - failure test~n"),
+            ok
     end,
-    
+
     Bucket = list_to_binary(get_bucket()),
     io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Data]),
     C = rt:pbc(Node),
     ok = riakc_ts:put(C, Bucket, Data),
-    
+
     io:format("3 - Now run the query ~p~n", [Qry]),
-    Got = riakc_ts:query(C, Qry), 
+    Got = {_ColumnDescriptions, Rows} = riakc_ts:query(C, Qry),
     io:format("Got is ~p~n", [Got]),
-    ?assertEqual(Expected, Got),
+    ?assertEqual(lists:sort(Expected), lists:sort(Rows)),
     pass.
 
 %%
@@ -102,9 +102,9 @@ activate_bucket(Node, _DDL) ->
 
 create_bucket(Node, DDL) ->
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, " ++
-			      "\\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
-    rt:admin(Node, ["bucket-type", "create", get_bucket(), 
-		    lists:flatten(Props)]).
+                              "\\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
+    rt:admin(Node, ["bucket-type", "create", get_bucket(),
+                    lists:flatten(Props)]).
 
 %% @ignore
 maybe_stop_a_node(one_down, [H | _T]) ->
@@ -147,64 +147,64 @@ get_valid_select_data() ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, 10),
-    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
+    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
 
 %% a valid DDL - the one used in the documents
 get_ddl(docs) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
-	"myfamily    varchar   not null, " ++
-	"myseries    varchar   not null, " ++
-	"time        timestamp not null, " ++
-	"weather     varchar   not null, " ++
-	"temperature float, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries))";
+        "myfamily    varchar   not null, " ++
+        "myseries    varchar   not null, " ++
+        "time        timestamp not null, " ++
+        "weather     varchar   not null, " ++
+        "temperature float, " ++
+        "PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
+        "time, myfamily, myseries))";
 %% another valid DDL - one with all the good stuff like
 %% different types and optional blah-blah
 get_ddl(variety) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
-	"myfamily    varchar     not null, " ++
-	"myseries    varchar     not null, " ++
-	"time        timestamp   not null, " ++
-	"myint       integer     not null, " ++
-	"myfloat     float       not null, " ++
-	"mybool      boolean     not null, " ++
-	"mytimestamp timestamp   not null, " ++
-	"myany       any         not null, " ++
-	"myoptional  integer, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries))";
+        "myfamily    varchar     not null, " ++
+        "myseries    varchar     not null, " ++
+        "time        timestamp   not null, " ++
+        "myint       integer     not null, " ++
+        "myfloat     float       not null, " ++
+        "mybool      boolean     not null, " ++
+        "mytimestamp timestamp   not null, " ++
+        "myany       any         not null, " ++
+        "myoptional  integer, " ++
+        "PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
+        "time, myfamily, myseries))";
 %% an invalid TS DDL becuz family and series not both in key
 get_ddl(shortkey_fail) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
-	"myfamily    varchar   not null, " ++
-	"myseries    varchar   not null, " ++
-	"time        timestamp not null, " ++
-	"weather     varchar   not null, " ++
-	"temperature float, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily), " ++
-	"time, myfamily))";
+        "myfamily    varchar   not null, " ++
+        "myseries    varchar   not null, " ++
+        "time        timestamp not null, " ++
+        "weather     varchar   not null, " ++
+        "temperature float, " ++
+        "PRIMARY KEY ((quantum(time, 15, 'm'), myfamily), " ++
+        "time, myfamily))";
 %% an invalid TS DDL becuz partition and local keys dont cover the same space
 get_ddl(splitkey_fail) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
-	"myfamily    varchar   not null, " ++
-	"myseries    varchar   not null, " ++
-	"time        timestamp not null, " ++
-	"weather     varchar   not null, " ++
-	"temperature float, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries, temperature))";
+        "myfamily    varchar   not null, " ++
+        "myseries    varchar   not null, " ++
+        "time        timestamp not null, " ++
+        "weather     varchar   not null, " ++
+        "temperature float, " ++
+        "PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
+        "time, myfamily, myseries, temperature))";
 %% another invalid TS DDL because family/series must be varchar
 %% or is this total bollox???
 get_ddl(keytype_fail_mebbies_or_not_eh_check_it_properly_muppet_boy) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
-	"myfamily    integer   not null, " ++
-	"myseries    varchar   not null, " ++
-	"time        timestamp not null, " ++
-	"weather     varchar   not null, " ++
-	"temperature float, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries))".
+        "myfamily    integer   not null, " ++
+        "myseries    varchar   not null, " ++
+        "time        timestamp not null, " ++
+        "weather     varchar   not null, " ++
+        "temperature float, " ++
+        "PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
+        "time, myfamily, myseries))".
 
 get_valid_obj() ->
     [get_varchar(),
