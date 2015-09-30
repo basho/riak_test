@@ -7,8 +7,8 @@
 -behavior(riak_test).
 
 -export([
-	 confirm/0
-	]).
+     confirm/0
+    ]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -19,8 +19,8 @@ confirm() ->
     io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
     C = rt:pbc(Node),
     ?assertMatch(
-    	{error,_},
-	    riakc_ts:put(C, Bucket, Obj)
-	),
-	pass.
+        {error,_},
+        riakc_ts:put(C, Bucket, Obj)
+    ),
+    pass.
 

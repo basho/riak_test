@@ -16,7 +16,7 @@ confirm() ->
     DDL = timeseries_util:get_ddl(docs),
     Obj = [timeseries_util:get_invalid_obj()],
     ?assertMatch(
-    	{error,_},
-	    timeseries_util:confirm_put(ClusterType, normal, DDL, Obj)
-	),
-	pass.
+        {error,_},
+        timeseries_util:confirm_put(ClusterType, normal, DDL, Obj)
+    ),
+    pass.
