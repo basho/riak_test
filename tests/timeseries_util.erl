@@ -149,6 +149,21 @@ get_valid_select_data() ->
     Times = lists:seq(1, 10),
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
 
+get_cols(docs) ->
+    [<<"myfamily">>,
+     <<"myseries">>,
+     <<"time">>,
+     <<"weather">>,
+     <<"temperature">>].
+
+%% Convert put data to result rows exclusive of the first and last records.
+exclusive_result_from_data(Data) ->
+    [_|Tail] = remove_last([list_to_tuple(R) || R <- Data]),
+    Tail.
+
+remove_last(Data) ->
+    lists:reverse(tl(lists:reverse(Data))).
+
 %% a valid DDL - the one used in the documents
 get_ddl(docs) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++

@@ -14,21 +14,13 @@
 			  ]).
 
 confirm() ->
+    Cluster = single,
+    TestType = normal,
     DDL = get_ddl(docs),
     Data = get_valid_select_data(),
     Qry = get_valid_qry(),
-    confirm_select(single, normal, DDL, Data, Qry, {get_cols(docs), to_result(Data)}).
+    Expected = {
+        timeseries_util:get_cols(docs),
+        timeseries_util:exclusive_result_from_data(Data)},
+    confirm_select(Cluster, TestType, DDL, Data, Qry, Expected).
 
-get_cols(docs) ->
-        [<<"myfamily">>,
-         <<"myseries">>,
-         <<"time">>,
-         <<"weather">>,
-         <<"temperature">>].
-
-to_result(Data) ->
-	[_|Tail] = remove_last([list_to_tuple(R) || R <- Data]),
-	Tail	.
-
-remove_last(Data) ->
-	lists:reverse(tl(lists:reverse(Data))).
