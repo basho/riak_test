@@ -149,6 +149,26 @@ get_valid_select_data() ->
     Times = lists:seq(1, 10),
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
 
+get_cols(docs) ->
+    [<<"myfamily">>,
+     <<"myseries">>,
+     <<"time">>,
+     <<"weather">>,
+     <<"temperature">>].
+
+exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
+						     is_integer(Finish)  andalso
+						     Start  > 0          andalso
+						     Finish > 0          andalso
+						     Finish > Start      andalso
+						     Finish =< length(Data) ->
+    {_, PartialResults} = lists:split(Start - 1, Data),
+    {Results, _} = lists:split(Finish, PartialResults),
+    [list_to_tuple(X) || X <- Results].
+
+remove_last(Data) ->
+    lists:reverse(tl(lists:reverse(Data))).
+
 %% a valid DDL - the one used in the documents
 get_ddl(docs) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++

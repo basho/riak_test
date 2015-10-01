@@ -14,8 +14,13 @@
 			  ]).
 
 confirm() ->
+    Cluster = single,
+    TestType = normal,
     DDL = get_ddl(docs),
     Data = get_valid_select_data(),
     Qry = get_valid_qry(),
-    Expected = ok,
-    confirm_select(single, normal, DDL, Data, Qry, Expected).
+    Expected = {
+        timeseries_util:get_cols(docs),
+        timeseries_util:exclusive_result_from_data(Data, 1, 9)},
+    confirm_select(Cluster, TestType, DDL, Data, Qry, Expected).
+
