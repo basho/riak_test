@@ -160,11 +160,8 @@ exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
 						     is_integer(Finish)  andalso
 						     Start  > 0          andalso
 						     Finish > 0          andalso
-						     Finish > Start      andalso
-						     Finish =< length(Data) ->
-    {_, PartialResults} = lists:split(Start - 1, Data),
-    {Results, _} = lists:split(Finish, PartialResults),
-    [list_to_tuple(X) || X <- Results].
+						     Finish > Start ->
+    [list_to_tuple(X) || X <- lists:sublist(Data, Start, Finish - Start + 1)].
 
 remove_last(Data) ->
     lists:reverse(tl(lists:reverse(Data))).
