@@ -156,10 +156,15 @@ get_cols(docs) ->
      <<"weather">>,
      <<"temperature">>].
 
-%% Convert put data to result rows exclusive of the first and last records.
-exclusive_result_from_data(Data) ->
-    [_|Tail] = remove_last([list_to_tuple(R) || R <- Data]),
-    Tail.
+exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
+						     is_integer(Finish)  andalso
+						     Start  > 0          andalso
+						     Finish > 0          andalso
+						     Finish > Start      andalso
+						     Finish =< length(Data) ->
+    {_, PartialResults} = lists:split(Start - 1, Data),
+    {Results, _} = lists:split(Finish, PartialResults),
+    [list_to_tuple(X) || X <- Results].
 
 remove_last(Data) ->
     lists:reverse(tl(lists:reverse(Data))).
