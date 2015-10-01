@@ -150,7 +150,7 @@ get_valid_select_data() ->
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
 
 
--define(SPANNING_STEP, (1000*1000*60*5)).
+-define(SPANNING_STEP, (1000*60*5)).
 
 get_valid_qry_spanning_quanta() ->
     EndTime = ?SPANNING_STEP * 10,
