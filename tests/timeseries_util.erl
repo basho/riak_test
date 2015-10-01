@@ -149,6 +149,23 @@ get_valid_select_data() ->
     Times = lists:seq(1, 10),
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
 
+
+-define(SPANNING_STEP, (1000*1000*60*5)).
+
+get_valid_qry_spanning_quanta() ->
+    EndTime = ?SPANNING_STEP * 10,
+    lists:flatten(
+      io_lib:format("select * from GeoCheckin Where time > 1 and time < ~b"
+                    " and myfamily = 'family1' and myseries = 'seriesX'",
+                    [EndTime])).
+
+get_valid_select_data_spanning_quanta() ->
+    Family = <<"family1">>,
+    Series = <<"seriesX">>,
+    Times = lists:seq(1, ?SPANNING_STEP * 10, ?SPANNING_STEP),  %% five-minute intervals, to span 15-min buckets
+    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+
+
 get_cols(docs) ->
     [<<"myfamily">>,
      <<"myseries">>,
@@ -160,11 +177,8 @@ exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
 						     is_integer(Finish)  andalso
 						     Start  > 0          andalso
 						     Finish > 0          andalso
-						     Finish > Start      andalso
-						     Finish =< length(Data) ->
-    {_, PartialResults} = lists:split(Start - 1, Data),
-    {Results, _} = lists:split(Finish, PartialResults),
-    [list_to_tuple(X) || X <- Results].
+						     Finish > Start ->
+    [list_to_tuple(X) || X <- lists:sublist(Data, Start, Finish - Start + 1)].
 
 remove_last(Data) ->
     lists:reverse(tl(lists:reverse(Data))).
