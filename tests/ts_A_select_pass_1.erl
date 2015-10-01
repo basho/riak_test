@@ -17,5 +17,18 @@ confirm() ->
     DDL = get_ddl(docs),
     Data = get_valid_select_data(),
     Qry = get_valid_qry(),
-    Expected = ok,
-    confirm_select(single, normal, DDL, Data, Qry, Expected).
+    confirm_select(single, normal, DDL, Data, Qry, {get_cols(docs), to_result(Data)}).
+
+get_cols(docs) ->
+        [<<"myfamily">>,
+         <<"myseries">>,
+         <<"time">>,
+         <<"weather">>,
+         <<"temperature">>].
+
+to_result(Data) ->
+	[_|Tail] = remove_last([list_to_tuple(R) || R <- Data]),
+	Tail	.
+
+remove_last(Data) ->
+	lists:reverse(tl(lists:reverse(Data))).
