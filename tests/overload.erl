@@ -166,7 +166,7 @@ test_cover_queries_overload(Nodes, _, false) ->
     lager:info("Setting vnode check interval to 1"),
 
     Config = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
-                           {vnode_request_check_interval, 2},
+                           {vnode_check_request_interval, 2},
                            {vnode_check_interval, 1}]}],
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
@@ -180,9 +180,6 @@ test_cover_queries_overload(Nodes, _, false) ->
                 lager:info("Suspending all kv vnodes on ~p", [N]),
                 suspend_and_overload_all_kv_vnodes(N)
             end || N <- [Node2, Node3, Node4, Node5]],
-
-    %% Need to wakt for the rest of riak to be up - not sure what to wait for here
-    timer:sleep(10000),
 
     [?assertEqual({error, <<"mailbox_overload">>}, KeysRes) ||
         KeysRes <- [list_keys(Node1) || _ <- lists:seq(1, 3)]],
@@ -398,7 +395,7 @@ remote_suspend_and_overload() ->
 wait_for_input(Vnodes) ->
     receive
         {overload, From} ->
-            [?MODULE:overload(Pid) ||
+            [?MODULE:overload(Vnodes, Pid) ||
                 {riak_kv_vnode, _, Pid} <- Vnodes],
             From ! overloaded,
             wait_for_input(Vnodes);
@@ -430,11 +427,17 @@ count_overload_messages(Message, Count) ->
             Count
     end.
 
-overload(Pid) ->
+overload(Vnodes, Pid) ->
     %% The actual message doesn't matter. This one just has the least
     %% side effects.
     [Pid ! {set_concurrency_limit, some_lock, 1} ||
-        _ <- lists:seq(1, ?NUM_REQUESTS)].
+        _ <- lists:seq(1, ?NUM_REQUESTS)],
+    %% Need to send 1 message through the proxy to get to overloaded state
+    {Mod, Idx, _} = lists:keyfind(Pid, 3, Vnodes),
+    ProxyPid = whereis(riak_core_vnode_proxy:reg_name(Mod, Idx)),
+    ProxyPid ! junk.
+
+
 
 suspend_vnode({Idx, Node}) ->
     suspend_vnode(Node, Idx).
