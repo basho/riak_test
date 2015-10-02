@@ -23,4 +23,3 @@ confirm() ->
         timeseries_util:get_cols(docs),
         timeseries_util:exclusive_result_from_data(Data, 2, 9)},
     confirm_select(Cluster, TestType, DDL, Data, Qry, Expected).
-
