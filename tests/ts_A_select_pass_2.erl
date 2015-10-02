@@ -32,5 +32,5 @@ confirm() ->
     Qry  = timeseries_util:get_valid_qry_spanning_quanta(),
     Expected = {
         timeseries_util:get_cols(docs),
-        timeseries_util:exclusive_result_from_data(Data, 1, 9)},
+        timeseries_util:exclusive_result_from_data(Data, 2, 9)},
     timeseries_util:confirm_select(single, normal, DDL, Data, Qry, Expected).
