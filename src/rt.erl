@@ -534,18 +534,18 @@ cmd(Cmd, Opts) ->
 -spec stream_cmd(string()) -> {integer(), string()}.
 stream_cmd(Cmd) ->
     Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr_to_stdout, exit_status]),
-    stream_cmd_loop(Port, "", "", now()).
+    stream_cmd_loop(Port, "", "", time_compat:timestamp()).
 
 %% @doc same as rt:stream_cmd/1, but with options, like open_port/2
 -spec stream_cmd(string(), string()) -> {integer(), string()}.
 stream_cmd(Cmd, Opts) ->
     Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr_to_stdout, exit_status] ++ Opts),
-    stream_cmd_loop(Port, "", "", now()).
+    stream_cmd_loop(Port, "", "", time_compat:timestamp()).
 
 stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs}) ->
     receive
         {Port, {data, Data}} ->
-            {_, Now, _} = now(),
+            {_, Now, _} = time_compat:timestamp(),
             NewNewLineBuffer = case Now > Secs of
                 true ->
                     lager:info(NewLineBuffer),
@@ -560,7 +560,7 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
                     [ lager:info(Token) || Token <- Tokens ],
                     stream_cmd_loop(Port, Buffer ++ NewNewLineBuffer ++ Data, "", Time);
                 _ ->
-                    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, now())
+                    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, time_compat:timestamp())
             end;
         {Port, {exit_status, Status}} ->
             catch port_close(Port),

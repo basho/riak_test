@@ -17,7 +17,7 @@ stop_vnode_after_bloom_fold_request_succeeds(IndexNode, Req, Sender, VMaster) ->
 
     case (ReqFun == fun riak_repl_aae_source:bloom_fold/3 orelse ReqFun == fun riak_repl_keylist_server:bloom_fold/3) of
         true ->
-            random:seed(erlang:now()),
+            random:seed(time_compat:timestamp()),
             case random:uniform(10) of
                 5 ->
                     %% Simulate what happens when a VNode completes handoff between command_returning_vnode

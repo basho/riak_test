@@ -36,7 +36,7 @@ wrong_node(_Partition) ->
 
 %% @doc Make all KV vnode coverage commands take abnormally long.
 slow_handle_coverage(Req, Filter, Sender, State) ->
-    random:seed(erlang:now()),
+    random:seed(time_compat:timestamp()),
     Rand = random:uniform(5000),
     error_logger:info_msg("coverage sleeping ~p", [Rand]),
     timer:sleep(Rand),
