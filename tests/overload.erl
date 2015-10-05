@@ -78,7 +78,7 @@ default_config() ->
         {enable_consensus, true},
         {vnode_overload_threshold, undefined}]},
         {riak_kv, [{fsm_limit, undefined},
-            {storage_backend, riak_kv_memory_backend},
+            {storage_backend, riak_kv_eleveldb_backend},
             {anti_entropy_build_limit, {100, 1000}},
             {anti_entropy_concurrency, 100},
             {anti_entropy_tick, 100},
@@ -90,7 +90,7 @@ test_no_overload_protection(_Nodes, _BKV, true) ->
     ok;
 test_no_overload_protection(Nodes, BKV, ConsistentType) ->
     lager:info("Testing with no overload protection"),
-    ProcFun = build_predicate_gte(test_no_overload_protection, ?NUM_REQUESTS,
+    ProcFun = build_predicate_eq(test_no_overload_protection, ?NUM_REQUESTS,
                                   "ProcFun", "Procs"),
     QueueFun = build_predicate_gte(test_no_overload_protection, ?NUM_REQUESTS,
                                    "QueueFun", "Queue Size"),
@@ -141,7 +141,10 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
 %% Don't check on fast path
 test_fsm_protection(_, {{<<"write_once_type">>, _}, _, _}, _) ->
     ok;
-test_fsm_protection(Nodes, BKV, ConsistentType) ->
+%% Or consistent path - doesn't use FSMs either
+test_fsm_protection(_, _, true) ->
+    ok;
+test_fsm_protection(Nodes, BKV, false) ->
     lager:info("Testing with coordinator protection enabled"),
     lager:info("Setting FSM limit to ~b", [?THRESHOLD]),
     Config = [{riak_kv, [
@@ -151,12 +154,42 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
-    ProcFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
+    Node1 = hd(Nodes),
+
+    %% TODO: Figure out why just using rt:wait_for_service completely breaks this test,
+    %% but not waiting for riak_kv leaves us open to a race where the resource doesn't exist yet.
+    %% Do the retry dance instead for now inside get_calculated_sj_limit.
+    rt:wait_for_cluster_service(Nodes, riak_kv),
+    rt:load_modules_on_nodes([?MODULE], Nodes),
+    {ok, ExpectedFsms} = get_calculated_sj_limit(Node1, riak_kv_get_fsm_sj),
+
+    %% We expect exactly ExpectedFsms, but because of a race in SideJob we sometimes get 1 more
+    %% Adding 2 (the highest observed rasce to date) to the lte predicate to handle the occasional case.
+    %% Once SideJob is fixed we should remove it (RIAK-2219).
+    ProcFun = build_predicate_lte(test_fsm_protection, (ExpectedFsms+2),
                                  "ProcFun", "Procs"),
     QueueFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
                                   "QueueFun", "QueueSize"),
-    verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
+    verify_test_results(run_test(Nodes, BKV), false, ProcFun, QueueFun),
+
     ok.
+
+get_calculated_sj_limit(Node, ResourceName) ->
+    get_calculated_sj_limit(Node, ResourceName, 5).
+
+get_calculated_sj_limit(Node, ResourceName, Retries) when Retries > 0 ->
+    CallResult = rpc:call(Node, erlang, apply, [fun() -> ResourceName:width() * ResourceName:worker_limit() end, []]),
+    Result = case CallResult of
+        {badrpc, Reason} ->
+            lager:info("Failed to retrieve sidejob limit from ~p for ~p: ~p", [Node, ResourceName, Reason]),
+            timer:sleep(1000),
+            get_calculated_sj_limit(Node, ResourceName, Retries-1);
+        R -> {ok, R}
+    end,
+    Result;
+
+get_calculated_sj_limit(Node, ResourceName, Retries) when Retries == 0 ->
+    {error, io_lib:format("Failed to retrieve sidejob limit from ~p for resource ~p. Giving up.", [Node, ResourceName])}.
 
 test_cover_queries_overload(_Nodes, _, true) ->
     ok;
@@ -319,7 +352,7 @@ spawn_reads(Node, {Bucket, Key, _}, Num) ->
                 Pid = spawn(fun() ->
                         rt:wait_until(pb_get_fun(Node, Bucket, Key, Self), ?GET_RETRIES, ?GET_RETRIES)
                             end),
-                erlang:yield(), %% allow the spawned fun to get started
+                timer:sleep(1), % slow down just a bit to prevent thundering herd from overwhelming the node,
                 Pid
             end || _ <- lists:seq(1, Num)],
     [ receive {sent, Pid} -> ok end || Pid <- Pids ],
@@ -330,23 +363,23 @@ pb_get_fun(Node, Bucket, Key, TestPid) ->
             PBC = rt:pbc(Node),
             Result = case catch riakc_pb_socket:get(PBC, Bucket, Key) of
                          {error, <<"overload">>} ->
-                                                %                lager:info("overload detected in pb_get, continuing..."),
-                             true;
-                         {error, notfound} ->
+                             lager:info("overload detected in pb_get, continuing..."),
                              true;
                          %% we expect timeouts in this test as we've shut down a vnode - return true in this case
                          {error, timeout} ->
+                             lager:info("timeout detected in pb_get, continuing..."),
                              true;
                          {error, <<"timeout">>} ->
+                             lager:info("timeout detected in pb_get, continuing..."),
+                             true;
+                         {ok, Res} ->
+                             lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res]),
                              true;
                          {error, Type} ->
-                             lager:error("riakc_pb_socket failed with ~p, retrying...", [Type]),
+                             lager:error("riakc_pb_socket threw error ~p reading {~p, ~p}, retrying...", [Type, Bucket, Key]),
                              false;
-                         {ok, _Res} ->
-                                                %                lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res]),
-                             true;
                          {'EXIT', Type} ->
-                             lager:info("riakc_pb_socket threw error ~p, retrying...", [Type]),
+                             lager:info("riakc_pb_socket threw error ~p reading {~p, ~p}, retrying...", [Type, Bucket, Key]),
                              false
                      end,
             case Result of
@@ -358,17 +391,6 @@ pb_get_fun(Node, Bucket, Key, TestPid) ->
             Result
     end.
 
-pb_get(PBC, Bucket, Key) ->
-    case riakc_pb_socket:get(PBC, Bucket, Key) of
-        {error, <<"overload">>} ->
-            lager:info("overload detected in pb_get, continuing...");
-        {error, Type} ->
-            lager:error("riakc_pb_socket failed with ~p, retrying...", [Type]),
-            pb_get(PBC, Bucket, Key);
-        {ok, Res} ->
-            lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res])
-    end.
-
 kill_pids(Pids) ->
     [exit(Pid, kill) || Pid <- Pids].
 
@@ -376,8 +398,9 @@ suspend_and_overload_all_kv_vnodes(Node) ->
     lager:info("Suspending vnodes on ~p", [Node]),
     Pid = rpc:call(Node, ?MODULE, remote_suspend_and_overload, []),
     Pid ! {overload, self()},
-    receive overloaded ->
-            Pid
+    receive {overloaded, Pid} ->
+        lager:info("Received overloaded message from ~p", [Pid]),
+        Pid
     end,
     rt:wait_until(node_overload_check(Pid)),
     Pid.
@@ -387,7 +410,7 @@ remote_suspend_and_overload() ->
                   Vnodes = riak_core_vnode_manager:all_vnodes(),
                   [begin
                        lager:info("Suspending vnode pid: ~p~n", [Pid]),
-                       erlang:suspend_process(Pid, [])
+                       erlang:suspend_process(Pid)
                    end || {riak_kv_vnode, _, Pid} <- Vnodes],
                   ?MODULE:wait_for_input(Vnodes)
           end).
@@ -395,9 +418,11 @@ remote_suspend_and_overload() ->
 wait_for_input(Vnodes) ->
     receive
         {overload, From} ->
+            lager:info("Overloading vnodes.", []),
             [?MODULE:overload(Vnodes, Pid) ||
                 {riak_kv_vnode, _, Pid} <- Vnodes],
-            From ! overloaded,
+            lager:info("Sending overloaded message back to test.", []),
+            From ! {overloaded, self()},
             wait_for_input(Vnodes);
         {verify_overload, From} ->
             OverloadCheck = ?MODULE:verify_overload(Vnodes),
@@ -449,9 +474,9 @@ remote_suspend_vnode(Idx) ->
     spawn(fun() ->
                   {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Idx, riak_kv_vnode),
                   lager:info("Suspending vnode pid: ~p", [Pid]),
-                  sys:suspend(Pid),
+                  erlang:suspend_process(Pid),
                   receive resume ->
-                          sys:resume(Pid)
+                          erlang:resume_process(Pid)
                   end
           end).
 
@@ -522,13 +547,23 @@ remote_vnode_queue(Idx) ->
     Len.
 
 %% In tests that do not expect work to be shed, we want to confirm that
-%% at least ?NUM_REQUESTS (processes|queue entries) are handled.
+%% at least ?NUM_REQUESTS (queue entries) are handled.
 build_predicate_gte(Test, Metric, Label, ValueLabel) ->
     fun (X) ->
             lager:info("in test ~p ~p, ~p:~p, expected no overload, Metric:>=~p",
                        [Test, Label, ValueLabel, X, Metric]),
             X >= Metric
     end.
+
+%% In tests that do not expect work to be shed, we want to confirm that
+%% exactly ?NUM_REQUESTS (processes entries) are handled.
+build_predicate_eq(Test, Metric, Label, ValueLabel) ->
+    fun (X) ->
+        lager:info("in test ~p ~p, ~p:~p, expected no overload, Metric:==~p",
+            [Test, Label, ValueLabel, X, Metric]),
+        X == Metric
+    end.
+
 %% In tests that expect work to be shed due to overload, the success
 %% condition is simply that the number of (fsms|queue entries) is
 %% less than ?NUM_REQUESTS.
@@ -537,4 +572,14 @@ build_predicate_lt(Test, Metric, Label, ValueLabel) ->
             lager:info("in test ~p ~p, ~p:~p, expected overload, Metric:<~p",
                        [Test, Label, ValueLabel, X, Metric]),
             X < Metric
+    end.
+
+%% In tests that expect work to be shed due to overload, the success
+%% condition is simply that the number of (fsms|queue entries) is
+%% less than ?NUM_REQUESTS.
+build_predicate_lte(Test, Metric, Label, ValueLabel) ->
+    fun (X) ->
+        lager:info("in test ~p ~p, ~p:~p, expected overload, Metric:=<~p",
+            [Test, Label, ValueLabel, X, Metric]),
+        X =< Metric
     end.
