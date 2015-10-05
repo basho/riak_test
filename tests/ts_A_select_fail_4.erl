@@ -1,21 +1,22 @@
+
+%%% Test the greater than operator on a varchar, this
+%%% is not allowed.
+
 -module(ts_A_select_fail_4).
 
 -behavior(riak_test).
 
--export([
-	 confirm/0
-	]).
-
--import(timeseries_util, [
-			  get_ddl/1,
-			  get_valid_select_data/0,
-			  get_invalid_qry/1,
-			  confirm_select/6
-			  ]).
+-export([confirm/0]).
 
 confirm() ->
-    DDL = get_ddl(docs),
-    Data = get_valid_select_data(),
-    Qry = get_invalid_qry(invalid_operator),
+    DDL = timeseries_util:get_ddl(docs),
+    Data = timeseries_util:get_valid_select_data(),
+    Qry = 
+    	"select * from GeoCheckin "
+    	"where time > 1 and time < 10 "
+    	"and myfamily = 'family1' "
+    	"and myseries ='seriesX' "
+    	"and weather > 'bob'", % can't do greater than on a varchar!
     Expected = "some error message, fix me",
-    confirm_select(single, normal, DDL, Data, Qry, Expected).
+    timeseries_util:confirm_select(
+    	single, normal, DDL, Data, Qry, Expected).

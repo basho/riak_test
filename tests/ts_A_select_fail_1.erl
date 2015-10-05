@@ -12,7 +12,8 @@
 			  get_invalid_qry/1,
 			  confirm_select/6
 			  ]).
-
+% TODO this test cannot select because the put fails
+%      because there is no ddl for it to write to
 confirm() ->
     DDL = "",
     Data = get_valid_select_data(),

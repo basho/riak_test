@@ -2,20 +2,17 @@
 
 -behavior(riak_test).
 
--export([
-	 confirm/0
-	]).
-
--import(timeseries_util, [
-			  get_ddl/1,
-			  get_valid_select_data/0,
-			  get_invalid_qry/1,
-			  confirm_select/6
-			  ]).
+-export([confirm/0]).
 
 confirm() ->
-    DDL = get_ddl(docs),
-    Data = get_valid_select_data(),
-    Qry = get_invalid_qry(borked_syntax),
+    Cluster = single,
+    TestType = normal,
+    DDL = timeseries_util:get_ddl(docs),
+    Data = timeseries_util:get_valid_select_data(),
+    % FIXME we get a badmatch from riak_ql_parser
+    Qry = 
+    	"selectah * from GeoCheckin "
+    	"Where time > 1 and time < 10",
     Expected = "some error message, fix me",
-    confirm_select(single, normal, DDL, Data, Qry, Expected).
+    timeseries_util:confirm_select(
+    	Cluster, TestType, DDL, Data, Qry, Expected).

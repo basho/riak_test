@@ -1,21 +1,21 @@
+
+%%% Execute a query where the primary key is not covered
+%%% in the where clause.
+
 -module(ts_A_select_fail_3).
 
 -behavior(riak_test).
 
--export([
-	 confirm/0
-	]).
-
--import(timeseries_util, [
-			  get_ddl/1,
-			  get_valid_select_data/0,
-			  get_invalid_qry/1,
-			  confirm_select/6
-			  ]).
+-export([confirm/0]).
 
 confirm() ->
-    DDL = get_ddl(docs),
-    Data = get_valid_select_data(),
-    Qry = get_invalid_qry(key_not_covered),
-    Expected = "some error message, fix me",
-    confirm_select(single, normal, DDL, Data, Qry, Expected).
+    DDL = timeseries_util:get_ddl(docs),
+    Data = timeseries_util:get_valid_select_data(),
+    % query with missing myfamily field
+    Query = 
+    	"select * from GeoCheckin "
+    	"where time > 1 and time < 10",
+    Expected = 
+    	{error,<<"missing_param: Missing parameter myfamily in where clase.">>},
+    timeseries_util:confirm_select(
+    	single, normal, DDL, Data, Query, Expected).
