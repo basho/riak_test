@@ -14,7 +14,7 @@ confirm() ->
           "and myfamily = 'family1' "
           "and myseries ='seriesX' ",
     Expected = 
-      {error, <<"\"incomplete_where_clause: Where clause has no lower bound.\"">>},
+      {error, <<"incomplete_where_clause: Where clause has no lower bound.">>},
     timeseries_util:confirm_select(
         Cluster, TestType, DDL, Data, Qry, Expected).
 
