@@ -34,10 +34,15 @@
 -define(SPARK_WORKER_SERVICE_CONFIG, [{"MASTER_URL", "spark://127.0.0.1:7077"},{"SPARK_WORKER_PORT","8081"}]).
 
 
-%this code tests if a spark job can successfully be submitted to a two node spark cluster within a three node bdp cluster
+% this code tests if a spark job can successfully be submitted to a two
+% node spark cluster within a three node bdp cluster
 
-%WARNINGS: spark worker configs must contain exact ip address of spark master, not 127.0.0.1.  Otherwise, spark master and worker
-%will fail to link together.  As such, os:cmd is used to get the ip address of node1 via a shell command that might not work on systems other than moc osx.
+% WARNINGS: spark worker configs must contain exact ip address of spark
+% master, not 127.0.0.1.  Otherwise, spark master and worker will fail
+% to link together.  As such, os:cmd is used to get the ip address of
+% node1 via a shell command that might not work on systems other than
+% moc osx.
+
 confirm() ->
 
     %build cluster
@@ -46,9 +51,9 @@ confirm() ->
     _Nodes = [Node1, Node2, _Node3] =
         bdp_util:build_cluster(
           ClusterSize, [{lager, [{handlers, [{file, "console.log"}, {level, debug}] }]}]),
-   
+
     %% add spark master and worker services
-    lager:info("Adding Spaker Master and Spark Worker Service..."), 
+    lager:info("Adding Spaker Master and Spark Worker Service..."),
     %% add master service
     ok = bdp_util:add_service(Node1, ?SPARK_MASTER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE, ?SPARK_MASTER_SERVICE_CONFIG),
     ok = bdp_util:wait_services(Node1, {[], [?SPARK_MASTER_SERVICE_NAME]}),
