@@ -296,7 +296,7 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
 
     [make_intercepts_tab(ANode) || ANode <- Cluster],
 
-    [rt_intercept:add(ANode, {yz_kv, [{{delete_operation, 6},
+    [rt_intercept:add(ANode, {yz_kv, [{{delete_operation, 5},
                                        handle_delete_operation}]})
      || ANode <- Cluster],
     [true = rpc:call(ANode, ets, insert, [intercepts_tab, {del_put, 0}]) ||
