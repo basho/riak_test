@@ -24,23 +24,23 @@
 
 -define(M, yz_kv_orig).
 
-handle_delete_operation(BProps, Obj, Reason, Docs, BKey, LP) ->
+handle_delete_operation(BProps, Obj, Docs, BKey, LP) ->
     Lookup = ets:lookup(intercepts_tab, del_put),
     case Lookup of
-        [] -> original_delete_op(BProps, Obj, Reason, Docs, BKey, LP);
+        [] -> original_delete_op(BProps, Obj, Docs, BKey, LP);
         _ ->
-            case {Reason, proplists:get_value(del_put, Lookup)} of
-                {put, 0} ->
+            case proplists:get_value(del_put, Lookup) of
+                0 ->
                     error_logger:info_msg(
-                      "Delete operation intercepted w/ Reason ~p", [Reason]),
+                      "Delete operation intercepted for BKey ~p", [BKey]),
                     ets:update_counter(intercepts_tab, del_put, 1),
                     [];
                 _ ->
-                    original_delete_op(BProps, Obj, Reason, Docs, BKey, LP)
+                    original_delete_op(BProps, Obj, Docs, BKey, LP)
             end
     end.
 
-original_delete_op(BProps, Obj, Reason, Docs, BKey, LP) ->
+original_delete_op(BProps, Obj, Docs, BKey, LP) ->
     error_logger:info_msg(
-      "Delete operation original w/ Reason ~p ~p", [Reason, Docs]),
-    ?M:delete_operation_orig(BProps, Obj, Reason, Docs, BKey, LP).
+      "Delete operation original for BKey ~p | ~p", [BKey, Docs]),
+    ?M:delete_operation_orig(BProps, Obj, Docs, BKey, LP).
