@@ -156,25 +156,23 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
     %% TODO: Figure out why just using rt:wait_for_service completely breaks this test,
     %% but not waiting for riak_kv leaves us open to a race where the resource doesn't exist yet.
     %% Do the retry dance instead for now inside get_calculated_sj_limit.
-    % rt:wait_for_cluster_service(Nodes, riak_kv),
+    rt:wait_for_cluster_service(Nodes, riak_kv),
     rt:load_modules_on_nodes([?MODULE], Nodes),
     {ok, ExpectedFsms} = get_calculated_sj_limit(Node1, riak_kv_get_fsm_sj),
 
     %% Suspend all vnodes
-    Pids = [begin
-                lager:info("Suspending all kv vnodes on ~p", [N]),
-                suspend_and_overload_all_kv_vnodes(N)
-            end || N <- Nodes],
+    lager:info("Suspending all kv vnodes on ~p", [Node1]),
+    Pid = suspend_and_overload_all_kv_vnodes(Node1),
     %% send ExpectedFsms requests, which will make all sidejob resources busy
-    spawn_reads(Node1, BKV, ?THRESHOLD),
+    spawn_reads(Node1, BKV, ExpectedFsms),
 
-    ProcFun = build_predicate_eq(test_fsm_protection, (ExpectedFsms),
+    ProcFun = build_predicate_eq(test_fsm_protection, (0),
                                  "ProcFun", "Procs"),
     QueueFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
                                   "QueueFun", "QueueSize"),
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
 
-    [resume_all_vnodes(Pid) || Pid <- Pids],
+    resume_all_vnodes(Pid),
     ok.
 
 get_calculated_sj_limit(Node, ResourceName) ->
@@ -355,7 +353,7 @@ spawn_reads(Node, {Bucket, Key, _}, Num) ->
                 Pid = spawn(fun() ->
                         rt:wait_until(pb_get_fun(Node, Bucket, Key, Self), ?GET_RETRIES, ?GET_RETRIES)
                             end),
-                erlang:yield(), %% allow the spawned fun to get started
+                timer:sleep(1), % slow down just a bit to prevent thundering herd from overwhelming the node,
                 Pid
             end || _ <- lists:seq(1, Num)],
     [ receive {sent, Pid} -> ok end || Pid <- Pids ],
@@ -370,11 +368,13 @@ pb_get_fun(Node, Bucket, Key, TestPid) ->
                              true;
                          %% we expect timeouts in this test as we've shut down a vnode - return true in this case
                          {error, timeout} ->
+                             lager:info("timeout detected in pb_get, continuing..."),
                              true;
                          {error, <<"timeout">>} ->
+                             lager:info("timeout detected in pb_get, continuing..."),
                              true;
-                         {ok, _Res} ->
-                                                %                lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res]),
+                         {ok, Res} ->
+                             lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res]),
                              true;
                          {error, Type} ->
                              lager:error("riakc_pb_socket threw error ~p reading {~p, ~p}, retrying...", [Type, Bucket, Key]),
@@ -399,8 +399,9 @@ suspend_and_overload_all_kv_vnodes(Node) ->
     lager:info("Suspending vnodes on ~p", [Node]),
     Pid = rpc:call(Node, ?MODULE, remote_suspend_and_overload, []),
     Pid ! {overload, self()},
-    receive overloaded ->
-            Pid
+    receive {overloaded, Pid} ->
+        lager:info("Received overloaded message from ~p", [Pid]),
+        Pid
     end,
     rt:wait_until(node_overload_check(Pid)),
     Pid.
@@ -410,7 +411,7 @@ remote_suspend_and_overload() ->
                   Vnodes = riak_core_vnode_manager:all_vnodes(),
                   [begin
                        lager:info("Suspending vnode pid: ~p~n", [Pid]),
-                       erlang:suspend_process(Pid, [])
+                       erlang:suspend_process(Pid)
                    end || {riak_kv_vnode, _, Pid} <- Vnodes],
                   ?MODULE:wait_for_input(Vnodes)
           end).
@@ -418,9 +419,11 @@ remote_suspend_and_overload() ->
 wait_for_input(Vnodes) ->
     receive
         {overload, From} ->
+            lager:info("Overloading vnodes.", []),
             [?MODULE:overload(Vnodes, Pid) ||
                 {riak_kv_vnode, _, Pid} <- Vnodes],
-            From ! overloaded,
+            lager:info("Sending overloaded message back to test.", []),
+            From ! {overloaded, self()},
             wait_for_input(Vnodes);
         {verify_overload, From} ->
             OverloadCheck = ?MODULE:verify_overload(Vnodes),
@@ -472,9 +475,9 @@ remote_suspend_vnode(Idx) ->
     spawn(fun() ->
                   {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Idx, riak_kv_vnode),
                   lager:info("Suspending vnode pid: ~p", [Pid]),
-                  sys:suspend(Pid),
+                  erlang:suspend_process(Pid),
                   receive resume ->
-                          sys:resume(Pid)
+                          erlang:resume_process(Pid)
                   end
           end).
 
