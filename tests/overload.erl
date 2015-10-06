@@ -52,10 +52,10 @@ confirm() ->
     write_once(Node1, BKV2),
     write_once(Node1, BKV3),
 
-    Tests = [%%test_no_overload_protection,
-             %%test_vnode_protection,
+    Tests = [%test_no_overload_protection,
+             %test_vnode_protection,
              test_fsm_protection],
-             %%test_cover_queries_overload],
+             %test_cover_queries_overload],
 
     [begin
          lager:info("Starting Test ~p for ~p~n", [Test, BKV]),
@@ -151,15 +151,20 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
-
     Node1 = hd(Nodes),
-    %% Suspend all vnodes
+
+    %% TODO: Figure out why just using rt:wait_for_service completely breaks this test,
+    %% but not waiting for riak_kv leaves us open to a race where the resource doesn't exist yet.
+    %% Do the retry dance instead for now inside get_calculated_sj_limit.
+    % rt:wait_for_cluster_service(Nodes, riak_kv),
     rt:load_modules_on_nodes([?MODULE], Nodes),
+    {ok, ExpectedFsms} = get_calculated_sj_limit(Node1, riak_kv_get_fsm_sj),
+
+    %% Suspend all vnodes
     Pids = [begin
                 lager:info("Suspending all kv vnodes on ~p", [N]),
                 suspend_and_overload_all_kv_vnodes(N)
             end || N <- Nodes],
-    ExpectedFsms = get_calculated_sj_limit(Node1, riak_kv_get_fsm_sj),
     %% send ExpectedFsms requests, which will make all sidejob resources busy
     spawn_reads(Node1, BKV, ?THRESHOLD),
 
@@ -173,13 +178,21 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
     ok.
 
 get_calculated_sj_limit(Node, ResourceName) ->
+    get_calculated_sj_limit(Node, ResourceName, 5).
+
+get_calculated_sj_limit(Node, ResourceName, Retries) when Retries > 0 ->
     CallResult = rpc:call(Node, erlang, apply, [fun() -> ResourceName:width() * ResourceName:worker_limit() end, []]),
     Result = case CallResult of
         {badrpc, Reason} ->
-            throw(io_lib:format("Failed to retrieve sidejob limit from ~p: ~p", [Node, Reason]));
-        R -> R
+            lager:info("Failed to retrieve sidejob limit from ~p for ~p: ~p", [Node, ResourceName, Reason]),
+            timer:sleep(1000),
+            get_calculated_sj_limit(Node, ResourceName, Retries-1);
+        R -> {ok, R}
     end,
-    Result.
+    Result;
+
+get_calculated_sj_limit(Node, ResourceName, Retries) when Retries == 0 ->
+    {error, io_lib:format("Failed to retrieve sidejob limit from ~p for resource ~p. Giving up.", [Node, ResourceName])}.
 
 test_cover_queries_overload(_Nodes, _, true) ->
     ok;
