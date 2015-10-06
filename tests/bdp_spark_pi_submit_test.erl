@@ -58,7 +58,8 @@ confirm() ->
     ok = bdp_util:add_service(Node1, ?SPARK_MASTER_SERVICE_NAME, ?SPARK_MASTER_SERVICE_TYPE, ?SPARK_MASTER_SERVICE_CONFIG),
     ok = bdp_util:wait_services(Node1, {[], [?SPARK_MASTER_SERVICE_NAME]}),
     %% add worker service
-    SparkMasterIP = re:replace(rpc:call(Node1,os,cmd,["ipconfig getifaddr en0"]),"\\s+", "", [global,{return,list}]),
+    [{_IfaceName, SparkMasterIP_}|_] = get_routed_interfaces(Node1),
+    SparkMasterIP = inet:ntoa(SparkMasterIP_),
     SparkMasterAddr = "spark://"++SparkMasterIP++":7077",
     WorkerConfig = [{"MASTER_URL", SparkMasterAddr},{"SPARK_WORKER_PORT","8081"}],
 
@@ -113,3 +114,42 @@ confirm() ->
     pass.
 
 
+-spec get_routed_interfaces(node()) -> [{Iface::string(), inet:ip_address()}].
+%% @private
+get_routed_interfaces(Node) ->
+    case rpc:call(Node, inet, getifaddrs, []) of
+        {ok, Ifaces} ->
+            lists:filtermap(
+              fun({Iface, Details}) ->
+                      case is_routed_addr(Details) of
+                          undefined ->
+                              false;
+                          Addr ->
+                              {true, {Iface, Addr}}
+                      end
+              end,
+              Ifaces);
+        {error, PosixCode} ->
+            _ = lager:log(error, self(), "Failed to enumerate network ifaces: ~p", [PosixCode]),
+            []
+    end.
+
+
+-spec is_routed_addr([{Ifname::string(), Ifopt::[{atom(), any()}]}]) ->
+    inet:ip_address() | undefined.
+%% @private
+is_routed_addr(Details) ->
+    Flags = proplists:get_value(flags, Details),
+    case {(is_list(Flags) andalso
+           %% andalso lists:member(running, Flags)
+           %% iface is reported as 'running' when it's not according
+           %% to ifconfig -- why?
+           not lists:member(loopback, Flags)),
+          proplists:get_all_values(addr, Details)} of
+        {true, [_|_] = Ipv4AndPossibly6} ->
+            %% prefer the ipv4 addr (4-elem tuple < 6-elem tuple),
+            %% only select ipv6 if ipv4 is missing
+            hd(lists:sort(Ipv4AndPossibly6));
+        _ ->
+            undefined
+    end.
