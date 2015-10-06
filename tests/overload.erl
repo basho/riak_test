@@ -52,10 +52,10 @@ confirm() ->
     write_once(Node1, BKV2),
     write_once(Node1, BKV3),
 
-    Tests = [%test_no_overload_protection,
-             %test_vnode_protection,
-             test_fsm_protection],
-             %test_cover_queries_overload],
+    Tests = [test_no_overload_protection,
+             test_vnode_protection,
+             test_fsm_protection,
+             test_cover_queries_overload],
 
     [begin
          lager:info("Starting Test ~p for ~p~n", [Test, BKV]),
@@ -160,19 +160,15 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
     rt:load_modules_on_nodes([?MODULE], Nodes),
     {ok, ExpectedFsms} = get_calculated_sj_limit(Node1, riak_kv_get_fsm_sj),
 
-    %% Suspend all vnodes
-    lager:info("Suspending all kv vnodes on ~p", [Node1]),
-    Pid = suspend_and_overload_all_kv_vnodes(Node1),
-    %% send ExpectedFsms requests, which will make all sidejob resources busy
-    spawn_reads(Node1, BKV, ExpectedFsms),
-
-    ProcFun = build_predicate_eq(test_fsm_protection, (0),
+    %% We expect exactly ExpectedFsms, but because of a race in SideJob we sometimes get 1 more
+    %% Adding 2 (the highest observed rasce to date) to the lte predicate to handle the occasional case.
+    %% Once SideJob is fixed we should remove it (RIAK-2219).
+    ProcFun = build_predicate_lte(test_fsm_protection, (ExpectedFsms+2),
                                  "ProcFun", "Procs"),
     QueueFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
                                   "QueueFun", "QueueSize"),
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
 
-    resume_all_vnodes(Pid),
     ok.
 
 get_calculated_sj_limit(Node, ResourceName) ->
@@ -573,4 +569,14 @@ build_predicate_lt(Test, Metric, Label, ValueLabel) ->
             lager:info("in test ~p ~p, ~p:~p, expected overload, Metric:<~p",
                        [Test, Label, ValueLabel, X, Metric]),
             X < Metric
+    end.
+
+%% In tests that expect work to be shed due to overload, the success
+%% condition is simply that the number of (fsms|queue entries) is
+%% less than ?NUM_REQUESTS.
+build_predicate_lte(Test, Metric, Label, ValueLabel) ->
+    fun (X) ->
+        lager:info("in test ~p ~p, ~p:~p, expected overload, Metric:=<~p",
+            [Test, Label, ValueLabel, X, Metric]),
+        X =< Metric
     end.
