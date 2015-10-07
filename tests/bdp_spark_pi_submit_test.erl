@@ -37,11 +37,10 @@
 % this code tests if a spark job can successfully be submitted to a two
 % node spark cluster within a three node bdp cluster
 
-% WARNINGS: spark worker configs must contain exact ip address of spark
-% master, not 127.0.0.1.  Otherwise, spark master and worker will fail
-% to link together.  As such, os:cmd is used to get the ip address of
-% node1 via a shell command that might not work on systems other than
-% moc osx.
+% WARNINGS: spark worker configs must contain exact ip address of
+% spark master, not 127.0.0.1.  Otherwise, spark master and worker
+% will fail to link together.  As such, we determine the routed
+% address using inet:getifaddrs/0.
 
 confirm() ->
 
