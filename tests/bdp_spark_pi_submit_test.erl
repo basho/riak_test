@@ -44,6 +44,9 @@
 
 confirm() ->
 
+    %% prepare for httpc:request/1
+    ok = application:start(inets),
+
     %build cluster
     lager:info("Building cluster"),
     ClusterSize = 3,
@@ -96,11 +99,8 @@ confirm() ->
     ?assert(string:str(Results,"Pi is roughly") > 0),
 
     %Assert proper cluster execution of spark job
-    WgetCall = "wget "++SparkMasterIP++":8080",
-    lager:info("wget call: ~s",[WgetCall]),
-    rpc:call(Node1,os,cmd,[WgetCall]),
-    {ok, File} = rpc:call(Node1,file,read_file,["index.html"]),
-    Content = unicode:characters_to_list(File),
+    {ok, _Headers, Content_} = httpc:request("http://"++SparkMasterIP++":8080"),
+    Content = unicode:characters_to_list(Content_),
     %assert master and worker see each other
     TestString1 = "<li><strong>Workers:</strong> 1</li>",
     ?assert(string:str(Content,TestString1) > 0),
