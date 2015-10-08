@@ -129,8 +129,7 @@ get_routed_interfaces(Node) ->
               end,
               Ifaces);
         {error, PosixCode} ->
-            _ = lager:log(error, self(), "Failed to enumerate network ifaces: ~p", [PosixCode]),
-            []
+            error(io_lib:format("Failed to enumerate network ifaces: ~p", [PosixCode]))
     end.
 
 
