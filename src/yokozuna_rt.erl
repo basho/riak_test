@@ -23,6 +23,7 @@
 -include("yokozuna_rt.hrl").
 
 -export([check_exists/2,
+         clear_trees/1,
          commit/2,
          expire_trees/1,
          gen_keys/1,
@@ -225,6 +226,15 @@ expire_trees(Cluster) ->
     timer:sleep(100),
     ok.
 
+%% @doc Expire YZ trees
+-spec clear_trees([node()]) -> ok.
+clear_trees(Cluster) ->
+    lager:info("Expire all trees"),
+    _ = [ok = rpc:call(Node, yz_entropy_mgr, clear_trees, [])
+         || Node <- Cluster],
+    ok.
+
+
 %% @doc Remove index directories, removing the index.
 -spec remove_index_dirs([node()], index_name()) -> ok.
 remove_index_dirs(Nodes, IndexName) ->
@@ -360,20 +370,24 @@ create_and_set_index(Cluster, Pid, Bucket, Index) ->
     ok = riakc_pb_socket:create_search_index(Pid, Index),
     %% For possible legacy upgrade reasons, wrap create index in a wait
     wait_for_index(Cluster, Index),
-    set_index(Pid, Bucket, Index).
+    set_index(Pid, hd(Cluster), Bucket, Index).
 -spec create_and_set_index([node()], pid(), bucket(), index_name(),
                            schema_name()) -> ok.
 create_and_set_index(Cluster, Pid, Bucket, Index, Schema) ->
     %% Create a search index and associate with a bucket
     lager:info("Create a search index ~s with a custom schema named ~s and " ++
-               "associate it with bucket ~s", [Index, Schema, Bucket]),
+               "associate it with bucket ~p", [Index, Schema, Bucket]),
     ok = riakc_pb_socket:create_search_index(Pid, Index, Schema, []),
     %% For possible legacy upgrade reasons, wrap create index in a wait
     wait_for_index(Cluster, Index),
-    set_index(Pid, Bucket, Index).
+    set_index(Pid, hd(Cluster), Bucket, Index).
 
--spec set_index(pid(), bucket(), index_name()) -> ok.
-set_index(Pid, Bucket, Index) ->
+-spec set_index(pid(), node(), bucket(), index_name()) -> ok.
+set_index(_Pid, Node, {BucketType, _Bucket}, Index) ->
+    lager:info("Create and activate map-based bucket type ~s and tie it to search_index ~s",
+               [BucketType, Index]),
+    rt:create_and_activate_bucket_type(Node, BucketType, [{search_index, Index}]);
+set_index(Pid, _Node, Bucket, Index) ->
     ok = riakc_pb_socket:set_search_index(Pid, Bucket, Index).
 
 internal_solr_url(Host, Port, Index) ->

@@ -99,8 +99,7 @@ confirm() ->
                            join_node = Node1,
                            admin_node = Node2}],
 
-    %% Run Shell Script to count/test # of replicas and leave/join
-    %% nodes from the cluster
+    %% Run set of leave/join trials and count/test #'s from the cluster
     [[begin
           check_data(Nodes, KeyCount, BucketURL, SearchURL, State),
           check_counts(Pid, KeyCount, BucketURL)
