@@ -341,17 +341,32 @@ print_summary(TestResults, CoverResult, Verbose) ->
                 [ atom_to_list(proplists:get_value(test, SingleTestResult)) ++ "-" ++
                       backend_list(proplists:get_value(backend, SingleTestResult)),
                   proplists:get_value(status, SingleTestResult),
-                  proplists:get_value(reason, SingleTestResult)]
+                  proplists:get_value(reason, SingleTestResult),
+                  proplists:get_value(duration, SingleTestResult)]
                 || SingleTestResult <- TestResults],
     Width = test_name_width(Results),
 
-    Print = fun(Test, Status, Reason) ->
-        case {Status, Verbose} of
-            {fail, true} -> io:format("~s: ~s ~p~n", [string:left(Test, Width), Status, Reason]);
-            _ -> io:format("~s: ~s~n", [string:left(Test, Width), Status])
-        end
-    end,
-    [ Print(Test, Status, Reason) || [Test, Status, Reason] <- Results],
+    Print = fun(Test, Status, Reason, DurationUSec) ->
+                    Duration =
+                        case DurationUSec of
+                            DurationUSec when is_integer(DurationUSec) ->
+                                io_lib:format("~6.1f sec", [DurationUSec / 1000000]);
+                            DurationUSec ->
+                                io_lib:format("~p", [DurationUSec])
+                        end,
+
+                    case {Status, Verbose} of
+                        {fail, true} ->
+                            io:format("~s: ~s (~s) ~p~n",
+                                      [string:left(Test, Width), Status, Duration, Reason]);
+                        _ ->
+                            io:format("~s: ~s (~s)~n",
+                                      [string:left(Test, Width), Status, Duration])
+                    end
+            end,
+    lists:foreach(fun(SingleTestResult) ->
+                          erlang:apply(Print, SingleTestResult)
+                  end, Results),
 
     PassCount = length(lists:filter(fun(X) -> proplists:get_value(status, X) =:= pass end, TestResults)),
     FailCount = length(lists:filter(fun(X) -> proplists:get_value(status, X) =:= fail end, TestResults)),
