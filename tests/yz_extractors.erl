@@ -28,10 +28,12 @@
 -include_lib("riakc/include/riakc.hrl").
 
 -define(FMT(S, Args), lists:flatten(io_lib:format(S, Args))).
+-define(TYPE1, <<"extractors_in_paradise">>).
+-define(TYPE2, <<"extractors_in_paradiso">>).
 -define(INDEX1, <<"test_idx1">>).
--define(BUCKET1, <<"test_bkt1">>).
+-define(BUCKET1, {?TYPE1, <<"test_bkt1">>}).
 -define(INDEX2, <<"test_idx2">>).
--define(BUCKET2, <<"test_bkt2">>).
+-define(BUCKET2, {?TYPE2, <<"test_bkt2">>}).
 -define(SCHEMANAME, <<"test">>).
 -define(TEST_SCHEMA,
 <<"<schema name=\"test\" version=\"1.5\">
@@ -278,9 +280,9 @@ get_map(Node) ->
 verify_extractor(Node, PacketData, Mod) ->
     rpc:call(Node, yz_extractor, run, [PacketData, Mod]).
 
-bucket_url({Host,Port}, BName, Key) ->
-    ?FMT("http://~s:~B/buckets/~s/keys/~s",
-         [Host, Port, BName, Key]).
+bucket_url({Host,Port}, {BType, BName}, Key) ->
+    ?FMT("http://~s:~B/types/~s/buckets/~s/keys/~s",
+         [Host, Port, BType, BName, Key]).
 
 test_extractor_works(Cluster, Packet) ->
     [rt_intercept:add(ANode, {yz_noop_extractor,
@@ -304,7 +306,7 @@ test_extractor_with_aae_expire(Cluster, Index, Bucket, Packet) ->
     {Host, Port} = rt:select_random(yokozuna_rt:host_entries(
                                                rt:connection_info(
                                                  Cluster))),
-    URL = bucket_url({Host, Port}, mochiweb_util:quote_plus(Bucket),
+    URL = bucket_url({Host, Port}, Bucket,
                      mochiweb_util:quote_plus(Key)),
 
     CT = ?EXTRACTOR_CT,
@@ -326,8 +328,13 @@ test_extractor_with_aae_expire(Cluster, Index, Bucket, Packet) ->
     yokozuna_rt:override_schema(APid, Cluster, Index, ?SCHEMANAME,
                                 ?TEST_SCHEMA_UPGRADE),
 
+    {ok, "200", RHeaders, _} = ibrowse:send_req(URL, [{"Content-Type", CT}], get,
+                                                [], []),
+    VC = proplists:get_value("X-Riak-Vclock", RHeaders),
+
     {ok, "204", _, _} = ibrowse:send_req(
-                          URL, [{"Content-Type", CT}], put, Packet),
+                          URL, [{"Content-Type", CT}, {"X-Riak-Vclock", VC}],
+                          put, Packet),
     yokozuna_rt:commit(Cluster, Index),
 
     yokozuna_rt:search_expect({Host, Port}, Index, <<"method">>,
