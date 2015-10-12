@@ -17,5 +17,5 @@ confirm() ->
     DDL = get_ddl(docs),
     Data = get_valid_select_data(),
     Qry = get_invalid_qry(key_not_covered),
-    Expected = "some error message, fix me",
+    Expected = {error, <<"missing_param: Missing parameter myfamily in where clause.">>},
     confirm_select(single, normal, DDL, Data, Qry, Expected).

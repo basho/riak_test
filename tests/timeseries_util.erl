@@ -141,7 +141,7 @@ get_invalid_qry(invalid_operator) ->
 get_invalid_qry(field_comparison) ->
     "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather = family1";
 get_invalid_qry(type_error) ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather = true".
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather > true".
 
 get_valid_select_data() ->
     Family = <<"family1">>,
