@@ -50,7 +50,7 @@ confirm_activate(ClusterType, DDL, Expected) ->
 
     pass.
 
-confirm_put(ClusterType, TestType, DDL, Obj, Expected) ->
+confirm_put(ClusterType, TestType, DDL, Obj) ->
 
     [Node | _]  = build_cluster(ClusterType),
     
@@ -66,10 +66,7 @@ confirm_put(ClusterType, TestType, DDL, Obj, Expected) ->
     Bucket = list_to_binary(get_bucket()),
     io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
     C = rt:pbc(Node),
-    Get = riakc_ts:put(C, Bucket, Obj),
-    ?assertEqual(Expected, Get),
-
-    pass.
+    riakc_ts:put(C, Bucket, Obj).
 
 confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
     
@@ -133,24 +130,59 @@ get_bucket() ->
     "GeoCheckin".
 
 get_valid_qry() ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries'".
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX'".
 
 get_invalid_qry(borked_syntax) ->
     "selectah * from GeoCheckin Where time > 1 and time < 10";
 get_invalid_qry(key_not_covered) ->
     "select * from GeoCheckin Where time > 1 and time < 10";
 get_invalid_qry(invalid_operator) ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather > 'bob'";
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather > 'bob'";
 get_invalid_qry(field_comparison) ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather = myfamily";
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather = family1";
 get_invalid_qry(type_error) ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and family = 'myfamily' and series ='myseries' and weather = true".
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather > true".
 
 get_valid_select_data() ->
-    Family = <<"myfamily">>,
-    Series = <<"myseries">>,
+    Family = <<"family1">>,
+    Series = <<"seriesX">>,
     Times = lists:seq(1, 10),
-    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
+    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+
+
+-define(SPANNING_STEP, (1000*60*5)).
+
+get_valid_qry_spanning_quanta() ->
+    StartTime = 1 + ?SPANNING_STEP *  1,
+    EndTime   = 1 + ?SPANNING_STEP * 10,
+    lists:flatten(
+      io_lib:format("select * from GeoCheckin Where time > ~b and time < ~b"
+                    " and myfamily = 'family1' and myseries = 'seriesX'",
+                    [StartTime, EndTime])).
+
+get_valid_select_data_spanning_quanta() ->
+    Family = <<"family1">>,
+    Series = <<"seriesX">>,
+    Times = lists:seq(1 + ?SPANNING_STEP, 1 + ?SPANNING_STEP * 10, ?SPANNING_STEP),  %% five-minute intervals, to span 15-min buckets
+    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+
+
+get_cols(docs) ->
+    [<<"myfamily">>,
+     <<"myseries">>,
+     <<"time">>,
+     <<"weather">>,
+     <<"temperature">>].
+
+exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
+						     is_integer(Finish)  andalso
+						     Start  > 0          andalso
+						     Finish > 0          andalso
+						     Finish > Start ->
+    [list_to_tuple(X) || X <- lists:sublist(Data, Start, Finish - Start + 1)].
+
+remove_last(Data) ->
+    lists:reverse(tl(lists:reverse(Data))).
 
 %% a valid DDL - the one used in the documents
 get_ddl(docs) ->

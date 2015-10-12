@@ -7,19 +7,16 @@
 
 -behavior(riak_test).
 
--export([
-	 confirm/0
-	]).
+-export([confirm/0]).
 
--import(timeseries_util, [
-			  get_ddl/1,
-			  get_invalid_obj/0,
-			  confirm_put/5
-			  ]).
+-include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
     ClusterType = single,
-    DDL = get_ddl(docs),
-    Obj = [get_invalid_obj()],
-    Expected = "some error message",
-    confirm_put(ClusterType, normal, DDL, Obj, Expected).
+    DDL = timeseries_util:get_ddl(docs),
+    Obj = [timeseries_util:get_invalid_obj()],
+    ?assertMatch(
+        {error,_},
+        timeseries_util:confirm_put(ClusterType, normal, DDL, Obj)
+    ),
+    pass.

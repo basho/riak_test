@@ -17,5 +17,5 @@ confirm() ->
     DDL = get_ddl(docs),
     Data = get_valid_select_data(),
     Qry = get_invalid_qry(invalid_operator),
-    Expected = "some error message, fix me",
+    Expected = {error, <<"invalid_query: \nincompatible_operator: field weather with type binary cannot use operator '>' in where clause.">>},
     confirm_select(single, normal, DDL, Data, Qry, Expected).

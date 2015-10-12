@@ -2,19 +2,17 @@
 
 -behavior(riak_test).
 
--export([
-	 confirm/0
-	]).
+-export([confirm/0]).
 
--import(timeseries_util, [
-			  get_ddl/1,
-			  get_valid_obj/0,
-			  confirm_put/5
-			  ]).
+-include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
     Cluster = single,
-    DDL = get_ddl(docs),
-    Obj = [get_valid_obj()],
-    Expected = ok,
-    confirm_put(Cluster, normal, DDL, Obj, Expected).
+    TestType = normal,
+    DDL = timeseries_util:get_ddl(docs),
+    Obj = [timeseries_util:get_valid_obj()],
+    ?assertEqual(
+        ok,
+        timeseries_util:confirm_put(Cluster, TestType, DDL, Obj)
+    ),
+    pass.
