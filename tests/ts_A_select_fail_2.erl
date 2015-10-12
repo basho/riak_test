@@ -17,5 +17,5 @@ confirm() ->
     DDL = get_ddl(docs),
     Data = get_valid_select_data(),
     Qry = get_invalid_qry(borked_syntax),
-    Expected = "some error message, fix me",
+    Expected = {error, <<"Message decoding error: \"Unexpected token 'selectah'\"">>},
     confirm_select(single, normal, DDL, Data, Qry, Expected).
