@@ -18,6 +18,6 @@ confirm() ->
         "and myseries = 10 ",
     Expected = {error,
         <<"invalid_query: \n",
-          "incompatible_type: field myseries with type binary cannot be compared to type int in where clause.">>},
+          "incompatible_type: field myseries with type binary cannot be compared to type integer in where clause.">>},
     timeseries_util:confirm_select(
         single, normal, DDL, Data, Qry, Expected).

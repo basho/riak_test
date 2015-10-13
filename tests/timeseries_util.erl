@@ -141,13 +141,31 @@ get_invalid_qry(invalid_operator) ->
 get_invalid_qry(field_comparison) ->
     "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather = family1";
 get_invalid_qry(type_error) ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather = true".
+    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather > true".
 
 get_valid_select_data() ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, 10),
-    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].     
+    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+
+
+-define(SPANNING_STEP, (1000*60*5)).
+
+get_valid_qry_spanning_quanta() ->
+    StartTime = 1 + ?SPANNING_STEP *  1,
+    EndTime   = 1 + ?SPANNING_STEP * 10,
+    lists:flatten(
+      io_lib:format("select * from GeoCheckin Where time > ~b and time < ~b"
+                    " and myfamily = 'family1' and myseries = 'seriesX'",
+                    [StartTime, EndTime])).
+
+get_valid_select_data_spanning_quanta() ->
+    Family = <<"family1">>,
+    Series = <<"seriesX">>,
+    Times = lists:seq(1 + ?SPANNING_STEP, 1 + ?SPANNING_STEP * 10, ?SPANNING_STEP),  %% five-minute intervals, to span 15-min buckets
+    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+
 
 get_cols(docs) ->
     [<<"myfamily">>,
@@ -156,10 +174,12 @@ get_cols(docs) ->
      <<"weather">>,
      <<"temperature">>].
 
-%% Convert put data to result rows exclusive of the first and last records.
-exclusive_result_from_data(Data) ->
-    [_|Tail] = remove_last([list_to_tuple(R) || R <- Data]),
-    Tail.
+exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
+						     is_integer(Finish)  andalso
+						     Start  > 0          andalso
+						     Finish > 0          andalso
+						     Finish > Start ->
+    [list_to_tuple(X) || X <- lists:sublist(Data, Start, Finish - Start + 1)].
 
 remove_last(Data) ->
     lists:reverse(tl(lists:reverse(Data))).
