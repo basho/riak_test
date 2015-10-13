@@ -15,4 +15,5 @@ confirm() ->
         ok,
         timeseries_util:confirm_put(Cluster, TestType, DDL, Obj)
     ),
+    io:format("~p ~p", [node(), erlang:get_cookie()]),
     pass.

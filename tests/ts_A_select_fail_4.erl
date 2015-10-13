@@ -11,12 +11,13 @@
 confirm() ->
     DDL = timeseries_util:get_ddl(docs),
     Data = timeseries_util:get_valid_select_data(),
-    Qry = 
-    	"select * from GeoCheckin "
-    	"where time > 1 and time < 10 "
-    	"and myfamily = 'family1' "
-    	"and myseries ='seriesX' "
-    	"and weather > 'bob'", % can't do greater than on a varchar!
-    Expected = "some error message, fix me",
+    Qry =
+        "select * from GeoCheckin "
+        "where time > 1 and time < 10 "
+        "and myfamily = 'family1' "
+        "and myseries = 10 ",
+    Expected = {error,
+        <<"invalid_query: \n",
+          "incompatible_type: field myseries with type binary cannot be compared to type int in where clause.">>},
     timeseries_util:confirm_select(
-    	single, normal, DDL, Data, Qry, Expected).
+        single, normal, DDL, Data, Qry, Expected).

@@ -9,10 +9,13 @@ confirm() ->
     TestType = normal,
     DDL = timeseries_util:get_ddl(docs),
     Data = timeseries_util:get_valid_select_data(),
-    % FIXME we get a badmatch from riak_ql_parser
-    Qry = 
-    	"selectah * from GeoCheckin "
-    	"Where time > 1 and time < 10",
-    Expected = "some error message, fix me",
+    Qry =
+        "selectah * from GeoCheckin "
+        "Where time > 1 and time < 10",
+    Expected =
+        {error, decoding_error_msg("Unexpected token 'selectah'")},
     timeseries_util:confirm_select(
-    	Cluster, TestType, DDL, Data, Qry, Expected).
+        Cluster, TestType, DDL, Data, Qry, Expected).
+
+decoding_error_msg(Msg) ->
+    iolist_to_binary(io_lib:format("Message decoding error: ~p", [Msg])).
