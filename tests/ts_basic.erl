@@ -31,7 +31,7 @@
 -define(TIMEBASE, (10*1000*1000)).
 
 confirm() ->
-    %% io:format("Data to be written: ~p\n", [make_data()]),
+    io:format("Data to be written: ~p\n", [make_data()]),
 
     ClusterSize = 1,
     lager:info("Building cluster"),
@@ -56,11 +56,21 @@ confirm() ->
     ?assert(is_pid(C)),
 
     %% 3. put some data
-    Data = make_data(),
-    Res = riakc_ts:put(C, ?BUCKET, Data),
-    io:format("Put ~b records (~p)\n", [length(Data), Res]),
+    Data0 = make_data(),
+    ResPut = riakc_ts:put(C, ?BUCKET, Data0),
+    io:format("Put ~b records: ~p\n", [length(Data0), ResPut]),
 
-    %% 4. select
+    %% 4. delete one
+    ElementToDelete = 15,
+    DelRecord = [DelSensor, DelTimepoint, _Score] =
+        lists:nth(ElementToDelete, Data0),
+    DelKey = [DelTimepoint, DelSensor],
+    %% Data = lists:delete(DelRecord, Data0),
+    ResDel = riakc_ts:delete(C, ?BUCKET, DelKey, []),
+    io:format("Deleted element ~b (~p): ~p\n", [ElementToDelete, DelRecord, ResDel]),
+    %?assertEqual(ResDel, ok),
+
+    %% 5. select
     Query =
         lists:flatten(
           io_lib:format(
@@ -69,7 +79,7 @@ confirm() ->
     io:format("Running query: ~p\n", [Query]),
     {_Columns, Rows} = riakc_ts:query(C, Query),
     io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
-    ?assertEqual(length(Rows), 9),
+    ?assertEqual(length(Rows), 10 - 1 - 1),
 
     pass.
 
