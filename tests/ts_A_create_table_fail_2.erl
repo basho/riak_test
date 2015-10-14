@@ -13,6 +13,6 @@
 
 confirm() ->
     ClusterType = single,
-    DDL = get_ddl(shortkey_fail),
-    Expected = {ok,"some error message, yeah?"},
+    DDL = get_ddl(splitkey_fail),
+    Expected = {ok,"this should fail"},
     confirm_create(ClusterType, DDL, Expected).
