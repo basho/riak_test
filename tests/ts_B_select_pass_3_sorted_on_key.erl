@@ -17,7 +17,7 @@ confirm() ->
     Qry = timeseries_util:get_valid_qry(),
     Expected = {
         timeseries_util:get_cols(docs),
-        timeseries_util:exclusive_result_from_data(Data)},
+        timeseries_util:exclusive_result_from_data(Data, 1, 9000000000)},
     % write the shuffled TS records but expect the
     % unshuffled records
     timeseries_util:confirm_select(
