@@ -1,5 +1,5 @@
 
-%%% Test the greater than operator on a varchar, this
+%%% Test the if a varchar matches an integer
 %%% is not allowed.
 
 -module(ts_A_select_fail_4).
