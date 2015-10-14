@@ -2,7 +2,7 @@
 %%% This test asserts that results for small queries are
 %%% returned in key-sorted order
 
--module(ts_select_sorted_on_key).
+-module(ts_B_select_pass_3_sorted_on_key).
 
 -behavior(riak_test).
 
