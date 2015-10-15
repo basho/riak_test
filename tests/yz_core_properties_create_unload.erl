@@ -67,7 +67,7 @@ confirm() ->
     %% Write keys and wait for soft commit
     lager:info("Writing ~p keys", [KeyCount]),
     [ok = rt:pbc_write(Pid, ?BUCKET, Key, Key, "text/plain") || Key <- Keys],
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     verify_count(Pid, KeyCount),
 
@@ -87,7 +87,7 @@ test_core_props_removal(Cluster, RandNodes, KeyCount, Pid) ->
 
     lager:info("Write one more piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"foo">>, <<"foo">>, "text/plain"),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     verify_count(Pid, KeyCount + 1).
 
@@ -102,7 +102,7 @@ test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid) ->
 
     lager:info("Write second piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"food">>, <<"foody">>, "text/plain"),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     verify_count(Pid, KeyCount + 2).
 
@@ -121,7 +121,7 @@ test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
 
     lager:info("Write third piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"baz">>, <<"bar">>, "text/plain"),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     verify_count(Pid, KeyCount + 3).
 

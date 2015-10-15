@@ -78,7 +78,7 @@ confirm() ->
 
     Pid = rt:pbc(Node2),
     yokozuna_rt:write_data(Nodes, Pid, ?INDEX, ?BUCKET, Keys),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Nodes, ?INDEX),
 
     %% Separate out shards for multiple runs
     [Shard1|Shards2Rest] = Shards,
@@ -99,8 +99,7 @@ confirm() ->
                            join_node = Node1,
                            admin_node = Node2}],
 
-    %% Run Shell Script to count/test # of replicas and leave/join
-    %% nodes from the cluster
+    %% Run set of leave/join trials and count/test #'s from the cluster
     [[begin
           check_data(Nodes, KeyCount, BucketURL, SearchURL, State),
           check_counts(Pid, KeyCount, BucketURL)

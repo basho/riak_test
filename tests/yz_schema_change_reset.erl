@@ -131,11 +131,7 @@ confirm() ->
     [Node1|_RestNodes] = Cluster = rt:build_cluster(4, ?CFG),
     rt:wait_for_cluster_service(Cluster, yokozuna),
 
-    %% Generate keys, YZ only supports UTF-8 compatible keys
-    GenKeys = [<<N:64/integer>> || N <- lists:seq(1, ?SEQMAX),
-                                  not lists:any(
-                                        fun(E) -> E > 127 end,
-                                        binary_to_list(<<N:64/integer>>))],
+    GenKeys = yokozuna_rt:gen_keys(?SEQMAX),
     KeyCount = length(GenKeys),
     lager:info("KeyCount ~p", [KeyCount]),
 
@@ -147,8 +143,7 @@ confirm() ->
     yokozuna_rt:write_data(Cluster, Pid, ?INDEX,
                            {?SCHEMANAME, ?TEST_SCHEMA},
                            ?BUCKET1, GenKeys),
-    timer:sleep(1100),
-
+    yokozuna_rt:commit(Cluster, ?INDEX),
     lager:info("Create and activate map-based bucket type ~s and tie it to search_index ~s",
                [?TYPE, ?INDEX]),
     rt:create_and_activate_bucket_type(Node1, ?TYPE, [{datatype, map},
@@ -165,14 +160,16 @@ confirm() ->
                              "application/json"),
 
     {ok, _ObjA} = riakc_pb_socket:put(Pid, NewObj1A, [return_head]),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
     {ok, _ObjB} = riakc_pb_socket:put(Pid, NewObj1B, [return_head]),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 2),
 
-    assert_search(Pid, Cluster, <<"age:26">>, {<<"age">>, <<"26">>}, []),
-    assert_search(Pid, Cluster, <<"age:99">>, {<<"age">>, <<"99">>}, []),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"age:26">>, {<<"age">>, <<"26">>}, []),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"age:99">>, {<<"age">>, <<"99">>}, []),
 
     Map1 = riakc_map:update(
              {<<"0_foo">>, register},
@@ -197,9 +194,11 @@ confirm() ->
            <<"keyMap1">>,
            riakc_map:to_op(Map3)),
 
-    timer:sleep(1100),
-    assert_search(Pid, Cluster, <<"0_foo_register:44ab">>, {<<"0_foo_register">>,
-                                                            <<"44ab">>}, []),
+    yokozuna_rt:commit(Cluster, ?INDEX),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"0_foo_register:44ab">>,
+                              {<<"0_foo_register">>, <<"44ab">>},
+                              []),
 
     lager:info("Expire and re-check count before updating schema"),
 
@@ -208,8 +207,7 @@ confirm() ->
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 3),
 
-    lager:info("Overwrite schema with updated schema"),
-    override_schema(Pid, Cluster, ?INDEX, ?SCHEMANAME, ?TEST_SCHEMA_UPDATE),
+    yokozuna_rt:override_schema(Pid, Cluster, ?INDEX, ?SCHEMANAME, ?TEST_SCHEMA_UPDATE),
 
     lager:info("Write and check hello_i at integer per schema update"),
 
@@ -218,10 +216,11 @@ confirm() ->
                             "application/json"),
 
     {ok, _Obj2} = riakc_pb_socket:put(Pid, NewObj2, [return_head]),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 4),
-    assert_search(Pid, Cluster, <<"hello_i:36">>, {<<"hello_i">>, <<"36">>}, []),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"hello_i:36">>, {<<"hello_i">>, <<"36">>}, []),
 
     lager:info("Write and check age at string per schema update"),
 
@@ -230,10 +229,12 @@ confirm() ->
                             "application/json"),
 
     {ok, _Obj3} = riakc_pb_socket:put(Pid, NewObj3, [return_head]),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 5),
-    assert_search(Pid, Cluster, <<"age:3jlkjkl">>,
-                  {<<"age">>, <<"3jlkjkl">>}, []),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"age:3jlkjkl">>, {<<"age">>, <<"3jlkjkl">>},
+                              []),
 
     lager:info("Expire and re-check count to make sure we're correctly indexed
                by the new schema"),
@@ -244,7 +245,7 @@ confirm() ->
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 5),
 
     HP = rt:select_random(yokozuna_rt:host_entries(rt:connection_info(Cluster))),
-    yokozuna_rt:search_expect(HP, ?INDEX, <<"age">>, <<"*">>, 2),
+    yokozuna_rt:search_expect(HP, ?INDEX, <<"age">>, <<"*">>, 3),
 
     lager:info("Re-Put because AAE won't find a diff even though the types
                have changed, as it only compares based on bkey currently.
@@ -252,9 +253,10 @@ confirm() ->
                with allow_mult=false... no siblings"),
 
     {ok, _Obj4} = riakc_pb_socket:put(Pid, NewObj1A, [return_head]),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
-    assert_search(Pid, Cluster, <<"age:26">>, {<<"age">>, <<"26">>}, []),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"age:26">>, {<<"age">>, <<"26">>}, []),
 
     lager:info("Re-Put Map data by dec/inc counter to account for *change* and
                allow previously unindexed counter to be searchable"),
@@ -272,11 +274,15 @@ confirm() ->
            <<"keyMap1">>,
            riakc_map:to_op(Map5)),
 
-    timer:sleep(1100),
-    assert_search(Pid, Cluster, <<"0_foo_register:44ab">>, {<<"0_foo_register">>,
-                                                            <<"44ab">>}, []),
-    assert_search(Pid, Cluster, <<"1_baz_counter:10">>, {<<"1_baz_counter">>,
-                                                         <<"10">>}, []),
+    yokozuna_rt:commit(Cluster, ?INDEX),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"0_foo_register:44ab">>,
+                              {<<"0_foo_register">>, <<"44ab">>},
+                              []),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"1_baz_counter:10">>,
+                              {<<"1_baz_counter">>, <<"10">>},
+                              []),
 
     lager:info("Test nested json searches w/ unsearched fields ignored"),
 
@@ -286,30 +292,13 @@ confirm() ->
                             "application/json"),
     {ok, _Obj5} = riakc_pb_socket:put(Pid, NewObj5, [return_head]),
 
-    timer:sleep(1100),
-    assert_search(Pid, Cluster, <<"paths.quip:88">>,
-                  {<<"paths.quip">>, <<"88">>}, []),
+    yokozuna_rt:commit(Cluster, ?INDEX),
+    yokozuna_rt:assert_search(Pid, Cluster, ?INDEX,
+                              <<"paths.quip:88">>,
+                              {<<"paths.quip">>, <<"88">>},
+                              []),
 
     riakc_pb_socket:stop(Pid),
 
     pass.
 
-override_schema(Pid, Cluster, Index, Schema, RawUpdate) ->
-    ok = riakc_pb_socket:create_search_schema(Pid, Schema, RawUpdate),
-    yokozuna_rt:wait_for_schema(Cluster, Schema, RawUpdate),
-    [Node|_] = Cluster,
-    {ok, _} = rpc:call(Node, yz_index, reload, [Index]).
-
-assert_search(Pid, Cluster, Search, SearchExpect, Params) ->
-    F = fun(_) ->
-                lager:info("Searching ~p and asserting it exists",
-                           [SearchExpect]),
-                {ok,{search_results,[{_Index,Fields}], _Score, Found}} =
-                    riakc_pb_socket:search(Pid, ?INDEX, Search, Params),
-                ?assert(lists:member(SearchExpect, Fields)),
-                case Found of
-                    1 -> true;
-                    0 -> false
-                end
-        end,
-    rt:wait_until(Cluster, F).
