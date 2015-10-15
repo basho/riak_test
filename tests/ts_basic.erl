@@ -84,6 +84,9 @@ confirm() ->
     {_Columns, Rows} = riakc_ts:query(C, Query),
     io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
     ?assertEqual(length(Rows), 10 - 1 - 1),
+    {_Columns, Rows} = riakc_ts:query(C, Query),
+    io:format("Got ~b rows back again\n", [length(Rows)]),
+    ?assertEqual(length(Rows), 10 - 1 - 1),
 
     pass.
 
