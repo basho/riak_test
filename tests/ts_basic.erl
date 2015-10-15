@@ -65,10 +65,14 @@ confirm() ->
     DelRecord = [DelSensor, DelTimepoint, _Score] =
         lists:nth(ElementToDelete, Data0),
     DelKey = [DelTimepoint, DelSensor],
+    DelNXKey = [DelTimepoint, <<"keke">>],
     %% Data = lists:delete(DelRecord, Data0),
     ResDel = riakc_ts:delete(C, ?BUCKET, DelKey, []),
-    io:format("Deleted element ~b (~p): ~p\n", [ElementToDelete, DelRecord, ResDel]),
-    %?assertEqual(ResDel, ok),
+    ?assertEqual(ResDel, ok),
+    io:format("Deleted key ~b (~p): ~p\n", [ElementToDelete, DelRecord, ResDel]),
+    ResDelNX = riakc_ts:delete(C, ?BUCKET, DelNXKey, []),
+    ?assertEqual(ResDelNX, ok),
+    io:format("Not deleted non-existing key: ~p\n", [ResDelNX]),
 
     %% 5. select
     Query =
