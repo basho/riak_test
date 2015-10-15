@@ -87,8 +87,8 @@ confirm() ->
 %% @ignore
 -spec build_cluster(non_neg_integer()) -> [node()].
 build_cluster(Size) ->
-    build_cluster(Size, []).
--spec build_cluster(non_neg_integer(), list()) -> [node()].
+    build_cluster(Size, [{yokozuna, [{enabled, true}]}]).
+-spec build_cluster(pos_integer(), list()) -> [node()].
 build_cluster(Size, Config) ->
     [_Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
     rt:join_cluster(Nodes),
