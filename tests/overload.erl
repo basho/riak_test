@@ -141,7 +141,10 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
 %% Don't check on fast path
 test_fsm_protection(_, {{<<"write_once_type">>, _}, _, _}, _) ->
     ok;
-test_fsm_protection(Nodes, BKV, ConsistentType) ->
+%% Or consistent path - doesn't use FSMs either
+test_fsm_protection(_, _, true) ->
+    ok;
+test_fsm_protection(Nodes, BKV, false) ->
     lager:info("Testing with coordinator protection enabled"),
     lager:info("Setting FSM limit to ~b", [?THRESHOLD]),
     Config = [{riak_kv, [
@@ -167,7 +170,7 @@ test_fsm_protection(Nodes, BKV, ConsistentType) ->
                                  "ProcFun", "Procs"),
     QueueFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
                                   "QueueFun", "QueueSize"),
-    verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
+    verify_test_results(run_test(Nodes, BKV), false, ProcFun, QueueFun),
 
     ok.
 
