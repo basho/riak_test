@@ -30,20 +30,15 @@
 
 confirm() ->
     [Node | _] = build_cluster(?NUMBEROFNODES),
-    %% ?assert(eqc:quickcheck(eqc:numtests(10000, ?MODULE:prop_ts(Node)))),
-    ?assert(eqc:quickcheck(eqc:numtests(1, ?MODULE:prop_ts(Node)))),
+    ?assert(eqc:quickcheck(eqc:numtests(10000, ?MODULE:prop_ts(Node)))),
     pass.
 
 prop_ts(Node) ->
     ?FORALL({NVal, NPuts, Q, NSpans},
-	    %% {gen_n_val(), gen_no_of_puts(), gen_quantum(), gen_spans()},
-	    {3, 6, {8, s}, 2},
-	    run_query(Node, NVal, NPuts, Q, NSpans)).
+	    {gen_n_val(), gen_no_of_puts(), gen_quantum(), gen_spans()},
+            run_query(Node, NVal, NPuts, Q, NSpans)).
 
 run_query(Node, NVal, NPuts, Q, NSpans) ->
-
-    gg:format("NVal is ~p NPuts is ~p Q is ~p NSpans is ~p~n",
-	      [NVal, NPuts, Q, NSpans]),
 
     %% Bucket = "Bucket_" ++ timestamp(),
     %% io:format("Bucket is ~p~n", [Bucket]),
