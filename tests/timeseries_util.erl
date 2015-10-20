@@ -44,7 +44,7 @@ confirm_activate(ClusterType, DDL, Expected) ->
 
     [Node | Rest] = build_cluster(ClusterType),
     ok = maybe_stop_a_node(ClusterType, Rest),
-    {ok, _} = create_bucket(Node, DDL),
+    {ok, _} = create_bucket(Node, DDL, 3),
     Got     = activate_bucket(Node, DDL),
     ?assertEqual(Expected, Got),
 
@@ -57,7 +57,7 @@ confirm_put(ClusterType, TestType, DDL, Obj) ->
     case TestType of
 	normal ->
 	    io:format("1 - Creating and activating bucket~n"),
-	    {ok, _} = create_bucket(Node, DDL),
+	    {ok, _} = create_bucket(Node, DDL, 3),
 	    {ok, _} = activate_bucket(Node, DDL);
 	no_ddl ->
 	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
@@ -75,7 +75,11 @@ confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
     case TestType of
 	normal ->
 	    io:format("1 - Create and activate the bucket~n"),
-	    {ok, _} = create_bucket(Node, DDL),
+	    {ok, _} = create_bucket(Node, DDL, 3),
+	    {ok, _} = activate_bucket(Node, DDL);
+	n_val_one ->
+	    io:format("1 - Creating and activating bucket~n"),
+	    {ok, _} = create_bucket(Node, DDL, 1),
 	    {ok, _} = activate_bucket(Node, DDL);
 	no_ddl ->
 	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
@@ -100,9 +104,10 @@ confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
 activate_bucket(Node, _DDL) ->
     rt:admin(Node, ["bucket-type", "activate", get_bucket()]).
 
-create_bucket(Node, DDL) ->
-    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, " ++
-			      "\\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
+create_bucket(Node, DDL, NVal) when is_integer(NVal) ->
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": " ++ 
+			      integer_to_list(NVal) ++
+			      ", \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
     rt:admin(Node, ["bucket-type", "create", get_bucket(), 
 		    lists:flatten(Props)]).
 
