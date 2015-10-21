@@ -29,8 +29,9 @@
 -define(NUMBEROFNODES, 3).
 
 confirm() ->
+    rt:set_backend(eleveldb),
     [Node | _] = build_cluster(?NUMBEROFNODES),
-    ?assert(eqc:quickcheck(eqc:numtests(10000, ?MODULE:prop_ts(Node)))),
+    ?assert(eqc:quickcheck(eqc:numtests(500, ?MODULE:prop_ts(Node)))),
     pass.
 
 prop_ts(Node) ->
@@ -40,12 +41,12 @@ prop_ts(Node) ->
 
 run_query(Node, NVal, NPuts, Q, NSpans) ->
 
-    %% Bucket = "Bucket_" ++ timestamp(),
-    %% io:format("Bucket is ~p~n", [Bucket]),
-    Bucket = "Bucket_1445256281934858",
+    Bucket = "Bucket_" ++ timestamp(),
+    lager:debug("Bucket is ~p~n", [Bucket]),
+    %% Bucket = "Bucket_1445256281934858",
 
     DDL = get_ddl(Bucket, Q),
-    %% io:format("DDL is ~p~n", [DDL]),
+    lager:debug("DDL is ~p~n", [DDL]),
 
     {ok, _Return1} = create_bucket(Bucket, Node, DDL, NVal),
     %% io:format("Create bucket returns ~p~n", [Return1]),
@@ -55,14 +56,14 @@ run_query(Node, NVal, NPuts, Q, NSpans) ->
 
     Data = make_data(NPuts, Q, NSpans),
 
-    %% io:format("Data is ~p~n", [Data]),
+    io:format("Data is ~p~n", [Data]),
 
     C = rt:pbc(Node),
     ok = riakc_ts:put(C, Bucket, Data),
 
     Query = make_query(Bucket, Q, NSpans),
 
-    %% io:format("Query is ~p~n", [Query]),
+    lager:debug("Query is ~p~n", [Query]),
 
     {_, Got} = riakc_ts:query(C, Query),
     %% should get the data back
