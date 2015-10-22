@@ -22,7 +22,7 @@
 -module(ts_B_random_query_pass_eqc).
 -compile(export_all).
 
-%%-ifdef(EQC).
+-ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -148,4 +148,4 @@ gen_spans() ->
 gen_quantum() ->
     ?LET({N, M}, {choose(1, 12), elements([d, h, m, s])}, {N, M}).
 
-%%-endif. % EQC
+-endif. % EQC
