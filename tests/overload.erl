@@ -133,7 +133,7 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
     ProcFun = build_predicate_lt(test_vnode_protection, (?NUM_REQUESTS+1), "ProcFun", "Procs"),
-    QueueFun = build_predicate_lt(test_vnode_protection, (?NUM_REQUESTS), "QueueFun", "QueueSize"),
+    QueueFun = build_predicate_lt(test_vnode_protection, (?THRESHOLD), "QueueFun", "QueueSize"),
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
 
     [Node1 | _] = Nodes,
@@ -149,7 +149,7 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     ProcFun2 = build_predicate_gte("test_vnode_protection after suspend",
                                    (?NUM_REQUESTS), "ProcFun", "Procs"),
     QueueFun2 = build_predicate_lt("test_vnode_protection after suspend",
-                                   (?NUM_REQUESTS), "QueueFun", "QueueSize"),
+                                   (?THRESHOLD), "QueueFun", "QueueSize"),
     verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun2, QueueFun2),
     Pid ! resume,
     ok.
