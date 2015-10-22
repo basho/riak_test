@@ -377,17 +377,17 @@ pb_get_fun(Node, Bucket, Key, TestPid) ->
             PBC = rt:pbc(Node),
             Result = case catch riakc_pb_socket:get(PBC, Bucket, Key) of
                          {error, <<"overload">>} ->
-                             lager:info("overload detected in pb_get, continuing..."),
+                             lager:debug("overload detected in pb_get, continuing..."),
                              true;
                          %% we expect timeouts in this test as we've shut down a vnode - return true in this case
                          {error, timeout} ->
-                             lager:info("timeout detected in pb_get, continuing..."),
+                             lager:debug("timeout detected in pb_get, continuing..."),
                              true;
                          {error, <<"timeout">>} ->
-                             lager:info("timeout detected in pb_get, continuing..."),
+                             lager:debug("timeout detected in pb_get, continuing..."),
                              true;
                          {ok, Res} ->
-                             lager:info("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res]),
+                             lager:debug("riakc_pb_socket:get(~p, ~p, ~p) succeeded, Res:~p", [PBC, Bucket, Key, Res]),
                              true;
                          {error, Type} ->
                              lager:error("riakc_pb_socket threw error ~p reading {~p, ~p}, retrying...", [Type, Bucket, Key]),
