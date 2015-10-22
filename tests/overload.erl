@@ -31,6 +31,41 @@
 -define(GET_RETRIES, 1000).
 -define(BUCKET, <<"test">>).
 -define(KEY, <<"hotkey">>).
+-define(NORMAL_BKV, {{NormalType, ?BUCKET}, ?KEY, <<"test">>}).
+-define(CONSISTENT_BKV, {{ConsistentType, ?BUCKET}, ?KEY, <<"test">>}).
+-define(WRITE_ONCE_BKV, {{WriteOnceType, ?BUCKET}, ?KEY, <<"test">>}).
+-record(config, {
+    vnode_overload_threshold = 10000,
+    vnode_check_interval = 5000,
+    vnode_check_request_interval = 2500,
+    fsm_limit=undefined}).
+
+default_config() ->
+    default_config(#config{}).
+
+default_config(#config{
+    vnode_overload_threshold=VnodeOverloadThreshold,
+    vnode_check_interval = VnodeCheckInterval,
+    vnode_check_request_interval = VnodeCheckRequestInterval,
+    fsm_limit = FsmLimit
+}) ->
+    [{riak_core, [{ring_creation_size, 8},
+        {default_bucket_props, [{n_val, 5}]},
+        {vnode_management_timer, 1000},
+        {enable_health_checks, false},
+        {enable_consensus, true},
+        {vnode_overload_threshold, VnodeOverloadThreshold},
+        {vnode_check_interval, VnodeCheckInterval},
+        {vnode_check_request_interval, VnodeCheckRequestInterval}]},
+        {riak_kv, [{fsm_limit, FsmLimit},
+            {storage_backend, riak_kv_eleveldb_backend},
+            {anti_entropy_build_limit, {100, 1000}},
+            {anti_entropy_concurrency, 100},
+            {anti_entropy_tick, 100},
+            {anti_entropy, {on, []}},
+            {anti_entropy_timeout, 5000}]},
+        {riak_api, [{pb_backlog, 1024}]}].
+
 
 confirm() ->
     Nodes = setup(),
@@ -44,13 +79,11 @@ confirm() ->
     ok = create_bucket_type(Nodes, WriteOnceType, [{write_once, true}, {n_val, 1}]),
     rt:wait_until(ring_manager_check_fun(hd(Nodes))),
 
-    BKV1 = {{NormalType, ?BUCKET}, ?KEY, <<"test">>},
-    BKV2 = {{ConsistentType, ?BUCKET}, ?KEY, <<"test">>},
-    BKV3 = {{WriteOnceType, ?BUCKET}, ?KEY, <<"test">>},
+
     Node1 = hd(Nodes),
-    write_once(Node1, BKV1),
-    write_once(Node1, BKV2),
-    write_once(Node1, BKV3),
+    write_once(Node1, ?NORMAL_BKV),
+    write_once(Node1, ?CONSISTENT_BKV),
+    write_once(Node1, ?WRITE_ONCE_BKV),
 
     Tests = [test_no_overload_protection,
              test_vnode_protection,
@@ -61,30 +94,14 @@ confirm() ->
          lager:info("Starting Test ~p for ~p~n", [Test, BKV]),
          ok = erlang:apply(?MODULE, Test, [Nodes, BKV, IsConsistent])
      end || Test <- Tests,
-            {BKV, IsConsistent} <- [{BKV1, false},
-                                    {BKV2, true},
-                                    {BKV3, false}]],
+            {BKV, IsConsistent} <- [{?NORMAL_BKV, false},
+                                    {?CONSISTENT_BKV, true},
+                                    {?WRITE_ONCE_BKV, false}]],
     pass.
 
 
 setup() ->
     ensemble_util:build_cluster(5, default_config(), 5).
-
-default_config() ->
-    [{riak_core, [{ring_creation_size, 8},
-        {default_bucket_props, [{n_val, 5}]},
-        {vnode_management_timer, 1000},
-        {enable_health_checks, false},
-        {enable_consensus, true},
-        {vnode_overload_threshold, undefined}]},
-        {riak_kv, [{fsm_limit, undefined},
-            {storage_backend, riak_kv_eleveldb_backend},
-            {anti_entropy_build_limit, {100, 1000}},
-            {anti_entropy_concurrency, 100},
-            {anti_entropy_tick, 100},
-            {anti_entropy, {on, []}},
-            {anti_entropy_timeout, 5000}]},
-        {riak_api, [{pb_backlog, 1024}]}].
 
 test_no_overload_protection(_Nodes, _BKV, true) ->
     ok;
@@ -111,8 +128,7 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
     lager:info("Testing with vnode queue protection enabled"),
     lager:info("Setting vnode overload threshold to ~b", [?THRESHOLD]),
     lager:info("Setting vnode check interval to 1"),
-    Config = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
-                           {vnode_check_interval, 1}]}],
+    Config = default_config(#config{vnode_overload_threshold=?THRESHOLD, vnode_check_interval=1}),
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
@@ -141,16 +157,14 @@ test_vnode_protection(Nodes, BKV, ConsistentType) ->
 %% Don't check on fast path
 test_fsm_protection(_, {{<<"write_once_type">>, _}, _, _}, _) ->
     ok;
-%% Or consistent path - doesn't use FSMs either
+%% Or consistent gets, as they don't use the FSM either
 test_fsm_protection(_, _, true) ->
     ok;
-test_fsm_protection(Nodes, BKV, false) ->
+test_fsm_protection(Nodes, BKV, ConsistentType) ->
     lager:info("Testing with coordinator protection enabled"),
     lager:info("Setting FSM limit to ~b", [?THRESHOLD]),
-    Config = [{riak_kv, [
-        {fsm_limit, ?THRESHOLD},
-        {vnode_overload_threshold, undefined},
-        {vnode_check_interval, undefined}]}],
+    %% Set FSM limit and reset other changes from previous tests.
+    Config = default_config(#config{fsm_limit=?THRESHOLD}),
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
@@ -170,7 +184,7 @@ test_fsm_protection(Nodes, BKV, false) ->
                                  "ProcFun", "Procs"),
     QueueFun = build_predicate_lt(test_fsm_protection, (?NUM_REQUESTS),
                                   "QueueFun", "QueueSize"),
-    verify_test_results(run_test(Nodes, BKV), false, ProcFun, QueueFun),
+    verify_test_results(run_test(Nodes, BKV), ConsistentType, ProcFun, QueueFun),
 
     ok.
 
@@ -198,9 +212,9 @@ test_cover_queries_overload(Nodes, _, false) ->
     lager:info("Setting vnode overload threshold to ~b", [?THRESHOLD]),
     lager:info("Setting vnode check interval to 1"),
 
-    Config = [{riak_core, [{vnode_overload_threshold, ?THRESHOLD},
-                           {vnode_check_request_interval, 2},
-                           {vnode_check_interval, 1}]}],
+    Config = default_config(#config{vnode_overload_threshold=?THRESHOLD,
+                           vnode_check_request_interval=2,
+                           vnode_check_interval=1}),
     rt:pmap(fun(Node) ->
                     rt:update_app_config(Node, Config)
             end, Nodes),
