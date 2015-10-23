@@ -44,7 +44,6 @@
          wait_for_index/2,
          wait_for_schema/2,
          wait_for_schema/3,
-         gen_keys/1,
          write_data/5,
          write_data/6]).
 
