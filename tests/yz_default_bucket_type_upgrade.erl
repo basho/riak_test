@@ -59,19 +59,14 @@ confirm() ->
 
     [rt:assert_capability(ANode, ?YZ_CAP, {unknown_capability, ?YZ_CAP}) || ANode <- Cluster],
 
-    %% Generate keys, YZ only supports UTF-8 compatible keys
-    GenKeys = [<<N:64/integer>> || N <- lists:seq(1, ?SEQMAX),
-                                  not lists:any(
-                                        fun(E) -> E > 127 end,
-                                        binary_to_list(<<N:64/integer>>))],
+    GenKeys = yokozuna_rt:gen_keys(?SEQMAX),
     KeyCount = length(GenKeys),
     lager:info("KeyCount ~p", [KeyCount]),
 
     OldPid = rt:pbc(Node),
 
     yokozuna_rt:write_data(Cluster, OldPid, ?INDEX, ?BUCKET, GenKeys),
-    %% wait for solr soft commit
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount),
 
@@ -86,7 +81,7 @@ confirm() ->
     lager:info("Write one more piece of data"),
     Pid = rt:pbc(Node),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"foo">>, <<"foo">>, "text/plain"),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 1),
