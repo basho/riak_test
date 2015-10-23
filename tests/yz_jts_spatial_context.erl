@@ -77,12 +77,11 @@ confirm() ->
     yokozuna_rt:write_data(Cluster, Pid, ?INDEX,
                            {?SCHEMANAME, ?SPATIAL_SCHEMA},
                            ?BUCKET, GenKeys),
-    timer:sleep(1100),
+    yokozuna_rt:commit(Cluster, ?INDEX),
 
     lager:info("Write and check geo field of type location_rpt"),
     GeoObj = riakc_obj:new(?BUCKET, <<"GeoKey">>, ?GEO_DOC, "application/json"),
     {ok, _Obj} = riakc_pb_socket:put(Pid, GeoObj, [return_head]),
-    timer:sleep(1100),
     yokozuna_rt:assert_search(Pid, Cluster, ?INDEX, ?GEO_QUERY,
                               {?FIELD_KEY, ?POLYGON}, []),
     pass.
