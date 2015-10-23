@@ -43,6 +43,7 @@ confirm() ->
                ]},
               {riak_kv,
                [{delete_mode, keep},
+                {reap_sweep_interval, 20},
                 {sweep_tick, 1000},       %% Speed up sweeping
                 {anti_entropy, {off, []}} %% No AAE please
                ]}
