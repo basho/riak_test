@@ -16,6 +16,6 @@ confirm() ->
         "select * from GeoCheckin "
         "where time > 1 and time < 10",
     Expected =
-        {error,<<"missing_param: Missing parameter myfamily in where clase.">>},
+        {error,<<"missing_param: Missing parameter myfamily in where clause.">>},
     timeseries_util:confirm_select(
         single, normal, DDL, Data, Query, Expected).
