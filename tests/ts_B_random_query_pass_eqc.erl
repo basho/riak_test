@@ -122,6 +122,7 @@ get_multi({No, m})  -> 60*1000 * No;
 get_multi({No, s})  -> 1000 * No.
 
 build_cluster(Size) ->
+    rt:set_backend(eleveldb),
     Nodes = rt:deploy_nodes(Size, []),
     rt:join_cluster(Nodes),
     Nodes.
