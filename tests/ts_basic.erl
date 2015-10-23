@@ -35,6 +35,7 @@ confirm() ->
 
     ClusterSize = 1,
     lager:info("Building cluster"),
+    rt:set_backend(eleveldb),
     _Nodes = [Node1|_] =
         build_cluster(
           ClusterSize),
