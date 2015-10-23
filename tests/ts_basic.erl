@@ -111,6 +111,7 @@ build_cluster(Size) ->
     build_cluster(Size, []).
 -spec build_cluster(pos_integer(), list()) -> [node()].
 build_cluster(Size, Config) ->
+    rt:set_backend(eleveldb),
     [_Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
     rt:join_cluster(Nodes),
     Nodes.
