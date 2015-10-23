@@ -88,13 +88,27 @@ confirm() ->
     io:format("Got ~b rows back again\n", [length(Rows)]),
     ?assertEqual(length(Rows), 10 - 1 - 1),
 
+    %% 6. single-key get some data
+    ElementToGet = 12,
+    GetRecord = [GetSensor, GetTimepoint, _Score2] =
+        lists:nth(ElementToGet, Data0),
+    GetKey = [GetTimepoint, GetSensor],
+    ResGet = riakc_ts:get(C, ?BUCKET, GetKey, []),
+    io:format("Get a single record: ~p\n", [ResGet]),
+    ?assertEqual([GetRecord], ResGet),
+
+    GetNXKey = [GetTimepoint, <<"dudu">>],
+    ResNXGet = riakc_ts:get(C, ?BUCKET, GetNXKey, []),
+    io:format("Not got a nonexistent single record: ~p\n", [ResNXGet]),
+    ?assertEqual([], ResNXGet),
+
     pass.
 
 
 %% @ignore
 -spec build_cluster(non_neg_integer()) -> [node()].
 build_cluster(Size) ->
-    build_cluster(Size, [{yokozuna, [{enabled, true}]}]).
+    build_cluster(Size, []).
 -spec build_cluster(pos_integer(), list()) -> [node()].
 build_cluster(Size, Config) ->
     [_Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
