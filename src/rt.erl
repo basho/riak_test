@@ -604,7 +604,8 @@ load_modules_on_nodes([Module | MoreModules], Nodes)
   when is_list(Nodes) ->
     case code:get_object_code(Module) of
         {Module, Bin, File} ->
-            {_, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]);
+            {ResList, []} = rpc:multicall(Nodes, code, load_binary, [Module, File, Bin]),
+            lager:info("Loading modules on Nodes ~p, results were ~p", [Nodes, ResList]);
         error ->
             error(lists:flatten(io_lib:format("unable to get_object_code(~s)", [Module])))
     end,
