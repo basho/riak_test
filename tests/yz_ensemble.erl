@@ -34,26 +34,26 @@ confirm() ->
     create_index(Node, Index),
     set_bucket_props(Node, Bucket, Index),
 
-	verify_ensemble_delete_support(Node, Bucket, Index),
+	verify_ensemble_delete_support(Nodes, Bucket, Index),
 
     pass.
 
 
 %% @private
 %% @doc Populates then deletes from SC bucket
-verify_ensemble_delete_support(Node, Bucket, Index) ->
+verify_ensemble_delete_support(Cluster, Bucket, Index) ->
     %% Yz only supports UTF-8 compatible keys
     Keys = [<<N:64/integer>> || N <- lists:seq(1,2000),
         not lists:any(fun(E) -> E > 127 end,binary_to_list(<<N:64/integer>>))],
 
-    PBC = rt:pbc(Node),
+    PBC = rt:pbc(hd(Cluster)),
 
     lager:info("Writing ~p keys", [length(Keys)]),
     [ok = rt:pbc_write(PBC, Bucket, Key, Key, "text/plain") || Key <- Keys],
+    yokozuna_rt:commit(Cluster, Index),
 
     %% soft commit wait, then check that last key is indexed
     lager:info("Search for keys to verify they exist"),
-    timer:sleep(1000),
     LKey = lists:last(Keys),
     rt:wait_until(fun() ->
         {M, _} = riakc_pb_socket:search(PBC, Index, query_value(LKey)),
@@ -64,7 +64,7 @@ verify_ensemble_delete_support(Node, Bucket, Index) ->
 
     lager:info("Deleting keys"),
     [riakc_pb_socket:delete(PBC, Bucket, Key) || Key <- Keys],
-    timer:sleep(1000),
+    yokozuna_rt:commit(Cluster, Index),
     rt:wait_until(fun() ->
         case riakc_pb_socket:search(PBC, Index, query_value(LKey)) of
             {ok,{search_results,Res,_,_}} ->
