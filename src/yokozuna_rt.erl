@@ -288,12 +288,16 @@ assert_search(Pid, Cluster, Index, Search, SearchExpect, Params) ->
     F = fun(_) ->
                 lager:info("Searching ~p and asserting it exists",
                            [SearchExpect]),
-                {ok,{search_results,[{_Index,Fields}], _Score, Found}} =
-                    riakc_pb_socket:search(Pid, Index, Search, Params),
-                ?assert(lists:member(SearchExpect, Fields)),
-                case Found of
-                    1 -> true;
-                    0 -> false
+                case riakc_pb_socket:search(Pid, Index, Search, Params) of
+                    {ok,{search_results,[{_Index,Fields}], _Score, Found}} ->
+                        ?assert(lists:member(SearchExpect, Fields)),
+                        case Found of
+                            1 -> true;
+                            0 -> false
+                        end;
+                    {ok, {search_results, [], _Score, 0}} ->
+                        lager:info("Search has not yet yielded data"),
+                        false
                 end
         end,
     rt:wait_until(Cluster, F).
