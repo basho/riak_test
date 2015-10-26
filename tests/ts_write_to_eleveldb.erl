@@ -23,7 +23,9 @@ confirm() ->
     ok = rt_intercept:add(Node, {riak_kv_eleveldb_backend, [
         {{async_put, 5}, {[Self], fun(Context, Bucket, PrimaryKey, Val, State) ->
             DoingPid = self(),
-            Self ! {reporting, DoingPid, {Bucket, PrimaryKey, Val}},
+            Obj = riak_object:from_binary(Bucket, PrimaryKey, Val),
+            Values = riak_object:get_value(Obj),
+            Self ! {reporting, DoingPid, {Bucket, PrimaryKey, Values}},
             riak_kv_eleveldb_backend_orig:async_put_orig(Context, Bucket, PrimaryKey, Val, State)
         end}}
     ]}),
@@ -34,16 +36,17 @@ confirm() ->
     Data = make_data(),
     ok = riakc_ts:put(C, ?BUCKET, Data),
 
-    %lager:info("test pulling the data"),
-    %{_Cols, TupleData} = riakc_ts:query(C,
-        %"select * from GeoCheckin"
-        %" where myfamily = 'family1'"
-        %" and myseries = 'series1'"
-        %" and time > 0"
-        %" and time < 100"),
-%
-    %?assertEqual(Data, lists:map(fun erlang:tuple_to_list/1, TupleData)),
-%
+    lager:info("test pulling the data"),
+    % this is to validate our interceptors didn't corrupt or alter the data
+    % actually put into eleveldb.
+    {_Cols, TupleData} = riakc_ts:query(C,
+        "select * from GeoCheckin"
+        " where myfamily = 'family1'"
+        " and myseries = 'series1'"
+        " and time > 0"
+        " and time < 100"),
+    ?assertEqual(Data, lists:map(fun erlang:tuple_to_list/1, TupleData)),
+
     Intercepted = receive_intercepts(),
     lager:info("Data Intercepted:"),
     ok = lists:foreach(fun(I) ->
@@ -53,6 +56,11 @@ confirm() ->
     lager:info("Data put: ~p", [Data]),
 
     ?assertEqual(length(Data), length(Intercepted)),
+    SimplifiedIntercepted = lists:map(fun(I) ->
+        {_Bucket, _Key, ProplistValue} = I,
+        lists:map(fun({_, V}) -> V end, ProplistValue)
+    end, Intercepted),
+    ?assertEqual(Data, SimplifiedIntercepted),
 
     pass.
 
