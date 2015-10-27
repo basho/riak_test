@@ -1,7 +1,7 @@
 -module(ts_A_put_fail_3_bad_date).
 
 %%
-%% 
+%%
 %%
 
 -behavior(riak_test).
@@ -21,7 +21,7 @@ confirm() ->
           timeseries_util:get_varchar(),
           timeseries_util:get_float()]],
     ?assertEqual(
-        ok,
+        {error, {3, <<"Invalid data">>}},
         timeseries_util:confirm_put(ClusterType, TestType, DDL, Obj)
     ),
     pass.
