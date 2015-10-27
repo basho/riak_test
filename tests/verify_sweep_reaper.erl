@@ -56,7 +56,7 @@ confirm() ->
     write_data(Client, KV1),
     delete_keys(Client, KV1),
     wait_for_sweep(),
-    
+
     false = check_reaps(Client, KV1),
     disable_sweep_scheduling(Nodes),
     set_tombstone_grace(Nodes, 5),
@@ -70,11 +70,26 @@ confirm() ->
     wait_for_sweep(),
     true = check_reaps(Client, KV2),
     true = check_reaps(Client, KV1),
+
+
+    disable_sweep_scheduling(Nodes),
+    KV3 = test_data(2001, 2001),
+    write_data(Client, KV3, [{n_val, 1}]),
+    {PNuke, NNuke} = choose_partition_to_nuke(hd(Nodes), ?BUCKET, KV3),
+    restart_vnode(NNuke, riak_kv, PNuke),
+    manual_sweep(NNuke, PNuke),
+    wait_for_sweep(5000),
+    true = check_reaps(Client, KV3),
+
+
     pass.
 
 wait_for_sweep() ->
-    lager:info("Wait for sweep ~p s", [?WAIT_FOR_SWEEP]),
-    timer:sleep(?WAIT_FOR_SWEEP).
+    wait_for_sweep(?WAIT_FOR_SWEEP).
+
+wait_for_sweep(WaitTime) ->
+    lager:info("Wait for sweep ~p s", [WaitTime]),
+    timer:sleep(WaitTime).
 
 write_data(Client, KVs) ->
     lager:info("Writing data ~p keys", [length(KVs)]),
@@ -131,5 +146,46 @@ disable_sweep_scheduling(Nodes) ->
 
 enable_sweep_scheduling(Nodes) ->
     rpc:multicall(Nodes, riak_kv_sweeper, enable_sweep_scheduling, []).
+
+restart_vnode(Node, Service, Partition) ->
+    VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),
+    {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
+                         [Partition, VNodeName]),
+    ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
+    Mon = monitor(process, Pid),
+    receive
+        {'DOWN', Mon, _, _, _} ->
+            ok
+    after
+        rt_config:get(rt_max_wait_time) ->
+            lager:error("VNode for partition ~p did not die, the bastard",
+                        [Partition]),
+            ?assertEqual(vnode_killed, {failed_to_kill_vnode, Partition})
+    end,
+    {ok, NewPid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
+                            [Partition, VNodeName]),
+    lager:info("Vnode for partition ~p restarted as ~p",
+               [Partition, NewPid]).
     
+get_preflist(Node, B, K) ->
+    DocIdx = rpc:call(Node, riak_core_util, chash_key, [{B, K}]),
+    PlTagged = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, ?N_VAL, riak_kv]),
+    Pl = [E || {E, primary} <- PlTagged],
+    Pl.
+
+acc_preflists(Pl, PlCounts) ->
+    lists:foldl(fun(Idx, D) ->
+                        dict:update(Idx, fun(V) -> V+1 end, 0, D)
+                end, PlCounts, Pl).
+
+choose_partition_to_nuke(Node, Bucket, KVs) ->
+    Preflists = [get_preflist(Node, Bucket, K) || {K, _} <- KVs],
+    PCounts = lists:foldl(fun acc_preflists/2, dict:new(), Preflists),
+    CPs = [{C, P} || {P, C} <- dict:to_list(PCounts)],
+    {_, MaxP} = lists:max(CPs),
+    MaxP.
+
+manual_sweep(Node, Partition) ->
+   rpc:call(Node, riak_kv_sweeper, sweep, [Partition]).
+
 
