@@ -1,4 +1,4 @@
--module(ts_A_create_table_fail_2).
+-module(ts_A_create_table_short_key).
 
 -behavior(riak_test).
 
@@ -14,5 +14,5 @@
 confirm() ->
     ClusterType = single,
     DDL = get_ddl(shortkey_fail),
-    Expected = {ok,"some error message, yeah?"},
+    Expected = {ok,"Error creating bucket type GeoCheckin:\nPrimary key is too short\n"},
     confirm_create(ClusterType, DDL, Expected).

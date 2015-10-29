@@ -1,4 +1,4 @@
--module(ts_A_create_table_fail_1).
+-module(ts_A_create_table_split_key).
 
 -behavior(riak_test).
 
@@ -13,6 +13,6 @@
 
 confirm() ->
     ClusterType = single,
-    DDL = get_ddl(shortkey_fail),
-    Expected = {ok,"this should fail - but doesnt currently"},
+    DDL = get_ddl(splitkey_fail),
+    Expected = {ok,"Error creating bucket type GeoCheckin:\nLocal key does not match primary key\n"},
     confirm_create(ClusterType, DDL, Expected).
