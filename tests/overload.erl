@@ -33,10 +33,8 @@
 -define(KEY, <<"hotkey">>).
 -define(NORMAL_TYPE, <<"normal_type">>).
 -define(CONSISTENT_TYPE, <<"consistent_type">>).
--define(WRITE_ONCE_TYPE, <<"write_once_type">>).
 -define(NORMAL_BKV, {{?NORMAL_TYPE, ?BUCKET}, ?KEY, <<"test">>}).
 -define(CONSISTENT_BKV, {{?CONSISTENT_TYPE, ?BUCKET}, ?KEY, <<"test">>}).
--define(WRITE_ONCE_BKV, {{?WRITE_ONCE_TYPE, ?BUCKET}, ?KEY, <<"test">>}).
 
 %% This record contains the default values for config settings if they were not set
 %% in the advanced.config file - because setting something to `undefined` is not the same
@@ -80,14 +78,12 @@ confirm() ->
 
     ok = create_bucket_type(Nodes, ?NORMAL_TYPE, [{n_val, 3}]),
     ok = create_bucket_type(Nodes, ?CONSISTENT_TYPE, [{consistent, true}, {n_val, 5}]),
-    ok = create_bucket_type(Nodes, ?WRITE_ONCE_TYPE, [{write_once, true}, {n_val, 1}]),
     rt:wait_until(ring_manager_check_fun(hd(Nodes))),
 
 
     Node1 = hd(Nodes),
     write_once(Node1, ?NORMAL_BKV),
     write_once(Node1, ?CONSISTENT_BKV),
-    write_once(Node1, ?WRITE_ONCE_BKV),
 
     Tests = [test_no_overload_protection,
              test_vnode_protection,
@@ -98,8 +94,7 @@ confirm() ->
          ok = erlang:apply(?MODULE, Test, [Nodes, BKV])
      end || Test <- Tests,
             BKV <- [?NORMAL_BKV,
-                    ?CONSISTENT_BKV,
-                    ?WRITE_ONCE_BKV]],
+                    ?CONSISTENT_BKV]],
     %% Test cover queries doesn't depend on bucket/keyvalue, just run it once
     test_cover_queries_overload(Nodes),
     pass.
@@ -163,10 +158,7 @@ test_vnode_protection(Nodes, BKV) ->
     Pid ! resume,
     ok.
 
-%% Don't check on fast path
-test_fsm_protection(_, ?WRITE_ONCE_BKV) ->
-    ok;
-%% Or consistent gets, as they don't use the FSM either
+%% Don't check consistent gets, as they don't use the FSM
 test_fsm_protection(_, ?CONSISTENT_BKV) ->
     ok;
 test_fsm_protection(Nodes, BKV) ->
