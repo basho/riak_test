@@ -30,12 +30,13 @@
 -export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
-
+-compile(export_all).
 -define(NUM_NODES, 1).
 -define(NUM_KEYS, 1000).
 -define(BUCKET, <<"test_bucket">>).
 -define(N_VAL, 3).
--define(WAIT_FOR_SWEEP, 15000).
+-define(WAIT_FOR_SWEEP, 20000).
+-define(TOMBSTONE_GRACE, 1).
 
 confirm() ->
     Config = [{riak_core, 
@@ -44,23 +45,25 @@ confirm() ->
               {riak_kv,
                [{delete_mode, keep},
                 {reap_sweep_interval, 5},
-                {sweep_tick, 1000},       %% Speed up sweeping
-                {storage_backend, riak_kv_memory_backend},
-                {anti_entropy, {off, []}}
+                {sweep_tick, 3000},       %% Speed up sweeping
+                {anti_entropy, {on, []}},
+                {anti_entropy_tick, 24 * 60 * 60 * 1000}
                ]}
              ],
 
-    Nodes = rt:build_cluster(1, Config),
+    [Node] = Nodes = rt:build_cluster(1, Config),
     [Client] = create_pb_clients(Nodes),
+
+    
     KV1 = test_data(1, 1000),
     write_data(Client, KV1),
     delete_keys(Client, KV1),
     wait_for_sweep(),
 
-    false = check_reaps(Client, KV1),
+    false = check_reaps(Node, Client, KV1),
     disable_sweep_scheduling(Nodes),
-    set_tombstone_grace(Nodes, 5),
-    false = check_reaps(Client, KV1),
+    set_tombstone_grace(Nodes, ?TOMBSTONE_GRACE),
+    false = check_reaps(Node, Client, KV1),
     enable_sweep_scheduling(Nodes),
 
     %% Write key.
@@ -68,20 +71,53 @@ confirm() ->
     write_data(Client, KV2),
     delete_keys(Client, KV2),
     wait_for_sweep(),
-    true = check_reaps(Client, KV2),
-    true = check_reaps(Client, KV1),
+    true = check_reaps(Node, Client, KV2),
+    true = check_reaps(Node, Client, KV1),
 
-
+    %% Sweep after restart 
     disable_sweep_scheduling(Nodes),
     KV3 = test_data(2001, 2001),
-    write_data(Client, KV3, [{n_val, 1}]),
-    {PNuke, NNuke} = choose_partition_to_nuke(hd(Nodes), ?BUCKET, KV3),
-    restart_vnode(NNuke, riak_kv, PNuke),
-    manual_sweep(NNuke, PNuke),
-    wait_for_sweep(5000),
-    true = check_reaps(Client, KV3),
+    write_data(Client, KV3),
+    delete_keys(Client, KV3),
+    timer:sleep(?TOMBSTONE_GRACE * 1500),
+    manually_sweep_all(Node),
+    wait_for_sweep(),
+    true = check_reaps(Node, Client, KV3),
 
+    KV5 = test_data(3001, 4000),
+    write_data(Client, KV5),
+    delete_keys(Client, KV5),
+    remove_sweep_participant(Nodes, riak_kv_delete),
+    add_sweep_participant(Nodes),
+    enable_sweep_scheduling(Nodes),
+    wait_for_sweep(),
+    true = check_reaps(Node, Client, KV5),
 
+    KV6 = test_data(10001, 15000),
+    write_data(Client, KV6),
+    delete_keys(Client, KV6),
+    timer:sleep(10000),
+    manually_sweep_all(Node),
+    remove_sweep_participant(Nodes, riak_kv_delete),
+    add_sweep_participant(Nodes),
+    enable_sweep_scheduling(Nodes),
+    wait_for_sweep(),
+    true = check_reaps(Node, Client, KV6),
+
+    disable_sweep_scheduling(Nodes),
+    KV7 = test_data(15001, 20000),
+    write_data(Client, KV7),
+    delete_keys(Client, KV7),
+    timer:sleep(10000),
+    manual_sweep(Node, 0),
+    get_status(Node),
+    timer:sleep(1000),
+    get_status(Node),
+    timer:sleep(1000),
+    get_status(Node),
+    timer:sleep(1000),
+    get_status(Node),
+    
     pass.
 
 wait_for_sweep() ->
@@ -105,7 +141,7 @@ test_data(Start, End) ->
     [{K, K} || K <- Keys].
 
 to_key(N) ->
-    list_to_binary(io_lib:format("K~4..0B", [N])).
+    list_to_binary(io_lib:format("K~6..0B", [N])).
 
 delete_keys(Client, KVs) ->
     lager:info("Delete data ~p keys", [length(KVs)]),
@@ -113,20 +149,22 @@ delete_keys(Client, KVs) ->
 delete_key(Client, Key) ->
     riakc_pb_socket:delete(Client, ?BUCKET, Key).
 
-
-check_reaps(Client, KVs) ->
+check_reaps(Node, Client, KVs) ->
+    RR1 = get_read_repairs(Node),
     lager:info("Check data ~p keys", [length(KVs)]),
     Results = [check_reap(Client, K)|| {K, _V} <- KVs],
     Reaped = length([ true || true <- Results]),
-    lager:info("Reaped ~p", [Reaped]),
-    Reaped == length(KVs).
+    RR2 = get_read_repairs(Node),
+    ReadRepaired = RR2-RR1,
+    lager:info("Reaped ~p Read repaired ~p", [Reaped, ReadRepaired]),
+    Reaped + ReadRepaired == length(KVs).
 
 check_reap(Client, Key) ->
     case riakc_pb_socket:get(Client, ?BUCKET, Key, [deletedvclock]) of
-        {error, notfound, _} ->
-            false;
         {error, notfound} ->
-            true
+            true;
+        _ ->
+            false
     end.
 
 %%% Client/Key ops
@@ -141,51 +179,59 @@ set_tombstone_grace(Nodes, Time) ->
     lager:info("set_tombstone_grace ~p s ", [Time]),
     rpc:multicall(Nodes, application, set_env, [riak_kv, tombstone_grace_period,Time]).
 
+%% set_sweep_throttle(Nodes, ThrottleLimit) ->
+%%     lager:info("set_sweep_throttle ~p", [ThrottleLimit]),
+%%     rpc:multicall(Nodes, application, set_env, [riak_kv, sweep_throttle,ThrottleLimit]).
+
 disable_sweep_scheduling(Nodes) ->
+    lager:info("disable sweep scheduling"),
     rpc:multicall(Nodes, riak_kv_sweeper, disable_sweep_scheduling, []).
 
 enable_sweep_scheduling(Nodes) ->
+    lager:info("enable sweep scheduling"),
     rpc:multicall(Nodes, riak_kv_sweeper, enable_sweep_scheduling, []).
 
-restart_vnode(Node, Service, Partition) ->
-    VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),
-    {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
-                         [Partition, VNodeName]),
-    ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
-    Mon = monitor(process, Pid),
-    receive
-        {'DOWN', Mon, _, _, _} ->
-            ok
-    after
-        rt_config:get(rt_max_wait_time) ->
-            lager:error("VNode for partition ~p did not die, the bastard",
-                        [Partition]),
-            ?assertEqual(vnode_killed, {failed_to_kill_vnode, Partition})
-    end,
-    {ok, NewPid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
-                            [Partition, VNodeName]),
-    lager:info("Vnode for partition ~p restarted as ~p",
-               [Partition, NewPid]).
-    
-get_preflist(Node, B, K) ->
-    DocIdx = rpc:call(Node, riak_core_util, chash_key, [{B, K}]),
-    PlTagged = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, ?N_VAL, riak_kv]),
-    Pl = [E || {E, primary} <- PlTagged],
-    Pl.
+remove_sweep_participant(Nodes, Module) ->
+    lager:info("enable sweep scheduling"),
+    {Succ, Fail} = rpc:multicall(Nodes, riak_kv_sweeper, remove_sweep_participant, [Module]),
+    FalseResults = 
+        [false || false <- Succ],
+    0 = length(FalseResults) + length(Fail).
 
-acc_preflists(Pl, PlCounts) ->
-    lists:foldl(fun(Idx, D) ->
-                        dict:update(Idx, fun(V) -> V+1 end, 0, D)
-                end, PlCounts, Pl).
+add_sweep_participant(Nodes) ->
+    lager:info("add sweep participant"),
+    rpc:multicall(Nodes, riak_kv_delete_sup, add_sweep_participant, []).
 
-choose_partition_to_nuke(Node, Bucket, KVs) ->
-    Preflists = [get_preflist(Node, Bucket, K) || {K, _} <- KVs],
-    PCounts = lists:foldl(fun acc_preflists/2, dict:new(), Preflists),
-    CPs = [{C, P} || {P, C} <- dict:to_list(PCounts)],
-    {_, MaxP} = lists:max(CPs),
-    MaxP.
+manually_sweep_all(Node) ->
+    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
+    Indices = rpc:call(Node, riak_core_ring, my_indices, [Ring]),
+    [begin manual_sweep(Node, Index), timer:sleep(5000)  end || Index <- Indices].
 
 manual_sweep(Node, Partition) ->
+    lager:info("Manual sweep index ~p", [Partition]),
    rpc:call(Node, riak_kv_sweeper, sweep, [Partition]).
 
+get_read_repairs(Node) ->
+    Stats = rpc:call(Node, riak_kv_status, get_stats, [console]),
+    proplists:get_value(read_repairs_total, Stats).
+
+%% wait_until_no_reaps(Nodes) ->
+%%     lager:info("Wait until all reapes are done so we don't read repair them"),
+%%     rt:wait_until(fun() -> no_aae_reaps(Nodes) end, 6, 10000).
+
+no_aae_reaps(Nodes) when is_list(Nodes) ->
+    MaxCount = max_aae_reaps(Nodes),
+    lager:info("Max reaps across the board is ~p", [MaxCount]),
+    MaxCount == 0.
+
+max_aae_reaps(Nodes) when is_list(Nodes) ->
+    MaxCount = lists:max([max_aae_reaps(Node) || Node <- Nodes]),
+    MaxCount;
+max_aae_reaps(Node) when is_atom(Node) ->
+    Stats = rpc:call(Node, riak_kv_status, get_stats, [console]),
+    proplists:get_value(vnode_reap_tombstone, Stats).
+
+get_status(Node) ->
+    Status = rpc:call(Node, riak_kv_sweeper, status, []),
+    io:format(Status).
 
