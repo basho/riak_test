@@ -47,7 +47,8 @@ confirm() ->
 confirm_GtOps(C) ->
     ts_api_util:confirm_Pass(C, {myint,   int,     '>', 1}),
     ts_api_util:confirm_Pass(C, {myfloat, float,   '>', 1.0}),
-    ts_api_util:confirm_Error(C, {mybin,   varchar, '>', test2}).
+    ts_api_util:confirm_Error(C, {mybin,   varchar, '>', test2}),
+    ts_api_util:confirm_Error(C, {mybool,  boolean, '>', true}).
 
 %------------------------------------------------------------
 % Test >= Ops
@@ -56,7 +57,8 @@ confirm_GtOps(C) ->
 confirm_GtEqOps(C) ->
     ts_api_util:confirm_Pass(C, {myint,   int,     '>=', 1}),
     ts_api_util:confirm_Pass(C, {myfloat, float,   '>=', 1.0}),
-    ts_api_util:confirm_Error(C, {mybin,   varchar, '>=', test2}).
+    ts_api_util:confirm_Error(C, {mybin,   varchar, '>=', test2}),
+    ts_api_util:confirm_Error(C, {mybool,  boolean, '>=', true}).
 
 %------------------------------------------------------------
 % Test < Ops
@@ -65,7 +67,8 @@ confirm_GtEqOps(C) ->
 confirm_LtOps(C) ->
     ts_api_util:confirm_Pass(C, {myint,   int,     '<', 4}),
     ts_api_util:confirm_Pass(C, {myfloat, float,   '<', 4.0}),
-    ts_api_util:confirm_Error(C, {mybin,   varchar, '<', test2}).
+    ts_api_util:confirm_Error(C, {mybin,   varchar, '<', test2}),
+    ts_api_util:confirm_Error(C, {mybool,  boolean, '<', true}).
 
 %------------------------------------------------------------
 % Test <= Ops
@@ -74,7 +77,8 @@ confirm_LtOps(C) ->
 confirm_LtEqOps(C) ->
     ts_api_util:confirm_Pass(C, {myint,   int,     '<=', 4}),
     ts_api_util:confirm_Pass(C, {myfloat, float,   '<=', 4.0}),
-    ts_api_util:confirm_Error(C, {mybin,   varchar, '<=', test2}).
+    ts_api_util:confirm_Error(C, {mybin,   varchar, '<=', test2}),
+    ts_api_util:confirm_Error(C, {mybool,  boolean, '<=', true}).
 
 %------------------------------------------------------------
 % Test == Ops
@@ -83,7 +87,8 @@ confirm_LtEqOps(C) ->
 confirm_EqOps(C) ->
     ts_api_util:confirm_Pass(C, {myint,   int,     '=', 2}),
     ts_api_util:confirm_Pass(C, {myfloat, float,   '=', 2.0}),
-    ts_api_util:confirm_Pass(C, {mybin,   varchar, '=', test2}).
+    ts_api_util:confirm_Pass(C, {mybin,   varchar, '=', test2}),
+    ts_api_util:confirm_Pass(C, {mybool,  boolean, '=', true}).
 
 %------------------------------------------------------------
 % Test != Ops
@@ -92,4 +97,5 @@ confirm_EqOps(C) ->
 confirm_NeqOps(C) ->
     ts_api_util:confirm_Pass(C, {myint,   int,     '!=', 2}),
     ts_api_util:confirm_Pass(C, {myfloat, float,   '!=', 2.0}),
-    ts_api_util:confirm_Pass(C, {mybin,   varchar, '!=', test2}).
+    ts_api_util:confirm_Pass(C, {mybin,   varchar, '!=', test2}),
+    ts_api_util:confirm_Pass(C, {mybool,  boolean, '!=', true}).
