@@ -100,9 +100,9 @@ get_ddl(Bucket, {No, Q}) ->
 	"time        timestamp not null, " ++
 	"weather     varchar   not null, " ++
 	"temperature float, " ++
-	"PRIMARY KEY ((quantum(time, " ++ integer_to_list(No) ++ ", '" ++
-	atom_to_list(Q) ++ "'), myfamily, myseries), " ++
-	"time, myfamily, myseries))".
+	"PRIMARY KEY ((myfamily, myseries, quantum(time, " ++ integer_to_list(No) ++ ", '" ++
+	atom_to_list(Q) ++ "')), " ++
+	"myfamily, myseries, time))".
 
 make_data(NPuts, Q, NSpans) ->
     Multi = get_multi(Q) * NSpans,

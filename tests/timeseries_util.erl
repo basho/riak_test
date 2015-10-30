@@ -197,9 +197,9 @@ get_ddl(docs) ->
 	"myseries    varchar   not null, " ++
 	"time        timestamp not null, " ++
 	"weather     varchar   not null, " ++
-	"temperature float, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries))";
+	"temperature double, " ++
+	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
+	"myfamily, myseries, time))";
 %% another valid DDL - one with all the good stuff like
 %% different types and optional blah-blah
 get_ddl(variety) ->
@@ -207,14 +207,14 @@ get_ddl(variety) ->
 	"myfamily    varchar     not null, " ++
 	"myseries    varchar     not null, " ++
 	"time        timestamp   not null, " ++
-	"myint       integer     not null, " ++
-	"myfloat     float       not null, " ++
+	"myint       sint64      not null, " ++
+	"myfloat     double      not null, " ++
 	"mybool      boolean     not null, " ++
 	"mytimestamp timestamp   not null, " ++
 	"myany       any         not null, " ++
-	"myoptional  integer, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries))";
+	"myoptional  sint64, " ++
+	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
+	"myfamily, myseries, time))";
 %% an invalid TS DDL becuz family and series not both in key
 get_ddl(shortkey_fail) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
@@ -222,7 +222,7 @@ get_ddl(shortkey_fail) ->
 	"myseries    varchar   not null, " ++
 	"time        timestamp not null, " ++
 	"weather     varchar   not null, " ++
-	"temperature float, " ++
+	"temperature double, " ++
 	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily), " ++
 	"time, myfamily))";
 %% an invalid TS DDL becuz partition and local keys dont cover the same space
@@ -232,20 +232,9 @@ get_ddl(splitkey_fail) ->
 	"myseries    varchar   not null, " ++
 	"time        timestamp not null, " ++
 	"weather     varchar   not null, " ++
-	"temperature float, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries, temperature))";
-%% another invalid TS DDL because family/series must be varchar
-%% or is this total bollox???
-get_ddl(keytype_fail_mebbies_or_not_eh_check_it_properly_muppet_boy) ->
-    _SQL = "CREATE TABLE GeoCheckin (" ++
-	"myfamily    integer   not null, " ++
-	"myseries    varchar   not null, " ++
-	"time        timestamp not null, " ++
-	"weather     varchar   not null, " ++
-	"temperature float, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries))".
+	"temperature double, " ++
+	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
+	"time, myfamily, myseries, temperature))".
 
 get_valid_obj() ->
     [get_varchar(),

@@ -17,8 +17,8 @@ confirm() ->
 	"myfamily    varchar     not null, " ++
 	"myseries    varchar     not null, " ++
 	"time        timestamp   not null, " ++
-	"myint       integer     not null, " ++
-	"myfloat     float       not null, " ++
+	"myint       sint64      not null, " ++
+	"myfloat     double      not null, " ++
 	"mybool      boolean     not null, " ++
 	"mytimestamp timestamp   not null, " ++
 	"myany       any         not null, " ++
