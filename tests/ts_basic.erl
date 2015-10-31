@@ -95,12 +95,12 @@ confirm() ->
     GetKey = [GetTimepoint, GetSensor],
     ResGet = riakc_ts:get(C, ?BUCKET, GetKey, []),
     io:format("Get a single record: ~p\n", [ResGet]),
-    ?assertEqual([GetRecord], ResGet),
+    ?assertMatch({_, [GetRecord]}, ResGet),
 
     GetNXKey = [GetTimepoint, <<"dudu">>],
     ResNXGet = riakc_ts:get(C, ?BUCKET, GetNXKey, []),
     io:format("Not got a nonexistent single record: ~p\n", [ResNXGet]),
-    ?assertEqual([], ResNXGet),
+    ?assertMatch({_, []}, ResNXGet),
 
     pass.
 
