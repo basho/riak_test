@@ -90,8 +90,8 @@ get_ddl(api) ->
 	"mybin       varchar     not null, " ++
 	"myfloat     float       not null, " ++
 	"mybool      boolean     not null, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries))".
+	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm') ), " ++
+	"myfamily, myseries, time))".
 
 get_map(api) ->
     [{<<"myfamily">>, 1},
