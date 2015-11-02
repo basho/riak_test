@@ -91,7 +91,7 @@ get_ddl(api) ->
 	"myfloat     float       not null, " ++
 	"mybool      boolean     not null, " ++
 	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
-	"myfamily, myseries, temperature, time))".
+	"myfamily, myseries, time))".
 
 get_map(api) ->
     [{<<"myfamily">>, 1},
