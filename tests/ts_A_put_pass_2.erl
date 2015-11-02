@@ -23,8 +23,8 @@ confirm() ->
 	"mytimestamp timestamp   not null, " ++
 	"myany       any         not null, " ++
 	"myoptional  integer, " ++
-	"PRIMARY KEY ((quantum(time, 15, 'm'), myfamily, myseries), " ++
-	"time, myfamily, myseries))",
+	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
+	"myfamily, myseries, time))",
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     N = 10,
