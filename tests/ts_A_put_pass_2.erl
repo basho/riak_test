@@ -30,7 +30,8 @@ confirm() ->
     N = 10,
     Data = make_data(N, Family, Series, []),
     %% Expected is wrong but we can't write data at the moment
-    ?assertEqual(ok, timeseries_util:confirm_put(Cluster, TestType, DDL, Data)).
+    ?assertEqual(ok, timeseries_util:confirm_put(Cluster, TestType, DDL, Data)),
+    pass.
 
 make_data(0, _, _, Acc) ->
     Acc;
@@ -48,8 +49,8 @@ make_data(N, F, S, Acc) when is_integer(N) andalso N > 0 ->
 	     ],
     make_data(N - 1, F, S, [NewAcc | Acc]).
 
-get_bool(N) when N < 5 -> <<"true">>;
-get_bool(_)            -> <<"false">>.
+get_bool(N) when N < 5 -> true;
+get_bool(_)            -> false.
 
 get_any(N) -> term_to_binary(lists:seq(1, N)).
 
