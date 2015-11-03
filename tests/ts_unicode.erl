@@ -41,16 +41,30 @@ confirm() ->
         build_cluster(
           ClusterSize),
 
+%get_ddl(docs) ->
+    %_SQL = "CREATE TABLE GeoCheckin (" ++
+    %"myfamily    varchar   not null, " ++
+    %"myseries    varchar   not null, " ++
+    %"time        timestamp not null, " ++
+    %"weather     varchar   not null, " ++
+    %"temperature float, " ++
+    %"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
+    %"myfamily, myseries, time))";
     %% 1. use riak-admin to create a bucket
-    TableDef = io_lib:format(
-                 "CREATE TABLE ~s "
-                 "(~s varchar not null, "
-                 " ~s timestamp not null, "
-                 " score float not null, "
-                 " PRIMARY KEY((quantum(time, 10, s)), time, sensor))",
-                 [?BUCKET, ?PKEY_P1, ?PKEY_P2]),
+    TableDef = "CREATE TABLE ts_test_bucket_one ("
+      "sensor varchar not null"
+      ", time timestamp not null"
+      ", score float not null"
+      ", PRIMARY KEY ("
+      "    (sensor, score, quantum(time, 10, 's'))"
+      "    , sensor"
+      "    , score"
+      "    , time"
+      "  )"
+    ")",
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
-    rt:admin(Node1, ["bucket-type", "create", binary_to_list(?BUCKET), lists:flatten(Props)]),
+    Create = rt:admin(Node1, ["bucket-type", "create", binary_to_list(?BUCKET), lists:flatten(Props)]),
+    lager:info("Create result: ~p", [Create]),
     rt:admin(Node1, ["bucket-type", "activate", binary_to_list(?BUCKET)]),
 
     %% 2. set up a client
