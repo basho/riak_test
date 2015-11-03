@@ -3,6 +3,10 @@
 shopt -s expand_aliases
 source ~/.aliases
 
+#============================================================
+# Checkout riak 2.1.1 and riak TS if they don't already exist
+#============================================================
+
 checkoutrepos()
 {
     riakTestDir=`pwd`
@@ -27,15 +31,6 @@ checkoutrepos()
 }
 
 #============================================================
-# Remove all profile results from the profiler directory
-#============================================================
-
-cleanprofdir()
-{
-    \rm ./profiler_results/*profile.txt
-}
-
-#============================================================
 # Create a directory for profiler results
 #============================================================
 
@@ -45,6 +40,15 @@ createprofdir()
     then
 	mkdir ./profiler_results
     fi
+}
+
+#============================================================
+# Remove all profile results from the profiler directory
+#============================================================
+
+cleanprofdir()
+{
+    \rm ./profiler_results/*profile.txt
 }
 
 #============================================================
@@ -248,9 +252,9 @@ setcurrent()
     popd
 }
 
-#------------------------------------------------------------
+#============================================================
 # Start of actual script
-#------------------------------------------------------------
+#============================================================
 
 # Create dir for profile results
 
@@ -260,10 +264,10 @@ createprofdir
 
 checkoutrepos
 
-# Now run with nkeys=250 to 40000, 5 iterations each
+# Now run with nkeys=250 to 20000, 5 iterations each
 
-declare -a nkeys=(500 1000 10000)
-niter=3
+declare -a nkeys=(250 500 1000 5000 10000 20000)
+niter=5
 
 # First set to riak_2.1.1 and run all tests
 

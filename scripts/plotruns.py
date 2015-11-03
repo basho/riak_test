@@ -92,7 +92,7 @@ def display(vals):
 # Main
 #------------------------------------------------------------
 
-xvals = [500, 1000, 10000]
+xvals = [250, 500, 1000, 5000, 10000, 20000]
 (means_211_w1c, errs_211_w1c) = getVals('riak_2.1.1', 'w1c', xvals)
 (means_ts_w1c,  errs_ts_w1c)  = getVals('riak_ts',    'w1c', xvals)
 (means_211_put, errs_211_put) = getVals('riak_2.1.1', 'put', xvals)
