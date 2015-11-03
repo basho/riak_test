@@ -11,14 +11,14 @@ def getMeanAndErr(vers, type, nrun, index):
 
     if vers == 'riak_2.1.1':
         if type == 'w1c':
-            path = '/tmp/riak_test_scratch/ts_puttest_211_w1c_' + str(nrun) + '/'
+            path = './profiler_results/ts_puttest_211_w1c_' + str(nrun) + '/'
         else:
-            path = '/tmp/riak_test_scratch/ts_puttest_211_put_' + str(nrun) + '/'
+            path = './profiler_results/ts_puttest_211_put_' + str(nrun) + '/'
     else:
         if type == 'w1c':
-            path = '/tmp/riak_test_scratch/ts_puttest_ts_' + str(nrun) + '/'
+            path = './profiler_results/ts_puttest_ts_w1c_'  + str(nrun) + '/'
         else:
-            path = '/tmp/riak_test_scratch/ts_puttest_ts_put_' + str(nrun) + '/'
+            path = './profiler_results/ts_puttest_ts_put_'  + str(nrun) + '/'
 
     files = listfiles(path)
 
@@ -92,7 +92,7 @@ def display(vals):
 # Main
 #------------------------------------------------------------
 
-xvals = [250, 500, 1000, 1500, 5000, 10000, 20000, 30000, 40000]
+xvals = [500, 1000, 10000]
 (means_211_w1c, errs_211_w1c) = getVals('riak_2.1.1', 'w1c', xvals)
 (means_ts_w1c,  errs_ts_w1c)  = getVals('riak_ts',    'w1c', xvals)
 (means_211_put, errs_211_put) = getVals('riak_2.1.1', 'put', xvals)

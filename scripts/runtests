@@ -262,8 +262,8 @@ checkoutrepos
 
 # Now run with nkeys=250 to 40000, 5 iterations each
 
-declare -a nkeys=(500 1000)
-niter=1
+declare -a nkeys=(500 1000 10000)
+niter=3
 
 # First set to riak_2.1.1 and run all tests
 
