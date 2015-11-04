@@ -29,6 +29,7 @@
 -define(PKEY_P2, <<"time">>).
 -define(PVAL_P1, <<"ZXC11">>).
 -define(TIMEBASE, (10*1000*1000)).
+-define(SINT64_MAX,  16#7FFFFFFFFFFFFFFF).
 
 confirm() ->
     io:format("Data to be written: ~p\n", [make_data()]),
@@ -45,6 +46,7 @@ confirm() ->
                  "(~s varchar not null, "
                  " ~s timestamp not null, "
                  " score float not null, "
+                 " bigscore int not null, "
                  " PRIMARY KEY((quantum(time, 10, s)), time, sensor))",
                  [?BUCKET, ?PKEY_P1, ?PKEY_P2]),
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
@@ -62,7 +64,7 @@ confirm() ->
 
     %% 4. delete one
     ElementToDelete = 15,
-    DelRecord = [DelSensor, DelTimepoint, _Score] =
+    DelRecord = [DelSensor, DelTimepoint, _Score, _BigScore] =
         lists:nth(ElementToDelete, Data0),
     DelKey = [DelTimepoint, DelSensor],
     DelNXKey = [DelTimepoint, <<"keke">>],
@@ -90,7 +92,7 @@ confirm() ->
 
     %% 6. single-key get some data
     ElementToGet = 12,
-    GetRecord = [GetSensor, GetTimepoint, _Score2] =
+    GetRecord = [GetSensor, GetTimepoint, _Score2, _BigScore2] =
         lists:nth(ElementToGet, Data0),
     GetKey = [GetTimepoint, GetSensor],
     ResGet = riakc_ts:get(C, ?BUCKET, GetKey, []),
@@ -123,6 +125,7 @@ make_data() ->
       fun(T, Q) ->
               [[?PVAL_P1,
                 ?TIMEBASE + ?LIFESPAN - T + 1,
-                math:sin(float(T) / 100 * math:pi())] | Q]
+                math:sin(float(T) / 100 * math:pi()),
+                ?SINT64_MAX + 10 - 10 * T] | Q]  %% make it cross the boundary
       end,
       [], lists:seq(?LIFESPAN, 0, -1)).
