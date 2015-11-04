@@ -99,3 +99,4 @@ confirm_NeqOps(C) ->
     ts_api_util:confirm_Pass(C, {myfloat, float,   '!=', 2.0}),
     ts_api_util:confirm_Pass(C, {mybin,   varchar, '!=', test2}),
     ts_api_util:confirm_Pass(C, {mybool,  boolean, '!=', true}).
+
