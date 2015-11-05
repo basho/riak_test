@@ -46,6 +46,7 @@ confirm() ->
                ]},
               {riak_kv,
                [{delete_mode, keep},
+                {tombstone_grace_period, 7 * 24 * 3600}, %% 1w in s
                 {reap_sweep_interval, 5000},
                 {sweep_tick, ?SWEEP_TICK},       %% Speed up sweeping
                 {anti_entropy_build_limit, {100, 1000}},
@@ -88,7 +89,7 @@ confirm() ->
 
     verify_aae_and_reaper_interaction(Nodes, KV7, KV8, KV9),
 
-    KV10 = test_data(10001, 20000),
+    KV10 = test_data(10001, 30000),
     test_status(Nodes, KV10),
 
     pass.
