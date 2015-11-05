@@ -86,9 +86,9 @@ get_ddl(api) ->
 	"myfamily    varchar     not null, " ++
 	"myseries    varchar     not null, " ++
 	"time        timestamp   not null, " ++
-	"myint       integer     not null, " ++
+	"myint       sint64      not null, " ++
 	"mybin       varchar     not null, " ++
-	"myfloat     float       not null, " ++
+	"myfloat     double      not null, " ++
 	"mybool      boolean     not null, " ++
 	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
 	"myfamily, myseries, time))".
