@@ -21,7 +21,7 @@ confirm() ->
 	"myfloat     double      not null, " ++
 	"mybool      boolean     not null, " ++
 	"mytimestamp timestamp   not null, " ++
-	"myoptional  integer, " ++
+	"myoptional  sint64, " ++
 	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
 	"myfamily, myseries, time))",
     Family = <<"family1">>,
