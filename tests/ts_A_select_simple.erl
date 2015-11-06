@@ -1,4 +1,4 @@
--module(ts_A_select_pass_1).
+-module(ts_A_select_simple).
 
 -behavior(riak_test).
 
