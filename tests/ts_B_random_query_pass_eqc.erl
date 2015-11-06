@@ -99,7 +99,7 @@ get_ddl(Bucket, {No, Q}) ->
 	"myseries    varchar   not null, " ++
 	"time        timestamp not null, " ++
 	"weather     varchar   not null, " ++
-	"temperature float, " ++
+	"temperature double, " ++
 	"PRIMARY KEY ((myfamily, myseries, quantum(time, " ++ integer_to_list(No) ++ ", '" ++
 	atom_to_list(Q) ++ "')), " ++
 	"myfamily, myseries, time))".
@@ -135,7 +135,7 @@ timestamp() ->
 %% eqc generators
 %%
 %% generates a list with the following elements
-%% [varchar, varchar, integer, float, boolean]
+%% [varchar, varchar, integer, double, boolean]
 gen_n_val() ->
     ?LET(N, choose(1, 5), N).
 

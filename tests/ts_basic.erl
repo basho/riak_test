@@ -21,17 +21,22 @@
 
 -module(ts_basic).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, run_tests/2]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"ts_test_bucket_one">>).
 -define(PKEY_P1, <<"sensor">>).
--define(PKEY_P2, <<"time">>).
+-define(PKEY_P2, <<"datum">>).
+-define(PKEY_P3, <<"time">>).
 -define(PVAL_P1, <<"ZXC11">>).
+-define(PVAL_P2, <<"PDP-11">>).
 -define(TIMEBASE, (10*1000*1000)).
 
 confirm() ->
-    io:format("Data to be written: ~p\n", [make_data()]),
+    run_tests(?PVAL_P1, ?PVAL_P2).
+
+run_tests(PVal1, PVal2) ->
+    io:format("Data to be written: ~p\n", [make_data(PVal1, PVal2)]),
 
     ClusterSize = 1,
     lager:info("Building cluster"),
@@ -43,10 +48,11 @@ confirm() ->
     TableDef = io_lib:format(
                  "CREATE TABLE ~s "
                  "(~s varchar not null, "
+                 " ~s varchar not null, "
                  " ~s timestamp not null, "
-                 " score float not null, "
-                 " PRIMARY KEY((quantum(time, 10, s)), time, sensor))",
-                 [?BUCKET, ?PKEY_P1, ?PKEY_P2]),
+                 " score double not null, "
+                 " PRIMARY KEY((~s, ~s, quantum(~s, 10, 's')), ~s, ~s, ~s))",
+                 [?BUCKET, ?PKEY_P1, ?PKEY_P2, ?PKEY_P3, ?PKEY_P1, ?PKEY_P2, ?PKEY_P3, ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
     rt:admin(Node1, ["bucket-type", "create", binary_to_list(?BUCKET), lists:flatten(Props)]),
     rt:admin(Node1, ["bucket-type", "activate", binary_to_list(?BUCKET)]),
@@ -56,16 +62,16 @@ confirm() ->
     ?assert(is_pid(C)),
 
     %% 3. put some data
-    Data0 = make_data(),
+    Data0 = make_data(PVal1, PVal2),
     ResPut = riakc_ts:put(C, ?BUCKET, Data0),
     io:format("Put ~b records: ~p\n", [length(Data0), ResPut]),
 
     %% 4. delete one
     ElementToDelete = 15,
-    DelRecord = [DelSensor, DelTimepoint, _Score] =
+    DelRecord = [DelSensor, DelDatum, DelTimepoint, _Score] =
         lists:nth(ElementToDelete, Data0),
-    DelKey = [DelTimepoint, DelSensor],
-    DelNXKey = [DelTimepoint, <<"keke">>],
+    DelKey = [DelSensor, DelDatum, DelTimepoint],
+    DelNXKey = [<<"keke">>, <<"tiki">>, DelTimepoint],
     %% Data = lists:delete(DelRecord, Data0),
     ResDel = riakc_ts:delete(C, ?BUCKET, DelKey, []),
     ?assertEqual(ResDel, ok),
@@ -78,8 +84,8 @@ confirm() ->
     Query =
         lists:flatten(
           io_lib:format(
-            "select * from ~s where ~s > ~b and ~s < ~b and sensor = \"~s\"",
-           [?BUCKET, ?PKEY_P2, ?TIMEBASE + 10, ?PKEY_P2, ?TIMEBASE + 20, ?PVAL_P1])),
+            "select * from ~s where ~s > ~b and ~s < ~b and sensor = \"~s\" and datum = \"~s\"",
+           [?BUCKET, ?PKEY_P3, ?TIMEBASE + 10, ?PKEY_P3, ?TIMEBASE + 20, PVal1, PVal2])),
     io:format("Running query: ~p\n", [Query]),
     {_Columns, Rows} = riakc_ts:query(C, Query),
     io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
@@ -90,14 +96,14 @@ confirm() ->
 
     %% 6. single-key get some data
     ElementToGet = 12,
-    GetRecord = [GetSensor, GetTimepoint, _Score2] =
+    GetRecord = [GetSensor, GetDatum, GetTimepoint, _Score2] =
         lists:nth(ElementToGet, Data0),
-    GetKey = [GetTimepoint, GetSensor],
+    GetKey = [GetSensor, GetDatum , GetTimepoint],
     ResGet = riakc_ts:get(C, ?BUCKET, GetKey, []),
     io:format("Get a single record: ~p\n", [ResGet]),
     ?assertMatch({_, [GetRecord]}, ResGet),
 
-    GetNXKey = [GetTimepoint, <<"dudu">>],
+    GetNXKey = [<<"dudu">>, <<"fufu">>, GetTimepoint],
     ResNXGet = riakc_ts:get(C, ?BUCKET, GetNXKey, []),
     io:format("Not got a nonexistent single record: ~p\n", [ResNXGet]),
     ?assertMatch({_, []}, ResNXGet),
@@ -118,10 +124,11 @@ build_cluster(Size, Config) ->
 
 
 -define(LIFESPAN, 30).
-make_data() ->
+make_data(PVal1, PVal2) ->
     lists:foldl(
       fun(T, Q) ->
-              [[?PVAL_P1,
+              [[PVal1,
+                PVal2,
                 ?TIMEBASE + ?LIFESPAN - T + 1,
                 math:sin(float(T) / 100 * math:pi())] | Q]
       end,
