@@ -1,4 +1,4 @@
--module(ts_A_put_fail_3_bad_date).
+-module(ts_A_put_bad_date).
 
 %%
 %%
@@ -20,8 +20,5 @@ confirm() ->
           <<"abc">>,
           timeseries_util:get_varchar(),
           timeseries_util:get_float()]],
-    ?assertEqual(
-        {error, {3, <<"Invalid data">>}},
-        timeseries_util:confirm_put(ClusterType, TestType, DDL, Obj)
-    ),
-    pass.
+    Expected = {error, {1003, <<"Invalid data">>}},
+    timeseries_util:confirm_put(ClusterType, TestType, DDL, Obj, Expected).

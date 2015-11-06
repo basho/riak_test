@@ -1,4 +1,4 @@
--module(ts_A_put_pass_1).
+-module(ts_A_put_simple).
 
 -behavior(riak_test).
 
@@ -11,9 +11,4 @@ confirm() ->
     TestType = normal,
     DDL = timeseries_util:get_ddl(docs),
     Obj = [timeseries_util:get_valid_obj()],
-    ?assertEqual(
-        ok,
-        timeseries_util:confirm_put(Cluster, TestType, DDL, Obj)
-    ),
-    io:format("~p ~p", [node(), erlang:get_cookie()]),
-    pass.
+    timeseries_util:confirm_put(Cluster, TestType, DDL, Obj, ok).

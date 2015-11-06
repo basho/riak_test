@@ -21,6 +21,17 @@
 %% @doc A util module for riak_ts basic CREATE TABLE Actions
 -module(timeseries_util).
 
+-export([
+    confirm_activate/3,
+    confirm_create/3,
+    confirm_get/7,
+    confirm_put/5,
+    confirm_select/6,
+    get_bool/1,
+    get_cols/1,
+    get_optional/2
+    ]).
+%% TODO: Kill unused functions
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -50,7 +61,7 @@ confirm_activate(ClusterType, DDL, Expected) ->
 
     pass.
 
-confirm_put(ClusterType, TestType, DDL, Obj) ->
+confirm_put(ClusterType, TestType, DDL, Obj, Expected) ->
 
     [Node | _]  = build_cluster(ClusterType),
     
@@ -66,7 +77,36 @@ confirm_put(ClusterType, TestType, DDL, Obj) ->
     Bucket = list_to_binary(get_bucket()),
     io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
     C = rt:pbc(Node),
-    riakc_ts:put(C, Bucket, Obj).
+    Got = riakc_ts:put(C, Bucket, Obj),
+    ?assertEqual(Expected, Got),
+    pass.
+
+confirm_get(ClusterType, TestType, DDL, Data, Key, Options, Expected) ->
+
+    [Node | _]  = build_cluster(ClusterType),
+
+    case TestType of
+        normal ->
+            io:format("1 - Creating and activating bucket~n"),
+            {ok, _} = create_bucket(Node, DDL, 3),
+            {ok, _} = activate_bucket(Node, DDL);
+        n_val_one ->
+            io:format("1 - Creating and activating bucket~n"),
+            {ok, _} = create_bucket(Node, DDL, 1),
+            {ok, _} = activate_bucket(Node, DDL);
+        no_ddl ->
+            io:format("1 - NOT Creating or activating bucket - failure test~n"),
+            ok
+    end,
+    Bucket = list_to_binary(get_bucket()),
+    io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Data]),
+    C = rt:pbc(Node),
+    ok = riakc_ts:put(C, Bucket, Data),
+
+    io:format("3 - reading from bucket ~p with key ~p~n", [Bucket, Key]),
+    Got = riakc_ts:get(C, Bucket, Key, Options),
+    ?assertEqual(Expected, Got),
+    pass.
 
 confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
     
@@ -108,7 +148,7 @@ create_bucket(Node, DDL, NVal) when is_integer(NVal) ->
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": " ++ 
                           integer_to_list(NVal) ++
                           ", \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
-    rt:admin(Node, ["bucket-type", "create", get_bucket(), 
+    rt:admin(Node, ["bucket-type", "create", get_bucket(),
                     lists:flatten(Props)]).
 
 %% @ignore
@@ -132,6 +172,7 @@ build_c2(Size, Config) ->
     rt:join_cluster(Nodes),
     Nodes.
 
+%% This is also the name of the table
 get_bucket() ->
     "GeoCheckin".
 
@@ -171,7 +212,6 @@ get_valid_select_data_spanning_quanta() ->
     Series = <<"seriesX">>,
     Times = lists:seq(1 + ?SPANNING_STEP, 1 + ?SPANNING_STEP * 10, ?SPANNING_STEP),  %% five-minute intervals, to span 15-min buckets
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
-
 
 get_cols(docs) ->
     [<<"myfamily">>,
@@ -273,3 +313,12 @@ get_float() ->
     F1 = random:uniform(trunc(?MAXFLOAT)),
     F2 = random:uniform(trunc(?MAXFLOAT)),
     F1 - F2 + random:uniform().
+
+get_bool(N) when N < 5 -> true;
+get_bool(_)            -> false.
+
+get_optional(N, X) ->
+    case N rem 2 of
+        0 -> X;
+        1 -> []
+    end.

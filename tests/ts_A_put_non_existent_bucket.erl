@@ -1,7 +1,7 @@
--module(ts_A_put_fail_1).
+-module(ts_A_put_non_existent_bucket).
 
 %%
-%% this test tries to write to a non-existant bucket
+%% this test tries to write to a non-existent bucket
 %%
 
 -behavior(riak_test).
@@ -18,9 +18,7 @@ confirm() ->
     Obj = [timeseries_util:get_valid_obj()],
     io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
     C = rt:pbc(Node),
-    ?assertMatch(
-        {error,_},
-        riakc_ts:put(C, Bucket, Obj)
-    ),
+    Got = riakc_ts:put(C, Bucket, Obj),
+    ?assertMatch({error, _}, Got),
     pass.
 

@@ -1,4 +1,4 @@
--module(ts_A_put_fail_2).
+-module(ts_A_put_invalid_data).
 
 %%
 %% this test tries to write well structured data that doesn't
@@ -15,8 +15,6 @@ confirm() ->
     ClusterType = single,
     DDL = timeseries_util:get_ddl(docs),
     Obj = [timeseries_util:get_invalid_obj()],
-    ?assertMatch(
-        {error,_},
-        timeseries_util:confirm_put(ClusterType, normal, DDL, Obj)
-    ),
-    pass.
+    Expected = {error, {1003,<<"Invalid data">>}},
+    timeseries_util:confirm_put(ClusterType, normal, DDL, Obj, Expected).
+

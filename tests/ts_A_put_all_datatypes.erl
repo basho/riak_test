@@ -1,4 +1,4 @@
--module(ts_A_put_pass_2).
+-module(ts_A_put_all_datatypes).
 
 -behavior(riak_test).
 
@@ -29,8 +29,7 @@ confirm() ->
     N = 10,
     Data = make_data(N, Family, Series, []),
     %% Expected is wrong but we can't write data at the moment
-    ?assertEqual(ok, timeseries_util:confirm_put(Cluster, TestType, DDL, Data)),
-    pass.
+    timeseries_util:confirm_put(Cluster, TestType, DDL, Data, ok).
 
 make_data(0, _, _, Acc) ->
     Acc;
@@ -41,18 +40,10 @@ make_data(N, F, S, Acc) when is_integer(N) andalso N > 0 ->
 	      1 + N * ?SPANNING_STEP, 
 	      N, 
 	      N + 0.1, 
-	      get_bool(N), 
+	      timeseries_util:get_bool(N),
 	      N + 100000, 
-	      get_optional(N, N)
+	      timeseries_util:get_optional(N, N)
 	     ],
     make_data(N - 1, F, S, [NewAcc | Acc]).
 
-get_bool(N) when N < 5 -> true;
-get_bool(_)            -> false.
-
-get_optional(N, X) ->
-    case N rem 2 of
-	0 -> X;
-	1 -> []
-    end.
 	     
