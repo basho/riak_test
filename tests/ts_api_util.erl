@@ -26,68 +26,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--include_lib("profiler/include/profiler.hrl").
-
 %------------------------------------------------------------
-% Cluster setup only. writes N copies of a fixed record via the normal
-% put path
-%------------------------------------------------------------
-
-setup_cluster_put(ClusterType, TestType, N, WriteOnce) ->
-    [Node | _] = timeseries_util:build_cluster(ClusterType),
-    
-    case TestType of
-	normal ->
-	    io:format("1 - Create and activate the bucket (0)~n"),
-	    {ok, _} = timeseries_util:create_bucket(Node, 3, WriteOnce),
-	    {ok, _} = timeseries_util:activate_bucket(Node, []);
-	no_ddl ->
-	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
-	    ok
-    end,
-    Bucket = list_to_binary(timeseries_util:get_bucket()),
-    C = rt:pbc(Node),
-    Data = [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]],
-    profiler:perf_profile({start, 0}),
-    ok = putData(C, Bucket, Data, N, false),
-    profiler:perf_profile({stop,  0}).
-
-setup_cluster_put(ClusterType, TestType, DDL, N, Ts) ->
-    [Node | _] = timeseries_util:build_cluster(ClusterType),
-    
-    case TestType of
-	normal ->
-	    io:format("1 - Create and activate the bucket (1)~n"),
-	    {ok, _} = timeseries_util:create_bucket(Node, DDL, 3),
-	    {ok, _} = timeseries_util:activate_bucket(Node, DDL);
-	no_ddl ->
-	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
-	    ok
-    end,
-    Bucket = list_to_binary(timeseries_util:get_bucket()),
-    C = rt:pbc(Node),
-    Data = [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]],
-    profiler:perf_profile({start, 0}),
-    ok = putData(C, Bucket, Data, N, Ts),
-    profiler:perf_profile({stop,  0}).
-
-putData(C, Bucket, Data, N, Ts) ->
-    putData(C, Bucket, Data, N, N, Ts).
-putData(_C, _Bucket, _Data, _N, 0, _Ts) ->
-    ok;
-putData(C, Bucket, Data, N, Acc, Ts) ->
-    case Ts of
-	true ->
-	    ok = riakc_ts:put(C, Bucket, Data);
-	false ->
-	    Key = list_to_binary("key"++integer_to_list(Acc)),
-	    Obj = riakc_obj:new({<<"GeoCheckin">>,<<"GeoCheckin">>}, Key, Data),
-	    ok  = riakc_pb_socket:put(C, Obj)
-    end,
-    putData(C, Bucket, Data, N, Acc-1, Ts).
-
-%------------------------------------------------------------
-% Cluster setup only,  Returns the client connection
+% Cluster setup only.  Returns the client connection
 %------------------------------------------------------------
 
 setup_cluster(ClusterType, TestType, DDL, Data) ->
@@ -95,7 +35,7 @@ setup_cluster(ClusterType, TestType, DDL, Data) ->
     
     case TestType of
 	normal ->
-	    io:format("1 - Create and activate the bucket (2)~n"),
+	    io:format("1 - Create and activate the bucket~n"),
 	    {ok, _} = timeseries_util:create_bucket(Node, DDL, 3),
 	    {ok, _} = timeseries_util:activate_bucket(Node, DDL);
 	no_ddl ->
@@ -140,31 +80,15 @@ get_data(api) ->
 	[[<<"family1">>, <<"seriesX">>, 200, 2, <<"test2">>, 2.0, false]] ++
 	[[<<"family1">>, <<"seriesX">>, 300, 3, <<"test3">>, 3.0, true]] ++
 	[[<<"family1">>, <<"seriesX">>, 400, 4, <<"test4">>, 4.0, false]].
-%        [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true,  <<1,2,3>>]] ++
-%	[[<<"family1">>, <<"seriesX">>, 200, 2, <<"test2">>, 2.0, false, <<2,3,4>>]] ++
-%	[[<<"family1">>, <<"seriesX">>, 300, 3, <<"test3">>, 3.0, true,  <<3,4,5>>]] ++
-%	[[<<"family1">>, <<"seriesX">>, 400, 4, <<"test4">>, 4.0, false, <<4,5,6>>]].
 
 get_ddl(api) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
 	"myfamily    varchar     not null, " ++
 	"myseries    varchar     not null, " ++
 	"time        timestamp   not null, " ++
-	"myint       integer     not null, " ++
+	"myint       sint64      not null, " ++
 	"mybin       varchar     not null, " ++
-	"myfloat     float       not null, " ++
-	"mybool      boolean     not null, " ++
-	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
-	"myfamily, myseries, time))".
-
-get_rv_ddl(api) ->
-    _SQL = "CREATE TABLE GeoCheckin (" ++
-	"myfamily    varchar     not null, " ++
-	"myseries    varchar     not null, " ++
-	"time        timestamp   not null, " ++
-	"myint       integer     not null, " ++
-	"mybin       varchar     not null, " ++
-	"myfloat     float       not null, " ++
+	"myfloat     double      not null, " ++
 	"mybool      boolean     not null, " ++
 	"PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
 	"myfamily, myseries, time))".
@@ -277,27 +201,9 @@ getQry({NameAtom, varchar, OpAtom, Val}) ->
 getQry({NameAtom, boolean, OpAtom, Val}) ->		     
     baseQry() ++ "AND " ++ atom_to_list(NameAtom) ++ " " ++ atom_to_list(OpAtom) ++ " " ++ atom_to_list(Val).
 
-bogusBaseQry() ->
-    "SELECT * FROM GeoCheckin "
-        "WHERE time >= 100 AND time <= 400 "
-        "AND myfamily = 'family 1' "
-        "AND myseries = 'seriesX' ".
-
-getBogusQry({NameAtom, float, OpAtom, Val}) ->		     
-    bogusBaseQry() ++ "AND " ++ atom_to_list(NameAtom) ++ " " ++ atom_to_list(OpAtom) ++ " " ++ float_to_list(Val);
-getBogusQry({NameAtom, int, OpAtom, Val}) ->		     
-    bogusBaseQry() ++ "AND " ++ atom_to_list(NameAtom) ++ " " ++ atom_to_list(OpAtom) ++ " " ++ integer_to_list(Val);
-getBogusQry({NameAtom, varchar, OpAtom, Val}) ->		     
-    bogusBaseQry() ++ "AND " ++ atom_to_list(NameAtom) ++ " " ++ atom_to_list(OpAtom) ++ " '" ++ atom_to_list(Val) ++ "'";
-getBogusQry({NameAtom, boolean, OpAtom, Val}) ->		     
-    bogusBaseQry() ++ "AND " ++ atom_to_list(NameAtom) ++ " " ++ atom_to_list(OpAtom) ++ " " ++ atom_to_list(Val).
-
 %------------------------------------------------------------
 % Template for checking that a query passes
 %------------------------------------------------------------
-
-confirm_BogusError(C, {NameAtom, TypeAtom, OpAtom, Val}) ->
-    confirm_BogusTemplate(C, {NameAtom, TypeAtom, OpAtom, Val}, error).
 
 confirm_Pass(C, {NameAtom, TypeAtom, OpAtom, Val}) ->
     confirm_Template(C, {NameAtom, TypeAtom, OpAtom, Val}, pass).
@@ -322,68 +228,6 @@ confirm_Error(C, {NameAtom, TypeAtom, OpAtom, Val}) ->
 confirm_Template(C, {NameAtom, TypeAtom, OpAtom, Val}, Result) ->
     Data = get_data(api),
     Qry = ts_api_util:getQry({NameAtom, TypeAtom, OpAtom, Val}),
-    Fields   = [<<"time">>, <<"myfamily">>, <<"myseries">>] ++ [list_to_binary(atom_to_list(NameAtom))],
-    case TypeAtom of
-	varchar ->
-	    CompVals = [<<"family1">>,  <<"seriesX">>] ++ [list_to_binary(atom_to_list(Val))];
-	_ ->
-	    CompVals = [<<"family1">>,  <<"seriesX">>] ++ [Val]
-    end,
-    case OpAtom of
-	'>' ->
-	    CompFn = fun(Vals, Cvals) ->
-			     [T,V1,V2,V3] = Vals,
-			     [C1,C2,C3] = Cvals,
-			     (T >= 100) and (T =< 400) and (V1 == C1) and (V2 == C2) and (V3 > C3)
-		     end;
-	'>=' ->
-	    CompFn = fun(Vals, Cvals) ->
-			     [T,V1,V2,V3] = Vals,
-			     [C1,C2,C3] = Cvals,
-			     (T >= 100) and (T =< 400) and (V1 == C1) and (V2 == C2) and (V3 >= C3)
-		     end;
-	'<' ->
-    	    CompFn = fun(Vals, Cvals) ->
-			     [T,V1,V2,V3] = Vals,
-			     [C1,C2,C3] = Cvals,
-			     (T >= 100) and (T =< 400) and (V1 == C1) and (V2 == C2) and (V3 < C3)
-		     end;
-	'=<' ->
-	    CompFn = fun(Vals, Cvals) ->
-			     [T,V1,V2,V3] = Vals,
-			     [C1,C2,C3] = Cvals,
-			     (T >= 100) and (T =< 400) and (V1 == C1) and (V2 == C2) and (V3 =< C3)
-		     end;
-	'<=' ->
-	    CompFn = fun(Vals, Cvals) ->
-			     [T,V1,V2,V3] = Vals,
-			     [C1,C2,C3] = Cvals,
-			     (T >= 100) and (T =< 400) and (V1 == C1) and (V2 == C2) and (V3 =< C3)
-		     end;
-	'=' ->
-	    CompFn = fun(Vals, Cvals) ->
-			     [T,V1,V2,V3] = Vals,
-			     [C1,C2,C3] = Cvals,
-			     (T >= 100) and (T =< 400) and (V1 == C1) and (V2 == C2) and (V3 == C3)
-		     end;
-	'!=' ->
-	    CompFn = fun(Vals, Cvals) ->
-			     [T,V1,V2,V3] = Vals,
-			     [C1,C2,C3] = Cvals,
-			     (T >= 100) and (T =< 400) and (V1 == C1) and (V2 == C2) and (V3 /= C3)
-		     end
-    end,
-    Expected = expected(api, Data, Fields, CompVals, CompFn),
-    case Result of
-	pass ->
-	    confirm_pass(C, Qry, Expected);
-	error ->
-	    confirm_error(C, Qry, Expected)
-    end.
-
-confirm_BogusTemplate(C, {NameAtom, TypeAtom, OpAtom, Val}, Result) ->
-    Data = get_data(api),
-    Qry = ts_api_util:getBogusQry({NameAtom, TypeAtom, OpAtom, Val}),
     Fields   = [<<"time">>, <<"myfamily">>, <<"myseries">>] ++ [list_to_binary(atom_to_list(NameAtom))],
     case TypeAtom of
 	varchar ->
@@ -497,4 +341,5 @@ check_Template({NameAtom, TypeAtom, OpAtom, Val}) ->
     end,
     Expected = expected(api, Data, Fields, CompVals, CompFn),
     {Qry, Fields, CompVals, Expected}.
+
 
