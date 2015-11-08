@@ -27,6 +27,64 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %------------------------------------------------------------
+% Cluster setup only. writes N copies of a fixed record via the normal
+% put path
+%------------------------------------------------------------
+
+setup_cluster_put(ClusterType, TestType, N, WriteOnce) ->
+    [Node | _] = timeseries_util:build_cluster(ClusterType),
+    
+    case TestType of
+	normal ->
+	    io:format("1 - Create and activate the bucket (0)~n"),
+	    {ok, _} = timeseries_util:create_bucket(Node, 3, WriteOnce),
+	    {ok, _} = timeseries_util:activate_bucket(Node, []);
+	no_ddl ->
+	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
+	    ok
+    end,
+    Bucket = list_to_binary(timeseries_util:get_bucket()),
+    C = rt:pbc(Node),
+    Data = [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]],
+    profiler:perf_profile({start, 0}),
+    ok = putData(C, Bucket, Data, N, false),
+    profiler:perf_profile({stop,  0}).
+
+setup_cluster_put(ClusterType, TestType, DDL, N, Ts) ->
+    [Node | _] = timeseries_util:build_cluster(ClusterType),
+    
+    case TestType of
+	normal ->
+	    io:format("1 - Create and activate the bucket (1)~n"),
+	    {ok, _} = timeseries_util:create_bucket(Node, DDL, 3),
+	    {ok, _} = timeseries_util:activate_bucket(Node, DDL);
+	no_ddl ->
+	    io:format("1 - NOT Creating or activating bucket - failure test~n"),
+	    ok
+    end,
+    Bucket = list_to_binary(timeseries_util:get_bucket()),
+    C = rt:pbc(Node),
+    Data = [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]],
+    profiler:perf_profile({start, 0}),
+    ok = putData(C, Bucket, Data, N, Ts),
+    profiler:perf_profile({stop,  0}).
+
+putData(C, Bucket, Data, N, Ts) ->
+    putData(C, Bucket, Data, N, N, Ts).
+putData(_C, _Bucket, _Data, _N, 0, _Ts) ->
+    ok;
+putData(C, Bucket, Data, N, Acc, Ts) ->
+    case Ts of
+	true ->
+	    ok = riakc_ts:put(C, Bucket, Data);
+	false ->
+	    Key = list_to_binary("key"++integer_to_list(Acc)),
+	    Obj = riakc_obj:new({<<"GeoCheckin">>,<<"GeoCheckin">>}, Key, Data),
+	    ok  = riakc_pb_socket:put(C, Obj)
+    end,
+    putData(C, Bucket, Data, N, Acc-1, Ts).
+
+%------------------------------------------------------------
 % Cluster setup only.  Returns the client connection
 %------------------------------------------------------------
 
