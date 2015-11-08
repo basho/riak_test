@@ -168,9 +168,7 @@ build_c2(Size) ->
 -spec build_c2(non_neg_integer(), list()) -> [node()].
 build_c2(Size, Config) ->
     rt:set_backend(eleveldb),
-    [_Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
-    rt:join_cluster(Nodes),
-    Nodes.
+    rt:build_cluster(Size, Config).
 
 %% This is also the name of the table
 get_bucket() ->

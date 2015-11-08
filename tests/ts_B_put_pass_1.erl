@@ -11,9 +11,5 @@ confirm() ->
     TestType = normal,
     DDL = timeseries_util:get_ddl(docs),
     Obj = [timeseries_util:get_valid_obj()],
-    ?assertEqual(
-        ok,
-        timeseries_util:confirm_put(Cluster, TestType, DDL, Obj)
-    ),
-    pass.
-
+    Expected = ok,
+    timeseries_util:confirm_put(Cluster, TestType, DDL, Obj, Expected).
