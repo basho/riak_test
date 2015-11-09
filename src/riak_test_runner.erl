@@ -88,7 +88,7 @@ stop_lager_backend() ->
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
 %% does some group_leader swapping, in the style of EUnit.
-execute(TestModule, {Mod, Fun}, TestMetaData) ->
+execute(TestModule, {_Mod, _Fun}, TestMetaData) ->
     process_flag(trap_exit, true),
     OldGroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
@@ -97,7 +97,12 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     {0, UName} = rt:cmd("uname -a"),
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
-    Pid = spawn_link(?MODULE, return_to_exit, [Mod, Fun, []]),
+    % Pid = spawn_link(?MODULE, return_to_exit, [Mod, Fun, []]),
+    Pid = spawn_link(
+        fun() ->
+            ct:install([{config,["config_node.ctc","config_user.ctc"]}]),
+            ct:run("test", TestModule)
+        end),
     Ref = case rt_config:get(test_timeout, undefined) of
         Timeout when is_integer(Timeout) ->
             erlang:send_after(Timeout, self(), test_took_too_long);

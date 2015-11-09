@@ -23,4 +23,4 @@ dialyzer_unhandled_warnings
 dialyzer_warnings
 .idea
 riak_test.iml
-
+ct_run*
