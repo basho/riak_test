@@ -89,6 +89,8 @@ confirm() ->
 
     verify_aae_and_reaper_interaction(Nodes, KV7, KV8, KV9),
 
+    verify_scheduling(Nodes),
+
     KV10 = test_data(10001, 30000),
     test_status(Nodes, KV10),
 
@@ -171,6 +173,33 @@ verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
     false = check_reaps(Node, Client, KV3),
 
     riakc_pb_socket:stop(Client).
+
+verify_scheduling([Node|_] = Nodes) ->
+    format_subtest(verify_scheduling),
+    disable_sweep_scheduling(Nodes),
+    %% First manually sweep then scheduled sweeps
+    %% should be in same order
+    Indices = manually_sweep_all(Node),
+    enable_sweep_scheduling(Nodes),
+
+    timer:sleep(?SWEEP_TICK * length(Indices)),
+    {_Participants , Sweeps} = get_unformated_status(Node),
+    ScheduledIndices =
+        [element(2, Sweep) || Sweep <- lists:keysort(8, Sweeps)],
+    Indices = ScheduledIndices,
+
+    timer:sleep(10000),
+    %% Test reversed
+    disable_sweep_scheduling(Nodes),
+    [begin manual_sweep(Node, Index), timer:sleep(1000) end ||
+      Index <- lists:reverse(Indices)],
+     enable_sweep_scheduling(Nodes),
+
+    timer:sleep(?SWEEP_TICK * length(Indices)),
+    {_Participants , ReverseSweeps} = get_unformated_status(Node),
+    ReverseScheduledIndices =
+        [element(2, Sweep) || Sweep <- lists:keysort(8, ReverseSweeps)],
+    ReverseScheduledIndices = lists:reverse(Indices).
 
 test_status([Node|_] = _Nodes, KV) ->
     format_subtest(test_status),
@@ -286,7 +315,7 @@ add_sweep_participant(Nodes) ->
 manually_sweep_all(Node) ->
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
     Indices = rpc:call(Node, riak_core_ring, my_indices, [Ring]),
-    [begin manual_sweep(Node, Index), timer:sleep(1000)  end || Index <- Indices].
+    [begin manual_sweep(Node, Index), timer:sleep(1000), Index  end || Index <- Indices].
 
 manual_sweep(Node, Partition) ->
    lager:info("Manual sweep index ~p", [Partition]),
@@ -297,8 +326,10 @@ get_read_repairs(Node) ->
     proplists:get_value(read_repairs_total, Stats).
 
 get_status(Node) ->
-    Status = rpc:call(Node, riak_kv_sweeper, status, []),
-    io:format(Status).
+    rpc:call(Node, riak_kv_console, sweep_status, [[]]).
+
+get_unformated_status(Node) ->
+    rpc:call(Node, riak_kv_sweeper, status, []).
 
 % @doc Verifies that the data is eventually restored to the expected set.
 verify_data(Node, KeyValues, Mode) ->
@@ -309,20 +340,20 @@ verify_data(Node, KeyValues, Mode, MaxTime) ->
     lager:info("Verify all replicas are eventually correct"),
     PB = rt:pbc(Node),
     CheckFun =
-    fun() ->
-            Matches = [verify_replicas(Node, ?BUCKET, K, V, ?N_VAL, Mode)
-                       || {K, V} <- KeyValues],
-            CountTrues = fun(true, G) -> G+1; (false, G) -> G end,
-            NumGood = lists:foldl(CountTrues, 0, Matches),
-            Num = length(KeyValues),
-            case Num == NumGood of
-                true -> true;
-                false ->
-                    lager:info("Data not yet correct: ~p mismatches",
-                               [Num-NumGood]),
-                    false
-            end
-    end,
+        fun() ->
+                Matches = [verify_replicas(Node, ?BUCKET, K, V, ?N_VAL, Mode)
+                             || {K, V} <- KeyValues],
+                CountTrues = fun(true, G) -> G+1; (false, G) -> G end,
+                NumGood = lists:foldl(CountTrues, 0, Matches),
+                Num = length(KeyValues),
+                case Num == NumGood of
+                    true -> true;
+                    false ->
+                        lager:info("Data not yet correct: ~p mismatches",
+                                   [Num-NumGood]),
+                        false
+                end
+        end,
     Delay = 2000, % every two seconds until max time.
     Retry = MaxTime div Delay,
     Response =
