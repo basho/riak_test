@@ -449,7 +449,7 @@ staged_join(Node, PNode) ->
 
 plan_and_commit(Node) ->
     timer:sleep(500),
-    lager:info("planning and commiting cluster join"),
+    lager:info("planning cluster join"),
     case rpc:call(Node, riak_core_claimant, plan, []) of
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
@@ -461,6 +461,7 @@ plan_and_commit(Node) ->
     end.
 
 do_commit(Node) ->
+    lager:info("planning cluster commit"),
     case rpc:call(Node, riak_core_claimant, commit, []) of
         {error, plan_changed} ->
             lager:info("commit: plan changed"),
@@ -472,8 +473,9 @@ do_commit(Node) ->
             timer:sleep(100),
             maybe_wait_for_changes(Node),
             do_commit(Node);
-        {error,nothing_planned} ->
+        {error, nothing_planned} ->
             %% Assume plan actually committed somehow
+            lager:info("commit: nothing planned"),
             ok;
         ok ->
             ok
