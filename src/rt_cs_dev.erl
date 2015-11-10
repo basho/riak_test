@@ -243,7 +243,7 @@ deploy_nodes(NodeConfig) ->
     [ok = rt:wait_until_pingable(N) || N <- Nodes],
 
     %% %% Enable debug logging
-    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+    %% [rt:rpc_call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
 
     %% We have to make sure that riak_core_ring_manager is running before we can go on.
     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
@@ -288,7 +288,7 @@ stop_command(C) ->
     end.
 
 stop(Node) ->
-    RiakPid = rpc:call(Node, os, getpid, []),
+    RiakPid = rt:rpc_call(Node, os, getpid, []),
     N = node_id(Node),
     rtdev:run_riak(N, relpath(node_version(N)), "stop"),
     F = fun(_N) ->
@@ -486,7 +486,7 @@ teardown() ->
 whats_up() ->
     io:format("Here's what's running...~n"),
 
-    Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
+    Up = [rt:rpc_call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
 
 devpaths() ->

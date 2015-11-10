@@ -55,7 +55,7 @@ confirm() ->
 
     lager:info("reformatting indexes and verifying range query"),
     %% should rewrite 1 index (* n = 3), ignore 0 and have zero errors
-    {3, 0, 0} = rpc:call(Node, riak_kv_util, fix_incorrect_index_entries, []),
+    {3, 0, 0} = rt:rpc_call(Node, riak_kv_util, fix_incorrect_index_entries, []),
 
     Client1 = rt:pbc(Node),
     Results = riakc_pb_socket:get_index(Client1, TestBucket,
@@ -80,7 +80,7 @@ confirm() ->
     check_fixed_index_statuses(Node, true),
 
     lager:info("rewriting indexes in old format to prepare for downgrade"),
-    {3, 0, 0} = rpc:call(Node, riak_kv_util, fix_incorrect_index_entries, [[{downgrade, true}]]),
+    {3, 0, 0} = rt:rpc_call(Node, riak_kv_util, fix_incorrect_index_entries, [[{downgrade, true}]]),
 
     check_fixed_index_statuses(Node, false),
 
@@ -96,7 +96,7 @@ check_fixed_index_statuses(Node, E) when not is_list(E) ->
 check_fixed_index_statuses(Node, ExpectedStatuses) ->
     lager:info("Verifying fixed index status of ~p is one of ~p for all partitions",
                [Node, ExpectedStatuses]),
-    Statuses = rpc:call(Node, riak_kv_status, vnode_status, []),
+    Statuses = rt:rpc_call(Node, riak_kv_status, vnode_status, []),
     BadIndexes = [{Idx, proplists:get_value(fixed_indexes, Status)} ||
                      {Idx, [{backend_status,_,Status}]} <- Statuses,
                      not fixed_index_status_ok(Status, ExpectedStatuses)],
@@ -107,7 +107,7 @@ check_fixed_index_statuses(Node, ExpectedStatuses) ->
         false ->
             IncompleteIndexes = [Idx || {Idx, [{backend_status,_,Status}]} <- Statuses,
                                         fixed_index_status_ok(Status, [false])],
-            RPCStatus = rpc:call(Node, riak_kv_status, fixed_index_status, []),
+            RPCStatus = rt:rpc_call(Node, riak_kv_status, fixed_index_status, []),
             case IncompleteIndexes of
                 [] -> ?assert(RPCStatus);
                 _ -> ?assertNot(RPCStatus)

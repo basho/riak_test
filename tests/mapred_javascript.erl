@@ -61,7 +61,7 @@ confirm() ->
 load_test_data([Node|_]) ->
     %% creates foonum/1..5 - this is what populates ?INTS_BUCKET
     lager:info("Filling INTS_BUCKET (~s)", [?INTS_BUCKET]),
-    ok = rpc:call(Node, riak_kv_mrc_pipe, example_setup, [?NUM_INTS]),
+    ok = rt:rpc_call(Node, riak_kv_mrc_pipe, example_setup, [?NUM_INTS]),
 
     lager:info("Adding Javascript source objects"),
     Map = riakc_obj:new(?JS_BUCKET, <<"map">>, ?MAP_JS, "text/plain"),
@@ -74,7 +74,7 @@ load_test_data([Node|_]) ->
 
 
 rpcmr(Node, Inputs, Query) ->
-    rpc:call(Node, riak_kv_mrc_pipe, mapred, [Inputs, Query]).
+    rt:rpc_call(Node, riak_kv_mrc_pipe, mapred, [Inputs, Query]).
 
 %% @doc map & reduce with jsanon-Source
 jsanon_source(Nodes) ->

@@ -71,7 +71,7 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
     %% keys: 1..NumKeysAOnly
     %%---------------------------------------------------------
 
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
     rt:log_to_nodes(AllNodes, "Test fullsync from cluster A leader ~p to cluster B", [LeaderA]),
     lager:info("Test fullsync from cluster A leader ~p to cluster B", [LeaderA]),
@@ -95,7 +95,7 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
 update_props(DefaultProps, NewProps, Node, Nodes, Bucket) ->
     lager:info("Setting bucket properties ~p for bucket ~p on node ~p", 
                [NewProps, Bucket, Node]),
-    rpc:call(Node, riak_core_bucket, set_bucket, [Bucket, NewProps]),    
+    rt:rpc_call(Node, riak_core_bucket, set_bucket, [Bucket, NewProps]),
     rt:wait_until_ring_converged(Nodes),
 
     UpdatedProps = get_current_bucket_props(Nodes, Bucket),
@@ -107,7 +107,7 @@ get_current_bucket_props(Nodes, Bucket) when is_list(Nodes) ->
     Node = lists:nth(length(Nodes), Nodes),
     get_current_bucket_props(Node, Bucket);
 get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
-    rpc:call(Node, 
+    rt:rpc_call(Node,
              riak_core_bucket,
              get_bucket,
              [Bucket]).

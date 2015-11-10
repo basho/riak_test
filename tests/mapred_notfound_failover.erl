@@ -59,10 +59,10 @@ confirm() ->
 load_test_data([Node|_]) ->
     %% creates foonum/1..?NUM_INTS - this is what populates ?INTS_BUCKET
     lager:info("Filling INTS_BUCKET (~s)", [?INTS_BUCKET]),
-    ok = rpc:call(Node, riak_kv_mrc_pipe, example_setup, [?NUM_INTS]).
+    ok = rt:rpc_call(Node, riak_kv_mrc_pipe, example_setup, [?NUM_INTS]).
 
 rpcmr(Node, Inputs, Query) ->
-    rpc:call(Node, riak_kv_mrc_pipe, mapred, [Inputs, Query]).
+    rt:rpc_call(Node, riak_kv_mrc_pipe, mapred, [Inputs, Query]).
 
 %% @doc check the condition that used to bring down a pipe in
 %% https://github.com/basho/riak_kv/issues/290 (this version checks it
@@ -84,10 +84,10 @@ replica_notfound(Node, {HashMod, HashFun},
     %% and now kill the first replica; this will make the vnode local
     %% to the kvget pipe fitting return an error (because it's the
     %% memory backend), so it will have to look at another kv vnode
-    Hash = rpc:call(Node, HashMod, HashFun, [{MissingBucket, MissingKey}]),
+    Hash = rt:rpc_call(Node, HashMod, HashFun, [{MissingBucket, MissingKey}]),
     [{{PrimaryIndex, PrimaryNode},_}] =
-        rpc:call(Node, riak_core_apl, get_primary_apl, [Hash, 1, riak_kv]),
-    {ok, VnodePid} = rpc:call(PrimaryNode,
+        rt:rpc_call(Node, riak_core_apl, get_primary_apl, [Hash, 1, riak_kv]),
+    {ok, VnodePid} = rt:rpc_call(PrimaryNode,
                               riak_core_vnode_manager, get_vnode_pid,
                               [PrimaryIndex, riak_kv_vnode]),
     exit(VnodePid, kill).
@@ -102,10 +102,10 @@ run_test([Node|_], PrepareFun) ->
           [{reduce_phase_batch_size, 1}, {wait, {self(), WaitRef}}],
           true}],
     %% mapred_plan must happen on riak node to access ring manager
-    PipeSpec = rpc:call(Node, riak_kv_mrc_pipe, mapred_plan, [Spec]),
+    PipeSpec = rt:rpc_call(Node, riak_kv_mrc_pipe, mapred_plan, [Spec]),
     %% make it easier to fill
     SmallPipeSpec = [ S#fitting_spec{q_limit=QLimit} || S <- PipeSpec ],
-    {ok, Pipe} = rpc:call(Node, riak_pipe, exec,
+    {ok, Pipe} = rt:rpc_call(Node, riak_pipe, exec,
                           [SmallPipeSpec,
                            [{log, sink}, {trace, [error, queue_full]},
                             {sink, rt_pipe:self_sink()}]]),
@@ -119,15 +119,15 @@ run_test([Node|_], PrepareFun) ->
     ?MODULE:PrepareFun(Node, ChashFun, MissingBucket, MissingKey, ValueRef),
 
     %% get main workers spun up
-    ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, ExistingKey]),
+    ok = rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, ExistingKey]),
     receive {waiting, WaitRef, ReducePid} -> ok end,
 
     %% reduce is now blocking, fill its queue
-    [ ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, ExistingKey])
+    [ ok = rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, ExistingKey])
       || _ <- lists:seq(1, QLimit) ],
 
     {NValMod,NValFun} = (hd(SmallPipeSpec))#fitting_spec.nval,
-    NVal = rpc:call(Node, NValMod, NValFun, [ExistingKey]),
+    NVal = rt:rpc_call(Node, NValMod, NValFun, [ExistingKey]),
 
     %% each of N paths through the primary preflist
     [ fill_map_queue(Node, Pipe, QLimit, ExistingKey)
@@ -136,12 +136,12 @@ run_test([Node|_], PrepareFun) ->
     %% check get queue actually full
     ExpectedTOs = lists:duplicate(NVal, timeout),
     {error, ExpectedTOs} =
-        rpc:call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock]),
+        rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock]),
 
     %% now inject a missing key that would need to
     %% failover to the full queue
     KeyDataRef = make_ref(),
-    ok = rpc:call(Node, riak_pipe, queue_work,
+    ok = rt:rpc_call(Node, riak_pipe, queue_work,
            [Pipe, {{MissingBucket, MissingKey}, KeyDataRef}]),
     %% and watch for it to block in the reduce queue
     %% *this* is when pre-patched code would fail:
@@ -171,30 +171,30 @@ run_test([Node|_], PrepareFun) ->
 
 fill_map_queue(Node, Pipe, QLimit, ExistingKey) ->
     %% give the map worker one more to block on
-    ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock]),
+    ok = rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock]),
     consume_queue_full(Pipe, 1),
     %% map is now blocking, fill its queue
-    [ ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock])
+    [ ok = rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock])
       || _ <- lists:seq(1, QLimit) ],
     %% give the get worker one more to block on
-    ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock]),
+    ok = rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock]),
     consume_queue_full(Pipe, {xform_map, 0}),
     %% get is now blocking, fill its queue
-    [ ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock])
+    [ ok = rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, ExistingKey, noblock])
       || _ <- lists:seq(1, QLimit) ],
     ok.
 
 find_adjacent_key(Node, {HashMod, HashFun}, ExistingKey) ->
-    Hash = rpc:call(Node, HashMod, HashFun, [ExistingKey]),
-    [ExistingHead|_] = rpc:call(Node, riak_core_apl, get_primary_apl,
+    Hash = rt:rpc_call(Node, HashMod, HashFun, [ExistingKey]),
+    [ExistingHead|_] = rt:rpc_call(Node, riak_core_apl, get_primary_apl,
                                 [Hash, 2, riak_kv]),
     [K|_] = lists:dropwhile(
               fun(N) ->
                       K = {<<"foonum_missing">>,
                            list_to_binary(integer_to_list(N))},
-                      KH = rpc:call(Node, HashMod, HashFun, [K]),
+                      KH = rt:rpc_call(Node, HashMod, HashFun, [K]),
                       [_,Second] =
-                          rpc:call(Node, riak_core_apl, get_primary_apl,
+                          rt:rpc_call(Node, riak_core_apl, get_primary_apl,
                                    [KH, 2, riak_kv]),
                       Second /= ExistingHead
               end,

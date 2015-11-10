@@ -158,7 +158,7 @@ getpid_up_test(Node) ->
     lager:info("Test riak getpid on ~s", [Node]),
     {ok, PidOut} = rt:riak(Node, ["getpid"]),
     ?assertNot(rt:str(PidOut, "")),
-    ?assert(rt:str(PidOut, rpc:call(Node, os, getpid, []))),
+    ?assert(rt:str(PidOut, rt:rpc_call(Node, os, getpid, []))),
     ok.
 
 getpid_down_test(Node) ->

@@ -47,9 +47,9 @@ prepare_cluster_data(TestBucket, NumKeysAOnly, _NumKeysBoth, [AFirst|_] = ANodes
     ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
 
     %% get the leader for the first cluster
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
-    {ok, {_IP, Port}} = rpc:call(BFirst, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(BFirst, application, get_env,
                                  [riak_core, cluster_mgr]),
 
     lager:info("connect cluster A:~p to B on port ~p", [LeaderA, Port]),

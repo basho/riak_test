@@ -56,7 +56,7 @@ confirm() ->
     pass.
 
 run_reformat(Node, KillHandoffs) ->
-    {_Success, _Ignore, Error} = rpc:call(Node,
+    {_Success, _Ignore, Error} = rt:rpc_call(Node,
                                           riak_kv_reformat,
                                           run,
                                           [v0, [{kill_handoffs, KillHandoffs}]]),

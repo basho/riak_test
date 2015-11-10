@@ -60,7 +60,7 @@ load_code(Node, Globs) ->
     ok.
 
 add_and_save(Node, Intercepts) ->
-    CodePaths = rpc:call(Node, code, get_path, []),
+    CodePaths = rt:rpc_call(Node, code, get_path, []),
     [PatchesDir] = [P || P <- CodePaths, lists:suffix("basho-patches", P)],
     add(Node, Intercepts, PatchesDir).
 
@@ -76,7 +76,7 @@ add(Node, {Target, Mapping}, OutDir) ->
 
 add(Node, {Target, Intercept, Mapping}, OutDir) ->
     NMapping = [transform_anon_fun(M) || M <- Mapping],
-    ok = rpc:call(Node, intercept, add, [Target, Intercept, NMapping, OutDir]).
+    ok = rt:rpc_call(Node, intercept, add, [Target, Intercept, NMapping, OutDir]).
 
 %% The following function transforms anonymous function mappings passed
 %% from an Erlang shell. Anonymous intercept functions from compiled code
@@ -96,9 +96,9 @@ transform_anon_fun(Mapping) ->
 
 remote_compile_and_load(Node, F) ->
     lager:debug("Compiling and loading file ~s on node ~s", [F, Node]),
-    {ok, _, Bin} = rpc:call(Node, compile, file, [F, [binary]]),
+    {ok, _, Bin} = rt:rpc_call(Node, compile, file, [F, [binary]]),
     ModName = list_to_atom(filename:basename(F, ".erl")),
-    {module, _} = rpc:call(Node, code, load_binary, [ModName, F, Bin]),
+    {module, _} = rt:rpc_call(Node, code, load_binary, [ModName, F, Bin]),
     ok.
 
 wait_until_loaded(Node) ->
@@ -125,7 +125,7 @@ are_intercepts_loaded(Node) ->
     are_intercepts_loaded(Node, [default_intercept_path_glob()]).
 
 are_intercepts_loaded(Node, Globs) ->
-    Results = [rpc:call(Node, code, is_loaded, [Mod])
+    Results = [rt:rpc_call(Node, code, is_loaded, [Mod])
                || Mod <- files_to_mods(intercept_files(Globs))],
     lists:all(fun is_loaded/1, Results).
 

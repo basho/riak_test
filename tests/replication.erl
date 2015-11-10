@@ -57,7 +57,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             ?assertEqual(ok, wait_until_leader_converge(BNodes)),
 
             %% get the leader for the first cluster
-            LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
+            LeaderA = rt:rpc_call(AFirst, riak_repl_leader, leader_node, []),
 
             %% list of listeners not on the leader node
             NonLeaderListeners = lists:keydelete(LeaderA, 3, Listeners),
@@ -86,7 +86,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             lager:info("waiting for leader to converge on cluster B"),
             ?assertEqual(ok, wait_until_leader_converge(BNodes)),
             %% get the leader for the first cluster
-            LeaderA = rpc:call(AFirst, riak_repl_leader, leader_node, []),
+            LeaderA = rt:rpc_call(AFirst, riak_repl_leader, leader_node, []),
             lager:info("Leader on cluster A is ~p", [LeaderA]),
             [{Ip, Port, _}|_] = get_listeners(LeaderA)
     end,
@@ -94,7 +94,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:log_to_nodes(AllNodes, "Write data to A"),
     %% write some data on A
     ?assertEqual(ok, wait_until_connection(LeaderA)),
-    %io:format("~p~n", [rpc:call(LeaderA, riak_repl_console, status, [quiet])]),
+    %io:format("~p~n", [rt:rpc_call(LeaderA, riak_repl_console, status, [quiet])]),
     lager:info("Writing 100 more keys to ~p", [LeaderA]),
     ?assertEqual([], do_write(LeaderA, 101, 200, TestBucket, 2)),
 
@@ -149,7 +149,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     rt:wait_until_unpingable(LeaderA),
     wait_until_leader(ASecond),
 
-    LeaderA2 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
+    LeaderA2 = rt:rpc_call(ASecond, riak_repl_leader, leader_node, []),
 
     lager:info("New leader is ~p", [LeaderA2]),
 
@@ -165,7 +165,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     ?assertEqual(0, wait_for_reads(BFirst, 201, 300, TestBucket, 2)),
 
     %% get the leader for the first cluster
-    LeaderB = rpc:call(BFirst, riak_repl_leader, leader_node, []),
+    LeaderB = rt:rpc_call(BFirst, riak_repl_leader, leader_node, []),
 
     lager:info("Testing client failover: stopping ~p", [LeaderB]),
     rt:stop(LeaderB),
@@ -173,7 +173,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     BSecond = hd(BNodes -- [LeaderB]),
     wait_until_leader(BSecond),
 
-    LeaderB2 = rpc:call(BSecond, riak_repl_leader, leader_node, []),
+    LeaderB2 = rt:rpc_call(BSecond, riak_repl_leader, leader_node, []),
 
     lager:info("New leader is ~p", [LeaderB2]),
 
@@ -215,7 +215,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
             %% Check that repl leader is LeaderA
             %% Check that LeaderA2 has ceeded socket back to LeaderA
 
-            lager:info("Leader: ~p", [rpc:call(ASecond, riak_repl_leader, leader_node, [])]),
+            lager:info("Leader: ~p", [rt:rpc_call(ASecond, riak_repl_leader, leader_node, [])]),
             lager:info("LeaderA: ~p", [LeaderA]),
             lager:info("LeaderA2: ~p", [LeaderA2]),
 
@@ -223,31 +223,31 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             lager:info("Simulation partition to force leader re-election"),
 
-            OldCookie = rpc:call(LeaderA2, erlang, get_cookie, []),
+            OldCookie = rt:rpc_call(LeaderA2, erlang, get_cookie, []),
             NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
-            rpc:call(LeaderA2, erlang, set_cookie, [LeaderA2, NewCookie]),
+            rt:rpc_call(LeaderA2, erlang, set_cookie, [LeaderA2, NewCookie]),
 
-            [ rpc:call(LeaderA2, erlang, disconnect_node, [Node]) ||
+            [ rt:rpc_call(LeaderA2, erlang, disconnect_node, [Node]) ||
                 Node <- ANodes -- [LeaderA2]],
-            [ rpc:call(Node, erlang, disconnect_node, [LeaderA2]) ||
+            [ rt:rpc_call(Node, erlang, disconnect_node, [LeaderA2]) ||
                 Node <- ANodes -- [LeaderA2]],
 
             wait_until_new_leader(hd(ANodes -- [LeaderA2]), LeaderA2),
-            InterimLeader = rpc:call(LeaderA, riak_repl_leader, leader_node, []),
+            InterimLeader = rt:rpc_call(LeaderA, riak_repl_leader, leader_node, []),
             lager:info("Interim leader: ~p", [InterimLeader]),
 
-            rpc:call(LeaderA2, erlang, set_cookie, [LeaderA2, OldCookie]),
+            rt:rpc_call(LeaderA2, erlang, set_cookie, [LeaderA2, OldCookie]),
 
-            [ rpc:call(LeaderA2, net_adm, ping, [Node]) ||
+            [ rt:rpc_call(LeaderA2, net_adm, ping, [Node]) ||
                 Node <- ANodes -- [LeaderA2]],
-            [ rpc:call(Node, net_adm, ping, [LeaderA2]) ||
+            [ rt:rpc_call(Node, net_adm, ping, [LeaderA2]) ||
                 Node <- ANodes -- [LeaderA2]],
 
             %% there's no point in writing anything until the leaders
             %% converge, as we can drop writes in the middle of an election
             wait_until_leader_converge(ANodes),
 
-            LeaderA3 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
+            LeaderA3 = rt:rpc_call(ASecond, riak_repl_leader, leader_node, []),
 
             wait_until_connection(LeaderA3),
 
@@ -296,7 +296,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
                     timer:sleep(1000)
             end,
 
-            LeaderA4 = rpc:call(ASecond, riak_repl_leader, leader_node, []),
+            LeaderA4 = rt:rpc_call(ASecond, riak_repl_leader, leader_node, []),
 
             lager:info("write 100 keys to a {repl, false} bucket"),
             ?assertEqual([], do_write(ASecond, 1, 100, NoRepl, 2)),
@@ -366,7 +366,7 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
     fin.
 
 verify_sites_balanced(NumSites, BNodes0) ->
-    Leader = rpc:call(hd(BNodes0), riak_repl_leader, leader_node, []),
+    Leader = rt:rpc_call(hd(BNodes0), riak_repl_leader, leader_node, []),
     case node_has_version(Leader, "1.2.0") of
         true ->
             BNodes = nodes_with_version(BNodes0, "1.2.0") -- [Leader],
@@ -388,7 +388,7 @@ verify_sites_balanced(NumSites, BNodes0) ->
 
 %% does the node meet the version requirement?
 node_has_version(Node, Version) ->
-    {_, NodeVersion} =  rpc:call(Node, init, script_id, []),
+    {_, NodeVersion} =  rt:rpc_call(Node, init, script_id, []),
     case NodeVersion of
         current ->
             %% current always satisfies any version check
@@ -404,7 +404,7 @@ nodes_all_have_version(Nodes, Version) ->
     Nodes == nodes_with_version(Nodes, Version).
 
 client_count(Node) ->
-    Clients = rpc:call(Node, supervisor, which_children, [riak_repl_client_sup]),
+    Clients = rt:rpc_call(Node, supervisor, which_children, [riak_repl_client_sup]),
     length(Clients).
 
 gen_fake_listeners(Num) ->
@@ -423,13 +423,13 @@ add_fake_sites([Node|_], Listeners) ->
 add_site(Node, {IP, Port, Name}) ->
     lager:info("Add site ~p ~p:~p at node ~p", [Name, IP, Port, Node]),
     Args = [IP, integer_to_list(Port), Name],
-    Res = rpc:call(Node, riak_repl_console, add_site, [Args]),
+    Res = rt:rpc_call(Node, riak_repl_console, add_site, [Args]),
     ?assertEqual(ok, Res),
     timer:sleep(timer:seconds(5)).
 
 del_site([Node|_]=Nodes, Name) ->
     lager:info("Del site ~p at ~p", [Name, Node]),
-    Res = rpc:call(Node, riak_repl_console, del_site, [[Name]]),
+    Res = rt:rpc_call(Node, riak_repl_console, del_site, [[Name]]),
     ?assertEqual(ok, Res),
     rt:wait_until_ring_converged(Nodes),
     timer:sleep(timer:seconds(5)).
@@ -445,7 +445,7 @@ verify_listener(Node, Strs) ->
     lager:info("Verify listeners ~p ~p", [Node, Strs]),
     rt:wait_until(Node,
         fun(_) ->
-                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
                 lists:all(fun(Str) ->
                             lists:keymember(Str, 2, Status)
                     end, Strs)
@@ -462,20 +462,20 @@ add_listeners(Nodes=[FirstNode|_]) ->
 add_listener(N, Node, IP, Port) ->
     lager:info("Adding repl listener to ~p ~s:~p", [Node, IP, Port]),
     Args = [[atom_to_list(Node), IP, integer_to_list(Port)]],
-    Res = rpc:call(N, riak_repl_console, add_listener, Args),
+    Res = rt:rpc_call(N, riak_repl_console, add_listener, Args),
     ?assertEqual(ok, Res).
 
 del_listeners(Node) ->
     Listeners = get_listeners(Node),
     lists:foreach(fun(Listener={IP, Port, N}) ->
                 lager:info("deleting listener ~p on ~p", [Listener, Node]),
-                Res = rpc:call(Node, riak_repl_console, del_listener,
+                Res = rt:rpc_call(Node, riak_repl_console, del_listener,
                     [[atom_to_list(N), IP, integer_to_list(Port)]]),
                 ?assertEqual(ok, Res)
         end, Listeners).
 
 get_listeners(Node) ->
-    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
     %% *sigh*
     [
         begin
@@ -493,7 +493,7 @@ wait_for_site_ips(Leader, Site, Listeners) ->
 
 verify_site_ips_fun(Leader, Site, Listeners) ->
     fun() ->
-            Status = rpc:call(Leader, riak_repl_console, status, [quiet]),
+            Status = rt:rpc_call(Leader, riak_repl_console, status, [quiet]),
             Key = lists:flatten([Site, "_ips"]),
             IPStr = proplists:get_value(Key, Status),
             lager:info("IPSTR: ~p", [IPStr]),
@@ -506,7 +506,7 @@ verify_site_ips_fun(Leader, Site, Listeners) ->
     end.
 
 make_bucket([Node|_]=Nodes, Name, Args) ->
-    Res = rpc:call(Node, riak_core_bucket, set_bucket, [Name, Args]),
+    Res = rt:rpc_call(Node, riak_core_bucket, set_bucket, [Name, Args]),
     rt:wait_until_ring_converged(Nodes),
     ?assertEqual(ok, Res).
 
@@ -514,13 +514,13 @@ start_and_wait_until_fullsync_complete(Node) ->
     start_and_wait_until_fullsync_complete(Node, 20).
 
 start_and_wait_until_fullsync_complete(Node, Retries) ->
-    Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
+    Status0 = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
     Count = proplists:get_value(server_fullsyncs, Status0) + 1,
     lager:info("waiting for fullsync count to be ~p", [Count]),
 
     lager:info("Starting fullsync on ~p (~p)", [Node,
             rtdev:node_version(rtdev:node_id(Node))]),
-    rpc:call(Node, riak_repl_console, start_fullsync, [[]]),
+    rt:rpc_call(Node, riak_repl_console, start_fullsync, [[]]),
 
     %% sleep because of the old bug where stats will crash if you call it too
     %% soon after starting a fullsync
@@ -538,7 +538,7 @@ start_and_wait_until_fullsync_complete(Node, Retries) ->
 
 make_fullsync_wait_fun(Node, Count) ->
     fun() ->
-            Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+            Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
             case Status of
                 {badrpc, _} ->
                     false;
@@ -557,7 +557,7 @@ wait_until_is_leader(Node) ->
     rt:wait_until(Node, fun is_leader/1).
 
 is_leader(Node) ->
-    case rpc:call(Node, riak_repl_leader, leader_node, []) of
+    case rt:rpc_call(Node, riak_repl_leader, leader_node, []) of
         {badrpc, _} ->
             lager:info("Badrpc"),
             false;
@@ -572,7 +572,7 @@ wait_until_is_not_leader(Node) ->
     rt:wait_until(Node, fun is_not_leader/1).
 
 is_not_leader(Node) ->
-    case rpc:call(Node, riak_repl_leader, leader_node, []) of
+    case rt:rpc_call(Node, riak_repl_leader, leader_node, []) of
         {badrpc, _} ->
             lager:info("Badrpc"),
             false;
@@ -587,7 +587,7 @@ wait_until_leader(Node) ->
 wait_until_new_leader(Node, OldLeader) ->
     Res = rt:wait_until(Node,
         fun(_) ->
-                case rpc:call(Node, riak_repl_console, status, [quiet]) of
+                case rt:rpc_call(Node, riak_repl_console, status, [quiet]) of
                     {badrpc, _} ->
                         false;
                     Status ->
@@ -607,7 +607,7 @@ wait_until_leader_converge([Node|_] = Nodes) ->
     rt:wait_until(Node,
         fun(_) ->
                 LeaderResults =
-                    [get_leader(rpc:call(N, riak_repl_console, status, [quiet])) ||
+                    [get_leader(rt:rpc_call(N, riak_repl_console, status, [quiet])) ||
                         N <- Nodes],
                 {Leaders, Errors} =
                     lists:partition(leader_result_filter_fun(), LeaderResults),
@@ -642,7 +642,7 @@ leader_result_filter_fun() ->
 wait_until_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
-                case rpc:call(Node, riak_repl_console, status, [quiet]) of
+                case rt:rpc_call(Node, riak_repl_console, status, [quiet]) of
                     {badrpc, _} ->
                         false;
                     Status ->
@@ -664,7 +664,7 @@ wait_until_connection(Node) ->
 wait_until_no_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
-                case rpc:call(Node, riak_repl_console, status, [quiet]) of
+                case rt:rpc_call(Node, riak_repl_console, status, [quiet]) of
                     {badrpc, _} ->
                         false;
                     Status ->

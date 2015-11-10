@@ -104,9 +104,9 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) 
             ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
 
             %% Get the leader for the first cluster.
-            LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []), %% Ask Cluster "A" Node 1 who the leader is.
+            LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []), %% Ask Cluster "A" Node 1 who the leader is.
 
-            {ok, {_IP, BFirstPort}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
+            {ok, {_IP, BFirstPort}} = rt:rpc_call(BFirst, application, get_env, [riak_core, cluster_mgr]),
 
             lager:info("connect cluster A:~p to B on port ~p", [LeaderA, BFirstPort]),
             repl_util:connect_cluster(LeaderA, "127.0.0.1", BFirstPort),
@@ -128,11 +128,11 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) 
             
             ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
             %% get the leader for the first cluster
-            LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+            LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
             
             lager:info("Leader on cluster A is ~p", [LeaderA]),
             lager:info("BFirst on cluster B is ~p", [BFirst]),
-            {ok, {_IP, BFirstPort}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
+            {ok, {_IP, BFirstPort}} = rt:rpc_call(BFirst, application, get_env, [riak_core, cluster_mgr]),
             lager:info("B is ~p with port ~p", [BFirst, BFirstPort]) 
     end,
 
@@ -154,7 +154,7 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) 
             log_to_nodes(ANodes++BNodes, "Test fullsync with leader ~p", [LeaderA]),
             repl_util:start_and_wait_until_fullsync_complete(LeaderA),
 
-            case rpc:call(LeaderA, init, script_id, []) of
+            case rt:rpc_call(LeaderA, init, script_id, []) of
                 {"riak", Vsn} when Vsn > "1.4" ->
                     %% check that the number of successful FS source exists matches the number of partitions
                     NumExits = repl_util:get_fs_coord_status_item(LeaderA, "B", successful_exits),
@@ -181,8 +181,8 @@ disconnected_cluster_fsync_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
   
     TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-discon_fsync_replication_tests">>,
-    {ok, {_IP, BFirstPort}} = rpc:call(BFirst, application, get_env,[riak_core, cluster_mgr]),
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    {ok, {_IP, BFirstPort}} = rt:rpc_call(BFirst, application, get_env,[riak_core, cluster_mgr]),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
     log_to_nodes(ANodes ++ BNodes, "Starting disconnected full sync test"),
 
@@ -229,7 +229,7 @@ master_failover_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
   
     TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-master_failover_test">>,
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
     log_to_nodes(ANodes ++ BNodes , "Failover tests"),
     log_to_nodes(ANodes ++ BNodes, "Testing master failover: stopping ~p", [LeaderA]),
@@ -240,7 +240,7 @@ master_failover_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     ASecond = hd(ANodes -- [LeaderA]),
     repl_util:wait_until_leader(ASecond),
 
-    LeaderA2 = rpc:call(ASecond, riak_core_cluster_mgr, get_leader, []),
+    LeaderA2 = rt:rpc_call(ASecond, riak_core_cluster_mgr, get_leader, []),
 
     lager:info("New leader is ~p", [LeaderA2]),
     ?assertEqual(ok, repl_util:wait_until_connection(LeaderA2)),
@@ -254,7 +254,7 @@ master_failover_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     ?assertEqual(0, repl_util:wait_for_reads(BFirst, 201, 300, TestBucket, 2)),
 
     %% Get the leader for Cluster "B"
-    LeaderB = rpc:call(BFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderB = rt:rpc_call(BFirst, riak_core_cluster_mgr, get_leader, []),
 
     log_to_nodes(ANodes ++ BNodes, "Testing client failover: stopping ~p", [LeaderB]),
 
@@ -264,7 +264,7 @@ master_failover_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     BSecond = hd(BNodes -- [LeaderB]),
     repl_util:wait_until_leader(BSecond),
 
-    LeaderB2 = rpc:call(BSecond, riak_core_cluster_mgr, get_leader, []),
+    LeaderB2 = rt:rpc_call(BSecond, riak_core_cluster_mgr, get_leader, []),
 
     lager:info("New leader is ~p", [LeaderB2]),
     ?assertEqual(ok, repl_util:wait_until_connection(LeaderA2)),
@@ -307,7 +307,7 @@ network_partition_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 
     TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
     TestBucket = <<TestHash/binary, "-network_partition_test">>,
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
     log_to_nodes(ANodes ++ BNodes, "Starting network partition test"),
 
@@ -316,28 +316,28 @@ network_partition_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     %% Check that repl leader is LeaderA
     %% Check that LeaderA2 has ceeded socket back to LeaderA
 
-    %%lager:info("Leader: ~p", [rpc:call(ASecond, riak_core_cluster_mgr, get_leader, [])]),
+    %%lager:info("Leader: ~p", [rt:rpc_call(ASecond, riak_core_cluster_mgr, get_leader, [])]),
     %%lager:info("LeaderA: ~p", [LeaderA]),
     %%lager:info("LeaderA2: ~p", [LeaderA2]),
 
     ?assertEqual(ok, repl_util:wait_until_connection(LeaderA)),
 
     %% Swap cookie on LeaderA to simulate a network partition.
-    OldCookie = rpc:call(LeaderA, erlang, get_cookie, []),
+    OldCookie = rt:rpc_call(LeaderA, erlang, get_cookie, []),
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
-    rpc:call(LeaderA, erlang, set_cookie, [LeaderA, NewCookie]),
+    rt:rpc_call(LeaderA, erlang, set_cookie, [LeaderA, NewCookie]),
 
-    [rpc:call(LeaderA, erlang, disconnect_node, [Node]) || Node <- ANodes -- [LeaderA]],
-    [rpc:call(Node, erlang, disconnect_node, [LeaderA]) || Node <- ANodes -- [LeaderA]],
+    [rt:rpc_call(LeaderA, erlang, disconnect_node, [Node]) || Node <- ANodes -- [LeaderA]],
+    [rt:rpc_call(Node, erlang, disconnect_node, [LeaderA]) || Node <- ANodes -- [LeaderA]],
 
     repl_util:wait_until_new_leader(hd(ANodes -- [LeaderA]), LeaderA),
-    InterimLeader = rpc:call(LeaderA, riak_core_cluster_mgr, get_leader, []),
+    InterimLeader = rt:rpc_call(LeaderA, riak_core_cluster_mgr, get_leader, []),
     lager:info("Interim leader: ~p", [InterimLeader]),
 
-    rpc:call(LeaderA, erlang, set_cookie, [LeaderA, OldCookie]),
+    rt:rpc_call(LeaderA, erlang, set_cookie, [LeaderA, OldCookie]),
 
-    [rpc:call(LeaderA, net_adm, ping, [Node]) || Node <- ANodes -- [LeaderA]],
-    [rpc:call(Node, net_adm, ping, [LeaderA]) || Node <- ANodes -- [LeaderA]],
+    [rt:rpc_call(LeaderA, net_adm, ping, [Node]) || Node <- ANodes -- [LeaderA]],
+    [rt:rpc_call(Node, net_adm, ping, [LeaderA]) || Node <- ANodes -- [LeaderA]],
 
     %% There's no point in writing anything until the leaders converge, as we
     %% can drop writes in the middle of an election
@@ -345,7 +345,7 @@ network_partition_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     
     ASecond = hd(ANodes -- [LeaderA]),
 
-    lager:info("Leader: ~p", [rpc:call(ASecond, riak_core_cluster_mgr, get_leader, [])]),
+    lager:info("Leader: ~p", [rt:rpc_call(ASecond, riak_core_cluster_mgr, get_leader, [])]),
     lager:info("Writing 2 more keys to ~p", [LeaderA]),
     ?assertEqual([], repl_util:do_write(LeaderA, 1301, 1302, TestBucket, 2)),
 
@@ -381,8 +381,8 @@ bucket_sync_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     FullsyncOnly = <<TestHash/binary, "-fullsync_only">>,
     RealtimeOnly = <<TestHash/binary, "-realtime_only">>,
     NoRepl = <<TestHash/binary, "-no_replication">>,
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
-    {ok, {_IP, BFirstPort}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    {ok, {_IP, BFirstPort}} = rt:rpc_call(BFirst, application, get_env, [riak_core, cluster_mgr]),
 
     log_to_nodes(ANodes ++ BNodes, "Starting bucket sync test"),
 
@@ -480,7 +480,7 @@ offline_queueing_tests([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     log_to_nodes(ANodes ++ BNodes, "Testing offline realtime queueing"),
     lager:info("Testing offline realtime queueing"),
 
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
     lager:info("Stopping realtime, queue will build"),
     repl_util:stop_realtime(LeaderA, "B"),
@@ -517,7 +517,7 @@ offline_queueing_tests([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     lager:info("Verifying 100 keys are missing from ~p", [BFirst]),
     repl_util:read_from_cluster(BFirst, 901, 1000, TestBucket, 100),
 
-    io:format("queue status: ~p", [rpc:call(Target, riak_repl2_rtq, status, [])]),
+    io:format("queue status: ~p", [rt:rpc_call(Target, riak_repl2_rtq, status, [])]),
 
     lager:info("Stopping node ~p", [Target]),
 
@@ -549,7 +549,7 @@ pb_write_during_shutdown([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 
     log_to_nodes(ANodes ++ BNodes, "Testing protocol buffer writes during shutdown"),
 
-    LeaderA = rpc:call( AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call( AFirst, riak_core_cluster_mgr, get_leader, []),
     Target = hd( ANodes -- [LeaderA]),
 
     ConnInfo = proplists:get_value(Target, rt:connection_info([Target])),
@@ -621,7 +621,7 @@ http_write_during_shutdown([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 
     log_to_nodes(ANodes ++ BNodes, "Testing http writes during shutdown"),
 
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
     Target = hd(ANodes -- [LeaderA]),
 
     ConnInfo = proplists:get_value(Target, rt:connection_info([Target])),

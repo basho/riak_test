@@ -80,7 +80,7 @@ check_throttle_and_expiration() ->
 
     %% Test manual expiration
     lager:info("Disabling automatic expiration"),
-    rpc:call(Node, application, set_env,
+    rt:rpc_call(Node, application, set_env,
              [riak_kv, anti_entropy_expire, never]),
     lager:info("Manually expiring hashtree for partition 0"),
     expire_tree(Node, 0),
@@ -94,29 +94,29 @@ time_build(Node) ->
     Duration.
 
 rebuild(Node, Limit, Wait) ->
-    rpc:call(Node, application, set_env,
+    rt:rpc_call(Node, application, set_env,
              [riak_kv, anti_entropy_build_throttle, {Limit, Wait}]),
-    rpc:call(Node, application, set_env,
+    rt:rpc_call(Node, application, set_env,
              [riak_kv, anti_entropy_expire, 0]),
     timer:sleep(1500),
     disable_aae(Node),
-    rpc:call(Node, ets, delete_all_objects, [ets_riak_kv_entropy]),
+    rt:rpc_call(Node, ets, delete_all_objects, [ets_riak_kv_entropy]),
     enable_aae(Node),
     time_build(Node).
 
 enable_aae(Node) ->
-    rpc:call(Node, riak_kv_entropy_manager, enable, []).
+    rt:rpc_call(Node, riak_kv_entropy_manager, enable, []).
 
 disable_aae(Node) ->
-    rpc:call(Node, riak_kv_entropy_manager, disable, []).
+    rt:rpc_call(Node, riak_kv_entropy_manager, disable, []).
 
 expire_tree(Node, Partition) ->
     Now = erlang:now(),
-    {ok, Tree} = rpc:call(Node, riak_kv_vnode, hashtree_pid, [Partition]),
-    rpc:call(Node, riak_kv_index_hashtree, expire, [Tree]),
+    {ok, Tree} = rt:rpc_call(Node, riak_kv_vnode, hashtree_pid, [Partition]),
+    rt:rpc_call(Node, riak_kv_index_hashtree, expire, [Tree]),
     rt:wait_until(Node,
                   fun(_) ->
-                          Info = rpc:call(Node, riak_kv_entropy_info, compute_tree_info, []),
+                          Info = rt:rpc_call(Node, riak_kv_entropy_info, compute_tree_info, []),
                           {0, Built} = lists:keyfind(0, 1, Info),
                           Built > Now
                   end),

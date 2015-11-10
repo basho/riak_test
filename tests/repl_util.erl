@@ -62,7 +62,7 @@ make_cluster(Nodes) ->
 
 name_cluster(Node, Name) ->
     lager:info("Naming cluster ~p",[Name]),
-    Res = rpc:call(Node, riak_repl_console, clustername, [[Name]]),
+    Res = rt:rpc_call(Node, riak_repl_console, clustername, [[Name]]),
     ?assertEqual(ok, Res).
 
 wait_until_is_leader(Node) ->
@@ -70,7 +70,7 @@ wait_until_is_leader(Node) ->
     rt:wait_until(Node, fun is_leader/1).
 
 is_leader(Node) ->
-    case rpc:call(Node, riak_core_cluster_mgr, get_leader, []) of
+    case rt:rpc_call(Node, riak_core_cluster_mgr, get_leader, []) of
         {badrpc, Wut} ->
             lager:info("Badrpc during is_leader for ~p. Error: ~p", [Node, Wut]),
             false;
@@ -85,7 +85,7 @@ wait_until_is_not_leader(Node) ->
     rt:wait_until(Node, fun is_not_leader/1).
 
 is_not_leader(Node) ->
-    case rpc:call(Node, riak_core_cluster_mgr, get_leader, []) of
+    case rt:rpc_call(Node, riak_core_cluster_mgr, get_leader, []) of
         {badrpc, Wut} ->
             lager:info("Badrpc during is_not leader for ~p. Error: ~p", [Node, Wut]),
             false;
@@ -100,7 +100,7 @@ wait_until_leader(Node) ->
 wait_until_new_leader(Node, OldLeader) ->
     Res = rt:wait_until(Node,
         fun(_) ->
-                Status = rpc:call(Node, riak_core_cluster_mgr, get_leader, []),
+                Status = rt:rpc_call(Node, riak_core_cluster_mgr, get_leader, []),
                 case Status of
                     {badrpc, _} ->
                         false;
@@ -118,7 +118,7 @@ wait_until_leader_converge([Node|_] = Nodes) ->
     rt:wait_until(Node,
         fun(_) ->
                 LeaderResults =
-                    [rpc:call(N, riak_core_cluster_mgr, get_leader, []) ||
+                    [rt:rpc_call(N, riak_core_cluster_mgr, get_leader, []) ||
                         N <- Nodes],
                 {Leaders, Errors} =
                     lists:partition(leader_result_filter_fun(), LeaderResults),
@@ -141,7 +141,7 @@ leader_result_filter_fun() ->
 wait_until_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
-                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
                 case Status of
                     {badrpc, _} ->
                         false;
@@ -162,7 +162,7 @@ wait_until_connection(Node) ->
 wait_until_no_connection(Node) ->
     rt:wait_until(Node,
         fun(_) ->
-                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
                 case Status of
                     {badrpc, _} ->
                         false;
@@ -205,7 +205,7 @@ wait_for_reads(Node, Start, End, Bucket, R) ->
     length(Reads).
 
 get_fs_coord_status_item(Node, SinkName, ItemName) ->
-    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
     FS_CoordProps = proplists:get_value(fullsync_coordinator, Status),
     ClusterProps = proplists:get_value(SinkName, FS_CoordProps),
     proplists:get_value(ItemName, ClusterProps).
@@ -220,14 +220,14 @@ start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid) ->
     start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, 20).
 
 start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries) ->
-    Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
+    Status0 = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
     Count0 = proplists:get_value(server_fullsyncs, Status0),
     Count = fullsync_count(Count0, Status0, Cluster),
 
     lager:info("Waiting for fullsync count to be ~p", [Count]),
 
     lager:info("Starting fullsync on: ~p", [Node]),
-    rpc:call(Node, riak_repl_console, fullsync, [fullsync_start_args(Cluster)]),
+    rt:rpc_call(Node, riak_repl_console, fullsync, [fullsync_start_args(Cluster)]),
 
     %% sleep because of the old bug where stats will crash if you call it too
     %% soon after starting a fullsync
@@ -267,7 +267,7 @@ fullsync_notify(_) ->
 
 make_fullsync_wait_fun(Node, Count) ->
     fun() ->
-            Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+            Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
             case Status of
                 {badrpc, _} ->
                     false;
@@ -282,12 +282,12 @@ make_fullsync_wait_fun(Node, Count) ->
     end.
 
 connect_cluster(Node, IP, Port) ->
-    Res = rpc:call(Node, riak_repl_console, connect,
+    Res = rt:rpc_call(Node, riak_repl_console, connect,
         [[IP, integer_to_list(Port)]]),
     ?assertEqual(ok, Res).
 
 disconnect_cluster(Node, Name) ->
-    Res = rpc:call(Node, riak_repl_console, disconnect,
+    Res = rt:rpc_call(Node, riak_repl_console, disconnect,
         [[Name]]),
     ?assertEqual(ok, Res).
 
@@ -295,7 +295,7 @@ wait_for_connection(Node, Name) ->
     rt:wait_until(Node,
         fun(_) ->
                 lager:info("Waiting for repl connection to cluster named ~p on node ~p", [Name, Node]),
-                case rpc:call(Node, riak_core_cluster_mgr,
+                case rt:rpc_call(Node, riak_core_cluster_mgr,
                         get_connections, []) of
                     {ok, Connections} ->
                         Conn = [P || {{cluster_by_name, N}, P} <- Connections, N == Name],
@@ -334,7 +334,7 @@ wait_for_disconnect(Node, Name) ->
                 lager:info("Attempting to verify disconnect on ~p from ~p.",
                            [Node, Name]),
                 try
-                    {ok, Connections} = rpc:call(Node,
+                    {ok, Connections} = rt:rpc_call(Node,
                                                  riak_core_cluster_mgr,
                                                  get_connections,
                                                  []),
@@ -360,7 +360,7 @@ wait_for_full_disconnect(Node) ->
                 lager:info("Attempting to verify full disconnect on ~p.",
                            [Node]),
                 try
-                    {ok, Connections} = rpc:call(Node,
+                    {ok, Connections} = rt:rpc_call(Node,
                                                  riak_core_cluster_mgr,
                                                  get_connections,
                                                  []),
@@ -383,7 +383,7 @@ wait_for_full_disconnect(Node) ->
 wait_until_connections_clear(Node) ->
     rt:wait_until(Node, fun(_) ->
                 try
-                    Status = rpc:call(Node,
+                    Status = rt:rpc_call(Node,
                                      riak_core_connection_mgr,
                                      get_request_states,
                                      []),
@@ -404,11 +404,11 @@ wait_until_connections_clear(Node) ->
 
 %% @doc Wait until errors in connection
 wait_until_connection_errors(Node, BNode) ->
-    {ok, {_IP, Port}} = rpc:call(BNode, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(BNode, application, get_env,
                                  [riak_core, cluster_mgr]),
     rt:wait_until(Node, fun(_) ->
                 try
-                    Failures = rpc:call(Node,
+                    Failures = rt:rpc_call(Node,
                                        riak_core_connection_mgr,
                                        get_connection_errors,
                                        [{"127.0.0.1",Port}]),
@@ -428,31 +428,31 @@ wait_until_connection_errors(Node, BNode) ->
         end).
 
 enable_realtime(Node, Cluster) ->
-    Res = rpc:call(Node, riak_repl_console, realtime, [["enable", Cluster]]),
+    Res = rt:rpc_call(Node, riak_repl_console, realtime, [["enable", Cluster]]),
     ?assertEqual(ok, Res).
 
 disable_realtime(Node, Cluster) ->
-    Res = rpc:call(Node, riak_repl_console, realtime, [["disable", Cluster]]),
+    Res = rt:rpc_call(Node, riak_repl_console, realtime, [["disable", Cluster]]),
     ?assertEqual(ok, Res).
 
 enable_fullsync(Node, Cluster) ->
-    Res = rpc:call(Node, riak_repl_console, fullsync, [["enable", Cluster]]),
+    Res = rt:rpc_call(Node, riak_repl_console, fullsync, [["enable", Cluster]]),
     ?assertEqual(ok, Res).
 
 disable_fullsync(Node, Cluster) ->
-    Res = rpc:call(Node, riak_repl_console, fullsync, [["disable", Cluster]]),
+    Res = rt:rpc_call(Node, riak_repl_console, fullsync, [["disable", Cluster]]),
     ?assertEqual(ok, Res).
 
 stop_fullsync(Node, Cluster) ->
-    Res = rpc:call(Node, riak_repl_console, fullsync, [["stop", Cluster]]),
+    Res = rt:rpc_call(Node, riak_repl_console, fullsync, [["stop", Cluster]]),
     ?assertEqual(ok, Res).
 
 start_realtime(Node, Cluster) ->
-    Res = rpc:call(Node, riak_repl_console, realtime, [["start", Cluster]]),
+    Res = rt:rpc_call(Node, riak_repl_console, realtime, [["start", Cluster]]),
     ?assertEqual(ok, Res).
 
 stop_realtime(Node, Cluster) ->
-    Res = rpc:call(Node, riak_repl_console, realtime, [["stop", Cluster]]),
+    Res = rt:rpc_call(Node, riak_repl_console, realtime, [["stop", Cluster]]),
     ?assertEqual(ok, Res).
 
 do_write(Node, Start, End, Bucket, W) ->
@@ -486,12 +486,12 @@ nodes_all_have_version(Nodes, Version) ->
 
 %% Return the number of partitions in the cluster where Node is a member.
 num_partitions(Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    {ok, Ring} = rt:rpc_call(Node, riak_core_ring_manager, get_raw_ring, []),
     N = riak_core_ring:num_partitions(Ring),
     N.
 
 get_cluster_mgr_port(Node) ->
-    {ok, {_Ip, Port}} = rpc:call(Node, application, get_env, [riak_core, cluster_mgr]),
+    {ok, {_Ip, Port}} = rt:rpc_call(Node, application, get_env, [riak_core, cluster_mgr]),
     Port.
 
 maybe_reconnect_rt(SourceNode, SinkPort, SinkName) ->
@@ -525,7 +525,7 @@ connect_cluster_by_name(Source, Destination, Port, Name) ->
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.
 get_port(Node) ->
-    {ok, {_IP, Port}} = rpc:call(Node,
+    {ok, {_IP, Port}} = rt:rpc_call(Node,
                                  application,
                                  get_env,
                                  [riak_core, cluster_mgr]),
@@ -534,7 +534,7 @@ get_port(Node) ->
 %% @doc Given a node, find out who the current replication leader in its
 %%      cluster is.
 get_leader(Node) ->
-    rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
+    rt:rpc_call(Node, riak_core_cluster_mgr, get_leader, []).
 
 %% @doc Validate fullsync completed and all keys are available.
 validate_completed_fullsync(ReplicationLeader,
@@ -584,7 +584,7 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
                          [Node, Cluster]),
     lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
 
-    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
 
     Props = case proplists:get_value(fullsync_coordinator, Status) of
         [{_Name, Props0}] ->

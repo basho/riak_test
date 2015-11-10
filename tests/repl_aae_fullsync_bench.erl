@@ -47,7 +47,7 @@ aae_fs_test(NumKeysAOnly, NumKeysBoth, ANodes, BNodes) ->
     AFirst = hd(ANodes),
     BFirst = hd(BNodes),
     AllNodes = ANodes ++ BNodes,
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
     %%---------------------------------------------------------
     %% TEST: fullsync, check that non-RT'd keys get repl'd to B

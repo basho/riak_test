@@ -65,8 +65,8 @@ verify_raw([RN|_]) ->
     Spec = [#fitting_spec{name=r,
                           module=riak_pipe_w_pass}],
     Opts = [{sink_type, raw},{sink, rt_pipe:self_sink()}],
-    {ok, P} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
-    rpc:call(RN, riak_pipe, queue_work, [P, 1]),
+    {ok, P} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, 1]),
     riak_pipe:eoi(P),
     Result = riak_pipe:collect_results(P, 1000),
     ?assertEqual({eoi, [{r, 1}], []}, Result).
@@ -81,8 +81,8 @@ verify_fsm([RN|_]) ->
                           module=riak_pipe_w_pass}],
     Sink = #fitting{pid=SinkPid, ref=PipeRef},
     Opts = [{sink, Sink}, {sink_type, {fsm, 0, 5000}}],
-    {ok, P} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {sync, 1}]),
+    {ok, P} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {sync, 1}]),
     riak_pipe:eoi(P),
     Result = rt_pipe_sink_fsm:get_results(SinkPid),
     ?assertEqual({eoi, [{fs, {sync, 1}}], []}, Result).
@@ -103,10 +103,10 @@ verify_fsm_timeout([RN|_]) ->
             {sink, Sink},
             %% a short timeout, to fit eunit
             {sink_type, {fsm, 0, 1000}}],
-    {ok, P} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {sync, 1}]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {sync, 2}]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {sync, 3}]),
+    {ok, P} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {sync, 1}]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {sync, 2}]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {sync, 3}]),
     riak_pipe:eoi(P),
     {eoi, Results, Logs} =
         rt_pipe_sink_fsm:get_results(SinkPid),
@@ -138,11 +138,11 @@ verify_fsm_sync_period([RN|_]) ->
             {trace, [error]},
             {sink, Sink},
             {sink_type, {fsm, 2, 1000}}],
-    {ok, P} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {sync, 1}]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {async, 2}]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {async, 3}]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {sync, 4}]),
+    {ok, P} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {sync, 1}]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {async, 2}]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {async, 3}]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {sync, 4}]),
     riak_pipe:eoi(P),
     {eoi, Results, []} =
         rt_pipe_sink_fsm:get_results(SinkPid),
@@ -169,11 +169,11 @@ verify_fsm_infinity_sync_period([RN|_]) ->
             {trace, [error]},
             {sink, Sink},
             {sink_type, {fsm, infinity, 1000}}],
-    {ok, P} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {async, 1}]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {async, 2}]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {async, 3}]),
-    rpc:call(RN, riak_pipe, queue_work, [P, {async, 4}]),
+    {ok, P} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {async, 1}]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {async, 2}]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {async, 3}]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [P, {async, 4}]),
     riak_pipe:eoi(P),
     {eoi, Results, []} =
         rt_pipe_sink_fsm:get_results(SinkPid),
@@ -189,7 +189,7 @@ verify_fsm_infinity_sync_period([RN|_]) ->
 %% specified
 verify_invalid_type([RN|_]) ->
     Spec = [#fitting_spec{module=riak_pipe_w_pass}],
-    case rpc:call(RN, riak_pipe, exec,
+    case rt:rpc_call(RN, riak_pipe, exec,
                   [Spec, [{sink_type, invalid}]]) of
         {invalid_sink_type, {sink_type, invalid}} ->
             %% hooray! the correct error

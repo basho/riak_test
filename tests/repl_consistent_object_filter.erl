@@ -76,7 +76,7 @@ confirm() ->
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [LeaderA, Port]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
@@ -135,12 +135,12 @@ make_clusters() ->
     repl_util:name_cluster(BFirst, "B"),
     rt:wait_until_ring_converged(BNodes),
 
-    ?assertEqual(true, rpc:call(AFirst, riak_ensemble_manager, enabled, [])),
+    ?assertEqual(true, rt:rpc_call(AFirst, riak_ensemble_manager, enabled, [])),
     ensemble_util:wait_until_cluster(ANodes),
     ensemble_util:wait_for_membership(AFirst),
     ensemble_util:wait_until_stable(AFirst, NVal),
 
-    ?assertEqual(true, rpc:call(BFirst, riak_ensemble_manager, enabled, [])),
+    ?assertEqual(true, rt:rpc_call(BFirst, riak_ensemble_manager, enabled, [])),
     ensemble_util:wait_until_cluster(BNodes),
     ensemble_util:wait_for_membership(BFirst),
     ensemble_util:wait_until_stable(BFirst, NVal),
@@ -151,6 +151,6 @@ make_clusters() ->
     {LeaderA, LeaderB, ANodes, BNodes}.
 
 get_pb_pid(Leader) ->
-    {ok, [{IP, PortA}] } = rpc:call(Leader, application, get_env, [riak_api, pb]),
+    {ok, [{IP, PortA}] } = rt:rpc_call(Leader, application, get_env, [riak_api, pb]),
     {ok, Pid} = riakc_pb_socket:start_link(IP, PortA, []),
     Pid.

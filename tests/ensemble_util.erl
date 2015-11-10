@@ -41,8 +41,8 @@ build_cluster_without_quorum(Num, Config) ->
     end,
     lists:map(SetupLogCaptureFun, Nodes),
     Node = hd(Nodes),
-    ok = rpc:call(Node, riak_ensemble_manager, enable, []),
-    _ = rpc:call(Node, riak_core_ring_manager, force_update, []),
+    ok = rt:rpc_call(Node, riak_ensemble_manager, enable, []),
+    _ = rt:rpc_call(Node, riak_core_ring_manager, force_update, []),
     rt:join_cluster(Nodes),
     ensemble_util:wait_until_cluster(Nodes),
     ensemble_util:wait_for_membership(Node),
@@ -74,13 +74,13 @@ config_aae(false) ->
     {riak_kv, [{anti_entropy, {off, []}}]}.
 
 ensembles(Node) ->
-    rpc:call(Node, riak_kv_ensembles, ensembles, []).
+    rt:rpc_call(Node, riak_kv_ensembles, ensembles, []).
 
 get_leader_pid(Node, Ensemble) ->
-    rpc:call(Node, riak_ensemble_manager, get_leader_pid, [Ensemble]).
+    rt:rpc_call(Node, riak_ensemble_manager, get_leader_pid, [Ensemble]).
 
 peers(Node) ->
-    rpc:call(Node, riak_ensemble_peer_sup, peers, []).
+    rt:rpc_call(Node, riak_ensemble_peer_sup, peers, []).
 
 kill_leader(Node, Ensemble) ->
     case get_leader_pid(Node, Ensemble) of
@@ -99,7 +99,7 @@ wait_until_cluster(Nodes) ->
     lager:info("Waiting until riak_ensemble cluster includes all nodes"),
     Node = hd(Nodes),
     F = fun() ->
-                case rpc:call(Node, riak_ensemble_manager, cluster, []) of
+                case rt:rpc_call(Node, riak_ensemble_manager, cluster, []) of
                     Nodes ->
                         true;
                     _ ->
@@ -112,7 +112,7 @@ wait_until_cluster(Nodes) ->
 
 wait_until_stable(Node, Count) ->
     lager:info("Waiting until all ensembles are stable"),
-    Ensembles = rpc:call(Node, riak_kv_ensembles, ensembles, []),
+    Ensembles = rt:rpc_call(Node, riak_kv_ensembles, ensembles, []),
     wait_until_quorum(Node, root),
     [wait_until_quorum(Node, Ensemble) || Ensemble <- Ensembles],
     [wait_until_quorum_count(Node, Ensemble, Count) || Ensemble <- Ensembles],
@@ -121,7 +121,7 @@ wait_until_stable(Node, Count) ->
 
 wait_until_quorum(Node, Ensemble) ->
     F = fun() ->
-                case rpc:call(Node, riak_ensemble_manager, check_quorum,
+                case rt:rpc_call(Node, riak_ensemble_manager, check_quorum,
                         [Ensemble, 10000]) of
                     true ->
                         true;
@@ -134,7 +134,7 @@ wait_until_quorum(Node, Ensemble) ->
 
 wait_until_quorum_count(Node, Ensemble, Want) ->
     F = fun() ->
-                case rpc:call(Node, riak_ensemble_manager, count_quorum,
+                case rt:rpc_call(Node, riak_ensemble_manager, count_quorum,
                         [Ensemble, 10000]) of
                     Count when Count >= Want ->
                         true;
@@ -148,7 +148,7 @@ wait_until_quorum_count(Node, Ensemble, Want) ->
 wait_for_membership(Node) ->
     lager:info("Waiting until ensemble membership matches ring ownership"),
     F = fun() ->
-                case rpc:call(Node, riak_kv_ensembles, check_membership, []) of
+                case rt:rpc_call(Node, riak_kv_ensembles, check_membership, []) of
                     Results when is_list(Results) ->
                         [] =:= [x || false <- Results];
                     _ ->

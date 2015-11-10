@@ -58,7 +58,7 @@ rtq_data_buildup_test(ClusterNodes) ->
     ?assertEqual(SinkBInitialQueueSize, rtq_bytes(SinkLeaderB)).
 
 rtq_bytes(Node) ->
-        RtqStatus = rpc:call(Node, riak_repl2_rtq, status, []),
+        RtqStatus = rt:rpc_call(Node, riak_repl2_rtq, status, []),
         proplists:get_value(bytes, RtqStatus).
 
 make_clusters() ->
@@ -168,7 +168,7 @@ enable_rt(SourceLeader, SourceNodes, SinkName) ->
 
 %% @doc Turn off Realtime replication on the cluster lead by LeaderA.
 disable_cascading(Leader, Nodes) ->
-    rpc:call(Leader, riak_repl_console, realtime_cascades, [["never"]]),
+    rt:rpc_call(Leader, riak_repl_console, realtime_cascades, [["never"]]),
     rt:wait_until_ring_converged(Nodes).
 
 %% @doc Write a series of keys and ensure they are all written.

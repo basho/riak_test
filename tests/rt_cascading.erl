@@ -107,7 +107,7 @@ simple_test_() ->
         end},
 
         {"disable cascading on middle", timeout, timeout(25), fun() ->
-            rpc:call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["never"]]),
+            rt:rpc_call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["never"]]),
             Bin = <<"disabled cascading">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
             Client = rt:pbc(State#simple_state.beginning),
@@ -119,7 +119,7 @@ simple_test_() ->
         end},
 
         {"re-enable cascading", timeout, timeout(25), fun() ->
-            rpc:call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["always"]]),
+            rt:rpc_call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["always"]]),
             Bin = <<"cascading re-enabled">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
             Client = rt:pbc(State#simple_state.beginning),
@@ -294,7 +294,7 @@ circle_test_() ->
             % there's no event we can properly wait for. All we can do is wait
             % and make sure we didn't update/write the object.
             timer:sleep(1000),
-            Status = rpc:call(hd(Nodes), riak_repl2_rt, status, []),
+            Status = rt:rpc_call(hd(Nodes), riak_repl2_rt, status, []),
             [SinkData] = proplists:get_value(sinks, Status, [[]]),
             ?assertEqual(undefined, proplists:get_value(expect_seq, SinkData))
         end},
@@ -307,7 +307,7 @@ circle_test_() ->
             riakc_pb_socket:put(Client, Obj, [{w,1}]),
             ?assertEqual(Bin, maybe_eventually_exists(One, <<"objects">>, Bin)),
             timer:sleep(1000),
-            Status = rpc:call(Two, riak_repl2_rt, status, []),
+            Status = rt:rpc_call(Two, riak_repl2_rt, status, []),
             [SinkData] = proplists:get_value(sinks, Status, [[]]),
             ?assertEqual(2, proplists:get_value(expect_seq, SinkData))
         end},
@@ -418,7 +418,7 @@ diamond_test_() ->
             ?assertEqual(Bin, maybe_eventually_exists(MidRight, <<"objects">>, Bin)),
             ?assertEqual(Bin, maybe_eventually_exists(Bottom, <<"objects">>, Bin)),
             %timer:sleep(1000),
-            Status = rpc:call(Bottom, riak_repl2_rt, status, []),
+            Status = rt:rpc_call(Bottom, riak_repl2_rt, status, []),
             [SinkOne, SinkTwo] = proplists:get_value(sinks, Status, [[], []]),
             ?assertEqual(proplists:get_value(expect_seq, SinkOne), proplists:get_value(expect_seq, SinkTwo))
         end},
@@ -428,7 +428,7 @@ diamond_test_() ->
             Port = get_cluster_mgr_port(Top),
             connect_rt(Bottom, Port, "top"),
             WaitFun = fun(N) ->
-                Status = rpc:call(N, riak_repl2_rt, status, []),
+                Status = rt:rpc_call(N, riak_repl2_rt, status, []),
                 Sinks = proplists:get_value(sinks, Status, []),
                 length(Sinks) == 1
             end,
@@ -440,7 +440,7 @@ diamond_test_() ->
             % To ensure a write doesn't happen to MidRight when it originated
             % on midright, we're going to compare the expect_seq before and
             % after.
-            Status = rpc:call(MidRight, riak_repl2_rt, status, []),
+            Status = rt:rpc_call(MidRight, riak_repl2_rt, status, []),
             [Sink] = proplists:get_value(sinks, Status, [[]]),
             ExpectSeq = proplists:get_value(expect_seq, Sink),
 
@@ -454,7 +454,7 @@ diamond_test_() ->
                 ?assertEqual(Bin, maybe_eventually_exists(N, Bucket, Bin))
             end || N <- [Bottom, Top, MidLeft]],
 
-            Status2 = rpc:call(MidRight, riak_repl2_rt, status, []),
+            Status2 = rt:rpc_call(MidRight, riak_repl2_rt, status, []),
             [Sink2] = proplists:get_value(sinks, Status2, [[]]),
             GotSeq = proplists:get_value(expect_seq, Sink2),
             ?assertEqual(ExpectSeq, GotSeq)
@@ -582,7 +582,7 @@ mixed_version_clusters_test_dep() ->
         DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
         Nodes = rt:deploy_nodes(DeployConfs),
         [N1, N2, N3, N4, N5, N6] =  Nodes,
-        case rpc:call(N1, application, get_key, [riak_core, vsn]) of
+        case rt:rpc_call(N1, application, get_key, [riak_core, vsn]) of
             % this is meant to test upgrading from early BNW aka
             % Brave New World aka Advanced Repl aka version 3 repl to
             % a cascading realtime repl. Other tests handle going from pre
@@ -643,7 +643,7 @@ mixed_version_clusters_test_dep() ->
                 rt:upgrade(N1, current),
                 repl_util:wait_until_leader_converge([N1, N2]),
                 Running = fun(Node) ->
-                    RTStatus = rpc:call(Node, riak_repl2_rt, status, []),
+                    RTStatus = rt:rpc_call(Node, riak_repl2_rt, status, []),
                     if
                         is_list(RTStatus) ->
                             SourcesList = proplists:get_value(sources, RTStatus, []),
@@ -660,7 +660,7 @@ mixed_version_clusters_test_dep() ->
                 ?assertEqual(ok, rt:wait_until(N1, Running)),
                 % give the node further time to settle
                 StatsNotEmpty = fun(Node) ->
-                    case rpc:call(Node, riak_repl_stats, get_stats, []) of
+                    case rt:rpc_call(Node, riak_repl_stats, get_stats, []) of
                         [] ->
                             false;
                         Stats ->
@@ -701,7 +701,7 @@ mixed_version_clusters_test_dep() ->
                 repl_util:wait_until_leader_converge([N3, N4]),
                 repl_util:wait_until_leader_converge([N5, N6]),
                 ClusterMgrUp = fun(Node) ->
-                    case rpc:call(Node, erlang, whereis, [riak_core_cluster_manager]) of
+                    case rt:rpc_call(Node, erlang, whereis, [riak_core_cluster_manager]) of
                         P when is_pid(P) ->
                             true;
                         _ ->
@@ -794,7 +794,7 @@ new_to_old_test_dep() ->
         Conf = conf(),
         DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
         [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
-        case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
+        case rt:rpc_call(Old2, application, get_key, [riak_core, vsn]) of
             % this is meant to test upgrading from early BNW aka
             % Brave New World aka Advanced Repl aka version 3 repl to
             % a cascading realtime repl. Other tests handle going from pre
@@ -907,7 +907,7 @@ ensure_ack_test_() ->
             lager:info("Reading 1 key written from ~p", [LeaderB]),
             ?assertEqual(0, repl_util:wait_for_reads(LeaderB, 1, 1, TestBucket, 2)),
 
-            RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+            RTQStatus = rt:rpc_call(LeaderA, riak_repl2_rtq, status, []),
 
             Consumers = proplists:get_value(consumers, RTQStatus),
             case proplists:get_value("B", Consumers) of
@@ -957,7 +957,7 @@ ensure_unacked_and_queue_test_() ->
             write_n_keys(N456Leader, N123Leader, 10001, 20000),
 
             Res = rt:wait_until(fun() ->
-                RTQStatus = rpc:call(N123Leader, riak_repl2_rtq, status, []),
+                RTQStatus = rt:rpc_call(N123Leader, riak_repl2_rtq, status, []),
 
                 Consumers = proplists:get_value(consumers, RTQStatus),
                 Data = proplists:get_value("n456", Consumers),
@@ -971,7 +971,7 @@ ensure_unacked_and_queue_test_() ->
         {"after acks, queues are empty", fun() ->
             Nodes = N123 ++ N456,
             Got = lists:map(fun(Node) ->
-                rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+                rt:rpc_call(Node, riak_repl2_rtq, all_queues_empty, [])
             end, Nodes),
             Expected = [true || _ <- lists:seq(1, length(Nodes))],
             ?assertEqual(Expected, Got)
@@ -980,7 +980,7 @@ ensure_unacked_and_queue_test_() ->
         {"after acks, queues truly are empty. Truly", fun() ->
             Nodes = N123 ++ N456,
             Gots = lists:map(fun(Node) ->
-                {Node, rpc:call(Node, riak_repl2_rtq, dumpq, [])}
+                {Node, rt:rpc_call(Node, riak_repl2_rtq, dumpq, [])}
             end, Nodes),
             lists:map(fun({Node, Got}) ->
                 ?debugFmt("Checking data from ~p", [Node]),
@@ -1005,7 +1005,7 @@ ensure_unacked_and_queue_test_() ->
             ?assert(lists:all(fun(E) -> E == normal end, Exits)),
 
             StatusDig = fun(SinkName, Node) ->
-                Status = rpc:call(Node, riak_repl2_rtq, status, []),
+                Status = rt:rpc_call(Node, riak_repl2_rtq, status, []),
                 Consumers = proplists:get_value(consumers, Status, []),
                 ConsumerStats = proplists:get_value(SinkName, Consumers, []),
                 proplists:get_value(unacked, ConsumerStats)
@@ -1033,7 +1033,7 @@ ensure_unacked_and_queue_test_() ->
         {"after dual load acks, queues are empty", fun() ->
             Nodes = N123 ++ N456,
             Got = lists:map(fun(Node) ->
-                rpc:call(Node, riak_repl2_rtq, all_queues_empty, [])
+                rt:rpc_call(Node, riak_repl2_rtq, all_queues_empty, [])
             end, Nodes),
             Expected = [true || _ <- lists:seq(1, length(Nodes))],
             ?assertEqual(Expected, Got)
@@ -1042,7 +1042,7 @@ ensure_unacked_and_queue_test_() ->
         {"after dual load acks, queues truly are empty. Truly", fun() ->
             Nodes = N123 ++ N456,
             Gots = lists:map(fun(Node) ->
-                {Node, rpc:call(Node, riak_repl2_rtq, dumpq, [])}
+                {Node, rt:rpc_call(Node, riak_repl2_rtq, dumpq, [])}
             end, Nodes),
             lists:map(fun({Node, Got}) ->
                 ?debugFmt("Checking data from ~p", [Node]),
@@ -1058,7 +1058,7 @@ ensure_unacked_and_queue_test_() ->
             end,
             lists:map(fun(Node) ->
                 ?debugFmt("Checking node ~p", [Node]),
-                Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
                 Sinks = proplists:get_value(sinks, Status),
                 lists:map(fun(SStats) ->
                     Pending = GetPending(SStats),
@@ -1109,7 +1109,7 @@ conf() ->
     ]}].
 
 get_cluster_mgr_port(Node) ->
-    {ok, {_Ip, Port}} = rpc:call(Node, application, get_env, [riak_core, cluster_mgr]),
+    {ok, {_Ip, Port}} = rt:rpc_call(Node, application, get_env, [riak_core, cluster_mgr]),
     Port.
 
 maybe_reconnect_rt(SourceNode, SinkPort, SinkName) ->
@@ -1174,7 +1174,7 @@ maybe_eventually_exists(Got, _Nodes, _Bucket, _Key, _Timeout, _WaitMs) ->
 
 wait_for_rt_started(Node, ToName) ->
     Fun = fun(_) ->
-        Status = rpc:call(Node, riak_repl2_rt, status, []),
+        Status = rt:rpc_call(Node, riak_repl2_rt, status, []),
         Started = proplists:get_value(started, Status, []),
         lists:member(ToName, Started)
     end,

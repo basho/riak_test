@@ -88,8 +88,8 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     Keys = [<<N:64/integer>> || N <- lists:seq(1,1000)],
 
     Key1 = hd(Keys),
-    DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key1}]),
-    PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
+    DocIdx = rt:rpc_call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key1}]),
+    PL = rt:rpc_call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
     {Valid, Partitioned} = partition(Minority, Node, PL),
 
     {KillVN,    Valid2} = lists:split(NumKill,    Valid),
@@ -166,20 +166,20 @@ init_intercepts(Node) ->
     rt_intercept:add(Node, {riak_ensemble_peer, [{{leader_tick, 1}, count_leader_ticks}]}).
 
 make_intercepts_tab(Node) ->
-    SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
+    SupPid = rt:rpc_call(Node, erlang, whereis, [sasl_safe_sup]),
     Opts = [named_table, public, set, {heir, SupPid, {}}],
-    ?INTERCEPT_TAB = rpc:call(Node, ets, new, [?INTERCEPT_TAB, Opts]).
+    ?INTERCEPT_TAB = rt:rpc_call(Node, ets, new, [?INTERCEPT_TAB, Opts]).
 
 get_leader_tick_counts(Nodes) ->
     AllCounts = [get_leader_tick_counts_for_node(N) || N <- Nodes],
     lists:append(AllCounts).
 
 get_leader_tick_counts_for_node(Node) ->
-    Ensembles = rpc:call(Node, riak_kv_ensembles, local_ensembles, []),
-    Leaders = rpc:call(Node, lists, map, [fun riak_ensemble_manager:get_leader_pid/1, Ensembles]),
+    Ensembles = rt:rpc_call(Node, riak_kv_ensembles, local_ensembles, []),
+    Leaders = rt:rpc_call(Node, lists, map, [fun riak_ensemble_manager:get_leader_pid/1, Ensembles]),
     LocalLeaders = [P || P <- Leaders, node(P) =:= Node],
     LookupFun = fun(P) ->
-                        [Res] = rpc:call(Node, ets, lookup, [?INTERCEPT_TAB, P]),
+                        [Res] = rt:rpc_call(Node, ets, lookup, [?INTERCEPT_TAB, P]),
                         Res
                 end,
     lists:map(LookupFun, LocalLeaders).
@@ -194,13 +194,13 @@ wait_for_leader_tick_change({Pid, Count}) ->
 
 leader_tick_count_exceeds(Pid, Count) ->
     Node = node(Pid),
-    case rpc:call(Node, ets, lookup, [?INTERCEPT_TAB, Pid]) of
+    case rt:rpc_call(Node, ets, lookup, [?INTERCEPT_TAB, Pid]) of
         [{Pid, NewCount}] when NewCount > Count ->
             true;
         Res ->
             %% If the count hasn't incremented, it may be because the leader
             %% already stepped down, so check for that scenario as well:
-            case rpc:call(Node, sys, get_state, [Pid]) of
+            case rt:rpc_call(Node, sys, get_state, [Pid]) of
                 {leading, _} ->
                     Res;
                 Res2 = {badrpc, _} ->

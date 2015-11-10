@@ -121,10 +121,10 @@ repl_power_activate(ClusterA, ClusterB) ->
     info("B->A complete").
 
 get_leader({_, Node}) ->
-    rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
+    rt:rpc_call(Node, riak_core_cluster_mgr, get_leader, []).
 
 get_mgr_port({_, Node}) ->
-    {ok, {_IP, Port}} = rpc:call(Node, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(Node, application, get_env,
                                  [riak_core, cluster_mgr]),
     Port.
 

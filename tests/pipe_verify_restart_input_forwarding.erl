@@ -80,7 +80,7 @@ verify_worker_restart_failure_input_forwarding([RN]) ->
     Opts = [{sink, rt_pipe:self_sink()},
             {log, sink},
             {trace,[error,restart,restart_fail,queue]}],
-    {ok, Pipe} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
+    {ok, Pipe} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
 
     Inputs1 = lists:seq(0,127),
     Inputs2 = lists:seq(128,255),
@@ -94,9 +94,9 @@ verify_worker_restart_failure_input_forwarding([RN]) ->
     %% redirected to an alternate vnode
 
     %% send many inputs, send crash, send more inputs
-    [ok = rpc:call(RN, riak_pipe, queue_work, [Pipe, N]) || N <- Inputs1],
-    ok = rpc:call(RN, riak_pipe, queue_work, [Pipe, init_restartfail]),
-    [ok = rpc:call(RN, riak_pipe, queue_work, [Pipe, N]) || N <- Inputs2],
+    [ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, N]) || N <- Inputs1],
+    ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, init_restartfail]),
+    [ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, N]) || N <- Inputs2],
     %% one worker should now have both the crashing input and a valid
     %% input following it waiting in its queue - the test is whether
     %% or not that valid input following the crash gets redirected
@@ -105,7 +105,7 @@ verify_worker_restart_failure_input_forwarding([RN]) ->
     %% wait for the worker to crash, then send more input at it
     %% - the test is whether the new inputs are redirected correctly
     timer:sleep(2000),
-    [ok = rpc:call(RN, riak_pipe, queue_work, [Pipe, N]) || N <- Inputs3],
+    [ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, N]) || N <- Inputs3],
 
     %% flush the pipe
     ok = riak_pipe:eoi(Pipe),
@@ -160,7 +160,7 @@ verify_worker_restart_failure_input_forwarding([RN]) ->
     %% correct location?
     Destined = lists:filter(
                  fun(I) ->
-                         [{P,_}] = rpc:call(RN, riak_core_apl, get_apl,
+                         [{P,_}] = rt:rpc_call(RN, riak_core_apl, get_apl,
                                             [chash:key_of(I), 1, riak_pipe]),
                          P == Restarter
                  end,

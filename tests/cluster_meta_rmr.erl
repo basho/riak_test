@@ -48,7 +48,7 @@ run(NumNodes, NumRounds, StableRounds) ->
     %% ensures any gossip messages being proxied during initial cluster setup
     %% are drained before we proceed
 %    wait_until_no_messages(),
-%    {ok, R} = rpc:call(hd(AllNodes), riak_core_ring_manager, get_my_ring, []),
+%    {ok, R} = rt:rpc_call(hd(AllNodes), riak_core_ring_manager, get_my_ring, []),
 %    Nodes = riak_core_ring:active_members(R),
 %    lager:info("GOSSIP TREE: ~p", [riak_core_util:build_tree(2, Nodes, [cycles])]),
     lager:info("running ~p broadcast rounds on nodes: ~p", [NumRounds, AllNodes]),
@@ -64,8 +64,8 @@ run(NumNodes, NumRounds, StableRounds) ->
 setup_nodes(NumNodes) ->
     Nodes = rt:build_cluster(NumNodes),
     [begin
-         ok = rpc:call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
-         ok = rpc:call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
+         ok = rt:rpc_call(Node, application, set_env, [riak_core, broadcast_exchange_timer, 4294967295]),
+         ok = rt:rpc_call(Node, application, set_env, [riak_core, gossip_limit, {10000000, 4294967295}]),
          rt_intercept:add(Node, {riak_core_broadcast, [{{send,2}, global_send}]})
      end || Node <- Nodes],
     Nodes.
@@ -78,7 +78,7 @@ run_rounds(_, _, _, _, [_SenderNode], DownNodes) ->
 run_rounds(Round, 0, SendFun, ConsistentFun, [SenderNode | OtherNodes]=UpNodes, DownNodes) ->
     lager:info("round ~p (unstable): starting", [Round]),
     %% get down nodes too just so it prints nicer, debug_get_tree handles them being down
-    Tree = rpc:call(SenderNode, riak_core_broadcast, debug_get_tree, [SenderNode, UpNodes ++ DownNodes]),
+    Tree = rt:rpc_call(SenderNode, riak_core_broadcast, debug_get_tree, [SenderNode, UpNodes ++ DownNodes]),
     lager:info("round ~p (unstable): tree before sending ~p", [Round, Tree]),
     {FailedNode, RemainingNodes} = fail_node(Round, OtherNodes),
     NewUpNodes = [SenderNode | RemainingNodes],
@@ -178,11 +178,11 @@ broadcast(SenderNode, Round) ->
     %% TODO: don't use metadata manager?
     Key = mk_key(Round),
     Value = mk_value(Round),
-    ok = rpc:call(SenderNode, riak_core_metadata, put, [?CM_PREFIX, Key, Value]).
+    ok = rt:rpc_call(SenderNode, riak_core_metadata, put, [?CM_PREFIX, Key, Value]).
 
 %gossip(SenderNode, Round) ->
 %    Value = mk_value(Round),
-%    {ok, _} = rpc:call(SenderNode, riak_core_ring, update_round, [Value]).
+%    {ok, _} = rt:rpc_call(SenderNode, riak_core_ring, update_round, [Value]).
 
 wait_until_no_messages() ->
     F = fun() ->
@@ -205,7 +205,7 @@ wait_until_metadata_value(Node, Key, Val) ->
     ok = rt:wait_until(F, 10, 500).
 
 metadata_get(Node, Key) ->
-    rpc:call(Node, riak_core_metadata, get, [?CM_PREFIX, Key]).
+    rt:rpc_call(Node, riak_core_metadata, get, [?CM_PREFIX, Key]).
 
 %wait_until_gossip_consistent(Nodes, Round) ->
 %    Value = mk_value(Round),
@@ -215,7 +215,7 @@ metadata_get(Node, Key) ->
 %    [wait_until_bucket_value(Node, Val) || Node <- Nodes];
 %wait_until_bucket_value(Node, Val) ->
 %    F = fun() ->
-%                {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
+%                {ok, Ring} = rt:rpc_call(Node, riak_core_ring_manager, get_my_ring, []),
 %                {ok, Val} =:= riak_core_ring:get_meta(round, Ring)
 %        end,
 %    ok = rt:wait_until(F).

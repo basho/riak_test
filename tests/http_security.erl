@@ -46,12 +46,12 @@ confirm() ->
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
     %% enable security on the cluster
-    ok = rpc:call(Node, riak_core_console, security_enable, [[]]),
+    ok = rt:rpc_call(Node, riak_core_console, security_enable, [[]]),
     enable_ssl(Node),
     %%[enable_ssl(N) || N <- Nodes],
-    {ok, [{IP0, Port0}]} = rpc:call(Node, application, get_env,
+    {ok, [{IP0, Port0}]} = rt:rpc_call(Node, application, get_env,
                                     [riak_api, http]),
-    {ok, [{IP, Port}]} = rpc:call(Node, application, get_env,
+    {ok, [{IP, Port}]} = rt:rpc_call(Node, application, get_env,
                                   [riak_api, https]),
 
     MD = riak_test_runner:metadata(),
@@ -82,7 +82,7 @@ confirm() ->
 
     lager:info("Creating user"),
     %% grant the user credentials
-    ok = rpc:call(Node, riak_core_console, add_user, [[Username, "password=password"]]),
+    ok = rt:rpc_call(Node, riak_core_console, add_user, [[Username, "password=password"]]),
 
     lager:info("Setting trust mode on user"),
     %% trust anyone from this host
@@ -93,7 +93,7 @@ confirm() ->
                    {ok,A0} = inet:getaddr(Hostname, inet),
                    inet:ntoa(A0)
            end,
-    ok = rpc:call(Node, riak_core_console, add_source, [[Username,
+    ok = rt:rpc_call(Node, riak_core_console, add_source, [[Username,
                                                          MyIP++"/32",
                                                          "trust"]]),
 
@@ -106,7 +106,7 @@ confirm() ->
 
     lager:info("Setting password mode on user"),
     %% require password from our IP
-    ok = rpc:call(Node, riak_core_console, add_source, [[Username,
+    ok = rt:rpc_call(Node, riak_core_console, add_source, [[Username,
                                                          MyIP++"/32",
                                                          "password"]]),
 
@@ -163,7 +163,7 @@ confirm() ->
     ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
 
     lager:info("Granting riak_kv.get, checking get works but put doesn't"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.get", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.get", "on",
                                                     "default", "hello", "to", Username]]),
 
     %% key is not present
@@ -173,7 +173,7 @@ confirm() ->
     ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
 
     lager:info("Granting riak_kv.put, checking put works and roundtrips with get"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.put", "on",
                                                     "default", "hello", "to", Username]]),
 
     %% NOW we can put
@@ -194,7 +194,7 @@ confirm() ->
                                                         <<"_xxboguskey">>)),
 
     lager:info("Granting riak_kv.delete, checking that delete succeeds"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.delete", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.delete", "on",
                                                     "default", "hello", "to", Username]]),
     ?assertEqual(ok, rhc:delete(C7, <<"hello">>,
                                 <<"world">>)),
@@ -213,7 +213,7 @@ confirm() ->
 
     %% slam the door in the user's face
     lager:info("Revoking get/put/delete, checking that get/put/delete are disallowed"),
-    ok = rpc:call(Node, riak_core_console, revoke,
+    ok = rt:rpc_call(Node, riak_core_console, revoke,
                   [["riak_kv.put,riak_kv.get,riak_kv.delete", "on",
                     "default", "hello", "from", Username]]),
 
@@ -227,7 +227,7 @@ confirm() ->
     ?assertMatch({error, {"403", _}}, rhc:list_buckets(C7)),
 
     lager:info("Granting riak_kv.list_buckets, checking that list_buckets succeeds"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_buckets", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.list_buckets", "on",
                                                     "default", "to", Username]]),
     ?assertMatch({ok, [<<"hello">>]}, rhc:list_buckets(C7)),
 
@@ -236,13 +236,13 @@ confirm() ->
     ?assertMatch({error, {"403", _}}, rhc:list_keys(C7, <<"hello">>)),
 
     lager:info("Granting riak_kv.list_keys, checking that list_keys succeeds"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_keys", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.list_keys", "on",
                                                     "default", "to", Username]]),
 
     ?assertMatch({ok, [<<"world">>]}, rhc:list_keys(C7, <<"hello">>)),
 
     lager:info("Revoking list_keys"),
-    ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "on",
+    ok = rt:rpc_call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "on",
                                                     "default", "from", Username]]),
 
     %% list keys with bucket type
@@ -252,7 +252,7 @@ confirm() ->
     ?assertMatch({error, {"403", _}}, rhc:list_keys(C7, {<<"list-keys-test">>, <<"hello">>})),
 
     lager:info("Granting riak_kv.list_keys on the bucket type, checking that list_keys succeeds"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_keys", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.list_keys", "on",
                                                     "list-keys-test", "to", Username]]),
     ?assertMatch({ok, []}, rhc:list_keys(C7, {<<"list-keys-test">>, <<"hello">>})),
 
@@ -260,7 +260,7 @@ confirm() ->
     ?assertMatch({error, {ok, "403", _, _}}, rhc:get_bucket(C7, <<"hello">>)),
 
     lager:info("Granting riak_core.get_bucket, checking that get_bucket succeeds"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_core.get_bucket", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_core.get_bucket", "on",
                                                     "default", "hello", "to", Username]]),
 
     ?assertEqual(3, proplists:get_value(n_val, element(2, rhc:get_bucket(C7,
@@ -274,7 +274,7 @@ confirm() ->
                                                             [{n_val, 5}])),
 
     lager:info("Granting set_bucket, checking that set_bucket succeeds"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_core.set_bucket", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_core.set_bucket", "on",
                                                     "default", "hello", "to", Username]]),
 
     ?assertEqual(ok, rhc:set_bucket(C7, <<"hello">>,
@@ -296,7 +296,7 @@ confirm() ->
                                                    <<"John">>)),
 
             lager:info("Granting 2i permissions, checking that results come back"),
-            ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.index", "on",
+            ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.index", "on",
                                                             "default", "to", Username]]),
 
             %% don't actually have any indexes
@@ -312,7 +312,7 @@ confirm() ->
                                             <<"hello">>}, {binary_index, "name"}, <<"John">>)),
 
             lager:info("Granting riak_kv.index on the bucket type, checking that get_index succeeds"),
-            ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.index", "on",
+            ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.index", "on",
                                                     "list-keys-test", "to", Username]]),
             ?assertMatch({ok, ?INDEX_RESULTS{}},
                          rhc:get_index(C7, {<<"list-keys-test">>,
@@ -325,7 +325,7 @@ confirm() ->
 
     %% grant get/put again
     lager:info("Granting get/put for counters, checking value and increment"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.get,riak_kv.put", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.get,riak_kv.put", "on",
                                                     "default", "hello", "to", Username]]),
 
 
@@ -340,7 +340,7 @@ confirm() ->
 
     %% revoke get
     lager:info("Revoking get, checking that value fails but increment succeeds"),
-    ok = rpc:call(Node, riak_core_console, revoke,
+    ok = rt:rpc_call(Node, riak_core_console, revoke,
                   [["riak_kv.get", "on", "default", "hello", "from", Username]]),
 
     ?assertMatch({error, {ok, "403", _, _}}, rhc:counter_val(C7, <<"hello">>,
@@ -350,7 +350,7 @@ confirm() ->
 
     %% revoke put
     lager:info("Revoking put, checking that increment fails"),
-    ok = rpc:call(Node, riak_core_console, revoke,
+    ok = rt:rpc_call(Node, riak_core_console, revoke,
                   [["riak_kv.put", "on", "default", "hello", "from", Username]]),
 
     ?assertMatch({error, {ok, "403", _, _}}, rhc:counter_incr(C7, <<"hello">>,
@@ -358,7 +358,7 @@ confirm() ->
 
     %% mapred tests
     lager:info("Checking that full-bucket mapred is disallowed"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.put", "on",
                                                     "default", "MR", "to", Username]]),
 
 
@@ -379,7 +379,7 @@ confirm() ->
                                                true}])),
 
     lager:info("Granting list-keys, asserting full-bucket mapred is still disallowed"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.list_keys", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.list_keys", "on",
                                                     "default", "MR", "to", Username]]),
 
     ?assertMatch({error, {"403", _}},
@@ -390,7 +390,7 @@ confirm() ->
                                                true}])),
 
     lager:info("Granting mapreduce, checking that job succeeds"),
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.mapreduce", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.mapreduce", "on",
                                                     "default", "MR", "to", Username]]),
 
     ?assertEqual({ok, [{1, [33]}]},
@@ -436,7 +436,7 @@ confirm() ->
 
     lager:info("whitelisting module path"),
     {?MODULE, _ModBin, ModFile} = code:get_object_code(?MODULE),
-    ok = rpc:call(Node, application, set_env, [riak_kv, add_paths, [filename:dirname(ModFile)]]),
+    ok = rt:rpc_call(Node, application, set_env, [riak_kv, add_paths, [filename:dirname(ModFile)]]),
 
     lager:info("checking that insecure input modfun fails when whitelisted but"
                " lacking permissions"),
@@ -450,7 +450,7 @@ confirm() ->
                                                        reduce_set_union}, undefined,
                                                true}])),
 
-    ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.mapreduce", "on",
+    ok = rt:rpc_call(Node, riak_core_console, grant, [["riak_kv.mapreduce", "on",
                                                     "any", "to", Username]]),
 
     lager:info("checking that insecure input modfun works when whitelisted and"
@@ -465,7 +465,7 @@ confirm() ->
                                                        reduce_set_union}, undefined,
                                                true}])),
 
-    ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.mapreduce", "on",
+    ok = rt:rpc_call(Node, riak_core_console, revoke, [["riak_kv.mapreduce", "on",
                                                     "any", "from", Username]]),
 
     lager:info("checking that insecure query modfuns works when whitelisted"),
@@ -480,7 +480,7 @@ confirm() ->
 
 
     lager:info("Revoking list-keys, checking that full-bucket mapred fails"),
-    ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "on",
+    ok = rt:rpc_call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "on",
                                                     "default", "MR", "from", Username]]),
 
     ?assertMatch({error, {"403", _}},
@@ -576,4 +576,4 @@ crdt_tests([Node|_]=Nodes, RHC) ->
     ok.
 
 grant(Node, Args) ->
-    ok = rpc:call(Node, riak_core_console, grant, [Args]).
+    ok = rt:rpc_call(Node, riak_core_console, grant, [Args]).

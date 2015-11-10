@@ -113,8 +113,8 @@ enable_realtime([{_, Node, _}|OtherClusters]) ->
 
 verify_snmp_cluster_stats(Clusters) ->
     [{_Name, Leader, [_Nodes]} | _Rest] = Clusters,
-    rpc:call(Leader, riak_core, wait_for_application, [snmp]),
-    rpc:call(Leader, riak_core, wait_for_application, [riak_snmp]),
-    ClusterJoins = rpc:call(Leader, snmpa, get, [snmp_master_agent, ?CLUSTER_OIDS]),
+    rt:rpc_call(Leader, riak_core, wait_for_application, [snmp]),
+    rt:rpc_call(Leader, riak_core, wait_for_application, [riak_snmp]),
+    ClusterJoins = rt:rpc_call(Leader, snmpa, get, [snmp_master_agent, ?CLUSTER_OIDS]),
     ?assertEqual(?OTHER_CLUSTERS, ClusterJoins).
 

@@ -140,7 +140,7 @@ wait_for_aae(Cluster) ->
 wait_for_all_trees(Cluster) ->
     F = fun(Node) ->
                 lager:info("Check if all trees built for node ~p", [Node]),
-                Info = rpc:call(Node, yz_kv, compute_tree_info, []),
+                Info = rt:rpc_call(Node, yz_kv, compute_tree_info, []),
                 NotBuilt = [X || {_,undefined}=X <- Info],
                 NotBuilt == []
         end,
@@ -161,7 +161,7 @@ wait_for_full_exchange_round(Cluster, Timestamp) ->
         end,
     AllExchanged =
         fun(Node) ->
-                Exchanges = rpc:call(Node, yz_kv, compute_exchange_info, []),
+                Exchanges = rt:rpc_call(Node, yz_kv, compute_exchange_info, []),
                 {_Recent, WaitingFor1} = lists:partition(MoreRecent, Exchanges),
                 WaitingFor2 = [element(1,X) || X <- WaitingFor1],
                 lager:info("Still waiting for AAE of ~p ~p", [Node, WaitingFor2]),
@@ -178,7 +178,7 @@ wait_for_index(Cluster, Index) ->
         fun(Node) ->
                 lager:info("Waiting for index ~s to be avaiable on node ~p",
                            [Index, Node]),
-                rpc:call(Node, yz_solr, ping, [Index])
+                rt:rpc_call(Node, yz_solr, ping, [Index])
         end,
     [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster],
     ok.
@@ -219,7 +219,7 @@ wait_for_schema(Cluster, Name, Content) ->
 -spec expire_trees([node()]) -> ok.
 expire_trees(Cluster) ->
     lager:info("Expire all trees"),
-    _ = [ok = rpc:call(Node, yz_entropy_mgr, expire_trees, [])
+    _ = [ok = rt:rpc_call(Node, yz_entropy_mgr, expire_trees, [])
          || Node <- Cluster],
 
     %% The expire is async so just give it a moment
@@ -230,7 +230,7 @@ expire_trees(Cluster) ->
 -spec clear_trees([node()]) -> ok.
 clear_trees(Cluster) ->
     lager:info("Expire all trees"),
-    _ = [ok = rpc:call(Node, yz_entropy_mgr, clear_trees, [])
+    _ = [ok = rt:rpc_call(Node, yz_entropy_mgr, clear_trees, [])
          || Node <- Cluster],
     ok.
 
@@ -238,7 +238,7 @@ clear_trees(Cluster) ->
 %% @doc Remove index directories, removing the index.
 -spec remove_index_dirs([node()], index_name()) -> ok.
 remove_index_dirs(Nodes, IndexName) ->
-    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+    IndexDirs = [rt:rpc_call(Node, yz_index, index_dir, [IndexName]) ||
                     Node <- Nodes],
     lager:info("Remove index dirs: ~p, on nodes: ~p~n",
                [IndexDirs, Nodes]),
@@ -252,7 +252,7 @@ remove_index_dirs(Nodes, IndexName) ->
 check_exists(Nodes, IndexName) ->
     rt:wait_until(Nodes,
                   fun(N) ->
-                          rpc:call(N, yz_index, exists, [IndexName])
+                          rt:rpc_call(N, yz_index, exists, [IndexName])
                   end).
 
 -spec verify_num_found_query([node()], index_name(), count()) -> ok.
@@ -422,4 +422,4 @@ override_schema(Pid, Cluster, Index, Schema, RawUpdate) ->
     ok = riakc_pb_socket:create_search_schema(Pid, Schema, RawUpdate),
     yokozuna_rt:wait_for_schema(Cluster, Schema, RawUpdate),
     [Node|_] = Cluster,
-    {ok, _} = rpc:call(Node, yz_index, reload, [Index]).
+    {ok, _} = rt:rpc_call(Node, yz_index, reload, [Index]).

@@ -139,7 +139,7 @@ verify_count(Pid, ExpectedKeyCount) ->
 
 %% @doc Remove core properties file on nodes.
 remove_core_props(Nodes, IndexName) ->
-    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+    IndexDirs = [rt:rpc_call(Node, yz_index, index_dir, [IndexName]) ||
                     Node <- Nodes],
     PropsFiles = [filename:join([IndexDir, "core.properties"]) ||
                      IndexDir <- IndexDirs],
@@ -151,7 +151,7 @@ remove_core_props(Nodes, IndexName) ->
 %% @doc Remove lucence segment info files to check if reindexing will occur
 %%      on re-creation/re-indexing.
 remove_segment_infos(Nodes, IndexName) ->
-    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+    IndexDirs = [rt:rpc_call(Node, yz_index, index_dir, [IndexName]) ||
                     Node <- Nodes],
     SiPaths = [binary_to_list(filename:join([IndexDir, "data/index/*.si"])) ||
                                      IndexDir <- IndexDirs],

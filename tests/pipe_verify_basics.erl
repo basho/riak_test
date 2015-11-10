@@ -73,7 +73,7 @@ verify_order([RN|_]) ->
 
     AllLog = [{log, sink}, {trace, all}],
     {eoi, Res, Trace} = 
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun mult_by_2/1, fun order_fun/1, AllLog, 5]),
 
     ?assertMatch([{_, 32}], Res),
@@ -85,11 +85,11 @@ verify_order([RN|_]) ->
 verify_trace_filtering([RN|_]) ->
     lager:info("Verify that trace messages are filtered"),
     {eoi, _Res, Trace1} = 
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun mult_by_2/1, fun order_fun/1,
                   [{log,sink}, {trace, [eoi]}], 5]),
     {eoi, _Res, Trace2} = 
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun mult_by_2/1, fun order_fun/1,
                   [{log,sink}, {trace, all}], 5]),
     %% Looking too deeply into the format of the trace
@@ -101,8 +101,8 @@ verify_recursive_countdown_1([RN|_]) ->
     Spec = [#fitting_spec{name=counter,
                           module=riak_pipe_w_rec_countdown}],
     Opts = [{sink, rt_pipe:self_sink()}],
-    {ok, Pipe} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
-    ok = rpc:call(RN, riak_pipe, queue_work, [Pipe, 3]),
+    {ok, Pipe} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
+    ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, 3]),
     riak_pipe:eoi(Pipe),
     {eoi, Res, []} = riak_pipe:collect_results(Pipe),
     ?assertEqual([{counter,0},{counter,1},{counter,2},{counter,3}], Res).
@@ -116,8 +116,8 @@ verify_recursive_countdown_2(RN, Retries) when Retries > 0 ->
                           module=riak_pipe_w_rec_countdown,
                           arg=testeoi}],
     Options = [{sink, rt_pipe:self_sink()},{trace,[restart]},{log,sink}],
-    {ok, Pipe} = rpc:call(RN, riak_pipe, exec, [Spec, Options]),
-    ok = rpc:call(RN, riak_pipe, queue_work, [Pipe, 3]),
+    {ok, Pipe} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Options]),
+    ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, 3]),
     riak_pipe:eoi(Pipe),
     {eoi, Res, Trc} = riak_pipe:collect_results(Pipe),
     ?assertEqual([{counter,0},{counter,0},{counter,0},

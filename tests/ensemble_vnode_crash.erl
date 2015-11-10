@@ -42,8 +42,8 @@ confirm() ->
     Keys = [<<N:64/integer>> || N <- lists:seq(1,1000)],
 
     Key1 = hd(Keys),
-    DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key1}]),
-    PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
+    DocIdx = rt:rpc_call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key1}]),
+    PL = rt:rpc_call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
     {{Key1Idx, Key1Node}, _} = hd(PL),
 
     PBC = rt:pbc(Node),
@@ -66,11 +66,11 @@ confirm() ->
             ?M:maybe_async_update_orig(Ref, Pid, Reason, State)
         end}}]}),
 
-    {ok, VnodePid} =rpc:call(Key1Node, riak_core_vnode_manager, get_vnode_pid,
+    {ok, VnodePid} =rt:rpc_call(Key1Node, riak_core_vnode_manager, get_vnode_pid,
         [Key1Idx, riak_kv_vnode]),
     lager:info("Killing Vnode ~p for Key1 {~p, ~p}", [VnodePid, Key1Node,
             Key1Idx]),
-    true = rpc:call(Key1Node, erlang, exit, [VnodePid, testkill]),
+    true = rt:rpc_call(Key1Node, erlang, exit, [VnodePid, testkill]),
 
     lager:info("Waiting to receive msg indicating downed vnode"),
     Count = wait_for_all_handle_downs(0),
@@ -82,11 +82,11 @@ confirm() ->
     [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
 
     lager:info("Killing Vnode Proxy for Key1"),
-    Proxy = rpc:call(Key1Node, riak_core_vnode_proxy, reg_name, [riak_kv_vnode,
+    Proxy = rt:rpc_call(Key1Node, riak_core_vnode_proxy, reg_name, [riak_kv_vnode,
             Key1Idx]),
-    ProxyPid = rpc:call(Key1Node, erlang, whereis, [Proxy]),
+    ProxyPid = rt:rpc_call(Key1Node, erlang, whereis, [Proxy]),
     lager:info("Killing Vnode Proxy ~p", [Proxy]),
-    true = rpc:call(Key1Node, erlang, exit, [ProxyPid, testkill]),
+    true = rt:rpc_call(Key1Node, erlang, exit, [ProxyPid, testkill]),
 
     lager:info("Waiting to receive msg indicating downed vnode proxy:"),
     Count2 = wait_for_all_handle_downs(0),

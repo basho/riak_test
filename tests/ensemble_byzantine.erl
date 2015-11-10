@@ -247,10 +247,10 @@ get_leader_idx(PL, LeaderNode) ->
 
 kill_peers(Ensemble, Nodes) ->
     Node = hd(Nodes),
-    {_, [View | _]} = rpc:call(Node, riak_ensemble_manager, get_views, [Ensemble]),
+    {_, [View | _]} = rt:rpc_call(Node, riak_ensemble_manager, get_views, [Ensemble]),
     Peers = [P || P={_Id, N} <- View, lists:member(N, Nodes)],
     lager:info("Killing Peers: ~p", [Peers]),
-    Pids = [rpc:call(Node, riak_ensemble_manager, get_peer_pid,
+    Pids = [rt:rpc_call(Node, riak_ensemble_manager, get_peer_pid,
              [Ensemble, Peer]) || Peer <- Peers],
     [exit(Pid, kill) || Pid <- Pids, Pid =/= undefined].
 
@@ -262,9 +262,9 @@ wipe_trees(Ensemble, PL) ->
 
 wipe_tree(Ensemble, Idx, Node) ->
     rt:clean_data_dir([Node], "ensembles/trees/kv_"++integer_to_list(Idx)),
-    {_, [View | _]} = rpc:call(Node, riak_ensemble_manager, get_views, [Ensemble]),
+    {_, [View | _]} = rt:rpc_call(Node, riak_ensemble_manager, get_views, [Ensemble]),
     [Peer] = [P || P={_Id, N} <- View, Node =:= N],
-    Pid = rpc:call(Node, riak_ensemble_manager, get_peer_pid, [Ensemble, Peer]),
+    Pid = rt:rpc_call(Node, riak_ensemble_manager, get_peer_pid, [Ensemble, Peer]),
     lager:info("Peer= ~p, Pid = ~p", [Peer, Pid]),
     exit(Pid, kill).
 
@@ -293,8 +293,8 @@ backend_dir(eleveldb) ->
     "leveldb".
 
 get_preflist(Node, Bucket, Key, NVal) ->
-    DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key}]),
-    PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
+    DocIdx = rt:rpc_call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key}]),
+    PL = rt:rpc_call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
     {ok, PL}.
 
 create_strong_bucket_type(Node, NVal) ->

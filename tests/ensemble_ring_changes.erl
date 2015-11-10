@@ -51,7 +51,7 @@ confirm() ->
     {ok, Obj} = initial_write(PBC, Bucket, Key, Val),
     {ok, _Obj2} = assert_update(PBC, Bucket, Key, Obj, <<"test-val2">>),
     Replacements = expand_cluster(Joined, NotJoined),
-    {_Vsn, [View]} = rpc:call(Node, riak_ensemble_manager, get_views, [Ensemble]),
+    {_Vsn, [View]} = rt:rpc_call(Node, riak_ensemble_manager, get_views, [Ensemble]),
     {_, F1} = hd(lists:reverse(View)),
     {_, F2} = hd(tl(lists:reverse(View))),
     lager:info("F1= ~p, F2=~p", [F1, F2]),
@@ -89,8 +89,8 @@ initial_write(PBC, Bucket, Key, Val) ->
     {ok, Obj}.
 
 get_preflist(Node, Bucket, Key, NVal) ->
-    DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key}]),
-    PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
+    DocIdx = rt:rpc_call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key}]),
+    PL = rt:rpc_call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
     {ok, PL}.
 
 create_strong_bucket_type(Node, NVal) ->
@@ -104,7 +104,7 @@ replace_node(Node, OldNode, NewNode) ->
     Nodes = [OldNode, NewNode],
     rt:staged_join(NewNode, Node),
     ?assertEqual(ok, rt:wait_until_ring_converged(Nodes)),
-    ok = rpc:call(Node, riak_core_claimant, replace, Nodes),
+    ok = rt:rpc_call(Node, riak_core_claimant, replace, Nodes),
     rt:plan_and_commit(Node),
     rt:try_nodes_ready(Nodes, 3, 500),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
@@ -114,7 +114,7 @@ force_replace_node(Node, OldNode, NewNode) ->
     Nodes = [OldNode, NewNode],
     rt:staged_join(NewNode, Node),
     ?assertEqual(ok, rt:wait_until_ring_converged(Nodes)),
-    ok = rpc:call(Node, riak_core_claimant, force_replace, Nodes),
+    ok = rt:rpc_call(Node, riak_core_claimant, force_replace, Nodes),
     rt:plan_and_commit(Node),
     rt:try_nodes_ready(Nodes, 3, 500),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).

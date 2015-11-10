@@ -62,7 +62,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
             spawn(fun() ->
                           lager:info("Running kv_reformat to downgrade to v0 on ~p",
                                      [BFirst]),
-                          {_, _, Error1} = rpc:call(BFirst,
+                          {_, _, Error1} = rt:rpc_call(BFirst,
                                                     riak_kv_reformat,
                                                     run,
                                                     [v0, [{kill_handoffs, false}]]),
@@ -132,7 +132,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
         {false, v1} ->
             lager:info("Running kv_reformat to downgrade to v0 on ~p",
                        [BFirst]),
-            {_, _, Error} = rpc:call(BFirst,
+            {_, _, Error} = rt:rpc_call(BFirst,
                                      riak_kv_reformat,
                                      run,
                                      [v0, [{kill_handoffs, false}]]),
@@ -205,7 +205,7 @@ configure_clusters(AVersion, BVersion, Realtime) ->
     LeaderA = repl_util:get_leader(AFirst),
 
     lager:info("Connecting cluster A to B"),
-    {ok, {BIP, BPort}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
+    {ok, {BIP, BPort}} = rt:rpc_call(BFirst, application, get_env, [riak_core, cluster_mgr]),
 
     repl_util:connect_cluster(LeaderA, BIP, BPort),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),

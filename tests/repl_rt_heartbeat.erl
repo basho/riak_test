@@ -148,7 +148,7 @@ verify_hb_noresponse(LeaderA, LeaderB) ->
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [LeaderA, Port]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
@@ -234,7 +234,7 @@ suspend_heartbeat_responses(Node) ->
 
 %% @doc Get the Pid of the first RT source connection on Node
 get_rt_conn_pid(Node) ->
-    [{_Remote, Pid}|Rest] = rpc:call(Node, riak_repl2_rtsource_conn_sup, enabled, []),
+    [{_Remote, Pid}|Rest] = rt:rpc_call(Node, riak_repl2_rtsource_conn_sup, enabled, []),
     case Rest of
         [] -> ok;
         RR -> lager:info("Other connections: ~p", [RR])
@@ -245,7 +245,7 @@ get_rt_conn_pid(Node) ->
 verify_heartbeat_messages(Node) ->
     lager:info("Verify heartbeats"),
     Pid = get_rt_conn_pid(Node),
-    Status = rpc:call(Node, riak_repl2_rtsource_conn, status, [Pid], ?RPC_TIMEOUT),
+    Status = rt:rpc_call(Node, riak_repl2_rtsource_conn, status, [Pid], ?RPC_TIMEOUT),
     HBRTT = proplists:get_value(hb_rtt, Status),
     case HBRTT of
         undefined ->

@@ -18,7 +18,7 @@ confirm() ->
     [] = repl_util:do_write(SrcLead, 1, 1000, ?TEST_BUCKET, 1),
 
     repl_util:enable_fullsync(SrcLead, "sink"),
-    rpc:call(SrcLead, riak_repl_console, fullsync, [["start", "sink"]]),
+    rt:rpc_call(SrcLead, riak_repl_console, fullsync, [["start", "sink"]]),
 
     % and now, the actual test.
     % find a random fssource, suspend it, and then ensure we can get a
@@ -89,7 +89,7 @@ suspend_an_fs_source([_Node | _Tail], 0) ->
     {error, tries_ran_out};
 
 suspend_an_fs_source([Node | Tail], TriesLeft) ->
-    Pids = rpc:call(Node, riak_repl2_fssource_sup, enabled, []),
+    Pids = rt:rpc_call(Node, riak_repl2_fssource_sup, enabled, []),
     case maybe_suspend_an_fs_source(Node, Pids) of
         false ->
             suspend_an_fs_source(Tail ++ [Node], TriesLeft - 1);

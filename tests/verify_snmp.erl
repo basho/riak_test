@@ -48,13 +48,13 @@ confirm() ->
 
     lager:info("Waiting for SNMP to start."),
 
-    rpc:call(Node1, riak_core, wait_for_application, [snmp]),
-    rpc:call(Node1, riak_core, wait_for_application, [riak_snmp]),
+    rt:rpc_call(Node1, riak_core, wait_for_application, [snmp]),
+    rt:rpc_call(Node1, riak_core, wait_for_application, [riak_snmp]),
 
     lager:info("Mapping SNMP names to OIDs"),
 
     OIDPairs = [ begin
-                     {value, OID} = rpc:call(Node1, snmpa, name_to_oid, [SKey]),
+                     {value, OID} = rt:rpc_call(Node1, snmpa, name_to_oid, [SKey]),
                      {OID ++ [0], HKey}
                  end || {SKey, HKey} <- Keys ],
 
@@ -80,7 +80,7 @@ verify_eq(Keys, Node) ->
                  rt:wait_until(Node,
                                fun(N) ->
                                        Stats = get_stats(Node),
-                                       SStats = rpc:call(N, snmpa, get, [snmp_master_agent, OIDs]),
+                                       SStats = rt:rpc_call(N, snmpa, get, [snmp_master_agent, OIDs]),
                                        SPairs = lists:zip(SStats, HKeys),
                                        lists:all(
                                             fun({A,B}) -> 

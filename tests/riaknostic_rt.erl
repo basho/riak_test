@@ -58,11 +58,11 @@ riaknostic_install(false, _Node) ->
 riaknostic_install(true, Node) ->
     %% Install
     lager:info("Installing Riaknostic"),
-    {ok, LibDir} = rpc:call(Node, application, get_env, [riak_core, platform_lib_dir]),
+    {ok, LibDir} = rt:rpc_call(Node, application, get_env, [riak_core, platform_lib_dir]),
     Cmd = io_lib:format("sh -c \"cd ~s && curl -O -L ~s && tar xzf ~s\"",
                         [LibDir, ?RIAKNOSTIC_URL, filename:basename(?RIAKNOSTIC_URL)]),
     lager:info("Running command: ~s", [Cmd]),
-    lager:debug("~p~n", [rpc:call(Node, os, cmd, [Cmd])]),
+    lager:debug("~p~n", [rt:rpc_call(Node, os, cmd, [Cmd])]),
     ok.
 
 %% Check that riaknostic executes

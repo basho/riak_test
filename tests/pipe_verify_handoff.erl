@@ -81,16 +81,16 @@ confirm() ->
 
     lager:info("Start two pipes on Primary"),
     {ok, Pipe1} =
-        rpc:call(Primary, riak_pipe, exec,
+        rt:rpc_call(Primary, riak_pipe, exec,
                  [P1Spec, [{sink, rt_pipe:self_sink()}|?ALL_LOG]]),
     {ok, Pipe2} =
-        rpc:call(Primary, riak_pipe, exec,
+        rt:rpc_call(Primary, riak_pipe, exec,
                  [P2Spec, [{sink, rt_pipe:self_sink()}|?ALL_LOG]]),
 
     lager:info("Send some inputs to both pipes"),
-    [ok = rpc:call(Primary, riak_pipe, queue_work, [Pipe1, X]) ||
+    [ok = rt:rpc_call(Primary, riak_pipe, queue_work, [Pipe1, X]) ||
         X <- lists:seq(1, 20)],
-    [ok = rpc:call(Primary, riak_pipe, queue_work, [Pipe2, X]) ||
+    [ok = rt:rpc_call(Primary, riak_pipe, queue_work, [Pipe2, X]) ||
         X <- lists:seq(101, 120)],
 
     P1Status1 = pipe_status(Primary, Pipe1),
@@ -98,7 +98,7 @@ confirm() ->
 
     lager:info("Start and register intercept log collector"),
     Collector = spawn_link(Primary, ?MODULE, collector, []),
-    rpc:call(Primary, erlang, register, [riak_test_collector, Collector]),
+    rt:rpc_call(Primary, erlang, register, [riak_test_collector, Collector]),
 
     lager:info("Install pipe vnode intercept"),
     Intercept = {riak_pipe_vnode,
@@ -117,7 +117,7 @@ confirm() ->
     ok = rt:wait_until_transfers_complete(Nodes),
 
     lager:info("Add more inputs to Pipe2"),
-    [ok = rpc:call(Primary, riak_pipe, queue_work, [Pipe2, X]) ||
+    [ok = rt:rpc_call(Primary, riak_pipe, queue_work, [Pipe2, X]) ||
         X <- lists:seq(121, 140)],
 
     %% transfers completing takes so long that the pipe is extremely
@@ -241,7 +241,7 @@ partitions_on_node(Node, PipeStatus) ->
 %% status list from it. It is expected that the given pipe has exactly
 %% one fitting.
 pipe_status(Node, Pipe) ->
-    [{_Name, Status}] = rpc:call(Node, riak_pipe, status, [Pipe]),
+    [{_Name, Status}] = rt:rpc_call(Node, riak_pipe, status, [Pipe]),
     Status.
 
 %% @doc entry point for collector process

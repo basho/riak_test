@@ -427,7 +427,7 @@ deploy_nodes(NodeConfig) ->
     [ok = rt:wait_until_pingable(N) || N <- Nodes],
 
     %% %% Enable debug logging
-    %% [rpc:call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
+    %% [rt:rpc_call(N, lager, set_loglevel, [lager_console_backend, debug]) || N <- Nodes],
 
     %% We have to make sure that riak_core_ring_manager is running before we can go on.
     [ok = rt:wait_until_registered(N, riak_core_ring_manager) || N <- Nodes],
@@ -442,11 +442,11 @@ deploy_nodes(NodeConfig) ->
 gen_stop_fun(Timeout) ->
     fun({C,Node}) ->
             net_kernel:hidden_connect_node(Node),
-            case rpc:call(Node, os, getpid, []) of
+            case rt:rpc_call(Node, os, getpid, []) of
                 PidStr when is_list(PidStr) ->
                     lager:info("Preparing to stop node ~p (process ID ~s) with init:stop/0...",
                                [Node, PidStr]),
-                    rpc:call(Node, init, stop, []),
+                    rt:rpc_call(Node, init, stop, []),
                     %% If init:stop/0 fails here, the wait_for_pid/2 call
                     %% below will timeout and the process will get cleaned
                     %% up by the kill_stragglers/2 function
@@ -520,7 +520,7 @@ stop_all(DevPath) ->
                     ok
             end,
             lager:info("Trying to obtain node shutdown_time via RPC..."),
-            Tmout = case rpc:call(hd(Nodes), init, get_argument, [shutdown_time]) of
+            Tmout = case rt:rpc_call(hd(Nodes), init, get_argument, [shutdown_time]) of
                         {ok,[[Tm]]} -> list_to_integer(Tm)+10000;
                         _ -> 20000
                     end,
@@ -533,7 +533,7 @@ stop_all(DevPath) ->
     ok.
 
 stop(Node) ->
-    RiakPid = rpc:call(Node, os, getpid, []),
+    RiakPid = rt:rpc_call(Node, os, getpid, []),
     N = node_id(Node),
     rt_cover:maybe_stop_on_node(Node),
     run_riak(N, relpath(node_version(N)), "stop"),
@@ -748,7 +748,7 @@ teardown() ->
 whats_up() ->
     io:format("Here's what's running...~n"),
 
-    Up = [rpc:call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
+    Up = [rt:rpc_call(Node, os, cmd, ["pwd"]) || Node <- nodes()],
     [io:format("  ~s~n",[string:substr(Dir, 1, length(Dir)-1)]) || Dir <- Up].
 
 devpaths() ->

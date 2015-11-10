@@ -52,23 +52,23 @@ confirm() ->
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
     %% enable security on the cluster
-    ok = rpc:call(Node, riak_core_console, security_enable, [[]]),
+    ok = rt:rpc_call(Node, riak_core_console, security_enable, [[]]),
 
 
     [_, {pb, {"127.0.0.1", Port}}] = rt:connection_info(Node),
 
     lager:info("Creating user"),
     %% grant the user credentials
-    ok = rpc:call(Node, riak_core_console, add_user, [["user", "password=password"]]),
+    ok = rt:rpc_call(Node, riak_core_console, add_user, [["user", "password=password"]]),
 
     lager:info("Setting password mode on user"),
     %% require password on localhost
-    ok = rpc:call(Node, riak_core_console, add_source, [["user", "127.0.0.1/32",
+    ok = rt:rpc_call(Node, riak_core_console, add_source, [["user", "127.0.0.1/32",
                                                     "password"]]),
 
     CipherList = "AES256-SHA256:RC4-SHA",
     %% set a simple default cipher list, one good one a and one shitty one
-    rpc:call(Node, riak_core_security, set_ciphers,
+    rt:rpc_call(Node, riak_core_security, set_ciphers,
              [CipherList]),
 
     [AES, RC4] = ParsedCiphers = [begin
@@ -93,7 +93,7 @@ confirm() ->
                                     ])),
 
     lager:info("disabling honor_cipher_info"),
-    rpc:call(Node, application, set_env, [riak_api, honor_cipher_order,
+    rt:rpc_call(Node, application, set_env, [riak_api, honor_cipher_order,
                                           false]),
 
     lager:info("Check that the client's preference for RC4-SHA"
@@ -138,7 +138,7 @@ confirm() ->
                                     ])),
 
     lager:info("Enable ssl 3.0, tls 1.0 and tls 1.1 and disable tls 1.2"),
-    rpc:call(Node, application, set_env, [riak_api, tls_protocols,
+    rt:rpc_call(Node, application, set_env, [riak_api, tls_protocols,
                                           [sslv3, tlsv1, 'tlsv1.1']]),
 
     lager:info("check that connections trying to use tls 1.2 fail"),
@@ -172,16 +172,16 @@ confirm() ->
                                     ])),
 
     lager:info("Reset tls protocols back to the default"),
-    rpc:call(Node, application, set_env, [riak_api, tls_protocols,
+    rt:rpc_call(Node, application, set_env, [riak_api, tls_protocols,
                                           ['tlsv1.2']]),
 
     lager:info("checking CRLs are checked for client certificates by"
               " default"),
 
-    ok = rpc:call(Node, riak_core_console, add_user, [["site5.basho.com"]]),
+    ok = rt:rpc_call(Node, riak_core_console, add_user, [["site5.basho.com"]]),
 
     %% require certificate auth on localhost
-    ok = rpc:call(Node, riak_core_console, add_source, [["site5.basho.com",
+    ok = rt:rpc_call(Node, riak_core_console, add_source, [["site5.basho.com",
                                                          "127.0.0.1/32",
                                                          "certificate"]]),
 
@@ -195,7 +195,7 @@ confirm() ->
                                       ])),
 
     lager:info("Disable CRL checking"),
-    rpc:call(Node, application, set_env, [riak_api, check_crl,
+    rt:rpc_call(Node, application, set_env, [riak_api, check_crl,
                                           false]),
 
     lager:info("Checking revoked certificates are allowed"),

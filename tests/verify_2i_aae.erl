@@ -43,7 +43,7 @@ confirm() ->
                       [{{index_specs, 1}, skippable_index_specs},
                        {{diff_index_specs, 2}, skippable_diff_index_specs}]}),
     lager:info("Installed intercepts to corrupt index specs on node ~p", [Node1]),
-    %%rpc:call(Node1, lager, set_loglevel, [lager_console_backend, debug]),
+    %%rt:rpc_call(Node1, lager, set_loglevel, [lager_console_backend, debug]),
     PBC = rt:pbc(Node1),
     NumItems = ?NUM_ITEMS,
     NumDel = ?NUM_DELETES,
@@ -65,9 +65,9 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
                                             Bucket <- ?BUCKETS],
     lager:info("Put half the objects, now enable AAE and build tress"),
     %% Enable AAE and build trees.
-    ok = rpc:call(Node1, application, set_env,
+    ok = rt:rpc_call(Node1, application, set_env,
                   [riak_kv, anti_entropy, {on, [debug]}]),
-    ok = rpc:call(Node1, riak_kv_entropy_manager, enable, []),
+    ok = rt:rpc_call(Node1, riak_kv_entropy_manager, enable, []),
     rt:wait_until_aae_trees_built([Node1]),
 
     lager:info("AAE trees built, now put the rest of the data"),
@@ -105,24 +105,24 @@ do_tree_rebuild(Node) ->
     lager:info("Let's go through a tree rebuild right here"),
     %% Cheat by clearing build times from ETS directly, as the code doesn't
     %% ever clear them currently.
-    ?assertEqual(true, rpc:call(Node, ets, delete_all_objects, [ets_riak_kv_entropy])),
+    ?assertEqual(true, rt:rpc_call(Node, ets, delete_all_objects, [ets_riak_kv_entropy])),
     %% Make it so it doesn't go wild rebuilding things when the expiration is
     %% tiny.
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+    ?assertEqual(ok, rt:rpc_call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {0, 5000}])),
     %% Make any tree expire on tick.
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+    ?assertEqual(ok, rt:rpc_call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_expire,
                                                            1])),
     %% Wait for a good number of ticks.
     timer:sleep(5000),
     %% Make sure things stop expiring on tick
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+    ?assertEqual(ok, rt:rpc_call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_expire,
                                                            7 * 24 * 60 * 60 * 1000])),
     %% And let the manager start allowing builds again.
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+    ?assertEqual(ok, rt:rpc_call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {100, 1000}])),
     rt:wait_until_aae_trees_built([Node]),
@@ -169,7 +169,7 @@ check_kill_repair(Node1) ->
 run_2i_repair(Node1) ->
     lager:info("Run 2i AAE repair"),
     ?assertMatch({ok, _}, rt:admin(Node1, ["repair-2i"])),
-    RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae]),
+    RepairPid = rt:rpc_call(Node1, erlang, whereis, [riak_kv_2i_aae]),
     lager:info("Wait for repair process to finish"),
     Mon = monitor(process, RepairPid),
     MaxWaitTime = rt_config:get(rt_max_wait_time),
@@ -184,7 +184,7 @@ run_2i_repair(Node1) ->
     end.
 
 set_skip_index_specs(Node, Val) ->
-    ok = rpc:call(Node, application, set_env,
+    ok = rt:rpc_call(Node, application, set_env,
                   [riak_kv, skip_index_specs, Val]).
 
 to_key(N) ->

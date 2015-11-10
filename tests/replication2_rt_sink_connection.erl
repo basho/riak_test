@@ -99,7 +99,7 @@ confirm() ->
 %% @doc Verify connectivity between sources and sink.
 verify_connectivity(Node) ->
     rt:wait_until(Node, fun(N) ->
-                {ok, Connections} = rpc:call(N,
+                {ok, Connections} = rt:rpc_call(N,
                                              riak_core_cluster_mgr,
                                              get_connections,
                                              []),
@@ -110,7 +110,7 @@ verify_connectivity(Node) ->
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
     lager:info("Connect cluster A:~p to B on port ~p", [LeaderA, Port]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port).

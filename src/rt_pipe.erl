@@ -96,8 +96,8 @@ zombies(Nodes) ->
 %% @doc Find still-running pipe processes on a node. Transient pipe
 %% processes store an `eunit' value in their dictionary.
 node_zombies(Node) ->
-    L = [ {Pid, rpc:call(Node, erlang, process_info, [Pid, dictionary])}
-          || Pid <- rpc:call(Node, erlang, processes, []) ],
+    L = [ {Pid, rt:rpc_call(Node, erlang, process_info, [Pid, dictionary])}
+          || Pid <- rt:rpc_call(Node, erlang, processes, []) ],
     %% process_info might return 'undefined', so filtering must be
     %% done in a second step
     [ {Pid, X} || {Pid, {dictionary, D}} <- L, {eunit, X} <- D ].

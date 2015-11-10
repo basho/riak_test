@@ -113,7 +113,7 @@ basic RPC call:
 <pre class="erlang">
 ```
 owners_according_to(Node) ->
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    {ok, Ring} = rt:rpc_call(Node, riak_core_ring_manager, get_raw_ring, []),
     Owners = [Owner || {_Idx, Owner} <- riak_core_ring:all_owners(Ring)],
     lists:usort(Owners).
 '''
@@ -129,7 +129,7 @@ wait_until_nodes_ready(Nodes) ->
     ok.
 
 is_ready(Node) ->
-    case rpc:call(Node, riak_core_ring_manager, get_raw_ring, []) of
+    case rt:rpc_call(Node, riak_core_ring_manager, get_raw_ring, []) of
         {ok, Ring} ->
             lists:member(Node, riak_core_ring:ready_members(Ring));
         _ ->

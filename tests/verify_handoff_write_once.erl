@@ -74,7 +74,7 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     rt:wait_for_service(NewNode, riak_kv),
 
     %% Set the w1c_put counter to 0
-    true = rpc:call(RootNode, ets, insert, [intercepts_tab, {w1c_put_counter, 0}]),
+    true = rt:rpc_call(RootNode, ets, insert, [intercepts_tab, {w1c_put_counter, 0}]),
 
     lager:info("Joining new node with cluster."),
     rt:join(NewNode, RootNode),
@@ -90,7 +90,7 @@ test_handoff(RootNode, NewNode, NTestItems) ->
     Results2 = rt:systest_read(NewNode, 1, NTestItems, {?BUCKET_TYPE, <<"bucket">>}, 1),
     ?assertEqual(0, length(Results2)),
     lager:info("Data looks ok."),
-    [{_, Count}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
+    [{_, Count}] = rt:rpc_call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
     ?assert(Count > 0),
     lager:info("Looking Good. We handled ~p write_once puts during handoff.", [Count]).
 
@@ -103,6 +103,6 @@ deploy_test_nodes(N) ->
     rt:deploy_nodes(N, Config).
 
 make_intercepts_tab(Node) ->
-    SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
-    intercepts_tab = rpc:call(Node, ets, new, [intercepts_tab, [named_table,
+    SupPid = rt:rpc_call(Node, erlang, whereis, [sasl_safe_sup]),
+    intercepts_tab = rt:rpc_call(Node, ets, new, [intercepts_tab, [named_table,
                 public, set, {heir, SupPid, {}}]]).

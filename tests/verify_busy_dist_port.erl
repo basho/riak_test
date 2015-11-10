@@ -52,18 +52,18 @@ confirm() ->
 
     rt:load_modules_on_nodes([cause_bdp, verify_bdp_event_handler,
                              riak_test_lager_backend], [Node1]),
-    Res = rpc:call(Node1, verify_bdp_event_handler, add_handler, [self()]),
-    ok = rpc:call(Node1, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
-    ok = rpc:call(Node1, lager, set_loglevel, [riak_test_lager_backend, info]),
+    Res = rt:rpc_call(Node1, verify_bdp_event_handler, add_handler, [self()]),
+    ok = rt:rpc_call(Node1, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
+    ok = rt:rpc_call(Node1, lager, set_loglevel, [riak_test_lager_backend, info]),
     lager:info("RES: ~p", [Res]),
 
-    OsPid = rpc:call(Node2, os, getpid, []),
+    OsPid = rt:rpc_call(Node2, os, getpid, []),
     lager:info("pausing node 2 (~p) pid ~s", [Node2, OsPid]),
     %% must use cast here, call will never return
     rpc:cast(Node2, os, cmd, [lists:flatten(io_lib:format("kill -STOP ~s", [OsPid]))]),
 
     lager:info("flooding node 2 (paused) with messages from node 1"),
-    rpc:call(Node1, cause_bdp, spam_nodes, [[Node2]]),
+    rt:rpc_call(Node1, cause_bdp, spam_nodes, [[Node2]]),
 
 
     receive
@@ -77,7 +77,7 @@ confirm() ->
 
     lager:info("Verifying busy_dist_port message ended up in the log"),
     CheckLogFun = fun(Node) ->
-            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+            Logs = rt:rpc_call(Node, riak_test_lager_backend, get_logs, []),
             try case re:run(Logs, "monitor busy_dist_port .*#Port", []) of
                     {match, _} -> true;
                     nomatch    -> false

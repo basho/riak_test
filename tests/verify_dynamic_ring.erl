@@ -73,11 +73,11 @@ confirm() ->
     %% rpc:multicall(Nodes, riak_core_handoff_manager, kill_handoffs, []),
     %% Statuses = rpc:multicall(Nodes, riak_core_handoff_manager, status, []),
     %% lager:info("Handoff statuses: ~p", [Statuses]),
-    %% ok = rpc:call(ReplacingNode, riak_core, staged_join, [ANode]),
+    %% ok = rt:rpc_call(ReplacingNode, riak_core, staged_join, [ANode]),
     %% rt:wait_until_ring_converged(AllNodes),
-    %% ok = rpc:call(ANode, riak_core_claimant, force_replace, [AnotherNode, ReplacingNode]),
-    %% {ok, _, _} = rpc:call(ANode, riak_core_claimant, plan, []),
-    %% ok = rpc:call(ANode, riak_core_claimant, commit, []),
+    %% ok = rt:rpc_call(ANode, riak_core_claimant, force_replace, [AnotherNode, ReplacingNode]),
+    %% {ok, _, _} = rt:rpc_call(ANode, riak_core_claimant, plan, []),
+    %% ok = rt:rpc_call(ANode, riak_core_claimant, commit, []),
     %% rpc:multicall(AllNodes, riak_core_handoff_manager, set_concurrency, [4]),
     %% rt:wait_until_no_pending_changes(NewNodes),
     %% assert_ring_size(?EXPANDED_SIZE, NewNodes),
@@ -163,19 +163,19 @@ verify_write_during_resize(Node, Start, End) ->
     end.
 
 submit_resize(NewSize, Node) ->
-    ?assertEqual(ok, rpc:call(Node, riak_core_claimant, resize_ring, [NewSize])),
-    {ok, _, _} = rpc:call(Node, riak_core_claimant, plan, []),
-    ?assertEqual(ok, rpc:call(Node, riak_core_claimant, commit, [])).
+    ?assertEqual(ok, rt:rpc_call(Node, riak_core_claimant, resize_ring, [NewSize])),
+    {ok, _, _} = rt:rpc_call(Node, riak_core_claimant, plan, []),
+    ?assertEqual(ok, rt:rpc_call(Node, riak_core_claimant, commit, [])).
 
 abort_resize(Node) ->
-    ?assertEqual(ok, rpc:call(Node, riak_core_claimant, abort_resize, [])),
-    {ok, _, _} = rpc:call(Node, riak_core_claimant, plan, []),
-    ?assertEqual(ok, rpc:call(Node, riak_core_claimant, commit, [])).
+    ?assertEqual(ok, rt:rpc_call(Node, riak_core_claimant, abort_resize, [])),
+    {ok, _, _} = rt:rpc_call(Node, riak_core_claimant, plan, []),
+    ?assertEqual(ok, rt:rpc_call(Node, riak_core_claimant, commit, [])).
 
 assert_ring_size(Size, Nodes) when is_list(Nodes) ->
     [assert_ring_size(Size, Node) || Node <- Nodes];
 assert_ring_size(Size, Node) ->
-    {ok, R} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
+    {ok, R} = rt:rpc_call(Node, riak_core_ring_manager, get_my_ring, []),
     ?assertEqual(Size, riak_core_ring:num_partitions(R)).
 
 wait_until_extra_vnodes_shutdown([]) ->
@@ -184,10 +184,10 @@ wait_until_extra_vnodes_shutdown([Node | Nodes]) ->
     wait_until_extra_vnodes_shutdown(Node),
     wait_until_extra_vnodes_shutdown(Nodes);
 wait_until_extra_vnodes_shutdown(Node) ->
-    {ok, R} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
+    {ok, R} = rt:rpc_call(Node, riak_core_ring_manager, get_my_ring, []),
     AllIndexes = [Idx || {Idx, _} <- riak_core_ring:all_owners(R)],
     F = fun(_N) ->
-                Running = rpc:call(Node, riak_core_vnode_manager, all_index_pid, [riak_kv_vnode]),
+                Running = rt:rpc_call(Node, riak_core_vnode_manager, all_index_pid, [riak_kv_vnode]),
                 StillRunning = [Idx || {Idx, _} <- Running, not lists:member(Idx, AllIndexes)],
                 length(StillRunning) =:= 0
         end,
@@ -199,7 +199,7 @@ wait_until_extra_proxies_shutdown([Node | Nodes]) ->
     wait_until_extra_proxies_shutdown(Node),
     wait_until_extra_proxies_shutdown(Nodes);
 wait_until_extra_proxies_shutdown(Node) ->
-    {ok, R} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
+    {ok, R} = rt:rpc_call(Node, riak_core_ring_manager, get_my_ring, []),
     AllIndexes = [Idx || {Idx, _} <- riak_core_ring:all_owners(R)],
     F = fun(_N) ->
                 Running = running_vnode_proxies(Node),
@@ -209,5 +209,5 @@ wait_until_extra_proxies_shutdown(Node) ->
     ?assertEqual(ok, rt:wait_until(Node, F)).
 
 running_vnode_proxies(Node) ->
-    Children = rpc:call(Node, supervisor, which_children, [riak_core_vnode_proxy_sup]),
+    Children = rt:rpc_call(Node, supervisor, which_children, [riak_core_vnode_proxy_sup]),
     [Idx || {{_,Idx},Pid,_,_} <- Children, is_pid(Pid)].

@@ -128,8 +128,8 @@ choose_partition_to_nuke(Node, Bucket, KVs) ->
     MaxP.
 
 get_preflist(Node, B, K) ->
-    DocIdx = rpc:call(Node, riak_core_util, chash_key, [{B, K}]),
-    PlTagged = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, ?N_VAL, riak_kv]),
+    DocIdx = rt:rpc_call(Node, riak_core_util, chash_key, [{B, K}]),
+    PlTagged = rt:rpc_call(Node, riak_core_apl, get_primary_apl, [DocIdx, ?N_VAL, riak_kv]),
     Pl = [E || {E, primary} <- PlTagged],
     Pl.
 
@@ -259,9 +259,9 @@ base_dir_for_backend(eleveldb) ->
 
 restart_vnode(Node, Service, Partition) ->
     VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),
-    {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
+    {ok, Pid} = rt:rpc_call(Node, riak_core_vnode_manager, get_vnode_pid,
                          [Partition, VNodeName]),
-    ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
+    ?assert(rt:rpc_call(Node, erlang, exit, [Pid, kill_for_test])),
     Mon = monitor(process, Pid),
     receive
         {'DOWN', Mon, _, _, _} ->
@@ -272,7 +272,7 @@ restart_vnode(Node, Service, Partition) ->
                         [Partition]),
             ?assertEqual(vnode_killed, {failed_to_kill_vnode, Partition})
     end,
-    {ok, NewPid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
+    {ok, NewPid} = rt:rpc_call(Node, riak_core_vnode_manager, get_vnode_pid,
                             [Partition, VNodeName]),
     lager:info("Vnode for partition ~p restarted as ~p",
                [Partition, NewPid]).
@@ -298,7 +298,7 @@ max_aae_repairs(Nodes) when is_list(Nodes) ->
     MaxCount = lists:max([max_aae_repairs(Node) || Node <- Nodes]),
     MaxCount;
 max_aae_repairs(Node) when is_atom(Node) ->
-    Info = rpc:call(Node, riak_kv_entropy_info, compute_exchange_info, []),
+    Info = rt:rpc_call(Node, riak_kv_entropy_info, compute_exchange_info, []),
     LastCounts = [Last || {_, _, _, {Last, _, _, _}} <- Info],
     MaxCount = lists:max(LastCounts),
     MaxCount.

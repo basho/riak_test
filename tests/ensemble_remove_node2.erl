@@ -73,7 +73,7 @@ confirm() ->
     timer:sleep(30000),
 
     %% Nodes should still be in leaving state
-    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
+    {ok, Ring} = rt:rpc_call(Node, riak_core_ring_manager, get_raw_ring, []),
     Leaving = lists:usort(riak_core_ring:members(Ring, [leaving])),
     ?assertEqual(Leaving, [Node2, Node3]),
 
@@ -86,9 +86,9 @@ confirm() ->
     ok = ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Read value from the root ensemble"),
     {ok, _Obj} = riak_ensemble_client:kget(Node, root, testerooni, 1000),
-    Members3 = rpc:call(Node, riak_ensemble_manager, get_members, [root]),
+    Members3 = rt:rpc_call(Node, riak_ensemble_manager, get_members, [root]),
     ?assertEqual(3, length(Members3)),
-    Cluster = rpc:call(Node, riak_ensemble_manager, cluster, []),
+    Cluster = rt:rpc_call(Node, riak_ensemble_manager, cluster, []),
     ?assertEqual(3, length(Cluster)),
 
     lager:info("Removing intercept and waiting until nodes 2/3 shutdown"),
@@ -100,7 +100,7 @@ confirm() ->
 
     ok = rt:wait_until_unpingable(Node2),
     ok = rt:wait_until_unpingable(Node3),
-    rpc:call(Node, riak_core_console, member_status, [[]]),
-    rpc:call(Node, riak_core_console, ring_status, [[]]),
+    rt:rpc_call(Node, riak_core_console, member_status, [[]]),
+    rt:rpc_call(Node, riak_core_console, ring_status, [[]]),
 
     pass.

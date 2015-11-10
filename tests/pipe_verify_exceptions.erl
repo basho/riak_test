@@ -86,7 +86,7 @@ verify_xbad1([RN|_]) ->
     lager:info("Verify correct error message from worker (xbad1)"),
 
     {eoi, Res, Trace} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun lists:sum/1, fun xbad1/1, ?ERR_LOG, 1]),
 
     %% three of the workers will succeed (the ones that receive only
@@ -111,7 +111,7 @@ verify_xbad2([RN|_]) ->
     %% we get a badrpc because the code exits, but it includes the
     %% test data we want
     {badrpc, {'EXIT', {success_so_far, {timeout, Res, Trace}}}} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun rt_pipe:decr_or_crash/1, fun xbad2/1, ?ERR_LOG, 3]),
 
     %% 3 fittings, send 0, 1, 2, 500; crash before eoi
@@ -128,7 +128,7 @@ verify_tail_worker_crash([RN|_]) ->
     lager:info("Verify work done before tail worker crash"),
 
     {eoi, Res, Trace} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun rt_pipe:decr_or_crash/1,
                   fun tail_worker_crash/1,
                   ?ERR_LOG,
@@ -156,7 +156,7 @@ vnode_crash(Pipe) ->
 verify_vnode_crash([RN|_]) ->
     lager:info("Verify eoi still flows through after vnodes crash"),
     {eoi, Res, Trace} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun rt_pipe:decr_or_crash/1,
                   fun vnode_crash/1,
                   ?ERR_LOG,
@@ -181,7 +181,7 @@ verify_head_fitting_crash([RN|_]) ->
     %% we get a badrpc because the code exits, but it includes the
     %% test data we want
     {badrpc, {'EXIT', {success_so_far, {timeout, Res, Trace}}}} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun lists:sum/1, fun head_fitting_crash/1, ?ERR_LOG, 1]),
 
     %% the first input, [1,2,3], gets through
@@ -229,7 +229,7 @@ verify_middle_fitting_normal([RN|_]) ->
     lager:info("Verify middle fitting normal"),
 
     {badrpc, {'EXIT', {success_so_far, {timeout, Res, Trace}}}} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun rt_pipe:decr_or_crash/1,
                   fun middle_fitting_normal/1,
                   ?ERR_LOG,
@@ -279,7 +279,7 @@ verify_middle_fitting_crash([RN|_]) ->
     lager:info("Verify pipe tears down when a fitting crashes (middle)"),
 
     {badrpc, {'EXIT', {success_so_far, {timeout, Res, Trace}}}} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun rt_pipe:decr_or_crash/1,
                   fun middle_fitting_crash/1,
                   ?ERR_LOG,
@@ -316,7 +316,7 @@ verify_tail_fitting_crash([RN|_]) ->
     lager:info("Verify pipe tears down when a fitting crashes (tail)"),
 
     {badrpc, {'EXIT', {success_so_far, {timeout, Res, Trace}}}} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun rt_pipe:decr_or_crash/1,
                   fun tail_fitting_crash/1,
                   ?ERR_LOG,
@@ -340,9 +340,9 @@ verify_worker_init_exit([RN|_]) ->
                           arg=init_exit,
                           chashfun=follow}],
     Opts = [{sink, rt_pipe:self_sink()}|?ERR_LOG],
-    {ok, Pipe} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
+    {ok, Pipe} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
     {error, [worker_startup_failed]} =
-        rpc:call(RN, riak_pipe, queue_work, [Pipe, x]),
+        rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, x]),
     ok = riak_pipe:eoi(Pipe),
     ?assertEqual({eoi, [], []}, riak_pipe:collect_results(Pipe)).
 
@@ -353,9 +353,9 @@ verify_worker_init_badreturn([RN|_]) ->
                           arg=init_badreturn,
                           chashfun=follow}],
     Opts = [{sink, rt_pipe:self_sink()}|?ERR_LOG],
-    {ok, Pipe} = rpc:call(RN, riak_pipe, exec, [Spec, Opts]),
+    {ok, Pipe} = rt:rpc_call(RN, riak_pipe, exec, [Spec, Opts]),
     {error, [worker_startup_failed]} =
-        rpc:call(RN, riak_pipe, queue_work, [Pipe, x]),
+        rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, x]),
     ok = riak_pipe:eoi(Pipe),
     ?assertEqual({eoi, [], []}, riak_pipe:collect_results(Pipe)).
 
@@ -370,7 +370,7 @@ verify_worker_limit_one([RN|_]) ->
     lager:info("Verify worker limit for one pipe"),
     PipeLen = 90,
     {eoi, Res, Trace} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun rt_pipe:decr_or_crash/1,
                   fun send_1_100/1,
                   ?ALL_LOG,
@@ -392,16 +392,16 @@ verify_worker_limit_multiple([RN|_]) ->
                            arg=fun rt_pipe:xform_or_crash/3,
                            %% force all workers onto one vnode
                            chashfun={riak_pipe, zero_part}}),
-    {ok, Pipe1} = rpc:call(RN, riak_pipe, exec,
+    {ok, Pipe1} = rt:rpc_call(RN, riak_pipe, exec,
                            [Spec, [{sink, rt_pipe:self_sink()}|?ALL_LOG]]),
-    {ok, Pipe2} = rpc:call(RN, riak_pipe, exec,
+    {ok, Pipe2} = rt:rpc_call(RN, riak_pipe, exec,
                            [Spec, [{sink, rt_pipe:self_sink()}|?ALL_LOG]]),
-    ok = rpc:call(RN, riak_pipe, queue_work, [Pipe1, 100]),
+    ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe1, 100]),
     %% plenty of time to start all workers
     timer:sleep(100),
     %% At worker limit, can't even start 1st worker @ Head2
     ?assertEqual({error, [worker_limit_reached]},
-                 rpc:call(RN, riak_pipe, queue_work, [Pipe2, 100])),
+                 rt:rpc_call(RN, riak_pipe, queue_work, [Pipe2, 100])),
     {timeout, [], Trace1} = riak_pipe:collect_results(Pipe1, 500),
     {timeout, [], Trace2} = riak_pipe:collect_results(Pipe2, 500),
     %% exactly one error: the 65th worker will fail to start
@@ -422,9 +422,9 @@ verify_under_worker_limit_one([RN|_]) ->
              #fitting_spec{name="foo",
                            module=riak_pipe_w_xform,
                            arg=fun rt_pipe:xform_or_crash/3}),
-    {ok, Pipe1} = rpc:call(RN, riak_pipe, exec,
+    {ok, Pipe1} = rt:rpc_call(RN, riak_pipe, exec,
                            [Spec, [{sink, rt_pipe:self_sink()}|?ALL_LOG]]),
-    [ok = rpc:call(RN, riak_pipe, queue_work, [Pipe1, X]) ||
+    [ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe1, X]) ||
         X <- lists:seq(101, 200)],
     riak_pipe:eoi(Pipe1),
     {eoi, Res, Trace1} = riak_pipe:collect_results(Pipe1, 500),
@@ -451,7 +451,7 @@ verify_queue_limit([RN|_]) ->
 
 verify_queue_limit(RN, Retries) when Retries > 0 ->
     {eoi, Res, Trace} =
-        rpc:call(RN, riak_pipe, generic_transform,
+        rt:rpc_call(RN, riak_pipe, generic_transform,
                  [fun sleep1fun/1,
                   fun send_100_100/1,
                   ?ALL_LOG, 1]),
@@ -478,13 +478,13 @@ verify_vnode_death([RN|_]) ->
     lager:info("Verify a vnode death does not kill the pipe"),
 
     {ok, Pipe} =
-        rpc:call(RN, riak_pipe, exec,
+        rt:rpc_call(RN, riak_pipe, exec,
                  [[#fitting_spec{name=vnode_death_test,
                                  module=riak_pipe_w_crash}],
                   [{sink, rt_pipe:self_sink()}]]),
     %% this should kill vnode such that it never
     %% responds to the enqueue request
-    rpc:call(RN, riak_pipe, queue_work, [Pipe, vnode_killer]),
+    rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, vnode_killer]),
     riak_pipe:eoi(Pipe),
     {eoi, Res, []} = riak_pipe:collect_results(Pipe),
     ?assertEqual([], Res).
@@ -513,7 +513,7 @@ verify_restart_after_eoi([RN|_]) ->
                           chashfun=ChashFun}],
 
     %% just make sure we are bouncing between partitions
-    {ok, R} = rpc:call(RN, riak_core_ring_manager, get_my_ring, []),
+    {ok, R} = rt:rpc_call(RN, riak_core_ring_manager, get_my_ring, []),
     ?assert(riak_core_ring:preflist(
               ChashFun(Inputs), R) /=
                 riak_core_ring:preflist(
@@ -524,12 +524,12 @@ verify_restart_after_eoi([RN|_]) ->
                   ChashFun(tl(tl(Inputs))), R)),
 
     {ok, Pipe} =
-        rpc:call(RN, riak_pipe, exec,
+        rt:rpc_call(RN, riak_pipe, exec,
                  [Spec,
                   [{sink, rt_pipe:self_sink()},
                    {log, sink},
                    {trace, [error, done, restart]}]]),
-    ok = rpc:call(RN, riak_pipe, queue_work, [Pipe, Inputs]),
+    ok = rt:rpc_call(RN, riak_pipe, queue_work, [Pipe, Inputs]),
     riak_pipe:eoi(Pipe),
     {eoi, [], Trace} = riak_pipe:collect_results(Pipe),
 

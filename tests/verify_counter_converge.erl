@@ -87,7 +87,7 @@ set_allow_mult_true(Nodes, Bucket) ->
     AllowMult = [{allow_mult, true}],
     lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
                [AllowMult, Bucket, N1]),
-    rpc:call(N1, riak_core_bucket, set_bucket, [Bucket, AllowMult]),
+    rt:rpc_call(N1, riak_core_bucket, set_bucket, [Bucket, AllowMult]),
     rt:wait_until_ring_converged(Nodes).
 
 %% Counter API

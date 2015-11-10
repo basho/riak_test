@@ -85,7 +85,7 @@ node_config_file(Node) ->
 
 -spec get_props(node(), binary()) -> proplists:proplist() | no_return().
 get_props(Node, Type) ->
-    case  rpc:call(Node, riak_core_bucket_type, get, [Type]) of
+    case  rt:rpc_call(Node, riak_core_bucket_type, get, [Type]) of
         {badrpc, Reason} ->
             throw({badrpc, Reason});
         Props ->

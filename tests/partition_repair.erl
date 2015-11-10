@@ -124,11 +124,11 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
 
     %% force restart of vnode since some data is kept in memory
     lager:info("Restarting ~p vnode for ~p on ~p", [Service, Partition, Node]),
-    {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
+    {ok, Pid} = rt:rpc_call(Node, riak_core_vnode_manager, get_vnode_pid,
                          [Partition, VNodeName]),
-    ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
+    ?assert(rt:rpc_call(Node, erlang, exit, [Pid, kill_for_test])),
     
-    rt:wait_until(Node, fun(N) -> not(rpc:call(N, erlang, is_process_alive, [Pid])) end),
+    rt:wait_until(Node, fun(N) -> not(rt:rpc_call(N, erlang, is_process_alive, [Pid])) end),
 
     lager:info("Verify data is missing"),
     ?assertEqual(0, count_data(Service, {Partition, Node})),
@@ -140,20 +140,20 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     Return =
         case Service of
             riak_kv ->
-                rpc:call(Node, riak_kv_vnode, repair, [Partition]);
+                rt:rpc_call(Node, riak_kv_vnode, repair, [Partition]);
             riak_search ->
-                rpc:call(Node, riak_search_vnode, repair, [Partition])
+                rt:rpc_call(Node, riak_search_vnode, repair, [Partition])
         end,
 
     %% Kill sending vnode to verify HO sender is killed
     %% {ok, [{KPart, KNode}|_]} = Return,
-    %% {ok, NewPid} = rpc:call(KNode, riak_core_vnode_manager, get_vnode_pid,
+    %% {ok, NewPid} = rt:rpc_call(KNode, riak_core_vnode_manager, get_vnode_pid,
     %%                         [KPart, VNodeName]),
     %% lager:info("killing src pid: ~p/~p ~p", [KNode, KPart, NewPid]),
-    %% KR = rpc:call(KNode, erlang, exit, [NewPid, kill]),
+    %% KR = rt:rpc_call(KNode, erlang, exit, [NewPid, kill]),
     %% lager:info("result of kill: ~p", [KR]),
     %% timer:sleep(1000),
-    %% ?assertNot(rpc:call(KNode, erlang, is_process_alive, [NewPid])),
+    %% ?assertNot(rt:rpc_call(KNode, erlang, is_process_alive, [NewPid])),
 
 
     lager:info("return value of repair_index ~p", [Return]),
@@ -288,9 +288,9 @@ wait_for_repair(Service, {Partition, Node}, Tries) ->
     Reply =
         case Service of
             riak_kv ->
-                rpc:call(Node, riak_kv_vnode, repair_status, [Partition]);
+                rt:rpc_call(Node, riak_kv_vnode, repair_status, [Partition]);
             riak_search ->
-                rpc:call(Node, riak_search_vnode, repair_status, [Partition])
+                rt:rpc_call(Node, riak_search_vnode, repair_status, [Partition])
         end,
     case Reply of
         not_found -> ok;

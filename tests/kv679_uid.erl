@@ -51,5 +51,5 @@ confirm() ->
 get_vnodeids(PLAnn, Node) ->
     PL = [{Idx, N} || {{Idx, N}, Type} <- PLAnn,
                          Type == primary],
-    Statuses = rpc:call(Node, riak_kv_vnode, vnode_status, [PL]),
+    Statuses = rt:rpc_call(Node, riak_kv_vnode, vnode_status, [PL]),
     [{Idx, proplists:get_value(vnodeid, Status)} || {Idx, Status} <- Statuses].

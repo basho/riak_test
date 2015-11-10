@@ -46,13 +46,13 @@ confirm() ->
     BaseDir = filename:join([Path, "riak_search", "tests", "riak_search"]),
 
     rt:load_modules_on_nodes([?MODULE], [Node0]),
-    TestDirs = rpc:call(Node0, ?MODULE, test_dirs, [BaseDir]),
+    TestDirs = rt:rpc_call(Node0, ?MODULE, test_dirs, [BaseDir]),
     ?assert(is_list(TestDirs)),
     Run =
         fun(Dir) ->
             lager:info("Running test in directory ~s", [Dir]),
             ?assertMatch(ok,
-                         rpc:call(Node0, riak_search_test, test, [Dir]))
+                         rt:rpc_call(Node0, riak_search_test, test, [Dir]))
         end,
     lists:foreach(Run, TestDirs),
     pass.

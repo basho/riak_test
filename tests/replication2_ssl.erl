@@ -298,7 +298,7 @@ confirm() ->
     lager:info("=== Testing basic connectivity"),
     rt:log_to_nodes([Node1, Node2], "Testing basic connectivity"),
 
-    {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(Node2, application, get_env,
         [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
     rt:log_to_nodes([Node1, Node2], "connect A to B"),
@@ -375,7 +375,7 @@ test_connection({Node1, Config1}, {Node2, Config2}) ->
     rt:wait_until_pingable(Node1),
     rt:wait_for_service(Node1, [riak_kv, riak_repl]),
     rt:wait_for_service(Node2, [riak_kv, riak_repl]),
-    {ok, {_IP, Port}} = rpc:call(Node2, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(Node2, application, get_env,
         [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [Node1, Port]),
     rt:log_to_nodes([Node1, Node2], "connect A to B"),
