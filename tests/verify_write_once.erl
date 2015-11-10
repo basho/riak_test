@@ -286,7 +286,7 @@ num_fast_merges(Nodes) ->
         fun(Node, Acc) ->
             {write_once_merge, N} = proplists:lookup(
                 write_once_merge,
-                rpc:call(Node, riak_kv_stat, get_stats, [])
+                rt:rpc_call(Node, riak_kv_stat, get_stats, [])
             ),
             Acc + N
         end,

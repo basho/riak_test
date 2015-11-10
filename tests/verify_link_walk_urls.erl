@@ -105,7 +105,7 @@ verify_query(Cfg, Bucket, Key, Query, Expected) ->
 get_config(Node0) ->
     [{http, {IP, Port}}|_] = rt:connection_info(Node0),
     Prefix =
-        rpc:call(Node0, app_helper, get_env, [riak_kv, raw_name, "riak"]),
+        rt:rpc_call(Node0, app_helper, get_env, [riak_kv, raw_name, "riak"]),
     #config{ip = IP, port = Port, prefix = Prefix}.
 
 

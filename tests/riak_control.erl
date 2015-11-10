@@ -170,14 +170,14 @@ mixed_cluster(VersionedNodes) ->
 wait_for_control_cycle(Node) when is_atom(Node) ->
     lager:info("Waiting for riak_control poll on node ~p.", [Node]),
 
-    {ok, CurrentVsn} = rpc:call(Node,
+    {ok, CurrentVsn} = rt:rpc_call(Node,
                                 riak_control_session,
                                 get_version,
                                 []),
     ExpectedVsn = CurrentVsn + 1,
 
     rt:wait_until(Node, fun(N) ->
-                {ok, Vsn} = rpc:call(N,
+                {ok, Vsn} = rt:rpc_call(N,
                                      riak_control_session,
                                      get_version,
                                      []),
@@ -252,7 +252,7 @@ validate_capability(VersionedNodes) ->
     lager:info("Waiting for riak_control to converge."),
 
     rt:wait_until(Node, fun(N) ->
-                {ok, _, Status} = rpc:call(N,
+                {ok, _, Status} = rt:rpc_call(N,
                                            riak_control_session,
                                            get_status,
                                            []),

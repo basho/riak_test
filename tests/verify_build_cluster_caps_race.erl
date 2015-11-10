@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 staged_join(InitiatingNode, DestinationNode) ->
-    rpc:call(InitiatingNode, riak_core, staged_join,
+    rt:rpc_call(InitiatingNode, riak_core, staged_join,
              [DestinationNode]).
 
 confirm() ->

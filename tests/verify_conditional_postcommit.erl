@@ -34,7 +34,7 @@ confirm() ->
 
     lager:info("Installing conditional hook"),
     CondHook = {?MODULE, conditional_hook},
-    ok = rpc:call(Node, riak_kv_hooks, add_conditional_postcommit, [CondHook]),
+    ok = rt:rpc_call(Node, riak_kv_hooks, add_conditional_postcommit, [CondHook]),
 
     Bucket1 = {<<"type1">>, <<"test">>},
     Bucket2 = {<<"type2">>, <<"test">>},
@@ -48,15 +48,15 @@ confirm() ->
     write_keys(Node, PBC, Bucket2, Keys, true),
 
     lager:info("Removing conditional hook"),
-    ok = rpc:call(Node, riak_kv_hooks, del_conditional_postcommit, [CondHook]),
+    ok = rt:rpc_call(Node, riak_kv_hooks, del_conditional_postcommit, [CondHook]),
     lager:info("Re-writing keys as 'type2' and verifying hook is not triggered"),
     write_keys(Node, PBC, Bucket2, Keys, false),
     pass.
 
 write_keys(Node, PBC, Bucket, Keys, ShouldHook) ->
-    rpc:call(Node, application, set_env, [riak_kv, hook_count, 0]),
+    rt:rpc_call(Node, application, set_env, [riak_kv, hook_count, 0]),
     [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
-    {ok, Count} = rpc:call(Node, application, get_env, [riak_kv, hook_count]),
+    {ok, Count} = rt:rpc_call(Node, application, get_env, [riak_kv, hook_count]),
     case ShouldHook of
         true ->
             ?assertEqual(length(Keys), Count);

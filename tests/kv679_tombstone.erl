@@ -179,9 +179,9 @@ start_node(Node, Preflist) ->
     wait_for_new_pl(Preflist, Node).
 
 get_preflist(Node) ->
-    Chash = rpc:call(Node, riak_core_util, chash_key, [{?BUCKET, ?KEY}]),
-    UpNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
-    PL = rpc:call(Node, riak_core_apl, get_apl_ann, [Chash, 3, UpNodes]),
+    Chash = rt:rpc_call(Node, riak_core_util, chash_key, [{?BUCKET, ?KEY}]),
+    UpNodes = rt:rpc_call(Node, riak_core_node_watcher, nodes, [riak_kv]),
+    PL = rt:rpc_call(Node, riak_core_apl, get_apl_ann, [Chash, 3, UpNodes]),
     PL.
 
 kill_primary(Preflist) ->
@@ -216,7 +216,7 @@ start_fallback_and_wait_for_handoff(DeadFallback) ->
     %% Below is random voodoo shit as I have no idea how to _KNOW_ that handoff has happened
     %% whatver, it takes 2 minutes, force_handoff? 2 minutes son!
     rt:start_and_wait(DeadFallback),
-    rpc:call(DeadFallback, riak_core_vnode_manager, force_handoffs, []),
+    rt:rpc_call(DeadFallback, riak_core_vnode_manager, force_handoffs, []),
     rt:wait_until_transfers_complete([DeadFallback]).
 
 

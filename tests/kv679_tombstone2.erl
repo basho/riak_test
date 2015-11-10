@@ -147,7 +147,7 @@ dump_clock({Node, Client}) ->
     case riakc_pb_socket:get(Client, ?BUCKET, ?KEY) of
         {ok, O} ->
             VCE = riakc_obj:vclock(O),
-            VC = rpc:call(Node, riak_object, decode_vclock, [VCE]),
+            VC = rt:rpc_call(Node, riak_object, decode_vclock, [VCE]),
             lager:info("VC ~p~n", [VC]),
             NodeId = erlang:crc32(term_to_binary(Node)),
             Id = <<NodeId:32/unsigned-integer>>,

@@ -57,7 +57,7 @@ confirm() ->
 
     write_n_keys(LeaderB, LeaderA, 10001, 20000),
 
-    RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+    RTQStatus = rt:rpc_call(LeaderA, riak_repl2_rtq, status, []),
 
     Consumers = proplists:get_value(consumers, RTQStatus),
     case proplists:get_value("B", Consumers) of
@@ -140,13 +140,13 @@ write_n_keys(Source, Destination, M, N) ->
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, PortB}} = rpc:call(LeaderB, application, get_env,
+    {ok, {_IP, PortB}} = rt:rpc_call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [LeaderA, PortB]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", PortB),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
 
-    {ok, {_IP, PortA}} = rpc:call(LeaderA, application, get_env,
+    {ok, {_IP, PortA}} = rt:rpc_call(LeaderA, application, get_env,
                                  [riak_core, cluster_mgr]),
     lager:info("connect cluster B:~p to A on port ~p", [LeaderB, PortA]),
     repl_util:connect_cluster(LeaderB, "127.0.0.1", PortA),
@@ -228,7 +228,7 @@ load_intercepts(Node) ->
 
 %% @doc Get the Pid of the first RT source connection on Node
 %get_rt_conn_pid(Node) ->
-%    [{_Remote, Pid}|Rest] = rpc:call(Node, riak_repl2_rtsource_conn_sup, enabled, []),
+%    [{_Remote, Pid}|Rest] = rt:rpc_call(Node, riak_repl2_rtsource_conn_sup, enabled, []),
 %    case Rest of
 %        [] -> ok;
 %        RR -> lager:info("Other connections: ~p", [RR])
@@ -239,7 +239,7 @@ load_intercepts(Node) ->
 %verify_heartbeat_messages(Node) ->
 %    lager:info("Verify heartbeats"),
 %    Pid = get_rt_conn_pid(Node),
-%    Status = rpc:call(Node, riak_repl2_rtsource_conn, status, [Pid], ?RPC_TIMEOUT),
+%    Status = rt:rpc_call(Node, riak_repl2_rtsource_conn, status, [Pid], ?RPC_TIMEOUT),
 %    HBRTT = proplists:get_value(hb_rtt, Status),
 %    case HBRTT of
 %        undefined ->

@@ -15,8 +15,8 @@ confirm() ->
     PBC = rt:pbc(Node1),
     lager:info("Setting last write wins on bucket"),
     B = ?BUCKET,
-    ?assertMatch(ok, rpc:call(Node1, riak_core_bucket, set_bucket, [B, [{last_write_wins, true}]])),
-    BProps = rpc:call(Node1, riak_core_bucket, get_bucket, [B]),
+    ?assertMatch(ok, rt:rpc_call(Node1, riak_core_bucket, set_bucket, [B, [{last_write_wins, true}]])),
+    BProps = rt:rpc_call(Node1, riak_core_bucket, get_bucket, [B]),
     lager:info("Bucket properties ~p", [BProps]),
     K = <<"Key">>,
     V = <<"Value">>,
@@ -42,7 +42,7 @@ confirm() ->
 
 
 get_write_stats(Node) ->
-    Stats = rpc:call(Node, riak_kv_stat, get_stats, []),
+    Stats = rt:rpc_call(Node, riak_kv_stat, get_stats, []),
     Puts = proplists:get_value(vnode_puts, Stats),
     ReadRepairs = proplists:get_value(read_repairs, Stats),
     [{puts, Puts}, {read_repairs, ReadRepairs}].

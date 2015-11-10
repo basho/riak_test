@@ -36,7 +36,7 @@ confirm() ->
     update_props(DefaultProps, Node1, Nodes),
     lager:info("Resetting bucket properties for bucket ~p on node ~p via rpc",
                [?BUCKET, Node2]),
-    rpc:call(Node2, riak_core_bucket, reset_bucket, [?BUCKET]),
+    rt:rpc_call(Node2, riak_core_bucket, reset_bucket, [?BUCKET]),
     rt:wait_until_ring_converged(Nodes),
 
     [check_props_reset(Node, ?BUCKET, DefaultProps) || Node <- Nodes],
@@ -56,7 +56,7 @@ update_props(DefaultProps, Node, Nodes) ->
     Updates = [{n_val, 1}],
     lager:info("Setting bucket properties ~p for bucket ~p on node ~p",
                [?BUCKET, Updates, Node]),
-    rpc:call(Node, riak_core_bucket, set_bucket, [?BUCKET, Updates]),
+    rt:rpc_call(Node, riak_core_bucket, set_bucket, [?BUCKET, Updates]),
     rt:wait_until_ring_converged(Nodes),
 
     UpdatedProps = get_current_bucket_props(Nodes, ?BUCKET),
@@ -69,7 +69,7 @@ get_current_bucket_props(Nodes, Bucket) when is_list(Nodes) ->
     Node = lists:nth(length(Nodes), Nodes),
     get_current_bucket_props(Node, Bucket);
 get_current_bucket_props(Node, Bucket) when is_atom(Node) ->
-    rpc:call(Node,
+    rt:rpc_call(Node,
              riak_core_bucket,
              get_bucket,
              [Bucket]).

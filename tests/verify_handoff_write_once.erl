@@ -95,9 +95,9 @@ run_test(Config, AsyncWrites) ->
             {{handle_command, 3}, count_w1c_handle_command}
         ]}
     ),
-    true = rpc:call(RootNode, ets, insert, [intercepts_tab, {w1c_async_replies, 0}]),
-    true = rpc:call(RootNode, ets, insert, [intercepts_tab, {w1c_sync_replies, 0}]),
-    true = rpc:call(RootNode, ets, insert, [intercepts_tab, {w1c_put_counter, 0}]),
+    true = rt:rpc_call(RootNode, ets, insert, [intercepts_tab, {w1c_async_replies, 0}]),
+    true = rt:rpc_call(RootNode, ets, insert, [intercepts_tab, {w1c_sync_replies, 0}]),
+    true = rt:rpc_call(RootNode, ets, insert, [intercepts_tab, {w1c_put_counter, 0}]),
     %%
     %% Seed the root node with some data
     %%
@@ -124,11 +124,11 @@ run_test(Config, AsyncWrites) ->
     Results2 = rt:systest_read(NewNode, 1, TotalSent, ?BUCKET, 1),
     ?assertMatch([], Results2),
     lager:info("Read ~p entries.", [TotalSent]),
-    [{_, Count}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
+    [{_, Count}] = rt:rpc_call(RootNode, ets, lookup, [intercepts_tab, w1c_put_counter]),
     ?assertEqual(RingSize div 2, Count),
     lager:info("We handled ~p write_once puts during handoff.", [Count]),
-    [{_, W1CAsyncReplies}] = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_async_replies]),
-    [{_, W1CSyncReplies}]  = rpc:call(RootNode, ets, lookup, [intercepts_tab, w1c_sync_replies]),
+    [{_, W1CAsyncReplies}] = rt:rpc_call(RootNode, ets, lookup, [intercepts_tab, w1c_async_replies]),
+    [{_, W1CSyncReplies}]  = rt:rpc_call(RootNode, ets, lookup, [intercepts_tab, w1c_sync_replies]),
     case AsyncWrites of
         true ->
             ?assertEqual(NTestItems + RingSize div 2, W1CAsyncReplies),
@@ -140,8 +140,8 @@ run_test(Config, AsyncWrites) ->
     Cluster.
 
 make_intercepts_tab(Node) ->
-    SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
-    intercepts_tab = rpc:call(Node, ets, new, [intercepts_tab, [named_table,
+    SupPid = rt:rpc_call(Node, erlang, whereis, [sasl_safe_sup]),
+    intercepts_tab = rt:rpc_call(Node, ets, new, [intercepts_tab, [named_table,
                 public, set, {heir, SupPid, {}}]]).
 
 

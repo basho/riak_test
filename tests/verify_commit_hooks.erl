@@ -28,10 +28,10 @@ confirm() ->
     rt:load_modules_on_nodes([hooks], [Node]),
 
     lager:info("Setting pid of test (~p) in application environment of ~p for postcommit hook", [self(), Node]),
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_test, test_pid, self()])),
+    ?assertEqual(ok, rt:rpc_call(Node, application, set_env, [riak_test, test_pid, self()])),
 
     lager:info("Installing commit hooks on ~p", [Node]),
-    ?assertEqual(ok, rpc:call(Node, hooks, set_hooks, [])),
+    ?assertEqual(ok, rt:rpc_call(Node, hooks, set_hooks, [])),
 
     lager:info("Checking precommit atom failure reason."),
     HTTP = rt:httpc(Node),

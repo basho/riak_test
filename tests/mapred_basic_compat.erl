@@ -77,7 +77,7 @@ confirm() ->
 load_test_data([Node|_]) ->
     %% creates foonum/1..5 - this is what populates ?INTS_BUCKET
     lager:info("Filling INTS_BUCKET (~s)", [?INTS_BUCKET]),
-    ok = rpc:call(Node, riak_kv_mrc_pipe, example_setup, []),
+    ok = rt:rpc_call(Node, riak_kv_mrc_pipe, example_setup, []),
     
     lager:info("Adding Link object"),
     Obj = riakc_obj:new(?LINK_BUCKET,
@@ -102,7 +102,7 @@ load_test_data([Node|_]) ->
     riakc_pb_socket:stop(C).
 
 rpcmr(Node, Inputs, Query) ->
-    rpc:call(Node, riak_kv_mrc_pipe, mapred, [Inputs, Query]).
+    rt:rpc_call(Node, riak_kv_mrc_pipe, mapred, [Inputs, Query]).
 
 %% @doc This will trigger a traversal of IntsBucket, but because the
 %% query is empty, the MapReduce will traverse the bucket and send

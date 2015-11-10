@@ -53,7 +53,7 @@ confirm() ->
             TestingTime = rt_config:get(eqc_testing_time, 120),
             lager:info("Running vnode proxy overload property for ~p seconds\n",
                        [TestingTime]),
-            ?assertEqual(true, rpc:call(Node1, ?MODULE, rtrun, [TestingTime])),
+            ?assertEqual(true, rt:rpc_call(Node1, ?MODULE, rtrun, [TestingTime])),
             pass;
         _ ->
             lager:warning("EQC was unavailable on this machine - PASSing "
@@ -439,9 +439,9 @@ add_eqc_apps(Nodes) ->
          {error, bad_name} -> % EQC component not installed locally
              ok;
          Path when is_list(Path) ->
-             case rpc:call(Node, code, priv_dir, [App]) of
+             case rt:rpc_call(Node, code, priv_dir, [App]) of
                  {error, bad_name} ->
-                     true = rpc:call(Node, code, add_pathz, [Path], 60000);
+                     true = rt:rpc_call(Node, code, add_pathz, [Path], 60000);
                  _ ->
                      ok
              end

@@ -93,7 +93,7 @@ verify_overload_writes(LeaderA, LeaderB) ->
 
     lager:info("systest_read saw ~p errors", [length(NumReads)]),
 
-    Status = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+    Status = rt:rpc_call(LeaderA, riak_repl2_rtq, status, []),
     {_, OverloadDrops} = lists:keyfind(overload_drops, 1, Status),
 
     lager:info("overload_drops: ~p", [OverloadDrops]),
@@ -103,7 +103,7 @@ verify_overload_writes(LeaderA, LeaderB) ->
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [LeaderA, Port]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
@@ -182,8 +182,8 @@ check_rtq_msg_q(Node) ->
     Pid.
 
 check_size(Node) ->
-    Pid = rpc:call(Node, erlang, whereis, [riak_repl2_rtq]),
-    Len = rpc:call(Node, erlang, process_info, [Pid, message_queue_len]),
+    Pid = rt:rpc_call(Node, erlang, whereis, [riak_repl2_rtq]),
+    Len = rt:rpc_call(Node, erlang, process_info, [Pid, message_queue_len]),
     io:format("mailbox size of riak_repl2_rtq: ~p", [Len]),
 
     timer:sleep(2000),

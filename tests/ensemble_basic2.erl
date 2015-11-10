@@ -50,7 +50,7 @@ confirm() ->
                 PL = ensemble_util:peers(Node),
                 NodePeers = [P || {P, _} <- PL],
                 NonRootPeers = [P || P <- NodePeers, element(1, P) /= root],
-                S = rpc:call(Node, riak_core_node_watcher, services, [Node]),
+                S = rt:rpc_call(Node, riak_core_node_watcher, services, [Node]),
                 case S of
                     L when is_list(L) ->
                         case lists:member(riak_kv, L) of

@@ -246,7 +246,7 @@ mkconf(Test, Mode) ->
     end.
 
 get_remote_vnode_pid(Node) ->
-    [{_,_,VNode}|_] = rpc:call(Node, riak_core_vnode_manager, 
+    [{_,_,VNode}|_] = rt:rpc_call(Node, riak_core_vnode_manager,
                                all_vnodes, [riak_kv_vnode]),
     VNode.
 

@@ -49,7 +49,7 @@ list_node_bitcask_files(Node) ->
          IdxStr = integer_to_list(Idx),
          IdxDir = filename:join(DataDir, IdxStr),
          BitcaskPattern = filename:join([IdxDir, "*.bitcask.data"]),
-         Paths = rpc:call(Node, filelib, wildcard, [BitcaskPattern]),
+         Paths = rt:rpc_call(Node, filelib, wildcard, [BitcaskPattern]),
          ?assert(is_list(Paths)),
          Files = [filename:basename(Path) || Path <- Paths],
          {IdxDir, Files}
@@ -80,7 +80,7 @@ upgrade_complete(Node, IdxDir, Files) ->
             [file_exists(Node, filename:join(IdxDir, F)) || F <- Files]).
 
 file_exists(Node, Path) ->
-    case rpc:call(Node, filelib, is_regular, [Path]) of
+    case rt:rpc_call(Node, filelib, is_regular, [Path]) of
         {badrpc, Reason} ->
             throw({can_not_check_file, Node, Path, Reason});
         Result ->

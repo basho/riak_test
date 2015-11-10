@@ -445,7 +445,7 @@ deadlock_test() ->
 
     %% Start fullsync.
     lager:info("Starting fullsync to cluster B."),
-    rpc:call(LeaderA, riak_repl_console, fullsync, [["start", "B"]]),
+    rt:rpc_call(LeaderA, riak_repl_console, fullsync, [["start", "B"]]),
 
     %% Wait for fullsync to initialize and the AAE repl processes to
     %% stall from the suspended intercepts.
@@ -453,7 +453,7 @@ deadlock_test() ->
     timer:sleep(25000),
 
     %% Attempt to get status from fscoordintor.
-    Result = rpc:call(LeaderA, riak_repl2_fscoordinator, status, [], 500),
+    Result = rt:rpc_call(LeaderA, riak_repl2_fscoordinator, status, [], 500),
     lager:info("Status result: ~p", [Result]),
     ?assertNotEqual({badrpc, timeout}, Result),
 
@@ -492,7 +492,7 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
                          [Node, Cluster]),
     lager:info("Fullsync completed in ~p seconds", [Time/1000/1000]),
 
-    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
 
     Props = case proplists:get_value(fullsync_coordinator, Status) of
         [{_Name, Props0}] ->
@@ -513,7 +513,7 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
 validate_intercepted_fullsync(InterceptTarget,
                               ReplicationLeader,
                               ReplicationCluster) ->
-    NumIndicies = length(rpc:call(InterceptTarget,
+    NumIndicies = length(rt:rpc_call(InterceptTarget,
                                   riak_core_ring,
                                   my_indices,
                                   [rt:get_ring(InterceptTarget)])),
@@ -579,7 +579,7 @@ validate_intercepted_fullsync(InterceptTarget,
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.
 get_port(Node) ->
-    {ok, {_IP, Port}} = rpc:call(Node,
+    {ok, {_IP, Port}} = rt:rpc_call(Node,
                                  application,
                                  get_env,
                                  [riak_core, cluster_mgr]),
@@ -588,7 +588,7 @@ get_port(Node) ->
 %% @doc Given a node, find out who the current replication leader in its
 %%      cluster is.
 get_leader(Node) ->
-    rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
+    rt:rpc_call(Node, riak_core_cluster_mgr, get_leader, []).
 
 %% @doc Connect two clusters using a given name.
 connect_cluster(Source, Port, Name) ->

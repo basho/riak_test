@@ -27,10 +27,10 @@ confirm() ->
     [Node] = rt:build_cluster(1),
 
     %% Generate a valid preflist for our get requests
-    rpc:call(Node, riak_core, wait_for_service, [riak_kv]),
+    rt:rpc_call(Node, riak_core, wait_for_service, [riak_kv]),
     BKey = {<<"bucket">>, <<"value">>},
     DocIdx = riak_core_util:chash_std_keyfun(BKey),
-    PL = rpc:call(Node, riak_core_apl, get_apl, [DocIdx, 3, riak_kv]),
+    PL = rt:rpc_call(Node, riak_core_apl, get_apl, [DocIdx, 3, riak_kv]),
 
     lager:info("Adding delayed start to app.config"),
     NewConfig = [{riak_core, [{delayed_start, 1000}]}],
@@ -59,11 +59,11 @@ confirm() ->
     pass.
 
 perform_gets(Count, Node, PL, BKey) ->
-    rpc:call(Node, riak_kv_vnode, get, [PL, BKey, make_ref()]),
+    rt:rpc_call(Node, riak_kv_vnode, get, [PL, BKey, make_ref()]),
     perform_gets2(Count, Node, PL, BKey).
 
 perform_gets2(0, _, _, _) ->
     ok;
 perform_gets2(Count, Node, PL, BKey) ->
-    rpc:call(Node, riak_kv_vnode, get, [PL, BKey, make_ref()], 1000),
+    rt:rpc_call(Node, riak_kv_vnode, get, [PL, BKey, make_ref()], 1000),
     perform_gets(Count - 1, Node, PL, BKey).

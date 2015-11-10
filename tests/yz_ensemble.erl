@@ -109,9 +109,9 @@ query_value(Value) ->
 %% @private
 create_index(Node, Index) ->
     lager:info("Creating index ~s [~p]", [Index, Node]),
-    ok = rpc:call(Node, yz_index, create, [Index]).
+    ok = rt:rpc_call(Node, yz_index, create, [Index]).
 
 %% @private
 set_bucket_props(Node, Bucket, Index) ->
     Props = [{search_index, Index}],
-    rpc:call(Node, riak_core_bucket, set_bucket, [Bucket, Props]).
+    rt:rpc_call(Node, riak_core_bucket, set_bucket, [Bucket, Props]).

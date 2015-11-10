@@ -53,8 +53,8 @@ confirm() ->
     Keys = [<<N:64/integer>> || N <- lists:seq(1,1000)],
 
     Key1 = hd(Keys),
-    DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key1}]),
-    PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
+    DocIdx = rt:rpc_call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key1}]),
+    PL = rt:rpc_call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
     All = [VN || {VN, _} <- PL],
     Other = [VN || {VN={_, Owner}, _} <- PL,
                    Owner =/= Node],

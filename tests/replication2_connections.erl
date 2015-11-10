@@ -217,7 +217,7 @@ error_cleanup_test() ->
     ?assertEqual(ok, repl_util:wait_until_connection_errors(repl_util:get_leader(AFirst), BFirst)),
 
     lager:info("Disconnect A from B via IP/PORT"),
-    ?assertEqual(ok, rpc:call(AFirst, riak_repl_console, disconnect,[["127.0.0.1","10046"]])),
+    ?assertEqual(ok, rt:rpc_call(AFirst, riak_repl_console, disconnect,[["127.0.0.1","10046"]])),
 
     lager:info("Wait until connections clear"),
     ?assertEqual(ok, repl_util:wait_until_connections_clear(repl_util:get_leader(AFirst))),
@@ -267,11 +267,11 @@ verify_full_disconnect(Node) ->
 
 %% @doc Print the status of the ring.
 print_repl_ring(Node) ->
-    {ok, Ring} = rpc:call(Node,
+    {ok, Ring} = rt:rpc_call(Node,
                           riak_core_ring_manager,
                           get_my_ring,
                           []),
-    Clusters = rpc:call(Node,
+    Clusters = rt:rpc_call(Node,
                         riak_repl_ring,
                         get_clusters,
                         [Ring]),
@@ -282,17 +282,17 @@ restart_process(Node, Name) ->
     lager:info("Restarting ~p on ~p.", [Name, Node]),
 
     %% Find the process.
-    Pid0 = rpc:call(Node, erlang, whereis, [Name]),
+    Pid0 = rt:rpc_call(Node, erlang, whereis, [Name]),
     lager:info("Found ~p on node ~p at ~p, killing.",
                [Name, Node, Pid0]),
 
     %% Kill it.
-    true = rpc:call(Node, erlang, exit, [Pid0, brutal_kill]),
+    true = rt:rpc_call(Node, erlang, exit, [Pid0, brutal_kill]),
 
     %% Verify it restarts.
     rt:wait_until(Node, fun(_) ->
                 lager:info("Waiting for ~p to restart...", [Name]),
-                Pid = rpc:call(Node, erlang, whereis, [Name]),
+                Pid = rt:rpc_call(Node, erlang, whereis, [Name]),
                 Pid =/= Pid0 andalso Pid =/= undefined
         end),
 
@@ -301,6 +301,6 @@ restart_process(Node, Name) ->
 %% @doc Connect two clusters for replication using their respective
 %%      leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, Port}} = rpc:call(LeaderB, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port).

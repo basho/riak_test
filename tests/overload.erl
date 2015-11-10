@@ -198,7 +198,7 @@ get_calculated_sj_limit(Node, ResourceName) ->
     get_calculated_sj_limit(Node, ResourceName, 5).
 
 get_calculated_sj_limit(Node, ResourceName, Retries) when Retries > 0 ->
-    CallResult = rpc:call(Node, erlang, apply, [fun() -> ResourceName:width() * ResourceName:worker_limit() end, []]),
+    CallResult = rt:rpc_call(Node, erlang, apply, [fun() -> ResourceName:width() * ResourceName:worker_limit() end, []]),
     Result = case CallResult of
         {badrpc, Reason} ->
             lager:info("Failed to retrieve sidejob limit from ~p for ~p: ~p", [Node, ResourceName, Reason]),
@@ -292,7 +292,7 @@ get_victim(ExcludeNode, {Bucket, Key, _}) ->
 
 ring_manager_check_fun(Node) ->
     fun() ->
-            case rpc:call(Node, riak_core_ring_manager, get_chash_bin, []) of
+            case rt:rpc_call(Node, riak_core_ring_manager, get_chash_bin, []) of
                 {ok, _R} ->
                     true;
                 _ ->
@@ -337,7 +337,7 @@ wait_for_all_vnode_queues_empty(Node) ->
                         end).
 
 vnode_queues_empty(Node) ->
-    rpc:call(Node, ?MODULE, remote_vnode_queues_empty, []).
+    rt:rpc_call(Node, ?MODULE, remote_vnode_queues_empty, []).
 
 remote_vnode_queues_empty() ->
     lists:all(fun({_, _, Pid}) ->
@@ -414,7 +414,7 @@ kill_pids(Pids) ->
 
 suspend_and_overload_all_kv_vnodes(Node) ->
     lager:info("Suspending vnodes on ~p", [Node]),
-    Pid = rpc:call(Node, ?MODULE, remote_suspend_and_overload, []),
+    Pid = rt:rpc_call(Node, ?MODULE, remote_suspend_and_overload, []),
     Pid ! {overload, self()},
     receive {overloaded, Pid} ->
         lager:info("Received overloaded message from ~p", [Pid]),
@@ -486,7 +486,7 @@ suspend_vnode({Idx, Node}) ->
     suspend_vnode(Node, Idx).
 
 suspend_vnode(Node, Idx) ->
-    rpc:call(Node, ?MODULE, remote_suspend_vnode, [Idx], infinity).
+    rt:rpc_call(Node, ?MODULE, remote_suspend_vnode, [Idx], infinity).
 
 remote_suspend_vnode(Idx) ->
     spawn(fun() ->
@@ -502,7 +502,7 @@ suspend_vnode_proxy({Idx, Node}) ->
     suspend_vnode_proxy(Node, Idx).
 
 suspend_vnode_proxy(Node, Idx) ->
-    rpc:call(Node, ?MODULE, remote_suspend_vnode_proxy, [Idx], infinity).
+    rt:rpc_call(Node, ?MODULE, remote_suspend_vnode_proxy, [Idx], infinity).
 
 remote_suspend_vnode_proxy(Idx) ->
     spawn(fun() ->
@@ -521,20 +521,20 @@ resume_vnode(Pid) ->
     Pid ! resume.
 
 process_count(Node) ->
-    rpc:call(Node, erlang, system_info, [process_count]).
+    rt:rpc_call(Node, erlang, system_info, [process_count]).
 
 vnode_queue_len({Idx, Node}) ->
     vnode_queue_len(Node, Idx).
 
 vnode_queue_len(Node, Idx) ->
-    rpc:call(Node, ?MODULE, remote_vnode_queue, [Idx]).
+    rt:rpc_call(Node, ?MODULE, remote_vnode_queue, [Idx]).
 
 dropped_stat(Node) ->
-    Stats = rpc:call(Node, riak_core_stat, get_stats, []),
+    Stats = rt:rpc_call(Node, riak_core_stat, get_stats, []),
     proplists:get_value(dropped_vnode_requests_total, Stats).
 
 get_fsm_active_stat(Node) ->
-    Stats = rpc:call(Node, riak_kv_stat, get_stats, []),
+    Stats = rt:rpc_call(Node, riak_kv_stat, get_stats, []),
     proplists:get_value(node_get_fsm_active, Stats).
 
 run_count(Node) ->
@@ -549,8 +549,8 @@ run_queue_len({Idx, Node}) ->
     run_queue_len({Idx, Node}).
 
 get_num_running_gen_fsm(Node) ->
-    Procs = rpc:call(Node, erlang, processes, []),
-    ProcInfo = [ rpc:call(Node, erlang, process_info, [P]) || P <- Procs, P /= undefined ],
+    Procs = rt:rpc_call(Node, erlang, processes, []),
+    ProcInfo = [ rt:rpc_call(Node, erlang, process_info, [P]) || P <- Procs, P /= undefined ],
 
     InitCalls = [ [ proplists:get_value(initial_call, Proc) ] || Proc <- ProcInfo, Proc /= undefined ],
     FsmList = [ proplists:lookup(riak_kv_get_fsm, Call) || Call <- InitCalls ],

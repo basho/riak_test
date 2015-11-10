@@ -98,7 +98,7 @@ confirm() ->
 
     lager:info("Start pipe on Primary"),
     {ok, Pipe} =
-        rpc:call(Primary, riak_pipe, exec,
+        rt:rpc_call(Primary, riak_pipe, exec,
                  [Spec, [{sink, rt_pipe:self_sink()}|?ALL_LOG]]),
 
     InitialInputCount = fill_queues(Primary, Pipe, Inputs),
@@ -149,7 +149,7 @@ fill_queues(Node, Pipe, Inputs) ->
 %% @doc fill one vnode queue by repeatedly sending the same input
 %% until it reports timeout
 fill_queue(Node, Pipe, Input, Count) ->
-    case rpc:call(Node, riak_pipe, queue_work, [Pipe, Input, noblock]) of
+    case rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, Input, noblock]) of
         {error, [timeout]} ->
             %% This queue is now full
             Count;
@@ -175,7 +175,7 @@ queue_filler(Node, Pipe, Inputs, Count) ->
         {stop, Owner} -> Owner ! {done, Count}
     after 0 ->
             {{value, I}, Q} = queue:out(Inputs),
-            ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, I]),
+            ok = rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, I]),
             queue_filler(Node, Pipe, queue:in(I, Q), Count+1)
     end.
 
@@ -222,7 +222,7 @@ runner_go() ->
 %% status list from it. It is expected that the given pipe has exactly
 %% one fitting.
 pipe_status(Node, Pipe) ->
-    [{_Name, Status}] = rpc:call(Node, riak_pipe, status, [Pipe]),
+    [{_Name, Status}] = rt:rpc_call(Node, riak_pipe, status, [Pipe]),
     Status.
 
 %% @doc Shuffle the elements of a list. (Thanks Micah)

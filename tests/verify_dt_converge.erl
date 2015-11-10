@@ -134,7 +134,7 @@ create_http_clients(Nodes) ->
 
 create_bucket_types([N1|_]=Nodes, Types) ->
     lager:info("Creating bucket types with datatypes: ~p", [Types]),
-    [ rpc:call(N1, riak_core_bucket_type, create,
+    [ rt:rpc_call(N1, riak_core_bucket_type, create,
                [Name, [{datatype, Type}, {allow_mult, true}]]) ||
         {Name, Type} <- Types ],
     [rt:wait_until(N1, bucket_type_ready_fun(Name)) || {Name, _Type} <- Types],
@@ -142,7 +142,7 @@ create_bucket_types([N1|_]=Nodes, Types) ->
 
 bucket_type_ready_fun(Name) ->
     fun(Node) ->
-            Res = rpc:call(Node, riak_core_bucket_type, activate, [Name]),
+            Res = rt:rpc_call(Node, riak_core_bucket_type, activate, [Name]),
             lager:info("is ~p ready ~p?", [Name, Res]),
             Res == ok
     end.
@@ -150,7 +150,7 @@ bucket_type_ready_fun(Name) ->
 bucket_type_matches_fun(Types) ->
     fun(Node) ->
             lists:all(fun({Name, Type}) ->
-                              Props = rpc:call(Node, riak_core_bucket_type, get,
+                              Props = rt:rpc_call(Node, riak_core_bucket_type, get,
                                                [Name]),
                               Props /= undefined andalso
                                   proplists:get_value(allow_mult, Props, false)

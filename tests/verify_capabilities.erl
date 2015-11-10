@@ -253,11 +253,11 @@ assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName)
     end.
 
 restart_capability_server(Node) ->
-    Pid = rpc:call(Node, erlang, whereis, [riak_core_capability]),
-    rpc:call(Node, erlang, exit, [Pid, kill]),
+    Pid = rt:rpc_call(Node, erlang, whereis, [riak_core_capability]),
+    rt:rpc_call(Node, erlang, exit, [Pid, kill]),
     HasNewPid =
         fun(N) ->
-            case rpc:call(N, erlang, whereis, [riak_core_capability]) of
+            case rt:rpc_call(N, erlang, whereis, [riak_core_capability]) of
                 Pid -> false;
                 NewPid when is_pid(NewPid) -> true;
                 _ -> false

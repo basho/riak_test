@@ -41,10 +41,10 @@ confirm() ->
 
     %% get the leader for the first cluster
     repl_util:wait_until_leader(AFirst),
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
-    %LeaderB = rpc:call(BFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    %LeaderB = rt:rpc_call(BFirst, riak_core_cluster_mgr, get_leader, []),
 
-    {ok, {_IP, Port}} = rpc:call(BFirst, application, get_env,
+    {ok, {_IP, Port}} = rt:rpc_call(BFirst, application, get_env,
                                  [riak_core, cluster_mgr]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", Port),
 
@@ -64,7 +64,7 @@ confirm() ->
 
     %% write some data on A
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
-    %io:format("~p~n", [rpc:call(LeaderA, riak_repl_console, status, [quiet])]),
+    %io:format("~p~n", [rt:rpc_call(LeaderA, riak_repl_console, status, [quiet])]),
     lager:info("Writing 2000 more keys to ~p", [LeaderA]),
     ?assertEqual([], repl_util:do_write(LeaderA, 101, 2000, TestBucket, 2)),
 
@@ -85,7 +85,7 @@ confirm() ->
     lager:info("Manually setting rt_dirty state"),
 
     % manually set this for now to simulate source errors
-    Result = rpc:call(LeaderA, riak_repl_stats, rt_source_errors, []),
+    Result = rt:rpc_call(LeaderA, riak_repl_stats, rt_source_errors, []),
     lager:info("Result = ~p", [Result]),
 
     lager:info("Waiting until dirty"),
@@ -105,8 +105,8 @@ confirm() ->
     %% test multiple nodes dirty
     [DirtyA , DirtyB | _] = ANodes,
     % manually set this for now to simulate source errors
-    ResultA = rpc:call(DirtyA, riak_repl_stats, rt_source_errors, []),
-    ResultB = rpc:call(DirtyB, riak_repl_stats, rt_sink_errors, []),
+    ResultA = rt:rpc_call(DirtyA, riak_repl_stats, rt_source_errors, []),
+    ResultB = rt:rpc_call(DirtyB, riak_repl_stats, rt_sink_errors, []),
     lager:info("Result = ~p", [ResultA]),
     lager:info("Result = ~p", [ResultB]),
 
@@ -128,7 +128,7 @@ confirm() ->
     %% test multiple nodes dirty
     [DirtyC , DirtyD | _] = ANodes,
     % manually set this for now to simulate source errors
-    ResultC = rpc:call(DirtyC, riak_repl_stats, rt_source_errors, []),
+    ResultC = rt:rpc_call(DirtyC, riak_repl_stats, rt_source_errors, []),
     lager:info("ResultC = ~p", [ResultC]),
 
     lager:info("Waiting until dirty"),
@@ -138,7 +138,7 @@ confirm() ->
     spawn(fun() ->
                 timer:sleep(1000),
                 lager:info("Marking node as dirty during a fullsync"),
-                ResultC = rpc:call(DirtyD, riak_repl_stats, rt_source_errors, []),
+                ResultC = rt:rpc_call(DirtyD, riak_repl_stats, rt_source_errors, []),
                 lager:info("Result = ~p", [ResultC])
            end),
     repl_util:start_and_wait_until_fullsync_complete(LeaderA),
@@ -155,12 +155,12 @@ confirm() ->
     pass.
 
 get_dirty_stat(Node) ->
-    Stats = rpc:call(Node, riak_repl_stats, get_stats, []),
+    Stats = rt:rpc_call(Node, riak_repl_stats, get_stats, []),
     %lager:info("RT_DIRTY = ~p", [proplists:get_value(rt_dirty, Stats, -1)]),
     proplists:get_value(rt_dirty, Stats, -1).
 
 get_rt_errors(Node) ->
-    Stats = rpc:call(Node, riak_repl_stats, get_stats, []),
+    Stats = rt:rpc_call(Node, riak_repl_stats, get_stats, []),
     SourceErrors = proplists:get_value(rt_source_errors, Stats, -1),
     SinkErrors = proplists:get_value(rt_sink_errors, Stats, -1),
     lager:info("Source errors = ~p, sink errors = ~p", [SourceErrors, SinkErrors]),
@@ -170,7 +170,7 @@ wait_until_coord_has_dirty(Node) ->
     Res = rt:wait_until(Node,
                         fun(_) ->
                     lager:info("Checking dirty for node ~p", [Node]),
-                    Status = rpc:call(Node, riak_repl2_fscoordinator, status, []),
+                    Status = rt:rpc_call(Node, riak_repl2_fscoordinator, status, []),
                     case Status of
                         {badrpc, _} -> false;
                         [] -> false;
@@ -187,7 +187,7 @@ wait_until_coord_has_dirty(Node) ->
 %    Res = rt:wait_until(SourceLeader,
 %                        fun(_) ->
 %                    lager:info("Checking for any dirty nodes"),
-%                    Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
+%                    Status = rt:rpc_call(SourceLeader, riak_repl2_fscoordinator, status, []),
 %                    case Status of
 %                        {badrpc, _} -> false;
 %                        [] -> false;
@@ -205,7 +205,7 @@ wait_until_coord_has_dirty(Node) ->
 %                        fun(_) ->
 %                    lager:info("Writing data while checking for any dirty nodes"),
 %                    ?assertEqual([], repl_util:do_write(SourceLeader, 0, 5000, TestBucket, 2)),
-%                    Status = rpc:call(SourceLeader, riak_repl2_fscoordinator, status, []),
+%                    Status = rt:rpc_call(SourceLeader, riak_repl2_fscoordinator, status, []),
 %                    case Status of
 %                        {badrpc, _} -> false;
 %                        [] -> false;
@@ -225,7 +225,7 @@ wait_until_node_clean(Node) ->
     Res = rt:wait_until(Node,
                         fun(_) ->
                     lager:info("Checking dirty for node ~p", [Node]),
-                    Status = rpc:call(Node, riak_repl2_fscoordinator, status, []),
+                    Status = rt:rpc_call(Node, riak_repl2_fscoordinator, status, []),
                     case Status of
                         {badrpc, _} -> false;
                         [] -> false;
@@ -242,7 +242,7 @@ wait_until_all_nodes_clean(Leader) ->
     Res = rt:wait_until(Leader,
                         fun(L) ->
                     lager:info("Checking for all nodes clean"),
-                    Status = rpc:call(L, riak_repl2_fscoordinator, status, []),
+                    Status = rt:rpc_call(L, riak_repl2_fscoordinator, status, []),
                     case Status of
                         {badrpc, _} -> false;
                         [] -> true;

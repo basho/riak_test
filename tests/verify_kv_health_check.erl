@@ -35,7 +35,7 @@ confirm() ->
     %% lets use some reasonable threshold values so we aren't here forever
     DisableThreshold = 10,
     EnableThreshold = 9,
-    ok = rpc:call(Node1,
+    ok = rt:rpc_call(Node1,
                   application,
                   set_env,
                   [riak_kv, vnode_mailbox_limit, {EnableThreshold, DisableThreshold}]),
@@ -45,12 +45,12 @@ confirm() ->
     %% so we read the same key again and again
     C = rt:pbc(Node2),
     [riakc_pb_socket:get(C, <<"b">>, <<"k">>) || _ <- lists:seq(1,DisableThreshold+5)],
-    ok = rpc:call(Node1, riak_core_node_watcher, check_health, [riak_kv]),
+    ok = rt:rpc_call(Node1, riak_core_node_watcher, check_health, [riak_kv]),
 
     lager:info("health check should disable riak_kv on ~p shortly", [Node1]),
     rt:wait_until(Node1,
                   fun(N) ->
-                          Up = rpc:call(N, riak_core_node_watcher, services, [N]),
+                          Up = rt:rpc_call(N, riak_core_node_watcher, services, [N]),
                           not lists:member(riak_kv, Up)
                   end),
     lager:info("health check successfully disabled riak_kv on ~p", [Node1]),

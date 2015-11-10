@@ -132,16 +132,16 @@ test_supervision() ->
 
     %% Let's make sure the thing's restarting as planned
     lager:info("calling riak_jmx:stop() to reset retry counters"),
-    rpc:call(Node, riak_jmx, stop, ["stopping for test purposes"]),
+    rt:rpc_call(Node, riak_jmx, stop, ["stopping for test purposes"]),
 
     lager:info("loading lager backend on node"),
     rt:load_modules_on_nodes([riak_test_lager_backend], [Node]),
-    ok = rpc:call(Node, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
-    ok = rpc:call(Node, lager, set_loglevel, [riak_test_lager_backend, info]),
+    ok = rt:rpc_call(Node, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
+    ok = rt:rpc_call(Node, lager, set_loglevel, [riak_test_lager_backend, info]),
 
     lager:info("Now we're capturing logs on the node, let's start jmx"),
     lager:info("calling riak_jmx:start() to get these retries started"),
-    rpc:call(Node, riak_jmx, start, []),
+    rt:rpc_call(Node, riak_jmx, start, []),
 
     lager:info("It can fail, it can fail 10 times"),
 
@@ -151,7 +151,7 @@ test_supervision() ->
 
 retry_check_fun(Node) ->
     fun() ->
-            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+            Logs = rt:rpc_call(Node, riak_test_lager_backend, get_logs, []),
              10 =:= lists:foldl(log_fold_fun(), 0, Logs)
     end.
 
@@ -179,7 +179,7 @@ test_application_stop() ->
     %% Let's make sure the java process is alive!
     lager:info("checking for riak_jmx.jar running."),
     rt:wait_until(Node, fun(_N) ->
-        try case re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", []) of
+        try case re:run(rt:rpc_call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", []) of
             nomatch -> false;
             _ -> true
             end
@@ -190,7 +190,7 @@ test_application_stop() ->
         end
     end),
 
-    rpc:call(Node, riak_jmx, stop, ["Stopping riak_jmx"]),
+    rt:rpc_call(Node, riak_jmx, stop, ["Stopping riak_jmx"]),
     timer:sleep(20000),
     case net_adm:ping(Node) of
         pang ->
@@ -203,7 +203,7 @@ test_application_stop() ->
     %% Let's make sure the java process is dead!
     lager:info("checking for riak_jmx.jar not running."),
 
-    ?assertEqual(nomatch, re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
+    ?assertEqual(nomatch, re:run(rt:rpc_call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", [])),
 
     rt:stop(Node).
 

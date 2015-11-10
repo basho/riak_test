@@ -120,7 +120,7 @@ n(Atom) ->
     atom_to_list(Atom).
 
 stage_join(Node, OtherNode) ->
-    %% rpc:call(Node, riak_kv_console, staged_join, [[n(OtherNode)]]).
+    %% rt:rpc_call(Node, riak_kv_console, staged_join, [[n(OtherNode)]]).
     JoinFun = fun() ->
         {ok, Result} = rt:admin(Node, ["cluster", "join", n(OtherNode)]),
         lists:prefix("Success:", Result)
@@ -128,23 +128,23 @@ stage_join(Node, OtherNode) ->
     rt:wait_until(JoinFun, 5, 1000).
 
 stage_leave(Node, OtherNode) ->
-    %% rpc:call(Node, riak_core_console, stage_leave, [[n(OtherNode)]]).
+    %% rt:rpc_call(Node, riak_core_console, stage_leave, [[n(OtherNode)]]).
     rt:admin(Node, ["cluster", "leave", n(OtherNode)]).
 
 stage_remove(Node, OtherNode) ->
-    %% rpc:call(Node, riak_core_console, stage_remove, [[n(OtherNode)]]).
+    %% rt:rpc_call(Node, riak_core_console, stage_remove, [[n(OtherNode)]]).
     rt:admin(Node, ["cluster", "force-remove", n(OtherNode)]).
 
 stage_replace(Node, Node1, Node2) ->
-    %% rpc:call(Node, riak_core_console, stage_replace, [[n(Node1), n(Node2)]]).
+    %% rt:rpc_call(Node, riak_core_console, stage_replace, [[n(Node1), n(Node2)]]).
     rt:admin(Node, ["cluster", "replace", n(Node1), n(Node2)]).
 
 stage_force_replace(Node, Node1, Node2) ->
-    %% rpc:call(Node, riak_core_console, stage_force_replace, [[n(Node1), n(Node2)]]).
+    %% rt:rpc_call(Node, riak_core_console, stage_force_replace, [[n(Node1), n(Node2)]]).
     rt:admin(Node, ["cluster", "force-replace", n(Node1), n(Node2)]).
 
 print_staged(Node) ->
-    %% rpc:call(Node, riak_core_console, print_staged, [[]]).
+    %% rt:rpc_call(Node, riak_core_console, print_staged, [[]]).
     F = fun(_) ->
                 {ok, StdOut} = rt:admin(Node, ["cluster", "plan"]),
                 case StdOut of
@@ -155,33 +155,33 @@ print_staged(Node) ->
     rt:wait_until(Node, F).
 
 commit_staged(Node) ->
-    %% rpc:call(Node, riak_core_console, commit_staged, [[]]).
+    %% rt:rpc_call(Node, riak_core_console, commit_staged, [[]]).
     rt:admin(Node, ["cluster", "commit"]).
 
 clear_staged(Node) ->
-    %% rpc:call(Node, riak_core_console, clear_staged, [[]]).
+    %% rt:rpc_call(Node, riak_core_console, clear_staged, [[]]).
     rt:admin(Node, ["cluster", "clear"]).
 
 stage_join_rpc(Node, OtherNode) ->
-    rpc:call(Node, riak_core, staged_join, [OtherNode]).
+    rt:rpc_call(Node, riak_core, staged_join, [OtherNode]).
 
 stage_leave_rpc(Node, OtherNode) ->
-    rpc:call(Node, riak_core_claimant, leave_member, [OtherNode]).
+    rt:rpc_call(Node, riak_core_claimant, leave_member, [OtherNode]).
 
 stage_remove_rpc(Node, OtherNode) ->
-    rpc:call(Node, riak_core_claimant, remove_member, [OtherNode]).
+    rt:rpc_call(Node, riak_core_claimant, remove_member, [OtherNode]).
 
 stage_replace_rpc(Node, Node1, Node2) ->
-    rpc:call(Node, riak_core_claimant, replace, [Node1, Node2]).
+    rt:rpc_call(Node, riak_core_claimant, replace, [Node1, Node2]).
 
 stage_force_replace_rpc(Node, Node1, Node2) ->
-    rpc:call(Node, riak_core_claimant, force_replace, [Node1, Node2]).
+    rt:rpc_call(Node, riak_core_claimant, force_replace, [Node1, Node2]).
 
 plan_staged_rpc(Node) ->
-    rpc:call(Node, riak_core_claimant, plan, []).
+    rt:rpc_call(Node, riak_core_claimant, plan, []).
 
 commit_staged_rpc(Node) ->
-    rpc:call(Node, riak_core_claimant, commit, []).
+    rt:rpc_call(Node, riak_core_claimant, commit, []).
 
 clear_staged_rpc(Node) ->
-    rpc:call(Node, riak_core_claimant, clear, []).
+    rt:rpc_call(Node, riak_core_claimant, clear, []).

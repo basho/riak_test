@@ -11,9 +11,9 @@ confirm() ->
     Nodes = rt:build_cluster(4),
 
     %% calculate the preflist for foo/bar
-    {ok, Ring} = rpc:call(hd(Nodes), riak_core_ring_manager, get_my_ring, []),
-    UpNodes = rpc:call(hd(Nodes), riak_core_node_watcher, nodes, [riak_kv]),
-    DocIdx = rpc:call(hd(Nodes), riak_core_util, chash_key, [{<<"foo">>,
+    {ok, Ring} = rt:rpc_call(hd(Nodes), riak_core_ring_manager, get_my_ring, []),
+    UpNodes = rt:rpc_call(hd(Nodes), riak_core_node_watcher, nodes, [riak_kv]),
+    DocIdx = rt:rpc_call(hd(Nodes), riak_core_util, chash_key, [{<<"foo">>,
                 <<"bar">>}]),
     N = 3,
     Preflist2 = riak_core_apl:get_apl_ann(DocIdx, N, Ring, UpNodes),
@@ -139,10 +139,10 @@ confirm() ->
     pass.
 
 make_intercepts_tab(Node, Partition) ->
-    SupPid = rpc:call(Node, erlang, whereis, [sasl_safe_sup]),
-    intercepts_tab = rpc:call(Node, ets, new, [intercepts_tab, [named_table,
+    SupPid = rt:rpc_call(Node, erlang, whereis, [sasl_safe_sup]),
+    intercepts_tab = rt:rpc_call(Node, ets, new, [intercepts_tab, [named_table,
                 public, set, {heir, SupPid, {}}]]),
-    true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_get_partitions,
+    true = rt:rpc_call(Node, ets, insert, [intercepts_tab, {drop_do_get_partitions,
                 [Partition]}]),
-    true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_put_partitions,
+    true = rt:rpc_call(Node, ets, insert, [intercepts_tab, {drop_do_put_partitions,
                 [Partition]}]).

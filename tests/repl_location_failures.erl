@@ -81,7 +81,7 @@ confirm() ->
     repl_util:enable_fullsync(LeaderA, "B"),
     rt:wait_until_ring_converged(ANodes),
 
-    BIndicies = length(rpc:call(LeaderB,
+    BIndicies = length(rt:rpc_call(LeaderB,
                                 riak_core_ring,
                                 my_indices,
                                 [rt:get_ring(LeaderB)])),

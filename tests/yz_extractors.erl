@@ -260,25 +260,25 @@ confirm() ->
 %%%===================================================================
 
 get_ring_and_cmd_vals(Node, Prefix, Key) ->
-    Ring = rpc:call(Node, yz_misc, get_ring, [transformed]),
+    Ring = rt:rpc_call(Node, yz_misc, get_ring, [transformed]),
     MDVal = metadata_get(Node, Prefix, Key),
     RingVal = ring_meta_get(Node, Key, Ring),
     {RingVal, MDVal}.
 
 metadata_get(Node, Prefix, Key) ->
-    rpc:call(Node, riak_core_metadata, get, [Prefix, Key, []]).
+    rt:rpc_call(Node, riak_core_metadata, get, [Prefix, Key, []]).
 
 ring_meta_get(Node, Key, Ring) ->
-    rpc:call(Node, riak_core_ring, get_meta, [Key, Ring]).
+    rt:rpc_call(Node, riak_core_ring, get_meta, [Key, Ring]).
 
 register_extractor(Node, MimeType, Mod) ->
-    rpc:call(Node, yz_extractor, register, [MimeType, Mod]).
+    rt:rpc_call(Node, yz_extractor, register, [MimeType, Mod]).
 
 get_map(Node) ->
-    rpc:call(Node, yz_extractor, get_map, []).
+    rt:rpc_call(Node, yz_extractor, get_map, []).
 
 verify_extractor(Node, PacketData, Mod) ->
-    rpc:call(Node, yz_extractor, run, [PacketData, Mod]).
+    rt:rpc_call(Node, yz_extractor, run, [PacketData, Mod]).
 
 bucket_url({Host,Port}, {BType, BName}, Key) ->
     ?FMT("http://~s:~B/types/~s/buckets/~s/keys/~s",

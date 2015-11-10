@@ -81,8 +81,8 @@ test_metadata_conflicts([N1, N2 | _]=Nodes) ->
 
     %% assert that we still have siblings since write_conflicting uses allow_put=false
     lager:info("checking object count after resolve on get w/o put"),
-    ?assertEqual(2, rpc:call(N1, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
-    ?assertEqual(2, rpc:call(N2, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
+    ?assertEqual(2, rt:rpc_call(N1, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
+    ?assertEqual(2, rt:rpc_call(N2, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
 
     %% iterate over the values and ensure we can resolve w/o doing a put
     ?assertEqual([{?KEY2, lists:usort([?VAL1, ?VAL2])}],
@@ -90,8 +90,8 @@ test_metadata_conflicts([N1, N2 | _]=Nodes) ->
     ?assertEqual([{?KEY2, lists:usort([?VAL1, ?VAL2])}],
                  metadata_to_list(N2, ?PREFIX1, [{allow_put, false}])),
     lager:info("checking object count after resolve on itr_key_values w/o put"),
-    ?assertEqual(2, rpc:call(N1, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
-    ?assertEqual(2, rpc:call(N2, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
+    ?assertEqual(2, rt:rpc_call(N1, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
+    ?assertEqual(2, rt:rpc_call(N2, ?MODULE, object_count, [?PREFIX1, ?KEY2])),
 
     %% assert that we no longer have siblings when allow_put=true
     lager:info("checking object count afger resolve on get w/ put"),
@@ -105,8 +105,8 @@ test_metadata_conflicts([N1, N2 | _]=Nodes) ->
     ok.
 
 write_conflicting(N1, N2, Prefix, Key, Val1, Val2) ->
-    rpc:call(N1, riak_core_metadata_manager, put, [{Prefix, Key}, undefined, Val1]),
-    rpc:call(N2, riak_core_metadata_manager, put, [{Prefix, Key}, undefined, Val2]),
+    rt:rpc_call(N1, riak_core_metadata_manager, put, [{Prefix, Key}, undefined, Val1]),
+    rt:rpc_call(N2, riak_core_metadata_manager, put, [{Prefix, Key}, undefined, Val2]),
     wait_until_metadata_value([N1, N2], Prefix, Key,
                               [{resolver, fun list_resolver/2},
                                {allow_put, false}],
@@ -134,13 +134,13 @@ metadata_to_list(Node, FullPrefix) ->
     metadata_to_list(Node, FullPrefix, []).
 
 metadata_to_list(Node, FullPrefix, Opts) ->
-    rpc:call(Node, riak_core_metadata, to_list, [FullPrefix, Opts]).
+    rt:rpc_call(Node, riak_core_metadata, to_list, [FullPrefix, Opts]).
 
 metadata_put(Node, Prefix, Key, FunOrVal) ->
-    ok = rpc:call(Node, riak_core_metadata, put, [Prefix, Key, FunOrVal]).
+    ok = rt:rpc_call(Node, riak_core_metadata, put, [Prefix, Key, FunOrVal]).
 
 metadata_get(Node, Prefix, Key, Opts) ->
-    rpc:call(Node, riak_core_metadata, get, [Prefix, Key, Opts]).
+    rt:rpc_call(Node, riak_core_metadata, get, [Prefix, Key, Opts]).
 
 wait_until_metadata_value(Nodes, Prefix, Key, Val) ->
     wait_until_metadata_value(Nodes, Prefix, Key, [], Val).
@@ -160,16 +160,16 @@ wait_until_object_count(Nodes, Prefix, Key, Count) when is_list(Nodes) ->
 wait_until_object_count(Node, Prefix, Key, Count) ->
     lager:info("wait until {~p, ~p} has object count ~p on ~p", [Prefix, Key, Count, Node]),
     F = fun() ->
-                Count =:= rpc:call(Node, ?MODULE, object_count, [Prefix, Key])
+                Count =:= rt:rpc_call(Node, ?MODULE, object_count, [Prefix, Key])
         end,
     ?assertEqual(ok, rt:wait_until(F)),
     ok.
 
 
 eager_peers(Node, Root) ->
-    {Eagers, _} = rpc:call(Node, riak_core_broadcast, debug_get_peers, [Node, Root]),
+    {Eagers, _} = rt:rpc_call(Node, riak_core_broadcast, debug_get_peers, [Node, Root]),
     Eagers.
 
 print_tree(Root, Nodes) ->
-    Tree = rpc:call(Root, riak_core_broadcast, debug_get_tree, [Root, Nodes]),
+    Tree = rt:rpc_call(Root, riak_core_broadcast, debug_get_tree, [Root, Nodes]),
     lager:info("broadcast tree: ~p", [Tree]).

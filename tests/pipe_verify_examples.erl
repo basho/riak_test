@@ -45,16 +45,16 @@ confirm() ->
 verify_example([RN|_]) ->
     lager:info("Run riak_pipe:example/0"),
     ?assertMatch({eoi, [{empty_pass, "hello"}], _Trc},
-                 rpc:call(RN, riak_pipe, example, [])).
+                 rt:rpc_call(RN, riak_pipe, example, [])).
 
 verify_example_transform([RN|_]) ->
     lager:info("Run riak_pipe:example_transform/0"),
     ?assertEqual({eoi, [{"generic transform", 55}], []},
-                 rpc:call(RN, riak_pipe, example_transform, [])).
+                 rt:rpc_call(RN, riak_pipe, example_transform, [])).
 
 verify_example_reduce([RN|_]) ->
     lager:info("Run riak_pipe:example_reduce/0"),
-    {eoi, Res, []} = rpc:call(RN, riak_pipe, example_reduce, []),
+    {eoi, Res, []} = rt:rpc_call(RN, riak_pipe, example_reduce, []),
     ?assertEqual([{"sum reduce", {a, [55]}},
                   {"sum reduce", {b, [155]}}],
                  lists:sort(Res)).

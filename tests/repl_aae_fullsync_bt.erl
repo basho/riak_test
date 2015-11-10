@@ -280,7 +280,7 @@ value_unchanged(Pid, Bucket, Key, Bin) ->
 update_props(Type, Updates, Node, Nodes) ->
     lager:info("Setting bucket properties ~p for bucket type ~p on node ~p",
                [Updates, Type, Node]),
-    rpc:call(Node, riak_core_bucket_type, update, [Type, Updates]),
+    rt:rpc_call(Node, riak_core_bucket_type, update, [Type, Updates]),
     rt:wait_until_ring_converged(Nodes),
 
     get_current_bucket_props(Nodes, Type).
@@ -291,7 +291,7 @@ get_current_bucket_props(Nodes, Type) when is_list(Nodes) ->
     Node = lists:nth(length(Nodes), Nodes),
     get_current_bucket_props(Node, Type);
 get_current_bucket_props(Node, Type) when is_atom(Node) ->
-    rpc:call(Node,
+    rt:rpc_call(Node,
              riak_core_bucket_type,
              get,
              [Type]).

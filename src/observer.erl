@@ -172,7 +172,7 @@ loop(Fun, Rate, H) ->
 %%                          notify_down(TS, X, Node, H),
 %%                          ok;
 %%                      pong ->
-%%                          case rpc:call(Node, riak_core_node_watcher, services, [Node]) of
+%%                          case rt:rpc_call(Node, riak_core_node_watcher, services, [Node]) of
 %%                              L when is_list(L) ->
 %%                                  case lists:member(riak_kv, L) of
 %%                                      true ->

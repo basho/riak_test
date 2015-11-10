@@ -66,7 +66,7 @@ confirm() ->
     lager:info("wrote value <<bob>>"),
 
     VCE0 = riakc_obj:vclock(Bod),
-    VC0 = rpc:call(Node, riak_object, decode_vclock, [VCE0]),
+    VC0 = rt:rpc_call(Node, riak_object, decode_vclock, [VCE0]),
     lager:info("VC ~p~n", [VC0]),
 
 
@@ -76,7 +76,7 @@ confirm() ->
     {ok, Bod2} = write_key(Client, <<"jon">>, [return_body]),
 
     VCE1 = riakc_obj:vclock(Bod2),
-    VC1 = rpc:call(Node, riak_object, decode_vclock, [VCE1]),
+    VC1 = rt:rpc_call(Node, riak_object, decode_vclock, [VCE1]),
     lager:info("VC ~p~n", [VC1]),
 
 
@@ -92,7 +92,7 @@ confirm() ->
     {ok, O} = Res,
 
     VCE = riakc_obj:vclock(O),
-    VC = rpc:call(Node, riak_object, decode_vclock, [VCE]),
+    VC = rt:rpc_call(Node, riak_object, decode_vclock, [VCE]),
     lager:info("VC ~p~n", [VC]),
 
     ?assertEqual([<<"bob">>, <<"jon">>, <<"phil">>], lists:sort(riakc_obj:get_values(O))),
@@ -109,12 +109,12 @@ delete_datadir({{Idx, Node}, Type}) ->
     lager:info("deleting backend data dir for ~p ~p on ~p",
                [Idx, Node, Type]),
     %% Get default backend
-    Backend = rpc:call(Node, app_helper, get_env, [riak_kv, storage_backend]),
+    Backend = rt:rpc_call(Node, app_helper, get_env, [riak_kv, storage_backend]),
 
     %% get name from mod
     BackendName = backend_name_from_mod(Backend),
     %% get data root for type
-    DataRoot = rpc:call(Node, app_helper, get_env, [BackendName, data_root]),
+    DataRoot = rt:rpc_call(Node, app_helper, get_env, [BackendName, data_root]),
     %% get datadir from Idx
     Path = filename:join([rtdev:relpath(current),
                           "dev",

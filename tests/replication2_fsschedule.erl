@@ -46,21 +46,21 @@ setup_repl_clusters(Conf, InterceptSetup) ->
 
     %% set the fullsync limits higher, so fullsyncs don't take forever
     [begin
-                rpc:call(N, riak_repl_console, max_fssource_cluster,
+                rt:rpc_call(N, riak_repl_console, max_fssource_cluster,
                     [["10"]]),
-                rpc:call(N, riak_repl_console, max_fssource_node, [["5"]]),
-                rpc:call(N, riak_repl_console, max_fssink_node, [["5"]])
+                rt:rpc_call(N, riak_repl_console, max_fssource_node, [["5"]]),
+                rt:rpc_call(N, riak_repl_console, max_fssink_node, [["5"]])
         end || N <- [AFirst, BFirst, CFirst]],
 
     %% get the leader for the first cluster
     repl_util:wait_until_leader(AFirst),
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
+    LeaderA = rt:rpc_call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
-    {ok, {_IP, BPort}} = rpc:call(BFirst, application, get_env,
+    {ok, {_IP, BPort}} = rt:rpc_call(BFirst, application, get_env,
                                   [riak_core, cluster_mgr]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", BPort),
 
-    {ok, {_IP, CPort}} = rpc:call(CFirst, application, get_env,
+    {ok, {_IP, CPort}} = rt:rpc_call(CFirst, application, get_env,
                                   [riak_core, cluster_mgr]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", CPort),
 
@@ -136,12 +136,12 @@ test_mixed_12_13() ->
 
     lager:info("Adding repl listener to cluster A"),
     ListenerArgs = [[atom_to_list(LeaderA), "127.0.0.1", "9010"]],
-    Res = rpc:call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
+    Res = rt:rpc_call(LeaderA, riak_repl_console, add_listener, ListenerArgs),
     ?assertEqual(ok, Res),
 
     lager:info("Adding repl site to cluster B"),
     SiteArgs = ["127.0.0.1", "9010", "rtmixed"],
-    Res = rpc:call(BFirst, riak_repl_console, add_site, [SiteArgs]),
+    Res = rt:rpc_call(BFirst, riak_repl_console, add_site, [SiteArgs]),
 
     lager:info("Waiting for v2 repl to catch up. Good time to light up a cold can of Tab."),
     wait_until_fullsyncs(LeaderA, "B", 3),
@@ -178,7 +178,7 @@ wait_until_fullsyncs(Node, ClusterName, N) ->
 wait_until_12_fs_complete(Node, N) ->
     rt:wait_until(Node,
                   fun(_) ->
-                          Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+                          Status = rt:rpc_call(Node, riak_repl_console, status, [quiet]),
                           case proplists:get_value(server_fullsyncs, Status) of
                               C when C >= N ->
                                   true;
@@ -193,7 +193,7 @@ get_firsts(Nodes) ->
     {AFirst, BFirst, CFirst}.
 
 get_cluster_fullsyncs(Node, ClusterName) ->
-    Status = rpc:call(Node, riak_repl2_fscoordinator, status, []),
+    Status = rt:rpc_call(Node, riak_repl2_fscoordinator, status, []),
     case proplists:lookup(ClusterName, Status) of
         none -> 0;
         {_, ClusterData} ->

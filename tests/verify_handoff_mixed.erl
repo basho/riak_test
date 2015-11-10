@@ -132,9 +132,9 @@ prepare_pipe_vnodes(Node) ->
     Options = [{sink, #fitting{pid=DummySink}}],
 
     lager:info("Filling a pipe with ~b inputs", [?PIPE_COUNT]),
-    {ok, Pipe} = rpc:call(Node, riak_pipe, exec, [Spec, Options]),
+    {ok, Pipe} = rt:rpc_call(Node, riak_pipe, exec, [Spec, Options]),
     lists:foreach(
-      fun(I) -> ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, I]) end,
+      fun(I) -> ok = rt:rpc_call(Node, riak_pipe, queue_work, [Pipe, I]) end,
       lists:seq(1, ?PIPE_COUNT)).
 
 check_logs() ->

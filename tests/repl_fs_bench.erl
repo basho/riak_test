@@ -110,10 +110,10 @@ fullsync_test(Strategy, Latency) ->
     ?assertEqual(ok, repl_util:wait_until_leader_converge(ANodes)),
     ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
 
-    LeaderA = rpc:call(AFirst,
+    LeaderA = rt:rpc_call(AFirst,
                        riak_core_cluster_mgr, get_leader, []),
 
-    {ok, {IP, Port}} = rpc:call(BFirst,
+    {ok, {IP, Port}} = rt:rpc_call(BFirst,
                                 application, get_env, [riak_core, cluster_mgr]),
 
     repl_util:connect_cluster(LeaderA, IP, Port),

@@ -61,7 +61,7 @@ confirm() ->
 start_dead_pipe(Node) ->
     Spec = [{map, {modfun, riak_kv_mapreduce, map_object_value}, none, true}],
     {{ok, Pipe}, _NumKeeps} =
-        rpc:call(Node, riak_kv_mrc_pipe, mapred_stream, [Spec]),
+        rt:rpc_call(Node, riak_kv_mrc_pipe, mapred_stream, [Spec]),
     riak_pipe:destroy(Pipe),
     Pipe.
 
@@ -69,7 +69,7 @@ start_dead_pipe(Node) ->
 %% raises an error (synchronous send)
 synchronous([Node|_]) ->
     Pipe = start_dead_pipe(Node),
-    {error, Reason} = rpc:call(Node, riak_kv_mrc_pipe,send_inputs,
+    {error, Reason} = rt:rpc_call(Node, riak_kv_mrc_pipe,send_inputs,
                                [Pipe, [{<<"foo">>, <<"bar">>}]]),
     %% Each vnode should have received the input, but
     %% being unable to find the fitting process, returned

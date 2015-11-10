@@ -204,7 +204,7 @@ create_bucket_types([N1|_], Types) ->
 
 bucket_type_ready_fun(Name) ->
     fun(Node) ->
-            Res = rpc:call(Node, riak_core_bucket_type, activate, [Name]),
+            Res = rt:rpc_call(Node, riak_core_bucket_type, activate, [Name]),
             lager:info("is ~p ready ~p?", [Name, Res]),
             Res == ok
     end.
@@ -212,7 +212,7 @@ bucket_type_ready_fun(Name) ->
 bucket_type_matches_fun(Types) ->
     fun(Node) ->
             lists:all(fun({Name, Type}) ->
-                              Props = rpc:call(Node, riak_core_bucket_type, get,
+                              Props = rt:rpc_call(Node, riak_core_bucket_type, get,
                                                [Name]),
                               Props /= undefined andalso
                                   proplists:get_value(allow_mult, Props, false)

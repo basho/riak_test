@@ -444,7 +444,7 @@ assert_bucket_not_found(Pid, Bucket, Key) ->
 update_props(Type, Updates, Node, Nodes) ->
     lager:info("Setting bucket properties ~p for bucket type ~p on node ~p",
                [Updates, Type, Node]),
-    rpc:call(Node, riak_core_bucket_type, update, [Type, Updates]),
+    rt:rpc_call(Node, riak_core_bucket_type, update, [Type, Updates]),
     rt:wait_until_ring_converged(Nodes),
 
     get_current_bucket_props(Nodes, Type).
@@ -455,7 +455,7 @@ get_current_bucket_props(Nodes, Type) when is_list(Nodes) ->
     Node = lists:nth(length(Nodes), Nodes),
     get_current_bucket_props(Node, Type);
 get_current_bucket_props(Node, Type) when is_atom(Node) ->
-    rpc:call(Node,
+    rt:rpc_call(Node,
              riak_core_bucket_type,
              get,
              [Type]).
@@ -463,7 +463,7 @@ get_current_bucket_props(Node, Type) when is_atom(Node) ->
 ensure_rtq_drained(ANodes) ->
     lager:info("making sure the rtq has drained"),
     Got = lists:map(fun(Node) ->
-                    [] =:= rpc:call(Node, riak_repl2_rtq, dumpq, [])
+                    [] =:= rt:rpc_call(Node, riak_repl2_rtq, dumpq, [])
                     end, ANodes),
     Expected = [true || _ <- lists:seq(1, length(ANodes))],
     ?assertEqual(Expected, Got).

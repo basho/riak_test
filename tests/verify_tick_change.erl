@@ -39,7 +39,7 @@ confirm() ->
     read_stuff(Nodes, Start, End, Bucket, W, <<>>),
 
     io:format("Start ticktime daemon on ~p, then wait a few seconds\n",[Node1]),
-    rpc:call(Node1, riak_core_net_ticktime, start_set_net_ticktime_daemon,
+    rt:rpc_call(Node1, riak_core_net_ticktime, start_set_net_ticktime_daemon,
              [Node1, NewTime]),
     timer:sleep(2*1000),
 
@@ -50,7 +50,7 @@ confirm() ->
            end),
     lager:info("If we got this far, then we found no inconsistencies\n"),
     [begin
-         RemoteTime = rpc:call(Node, net_kernel, get_net_ticktime, []),
+         RemoteTime = rt:rpc_call(Node, net_kernel, get_net_ticktime, []),
          io:format("Node ~p tick is ~p\n", [Node, RemoteTime]),
          ?assertEqual(NewTime, RemoteTime)
      end || Node <- lists:usort([node()|nodes(connected)])],
@@ -70,7 +70,7 @@ read_stuff(Nodes, Start, End, Bucket, W, Common) ->
     [] = rt:systest_read(Nd, Start, End, Bucket, W, Common).
 
 is_set_net_ticktime_done(Nodes, Time) ->
-    case lists:usort([(catch rpc:call(Node, net_kernel, get_net_ticktime,[]))
+    case lists:usort([(catch rt:rpc_call(Node, net_kernel, get_net_ticktime,[]))
                       || Node <- Nodes]) of
         [Time] ->
             true;
