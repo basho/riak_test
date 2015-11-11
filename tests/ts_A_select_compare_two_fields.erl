@@ -1,4 +1,4 @@
--module(ts_A_select_fail_5).
+-module(ts_A_select_compare_two_fields).
 
 -behavior(riak_test).
 
@@ -16,6 +16,6 @@ confirm() ->
         "AND myfamily = 'fa2mily1' "
         "AND myseries ='seriesX' "
         "AND weather = myseries",
-    Expected = {[],[]},
+    Expected = "Expect that fields cannot be compared",
     timeseries_util:confirm_select(
         single, normal, DDL, Data, Qry, Expected).
