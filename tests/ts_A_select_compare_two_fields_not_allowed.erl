@@ -1,4 +1,4 @@
--module(ts_A_select_compare_two_fields).
+-module(ts_A_select_compare_two_fields_not_allowed).
 
 -behavior(riak_test).
 
