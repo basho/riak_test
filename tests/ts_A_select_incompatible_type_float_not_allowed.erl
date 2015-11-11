@@ -1,4 +1,4 @@
--module(ts_A_select_incompatible_type_float).
+-module(ts_A_select_incompatible_type_float_not_allowed).
 
 -behavior(riak_test).
 

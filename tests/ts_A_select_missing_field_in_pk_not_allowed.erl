@@ -2,7 +2,7 @@
 %%% Execute a query where the primary key is not covered
 %%% in the where clause.
 
--module(ts_A_select_missing_field_in_pk).
+-module(ts_A_select_missing_field_in_pk_not_allowed).
 
 -behavior(riak_test).
 

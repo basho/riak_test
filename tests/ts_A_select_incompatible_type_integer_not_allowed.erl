@@ -2,7 +2,7 @@
 %%% Test the if a varchar matches an integer
 %%% is not allowed.
 
--module(ts_A_select_incompatible_type_integer).
+-module(ts_A_select_incompatible_type_integer_not_allowed).
 
 -behavior(riak_test).
 

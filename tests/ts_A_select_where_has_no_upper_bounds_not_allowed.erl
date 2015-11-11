@@ -1,4 +1,4 @@
--module(ts_A_select_where_has_no_upper_bounds).
+-module(ts_A_select_where_has_no_upper_bounds_not_allowed).
 
 -behavior(riak_test).
 
