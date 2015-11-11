@@ -2,7 +2,7 @@
 %%% Execute a query where the primary key is not covered
 %%% in the where clause.
 
--module(ts_A_select_fail_3).
+-module(ts_A_select_missing_field_in_pk_not_allowed).
 
 -behavior(riak_test).
 
@@ -16,6 +16,6 @@ confirm() ->
         "select * from GeoCheckin "
         "where time > 1 and time < 10",
     Expected =
-        {error,<<"missing_param: Missing parameter myfamily in where clause.">>},
+        {error,{1001,<<"missing_param: Missing parameter myfamily in where clause.">>}},
     timeseries_util:confirm_select(
         single, normal, DDL, Data, Query, Expected).
