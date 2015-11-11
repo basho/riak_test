@@ -16,6 +16,6 @@ confirm() ->
         "AND myfamily = 'fa2mily1' "
         "AND myseries ='seriesX' "
         "AND weather = myseries",
-    Expected = "some error message, fix me",
+    Expected = {[],[]},
     timeseries_util:confirm_select(
         single, normal, DDL, Data, Qry, Expected).

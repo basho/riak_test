@@ -13,8 +13,8 @@ confirm() ->
         "AND myfamily = 'family1' "
         "AND myseries = 1 ", % error, should be a varchar
     Expected =
-        {error,
+        {error,{1001,
          <<"invalid_query: \n",
-           "incompatible_type: field myseries with type binary cannot be compared to type integer in where clause.">>},
+           "incompatible_type: field myseries with type varchar cannot be compared to type integer in where clause.">>}},
     timeseries_util:confirm_select(
         single, normal, DDL, Data, Qry, Expected).
