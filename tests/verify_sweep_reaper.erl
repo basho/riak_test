@@ -47,7 +47,7 @@ confirm() ->
               {riak_kv,
                [{delete_mode, keep},
                 {tombstone_grace_period, 7 * 24 * 3600}, %% 1w in s
-                {reap_sweep_interval, 5},
+                {reap_sweep_interval, 1},
                 {sweep_tick, ?SWEEP_TICK},       %% Speed up sweeping
                 {anti_entropy_build_limit, {100, 1000}},
                 {anti_entropy_concurrency, 10},
