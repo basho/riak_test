@@ -25,8 +25,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"ts_test_bucket_one">>).
--define(PKEY_P1, <<"sensor">>).
--define(PKEY_P2, <<"datum">>).
+-define(PKEY_P1, <<"pooter1">>).
+-define(PKEY_P2, <<"pooter2">>).
 -define(PKEY_P3, <<"time">>).
 -define(PVAL_P1, <<"ZXC11">>).
 -define(PVAL_P2, <<"PDP-11">>).
@@ -35,8 +35,9 @@
 confirm() ->
     run_tests(?PVAL_P1, ?PVAL_P2).
 
-run_tests(PVal1, PVal2) ->
-    io:format("Data to be written: ~p\n", [make_data(PVal1, PVal2)]),
+run_tests(PvalP1, PvalP2) ->
+    Data = make_data(PvalP1, PvalP2),
+    io:format("Data to be written:\n~p\n...\n~p\n", [hd(Data), lists:last(Data)]),
 
     ClusterSize = 1,
     lager:info("Building cluster"),
@@ -44,74 +45,44 @@ run_tests(PVal1, PVal2) ->
         build_cluster(
           ClusterSize),
 
-    %% 1. use riak-admin to create a bucket
+    %% use riak-admin to create a bucket
     TableDef = io_lib:format(
                  "CREATE TABLE ~s "
                  "(~s varchar not null, "
                  " ~s varchar not null, "
                  " ~s timestamp not null, "
                  " score double not null, "
-                 " PRIMARY KEY((~s, ~s, quantum(~s, 10, 's')), ~s, ~s, ~s))",
-                 [?BUCKET, ?PKEY_P1, ?PKEY_P2, ?PKEY_P3, ?PKEY_P1, ?PKEY_P2, ?PKEY_P3, ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
+                 " PRIMARY KEY ((~s, ~s, quantum(~s, 10, s)), ~s, ~s, ~s))",
+                 [?BUCKET,
+                  ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
+                  ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
+                  ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
     rt:admin(Node1, ["bucket-type", "create", binary_to_list(?BUCKET), lists:flatten(Props)]),
     rt:admin(Node1, ["bucket-type", "activate", binary_to_list(?BUCKET)]),
 
-    %% 2. set up a client
+    %% set up a client
     C = rt:pbc(Node1),
-    ?assert(is_pid(C)),
 
-    %% 3. put some data
-    Data0 = make_data(PVal1, PVal2),
-    ResPut = riakc_ts:put(C, ?BUCKET, Data0),
-    io:format("Put ~b records: ~p\n", [length(Data0), ResPut]),
+    Data = make_data(),
+
+    %% 1. put some data
+    ok = confirm_put(C, Data),
 
     %% 4. delete one
-    ElementToDelete = 15,
-    DelRecord = [DelSensor, DelDatum, DelTimepoint, _Score] =
-        lists:nth(ElementToDelete, Data0),
-    DelKey = [DelSensor, DelDatum, DelTimepoint],
-    DelNXKey = [<<"keke">>, <<"tiki">>, DelTimepoint],
-    %% Data = lists:delete(DelRecord, Data0),
-    ResDel = riakc_ts:delete(C, ?BUCKET, DelKey, []),
-    ?assertEqual(ResDel, ok),
-    io:format("Deleted key ~b (~p): ~p\n", [ElementToDelete, DelRecord, ResDel]),
-    ResDelNX = riakc_ts:delete(C, ?BUCKET, DelNXKey, []),
-    ?assertEqual(ResDelNX, ok),
-    io:format("Not deleted non-existing key: ~p\n", [ResDelNX]),
+    ok = confirm_delete(C, lists:nth(15, Data)),
+    ok = confirm_nx_delete(C),
 
     %% 5. select
-    Query =
-        lists:flatten(
-          io_lib:format(
-            "select * from ~s where ~s > ~b and ~s < ~b and sensor = \"~s\" and datum = \"~s\"",
-           [?BUCKET, ?PKEY_P3, ?TIMEBASE + 10, ?PKEY_P3, ?TIMEBASE + 20, PVal1, PVal2])),
-    io:format("Running query: ~p\n", [Query]),
-    {_Columns, Rows} = riakc_ts:query(C, Query),
-    io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
-    ?assertEqual(length(Rows), 10 - 1 - 1),
-    {_Columns, Rows} = riakc_ts:query(C, Query),
-    io:format("Got ~b rows back again\n", [length(Rows)]),
-    ?assertEqual(length(Rows), 10 - 1 - 1),
+    ok = confirm_select(C, PvalP1, PvalP2),
 
     %% 6. single-key get some data
-    ElementToGet = 12,
-    GetRecord = [GetSensor, GetDatum, GetTimepoint, _Score2] =
-        lists:nth(ElementToGet, Data0),
-    GetKey = [GetSensor, GetDatum , GetTimepoint],
-    ResGet = riakc_ts:get(C, ?BUCKET, GetKey, []),
-    io:format("Get a single record: ~p\n", [ResGet]),
-    ?assertMatch({_, [GetRecord]}, ResGet),
-
-    GetNXKey = [<<"dudu">>, <<"fufu">>, GetTimepoint],
-    ResNXGet = riakc_ts:get(C, ?BUCKET, GetNXKey, []),
-    io:format("Not got a nonexistent single record: ~p\n", [ResNXGet]),
-    ?assertMatch({_, []}, ResNXGet),
+    ok = confirm_get(C, lists:nth(12, Data)),
+    ok = confirm_nx_get(C),
 
     pass.
 
 
-%% @ignore
 -spec build_cluster(non_neg_integer()) -> [node()].
 build_cluster(Size) ->
     build_cluster(Size, []).
@@ -122,14 +93,81 @@ build_cluster(Size, Config) ->
     rt:join_cluster(Nodes),
     Nodes.
 
-
 -define(LIFESPAN, 30).
-make_data(PVal1, PVal2) ->
+make_data() ->
     lists:foldl(
       fun(T, Q) ->
-              [[PVal1,
-                PVal2,
+              [[?PVAL_P1,
+                ?PVAL_P2,
                 ?TIMEBASE + ?LIFESPAN - T + 1,
                 math:sin(float(T) / 100 * math:pi())] | Q]
       end,
       [], lists:seq(?LIFESPAN, 0, -1)).
+
+confirm_put(C, Data) ->
+    %% Res = lists:map(fun(Datum) -> riakc_ts:put(C, ?BUCKET, [Datum]), timer:sleep(300) end, Data0),
+    %% (for future tests of batch put writing order)
+    Res = riakc_ts:put(C, ?BUCKET, Data),
+    io:format("Put ~b records: ~p\n", [length(Data), Res]),
+    ?assertEqual(ok, Res),
+    ok.
+
+confirm_delete(C, [Pooter1, Pooter2, Timepoint | _] = Record) ->
+    Key = [Pooter1, Pooter2, Timepoint],
+
+    BadKey1 = [Pooter1],
+    BadRes1 = riakc_ts:delete(C, ?BUCKET, BadKey1, []),
+    io:format("Not deleted because short key: ~p\n", [BadRes1]),
+    ?assertMatch({error, _}, BadRes1),
+
+    BadKey2 = Key ++ [43],
+    BadRes2 = riakc_ts:delete(C, ?BUCKET, BadKey2, []),
+    io:format("Not deleted because long key: ~p\n", [BadRes2]),
+    ?assertMatch({error, _}, BadRes2),
+
+    Res = riakc_ts:delete(C, ?BUCKET, Key, []),
+    io:format("Deleted record ~p: ~p\n", [Record, Res]),
+    ?assertEqual(ok, Res),
+    ok.
+
+confirm_nx_delete(C) ->
+    NXKey = [<<"Michael Jackson">>, <<"doo">>, ?TIMEBASE + 1],
+    Res = riakc_ts:delete(C, ?BUCKET, NXKey, []),
+    io:format("Not deleted non-existing key: ~p\n", [Res]),
+    ?assertEqual(ok, Res),
+    ok.
+
+confirm_select(C, PvalP1, PvalP2) ->
+    Query =
+        lists:flatten(
+          io_lib:format(
+            "select score, pooter2 from ~s where"
+            "     ~s = \"~s\""
+            " and ~s = \"~s\""
+            " and ~s > ~b and ~s < ~b",
+           [?BUCKET,
+            ?PKEY_P1, PvalP1,
+            ?PKEY_P2, PvalP2,
+            ?PKEY_P3, ?TIMEBASE + 10, ?PKEY_P3, ?TIMEBASE + 20])),
+    io:format("Running query: ~p\n", [Query]),
+    {_Columns, Rows} = riakc_ts:query(C, Query),
+    io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
+    ?assertEqual( 10 - 1 - 1, length(Rows)),
+    {_Columns, Rows} = riakc_ts:query(C, Query),
+    io:format("Got ~b rows back again\n", [length(Rows)]),
+    ?assertEqual(10 - 1 - 1, length(Rows)),
+    ok.
+
+confirm_get(C, Record = [Pooter1, Pooter2, Timepoint | _]) ->
+    Key = [Pooter1, Pooter2, Timepoint],
+    Res = riakc_ts:get(C, ?BUCKET, Key, []),
+    io:format("Get a single record: ~p\n", [Res]),
+    ?assertMatch({_, [Record]}, Res),
+    ok.
+
+confirm_nx_get(C) ->
+    Key = [<<"Claudia Schiffer">>, <<"mimi">>, ?TIMEBASE + 2],
+    Res = riakc_ts:get(C, ?BUCKET, Key, []),
+    io:format("Not got a nonexistent single record: ~p\n", [Res]),
+    ?assertMatch({_, []}, Res),
+    ok.
