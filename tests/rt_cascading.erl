@@ -45,6 +45,7 @@ confirm() ->
     big_circle(),
     circle(),
     pyramid(),
+    diamond(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -404,7 +405,30 @@ pyramid_tests(Nodes) ->
         Eval()
     end, Tests).
 
-diamond_test_() ->
+diamond() ->
+    State = diamond_setup(),
+    _ = diamond_tests(State),
+    diamond_teardown(State).
+
+diamond_setup() ->
+    Clusters = make_clusters([{"top", 1}, {"midleft", 1}, {"midright", 1}, {"bottom", 1}]),
+    GetNode = fun(Name) ->
+        [N] = proplists:get_value(Name, Clusters),
+        N
+    end,
+    GetPort = fun(Name) ->
+        get_cluster_mgr_port(GetNode(Name))
+    end,
+    connect_rt(GetNode("top"), GetPort("midleft"), "midleft"),
+    connect_rt(GetNode("midleft"), GetPort("bottom"), "bottom"),
+    connect_rt(GetNode("midright"), GetPort("bottom"), "bottom"),
+    connect_rt(GetNode("top"), GetPort("midright"), "midright"),
+    lists:flatten([Nodes || {_, Nodes} <- Clusters]).
+
+diamond_teardown(Nodes) ->
+    rt:clean_cluster(Nodes).
+
+diamond_tests(Nodes) ->
     % A pretty cluster of clusters:
     %                      +-----+
     %     +--------------->| top |
@@ -419,29 +443,9 @@ diamond_test_() ->
     %     |               +--------+
     %     +-------<-------| bottom |
     %                     +--------+
-    {timeout, timeout(180), {setup, fun() ->
-        Conf = conf(),
-        [Top, MidLeft, MidRight, Bottom] = Nodes = rt:deploy_nodes(4, Conf),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        Names = ["top", "midleft", "midright", "bottom"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        PortMap = lists:map(fun(Node) ->
-            Port = get_cluster_mgr_port(Node),
-            {Node, Port}
-        end, Nodes),
-        connect_rt(Top, proplists:get_value(MidLeft, PortMap), "midleft"),
-        connect_rt(MidLeft, proplists:get_value(Bottom, PortMap), "bottom"),
-        connect_rt(MidRight, proplists:get_value(Bottom, PortMap), "bottom"),
-        connect_rt(Top, proplists:get_value(MidRight, PortMap), "midright"),
-        Nodes
-    end,
-    fun(Nodes) ->
-        rt:clean_cluster(Nodes)
-    end,
-    fun(Nodes) -> [
+    Tests = [
 
-        {"unfortunate double write", timeout, timeout(135), fun() ->
+        {"unfortunate double write", fun() ->
             [Top, MidLeft, MidRight, Bottom] = Nodes,
             Client = rt:pbc(Top),
             Bin = <<"start_at_top">>,
@@ -469,7 +473,7 @@ diamond_test_() ->
             ?assertEqual(ok, rt:wait_until(Top, WaitFun))
         end},
 
-        {"start at midright", timeout, timeout(35), fun() ->
+        {"start at midright", fun() ->
             [Top, MidLeft, MidRight, Bottom] = Nodes,
             % To ensure a write doesn't happen to MidRight when it originated
             % on midright, we're going to compare the expect_seq before and
@@ -493,10 +497,16 @@ diamond_test_() ->
             GotSeq = proplists:get_value(expect_seq, Sink2),
             ?assertEqual(ExpectSeq, GotSeq)
         end},
+
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
         end}
-    ] end}}.
+
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== diamond: ~s =====", [Name]),
+        Eval()
+    end, Tests).
 
 circle_and_spurs_test_() ->
     %                        +------------+
