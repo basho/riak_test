@@ -47,7 +47,6 @@
         [{riak_kv,
           [
            {sweep_tick, 3000},
-           {aae_sweep_interval, 20},
            % Speedy AAE configuration
            {anti_entropy, {on, []}},
            {anti_entropy_build_limit, {100, 1000}},
