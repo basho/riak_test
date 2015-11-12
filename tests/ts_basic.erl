@@ -39,9 +39,9 @@ run_tests(PvalP1, PvalP2) ->
     Data = make_data(PvalP1, PvalP2),
     io:format("Data to be written:\n~p\n...\n~p\n", [hd(Data), lists:last(Data)]),
 
-    ClusterSize = 1,
+    ClusterSize = 3,
     lager:info("Building cluster"),
-    _Nodes = [Node1|_] =
+    _Nodes = [Node1,Node2|_] =
         build_cluster(
           ClusterSize),
 
@@ -61,10 +61,15 @@ run_tests(PvalP1, PvalP2) ->
     rt:admin(Node1, ["bucket-type", "create", binary_to_list(?BUCKET), lists:flatten(Props)]),
     rt:admin(Node1, ["bucket-type", "activate", binary_to_list(?BUCKET)]),
 
-    %% set up a client
-    C = rt:pbc(Node1),
+    confirm_all_from_node(Node1, Data, PvalP1, PvalP2),
+    confirm_all_from_node(Node2, Data, PvalP1, PvalP2),
 
-    Data = make_data(),
+    pass.
+
+
+confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
+    %% set up a client
+    C = rt:pbc(Node),
 
     %% 1. put some data
     ok = confirm_put(C, Data),
@@ -80,7 +85,8 @@ run_tests(PvalP1, PvalP2) ->
     ok = confirm_get(C, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
-    pass.
+    ok = confirm_list_keys(C),
+    ok = confirm_delete_all(C).
 
 
 -spec build_cluster(non_neg_integer()) -> [node()].
@@ -93,16 +99,17 @@ build_cluster(Size, Config) ->
     rt:join_cluster(Nodes),
     Nodes.
 
--define(LIFESPAN, 30).
-make_data() ->
-    lists:foldl(
-      fun(T, Q) ->
-              [[?PVAL_P1,
-                ?PVAL_P2,
-                ?TIMEBASE + ?LIFESPAN - T + 1,
-                math:sin(float(T) / 100 * math:pi())] | Q]
-      end,
-      [], lists:seq(?LIFESPAN, 0, -1)).
+-define(LIFESPAN, 300).  %% > 100, which is the default chunk size for list_keys
+make_data(PvalP1, PvalP2) ->
+    lists:reverse(
+      lists:foldl(
+        fun(T, Q) ->
+                [[PvalP1,
+                  PvalP2,
+                  ?TIMEBASE + ?LIFESPAN - T + 1,
+                  math:sin(float(T) / 100 * math:pi())] | Q]
+        end,
+        [], lists:seq(?LIFESPAN, 0, -1))).
 
 confirm_put(C, Data) ->
     %% Res = lists:map(fun(Datum) -> riakc_ts:put(C, ?BUCKET, [Datum]), timer:sleep(300) end, Data0),
@@ -170,4 +177,20 @@ confirm_nx_get(C) ->
     Res = riakc_ts:get(C, ?BUCKET, Key, []),
     io:format("Not got a nonexistent single record: ~p\n", [Res]),
     ?assertMatch({_, []}, Res),
+    ok.
+
+confirm_list_keys(C) ->
+    {keys, Keys} = _Res = riakc_ts:list_keys(C, ?BUCKET, []),
+    io:format("Listed ~b keys\n", [length(Keys)]),
+    ?assertEqual(?LIFESPAN, length(Keys)),
+    ok.
+
+confirm_delete_all(C) ->
+    {keys, Keys} = riakc_ts:list_keys(C, ?BUCKET, []),
+    lists:foreach(
+      fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
+      Keys),
+    {keys, Res} = riakc_ts:list_keys(C, ?BUCKET, []),
+    io:format("Deleted all: ~p\n", [Res]),
+    ?assertMatch([], Res),
     ok.
