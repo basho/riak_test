@@ -36,9 +36,12 @@
 
 % cluster_mgr port = 10006 + 10n where n is devN
 
+
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+
+    simple(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -53,34 +56,34 @@ confirm() ->
     end.
 
 -record(simple_state, {
-    beginning = [] :: [node()],
-    middle = [] :: [node()],
-    ending = [] :: [node()]
+    beginning :: node(),
+    middle :: node(),
+    ending :: node()
 }).
 
-simple_test_() ->
-    % +-----------+    +--------+    +-----+
-    % | beginning | -> | middle | -> | end |
-    % +-----------+    +--------+    +-----+
-    {timeout, timeout(90), {setup, fun() ->
-        Conf = conf(),
-        [BeginNode, MiddleNode, EndNode] = Nodes = rt:deploy_nodes(3, Conf),
-        repl_util:make_cluster([BeginNode]),
-        repl_util:make_cluster([MiddleNode]),
-        repl_util:make_cluster([EndNode]),
-        repl_util:name_cluster(BeginNode, "beginning"),
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        repl_util:name_cluster(MiddleNode, "middle"),
-        repl_util:name_cluster(EndNode, "end"),
-        #simple_state{beginning = BeginNode, middle = MiddleNode,
-            ending = EndNode}
-    end,
-    fun(State) ->
-        Nodes = [State#simple_state.beginning, State#simple_state.middle,
-            State#simple_state.ending],
-        rt:clean_cluster(Nodes)
-    end,
-    fun(State) -> [
+simple() ->
+    State = simple_setup(),
+    simple_tests(State),
+    simple_teardown(State).
+
+simple_setup() ->
+    [BeginCluster, MidCluster, EndCluster] = make_clusters([
+        {"beginning", 1},
+        {"middle", 1},
+        {"end", 1}
+    ]),
+    {_, [BeginNode]} = BeginCluster,
+    {_, [MidNode]} = MidCluster,
+    {_, [EndNode]} = EndCluster,
+    #simple_state{beginning = BeginNode, middle = MidNode, ending = EndNode}.
+
+simple_teardown(State) ->
+    [simple_state | Nodes] = tuple_to_list(State),
+    rt:clean_cluster(Nodes).
+
+
+simple_tests(State) ->
+    Tests = [
 
         {"connecting Beginning to Middle", fun() ->
             Port = get_cluster_mgr_port(State#simple_state.middle),
@@ -96,7 +99,7 @@ simple_test_() ->
             repl_util:start_realtime(State#simple_state.middle, "end")
         end},
 
-        {"cascade a put from beginning down to ending", timeout, timeout(25), fun() ->
+        {"cascade a put from beginning down to ending", fun() ->
             BeginningClient = rt:pbc(State#simple_state.beginning),
             Bin = <<"cascading realtime">>,
             Obj = riakc_obj:new(<<"objects">>, Bin, Bin),
@@ -106,7 +109,7 @@ simple_test_() ->
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.ending, <<"objects">>, Bin))
         end},
 
-        {"disable cascading on middle", timeout, timeout(25), fun() ->
+        {"disable cascading on middle", fun() ->
             rpc:call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["never"]]),
             Bin = <<"disabled cascading">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
@@ -118,7 +121,7 @@ simple_test_() ->
 
         end},
 
-        {"re-enable cascading", timeout, timeout(25), fun() ->
+        {"re-enable cascading", fun() ->
             rpc:call(State#simple_state.middle, riak_repl_console, realtime_cascades, [["always"]]),
             Bin = <<"cascading re-enabled">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
@@ -128,12 +131,17 @@ simple_test_() ->
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.ending, ?bucket, Bin))
         end},
+        
         {"check pendings", fun() ->
             wait_until_pending_count_zero([State#simple_state.middle,
                                            State#simple_state.beginning,
                                            State#simple_state.ending])
         end}
-    ] end}}.
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== ~s =====", [Name]),
+        Eval()
+    end, Tests).
 
 big_circle_test_() ->
     % Initally just 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 1, but then 2 way is
@@ -1083,6 +1091,31 @@ wait_exit(Pids, Timeout) ->
             timeout
         end
     end, Mons).
+
+make_clusters(ClusterConfs) ->
+    DeployList = lists:foldl(fun
+        ({_Name, Size}, ConfAcc) ->
+            Conf = conf(),
+            AddToAcc = lists:duplicate(Size, {current, Conf}),
+            ConfAcc ++ AddToAcc
+    end, [], ClusterConfs),
+    Nodes = rt:deploy_nodes(DeployList),
+    lager:info("nodes deployed: ~p", [Nodes]),
+    {NamesAndNodes, []} = lists:foldl(fun
+        ({Name, Size}, {Clusters, NodesLeft}) ->
+            {ForCluster, NewNodesLeft} = lists:split(Size, NodesLeft),
+            {Clusters ++ [{Name, ForCluster}], NewNodesLeft}
+    end, {[], Nodes}, ClusterConfs),
+    lists:map(fun({Name, ForClusterNodes}) ->
+        {Name, make_cluster(Name, ForClusterNodes)}
+    end, NamesAndNodes).
+
+make_cluster(Name, Nodes) ->
+    repl_util:make_cluster(Nodes),
+    _ = [repl_util:wait_until_is_leader(N) || N <- Nodes],
+    [ANode | _] = Nodes,
+    repl_util:name_cluster(ANode, Name),
+    Nodes.
 
 conf() ->
     [{lager, [
