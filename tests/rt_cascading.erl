@@ -42,6 +42,7 @@ confirm() ->
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     simple(),
+    big_circle(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -131,7 +132,7 @@ simple_tests(State) ->
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.middle, ?bucket, Bin)),
             ?assertEqual(Bin, maybe_eventually_exists(State#simple_state.ending, ?bucket, Bin))
         end},
-        
+
         {"check pendings", fun() ->
             wait_until_pending_count_zero([State#simple_state.middle,
                                            State#simple_state.beginning,
@@ -139,11 +140,37 @@ simple_tests(State) ->
         end}
     ],
     lists:foreach(fun({Name, Eval}) ->
-        lager:info("===== ~s =====", [Name]),
+        lager:info("===== simple: ~s =====", [Name]),
         Eval()
     end, Tests).
 
-big_circle_test_() ->
+big_circle() ->
+    State = big_circle_setup(),
+    _ = big_circle_tests(State),
+    big_circle_teardown(State).
+
+big_circle_setup() ->
+    Conf = lists:map(fun(I) ->
+        {integer_to_list(I), 1}
+    end, lists:seq(1, 6)),
+    NamesAndNodes = make_clusters(Conf),
+    Nodes = lists:flatten([ClusterNodes || {_Name, ClusterNodes} <- NamesAndNodes]),
+    Names = [ClusterName || {ClusterName, _} <- Conf],
+    [NameHd | NameTail] = Names,
+    ConnectTo = NameTail ++ [NameHd],
+    ClustersAndConnectTo = lists:zip(NamesAndNodes, ConnectTo),
+    ok = lists:foreach(fun({SourceCluster, SinkName}) ->
+        {_SourceName, [Node]} = SourceCluster,
+        [SinkNode] = proplists:get_value(SinkName, NamesAndNodes),
+        Port = get_cluster_mgr_port(SinkNode),
+        connect_rt(Node, Port, SinkName)
+    end, ClustersAndConnectTo),
+    Nodes.
+
+big_circle_teardown(Nodes) ->
+    rt:clean_cluster(Nodes).
+
+big_circle_tests(Nodes) ->
     % Initally just 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 1, but then 2 way is
     % added later.
     %     +---+
@@ -167,33 +194,9 @@ big_circle_test_() ->
     %     +---+
     %     | 4 |
     %     +---+
-    {timeout, timeout(130), {setup, fun() ->
-        Conf = conf(),
-        Nodes = rt:deploy_nodes(6, Conf),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        Names = ["1", "2", "3", "4", "5", "6"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        [NameHd | NameTail] = Names,
-        ConnectTo = NameTail ++ [NameHd],
-        NamePortMap = lists:map(fun({Node, Name}) ->
-            Port = get_cluster_mgr_port(Node),
-            {Name, Port}
-        end, lists:zip(Nodes, Names)),
-        Connect = fun({Node, ConnectToName}) ->
-            Port = proplists:get_value(ConnectToName, NamePortMap),
-            connect_rt(Node, Port, ConnectToName)
-        end,
-        Res = lists:map(Connect, lists:zip(Nodes, ConnectTo)),
-        ?debugFmt("der res: ~p", [Res]),
-        Nodes
-    end,
-    fun(Nodes) ->
-        rt:clean_cluster(Nodes)
-    end,
-    fun(Nodes) -> [
+    Tests = [
 
-        {"circle it", timeout, timeout(65), fun() ->
+        {"circle it", fun() ->
             [One | _] = Nodes,
             C = rt:pbc(One),
             Bin = <<"goober">>,
@@ -207,7 +210,7 @@ big_circle_test_() ->
             end || Node <- Nodes]
         end},
 
-        {"2 way repl, and circle it", timeout, timeout(65), fun() ->
+        {"2 way repl, and circle it", fun() ->
             ConnectTo = ["6", "1", "2", "3", "4", "5"],
             Connect = fun({Node, ConnectToName}) ->
                 Nth = list_to_integer(ConnectToName),
@@ -254,10 +257,15 @@ big_circle_test_() ->
             % best guess based on what's above is:
             %  NumDuplicateWrites = ceil(NumClusters/2 - 1.5)
         end},
+
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
         end}
-    ] end}}.
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== big circle: ~s =====", [Name]),
+        Eval()
+    end, Tests).
 
 circle_test_() ->
     %      +-----+
