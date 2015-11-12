@@ -44,6 +44,7 @@ confirm() ->
     simple(),
     big_circle(),
     circle(),
+    pyramid(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -340,7 +341,31 @@ circle_tests(Nodes) ->
         Eval()
     end, Tests).
 
-pyramid_test_() ->
+pyramid() ->
+    State = pyramid_setup(),
+    _ = pyramid_tests(State),
+    pyramid_teardown(State).
+
+pyramid_setup() ->
+    Conf = [{"top", 1}, {"left", 1}, {"left2", 1}, {"right", 1}, {"right2", 1}],
+    Clusters = make_clusters(Conf),
+    GetPort = fun(Name) ->
+        [Node] = proplists:get_value(Name, Clusters),
+        get_cluster_mgr_port(Node)
+    end,
+    [Top] = proplists:get_value("top", Clusters),
+    [Left] = proplists:get_value("left", Clusters),
+    [Right] = proplists:get_value("right", Clusters),
+    connect_rt(Top, GetPort("left"), "left"),
+    connect_rt(Left, GetPort("left2"), "left2"),
+    connect_rt(Top, GetPort("right"), "right"),
+    connect_rt(Right, GetPort("right2"), "right2"),
+    lists:flatten([Nodes || {_, Nodes} <- Clusters]).
+
+pyramid_teardown(Nodes) ->
+    rt:clean_cluster(Nodes).
+
+pyramid_tests(Nodes) ->
     %        +-----+
     %        | top |
     %        +-----+
@@ -355,29 +380,9 @@ pyramid_test_() ->
     % | left2 |  | right2 |
     % +-------+  +--------+
 
-    {timeout, timeout(70), {setup, fun() ->
-        Conf = conf(),
-        [Top, Left, Left2, Right, Right2] = Nodes = rt:deploy_nodes(5, Conf),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        Names = ["top", "left", "left2", "right", "right2"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        Ports = lists:map(fun(Node) ->
-            Port = get_cluster_mgr_port(Node),
-            {Node, Port}
-        end, Nodes),
-        connect_rt(Top, proplists:get_value(Left, Ports), "left"),
-        connect_rt(Left, proplists:get_value(Left2, Ports), "left2"),
-        connect_rt(Top, proplists:get_value(Right, Ports), "right"),
-        connect_rt(Right, proplists:get_value(Right2, Ports), "right2"),
-        Nodes
-    end,
-    fun(Nodes) ->
-        rt:clean_cluster(Nodes)
-    end,
-    fun(Nodes) -> [
+    Tests = [
 
-        {"Cascade to both kids", timeout, timeout(65), fun() ->
+        {"Cascade to both kids", fun() ->
             [Top | _] = Nodes,
             Client = rt:pbc(Top),
             Bucket = <<"objects">>,
@@ -389,10 +394,15 @@ pyramid_test_() ->
                 ?assertEqual(Bin, maybe_eventually_exists(N, Bucket, Bin))
             end, Nodes)
         end},
+
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
          end}
-    ] end}}.
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== pyramid: ~s =====", [Name]),
+        Eval()
+    end, Tests).
 
 diamond_test_() ->
     % A pretty cluster of clusters:
