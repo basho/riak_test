@@ -43,6 +43,7 @@ confirm() ->
 
     simple(),
     big_circle(),
+    circle(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -267,7 +268,31 @@ big_circle_tests(Nodes) ->
         Eval()
     end, Tests).
 
-circle_test_() ->
+circle() ->
+    State = circle_setup(),
+    _ = circle_tests(State),
+    circle_teardown(State).
+
+circle_setup() ->
+    Conf = [{"one", 1}, {"two", 1}, {"three", 1}],
+    Clusters = make_clusters(Conf),
+    [[One], [Two], [Three]] = Unflattened = [ClusterNodes || {_Name, ClusterNodes} <- Clusters],
+
+    Connections = [
+        {One, Two, "two"},
+        {Two, Three, "three"},
+        {Three, One, "one"}
+    ],
+    ok = lists:foreach(fun({Node, ConnectNode, Name}) ->
+        Port = get_cluster_mgr_port(ConnectNode),
+        connect_rt(Node, Port, Name)
+    end, Connections),
+    lists:flatten(Unflattened).
+
+circle_teardown(Nodes) ->
+    rt:clean_cluster(Nodes).
+
+circle_tests(Nodes) ->
     %      +-----+
     %      | one |
     %      +-----+
@@ -276,31 +301,9 @@ circle_test_() ->
     % +-------+    +-----+
     % | three | <- | two |
     % +-------+    +-----+
-    {timeout, timeout(30), {setup, fun() ->
-        Conf = conf(),
-        [One, Two, Three] = Nodes = rt:deploy_nodes(3, Conf),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        Names = ["one", "two", "three"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+    Tests = [
 
-        Connections = [
-            {One, Two, "two"},
-            {Two, Three, "three"},
-            {Three, One, "one"}
-        ],
-        lists:map(fun({Node, ConnectNode, Name}) ->
-            Port = get_cluster_mgr_port(ConnectNode),
-            connect_rt(Node, Port, Name)
-        end, Connections),
-        Nodes
-    end,
-    fun(Nodes) ->
-        rt:clean_cluster(Nodes)
-    end,
-    fun(Nodes) -> [
-
-        {"cascade all the way to the other end, but no further", timeout, timeout(12), fun() ->
+        {"cascade all the way to the other end, but no further", fun() ->
             Client = rt:pbc(hd(Nodes)),
             Bin = <<"cascading">>,
             Obj = riakc_obj:new(<<"objects">>, Bin, Bin),
@@ -315,7 +318,7 @@ circle_test_() ->
             ?assertEqual(undefined, proplists:get_value(expect_seq, SinkData))
         end},
 
-        {"cascade starting at a different point", timeout, timeout(12), fun() ->
+        {"cascade starting at a different point", fun() ->
             [One, Two | _] = Nodes,
             Client = rt:pbc(Two),
             Bin = <<"start_at_two">>,
@@ -327,10 +330,15 @@ circle_test_() ->
             [SinkData] = proplists:get_value(sinks, Status, [[]]),
             ?assertEqual(2, proplists:get_value(expect_seq, SinkData))
         end},
+
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
         end}
-    ] end}}.
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== cirle: ~s =====", [Name]),
+        Eval()
+    end, Tests).
 
 pyramid_test_() ->
     %        +-----+
