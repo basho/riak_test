@@ -51,18 +51,7 @@ confirm() ->
     new_to_old(),
     ensure_ack(),
     ensure_unacked_and_queue(),
-
-    case eunit:test(?MODULE, [verbose]) of
-        ok ->
-            pass;
-        error ->
-            % at the time this is written, the return value isn't acutally
-            % checked, the only way to fail is to crash the process.
-            % i leave the fail here in hopes a future version will actually
-            % do what the documentation says.
-            exit(error),
-            fail
-    end.
+    pass.
 
 -record(simple_state, {
     beginning :: node(),
@@ -1268,15 +1257,6 @@ timeout(MultiplyBy) ->
             infinity;
         N ->
             N * MultiplyBy
-    end.
-
-eunit(TestDef) ->
-    case eunit:test(TestDef, [verbose]) of
-        ok ->
-            pass;
-        error ->
-            exit(error),
-            fail
     end.
 
 maybe_skip_teardown(TearDownFun) ->
