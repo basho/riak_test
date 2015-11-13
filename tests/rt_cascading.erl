@@ -32,10 +32,17 @@
 -define(bucket, <<"objects">>).
 
 -export([confirm/0]).
--export([new_to_old/0, mixed_version_clusters/0]).
-
-% cluster_mgr port = 10006 + 10n where n is devN
-
+-export([
+    simple/0,
+    big_circle/0,
+    pyramid/0,
+    diamond/0,
+    circle_and_spurs/0,
+    mixed_version_clusters/0,
+    new_to_old/0,
+    ensure_ack/0,
+    ensure_unacked_and_queue/0
+]).
 
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
