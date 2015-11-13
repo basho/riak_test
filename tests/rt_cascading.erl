@@ -47,6 +47,7 @@ confirm() ->
     pyramid(),
     diamond(),
     circle_and_spurs(),
+    mixed_version_clusters(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -594,19 +595,54 @@ circle_and_spurs_tests(Nodes) ->
     end, Tests).
 
 mixed_version_clusters() ->
-    case eunit:test(?MODULE:mixed_version_clusters_test_(), [verbose]) of
-        ok ->
-            pass;
-        error ->
-            % at the time this is written, the return value isn't acutally
-            % checked, the only way to fail is to crash the process.
-            % i leave the fail here in hopes a future version will actually
-            % do what the documentation says.
-            exit(error),
-            fail
+    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
+        false -> 
+            lager:info("mixed_version_clusters_test_ not configured to run!");
+        _ ->
+            State = mixed_version_clusters_setup(),
+            _ = mixed_version_clusters_tests(State),
+            mixed_version_clusters_teardown(State)
     end.
 
-mixed_version_clusters_test_() ->
+mixed_version_clusters_setup() ->
+    Conf = conf(),
+    DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
+    Nodes = rt:deploy_nodes(DeployConfs),
+    [N1, N2, N3, N4, N5, N6] =  Nodes,
+    case rpc:call(N1, application, get_key, [riak_core, vsn]) of
+        % this is meant to test upgrading from early BNW aka
+        % Brave New World aka Advanced Repl aka version 3 repl to
+        % a cascading realtime repl. Other tests handle going from pre
+        % repl 3 to repl 3.
+        {ok, Vsn} when Vsn < "1.3.0" ->
+            {too_old, Nodes};
+        _ ->
+            N12 = [N1, N2],
+            N34 = [N3, N4],
+            N56 = [N5, N6],
+            repl_util:make_cluster(N12),
+            repl_util:make_cluster(N34),
+            repl_util:make_cluster(N56),
+            repl_util:name_cluster(N1, "n12"),
+            repl_util:name_cluster(N3, "n34"),
+            repl_util:name_cluster(N5, "n56"),
+            [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
+            connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
+            connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
+            connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
+            Nodes
+    end.
+
+mixed_version_clusters_teardown({too_old, Nodes}) ->
+    mixed_version_clusters_teardown(Nodes);
+
+mixed_version_clusters_teardown(Nodes) ->
+    rt:clean_cluster(Nodes).
+
+mixed_version_clusters_tests({too_old, _Nodes}) ->
+    ok;
+
+mixed_version_clusters_tests(Nodes) ->
     %      +-----+
     %      | n12 |
     %      +-----+
@@ -620,191 +656,144 @@ mixed_version_clusters_test_() ->
     % place the following config in ~/.riak_test_config to run:
     % 
     % {run_rt_cascading_1_3_tests, true}
-    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
-        false -> 
-            lager:info("mixed_version_clusters_test_ not configured to run!"),
-            [];
-        _ ->
-            lager:info("new_to_old_test_ configured to run for 1.3"),
-            mixed_version_clusters_test_dep()
-    end.
+    [N1, N2, N3, N4, N5, N6] = Nodes,
+    Tests = [
 
-mixed_version_clusters_test_dep() ->
-    {timeout, 60000, {setup, fun() ->
-        Conf = conf(),
-        DeployConfs = [{previous, Conf} || _ <- lists:seq(1,6)],
-        Nodes = rt:deploy_nodes(DeployConfs),
-        [N1, N2, N3, N4, N5, N6] =  Nodes,
-        case rpc:call(N1, application, get_key, [riak_core, vsn]) of
-            % this is meant to test upgrading from early BNW aka
-            % Brave New World aka Advanced Repl aka version 3 repl to
-            % a cascading realtime repl. Other tests handle going from pre
-            % repl 3 to repl 3.
-            {ok, Vsn} when Vsn < "1.3.0" ->
-                {too_old, Nodes};
-            _ ->
-                N12 = [N1, N2],
-                N34 = [N3, N4],
-                N56 = [N5, N6],
-                repl_util:make_cluster(N12),
-                repl_util:make_cluster(N34),
-                repl_util:make_cluster(N56),
-                repl_util:name_cluster(N1, "n12"),
-                repl_util:name_cluster(N3, "n34"),
-                repl_util:name_cluster(N5, "n56"),
-                [repl_util:wait_until_leader_converge(Cluster) || Cluster <- [N12, N34, N56]],
-                connect_rt(N1, get_cluster_mgr_port(N3), "n34"),
-                connect_rt(N3, get_cluster_mgr_port(N5), "n56"),
-                connect_rt(N5, get_cluster_mgr_port(N1), "n12"),
-                Nodes
-        end
-    end,
-    fun(MaybeNodes) ->
-        Nodes = case MaybeNodes of
-            {too_old, Ns} -> Ns;
-            _ -> MaybeNodes
-        end,
-        rt:clean_cluster(Nodes)
-    end,
-    fun({too_old, _Nodes}) -> [];
-       ([N1, N2, N3, N4, N5, N6] = Nodes) -> [
+        {"no cascading at first 1", fun() ->
+            Client = rt:pbc(N1),
+            Bin = <<"no cascade yet">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w, 2}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual({error, notfound}, maybe_eventually_exists([N5, N6], ?bucket, Bin)),
+            ?assertEqual(Bin, maybe_eventually_exists([N3, N4], ?bucket, Bin))
+        end},
 
-        {"no cascading at first", timeout, timeout(35), [
-            {timeout, timeout(15), fun() ->
-                Client = rt:pbc(N1),
-                Bin = <<"no cascade yet">>,
-                Obj = riakc_obj:new(?bucket, Bin, Bin),
-                riakc_pb_socket:put(Client, Obj, [{w, 2}]),
-                riakc_pb_socket:stop(Client),
-                ?assertEqual({error, notfound}, maybe_eventually_exists([N5, N6], ?bucket, Bin)),
-                ?assertEqual(Bin, maybe_eventually_exists([N3, N4], ?bucket, Bin))
-            end},
+        {"no cascading at first 2", fun() ->
+            Client = rt:pbc(N2),
+            Bin = <<"no cascade yet 2">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w, 2}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual({error, notfound}, maybe_eventually_exists([N5, N6], ?bucket, Bin)),
+            ?assertEqual(Bin, maybe_eventually_exists([N3, N4], ?bucket, Bin))
+        end},
 
-            {timeout, timeout(15), fun() ->
-                Client = rt:pbc(N2),
-                Bin = <<"no cascade yet 2">>,
-                Obj = riakc_obj:new(?bucket, Bin, Bin),
-                riakc_pb_socket:put(Client, Obj, [{w, 2}]),
-                riakc_pb_socket:stop(Client),
-                ?assertEqual({error, notfound}, maybe_eventually_exists([N5, N6], ?bucket, Bin)),
-                ?assertEqual(Bin, maybe_eventually_exists([N3, N4], ?bucket, Bin))
-            end}
-        ]},
-
-        {"mixed source can send", timeout, timeout(235), {setup,
-            fun() ->
-                rt:upgrade(N1, current),
-                repl_util:wait_until_leader_converge([N1, N2]),
-                Running = fun(Node) ->
-                    RTStatus = rpc:call(Node, riak_repl2_rt, status, []),
-                    if
-                        is_list(RTStatus) ->
-                            SourcesList = proplists:get_value(sources, RTStatus, []),
-                            Sources = [S || S <- SourcesList,
-                                is_list(S),
-                                proplists:get_value(connected, S, false),
-                                proplists:get_value(source, S) =:= "n34"
-                            ],
-                            length(Sources) >= 1;
-                        true ->
-                            false
-                    end
-                end,
-                ?assertEqual(ok, rt:wait_until(N1, Running)),
-                % give the node further time to settle
-                StatsNotEmpty = fun(Node) ->
-                    case rpc:call(Node, riak_repl_stats, get_stats, []) of
-                        [] ->
-                            false;
-                        Stats ->
-                            is_list(Stats)
-                    end
-                end,
-                ?assertEqual(ok, rt:wait_until(N1, StatsNotEmpty))
+        {"mixed source can send (setup)", fun() ->
+            rt:upgrade(N1, current),
+            repl_util:wait_until_leader_converge([N1, N2]),
+            Running = fun(Node) ->
+                RTStatus = rpc:call(Node, riak_repl2_rt, status, []),
+                if
+                    is_list(RTStatus) ->
+                        SourcesList = proplists:get_value(sources, RTStatus, []),
+                        Sources = [S || S <- SourcesList,
+                            is_list(S),
+                            proplists:get_value(connected, S, false),
+                            proplists:get_value(source, S) =:= "n34"
+                        ],
+                        length(Sources) >= 1;
+                    true ->
+                        false
+                end
             end,
-            fun(_) -> [
-
-                {"node1 put", timeout, timeout(205), fun() ->
-                    Client = rt:pbc(N1),
-                    Bin = <<"rt after upgrade">>,
-                    Obj = riakc_obj:new(?bucket, Bin, Bin),
-                    riakc_pb_socket:put(Client, Obj, [{w, 2}]),
-                    riakc_pb_socket:stop(Client),
-                    ?assertEqual(Bin, maybe_eventually_exists(N3, ?bucket, Bin, timeout(100))),
-                    ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin, 100000))
-                end},
-
-                {"node2 put", timeout, timeout(25), fun() ->
-                    Client = rt:pbc(N2),
-                    Bin = <<"rt after upgrade 2">>,
-                    Obj = riakc_obj:new(?bucket, Bin, Bin),
-                    riakc_pb_socket:put(Client, Obj, [{w, 2}]),
-                    riakc_pb_socket:stop(Client),
-                    ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin)),
-                    ?assertEqual(Bin, maybe_eventually_exists([N3,N4], ?bucket, Bin))
-                end}
-            ] end
-        }},
-
-        {"upgrade the world, cascade starts working", timeout, timeout(200), {setup,
-            fun() ->
-                [N1 | NotUpgraded] = Nodes,
-                [rt:upgrade(Node, current) || Node <- NotUpgraded],
-                repl_util:wait_until_leader_converge([N1, N2]),
-                repl_util:wait_until_leader_converge([N3, N4]),
-                repl_util:wait_until_leader_converge([N5, N6]),
-                ClusterMgrUp = fun(Node) ->
-                    case rpc:call(Node, erlang, whereis, [riak_core_cluster_manager]) of
-                        P when is_pid(P) ->
-                            true;
-                        _ ->
-                            fail
-                    end
-                end,
-                [rt:wait_until(N, ClusterMgrUp) || N <- Nodes],
-                maybe_reconnect_rt(N1, get_cluster_mgr_port(N3), "n34"),
-                maybe_reconnect_rt(N3, get_cluster_mgr_port(N5), "n56"),
-                maybe_reconnect_rt(N5, get_cluster_mgr_port(N1), "n12"),
-                ok
+            ?assertEqual(ok, rt:wait_until(N1, Running)),
+            % give the node further time to settle
+            StatsNotEmpty = fun(Node) ->
+                case rpc:call(Node, riak_repl_stats, get_stats, []) of
+                    [] ->
+                        false;
+                    Stats ->
+                        is_list(Stats)
+                end
             end,
-            fun(_) ->
-                ToB = fun
-                    (Atom) when is_atom(Atom) ->
-                        list_to_binary(atom_to_list(Atom));
-                    (N) when is_integer(N) ->
-                        list_to_binary(integer_to_list(N))
-                end,
-                ExistsEverywhere = fun(Key, LookupOrder) ->
-                    Reses = [maybe_eventually_exists(Node, ?bucket, Key) || Node <- LookupOrder],
-                    ?debugFmt("Node and it's res:~n~p", [lists:zip(LookupOrder,
+            ?assertEqual(ok, rt:wait_until(N1, StatsNotEmpty))
+        end},
+
+        {"node1 put", fun() ->
+            Client = rt:pbc(N1),
+            Bin = <<"rt after upgrade">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w, 2}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual(Bin, maybe_eventually_exists(N3, ?bucket, Bin, timeout(100))),
+            ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin, 100000))
+        end},
+
+        {"node2 put", fun() ->
+            Client = rt:pbc(N2),
+            Bin = <<"rt after upgrade 2">>,
+            Obj = riakc_obj:new(?bucket, Bin, Bin),
+            riakc_pb_socket:put(Client, Obj, [{w, 2}]),
+            riakc_pb_socket:stop(Client),
+            ?assertEqual({error, notfound}, maybe_eventually_exists(N5, ?bucket, Bin)),
+            ?assertEqual(Bin, maybe_eventually_exists([N3,N4], ?bucket, Bin))
+        end},
+
+        {"upgrade the world, cascade starts working", fun() ->
+            [N1 | NotUpgraded] = Nodes,
+            [rt:upgrade(Node, current) || Node <- NotUpgraded],
+            repl_util:wait_until_leader_converge([N1, N2]),
+            repl_util:wait_until_leader_converge([N3, N4]),
+            repl_util:wait_until_leader_converge([N5, N6]),
+            ClusterMgrUp = fun(Node) ->
+                case rpc:call(Node, erlang, whereis, [riak_core_cluster_manager]) of
+                    P when is_pid(P) ->
+                        true;
+                    _ ->
+                        fail
+                end
+            end,
+            [rt:wait_until(N, ClusterMgrUp) || N <- Nodes],
+            maybe_reconnect_rt(N1, get_cluster_mgr_port(N3), "n34"),
+            maybe_reconnect_rt(N3, get_cluster_mgr_port(N5), "n56"),
+            maybe_reconnect_rt(N5, get_cluster_mgr_port(N1), "n12"),
+
+            ToB = fun
+                (Atom) when is_atom(Atom) ->
+                    list_to_binary(atom_to_list(Atom));
+                (N) when is_integer(N) ->
+                    list_to_binary(integer_to_list(N))
+            end,
+            ExistsEverywhere = fun(Key, LookupOrder) ->
+                Reses = [maybe_eventually_exists(Node, ?bucket, Key) || Node <- LookupOrder],
+                ?debugFmt("Node and it's res:~n~p", [lists:zip(LookupOrder,
 Reses)]),
-                    lists:all(fun(E) -> E =:= Key end, Reses)
+                lists:all(fun(E) -> E =:= Key end, Reses)
+            end,
+            MakeTest = fun(Node, N) ->
+                Name = "writing " ++ atom_to_list(Node) ++ "-write-" ++ integer_to_list(N),
+                {NewTail, NewHead} = lists:splitwith(fun(E) ->
+                    E =/= Node
+                end, Nodes),
+                ExistsLookup = NewHead ++ NewTail,
+                Test = fun() ->
+                    ?debugFmt("Running test ~p", [Name]),
+                    Client = rt:pbc(Node),
+                    Key = <<(ToB(Node))/binary, "-write-", (ToB(N))/binary>>,
+                    Obj = riakc_obj:new(?bucket, Key, Key),
+                    riakc_pb_socket:put(Client, Obj, [{w, 2}]),
+                    riakc_pb_socket:stop(Client),
+                    ?assert(ExistsEverywhere(Key, ExistsLookup))
                 end,
-                MakeTest = fun(Node, N) ->
-                    Name = "writing " ++ atom_to_list(Node) ++ "-write-" ++ integer_to_list(N),
-                    {NewTail, NewHead} = lists:splitwith(fun(E) ->
-                        E =/= Node
-                    end, Nodes),
-                    ExistsLookup = NewHead ++ NewTail,
-                    Test = fun() ->
-                        ?debugFmt("Running test ~p", [Name]),
-                        Client = rt:pbc(Node),
-                        Key = <<(ToB(Node))/binary, "-write-", (ToB(N))/binary>>,
-                        Obj = riakc_obj:new(?bucket, Key, Key),
-                        riakc_pb_socket:put(Client, Obj, [{w, 2}]),
-                        riakc_pb_socket:stop(Client),
-                        ?assert(ExistsEverywhere(Key, ExistsLookup))
-                    end,
-                    {Name, timeout, timeout(65), Test}
-                end,
-                [MakeTest(Node, N) || Node <- Nodes, N <- lists:seq(1, 3)]
-            end
-        }},
+                {Name, Test}
+            end,
+            NodeTests = [MakeTest(Node, N) || Node <- Nodes, N <- lists:seq(1, 3)],
+            lists:foreach(fun({Name, Eval}) ->
+                lager:info("===== mixed version cluster: upgrade world: ~s =====", [Name]),
+                Eval()
+            end, NodeTests)
+        end},
+
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
         end}
 
-    ] end}}.
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== mixed version cluster: ~p =====", [Name]),
+        Eval()
+    end, Tests).
 
 new_to_old() ->
     case eunit:test(?MODULE:new_to_old_test_(), [verbose]) of
