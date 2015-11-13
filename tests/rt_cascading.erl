@@ -46,6 +46,7 @@ confirm() ->
     circle(),
     pyramid(),
     diamond(),
+    circle_and_spurs(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -508,7 +509,27 @@ diamond_tests(Nodes) ->
         Eval()
     end, Tests).
 
-circle_and_spurs_test_() ->
+circle_and_spurs() ->
+    State = circle_and_spurs_setup(),
+    _ = circle_and_spurs_tests(State),
+    circle_and_spurs_teardown(State).
+
+circle_and_spurs_setup() ->
+    Config = [
+        {"north", 1, ["east", "north_spur"]},
+        {"east", 1, ["west", "east_spur"]},
+        {"west", 1, ["north", "west_spur"]},
+        {"north_spur", 1},
+        {"east_spur", 1},
+        {"west_spur", 1}
+    ],
+    Clusters = make_clusters(Config),
+    lists:flatten([Nodes || {_, Nodes} <- Clusters]).
+
+circle_and_spurs_teardown(Nodes) ->
+    rt:clean_cluster(Nodes).
+
+circle_and_spurs_tests(Nodes) ->
     %                        +------------+
     %                        | north_spur |
     %                        +------------+
@@ -521,27 +542,9 @@ circle_and_spurs_test_() ->
     % +-----------+    +------+           +------+    +-----------+
     % | west_spur | <- | west | <-------- | east | -> | east_spur |
     % +-----------+    +------+           +------+    +-----------+
-    {timeout, timeout(170), {setup, fun() ->
-        Conf = conf(),
-        [North, East, West, NorthSpur, EastSpur, WestSpur] = Nodes = rt:deploy_nodes(6, Conf),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        Names = ["north", "east", "west", "north_spur", "east_spur", "west_spur"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        connect_rt(North, get_cluster_mgr_port(East), "east"),
-        connect_rt(East, get_cluster_mgr_port(West), "west"),
-        connect_rt(West, get_cluster_mgr_port(North), "north"),
-        connect_rt(North, get_cluster_mgr_port(NorthSpur), "north_spur"),
-        connect_rt(East, get_cluster_mgr_port(EastSpur), "east_spur"),
-        connect_rt(West, get_cluster_mgr_port(WestSpur), "west_spur"),
-        Nodes
-    end,
-    fun(Nodes) ->
-        rt:clean_cluster(Nodes)
-    end,
-    fun(Nodes) -> [
+    Tests = [
 
-        {"start at north", timeout, timeout(55), fun() ->
+        {"start at north", fun() ->
             [North | _Rest] = Nodes,
             Client = rt:pbc(North),
             Bin = <<"start at north">>,
@@ -554,7 +557,7 @@ circle_and_spurs_test_() ->
             end || N <- Nodes, N =/= North]
         end},
 
-        {"Start at west", timeout, timeout(55), fun() ->
+        {"Start at west", fun() ->
             [_North, _East, West | _Rest] = Nodes,
             Client = rt:pbc(West),
             Bin = <<"start at west">>,
@@ -567,7 +570,7 @@ circle_and_spurs_test_() ->
             end || N <- Nodes, N =/= West]
         end},
 
-        {"spurs don't replicate back", timeout, timeout(55), fun() ->
+        {"spurs don't replicate back", fun() ->
             [_North, _East, _West, NorthSpur | _Rest] = Nodes,
             Client = rt:pbc(NorthSpur),
             Bin = <<"start at north_spur">>,
@@ -579,10 +582,16 @@ circle_and_spurs_test_() ->
                 ?assertEqual({error, notfound}, maybe_eventually_exists(N, Bucket, Bin))
             end || N <- Nodes, N =/= NorthSpur]
         end},
+
         {"check pendings", fun() ->
             wait_until_pending_count_zero(Nodes)
         end}
-    ] end}}.
+
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== cirlce_and_spurs: ~s =====", [Name]),
+        Eval()
+    end, Tests).
 
 mixed_version_clusters() ->
     case eunit:test(?MODULE:mixed_version_clusters_test_(), [verbose]) of
@@ -1128,9 +1137,15 @@ wait_exit(Pids, Timeout) ->
         end
     end, Mons).
 
-make_clusters(ClusterConfs) ->
+make_clusters(UnNormalClusterConfs) ->
+    ClusterConfs = lists:map(fun
+        ({Name, Size}) ->
+            {Name, Size, []};
+        ({_Name, _Size, _ConnectsTo} = E) ->
+            E
+    end, UnNormalClusterConfs),
     DeployList = lists:foldl(fun
-        ({_Name, Size}, ConfAcc) ->
+        ({_Name, Size, _ConnectTo}, ConfAcc) ->
             Conf = conf(),
             AddToAcc = lists:duplicate(Size, {current, Conf}),
             ConfAcc ++ AddToAcc
@@ -1138,13 +1153,19 @@ make_clusters(ClusterConfs) ->
     Nodes = rt:deploy_nodes(DeployList),
     lager:info("nodes deployed: ~p", [Nodes]),
     {NamesAndNodes, []} = lists:foldl(fun
-        ({Name, Size}, {Clusters, NodesLeft}) ->
+        ({Name, Size, _ConnectTo}, {Clusters, NodesLeft}) ->
             {ForCluster, NewNodesLeft} = lists:split(Size, NodesLeft),
             {Clusters ++ [{Name, ForCluster}], NewNodesLeft}
     end, {[], Nodes}, ClusterConfs),
-    lists:map(fun({Name, ForClusterNodes}) ->
+    NamesAndNodes = lists:map(fun({Name, ForClusterNodes}) ->
         {Name, make_cluster(Name, ForClusterNodes)}
-    end, NamesAndNodes).
+    end, NamesAndNodes),
+    ok = lists:foreach(fun({Name, _Size, ConnectsTo}) ->
+        lists:foreach(fun(ConnectToName) ->
+            connect_rt(get_node(Name, NamesAndNodes), get_port(ConnectToName, NamesAndNodes), ConnectToName)
+        end, ConnectsTo)
+    end, ClusterConfs),
+    NamesAndNodes.
 
 make_cluster(Name, Nodes) ->
     repl_util:make_cluster(Nodes),
@@ -1152,6 +1173,13 @@ make_cluster(Name, Nodes) ->
     [ANode | _] = Nodes,
     repl_util:name_cluster(ANode, Name),
     Nodes.
+
+get_node(Name, NamesAndNodes) ->
+    [Node | _] = proplists:get_value(Name, NamesAndNodes),
+    Node.
+
+get_port(Name, NamesAndNodes) ->
+    get_cluster_mgr_port(get_node(Name, NamesAndNodes)).
 
 conf() ->
     [{lager, [
