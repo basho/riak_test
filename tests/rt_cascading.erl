@@ -49,6 +49,8 @@ confirm() ->
     circle_and_spurs(),
     mixed_version_clusters(),
     new_to_old(),
+    ensure_ack(),
+    ensure_unacked_and_queue(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -906,85 +908,65 @@ new_to_old_tests(Nodes) ->
         Eval()
     end, Tests).
 
-ensure_ack_test_() ->
-    {timeout, timeout(130), {setup, fun() ->
-        Conf = conf(),
-        [LeaderA, LeaderB] = Nodes = rt:deploy_nodes(2, Conf),
-        [repl_util:make_cluster([N]) || N <- Nodes],
-        [repl_util:wait_until_is_leader(N) || N <- Nodes],
-        Names = ["A", "B"],
-        [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-        %repl_util:name_cluster(LeaderA, "A"),
-        %repl_util:name_cluster(LeaderB, "B"), 
-        lager:info("made it past naming"), 
-        Port = get_cluster_mgr_port(LeaderB),
-        lager:info("made it past port"), 
-        connect_rt(LeaderA, Port, "B"),
-        lager:info("made it past connect"), 
-        [LeaderA, LeaderB]
-    end,
-    fun(Nodes) ->
-        rt:clean_cluster(Nodes)
-    end,
+ensure_ack() ->
+    State = ensure_ack_setup(),
+    _ = ensure_ack_tests(State),
+    ensure_ack_teardown(State).
 
-    fun([LeaderA, LeaderB] = _Nodes) -> [
-        {"ensure acks", timeout, timeout(65), fun() ->
-            lager:info("Nodes:~p, ~p", [LeaderA, LeaderB]),
-            TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
-                <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
-            TestBucket = <<TestHash/binary, "-rt_test_a">>,
+ensure_ack_setup() ->
+    Clusters = make_clusters([{"A", 1, ["B"]}, {"B", 1}]),
+    lists:flatten([Nodes || {_, Nodes} <- Clusters]).
 
-            %% Write some objects to the source cluster (A),
-            lager:info("Writing 1 key to ~p, which should RT repl to ~p",
-            [LeaderA, LeaderB]),
-            ?assertEqual([], repl_util:do_write(LeaderA, 1, 1, TestBucket, 2)),
+ensure_ack_teardown(Nodes) ->
+    rt:clean_cluster(Nodes).
 
-            %% verify data is replicated to B
-            lager:info("Reading 1 key written from ~p", [LeaderB]),
-            ?assertEqual(0, repl_util:wait_for_reads(LeaderB, 1, 1, TestBucket, 2)),
+ensure_ack_tests(Nodes) ->
+    [LeaderA, LeaderB] = Nodes,
 
-            RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+    lager:info("Nodes:~p, ~p", [LeaderA, LeaderB]),
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+        <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+    TestBucket = <<TestHash/binary, "-rt_test_a">>,
 
-            Consumers = proplists:get_value(consumers, RTQStatus),
-            case proplists:get_value("B", Consumers) of
-                 undefined ->
-                    [];
-                 Consumer ->
-                    Unacked = proplists:get_value(unacked, Consumer, 0),
-                    lager:info("unacked: ~p", [Unacked]),
-                    ?assertEqual(0, Unacked)
-            end
+    %% Write some objects to the source cluster (A),
+    lager:info("Writing 1 key to ~p, which should RT repl to ~p",
+    [LeaderA, LeaderB]),
+    ?assertEqual([], repl_util:do_write(LeaderA, 1, 1, TestBucket, 2)),
 
-        end}
-    ]
-    end}}.
+    %% verify data is replicated to B
+    lager:info("Reading 1 key written from ~p", [LeaderB]),
+    ?assertEqual(0, repl_util:wait_for_reads(LeaderB, 1, 1, TestBucket, 2)),
+
+    RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
+
+    Consumers = proplists:get_value(consumers, RTQStatus),
+    case proplists:get_value("B", Consumers) of
+        undefined ->
+            [];
+        Consumer ->
+            Unacked = proplists:get_value(unacked, Consumer, 0),
+            lager:info("unacked: ~p", [Unacked]),
+            ?assertEqual(0, Unacked)
+    end.
 
 ensure_unacked_and_queue() ->
-    eunit(ensure_unacked_and_queue_test_()).
+    State = ensure_unacked_and_queue_setup(),
+    _ = ensure_unacked_and_queue_tests(State),
+    ensure_unacked_and_queue_teardown(State).
 
-ensure_unacked_and_queue_test_() ->
-    {timeout, timeout(2300), {setup, fun() ->
-        Nodes = rt:deploy_nodes(6, conf()),
-        {N123, N456} = lists:split(3, Nodes),
-        repl_util:make_cluster(N123),
-        repl_util:make_cluster(N456),
-        repl_util:wait_until_leader_converge(N123),
-        repl_util:wait_until_leader_converge(N456),
-        repl_util:name_cluster(hd(N123), "n123"),
-        repl_util:name_cluster(hd(N456), "n456"),
-        N456Port = get_cluster_mgr_port(hd(N456)),
-        connect_rt(hd(N123), N456Port, "n456"),
-        N123Port = get_cluster_mgr_port(hd(N123)),
-        connect_rt(hd(N456), N123Port, "n123"),
-        {N123, N456}
-    end,
-    maybe_skip_teardown(fun({N123, N456}) ->
-        rt:clean_cluster(N123),
-        rt:clean_cluster(N456)
-    end),
-    fun({N123, N456}) -> [
+ensure_unacked_and_queue_setup() ->
+    Clusters = make_clusters([{"n123", 3, ["n456"]}, {"n456", 3, ["n123"]}]),
+    [{"n123", N123}, {"n456", N456}] = Clusters,
+    {N123, N456}.
 
-        {"unacked does not increase when there are skips", timeout, timeout(100), fun() ->
+ensure_unacked_and_queue_teardown({N123, N456}) ->
+    rt:clean_cluster(N123),
+    rt:clean_cluster(N456).
+
+ensure_unacked_and_queue_tests({N123, N456}) ->
+    Tests = [
+
+        {"unacked does not increase when there are skips", fun() ->
             N123Leader = hd(N123),
             N456Leader = hd(N456),
 
@@ -1024,7 +1006,7 @@ ensure_unacked_and_queue_test_() ->
             end, Gots)
         end},
 
-        {"dual loads keeps unacked satisfied", timeout, timeout(100), fun() ->
+        {"dual loads keeps unacked satisfied", fun() ->
             N123Leader = hd(N123),
             N456Leader = hd(N456),
             LoadN123Pid = spawn(fun() ->
@@ -1103,7 +1085,11 @@ ensure_unacked_and_queue_test_() ->
             end, Nodes)
         end}
 
-    ] end}}.
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== ensure_unacked_and_queue: ~s =====", [Name]),
+        Eval()
+    end, Tests).
 
 %% =====
 %% utility functions for teh happy
