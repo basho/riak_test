@@ -48,6 +48,7 @@ confirm() ->
     diamond(),
     circle_and_spurs(),
     mixed_version_clusters(),
+    new_to_old(),
 
     case eunit:test(?MODULE, [verbose]) of
         ok ->
@@ -796,19 +797,45 @@ Reses)]),
     end, Tests).
 
 new_to_old() ->
-    case eunit:test(?MODULE:new_to_old_test_(), [verbose]) of
-        ok ->
-            pass;
-        error ->
-            % at the time this is written, the return value isn't acutally
-            % checked, the only way to fail is to crash the process.
-            % i leave the fail here in hopes a future version will actually
-            % do what the documentation says.
-            exit(error),
-            fail
+    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
+        false -> 
+            lager:info("new_to_old_test_ not configured to run.");
+        _ ->
+            lager:info("new_to_old_test_ configured to run for 1.3"),
+            State = new_to_old_setup(),
+            _ = new_to_old_tests(State),
+            new_to_old_teardown(State)
     end.
 
-new_to_old_test_() ->
+new_to_old_setup() ->
+    Conf = conf(),
+    DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
+    [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
+    case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
+        % this is meant to test upgrading from early BNW aka
+        % Brave New World aka Advanced Repl aka version 3 repl to
+        % a cascading realtime repl. Other tests handle going from pre
+        % repl 3 to repl 3.
+        {ok, Vsn} when Vsn < "1.3.0" ->
+            {too_old, Nodes};
+        _ ->
+            [repl_util:make_cluster([N]) || N <- Nodes],
+            Names = ["new1", "old2", "new3"],
+            [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
+            [repl_util:wait_until_is_leader(N) || N <- Nodes],
+            connect_rt(New1, 10026, "old2"),
+            connect_rt(Old2, 10036, "new3"),
+            connect_rt(New3, 10016, "new1"),
+            Nodes
+    end.
+
+new_to_old_teardown({too_old, Nodes}) ->
+    new_to_old_teardown(Nodes);
+
+new_to_old_teardown(Nodes) ->
+    rt:clean_cluster(Nodes).
+
+new_to_old_tests(Nodes) ->
     %      +------+
     %      | New1 |
     %      +------+
@@ -822,49 +849,10 @@ new_to_old_test_() ->
     % place the following config in ~/.riak_test_config to run:
     % 
     % {run_rt_cascading_1_3_tests, true}
-    case rt_config:config_or_os_env(run_rt_cascading_1_3_tests, false) of
-        false -> 
-            lager:info("new_to_old_test_ not configured to run!"),
-            [];
-        _ ->
-            lager:info("new_to_old_test_ configured to run for 1.3"),
-            new_to_old_test_dep()
-    end.
+    [New1, Old2, New3] = Nodes,
+    Tests = [
 
-new_to_old_test_dep() ->
-    {timeout, timeout(105), {setup, fun() ->
-        Conf = conf(),
-        DeployConfs = [{current, Conf}, {previous, Conf}, {current, Conf}],
-        [New1, Old2, New3] = Nodes = rt:deploy_nodes(DeployConfs),
-        case rpc:call(Old2, application, get_key, [riak_core, vsn]) of
-            % this is meant to test upgrading from early BNW aka
-            % Brave New World aka Advanced Repl aka version 3 repl to
-            % a cascading realtime repl. Other tests handle going from pre
-            % repl 3 to repl 3.
-            {ok, Vsn} when Vsn < "1.3.0" ->
-                {too_old, Nodes};
-            _ ->
-                [repl_util:make_cluster([N]) || N <- Nodes],
-                Names = ["new1", "old2", "new3"],
-                [repl_util:name_cluster(Node, Name) || {Node, Name} <- lists:zip(Nodes, Names)],
-                [repl_util:wait_until_is_leader(N) || N <- Nodes],
-                connect_rt(New1, 10026, "old2"),
-                connect_rt(Old2, 10036, "new3"),
-                connect_rt(New3, 10016, "new1"),
-                Nodes
-        end
-    end,
-    fun(MaybeNodes) ->
-        Nodes = case MaybeNodes of
-            {too_old, Ns} -> Ns;
-            _ -> MaybeNodes
-        end,
-        rt:clean_cluster(Nodes)
-    end,
-    fun({too_old, _}) -> [];
-       ([New1, Old2, New3]) -> [
-
-        {"From new1 to old2", timeout, timeout(25), fun() ->
+        {"From new1 to old2", fun() ->
             Client = rt:pbc(New1),
             Bin = <<"new1 to old2">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
@@ -874,7 +862,7 @@ new_to_old_test_dep() ->
             ?assertEqual({error, notfound}, maybe_eventually_exists(New3, ?bucket, Bin))
         end},
 
-        {"old2 does not cascade at all", timeout, timeout(25), fun() ->
+        {"old2 does not cascade at all", fun() ->
             Client = rt:pbc(New1),
             Bin = <<"old2 no cascade">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
@@ -884,7 +872,7 @@ new_to_old_test_dep() ->
             ?assertEqual({error, notfound}, maybe_eventually_exists(New3, ?bucket, Bin))
         end},
 
-        {"from new3 to old2", timeout, timeout(25), fun() ->
+        {"from new3 to old2", fun() ->
             Client = rt:pbc(New3),
             Bin = <<"new3 to old2">>,
             Obj = riakc_obj:new(?bucket, Bin, Bin),
@@ -894,7 +882,7 @@ new_to_old_test_dep() ->
             ?assertEqual(Bin, maybe_eventually_exists(Old2, ?bucket, Bin))
         end},
 
-        {"from old2 to new3 no cascade", timeout, timeout(25), fun() ->
+        {"from old2 to new3 no cascade", fun() ->
             % in the future, cascading may be able to occur even if it starts
             % from an older source cluster/node. It is prevented for now by
             % having no easy/good way to get the name of the source cluster,
@@ -907,10 +895,16 @@ new_to_old_test_dep() ->
             ?assertEqual(Bin, maybe_eventually_exists(New3, ?bucket, Bin)),
             ?assertEqual({error, notfound}, maybe_eventually_exists(New1, ?bucket, Bin))
         end},
+
         {"check pendings", fun() ->
             wait_until_pending_count_zero(["new1", "old2", "new3"])
         end}
-    ] end}}.
+
+    ],
+    lists:foreach(fun({Name, Eval}) ->
+        lager:info("===== new to old: ~s =====", [Name]),
+        Eval()
+    end, Tests).
 
 ensure_ack_test_() ->
     {timeout, timeout(130), {setup, fun() ->
