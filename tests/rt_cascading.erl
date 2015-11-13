@@ -1259,16 +1259,6 @@ timeout(MultiplyBy) ->
             N * MultiplyBy
     end.
 
-maybe_skip_teardown(TearDownFun) ->
-    fun(Arg) ->
-        case rt_config:config_or_os_env(skip_teardowns, undefined) of
-            undefined ->
-                TearDownFun(Arg);
-            _ ->
-                ok
-        end
-    end.
-
 wait_until_pending_count_zero(Nodes) ->
     WaitFun = fun() ->
         {Statuses, _} =  rpc:multicall(Nodes, riak_repl2_rtq, status, []),
