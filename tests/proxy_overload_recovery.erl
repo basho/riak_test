@@ -215,6 +215,10 @@ prepare(ThresholdSeed) ->
     ok = supervisor:terminate_child(riak_core_vnode_proxy_sup, {riak_kv_vnode, Id}),
     RegName = riak_core_vnode_proxy:reg_name(riak_kv_vnode, Index),
     undefined = whereis(RegName),
+    %% Fail if we get back the dead vnode
+    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
+    ?assertNotEqual(VPid1, VPid0),
+
     {ok, PPid} = supervisor:restart_child(riak_core_vnode_proxy_sup, {riak_kv_vnode, Id}),
 
     %% Find the proxy pid and check it's alive and matches the supervisor
@@ -225,6 +229,7 @@ prepare(ThresholdSeed) ->
     %% and return the Pid so we know we have the same Pid.
     {ok, VPid} = riak_core_vnode_proxy:command_return_vnode(
                    {riak_kv_vnode,Index,node()}, timeout),
+    ?assertEqual(VPid, VPid1),
 
     true = is_process_alive(PPid),
     true = is_process_alive(VPid),
