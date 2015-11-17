@@ -31,6 +31,7 @@
 -define(PVAL_P1, <<"ZXC11">>).
 -define(PVAL_P2, <<"PDP-11">>).
 -define(TIMEBASE, (10*1000*1000)).
+-define(BADKEY, [<<"b">>,<<"a">>, ?TIMEBASE-1]).
 
 confirm() ->
     run_tests(?PVAL_P1, ?PVAL_P2).
@@ -112,6 +113,10 @@ make_data(PvalP1, PvalP2) ->
         [], lists:seq(?LIFESPAN, 0, -1))).
 
 confirm_put(C, Data) ->
+    ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, [?BADKEY]),
+    io:format("Not put anything to a non-existent bucket: ~p\n", [ResFail]),
+    ?assertMatch({error, _}, ResFail),
+
     %% Res = lists:map(fun(Datum) -> riakc_ts:put(C, ?BUCKET, [Datum]), timer:sleep(300) end, Data0),
     %% (for future tests of batch put writing order)
     Res = riakc_ts:put(C, ?BUCKET, Data),
@@ -120,6 +125,10 @@ confirm_put(C, Data) ->
     ok.
 
 confirm_delete(C, [Pooter1, Pooter2, Timepoint | _] = Record) ->
+    ResFail = riakc_ts:delete(C, <<"no-bucket-like-this">>, ?BADKEY, []),
+    io:format("Not deleted anything in a non-existent bucket: ~p\n", [ResFail]),
+    ?assertMatch({error, _}, ResFail),
+
     Key = [Pooter1, Pooter2, Timepoint],
 
     BadKey1 = [Pooter1],
@@ -138,8 +147,7 @@ confirm_delete(C, [Pooter1, Pooter2, Timepoint | _] = Record) ->
     ok.
 
 confirm_nx_delete(C) ->
-    NXKey = [<<"Michael Jackson">>, <<"doo">>, ?TIMEBASE + 1],
-    Res = riakc_ts:delete(C, ?BUCKET, NXKey, []),
+    Res = riakc_ts:delete(C, ?BUCKET, ?BADKEY, []),
     io:format("Not deleted non-existing key: ~p\n", [Res]),
     ?assertEqual(ok, Res),
     ok.
@@ -166,20 +174,27 @@ confirm_select(C, PvalP1, PvalP2) ->
     ok.
 
 confirm_get(C, Record = [Pooter1, Pooter2, Timepoint | _]) ->
+    ResFail = riakc_ts:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
+    io:format("Not got anything from a non-existent bucket: ~p\n", [ResFail]),
+    ?assertMatch({error, _}, ResFail),
+
     Key = [Pooter1, Pooter2, Timepoint],
     Res = riakc_ts:get(C, ?BUCKET, Key, []),
     io:format("Get a single record: ~p\n", [Res]),
-    ?assertMatch({_, [Record]}, Res),
+    ?assertMatch({ok, {_, [Record]}}, Res),
     ok.
 
 confirm_nx_get(C) ->
-    Key = [<<"Claudia Schiffer">>, <<"mimi">>, ?TIMEBASE + 2],
-    Res = riakc_ts:get(C, ?BUCKET, Key, []),
+    Res = riakc_ts:get(C, ?BUCKET, ?BADKEY, []),
     io:format("Not got a nonexistent single record: ~p\n", [Res]),
-    ?assertMatch({_, []}, Res),
+    ?assertMatch({ok, {[], []}}, Res),
     ok.
 
 confirm_list_keys(C) ->
+    ResFail = riakc_ts:list_keys(C, <<"no-bucket-like-this">>, []),
+    io:format("Not listed anything in a non-existent bucket: ~p\n", [ResFail]),
+    ?assertMatch({error, _}, ResFail),
+
     {keys, Keys} = _Res = riakc_ts:list_keys(C, ?BUCKET, []),
     io:format("Listed ~b keys\n", [length(Keys)]),
     ?assertEqual(?LIFESPAN, length(Keys)),
