@@ -1,4 +1,4 @@
--module(ts_A_select_fail_2).
+-module(ts_A_select_unexpected_token_not_allowed).
 
 -behavior(riak_test).
 

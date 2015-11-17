@@ -1,4 +1,4 @@
--module(ts_A_select_fail_7_where_has_no_lower_bounds).
+-module(ts_A_select_where_has_no_upper_bounds_not_allowed).
 
 -behavior(riak_test).
 
@@ -10,11 +10,11 @@ confirm() ->
     DDL = timeseries_util:get_ddl(docs),
     Data = [],
     Qry = "select * from GeoCheckin "
-          "where time < 10 "
+          "where time > 10 "
           "and myfamily = 'family1' "
           "and myseries ='seriesX' ",
     Expected = 
-      {error, <<"incomplete_where_clause: Where clause has no lower bound.">>},
+      {error, {1001, <<"incomplete_where_clause: Where clause has no upper bound.">>}},
     timeseries_util:confirm_select(
         Cluster, TestType, DDL, Data, Qry, Expected).
 

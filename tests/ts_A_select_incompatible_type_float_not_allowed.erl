@@ -1,4 +1,4 @@
--module(ts_A_select_fail_6).
+-module(ts_A_select_incompatible_type_float_not_allowed).
 
 -behavior(riak_test).
 
@@ -11,10 +11,10 @@ confirm() ->
         "SELECT * FROM GeoCheckin "
         "WHERE time > 1 AND time < 10 "
         "AND myfamily = 'family1' "
-        "AND myseries = 1 ", % error, should be a varchar
+        "AND myseries = 1.0", % error, should be a varchar
     Expected =
-        {error,
+        {error,{1001,
          <<"invalid_query: \n",
-           "incompatible_type: field myseries with type binary cannot be compared to type integer in where clause.">>},
+           "incompatible_type: field myseries with type varchar cannot be compared to type float in where clause.">>}},
     timeseries_util:confirm_select(
         single, normal, DDL, Data, Qry, Expected).
