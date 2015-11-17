@@ -648,6 +648,7 @@ common_stats() ->
         <<"precommit_fail">>,
         <<"protobuffs_version">>,
         <<"public_key_version">>,
+        <<"riak_ql_version">>,
         <<"read_repairs">>,
         <<"read_repairs_counter">>,
         <<"read_repairs_counter_total">>,
