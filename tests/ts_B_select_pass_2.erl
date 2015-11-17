@@ -24,6 +24,8 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 confirm() ->
@@ -33,4 +35,6 @@ confirm() ->
     Expected = {
         timeseries_util:get_cols(docs),
         timeseries_util:exclusive_result_from_data(Data, 2, 9)},
-    timeseries_util:confirm_select(multiple, normal, DDL, Data, Qry, Expected).
+    Got = timeseries_util:confirm_select(multiple, normal, DDL, Data, Qry),
+    ?assertEqual(Expected, Got),
+    pass.

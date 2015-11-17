@@ -2,17 +2,16 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([
 	 confirm/0
 	]).
 
--import(timeseries_util, [
-			  get_ddl/1,
-			  confirm_create/3
-			  ]).
-
 confirm() ->
     ClusterType = single,
-    DDL = get_ddl(splitkey_fail),
+    DDL = timeseries_util:get_ddl(splitkey_fail),
     Expected = {ok,"Error creating bucket type GeoCheckin:\nLocal key does not match primary key\n"},
-    confirm_create(ClusterType, DDL, Expected).
+	Got = timeseries_util:confirm_create(ClusterType, DDL),
+    ?assertEqual(Expected, Got),
+    pass.

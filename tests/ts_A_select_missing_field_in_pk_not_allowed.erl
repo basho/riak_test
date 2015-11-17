@@ -6,6 +6,8 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 confirm() ->
@@ -17,5 +19,6 @@ confirm() ->
         "where time > 1 and time < 10",
     Expected =
         {error,{1001,<<"missing_param: Missing parameter myfamily in where clause.">>}},
-    timeseries_util:confirm_select(
-        single, normal, DDL, Data, Query, Expected).
+    Got = timeseries_util:confirm_select(single, normal, DDL, Data, Query),
+    ?assertEqual(Expected, Got),
+    pass.

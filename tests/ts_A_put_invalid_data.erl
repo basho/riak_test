@@ -16,5 +16,7 @@ confirm() ->
     DDL = timeseries_util:get_ddl(docs),
     Obj = [timeseries_util:get_invalid_obj()],
     Expected = {error, {1003,<<"Invalid data">>}},
-    timeseries_util:confirm_put(ClusterType, normal, DDL, Obj, Expected).
+    Got = timeseries_util:confirm_put(ClusterType, normal, DDL, Obj, Expected),
+    ?assertEqual(Expected, Got),
+    pass.
 

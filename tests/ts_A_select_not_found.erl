@@ -22,6 +22,8 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 %% Test selects over fields which are not in the
@@ -40,5 +42,6 @@ confirm() ->
         "AND myseries = 'seriesX' "
         "AND weather = 'summer rain'",
     Expected = {[], []},
-    timeseries_util:confirm_select(
-        single, normal, DDL, Data, Qry, Expected).
+    Got = timeseries_util:confirm_select(single, normal, DDL, Data, Qry),
+    ?assertEqual(Expected, Got),
+    pass.

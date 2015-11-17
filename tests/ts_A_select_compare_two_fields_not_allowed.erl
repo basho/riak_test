@@ -2,6 +2,8 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 %%% Comparing fields should yield an error message.
@@ -17,5 +19,7 @@ confirm() ->
         "AND myseries ='seriesX' "
         "AND weather = myseries",
     Expected = "Expect that fields cannot be compared",
-    timeseries_util:confirm_select(
-        single, normal, DDL, Data, Qry, Expected).
+    Got = timeseries_util:confirm_select(
+        single, normal, DDL, Data, Qry),
+    ?assertEqual(Expected, Got),
+    pass.

@@ -34,4 +34,6 @@ confirm() ->
     DataRow = hd(Data),
     Key = lists:sublist(DataRow, 3),
     Expected = {timeseries_util:get_cols(docs),[DataRow]},
-    timeseries_util:confirm_get(single, normal, DDL, Data, Key, [], Expected).
+    Got = timeseries_util:confirm_get(single, normal, DDL, Data, Key, []),
+    ?assertEqual(Expected, Got),
+    pass.

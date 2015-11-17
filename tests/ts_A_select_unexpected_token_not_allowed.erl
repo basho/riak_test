@@ -2,6 +2,8 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 confirm() ->
@@ -14,8 +16,9 @@ confirm() ->
         "Where time > 1 and time < 10",
     Expected =
         {error, decoding_error_msg("Unexpected token 'selectah'")},
-    timeseries_util:confirm_select(
-        Cluster, TestType, DDL, Data, Qry, Expected).
+    Got = timeseries_util:confirm_select(Cluster, TestType, DDL, Data, Qry),
+    ?assertEqual(Expected, Got),
+    pass.
 
 decoding_error_msg(Msg) ->
     iolist_to_binary(io_lib:format("Message decoding error: ~p", [Msg])).

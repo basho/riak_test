@@ -6,6 +6,8 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 confirm() ->
@@ -19,5 +21,6 @@ confirm() ->
     Expected = {error,
         {1001,<<"invalid_query: \n",
           "incompatible_type: field myseries with type varchar cannot be compared to type integer in where clause.">>}},
-    timeseries_util:confirm_select(
-        single, normal, DDL, Data, Qry, Expected).
+    Got = timeseries_util:confirm_select(single, normal, DDL, Data, Qry),
+    ?assertEqual(Expected, Got),
+    pass.

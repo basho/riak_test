@@ -31,5 +31,8 @@
 confirm() ->
     DDL = timeseries_util:get_ddl(docs),
     Data = timeseries_util:get_valid_select_data(),
-    timeseries_util:confirm_get(
-        single, normal, DDL, Data, [<<"nada">>, <<"nope">>, 10], [], {[], []}).
+    Expected = {[], []},
+    Got = timeseries_util:confirm_get(
+        single, normal, DDL, Data, [<<"nada">>, <<"nope">>, 10], []),
+    ?assertEqual(Expected, Got),
+    pass.

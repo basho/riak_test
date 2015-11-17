@@ -21,4 +21,6 @@ confirm() ->
           timeseries_util:get_varchar(),
           timeseries_util:get_float()]],
     Expected = {error, {1003, <<"Invalid data">>}},
-    timeseries_util:confirm_put(ClusterType, TestType, DDL, Obj, Expected).
+    Got = timeseries_util:confirm_put(ClusterType, TestType, DDL, Obj),
+    ?assertEqual(Expected, Got),
+    pass.

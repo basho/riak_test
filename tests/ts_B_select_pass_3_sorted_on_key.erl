@@ -6,6 +6,8 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 confirm() ->
@@ -20,8 +22,9 @@ confirm() ->
         timeseries_util:exclusive_result_from_data(Data, 1, 9000000000)},
     % write the shuffled TS records but expect the
     % unshuffled records
-    timeseries_util:confirm_select(
-        Cluster, TestType, DDL, ShuffledData, Qry, Expected).
+    Got = timeseries_util:confirm_select(Cluster, TestType, DDL, ShuffledData, Qry),
+    ?assertEqual(Expected, Got),
+    pass.
 
 %%
 shuffle_list(List) ->

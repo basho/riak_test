@@ -2,17 +2,16 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([
 	 confirm/0
 	]).
 
--import(timeseries_util, [
-			  get_ddl/1,
-			  confirm_activate/3
-			  ]).
-
 confirm() ->
     ClusterType = one_down,
-    DDL = get_ddl(docs),
+    DDL = timeseries_util:get_ddl(docs),
     Expected = {ok,"GeoCheckin has been created but cannot be activated yet\n"},
-    confirm_activate(ClusterType, DDL, Expected).
+	Got = timeseries_util:confirm_activate(ClusterType, DDL, Expected),
+	?assertEqual(Expected, Got),
+	pass.

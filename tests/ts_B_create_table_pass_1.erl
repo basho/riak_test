@@ -2,17 +2,16 @@
 
 -behavior(riak_test).
 
--export([
-	 confirm/0
-	]).
+-include_lib("eunit/include/eunit.hrl").
 
--import(timeseries_util, [
-			  get_ddl/1,
-			  confirm_create/3
-			  ]).
+-export([
+     confirm/0
+    ]).
 
 confirm() ->
     ClusterType = multiple,
-    DDL = get_ddl(docs),
+    DDL = timeseries_util:get_ddl(docs),
     Expected = {ok, "GeoCheckin created\n\nWARNING: After activating GeoCheckin, nodes in this cluster\ncan no longer be downgraded to a version of Riak prior to 2.0\n"},
-    confirm_create(ClusterType, DDL, Expected).
+    Got = timeseries_util:confirm_create(ClusterType, DDL),
+    ?assertEqual(Expected, Got),
+    pass.

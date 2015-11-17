@@ -22,17 +22,35 @@
 -module(timeseries_util).
 
 -export([
-    confirm_activate/3,
-    confirm_create/3,
-    confirm_get/7,
-    confirm_put/5,
-    confirm_select/6,
+    activate_bucket/2,
+    build_cluster/1,
+    confirm_activate/2,
+    confirm_create/2,
+    confirm_get/6,
+    confirm_put/4,
+    confirm_select/5,
+    create_bucket/3,
+    exclusive_result_from_data/3,
     get_bool/1,
+    get_bucket/0,
     get_cols/1,
-    get_optional/2
-    ]).
-%% TODO: Kill unused functions
--compile(export_all).
+    get_ddl/1,
+    get_float/0,
+    get_integer/0,
+    get_invalid_obj/0,
+    get_invalid_qry/1,
+    get_optional/2,
+    get_string/1,
+    get_timestamp/0,
+    get_valid_obj/0,
+    get_valid_qry/0,
+    get_valid_qry_spanning_quanta/0,
+    get_valid_select_data/0,
+    get_valid_select_data_spanning_quanta/0,
+    get_varchar/0,
+    maybe_stop_a_node/2,
+    remove_last/1
+]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -41,101 +59,91 @@
 -define(MAXFLOAT,            math:pow(2, 63)).
 -define(MULTIPLECLUSTERSIZE, 3).
 
-confirm_create(ClusterType, DDL, Expected) ->
+-spec(confirm_create(atom(), string()) -> {ok, string()} | term()).
+confirm_create(ClusterType, DDL) ->
 
-    [Node | _] =build_cluster(ClusterType),
+    [Node | _] = build_cluster(ClusterType),
 
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
-    Got = rt:admin(Node, ["bucket-type", "create", get_bucket(), lists:flatten(Props)]),
-    ?assertEqual(Expected, Got),
+    rt:admin(Node, ["bucket-type", "create", get_bucket(), lists:flatten(Props)]).
 
-    pass.
-
-confirm_activate(ClusterType, DDL, Expected) ->
+confirm_activate(ClusterType, DDL) ->
 
     [Node | Rest] = build_cluster(ClusterType),
     ok = maybe_stop_a_node(ClusterType, Rest),
     {ok, _} = create_bucket(Node, DDL, 3),
-    Got     = activate_bucket(Node, DDL),
-    ?assertEqual(Expected, Got),
+    activate_bucket(Node, DDL).
 
-    pass.
-
-confirm_put(ClusterType, TestType, DDL, Obj, Expected) ->
+confirm_put(ClusterType, TestType, DDL, Obj) ->
 
     [Node | _]  = build_cluster(ClusterType),
     
     case TestType of
         normal ->
-            io:format("1 - Creating and activating bucket~n"),
+            lager:info("1 - Creating and activating bucket"),
             {ok, _} = create_bucket(Node, DDL, 3),
             {ok, _} = activate_bucket(Node, DDL);
         no_ddl ->
-            io:format("1 - NOT Creating or activating bucket - failure test~n"),
+            lager:info("1 - NOT Creating or activating bucket - failure test"),
             ok
     end,
     Bucket = list_to_binary(get_bucket()),
-    io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
+    lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Obj]),
     C = rt:pbc(Node),
-    Got = riakc_ts:put(C, Bucket, Obj),
-    ?assertEqual(Expected, Got),
-    pass.
+    riakc_ts:put(C, Bucket, Obj).
 
-confirm_get(ClusterType, TestType, DDL, Data, Key, Options, Expected) ->
+confirm_get(ClusterType, TestType, DDL, Data, Key, Options) ->
 
     [Node | _]  = build_cluster(ClusterType),
 
     case TestType of
         normal ->
-            io:format("1 - Creating and activating bucket~n"),
+            lager:info("1 - Creating and activating bucket"),
             {ok, _} = create_bucket(Node, DDL, 3),
             {ok, _} = activate_bucket(Node, DDL);
         n_val_one ->
-            io:format("1 - Creating and activating bucket~n"),
+            lager:info("1 - Creating and activating bucket"),
             {ok, _} = create_bucket(Node, DDL, 1),
             {ok, _} = activate_bucket(Node, DDL);
         no_ddl ->
-            io:format("1 - NOT Creating or activating bucket - failure test~n"),
+            lager:info("1 - NOT Creating or activating bucket - failure test"),
             ok
     end,
     Bucket = list_to_binary(get_bucket()),
-    io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Data]),
+    lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Data]),
     C = rt:pbc(Node),
     ok = riakc_ts:put(C, Bucket, Data),
 
-    io:format("3 - reading from bucket ~p with key ~p~n", [Bucket, Key]),
-    Got = riakc_ts:get(C, Bucket, Key, Options),
-    ?assertEqual(Expected, Got),
-    pass.
+    lager:info("3 - reading from bucket ~p with key ~p", [Bucket, Key]),
+    riakc_ts:get(C, Bucket, Key, Options).
 
-confirm_select(ClusterType, TestType, DDL, Data, Qry, Expected) ->
+confirm_select(ClusterType, TestType, DDL, Data, Qry) ->
     
     [Node | _] = build_cluster(ClusterType),
     
     case TestType of
         normal ->
-            io:format("1 - Create and activate the bucket~n"),
+            lager:info("1 - Create and activate the bucket"),
             {ok, _} = create_bucket(Node, DDL, 3),
             {ok, _} = activate_bucket(Node, DDL);
         n_val_one ->
-            io:format("1 - Creating and activating bucket~n"),
+            lager:info("1 - Creating and activating bucket"),
             {ok, _} = create_bucket(Node, DDL, 1),
             {ok, _} = activate_bucket(Node, DDL);
         no_ddl ->
-            io:format("1 - NOT Creating or activating bucket - failure test~n"),
+            lager:info("1 - NOT Creating or activating bucket - failure test"),
             ok
     end,
     
     Bucket = list_to_binary(get_bucket()),
-    io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Data]),
+    lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Data]),
     C = rt:pbc(Node),
     ok = riakc_ts:put(C, Bucket, Data),
     
-    io:format("3 - Now run the query ~p~n", [Qry]),
+    lager:info("3 - Now run the query ~p", [Qry]),
     Got = riakc_ts:query(C, Qry), 
-    io:format("Got is ~p~n", [Got]),
-    ?assertEqual(Expected, Got),
-    pass.
+    lager:info("Result is ~p", [Got]),
+    Got.
 
 %%
 %% Helper funs

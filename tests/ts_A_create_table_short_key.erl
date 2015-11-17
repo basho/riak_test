@@ -2,17 +2,16 @@
 
 -behavior(riak_test).
 
--export([
-	 confirm/0
-	]).
+-include_lib("eunit/include/eunit.hrl").
 
--import(timeseries_util, [
-			  get_ddl/1,
-			  confirm_create/3
-			  ]).
+-export([
+     confirm/0
+    ]).
 
 confirm() ->
     ClusterType = single,
-    DDL = get_ddl(shortkey_fail),
+    DDL = timeseries_util:get_ddl(shortkey_fail),
     Expected = {ok,"Error creating bucket type GeoCheckin:\nPrimary key is too short\n"},
-    confirm_create(ClusterType, DDL, Expected).
+    Got = timeseries_util:confirm_create(ClusterType, DDL),
+    ?assertEqual(Expected, Got),
+    pass.

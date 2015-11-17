@@ -2,6 +2,8 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 confirm() ->
@@ -15,6 +17,7 @@ confirm() ->
           "and myseries ='seriesX' ",
     Expected = 
       {error, {1001, <<"incomplete_where_clause: Where clause has no upper bound.">>}},
-    timeseries_util:confirm_select(
-        Cluster, TestType, DDL, Data, Qry, Expected).
+    Got = timeseries_util:confirm_select(Cluster, TestType, DDL, Data, Qry),
+    ?assertEqual(Expected, Got),
+    pass.
 
