@@ -15,3 +15,4 @@ confirm() ->
     Got = timeseries_util:confirm_put(Cluster, TestType, DDL, Obj),
     ?assertEqual(Expected, Got),
     pass.
+
