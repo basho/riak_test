@@ -339,7 +339,7 @@ circle_tests(Nodes) ->
         end}
     ],
     lists:foreach(fun({Name, Eval}) ->
-        lager:info("===== cirle: ~s =====", [Name]),
+        lager:info("===== circle: ~s =====", [Name]),
         Eval()
     end, Tests).
 
@@ -589,7 +589,7 @@ circle_and_spurs_tests(Nodes) ->
 
     ],
     lists:foreach(fun({Name, Eval}) ->
-        lager:info("===== cirlce_and_spurs: ~s =====", [Name]),
+        lager:info("===== circle_and_spurs: ~s =====", [Name]),
         Eval()
     end, Tests).
 
