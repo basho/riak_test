@@ -157,8 +157,8 @@ confirm_select(C, PvalP1, PvalP2) ->
         lists:flatten(
           io_lib:format(
             "select score, pooter2 from ~s where"
-            "     ~s = \"~s\""
-            " and ~s = \"~s\""
+            "     ~s = '~s'"
+            " and ~s = '~s'"
             " and ~s > ~b and ~s < ~b",
            [?BUCKET,
             ?PKEY_P1, PvalP1,
