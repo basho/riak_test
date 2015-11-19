@@ -113,7 +113,7 @@ make_data(PvalP1, PvalP2) ->
         [], lists:seq(?LIFESPAN, 0, -1))).
 
 confirm_put(C, Data) ->
-    ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, [?BADKEY]),
+    ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, Data),
     io:format("Not put anything to a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
