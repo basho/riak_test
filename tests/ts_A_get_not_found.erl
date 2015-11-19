@@ -29,10 +29,9 @@
 %% Test gets which return no data, i.e., not found.
 
 confirm() ->
-    DDL = timeseries_util:get_ddl(docs),
-    Data = timeseries_util:get_valid_select_data(),
+    DDL = ts_util:get_ddl(docs),
+    Data = ts_util:get_valid_select_data(),
     Expected = {[], []},
-    Got = timeseries_util:confirm_get(
-        single, normal, DDL, Data, [<<"nada">>, <<"nope">>, 10], []),
+    Got = ts_util:ts_get(ts_util:cluster_and_connect(single), normal, DDL, Data, [<<"nada">>, <<"nope">>, 10], []),
     ?assertEqual(Expected, Got),
     pass.

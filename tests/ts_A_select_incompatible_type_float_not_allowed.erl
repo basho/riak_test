@@ -7,8 +7,8 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = timeseries_util:get_ddl(docs),
-    Data = timeseries_util:get_valid_select_data(),
+    DDL = ts_util:get_ddl(docs),
+    Data = ts_util:get_valid_select_data(),
     Qry =
         "SELECT * FROM GeoCheckin "
         "WHERE time > 1 AND time < 10 "
@@ -18,6 +18,6 @@ confirm() ->
         {error,{1001,
          <<"invalid_query: \n",
            "incompatible_type: field myseries with type varchar cannot be compared to type float in where clause.">>}},
-    Got = timeseries_util:confirm_select(single, normal, DDL, Data, Qry),
+    Got = ts_util:ts_query(ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
     pass.

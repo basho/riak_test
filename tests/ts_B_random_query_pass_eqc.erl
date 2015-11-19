@@ -26,63 +26,38 @@
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(NUMBEROFNODES, 3).
-
 confirm() ->
     rt:set_backend(eleveldb),
-    [Node | _] = build_cluster(?NUMBEROFNODES),
-    ?assert(eqc:quickcheck(eqc:numtests(500, ?MODULE:prop_ts(Node)))),
+    ClusterConn = ts_util:cluster_and_connect(multiple),
+    ?assert(eqc:quickcheck(eqc:numtests(500, ?MODULE:prop_ts(ClusterConn)))),
     pass.
 
-prop_ts(Node) ->
+prop_ts(ClusterConn) ->
     ?FORALL({NVal, NPuts, Q, NSpans},
 	    {gen_n_val(), gen_no_of_puts(), gen_quantum(), gen_spans()},
-            run_query(Node, NVal, NPuts, Q, NSpans)).
+            run_query(ClusterConn, NVal, NPuts, Q, NSpans)).
 
-run_query(Node, NVal, NPuts, Q, NSpans) ->
+run_query(ClusterConn, NVal, NPuts, Q, NSpans) ->
 
     Bucket = "Bucket_" ++ timestamp(),
     lager:debug("Bucket is ~p~n", [Bucket]),
-    %% Bucket = "Bucket_1445256281934858",
 
     DDL = get_ddl(Bucket, Q),
     lager:debug("DDL is ~p~n", [DDL]),
 
-    {ok, _Return1} = create_bucket(Bucket, Node, DDL, NVal),
-    %% io:format("Create bucket returns ~p~n", [Return1]),
-
-    {ok, _Return2} = activate_bucket(Bucket, Node),
-    %% io:format("Activate bucket returns ~p~n", [Return2]),
-
     Data = make_data(NPuts, Q, NSpans),
-
-    io:format("Data is ~p~n", [Data]),
-
-    C = rt:pbc(Node),
-    ok = riakc_ts:put(C, Bucket, Data),
 
     Query = make_query(Bucket, Q, NSpans),
 
-    lager:debug("Query is ~p~n", [Query]),
+    TestType = normal,
+    {_, Got} = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Query, Bucket),
 
-    {_, Got} = riakc_ts:query(C, Query),
     %% should get the data back
     Got2 = [tuple_to_list(X) || X <- Got],
 
     ?assertEqual(Data, Got2),
 
     true.
-
-activate_bucket(Bucket, Node) ->
-    rt:admin(Node, ["bucket-type", "activate", Bucket]).
-
-create_bucket(Bucket, Node, DDL, NVal) when is_integer(NVal) ->
-    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": " ++
-			      integer_to_list(NVal) ++
-			      ", \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
-    io:format("Creating bucket with ~p~n", [lists:flatten(Props)]),
-    rt:admin(Node, ["bucket-type", "create", Bucket,
-		    lists:flatten(Props)]).
 
 make_query(Bucket, Q, NSpans) ->
     Multi = get_multi(Q),
@@ -110,8 +85,8 @@ make_data(NPuts, Q, NSpans) ->
     Series = <<"seriesX">>,
     Times = lists:seq(1, NPuts),
     [[Family, Series, trunc((X/NPuts) * Multi),
-      timeseries_util:get_varchar(),
-      timeseries_util:get_float()]
+      ts_util:get_varchar(),
+      ts_util:get_float()]
      || X <- Times].
 
 get_multi({No, y})  -> 365*24*60*60*1000 * No;
@@ -120,12 +95,6 @@ get_multi({No, d})  -> 24*60*60*1000 * No;
 get_multi({No, h})  -> 60*60*1000 * No;
 get_multi({No, m})  -> 60*1000 * No;
 get_multi({No, s})  -> 1000 * No.
-
-build_cluster(Size) ->
-    rt:set_backend(eleveldb),
-    Nodes = rt:deploy_nodes(Size, []),
-    rt:join_cluster(Nodes),
-    Nodes.
 
 timestamp() ->
     {A, B, C} = now(),

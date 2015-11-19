@@ -7,16 +7,16 @@
 -export([confirm/0]).
 
 confirm() ->
-    Cluster = single,
+    ClusterType = single,
     TestType = normal,
-    DDL = timeseries_util:get_ddl(docs),
-    Data = timeseries_util:get_valid_select_data(),
+    DDL = ts_util:get_ddl(docs),
+    Data = ts_util:get_valid_select_data(),
     Qry =
         "selectah * from GeoCheckin "
         "Where time > 1 and time < 10",
     Expected =
         {error, decoding_error_msg("Unexpected token 'selectah'")},
-    Got = timeseries_util:confirm_select(Cluster, TestType, DDL, Data, Qry),
+    Got = ts_util:ts_query(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
     pass.
 

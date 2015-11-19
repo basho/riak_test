@@ -19,26 +19,26 @@
 %%
 %% -------------------------------------------------------------------
 %% @doc A util module for riak_ts basic CREATE TABLE Actions
--module(timeseries_util).
+-module(ts_util).
 
 -export([
-    activate_bucket/2,
     build_cluster/1,
-    confirm_activate/2,
-    confirm_create/2,
-    confirm_get/6,
-    confirm_put/4,
-    confirm_select/5,
-    create_bucket/3,
+    cluster_and_connect/1,
+    create_and_activate_bucket_type/2,
+    create_and_activate_bucket_type/3,
+    create_bucket_type/2,
+    create_bucket_type/3,
     exclusive_result_from_data/3,
     get_bool/1,
-    get_bucket/0,
     get_cols/1,
+    get_data/1,
     get_ddl/1,
+    get_default_bucket/0,
     get_float/0,
     get_integer/0,
     get_invalid_obj/0,
     get_invalid_qry/1,
+    get_map/1,
     get_optional/2,
     get_string/1,
     get_timestamp/0,
@@ -49,7 +49,14 @@
     get_valid_select_data_spanning_quanta/0,
     get_varchar/0,
     maybe_stop_a_node/2,
-    remove_last/1
+    ts_query/5,
+    ts_query/6,
+    remove_last/1,
+    ts_get/6,
+    ts_get/7,
+    ts_put/4,
+    ts_put/5,
+    single_query/2
 ]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -59,127 +66,129 @@
 -define(MAXFLOAT,            math:pow(2, 63)).
 -define(MULTIPLECLUSTERSIZE, 3).
 
--spec(confirm_create(atom(), string()) -> {ok, string()} | term()).
-confirm_create(ClusterType, DDL) ->
+ts_put(ClusterConn, TestType, DDL, Obj) ->
+    Bucket = get_default_bucket(),
+    ts_put(ClusterConn, TestType, DDL, Obj, Bucket).
+ts_put({Cluster, Conn}, TestType, DDL, Obj, Bucket) ->
 
-    [Node | _] = build_cluster(ClusterType),
-
-    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
-    rt:admin(Node, ["bucket-type", "create", get_bucket(), lists:flatten(Props)]).
-
-confirm_activate(ClusterType, DDL) ->
-
-    [Node | Rest] = build_cluster(ClusterType),
-    ok = maybe_stop_a_node(ClusterType, Rest),
-    {ok, _} = create_bucket(Node, DDL, 3),
-    activate_bucket(Node, DDL).
-
-confirm_put(ClusterType, TestType, DDL, Obj) ->
-
-    [Node | _]  = build_cluster(ClusterType),
-    
-    case TestType of
-        normal ->
-            lager:info("1 - Creating and activating bucket"),
-            {ok, _} = create_bucket(Node, DDL, 3),
-            {ok, _} = activate_bucket(Node, DDL);
-        no_ddl ->
-            lager:info("1 - NOT Creating or activating bucket - failure test"),
-            ok
-    end,
-    Bucket = list_to_binary(get_bucket()),
+    create_table(TestType, Cluster, DDL, Bucket),
     lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Obj]),
-    C = rt:pbc(Node),
-    riakc_ts:put(C, Bucket, Obj).
+    riakc_ts:put(Conn, Bucket, Obj).
 
-confirm_get(ClusterType, TestType, DDL, Data, Key, Options) ->
+ts_get(ClusterConn, TestType, DDL, Obj, Key, Options) ->
+    Bucket = get_default_bucket(),
+    ts_get(ClusterConn, TestType, DDL, Obj, Key, Options, Bucket).
+ts_get({Cluster, Conn}, TestType, DDL, Obj, Key, Options, Bucket) ->
 
-    [Node | _]  = build_cluster(ClusterType),
-
-    case TestType of
-        normal ->
-            lager:info("1 - Creating and activating bucket"),
-            {ok, _} = create_bucket(Node, DDL, 3),
-            {ok, _} = activate_bucket(Node, DDL);
-        n_val_one ->
-            lager:info("1 - Creating and activating bucket"),
-            {ok, _} = create_bucket(Node, DDL, 1),
-            {ok, _} = activate_bucket(Node, DDL);
-        no_ddl ->
-            lager:info("1 - NOT Creating or activating bucket - failure test"),
-            ok
-    end,
-    Bucket = list_to_binary(get_bucket()),
-    lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Data]),
-    C = rt:pbc(Node),
-    ok = riakc_ts:put(C, Bucket, Data),
+    create_table(TestType, Cluster, DDL, Bucket),
+    lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Obj]),
+    ok = riakc_ts:put(Conn, Bucket, Obj),
 
     lager:info("3 - reading from bucket ~p with key ~p", [Bucket, Key]),
-    riakc_ts:get(C, Bucket, Key, Options).
+    riakc_ts:get(Conn, Bucket, Key, Options).
 
-confirm_select(ClusterType, TestType, DDL, Data, Qry) ->
-    
-    [Node | _] = build_cluster(ClusterType),
-    
-    case TestType of
-        normal ->
-            lager:info("1 - Create and activate the bucket"),
-            {ok, _} = create_bucket(Node, DDL, 3),
-            {ok, _} = activate_bucket(Node, DDL);
-        n_val_one ->
-            lager:info("1 - Creating and activating bucket"),
-            {ok, _} = create_bucket(Node, DDL, 1),
-            {ok, _} = activate_bucket(Node, DDL);
-        no_ddl ->
-            lager:info("1 - NOT Creating or activating bucket - failure test"),
-            ok
-    end,
-    
-    Bucket = list_to_binary(get_bucket()),
+ts_query(ClusterConn, TestType, DDL, Data, Qry) ->
+    Bucket = get_default_bucket(),
+    ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket).
+ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
+
+    create_table(TestType, Cluster, DDL, Bucket),
+
     lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Data]),
-    C = rt:pbc(Node),
-    ok = riakc_ts:put(C, Bucket, Data),
+    ok = riakc_ts:put(Conn, Bucket, Data),
     
+    single_query(Conn, Qry).
+
+single_query(Conn, Qry) ->
     lager:info("3 - Now run the query ~p", [Qry]),
-    Got = riakc_ts:query(C, Qry), 
+    Got = riakc_ts:query(Conn, Qry),
     lager:info("Result is ~p", [Got]),
     Got.
 
 %%
-%% Helper funs
+%% Table and Bucket Type Management
 %%
 
-activate_bucket(Node, _DDL) ->
-    rt:admin(Node, ["bucket-type", "activate", get_bucket()]).
+-spec(create_table(normal|n_val_one|no_ddl, [node()], string(), string()) -> ok).
+create_table(normal, Cluster, DDL, Bucket) ->
+    lager:info("1 - Create and activate the bucket"),
+    lager:debug("DDL = ~p", [DDL]),
+    create_and_activate_bucket_type(Cluster, DDL, Bucket);
+create_table(n_val_one, Cluster, DDL, Bucket) ->
+    lager:info("1 - Creating and activating bucket"),
+    lager:debug("DDL = ~p", [DDL]),
+    create_and_activate_bucket_type(Cluster, DDL, Bucket);
+create_table(no_ddl, _Cluster, _DDL, _Bucket) ->
+    lager:info("1 - NOT Creating or activating bucket - failure test"),
+    ok.
 
-create_bucket(Node, DDL, NVal) when is_integer(NVal) ->
-    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": " ++ 
-                          integer_to_list(NVal) ++
-                          ", \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
-    rt:admin(Node, ["bucket-type", "create", get_bucket(),
-                    lists:flatten(Props)]).
+-spec(create_bucket_type([node()], string()) -> {ok, term()} | term()).
+create_bucket_type(Cluster, DDL) ->
+    create_bucket_type(Cluster, DDL, get_default_bucket()).
+-spec(create_bucket_type(node()|{[node()],term()}, string(), string()|non_neg_integer()) -> {ok, term()} | term()).
+create_bucket_type({Cluster, _Conn}, DDL, Bucket) ->
+    create_bucket_type(Cluster, DDL, Bucket);
+create_bucket_type(Cluster, DDL, Bucket) ->
+    [Node|_Rest] = Cluster,
+    NVal = length(Cluster),
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": ~s, \\\"table_def\\\": \\\"~s\\\"}}", [integer_to_list(NVal), DDL]),
+    rt:admin(Node, ["bucket-type", "create", bucket_to_list(Bucket), lists:flatten(Props)]).
+
+-spec(activate_bucket_type(node(), string()) -> {ok, string()} | term()).
+activate_bucket_type([Node|_Rest], Bucket) ->
+    rt:admin(Node, ["bucket-type", "activate", bucket_to_list(Bucket)]).
+
+-spec(create_and_activate_bucket_type({[node()],term()}, string()) -> term()).
+create_and_activate_bucket_type({Cluster, _Conn}, DDL) ->
+    create_and_activate_bucket_type(Cluster, DDL);
+create_and_activate_bucket_type(Cluster, DDL) ->
+    create_and_activate_bucket_type(Cluster, DDL, get_default_bucket()).
+
+-spec(create_and_activate_bucket_type({[node()],term()}, string(), string()) -> term()).
+create_and_activate_bucket_type({Cluster, _Conn}, DDL, Bucket) ->
+    create_and_activate_bucket_type(Cluster, DDL, Bucket);
+create_and_activate_bucket_type(Cluster, DDL, Bucket)->
+    {ok, _} = create_bucket_type(Cluster, DDL, Bucket),
+    activate_bucket_type(Cluster, Bucket).
+
+bucket_to_list(Bucket) when is_binary(Bucket) ->
+    binary_to_list(Bucket);
+bucket_to_list(Bucket) ->
+    Bucket.
 
 %% @ignore
-maybe_stop_a_node(one_down, [H | _T]) ->
-    ok = rt:stop(H);
+maybe_stop_a_node(one_down, [Stop|_Rest]) ->
+    %% Shutdown the second node, since we connect to the first one
+    ok = rt:stop(Stop);
 maybe_stop_a_node(_, _) ->
     ok.
 
-build_cluster(single)   -> build_c2(1);
-build_cluster(multiple) -> build_c2(?MULTIPLECLUSTERSIZE);
-build_cluster(one_down)   -> build_c2(?MULTIPLECLUSTERSIZE).
+build_cluster(single)   -> build_c2(1, all_up);
+build_cluster(multiple) -> build_c2(?MULTIPLECLUSTERSIZE, all_up);
+build_cluster(one_down) -> build_c2(?MULTIPLECLUSTERSIZE, one_down).
 
--spec build_c2(non_neg_integer()) -> [node()].
-build_c2(Size) ->
+%% Build a cluster and create a PBC connection to the first node
+-spec cluster_and_connect(single|multiple|one_down) -> {[node()], term()}.
+cluster_and_connect(ClusterType) ->
+    Cluster = [Node|_Rest] = build_cluster(ClusterType),
+    Conn = rt:pbc(Node),
+    ?assert(is_pid(Conn)),
+    {Cluster, Conn}.
+%% Just build cluster and stop a node, if necessary
+-spec build_c2(non_neg_integer(), all_up|one_down) -> [node()].
+build_c2(Size, ClusterType) ->
     lager:info("Building cluster of ~p~n", [Size]),
-    build_c2(Size, []).
--spec build_c2(non_neg_integer(), list()) -> [node()].
-build_c2(Size, Config) ->
+    build_c2(Size, ClusterType, []).
+-spec build_c2(non_neg_integer(), all_up|one_down, list()) -> {[node()], term()}.
+build_c2(Size, ClusterType, Config) ->
     rt:set_backend(eleveldb),
-    rt:build_cluster(Size, Config).
+    [_Node|Rest] = Cluster = rt:build_cluster(Size, Config),
+    maybe_stop_a_node(ClusterType, Rest),
+    Cluster.
+
 
 %% This is also the name of the table
-get_bucket() ->
+get_default_bucket() ->
     "GeoCheckin".
 
 get_valid_qry() ->
@@ -224,7 +233,15 @@ get_cols(docs) ->
      <<"myseries">>,
      <<"time">>,
      <<"weather">>,
-     <<"temperature">>].
+     <<"temperature">>];
+get_cols(api) ->
+    [<<"myfamily">>,
+     <<"myseries">>,
+     <<"time">>,
+     <<"myint">>,
+     <<"mybin">>,
+     <<"myfloat">>,
+     <<"mybool">>].
 
 exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
                                                      is_integer(Finish)  andalso
@@ -280,7 +297,34 @@ get_ddl(splitkey_fail) ->
     "weather     varchar   not null, " ++
     "temperature double, " ++
     "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
-    "time, myfamily, myseries, temperature))".
+    "time, myfamily, myseries, temperature))";
+get_ddl(api) ->
+    _SQL = "CREATE TABLE GeoCheckin (" ++
+    "myfamily    varchar     not null, " ++
+    "myseries    varchar     not null, " ++
+    "time        timestamp   not null, " ++
+    "myint       sint64      not null, " ++
+    "mybin       varchar     not null, " ++
+    "myfloat     double      not null, " ++
+    "mybool      boolean     not null, " ++
+    "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
+    "myfamily, myseries, time))".
+
+get_data(api) ->
+    [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]] ++
+    [[<<"family1">>, <<"seriesX">>, 200, 2, <<"test2">>, 2.0, false]] ++
+    [[<<"family1">>, <<"seriesX">>, 300, 3, <<"test3">>, 3.0, true]] ++
+    [[<<"family1">>, <<"seriesX">>, 400, 4, <<"test4">>, 4.0, false]].
+
+get_map(api) ->
+    [{<<"myfamily">>, 1},
+     {<<"myseries">>, 2},
+     {<<"time">>,     3},
+     {<<"myint">>,    4},
+     {<<"mybin">>,    5},
+     {<<"myfloat">>,  6},
+     {<<"mybool">>,   7}].
+
 
 get_valid_obj() ->
     [get_varchar(),

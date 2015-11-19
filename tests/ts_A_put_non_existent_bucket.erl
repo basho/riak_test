@@ -13,12 +13,11 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    [Node | _]  = timeseries_util:build_cluster(single),
-    Bucket = list_to_binary(timeseries_util:get_bucket()),
-    Obj = [timeseries_util:get_valid_obj()],
-    io:format("2 - writing to bucket ~p with:~n- ~p~n", [Bucket, Obj]),
-    C = rt:pbc(Node),
-    Got = riakc_ts:put(C, Bucket, Obj),
+    ClusterType = single,
+    DDL = ts_util:get_ddl(docs),
+    Obj = [ts_util:get_invalid_obj()],
+    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), no_ddl, DDL, Obj),
     ?assertMatch({error, _}, Got),
     pass.
+
 

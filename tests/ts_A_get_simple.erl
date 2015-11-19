@@ -29,11 +29,11 @@
 %% Test gets which return no data, i.e., not found.
 
 confirm() ->
-    DDL = timeseries_util:get_ddl(docs),
-    Data = timeseries_util:get_valid_select_data(),
+    DDL = ts_util:get_ddl(docs),
+    Data = ts_util:get_valid_select_data(),
     DataRow = hd(Data),
     Key = lists:sublist(DataRow, 3),
-    Expected = {timeseries_util:get_cols(docs),[DataRow]},
-    Got = timeseries_util:confirm_get(single, normal, DDL, Data, Key, []),
+    Expected = {ts_util:get_cols(docs),[DataRow]},
+    Got = ts_util:ts_get(ts_util:cluster_and_connect(single), normal, DDL, Data, Key, []),
     ?assertEqual(Expected, Got),
     pass.

@@ -11,14 +11,14 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = timeseries_util:get_ddl(docs),
-    Data = timeseries_util:get_valid_select_data(),
+    DDL = ts_util:get_ddl(docs),
+    Data = ts_util:get_valid_select_data(),
     % query with missing myfamily field
     Query =
         "select * from GeoCheckin "
         "where time > 1 and time < 10",
     Expected =
         {error,{1001,<<"missing_param: Missing parameter myfamily in where clause.">>}},
-    Got = timeseries_util:confirm_select(single, normal, DDL, Data, Query),
+    Got = ts_util:ts_query(ts_util:cluster_and_connect(single), normal, DDL, Data, Query),
     ?assertEqual(Expected, Got),
     pass.

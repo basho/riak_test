@@ -11,18 +11,18 @@
 -export([confirm/0]).
 
 confirm() ->
-    Cluster = multiple,
+    ClusterType = multiple,
     TestType = normal,
-    DDL = timeseries_util:get_ddl(docs),
-    Data = timeseries_util:get_valid_select_data(),
+    DDL = ts_util:get_ddl(docs),
+    Data = ts_util:get_valid_select_data(),
     ShuffledData = shuffle_list(Data),
-    Qry = timeseries_util:get_valid_qry(),
+    Qry = ts_util:get_valid_qry(),
     Expected = {
-        timeseries_util:get_cols(docs),
-        timeseries_util:exclusive_result_from_data(Data, 1, 9000000000)},
+        ts_util:get_cols(docs),
+        ts_util:exclusive_result_from_data(Data, 2, 9)},
     % write the shuffled TS records but expect the
     % unshuffled records
-    Got = timeseries_util:confirm_select(Cluster, TestType, DDL, ShuffledData, Qry),
+    Got = ts_util:ts_query(ts_util:cluster_and_connect(ClusterType), TestType, DDL, ShuffledData, Qry),
     ?assertEqual(Expected, Got),
     pass.
 

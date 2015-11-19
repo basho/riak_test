@@ -11,7 +11,7 @@
 -define(SPANNING_STEP, (1000)).
 
 confirm() ->
-    Cluster = single,
+    ClusterType = single,
     TestType = normal,
     DDL = "CREATE TABLE GeoCheckin (" ++
         "myfamily    varchar     not null, " ++
@@ -29,7 +29,7 @@ confirm() ->
     N = 10,
     Data = make_data(N, Family, Series, []),
     %% Expected is wrong but we can't write data at the moment
-    Got = timeseries_util:confirm_put(Cluster, TestType, DDL, Data),
+    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Data),
     ?assertEqual(ok, Got),
     pass.
 
@@ -42,9 +42,9 @@ make_data(N, F, S, Acc) when is_integer(N) andalso N > 0 ->
           1 + N * ?SPANNING_STEP,
           N,
           N + 0.1,
-          timeseries_util:get_bool(N),
+          ts_util:get_bool(N),
           N + 100000,
-          timeseries_util:get_optional(N, N)
+          ts_util:get_optional(N, N)
          ],
     make_data(N - 1, F, S, [NewAcc | Acc]).
 

@@ -13,10 +13,10 @@
 
 confirm() ->
     ClusterType = single,
-    DDL = timeseries_util:get_ddl(docs),
-    Obj = [timeseries_util:get_invalid_obj()],
+    DDL = ts_util:get_ddl(docs),
+    Obj = [ts_util:get_invalid_obj()],
     Expected = {error, {1003,<<"Invalid data">>}},
-    Got = timeseries_util:confirm_put(ClusterType, normal, DDL, Obj, Expected),
+    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), normal, DDL, Obj),
     ?assertEqual(Expected, Got),
     pass.
 

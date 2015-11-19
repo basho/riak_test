@@ -7,12 +7,12 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    Cluster = multiple,
+    ClusterType = multiple,
     TestType = normal,
-    DDL = timeseries_util:get_ddl(docs),
-    Obj = [timeseries_util:get_valid_obj()],
+    DDL = ts_util:get_ddl(docs),
+    Obj = [ts_util:get_valid_obj()],
     Expected = ok,
-    Got = timeseries_util:confirm_put(Cluster, TestType, DDL, Obj),
+    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Obj),
     ?assertEqual(Expected, Got),
     pass.
 

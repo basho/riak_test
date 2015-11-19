@@ -7,9 +7,9 @@
 -export([confirm/0]).
 
 confirm() ->
-    Cluster = multiple,
+    ClusterType = multiple,
     TestType = normal,
-    DDL = timeseries_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(docs),
     Data = [],
     Qry = "select * from GeoCheckin "
           "where time < 10 "
@@ -17,7 +17,7 @@ confirm() ->
           "and myseries ='seriesX' ",
     Expected = 
       {error, {1001, <<"incomplete_where_clause: Where clause has no lower bound.">>}},
-    Got = timeseries_util:confirm_select(Cluster, TestType, DDL, Data, Qry),
+    Got = ts_util:ts_query(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
     pass.
 
