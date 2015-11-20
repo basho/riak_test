@@ -1,0 +1,172 @@
+%% @author mikael
+%% @doc @todo Add description to verify_object_ttl.
+
+
+-module(verify_object_ttl).
+
+-compile([export_all]).
+
+-include_lib("eunit/include/eunit.hrl").
+-define(BUCKET, <<"obj-ttl">>).
+
+-import(verify_sweep_reaper, [manually_sweep_all/1,
+                              disable_sweep_scheduling/1,
+                              set_tombstone_grace/2,
+                              check_reaps/3]).
+%% ====================================================================
+%% API functions
+%% ====================================================================
+-export([confirm/0]).
+
+-define(SWEEP_TICK, 1000).
+-define(SHORT_TOMBSTONE_GRACE, 1).
+
+confirm() ->
+    Config = [{riak_core, 
+               [{ring_creation_size, 8}
+               ]},
+              {riak_kv,
+               [{delete_mode, keep},
+                {reap_sweep_interval, 1},
+                {sweep_tick, ?SWEEP_TICK},       %% Speed up sweeping
+                {obj_ttl_sweep_interval, 1}]}
+             ],
+
+    Nodes = rt:build_cluster(1, Config),
+    ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
+    
+    [Client] = create_pb_clients(Nodes),
+    disable_sweep_scheduling(Nodes), %% Disable sweeps so they don't mess with our tests.
+    verify_object_ttl(Client),
+    verify_bucket_ttl(Client),
+    set_tombstone_grace(Nodes, ?SHORT_TOMBSTONE_GRACE),
+    verify_ttl_sweep(Client, hd(Nodes)),
+    pass.
+
+verify_object_ttl(Client) ->
+    KV = test_data(1, 1),
+    put_object_with_ttl(Client, KV, 5), %% 5s
+    wait_for_expiry(Client, KV).
+
+verify_bucket_ttl(Client) ->
+    riakc_pb_socket:set_bucket(Client, <<"ttl_bucket">>, [{ttl, 5}]), %% 5s
+    Key2 = test_data(2),
+    Key3 = test_data(3),
+    put_object_without_ttl(Client, <<"ttl_bucket">>, Key2),
+    put_object_without_ttl(Client, ?BUCKET, Key3),
+    timer:sleep(timer:seconds(6)),
+    true = check_expired(Client, <<"ttl_bucket">>, Key2),
+    false = check_expired(Client, ?BUCKET, Key3),
+
+    riakc_pb_socket:set_bucket(Client, <<"long_ttl_bucket">>, [{ttl, 50000}]),
+    Key4 = test_data(4),
+    put_object_with_ttl(Client, Key4, 1),
+    timer:sleep(timer:seconds(2)),
+    true = check_expired(Client, <<"long_ttl_bucket">>, Key4),
+
+    riakc_pb_socket:set_bucket(Client, <<"short_ttl_bucket">>, [{ttl, 1}]),
+    Key5 = test_data(5),
+    put_object_with_ttl(Client, <<"short_ttl_bucket">>, Key5, 20),
+    timer:sleep(timer:seconds(2)),
+    false = check_expired(Client, <<"short_ttl_bucket">>, Key5).
+
+verify_ttl_sweep(Client, Node) ->
+   KVs = test_data(101, 200),
+   put_object_with_ttl(Client, KVs, 5), %% 5s
+   manually_sweep_all(Node),
+   
+   check_expired(Client, KVs),
+   
+   timer:sleep(timer:seconds(5)),
+   manually_sweep_all(Node),
+   check_reaps(Node, Client, KVs),
+   ok.
+
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%%% Client/Key ops
+create_pb_clients(Nodes) ->
+    [begin
+         C = rt:pbc(Node),
+         riakc_pb_socket:set_options(C, [queue_if_disconnected]),
+         C
+     end || Node <- Nodes].
+
+put_object_with_ttl(Client, KV, TTL) ->
+    put_object_with_ttl(Client, ?BUCKET, KV, TTL).
+
+put_object_with_ttl(Client, Bucket, KVs, TTL) when is_list(KVs) ->
+    lager:info("Putting ~p object", [length(KVs)]),
+    [put_object_with_ttl(Client, Bucket, KV, TTL)  || KV <- KVs];
+
+put_object_with_ttl(Client, Bucket, {Key, Value}, TTL) ->
+    Robj0 = riakc_obj:new(Bucket, Key, Value),
+    MD = riakc_obj:get_metadata(Robj0),  
+    Robj1 = riakc_obj:update_metadata(Robj0, riakc_obj:set_ttl(MD, TTL)),
+    riakc_pb_socket:put(Client, Robj1).
+
+put_object_without_ttl(Client, KV) ->
+    put_object_without_ttl(Client, ?BUCKET, KV).
+
+put_object_without_ttl(Client, Bucket, KVs) when is_list(KVs) ->
+    [put_object_without_ttl(Client, Bucket, KV)  || KV <- KVs];
+
+put_object_without_ttl(Client, Bucket, {Key, Value}) ->
+    lager:info("Putting object ~p", [Key]),
+    Robj0 = riakc_obj:new(Bucket, Key, Value),
+    riakc_pb_socket:put(Client, Robj0).
+
+wait_for_expiry(Client, KV) ->
+    wait_for_expiry(Client, ?BUCKET, KV).
+
+wait_for_expiry(Client, Bucket, KVs) when is_list(KVs) ->
+    [wait_for_expiry(Client, Bucket, KV)  || KV <- KVs];
+
+wait_for_expiry(Client, Bucket, KV) ->
+    rt:wait_until(
+      fun() ->
+              check_expired(Client, Bucket, KV)
+      end).
+
+check_expired(Client, KVs) ->
+    check_expired(Client, ?BUCKET, KVs).
+
+check_expired(Client, Bucket, KVs) when is_list(KVs) ->
+    Expired = [true || true <- [check_expired(Client, Bucket, KV)  || KV <- KVs]],
+    case length(KVs) of
+       N when N == length(Expired) ->
+           lager:info("TTL expired ~p keys ~n", [N]),
+           true;
+        N ->
+            lager:info("Not all keys expired ~p keys ~n", [N]),
+            false
+    end;
+
+check_expired(Client, Bucket, {Key, _Value}) ->
+    case riakc_pb_socket:get(Client, Bucket, Key) of
+        {error, notfound} ->
+            true;
+        {ok, _RObj} ->
+            false
+    end.
+
+test_data(Start) ->
+    test_data(Start, Start).
+
+test_data(Start, End) ->
+    Keys = [int_to_key(N) || N <- lists:seq(Start, End)],
+    [{K, K} || K <- Keys].
+
+int_to_key(Ns) when is_list(Ns) ->
+    [int_to_key(N) || N <- Ns];
+
+int_to_key(N) ->
+    case N < 100 of
+        true ->
+            list_to_binary(io_lib:format("obj~2..0B", [N]));
+        _ ->
+            list_to_binary(io_lib:format("obj~p", [N]))
+    end.

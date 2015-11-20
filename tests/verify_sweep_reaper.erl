@@ -27,7 +27,11 @@
 
 -module(verify_sweep_reaper).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0,
+         manually_sweep_all/1,
+         disable_sweep_scheduling/1,
+         set_tombstone_grace/2,
+         check_reaps/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 %% -compile(export_all).
@@ -56,7 +60,7 @@ confirm() ->
                ]}
              ],
 
-    [Node] = Nodes = rt:build_cluster(1, Config),
+    Nodes = rt:build_cluster(1, Config),
     [Client] = create_pb_clients(Nodes),
 
     KV1 = test_data(1, 100),
@@ -76,12 +80,12 @@ confirm() ->
     write_data(Client, KV6),
     delete_keys(Client, KV6),
     timer:sleep(10000),
-    manually_sweep_all(Node),
+    manually_sweep_all(hd(Nodes)),
     remove_sweep_participant(Nodes, riak_kv_delete),
     add_sweep_participant(Nodes),
     enable_sweep_scheduling(Nodes),
     wait_for_sweep(),
-    true = check_reaps(Node, Client, KV6),
+    true = check_reaps(hd(Nodes), Client, KV6),
 
     KV7 = test_data(1501, 1600), %% AAE repair write {n_val, 1}
     KV8 = test_data(1601, 1700), %% AAE repair delete {n_val, 1} then reap
@@ -90,9 +94,14 @@ confirm() ->
     verify_aae_and_reaper_interaction(Nodes, KV7, KV8, KV9),
 
     verify_scheduling(Nodes),
+    
+    KV10 = test_data(2001, 2200),
+    KV11 = test_data_bucket(2201, 2400),
+    
+    check_bucket_acc(Nodes, KV10, KV11), 
 
-    KV10 = test_data(10001, 30000),
-    test_status(Nodes, KV10),
+    KV15 = test_data(10001, 25000),
+    test_status(Nodes, KV15),
 
     pass.
 
@@ -102,8 +111,10 @@ verify_no_reap([Node|_] = Nodes, KV) ->
     write_data(Client, KV),
     delete_keys(Client, KV),
     wait_for_sweep(),
-
+    %% Keys should not be reaped since 
+    %% the tombstone grace period is 1w.
     false = check_reaps(Node, Client, KV),
+    
     disable_sweep_scheduling(Nodes),
     false = check_reaps(Node, Client, KV),
     enable_sweep_scheduling(Nodes),
@@ -115,6 +126,8 @@ verify_reap([Node|_] = _Nodes, KV1, KV2) ->
     write_data(Client, KV2),
     delete_keys(Client, KV2),
     wait_for_sweep(),
+    %% Now we have 1s grace period.
+    %% Both new and old writes will be reaped.
     true = check_reaps(Node, Client, KV2),
     true = check_reaps(Node, Client, KV1),
     riakc_pb_socket:stop(Client).
@@ -138,9 +151,11 @@ verify_remove_add_participant([Node|_] = Nodes, KV) ->
     write_data(Client, KV),
     delete_keys(Client, KV),
     wait_for_sweep(),
+    %% riak_kv_delete not active no reapes.
     false = check_reaps(Node, Client, KV),
     add_sweep_participant(Nodes),
     wait_for_sweep(),
+    %% activated again and now thet get reaped
     true = check_reaps(Node, Client, KV),
     riakc_pb_socket:stop(Client).
 
@@ -184,12 +199,13 @@ verify_scheduling([Node|_] = Nodes) ->
 
     timer:sleep(?SWEEP_TICK * length(Indices)),
     {_Participants , Sweeps} = get_unformated_status(Node),
+    %% 2 and 8 are postions in #sweep
     ScheduledIndices =
         [element(2, Sweep) || Sweep <- lists:keysort(8, Sweeps)],
     Indices = ScheduledIndices,
 
     timer:sleep(10000),
-    %% Test reversed
+    %% Manual sweeps reverse the scheduled should be in the same order.
     disable_sweep_scheduling(Nodes),
     [begin manual_sweep(Node, Index), timer:sleep(1000) end ||
       Index <- lists:reverse(Indices)],
@@ -200,6 +216,19 @@ verify_scheduling([Node|_] = Nodes) ->
     ReverseScheduledIndices =
         [element(2, Sweep) || Sweep <- lists:keysort(8, ReverseSweeps)],
     ReverseScheduledIndices = lists:reverse(Indices).
+
+check_bucket_acc([Node|_] = Nodes, KV10, KV11) ->
+    format_subtest(check_bucket_acc),        
+    disable_sweep_scheduling(Nodes),
+    
+    Client = rt:pbc(Node),
+    write_data(Client, KV10),
+    manually_sweep_all(Node),
+    get_status(Node),
+    
+    write_data(Client, KV11),
+    manually_sweep_all(Node),
+    get_status(Node).
 
 test_status([Node|_] = _Nodes, KV) ->
     format_subtest(test_status),
@@ -236,11 +265,23 @@ write_data(Client, KVs) ->
     lager:info("Writing data ~p keys", [length(KVs)]),
     write_data(Client, KVs, []).
 write_data(Client, KVs, Opts) ->
-    [begin
-         O = riakc_obj:new(?BUCKET, K, V),
-         ?assertMatch(ok, riakc_pb_socket:put(Client, O, Opts))
-     end || {K, V} <- KVs],
+    write_data(Client, ?BUCKET, KVs, Opts).
+
+write_data(Client, Bucket, KVs, Opts) ->
+    [put(Client, Bucket, Opts, KV) || KV <- KVs],
     ok.
+
+put(Client, _Bucket, Opts, {B, K, V}) ->
+   put(Client, B, Opts, {K, V});
+
+put(Client, Bucket, Opts, {K, V}) ->
+    O = riakc_obj:new(Bucket, K, V),
+    ?assertMatch(ok, riakc_pb_socket:put(Client, O, Opts)).
+
+test_data_bucket(Start, End) ->
+    Keys = [to_key(N) || N <- lists:seq(Start, End)],
+    [{K, K, K} || K <- Keys].
+
 test_data(Start, End) ->
     Keys = [to_key(N) || N <- lists:seq(Start, End)],
     [{K, K} || K <- Keys].
