@@ -26,6 +26,7 @@
     cluster_and_connect/1,
     create_and_activate_bucket_type/2,
     create_and_activate_bucket_type/3,
+    create_and_activate_bucket_type/4,
     create_bucket_type/2,
     create_bucket_type/3,
     exclusive_result_from_data/3,
@@ -129,16 +130,19 @@ create_bucket_type(Cluster, DDL) ->
 create_bucket_type({Cluster, _Conn}, DDL, Bucket) ->
     create_bucket_type(Cluster, DDL, Bucket);
 create_bucket_type(Cluster, DDL, Bucket) ->
-    [Node|_Rest] = Cluster,
     NVal = length(Cluster),
+    create_bucket_type(Cluster, DDL, Bucket, NVal).
+
+-spec(create_bucket_type(node()|{[node()],term()}, string(), string(), non_neg_integer()) -> {ok, term()} | term()).
+create_bucket_type([Node|_Rest], DDL, Bucket, NVal) when is_integer(NVal) ->
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": ~s, \\\"table_def\\\": \\\"~s\\\"}}", [integer_to_list(NVal), DDL]),
     rt:admin(Node, ["bucket-type", "create", bucket_to_list(Bucket), lists:flatten(Props)]).
 
--spec(activate_bucket_type(node(), string()) -> {ok, string()} | term()).
+-spec(activate_bucket_type([node()], string()) -> {ok, string()} | term()).
 activate_bucket_type([Node|_Rest], Bucket) ->
     rt:admin(Node, ["bucket-type", "activate", bucket_to_list(Bucket)]).
 
--spec(create_and_activate_bucket_type({[node()],term()}, string()) -> term()).
+-spec(create_and_activate_bucket_type([node()]|{[node()],term()}, string()) -> term()).
 create_and_activate_bucket_type({Cluster, _Conn}, DDL) ->
     create_and_activate_bucket_type(Cluster, DDL);
 create_and_activate_bucket_type(Cluster, DDL) ->
@@ -149,6 +153,10 @@ create_and_activate_bucket_type({Cluster, _Conn}, DDL, Bucket) ->
     create_and_activate_bucket_type(Cluster, DDL, Bucket);
 create_and_activate_bucket_type(Cluster, DDL, Bucket)->
     {ok, _} = create_bucket_type(Cluster, DDL, Bucket),
+    activate_bucket_type(Cluster, Bucket).
+-spec(create_and_activate_bucket_type({[node()],term()}, string(), string(), non_neg_integer()) -> term()).
+create_and_activate_bucket_type({Cluster, _Conn}, DDL, Bucket, NVal) ->
+    {ok, _} = create_bucket_type(Cluster, DDL, Bucket, NVal),
     activate_bucket_type(Cluster, Bucket).
 
 bucket_to_list(Bucket) when is_binary(Bucket) ->

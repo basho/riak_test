@@ -49,8 +49,11 @@ run_query(ClusterConn, NVal, NPuts, Q, NSpans) ->
 
     Query = make_query(Bucket, Q, NSpans),
 
-    TestType = normal,
-    {_, Got} = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Query, Bucket),
+    {_Cluster, Conn} = ClusterConn,
+
+    {ok, _} = ts_util:create_and_activate_bucket_type(ClusterConn, DDL, Bucket, NVal),
+    ok = riakc_ts:put(Conn, Bucket, Data),
+    {_, Got} = ts_util:single_query(Conn, Query),
 
     %% should get the data back
     Got2 = [tuple_to_list(X) || X <- Got],
