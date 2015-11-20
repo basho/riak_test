@@ -31,7 +31,7 @@
 confirm() ->
     DDL = ts_util:get_ddl(docs),
     Data = ts_util:get_valid_select_data(),
-    Expected = {[], []},
-    Got = ts_util:ts_get(ts_util:cluster_and_connect(single), normal, DDL, Data, [<<"nada">>, <<"nope">>, 10], []),
+    Expected = {[],[]},
+    {ok, Got} = ts_util:ts_get(ts_util:cluster_and_connect(single), normal, DDL, Data, [<<"nada">>, <<"nope">>, 10], []),
     ?assertEqual(Expected, Got),
     pass.

@@ -14,11 +14,6 @@ confirm() ->
     Qry =
         "selectah * from GeoCheckin "
         "Where time > 1 and time < 10",
-    Expected =
-        {error, decoding_error_msg("Unexpected token 'selectah'")},
-    Got = ts_util:ts_query(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Data, Qry),
-    ?assertEqual(Expected, Got),
+    {error, Got} = ts_util:ts_query(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Data, Qry),
+    ?assertNotEqual(0, string:str(binary_to_list(Got), "Unexpected token")),
     pass.
-
-decoding_error_msg(Msg) ->
-    iolist_to_binary(io_lib:format("Message decoding error: ~p", [Msg])).
