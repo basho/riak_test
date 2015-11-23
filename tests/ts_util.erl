@@ -296,7 +296,7 @@ get_ddl(shortkey_fail) ->
     "temperature double, " ++
     "PRIMARY KEY ((quantum(time, 15, 'm'), myfamily), " ++
     "time, myfamily))";
-%% an invalid TS DDL becuz partition and local keys dont cover the same space
+%% an invalid TS DDL becuz partition and local keys don't cover the same space
 get_ddl(splitkey_fail) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
     "myfamily    varchar   not null, " ++

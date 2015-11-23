@@ -1,3 +1,4 @@
+%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -34,6 +35,6 @@ confirm() ->
     DataRow = hd(Data),
     Key = lists:sublist(DataRow, 3),
     Expected = {ts_util:get_cols(docs),[DataRow]},
-    Got = ts_util:ts_get(ts_util:cluster_and_connect(single), normal, DDL, Data, Key, []),
+    {ok, Got} = ts_util:ts_get(ts_util:cluster_and_connect(single), normal, DDL, Data, Key, []),
     ?assertEqual(Expected, Got),
     pass.
