@@ -636,9 +636,9 @@ admin(Node, Args, Options) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Cmd = riak_admin_cmd(Path, N, Args),
-    lager:info("Running: ~s", [Cmd]),
+    lager:info("Running: ~ts", [Cmd]),
     Result = execute_admin_cmd(Cmd, Options),
-    lager:info("~p", [Result]),
+    lager:info("~ts", [Result]),
     {ok, Result}.
 
 execute_admin_cmd(Cmd, Options) ->
