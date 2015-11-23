@@ -31,7 +31,8 @@
          manually_sweep_all/1,
          disable_sweep_scheduling/1,
          set_tombstone_grace/2,
-         check_reaps/3]).
+         check_reaps/3,
+         get_sweep_status/1]).
 
 -include_lib("eunit/include/eunit.hrl").
 %% -compile(export_all).
@@ -224,11 +225,11 @@ check_bucket_acc([Node|_] = Nodes, KV10, KV11) ->
     Client = rt:pbc(Node),
     write_data(Client, KV10),
     manually_sweep_all(Node),
-    get_status(Node),
+    get_sweep_status(Node),
     
     write_data(Client, KV11),
     manually_sweep_all(Node),
-    get_status(Node).
+    get_sweep_status(Node).
 
 test_status([Node|_] = _Nodes, KV) ->
     format_subtest(test_status),
@@ -237,13 +238,13 @@ test_status([Node|_] = _Nodes, KV) ->
     delete_keys(Client, KV),
     timer:sleep(10000),
     manual_sweep(Node, 0),
-    get_status(Node),
+    get_sweep_status(Node),
     timer:sleep(1000),
-    get_status(Node),
+    get_sweep_status(Node),
     timer:sleep(1000),
-    get_status(Node),
+    get_sweep_status(Node),
     timer:sleep(1000),
-    get_status(Node).
+    get_sweep_status(Node).
 
 enable_aae(Node) ->
     lager:info("enable aae", []),
@@ -366,7 +367,7 @@ get_read_repairs(Node) ->
     Stats = rpc:call(Node, riak_kv_status, get_stats, [console]),
     proplists:get_value(read_repairs_total, Stats).
 
-get_status(Node) ->
+get_sweep_status(Node) ->
     rpc:call(Node, riak_kv_console, sweep_status, [[]]).
 
 get_unformated_status(Node) ->
