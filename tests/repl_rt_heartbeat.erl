@@ -65,8 +65,14 @@ confirm() ->
     suspend_heartbeat_messages(LeaderA),
 
     %% sleep longer than the HB timeout interval to force re-connection;
-    %% and give it time to restart the RT connection. Wait an extra 2 seconds.
-    timer:sleep(timer:seconds(?HB_TIMEOUT) + 2000),
+    %% and give it time to restart the RT connection.
+    %% Since it's possible we may disable heartbeats right after a heartbeat has been fired,
+    %% it can take up to 2*?HB_TIMEOUT seconds to detect a missed heartbeat. The extra second
+    %% is to avoid rare race conditions due to the timeouts lining up exactly. Not the prettiest
+    %% solution, but it failed so rarely at 2*HB_TIMEOUT, that this should be good enough
+    %% in practice, and it beats having to write a bunch of fancy intercepts to verify that
+    %% the timeout has been hit internally.
+    timer:sleep(timer:seconds(?HB_TIMEOUT*2) + 1000),
 
     %% Verify that RT connection has restarted by noting that it's Pid has changed
     RTConnPid2 = get_rt_conn_pid(LeaderA),
