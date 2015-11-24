@@ -21,7 +21,7 @@
 %% Test for creating a latin1 table name. This should fail
 %% because of mochijson decoding.
 
--module(ts_latin1).
+-module(ts_latin1_create_table_not_allowed).
 
 -behavior(riak_test).
 
