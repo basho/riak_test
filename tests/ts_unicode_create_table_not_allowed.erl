@@ -21,7 +21,7 @@
 %% Test for creating a utf8 table name. This should fail
 %% because of mochijson decoding.
 
--module(ts_unicode_2).
+-module(ts_unicode_create_table_not_allowed).
 
 -behavior(riak_test).
 
