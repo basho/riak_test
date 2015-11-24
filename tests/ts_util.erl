@@ -50,14 +50,14 @@
     get_valid_select_data_spanning_quanta/0,
     get_varchar/0,
     maybe_stop_a_node/2,
-    ts_query/5,
-    ts_query/6,
     remove_last/1,
+    single_query/2,
     ts_get/6,
     ts_get/7,
     ts_put/4,
     ts_put/5,
-    single_query/2
+    ts_query/5,
+    ts_query/6
 ]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -73,7 +73,7 @@ ts_put(ClusterConn, TestType, DDL, Obj) ->
 ts_put({Cluster, Conn}, TestType, DDL, Obj, Bucket) ->
 
     create_table(TestType, Cluster, DDL, Bucket),
-    lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Obj]),
+    lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Obj]),
     riakc_ts:put(Conn, Bucket, Obj).
 
 ts_get(ClusterConn, TestType, DDL, Obj, Key, Options) ->
@@ -82,10 +82,10 @@ ts_get(ClusterConn, TestType, DDL, Obj, Key, Options) ->
 ts_get({Cluster, Conn}, TestType, DDL, Obj, Key, Options, Bucket) ->
 
     create_table(TestType, Cluster, DDL, Bucket),
-    lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Obj]),
+    lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Obj]),
     ok = riakc_ts:put(Conn, Bucket, Obj),
 
-    lager:info("3 - reading from bucket ~p with key ~p", [Bucket, Key]),
+    lager:info("3 - reading from bucket ~ts with key ~p", [Bucket, Key]),
     riakc_ts:get(Conn, Bucket, Key, Options).
 
 ts_query(ClusterConn, TestType, DDL, Data, Qry) ->
@@ -95,15 +95,15 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
 
     create_table(TestType, Cluster, DDL, Bucket),
 
-    lager:info("2 - writing to bucket ~p with:~n- ~p", [Bucket, Data]),
+    lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Data]),
     ok = riakc_ts:put(Conn, Bucket, Data),
     
     single_query(Conn, Qry).
 
 single_query(Conn, Qry) ->
-    lager:info("3 - Now run the query ~p", [Qry]),
+    lager:info("3 - Now run the query ~ts", [Qry]),
     Got = riakc_ts:query(Conn, Qry),
-    lager:info("Result is ~p", [Got]),
+    lager:info("Result is ~ts", [Got]),
     Got.
 
 %%
@@ -113,11 +113,11 @@ single_query(Conn, Qry) ->
 -spec(create_table(normal|n_val_one|no_ddl, [node()], string(), string()) -> ok).
 create_table(normal, Cluster, DDL, Bucket) ->
     lager:info("1 - Create and activate the bucket"),
-    lager:debug("DDL = ~p", [DDL]),
+    lager:debug("DDL = ~ts", [DDL]),
     create_and_activate_bucket_type(Cluster, DDL, Bucket);
 create_table(n_val_one, Cluster, DDL, Bucket) ->
     lager:info("1 - Creating and activating bucket"),
-    lager:debug("DDL = ~p", [DDL]),
+    lager:debug("DDL = ~ts", [DDL]),
     create_and_activate_bucket_type(Cluster, DDL, Bucket);
 create_table(no_ddl, _Cluster, _DDL, _Bucket) ->
     lager:info("1 - NOT Creating or activating bucket - failure test"),
