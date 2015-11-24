@@ -13,7 +13,11 @@ confirm() ->
     lager:info("Deploy some nodes"),
     Nodes = rt:build_cluster(4, [], [
                                      {riak_core, [{default_bucket_props,
-                                                   [{n_val, 2}]}]}]),
+                                                   [
+                                                       {n_val, 2},
+                                                       {allow_mult, true},
+                                                       {dvv_enabled, true}
+                                                   ]}]}]),
     Node = hd(Nodes),
 
     RMD = riak_test_runner:metadata(),
