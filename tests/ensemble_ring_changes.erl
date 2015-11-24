@@ -27,7 +27,12 @@
 -define(RING_SIZE, 16).
 
 config() ->
-    [{riak_core, [{default_bucket_props, [{n_val, 5}]},
+    [{riak_core, [{default_bucket_props,
+                  [
+                    {n_val, 5},
+                    {allow_mult, true},
+                    {dvv_enabled, true}
+                  ]},
                   {vnode_management_timer, 1000},
                   {ring_creation_size, ?RING_SIZE},
                   {enable_consensus, true},

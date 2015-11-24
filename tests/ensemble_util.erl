@@ -58,10 +58,15 @@ fast_config(Nval, EnableAAE) when is_boolean(EnableAAE) ->
 
 fast_config(NVal, RingSize, EnableAAE) ->
     [config_aae(EnableAAE),
-     {riak_core, [{default_bucket_props, [{n_val, NVal}]},
-                  {vnode_management_timer, 1000},
-                  {ring_creation_size, RingSize},
-                  {enable_consensus, true}]}].
+     {riak_core, [{default_bucket_props,
+          [
+             {n_val, NVal,
+             {allow_mult, true},
+             {dvv_enabled, true}}
+          ]},
+          {vnode_management_timer, 1000},
+          {ring_creation_size, RingSize},
+          {enable_consensus, true}]}].
 
 config_aae(true) ->
     {riak_kv, [{anti_entropy_build_limit, {100, 1000}},
