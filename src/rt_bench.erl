@@ -115,6 +115,12 @@ config(Rate, Duration, NodeList, KeyGen,
 
 config(Rate, Duration, NodeList, KeyGen,
        ValGen, Operations, Bucket, Driver0) ->
+config(Rate, Duration, NodeList, KeyGen,
+       ValGen, Operations, Bucket, Driver0, []).
+
+
+config(Rate, Duration, NodeList, KeyGen,
+       ValGen, Operations, Bucket, Driver0, ExtraOpt) ->
     lager:info("Bucket is: ~p", [Bucket]),
     {Driver, DriverB} = case Driver0 of
         '2i' ->
@@ -144,7 +150,7 @@ config(Rate, Duration, NodeList, KeyGen,
      {DriverReplies, default},
      {driver, DriverName}
      %%{code_paths, rt_config:get(basho_bench_code_paths)}
-    ].
+    ] ++ ExtraOpt.
 
 append_atoms(L, R) ->
     list_to_atom(atom_to_list(L)++atom_to_list(R)).
