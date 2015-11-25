@@ -103,7 +103,7 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
 single_query(Conn, Qry) ->
     lager:info("3 - Now run the query ~ts", [Qry]),
     Got = riakc_ts:query(Conn, Qry),
-    lager:info("Result is ~ts", [Got]),
+    lager:info("Result is ~p", [Got]),
     Got.
 
 %%
