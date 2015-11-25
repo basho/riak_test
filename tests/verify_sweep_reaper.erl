@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 %%% @copyright (C) 2015, Basho Technologies
 %%% @doc
-%%% riak_test for riak_kv_sweeper and 
+%%% riak_test for riak_kv_sweeper and
 %%%
 %%% Verify that the sweeper doesn't reap until we set a short grace period
 %%%
@@ -27,6 +27,7 @@
 
 -module(verify_sweep_reaper).
 -behavior(riak_test).
+-compile(export_all).
 -export([confirm/0,
          manually_sweep_all/1,
          disable_sweep_scheduling/1,
@@ -46,7 +47,7 @@
 -define(LONG_TOMBSTONE_GRACE, 1000).
 
 confirm() ->
-    Config = [{riak_core, 
+    Config = [{riak_core,
                [{ring_creation_size, 4}
                ]},
               {riak_kv,
@@ -62,7 +63,6 @@ confirm() ->
              ],
 
     Nodes = rt:build_cluster(1, Config),
-    [Client] = create_pb_clients(Nodes),
 
     KV1 = test_data(1, 100),
     verify_no_reap(Nodes, KV1),
@@ -77,31 +77,21 @@ confirm() ->
     KV4 = test_data(301, 400),
     verify_remove_add_participant(Nodes, KV4),
 
-    KV6 = test_data(1001, 1500),
-    write_data(Client, KV6),
-    delete_keys(Client, KV6),
-    timer:sleep(10000),
-    manually_sweep_all(hd(Nodes)),
-    remove_sweep_participant(Nodes, riak_kv_delete),
-    add_sweep_participant(Nodes),
-    enable_sweep_scheduling(Nodes),
-    wait_for_sweep(),
-    true = check_reaps(hd(Nodes), Client, KV6),
-
-    KV7 = test_data(1501, 1600), %% AAE repair write {n_val, 1}
+    KV7 = test_data(501,  1500), %% AAE repair write {n_val, 1}
     KV8 = test_data(1601, 1700), %% AAE repair delete {n_val, 1} then reap
     KV9 = test_data(1701, 1800), %% AAE no repair then reap {n_val, 1}
 
     verify_aae_and_reaper_interaction(Nodes, KV7, KV8, KV9),
 
     verify_scheduling(Nodes),
-    
     KV10 = test_data(2001, 2200),
     KV11 = test_data_bucket(2201, 2400),
-    
-    check_bucket_acc(Nodes, KV10, KV11), 
+    check_bucket_acc(Nodes, KV10, KV11),
 
-    KV15 = test_data(10001, 25000),
+    set_sweep_throttle(Nodes, {100, 500}),
+    KV12 = test_data(10001, 11000),
+    test_restart_sweep(Nodes, KV12),
+    KV15 = test_data(15001, 16000),
     test_status(Nodes, KV15),
 
     pass.
@@ -112,10 +102,9 @@ verify_no_reap([Node|_] = Nodes, KV) ->
     write_data(Client, KV),
     delete_keys(Client, KV),
     wait_for_sweep(),
-    %% Keys should not be reaped since 
+    %% Keys should not be reaped since
     %% the tombstone grace period is 1w.
     false = check_reaps(Node, Client, KV),
-    
     disable_sweep_scheduling(Nodes),
     false = check_reaps(Node, Client, KV),
     enable_sweep_scheduling(Nodes),
@@ -162,8 +151,9 @@ verify_remove_add_participant([Node|_] = Nodes, KV) ->
 
 verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
     format_subtest(verify_aae_in_grace),
-    Client = rt:pbc(Node),
     disable_sweep_scheduling(Nodes),
+    Client = rt:pbc(Node),
+    timer:sleep(timer:seconds(5)),
     set_tombstone_grace(Nodes, ?LONG_TOMBSTONE_GRACE),
     write_data(Client, KV1, [{n_val, 1}]),
     true = verify_data(Node, KV1, changed),
@@ -175,7 +165,6 @@ verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
     set_tombstone_grace(Nodes, ?SHORT_TOMBSTONE_GRACE),
     manually_sweep_all(Node),
     true = check_reaps(Node, Client, KV2),
-
 
     format_subtest(verify_aae_no_repair_tombstone),
     disable_aae(Node),
@@ -203,7 +192,7 @@ verify_scheduling([Node|_] = Nodes) ->
     %% 2 and 8 are postions in #sweep
     ScheduledIndices =
         [element(2, Sweep) || Sweep <- lists:keysort(8, Sweeps)],
-    Indices = ScheduledIndices,
+    lists:member(ScheduledIndices, create_all_possible_lists(Indices)), 
 
     timer:sleep(10000),
     %% Manual sweeps reverse the scheduled should be in the same order.
@@ -214,21 +203,45 @@ verify_scheduling([Node|_] = Nodes) ->
 
     timer:sleep(?SWEEP_TICK * length(Indices)),
     {_Participants , ReverseSweeps} = get_unformated_status(Node),
-    ReverseScheduledIndices =
-        [element(2, Sweep) || Sweep <- lists:keysort(8, ReverseSweeps)],
-    ReverseScheduledIndices = lists:reverse(Indices).
+                 ReverseScheduledIndices =
+                     [element(2, Sweep) || Sweep <- lists:keysort(8, ReverseSweeps)],
+    lists:member(ReverseScheduledIndices, create_all_possible_lists(lists:reverse(Indices))).
+
+
+%% We create all possible combinations of the same list so we
+%% don't have to time the status check perfectly
+create_all_possible_lists(List) ->
+    [begin
+         {A, B} = lists:split(N, List),
+         B ++ A 
+         end    || N <- lists:seq(1, length(List))].
 
 check_bucket_acc([Node|_] = Nodes, KV10, KV11) ->
-    format_subtest(check_bucket_acc),        
-    disable_sweep_scheduling(Nodes),
-    
+    format_subtest(check_bucket_acc),        disable_sweep_scheduling(Nodes),
     Client = rt:pbc(Node),
     write_data(Client, KV10),
     manually_sweep_all(Node),
     get_sweep_status(Node),
-    
     write_data(Client, KV11),
     manually_sweep_all(Node),
+    get_sweep_status(Node).
+
+test_restart_sweep([Node|_] = Nodes, KV) ->
+    format_subtest(test_restart_sweep),
+    set_sweep_concurrency(Nodes, 4),
+    Client = rt:pbc(Node),
+    write_data(Client, KV),
+    delete_keys(Client, KV),
+
+
+    {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
+    Idxs = rpc:call(Node, riak_core_ring, my_indices, [Ring]),
+    [begin
+         spawn(fun() -> manual_sweep(Node, Index) end),
+         timer:sleep(timer:seconds(1))
+     end || Index <- Idxs, _N <- [1,2,3]],
+    timer:sleep(timer:seconds(10)),
+    true = check_reaps(Node, Client, KV),
     get_sweep_status(Node).
 
 test_status([Node|_] = _Nodes, KV) ->
@@ -239,11 +252,11 @@ test_status([Node|_] = _Nodes, KV) ->
     timer:sleep(10000),
     manual_sweep(Node, 0),
     get_sweep_status(Node),
-    timer:sleep(1000),
+    timer:sleep(10000),
     get_sweep_status(Node),
-    timer:sleep(1000),
+    timer:sleep(10000),
     get_sweep_status(Node),
-    timer:sleep(1000),
+    timer:sleep(10000),
     get_sweep_status(Node).
 
 enable_aae(Node) ->
@@ -259,7 +272,7 @@ wait_for_sweep() ->
     wait_for_sweep(?WAIT_FOR_SWEEP).
 
 wait_for_sweep(WaitTime) ->
-    lager:info("Wait for sweep ~p s", [WaitTime]),
+    lager:info("Wait for sweep ~p s", [WaitTime div 1000]),
     timer:sleep(WaitTime).
 
 write_data(Client, KVs) ->
@@ -331,10 +344,24 @@ set_tombstone_grace(Nodes, Time) ->
     lager:info("set_tombstone_grace ~p s ", [Time]),
     rpc:multicall(Nodes, application, set_env, [riak_kv, tombstone_grace_period,Time]).
 
+set_sweep_throttle(Nodes, {Limit, Sleep}) ->
+    lager:info("set_sweep_throttle ~p ~p s ", [Limit, Sleep]),
+    rpc:multicall(Nodes, application, set_env, [riak_kv, sweep_throttle, {Limit, Sleep}]),
+    Expected = [{Limit, Sleep} || _ <- Nodes],
+    rt:wait_until(
+      fun() ->
+              {Expected, []} ==
+                  rpc:multicall(Nodes, app_helper, get_env, [riak_kv, sweep_throttle])
+      end).
+
+set_sweep_concurrency(Nodes, N) ->
+    lager:info("set_sweep_concurrency ~p ", [N]),
+    rpc:multicall(Nodes, application, set_env, [riak_kv, sweep_concurrency,N]).
+
 disable_sweep_scheduling(Nodes) ->
     lager:info("disable sweep scheduling"),
     {Succ, Fail} = rpc:multicall(Nodes, riak_kv_sweeper, disable_sweep_scheduling, []),
-    FalseResults = 
+    FalseResults =
         [false || false <- Succ],
     0 = length(FalseResults) + length(Fail).
 
@@ -345,7 +372,7 @@ enable_sweep_scheduling(Nodes) ->
 remove_sweep_participant(Nodes, Module) ->
     lager:info("remove sweep participant"),
     {Succ, Fail} = rpc:multicall(Nodes, riak_kv_sweeper, remove_sweep_participant, [Module]),
-    FalseResults = 
+    FalseResults =
         [false || false <- Succ],
     0 = length(FalseResults) + length(Fail).
 
@@ -357,7 +384,7 @@ add_sweep_participant(Nodes) ->
 manually_sweep_all(Node) ->
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
     Indices = rpc:call(Node, riak_core_ring, my_indices, [Ring]),
-    [begin manual_sweep(Node, Index), timer:sleep(1000), Index  end || Index <- Indices].
+    [begin manual_sweep(Node, Index), timer:sleep(500), Index  end || Index <- Indices].
 
 manual_sweep(Node, Partition) ->
    lager:info("Manual sweep index ~p", [Partition]),
@@ -385,14 +412,21 @@ verify_data(Node, KeyValues, Mode, MaxTime) ->
         fun() ->
                 Matches = [verify_replicas(Node, ?BUCKET, K, V, ?N_VAL, Mode)
                              || {K, V} <- KeyValues],
-                CountTrues = fun(true, G) -> G+1; (false, G) -> G end,
-                NumGood = lists:foldl(CountTrues, 0, Matches),
+                Good = [true || true <- Matches],
+                NumGood = length(Good),
+                Bad = Matches -- Good,
                 Num = length(KeyValues),
                 case Num == NumGood of
                     true -> true;
                     false ->
-                        lager:info("Data not yet correct: ~p mismatches",
-                                   [Num-NumGood]),
+                        case length(Bad) < (NumGood div 20) of
+                            true ->
+                                lager:info("Data not yet correct: ~p mismatches ~p ",
+                                           [Num-NumGood, Bad]);
+                            false ->
+                                lager:info("Data not yet correct: ~p mismatches",
+                                           [Num-NumGood])
+                        end,
                         false
                 end
         end,
@@ -423,14 +457,14 @@ verify_replicas(Node, B, K, _V, N, delete) ->
     Replies = [rt:get_replica(Node, B, K, I, N)
                  || I <- lists:seq(1,N)],
     Match = hd(Replies),
-    length([del || Response <- Replies, Match == Response]) == N;
+    length([del || Response <- Replies, Match == Response]) == N orelse K;
 
 verify_replicas(Node, B, K, V, N, _Mode) ->
     Replies = [rt:get_replica(Node, B, K, I, N)
                || I <- lists:seq(1,N)],
     Vals = [merge_values(O) || {ok, O} <- Replies],
     Expected = [V || _ <- lists:seq(1, N)],
-    Vals == Expected.
+    Vals == Expected orelse K.
 
 format_subtest(Test) ->
     TestString = atom_to_list(Test),
