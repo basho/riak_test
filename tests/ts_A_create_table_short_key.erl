@@ -32,7 +32,7 @@
 confirm() ->
     ClusterType = single,
     DDL = ts_util:get_ddl(shortkey_fail),
-    Expected = {ok,"Error creating bucket type GeoCheckin:\nPrimary key is too short\n"},
+    Expected = {ok,"Error validating table definition for bucket type GeoCheckin:\nPrimary key must consist of exactly 3 fields (has 2)\n"},
     Got = ts_util:create_bucket_type(ts_util:build_cluster(ClusterType), DDL),
     ?assertEqual(Expected, Got),
     pass.

@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -19,7 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 
--module(ts_A_create_table_split_key).
+-module(ts_A_create_table_not_null_pk_fields).
 
 -behavior(riak_test).
 
@@ -31,8 +30,8 @@
 
 confirm() ->
     ClusterType = single,
-    DDL = ts_util:get_ddl(splitkey_fail),
-    Expected = {ok,"Error validating table definition for bucket type GeoCheckin:\nLocal key does not match primary key\n"},
+    DDL = ts_util:get_ddl(not_null_primary_key_field_fail),
+    Expected = {ok, "Error validating table definition for bucket type GeoCheckin:\nAll fields in primary key must be not null\n"},
     Got = ts_util:create_bucket_type(ts_util:build_cluster(ClusterType), DDL),
     ?assertEqual(Expected, Got),
     pass.

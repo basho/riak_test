@@ -306,6 +306,22 @@ get_ddl(splitkey_fail) ->
     "temperature double, " ++
     "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
     "time, myfamily, myseries, temperature))";
+get_ddl(not_null_primary_key_field_fail) ->
+    _SQL = "CREATE TABLE GeoCheckin (" ++
+    "myfamily    varchar   not null, " ++
+    "myseries    varchar           , " ++
+    "time        timestamp not null, " ++
+    "weather     varchar   not null, " ++
+    "temperature double, " ++
+    "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
+    "myfamily, myseries, time))";
+get_ddl(no_primary_key_fail) ->
+    _SQL = "CREATE TABLE GeoCheckin (" ++
+    "myfamily    varchar   not null, " ++
+    "myseries    varchar           , " ++
+    "time        timestamp not null, " ++
+    "weather     varchar   not null, " ++
+    "temperature double)";
 get_ddl(api) ->
     _SQL = "CREATE TABLE GeoCheckin (" ++
     "myfamily    varchar     not null, " ++
