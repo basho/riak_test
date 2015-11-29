@@ -25,13 +25,13 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([
-	 confirm/0
-	]).
+         confirm/0
+        ]).
 
 confirm() ->
     ClusterType = single,
     DDL = ts_util:get_ddl(not_null_primary_key_field_fail),
-    Expected = {ok, "Error validating table definition for bucket type GeoCheckin:\nAll fields in primary key must be not null\n"},
+    Expected = {ok, "Error validating table definition for bucket type GeoCheckin:\nPrimary key has 'null' fields (myseries)\n"},
     Got = ts_util:create_bucket_type(ts_util:build_cluster(ClusterType), DDL),
     ?assertEqual(Expected, Got),
     pass.
