@@ -223,7 +223,7 @@ prepare(ThresholdSeed) ->
             VnodeTab = riak_core_vnode_manager:get_tab(),
             lager:debug("~w", [VnodeTab]),
             file:write_file("vnode_tab.terms", term_to_binary(VnodeTab)),
-            error("VNode PID didn't change");
+            error(io_lib:format("VNode PID didn't change. Was: ~p", [VPid0]);
         _ ->
             ok
     end,
