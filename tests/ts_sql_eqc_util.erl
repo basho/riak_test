@@ -29,7 +29,20 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riak_ql/include/riak_ql_ddl.hrl").
 
+
 %% eqc generators
+
+%%
+%% Create Table generators
+%%
+gen_valid_create_table() ->
+    ?LET(DDL, gen_valid_ddl(), make_valid_create_table(DDL)).
+
+%%
+%% These generators generate DDL records
+%%
+gen_valid_ddl() ->
+    ?SUCHTHAT(DDL, gen_ddl(), is_valid_ddl(DDL)).
 
 gen_ddl() ->
     ?LET({TblName, Keys, Quantum, Fields},
@@ -74,7 +87,7 @@ gen_timeseries_key_field() ->
 %% generate field components
 %%
 gen_name(Prefix) ->
-    %%utf8().
+    %% utf8().
     gen_ascii_name(Prefix).
 
 gen_field_type() ->
@@ -137,5 +150,49 @@ make_pk([Family, Series, TS], {Unit, No}) ->
     
 make_lk(Key) ->
     #key_v1{ast = [#param_v1{name = X#riak_field_v1.name} || X <- Key]}.
+
+is_valid_ddl(#ddl_v1{fields = Fs}) ->
+    Fs2 = lists:sort([X#riak_field_v1.name || X <- Fs]),
+    _IsValid = case lists:usort(Fs2) of
+                   Fs2 -> true;
+                   _   -> false
+end.
+
+make_valid_create_table(#ddl_v1{table         = Tb,
+                                fields        = Fs,
+                                partition_key = PK,
+                                local_key     = LK}) ->
+    "CREATE TABLE " ++ binary_to_list(Tb) ++ " (" ++ make_fields(Fs) ++ "PRIMARY KEY ((" ++ pk_to_sql(PK) ++ "), " ++ lk_to_sql(LK) ++ ")".
+
+make_fields(Fs) ->
+    make_f2(Fs, []).
+
+make_f2([], Acc) ->
+    lists:flatten(lists:reverse(Acc));
+make_f2([#riak_field_v1{name    = Nm,
+                       type     = Ty,
+                       optional = IsOpt} | T], Acc) ->
+    Args = [
+            binary_to_list(Nm),
+            atom_to_list(Ty)
+           ] ++ case IsOpt of
+                    true  -> [];
+                    false -> ["not_null"]
+                end,
+    NewAcc = string:join(Args, " ") ++ ", ",
+    make_f2(T, [NewAcc | Acc]).
+
+pk_to_sql(#key_v1{ast = [Fam, Series, TS]}) ->
+    string:join([binary_to_list(X#param_v1.name) || X <- [Fam, Series]] ++ [make_q(TS)], ", ").
+
+make_q(#hash_fn_v1{mod  = riak_ql_quanta,
+                   fn   = quantum,
+                   args = Args,
+                   type = timeseries}) ->
+              [#param_v1{name = Nm}, Unit, No] = Args,
+    _Q = "quantum(" ++ string:join([binary_to_list(Nm), atom_to_list(Unit), integer_to_list(No)], ", ") ++ ")".
+
+lk_to_sql(LK) ->
+    string:join([binary_to_list(X#param_v1.name) || X <- LK#key_v1.ast], ", ").
 
 %-endif.

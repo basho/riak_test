@@ -12,6 +12,7 @@ erl_crash.dump
 #*#
 doc/
 !doc/overview.edoc
+*.beam
 *.jar
 coverage
 tags
@@ -23,4 +24,5 @@ dialyzer_unhandled_warnings
 dialyzer_warnings
 .idea
 riak_test.iml
-
+.eqc-info
+current_counterexample.eqc
