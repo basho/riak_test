@@ -139,8 +139,23 @@ create_bucket_type([Node|_Rest], DDL, Bucket, NVal) when is_integer(NVal) ->
     rt:admin(Node, ["bucket-type", "create", bucket_to_list(Bucket), lists:flatten(Props)]).
 
 -spec(activate_bucket_type([node()], string()) -> {ok, string()} | term()).
-activate_bucket_type([Node|_Rest], Bucket) ->
-    rt:admin(Node, ["bucket-type", "activate", bucket_to_list(Bucket)]).
+activate_bucket_type(Cluster, Bucket) ->
+    activate_bucket_type(Cluster, Bucket, 3).
+%% Attempt to activate the bucket type 4 times
+activate_bucket_type(Cluster, Bucket, Retries) ->
+    [Node|_Rest] = Cluster,
+    {ok, Msg} = Result = rt:admin(Node, ["bucket-type", "activate", bucket_to_list(Bucket)]),
+    %% Look for a successful message
+    case string:str(Msg, "has been activated") of
+        0 ->
+            lager:error("Could not activate bucket type. Retrying. Result = ~p", [Result]),
+            case Retries of
+                0 -> Result;
+                _ -> timer:sleep(timer:seconds(1)),
+                     activate_bucket_type(Cluster, Bucket, Retries-1)
+            end;
+        _ -> Result
+    end.
 
 -spec(create_and_activate_bucket_type([node()]|{[node()],term()}, string()) -> term()).
 create_and_activate_bucket_type({Cluster, _Conn}, DDL) ->
