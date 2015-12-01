@@ -45,11 +45,12 @@ confirm() ->
     verify_bucket_ttl_change(Client, hd(Nodes)),
     pass.
 
+%% Tests that objects not visible after ttl expire
 verify_object_ttl(Client) ->
     KV = test_data(1, 1),
     put_object_with_ttl(Client, KV, 5), %% 5s
     wait_for_expiry(Client, KV).
-
+%% Tests that objects not visible after ttl expire on bucket
 verify_bucket_ttl(Client) ->
     TTLBucket = <<"ttl_bucket">>,
     riakc_pb_socket:set_bucket(Client, TTLBucket, [{ttl, 5}]), %% 5s
@@ -74,7 +75,7 @@ verify_bucket_ttl(Client) ->
     put_object_with_ttl(Client, ShortTTLBucket, Key5, 20),
     timer:sleep(timer:seconds(2)),
     false = check_expired(Client, ShortTTLBucket, Key5).
-
+%% Obj -> TTL sweep -> Tombstone -> Reap sweep -> gone
 verify_ttl_sweep(Client, Node) ->
    KVs1 = test_data(101, 200),
    KVs1000 = test_data(201, 300),
@@ -94,7 +95,7 @@ verify_ttl_sweep(Client, Node) ->
    manually_sweep_all(Node),
    true = check_reaps(Node, Client, KVs1000),
    ok.
-
+%% Verify that old objects get expired when we configure short ttl on bucket
 verify_bucket_ttl_change(Client, Node) ->
     KVs = test_data(301, 400),
     Bucket = <<"change_ttl_bucket">>,
