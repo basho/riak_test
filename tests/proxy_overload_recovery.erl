@@ -206,9 +206,15 @@ prepare(ThresholdSeed) ->
     %% Ask the supervisor to do it for us to avoid messy messages in the logs.
     Id = 0,
     {ok, VPid0} = riak_core_vnode_manager:get_vnode_pid(Id, riak_kv_vnode),
+    Mon = erlang:monitor(process, VPid0),
     sys:resume(VPid0),
     ok = supervisor:terminate_child(riak_core_vnode_sup, VPid0),
-    false = is_process_alive(VPid0),
+    receive
+        {'DOWN', Mon, process, _, _} ->
+            ok
+        after 15000 ->
+            error("Timed out waiting for vnode to exit")
+    end,
 
     %% Reset the proxy pid to make sure it resets state and picks up the new
     %% environment variables
@@ -223,7 +229,7 @@ prepare(ThresholdSeed) ->
             VnodeTab = riak_core_vnode_manager:get_tab(),
             lager:debug("~w", [VnodeTab]),
             file:write_file("vnode_tab.terms", term_to_binary(VnodeTab)),
-            error(io_lib:format("VNode PID didn't change. Was: ~p", [VPid0]);
+            error(io_lib:format("VNode PID didn't change. Was: ~p", [VPid0]));
         _ ->
             ok
     end,
