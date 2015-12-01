@@ -219,7 +219,7 @@ prepare(ThresholdSeed) ->
     {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
     case VPid1 of
         VPid0 ->
-            lager:debug("Vnode PID didn't change after killing vnode"),
+            lager:debug("Vnode PID didn't change after killing vnode - was ~p", [VPid0]),
             VnodeTab = riak_core_vnode_manager:get_tab(),
             lager:debug("~w", [VnodeTab]),
             file:write_file("vnode_tab.terms", term_to_binary(VnodeTab)),
