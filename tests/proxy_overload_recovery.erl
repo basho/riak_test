@@ -396,21 +396,25 @@ prep_env(Var, Val) ->
 %% last message consumed have been transmitted.
 %%
 drain(Pid) when is_pid(Pid) ->
-    drain([Pid]);
+    drain([Pid], -1);
 
 drain(Pids) when is_list(Pids) ->
+    drain(Pids, -1).
+drain(Pids, Prev) ->
     _ = [sys:suspend(Pid) || Pid <- Pids],
     Len = lists:foldl(fun(Pid, Acc0) ->
             {message_queue_len, Len} = erlang:process_info(Pid, message_queue_len),
             Acc0 + Len
             end, 0, Pids),
     _ = [sys:resume(Pid) || Pid <- Pids],
-    case Len of
-        0 ->
+    case {Prev, Len} of
+        {0, 0} ->
             ok;
         _ ->
+            %% Attempt to ensure something else is scheduled before we try to drain again
+            erlang:yield(),
             timer:sleep(1),
-            drain(Pids)
+            drain(Pids, Len)
     end.
 
 %% Return the length of the message queue (or crash if proc dead)
