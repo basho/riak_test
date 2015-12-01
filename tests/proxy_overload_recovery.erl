@@ -221,19 +221,12 @@ prepare(ThresholdSeed) ->
     ok = supervisor:terminate_child(riak_core_vnode_proxy_sup, {riak_kv_vnode, Id}),
     RegName = riak_core_vnode_proxy:reg_name(riak_kv_vnode, Index),
     undefined = whereis(RegName),
-    %% Fail if we get back the dead vnode
-    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
-    case VPid1 of
-        VPid0 ->
-            lager:debug("Vnode PID didn't change after killing vnode - was ~p", [VPid0]),
-            VnodeTab = riak_core_vnode_manager:get_tab(),
-            lager:debug("~w", [VnodeTab]),
-            file:write_file("vnode_tab.terms", term_to_binary(VnodeTab)),
-            error(io_lib:format("VNode PID didn't change. Was: ~p", [VPid0]));
-        _ ->
-            ok
-    end,
+    rt:wait_until(fun() ->
+        {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
+        VPid0 /= VPid1
+        end),
 
+    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
     {ok, PPid} = supervisor:restart_child(riak_core_vnode_proxy_sup, {riak_kv_vnode, Id}),
 
     %% Find the proxy pid and check it's alive and matches the supervisor
