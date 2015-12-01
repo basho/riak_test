@@ -24,14 +24,23 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([
-         confirm/0
-        ]).
+-export([confirm/0]).
 
 confirm() ->
-    ClusterType = single,
-    DDL = ts_util:get_ddl(not_null_primary_key_field_fail),
-    Expected = {ok, "Error validating table definition for bucket type GeoCheckin:\nPrimary key has 'null' fields (myseries)\n"},
-    Got = ts_util:create_bucket_type(ts_util:build_cluster(ClusterType), DDL),
+    DDL =
+        "CREATE TABLE GeoCheckin ("
+        " myfamily    varchar   not null,"
+        " myseries    varchar           ,"
+        " time        timestamp not null,"
+        " weather     varchar   not null,"
+        " temperature double,"
+        " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
+        " myfamily, myseries, time))",
+    Expected =
+        {ok,
+         "Error validating table definition for bucket type GeoCheckin:\n"
+         "Primary key has 'null' fields (myseries)\n"},
+    Got = ts_util:create_bucket_type(
+            ts_util:build_cluster(single), DDL),
     ?assertEqual(Expected, Got),
     pass.

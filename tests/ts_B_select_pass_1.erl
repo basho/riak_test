@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -25,19 +24,17 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([
-	 confirm/0
-	]).
+-export([confirm/0]).
 
 confirm() ->
-    ClusterType = multiple,
     TestType = normal,
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Data = ts_util:get_valid_select_data(),
     Qry = ts_util:get_valid_qry(),
     Expected = {
-        ts_util:get_cols(docs),
+        ts_util:get_cols(),
         ts_util:exclusive_result_from_data(Data, 2, 9)},
-    Got = ts_util:ts_query(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Data, Qry),
+    Got = ts_util:ts_query(
+            ts_util:cluster_and_connect(multiple), TestType, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
     pass.

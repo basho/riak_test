@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -27,14 +26,12 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([
-	 confirm/0
-	]).
+-export([confirm/0]).
 
 confirm() ->
-    ClusterType = one_down,
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Expected = {ok, "GeoCheckin has been created but cannot be activated yet\n"},
-	Got = ts_util:create_and_activate_bucket_type(ts_util:build_cluster(ClusterType), DDL),
-	?assertEqual(Expected, Got),
-	pass.
+    Got = ts_util:create_and_activate_bucket_type(
+            ts_util:build_cluster(one_down), DDL),
+    ?assertEqual(Expected, Got),
+    pass.

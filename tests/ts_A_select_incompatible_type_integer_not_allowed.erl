@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -30,16 +29,19 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Data = ts_util:get_valid_select_data(),
     Qry =
         "select * from GeoCheckin "
         "where time > 1 and time < 10 "
         "and myfamily = 'family1' "
         "and myseries = 10 ",
-    Expected = {error,
-        {1001,<<"invalid_query: \n",
-          "incompatible_type: field myseries with type varchar cannot be compared to type integer in where clause.">>}},
-    Got = ts_util:ts_query(ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
+    Expected =
+        {error,
+         {1001,
+          <<"invalid_query: \n",
+            "incompatible_type: field myseries with type varchar cannot be compared to type integer in where clause.">>}},
+    Got = ts_util:ts_query(
+            ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
     pass.
