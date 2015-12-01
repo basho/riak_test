@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -25,14 +24,17 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([
-     confirm/0
-    ]).
+-export([confirm/0]).
 
 confirm() ->
-    ClusterType = single,
-    DDL = ts_util:get_ddl(docs),
-    Expected = {ok, "GeoCheckin has been activated\n\nWARNING: Nodes in this cluster can no longer be\ndowngraded to a version of Riak prior to 2.0\n"},
-    Got = ts_util:create_and_activate_bucket_type(ts_util:build_cluster(ClusterType), DDL),
+    DDL = ts_util:get_ddl(),
+    Expected =
+        {ok,
+         "GeoCheckin has been activated\n"
+         "\n"
+         "WARNING: Nodes in this cluster can no longer be\n"
+         "downgraded to a version of Riak prior to 2.0\n"},
+    Got = ts_util:create_and_activate_bucket_type(
+            ts_util:build_cluster(single), DDL),
     ?assertEqual(Expected, Got),
     pass.

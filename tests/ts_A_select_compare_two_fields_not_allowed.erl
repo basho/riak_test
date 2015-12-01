@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -31,7 +30,7 @@
 %%% FIXME failing because of RTS-388
 
 confirm() ->
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Data = ts_util:get_valid_select_data(),
     Qry =
         "SELECT * FROM GeoCheckin "
@@ -39,6 +38,9 @@ confirm() ->
         "AND myfamily = 'fa2mily1' "
         "AND myseries ='seriesX' "
         "AND weather = myseries",
-    {error, Got} = ts_util:ts_query(ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
-    ?assertNotEqual(0, string:str(binary_to_list(Got), "Comparing or otherwise operating on two fields is not supported")),
+    {error, Got} = ts_util:ts_query(
+                     ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
+    ?assertNotEqual(0, string:str(
+                         binary_to_list(Got),
+                         "Comparing or otherwise operating on two fields is not supported")),
     pass.

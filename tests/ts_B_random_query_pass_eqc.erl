@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -28,14 +27,13 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    rt:set_backend(eleveldb),
     ClusterConn = ts_util:cluster_and_connect(multiple),
     ?assert(eqc:quickcheck(eqc:numtests(500, ?MODULE:prop_ts(ClusterConn)))),
     pass.
 
 prop_ts(ClusterConn) ->
     ?FORALL({NVal, NPuts, Q, NSpans},
-	    {gen_n_val(), gen_no_of_puts(), gen_quantum(), gen_spans()},
+            {gen_n_val(), gen_no_of_puts(), gen_quantum(), gen_spans()},
             run_query(ClusterConn, NVal, NPuts, Q, NSpans)).
 
 run_query(ClusterConn, NVal, NPuts, Q, NSpans) ->
@@ -68,20 +66,20 @@ make_query(Bucket, Q, NSpans) ->
     Start = 1,
     End = Multi * NSpans,
     "select * from " ++ Bucket ++
-	" Where time >= " ++ integer_to_list(Start) ++
-	" and time <= "   ++ integer_to_list(End) ++
-	" and myfamily = 'family1' and myseries ='seriesX'".
+        " Where time >= " ++ integer_to_list(Start) ++
+        " and time <= "   ++ integer_to_list(End) ++
+        " and myfamily = 'family1' and myseries ='seriesX'".
 
 get_ddl(Bucket, {No, Q}) ->
     _SQL = "CREATE TABLE " ++ Bucket ++ " (" ++
-	"myfamily    varchar   not null, " ++
-	"myseries    varchar   not null, " ++
-	"time        timestamp not null, " ++
-	"weather     varchar   not null, " ++
-	"temperature double, " ++
-	"PRIMARY KEY ((myfamily, myseries, quantum(time, " ++ integer_to_list(No) ++ ", '" ++
-	atom_to_list(Q) ++ "')), " ++
-	"myfamily, myseries, time))".
+        "myfamily    varchar   not null, " ++
+        "myseries    varchar   not null, " ++
+        "time        timestamp not null, " ++
+        "weather     varchar   not null, " ++
+        "temperature double, " ++
+        "PRIMARY KEY ((myfamily, myseries, quantum(time, " ++ integer_to_list(No) ++ ", '" ++
+        atom_to_list(Q) ++ "')), " ++
+        "myfamily, myseries, time))".
 
 make_data(NPuts, Q, NSpans) ->
     Multi = get_multi(Q) * NSpans,

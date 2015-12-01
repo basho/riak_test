@@ -18,24 +18,29 @@
 %%
 %% -------------------------------------------------------------------
 
--module(ts_A_get_simple).
+-module(ts_A_create_table_dup_primary_key).
 
 -behavior(riak_test).
 
--export([confirm/0]).
-
 -include_lib("eunit/include/eunit.hrl").
 
-%% Test gets which return no data, i.e., not found.
+-export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
-    DataRow = hd(Data),
-    Key = lists:sublist(DataRow, 3),
-    Expected = {ts_util:get_cols(),[DataRow]},
-    {ok, Got} = ts_util:ts_get(
-                  ts_util:cluster_and_connect(single),
-                  normal, DDL, Data, Key, []),
+    DDL =
+        "CREATE TABLE GeoCheckin ("
+        " myfamily    varchar   not null,"
+        " myseries    varchar   not null,"
+        " time        timestamp not null,"
+        " weather     varchar   not null,"
+        " temperature double,"
+        " PRIMARY KEY ((myfamily, myfamily, quantum(time, 15, 'm')),"
+        " myfamily, myfamily, time))",
+    Expected =
+        {ok,
+         "Error validating table definition for bucket type GeoCheckin:\n"
+         "Primary key has duplicate fields (myfamily)\n"},
+    Got = ts_util:create_bucket_type(
+            ts_util:build_cluster(single), DDL),
     ?assertEqual(Expected, Got),
     pass.

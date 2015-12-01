@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -25,14 +24,23 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([
-	 confirm/0
-	]).
+-export([confirm/0]).
 
 confirm() ->
-    ClusterType = single,
-    DDL = ts_util:get_ddl(splitkey_fail),
-    Expected = {ok,"Error creating bucket type GeoCheckin:\nLocal key does not match primary key\n"},
-    Got = ts_util:create_bucket_type(ts_util:build_cluster(ClusterType), DDL),
+    DDL =
+        "CREATE TABLE GeoCheckin ("
+        " myfamily    varchar   not null,"
+        " myseries    varchar   not null,"
+        " time        timestamp not null,"
+        " weather     varchar   not null,"
+        " temperature double,"
+        " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
+        " time, myfamily, myseries, temperature))",
+    Expected =
+        {ok,
+         "Error validating table definition for bucket type GeoCheckin:\n"
+         "Local key does not match primary key\n"},
+    Got = ts_util:create_bucket_type(
+            ts_util:build_cluster(single), DDL),
     ?assertEqual(Expected, Got),
     pass.

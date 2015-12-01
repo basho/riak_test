@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -30,9 +29,12 @@
 %% Test gets which return no data, i.e., not found.
 
 confirm() ->
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Data = ts_util:get_valid_select_data(),
     Expected = {[],[]},
-    {ok, Got} = ts_util:ts_get(ts_util:cluster_and_connect(single), normal, DDL, Data, [<<"nada">>, <<"nope">>, 10], []),
+    {ok, Got} = ts_util:ts_get(
+                  ts_util:cluster_and_connect(single),
+                  normal, DDL, Data,
+                  [<<"nada">>, <<"nope">>, 10], []),
     ?assertEqual(Expected, Got),
     pass.

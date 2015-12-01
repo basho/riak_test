@@ -31,9 +31,9 @@
     create_bucket_type/3,
     exclusive_result_from_data/3,
     get_bool/1,
-    get_cols/1,
+    get_cols/0, get_cols/1,
     get_data/1,
-    get_ddl/1,
+    get_ddl/0, get_ddl/1,
     get_default_bucket/0,
     get_float/0,
     get_integer/0,
@@ -97,7 +97,7 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
 
     lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Data]),
     ok = riakc_ts:put(Conn, Bucket, Data),
-    
+
     single_query(Conn, Qry).
 
 single_query(Conn, Qry) ->
@@ -251,7 +251,9 @@ get_valid_select_data_spanning_quanta() ->
     Times = lists:seq(1 + ?SPANNING_STEP, 1 + ?SPANNING_STEP * 10, ?SPANNING_STEP),  %% five-minute intervals, to span 15-min buckets
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
 
-get_cols(docs) ->
+get_cols() ->
+    get_cols(small).
+get_cols(small) ->
     [<<"myfamily">>,
      <<"myseries">>,
      <<"time">>,
@@ -277,61 +279,48 @@ remove_last(Data) ->
     lists:reverse(tl(lists:reverse(Data))).
 
 %% a valid DDL - the one used in the documents
-get_ddl(docs) ->
-    _SQL = "CREATE TABLE GeoCheckin (" ++
-    "myfamily    varchar   not null, " ++
-    "myseries    varchar   not null, " ++
-    "time        timestamp not null, " ++
-    "weather     varchar   not null, " ++
-    "temperature double, " ++
-    "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
-    "myfamily, myseries, time))";
+get_ddl() ->
+    get_ddl(small).
+get_ddl(small) ->
+    "CREATE TABLE GeoCheckin ("
+    " myfamily    varchar   not null,"
+    " myseries    varchar   not null,"
+    " time        timestamp not null,"
+    " weather     varchar   not null,"
+    " temperature double,"
+    " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), "
+    " myfamily, myseries, time))";
+
 %% another valid DDL - one with all the good stuff like
 %% different types and optional blah-blah
-get_ddl(variety) ->
-    _SQL = "CREATE TABLE GeoCheckin (" ++
-    "myfamily    varchar     not null, " ++
-    "myseries    varchar     not null, " ++
-    "time        timestamp   not null, " ++
-    "myint       sint64      not null, " ++
-    "myfloat     double      not null, " ++
-    "mybool      boolean     not null, " ++
-    "mytimestamp timestamp   not null, " ++
-    "myany       any         not null, " ++
-    "myoptional  sint64, " ++
-    "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
-    "myfamily, myseries, time))";
-%% an invalid TS DDL becuz family and series not both in key
-get_ddl(shortkey_fail) ->
-    _SQL = "CREATE TABLE GeoCheckin (" ++
-    "myfamily    varchar   not null, " ++
-    "myseries    varchar   not null, " ++
-    "time        timestamp not null, " ++
-    "weather     varchar   not null, " ++
-    "temperature double, " ++
-    "PRIMARY KEY ((quantum(time, 15, 'm'), myfamily), " ++
-    "time, myfamily))";
-%% an invalid TS DDL becuz partition and local keys don't cover the same space
-get_ddl(splitkey_fail) ->
-    _SQL = "CREATE TABLE GeoCheckin (" ++
-    "myfamily    varchar   not null, " ++
-    "myseries    varchar   not null, " ++
-    "time        timestamp not null, " ++
-    "weather     varchar   not null, " ++
-    "temperature double, " ++
-    "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
-    "time, myfamily, myseries, temperature))";
+get_ddl(big) ->
+    "CREATE TABLE GeoCheckin ("
+    " myfamily    varchar     not null,"
+    " myseries    varchar     not null,"
+    " time        timestamp   not null,"
+    " myint       sint64      not null,"
+    " myfloat     double      not null,"
+    " mybool      boolean     not null,"
+    " mytimestamp timestamp   not null,"
+    " myoptional  sint64,"
+    " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
+    " myfamily, myseries, time))";
+
+%% the other DDLs which used to be here but were only used once, each
+%% in a corresponding ts_A_create_*_fail module, have been moved to
+%% those respective modules
+
 get_ddl(api) ->
-    _SQL = "CREATE TABLE GeoCheckin (" ++
-    "myfamily    varchar     not null, " ++
-    "myseries    varchar     not null, " ++
-    "time        timestamp   not null, " ++
-    "myint       sint64      not null, " ++
-    "mybin       varchar     not null, " ++
-    "myfloat     double      not null, " ++
-    "mybool      boolean     not null, " ++
-    "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
-    "myfamily, myseries, time))".
+    "CREATE TABLE GeoCheckin ("
+    " myfamily    varchar     not null,"
+    " myseries    varchar     not null,"
+    " time        timestamp   not null,"
+    " myint       sint64      not null,"
+    " mybin       varchar     not null,"
+    " myfloat     double      not null,"
+    " mybool      boolean     not null,"
+    " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
+    " myfamily, myseries, time))".
 
 get_data(api) ->
     [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]] ++

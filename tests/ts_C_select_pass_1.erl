@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -27,20 +26,19 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([
-	 confirm/0
-	]).
+-export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Data = ts_util:get_valid_select_data(),
     Qry = ts_util:get_valid_qry(),
     Expected = {
-        ts_util:get_cols(docs),
+        ts_util:get_cols(),
         ts_util:exclusive_result_from_data(Data, 2, 9)},
     {[_Node|Rest], Conn} = ClusterConn = ts_util:cluster_and_connect(multiple),
     Got = ts_util:ts_query(ClusterConn, normal, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
+
     % Stop Node 2 after bucket type has been activated
     rt:stop(hd(Rest)),
     Got1 = ts_util:single_query(Conn, Qry),

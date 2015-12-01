@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -27,17 +26,15 @@
 
 -behavior(riak_test).
 
--export([
-     confirm/0
-    ]).
+-export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    ClusterType = single,
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Obj = [ts_util:get_invalid_obj()],
-    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), no_ddl, DDL, Obj),
+    Got = ts_util:ts_put(
+            ts_util:cluster_and_connect(single), no_ddl, DDL, Obj),
     ?assertMatch({error, _}, Got),
     pass.
 
