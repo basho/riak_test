@@ -206,15 +206,8 @@ prepare(ThresholdSeed) ->
     %% Ask the supervisor to do it for us to avoid messy messages in the logs.
     Id = 0,
     {ok, VPid0} = riak_core_vnode_manager:get_vnode_pid(Id, riak_kv_vnode),
-    Mon = erlang:monitor(process, VPid0),
     sys:resume(VPid0),
     ok = supervisor:terminate_child(riak_core_vnode_sup, VPid0),
-    receive
-        {'DOWN', Mon, process, _, _} ->
-            ok
-        after 15000 ->
-            error("Timed out waiting for vnode to exit")
-    end,
 
     %% Reset the proxy pid to make sure it resets state and picks up the new
     %% environment variables
@@ -273,14 +266,14 @@ resume_args(#tstate{rt = RT}) ->
 resume(#rt{ppid = PPid, vpid = VPid}) ->
     sys:resume(VPid),
     %% Use the sys:get_status call to force a synchronous call
-    %% against the vnode proxy to ensure all messages sent by
+    %% against the vnode & the  proxy to ensure all messages sent by
     %% this process have been serviced and there are no pending
     %% 'ping's in the vnode before we continue.
     %% Then drain the vnode to make sure any pending pongs have
-    %% been sent.
-    ok = drain(VPid),
+    %% been sent, and ensure the proxy has
+    _ = sys:get_status(PPid),
     _ = sys:get_status(VPid),
-    _ = sys:get_status(PPid).
+    ok = drain([VPid, PPid]).
 
 resume_next(S, _V, _A) ->
     S#tstate{vnode_running = true, proxy_msgs = 0, direct_msgs = 0}.
