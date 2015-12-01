@@ -394,6 +394,12 @@ prep_env(Var, Val) ->
 %% Wait until all messages are drained by the Pid. No guarantees
 %% about future messages being sent, or that responses for the
 %% last message consumed have been transmitted.
+%% NOTE: The "drain 3 times in a row" was determined empirically,
+%% and may not be sufficient (2 was not). Given time constraints,
+%% living with it for now. If this fails, we should really add some
+%% tracing code around the send of messages to Vnode and Proxy to
+%% determine where extra messages are coming from rather than just
+%% make this "try 4 times"
 %%
 drain(Pid) when is_pid(Pid) ->
     drain([Pid], {-1, -1});
