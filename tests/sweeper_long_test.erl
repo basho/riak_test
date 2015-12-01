@@ -19,39 +19,71 @@
 -define(Conf,
         [{riak_kv, [{delete_mode, keep},
                     {tombstone_grace_period, 3600}, %% 1h in s
-                    {reap_sweep_interval, 60 * 60}, %% 60 min
-                    {anti_entropy_expire, 60 * 60 * 1000},
+                    {reap_sweep_interval, 1 * 60 * 3600}, %% 60 min
+                    {anti_entropy_expire, 1 * 60 * 1000},
+                    {obj_ttl_sweep_interval, 60 * 3600}, %% 60 min
                     {storage_backend, riak_kv_eleveldb_backend},
+                    %%{sweep_window, {22, 7}},
                     {anti_entropy, {on, []}}
-                   ]},
-         {riak_repl, [{realtime_connection_rebalance_max_delay_secs, 30},%% speed up rebalancing a bit
-                      {fullsync_strategy, aae},
-                      {fullsync_on_connect, false},
-                      {fullsync_interval, 55}
-                     ]}
+                   ]}
         ]).
 
--define(SizeA, 4).
--define(SizeB, 4).
+-define(DEFAULT_BENCH_DURATION, 120).
 
--define(Sleep, 1 * 60 * 1000).
+-define(SizeA, 3).
+-define(SizeB, 3).
+
 
 -define(HARNESS, (rt_config:get(rt_harness))).
 
 confirm() ->
-    lager:info("Setup test"),
+    BenchDuration =
+        rt_config:get(basho_bench_duration, ?DEFAULT_BENCH_DURATION),
+    lager:info("Setup test that will run for ~p min", [BenchDuration]),
     {ANodes, BNodes} =
         deploy_clusters_with_rt([{?SizeA, ?Conf}, {?SizeB,?Conf}], '<->'),
 
-    State = #state{ a_up = ANodes, b_up = BNodes},
+    State0 = #state{ a_up = ANodes, b_up = BNodes},
     lager:info("Start bench"),
-    start_basho_bench(ANodes),
+    start_basho_bench(ANodes, "putttl", [{put, 1}, {put_ttl, 1}, {delete, 1}]),
     put(test_start, now()),
+    timer:sleep(timer:minutes(1)),
 
-    timer:sleep(?Sleep),
+    State = leave_join(State0),
+
+    timer:sleep(timer:minutes(1)),
     run_full_sync(State),
-    timer:sleep(?Sleep),
+    timer:sleep(timer:minutes(1)),
 
+    State2 = up_and_down_nodes(State),
+    run_full_sync(State2),
+    timer:sleep(timer:minutes(1)),
+    State3 = up_and_down_nodes(State2),
+
+    timer:sleep(timer:hours(1)),
+
+    State4 = up_and_down_nodes(State3),
+
+    run_full_sync(State4),
+    timer:sleep(timer:minutes(1)),
+
+    _State5 = up_and_down_nodes(State4),
+
+    timer:sleep(trunc(BenchDuration* 60 * 1000 * 1.2)),
+    get_status(hd(ANodes)),
+
+    pass.
+
+leave_join(State) ->
+    State2 = node_a_leave(State),
+    rt:wait_until_no_pending_changes(all_active_nodes(State2)),
+    timer:sleep(timer:minutes(1)),
+    State3 = node_a_join(State2),
+    rt:wait_until_no_pending_changes(all_active_nodes(State3)),
+    State3.
+
+
+up_and_down_nodes(State) ->
     State2 = node_a_down(State),
     rt:wait_until_no_pending_changes(all_active_nodes(State2)),
 
@@ -63,12 +95,11 @@ confirm() ->
 
     State5 = node_b_up(State4),
     rt:wait_until_no_pending_changes(all_active_nodes(State5)),
+    lager:info("No pending changes"),
+    State5.
 
-    run_full_sync(State5),
-    timer:sleep(?Sleep),
-
-    timer:sleep(8 *60 * 60 * 1000),
-    pass.
+get_status(Node) ->
+    rpc:call(Node, riak_kv_console, sweep_status, [[]]).
 
 run_full_sync(State) ->
     time_stamp_action(run_full_sync, "A->B"),
@@ -78,31 +109,34 @@ run_full_sync(State) ->
                                   [LeaderA]),
     time_stamp_action(full_done, FullsyncTime div 1000000).
 
-start_basho_bench(Nodes) ->
+start_basho_bench(Nodes, Name, Operations) ->
     PbIps = lists:map(fun(Node) ->
                               {ok, [{PB_IP, PB_Port}]} = rt:get_pb_conn_info(Node),
                               {PB_IP, PB_Port}
                       end, Nodes),
 
-    LoadConfig = bacho_bench_config(PbIps),
-    spawn_link(fun() -> rt_bench:bench(LoadConfig, Nodes, "50percentbackround", 1, false) end).
+    LoadConfig = bacho_bench_config(PbIps, Operations),
+    spawn_link(fun() -> rt_bench:bench(LoadConfig, Nodes, Name, 1, false) end).
 
 
-bacho_bench_config(HostList) ->
+bacho_bench_config(HostList, Operations) ->
     BenchRate =
-        rt_config:get(basho_bench_rate, 20),
+        rt_config:get(basho_bench_rate, 10),
     BenchDuration =
-        rt_config:get(basho_bench_duration, infinity),
+        rt_config:get(basho_bench_duration, ?DEFAULT_BENCH_DURATION),
     KeyGen =
         rt_config:get(basho_bench_keygen, {int_to_bin_bigendian, {pareto_int, 1000000000}}),
     ValGen =
         rt_config:get(basho_bench_valgen, {exponential_bin, 100, 500}),
+    %% {get, 1},{put, 1},{delete, 2}
     Operations =
-        rt_config:get(basho_bench_operations, [{get, 1},{put, 1},{delete, 2}]),
+        rt_config:get(basho_bench_operations, Operations),
     Bucket =
         rt_config:get(basho_bench_bucket, <<"mybucket">>),
     Driver =
         rt_config:get(basho_bench_driver, riakc_pb),
+    ObjTTL =
+        rt_config:get(obj_ttl, 5),
 
     rt_bench:config(BenchRate,
                     BenchDuration,
@@ -111,7 +145,8 @@ bacho_bench_config(HostList) ->
                     ValGen,
                     Operations,
                     Bucket,
-                    Driver).
+                    Driver,
+                    [{obj_ttl, ObjTTL}]).
 
 random_action(State) ->
     [_|ValidAUp] = State#state.a_up,
