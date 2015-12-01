@@ -19,11 +19,19 @@
 : ${R15B01:=$HOME/erlang-R15B01}
 : ${R16B02:=$HOME/erlang-R16B02}
 
+# These are the default tags to use when building basho OTP releases.
+# Export different tags to get a different build. N.B. You will need to
+# remove the builds from kerl (e.g., kerl delete build $BUILDNAME) and
+# possibly remove the directories above.
+: ${R16_TAG:="OTP_R16B02_basho9"}
+: ${R15_TAG:="basho_OTP_R15B01p"}
+
 # By default the Open Source version of Riak will be used, but for internal
 # testing you can override this variable to use `riak_ee` instead
 : ${RT_USE_EE:=""}
 GITURL_RIAK="git://github.com/basho/riak"
 GITURL_RIAK_EE="git@github.com:basho/riak_ee"
+GITDIR="riak-src"
 
 
 checkbuild()
@@ -44,7 +52,7 @@ checkbuild()
                     echo "You need 'curl' to be able to run this script, exiting"
                     exit 1
                 fi
-                curl -O https://raw.github.com/spawngrid/kerl/master/kerl > /dev/null 2>&1; chmod a+x kerl
+                curl -O https://raw.githubusercontent.com/spawngrid/kerl/master/kerl > /dev/null 2>&1; chmod a+x kerl
             fi
         fi
     fi
@@ -55,8 +63,32 @@ kerl()
     RELEASE=$1
     BUILDNAME=$2
 
+    export CFLAGS="-g -O2"
+    export LDFLAGS="-g"
+    if [ -n "`uname -r | grep el6`" ]; then
+        export CFLAGS="-g -DOPENSSL_NO_EC=1"
+    fi
+    BUILDFLAGS="--disable-hipe --enable-smp-support --without-odbc"
+    if [ $(uname -s) = "Darwin" ]; then
+        export CFLAGS="-g -O0"
+        BUILDFLAGS="$BUILDFLAGS --enable-darwin-64bit --with-dynamic-trace=dtrace"
+    else
+        BUILDFLAGS="$BUILDFLAGS --enable-m64-build"
+    fi
+
+    KERL_ENV="KERL_CONFIGURE_OPTIONS=${BUILDFLAGS}"
+    MAKE="make -j10"
+
     echo " - Building Erlang $RELEASE (this could take a while)"
-    ./kerl build $RELEASE $BUILDNAME  > /dev/null 2>&1
+    # Use the Basho-patched version of Erlang 
+    if [ "$RELEASE" == "R15B01" ]; then
+        BUILD_CMD="./kerl build git git://github.com/basho/otp.git $R15_TAG $BUILDNAME"
+    elif [ "$RELEASE" == "R16B02" ]; then
+        BUILD_CMD="./kerl build git git://github.com/basho/otp.git $R16_TAG $BUILDNAME"
+    else
+        BUILD_CMD="./kerl build $RELEASE $BUILDNAME"
+    fi
+    env "$KERL_ENV" "MAKE=$MAKE" $BUILD_CMD
     RES=$?
     if [ "$RES" -ne 0 ]; then
         echo "[ERROR] Kerl build $BUILDNAME failed"
@@ -64,7 +96,7 @@ kerl()
     fi
 
     echo " - Installing $RELEASE into $HOME/$BUILDNAME"
-    ./kerl install $BUILDNAME $HOME/$BUILDNAME  > /dev/null 2>&1
+    ./kerl install $BUILDNAME "$HOME/$BUILDNAME" > /dev/null 2>&1
     RES=$?
     if [ "$RES" -ne 0 ]; then
         echo "[ERROR] Kerl install $BUILDNAME failed"
@@ -77,12 +109,27 @@ build()
     SRCDIR=$1
     ERLROOT=$2
     TAG="$3"
+    if [ -z $4 ]; then
+        LOCKED_DEPS=true
+    else
+        LOCKED_DEPS=$4
+    fi
+
     if [ -z "$RT_USE_EE" ]; then
         GITURL=$GITURL_RIAK
         GITTAG=riak-$TAG
     else
         GITURL=$GITURL_RIAK_EE
         GITTAG=riak_ee-$TAG
+    fi
+
+    echo "Getting sources from github"
+    if [ ! -d $GITDIR ]; then
+        git clone $GITURL $GITDIR
+    else
+        cd $GITDIR
+        git pull origin develop
+        cd ..
     fi
 
     echo "Building $SRCDIR:"
@@ -94,83 +141,53 @@ build()
         kerl $RELEASE $BUILDNAME
     fi
 
-    GITRES=1
-    echo " - Cloning $GITURL"
-    rm -rf $SRCDIR
-    git clone $GITURL $SRCDIR
-    GITRES=$?
-    if [ $GITRES -eq 0 -a -n "$TAG" ]; then
-        cd $SRCDIR
-        git checkout $GITTAG
+    if [ ! -d $SRCDIR ]
+    then
+        GITRES=1
+        echo " - Cloning $GITURL"
+        git clone $GITDIR $SRCDIR
         GITRES=$?
-        cd ..
+        if [ $GITRES -eq 0 -a -n "$TAG" ]; then
+            cd $SRCDIR
+            git checkout $GITTAG
+            GITRES=$?
+            cd ..
+        fi
     fi
 
-    RUN="env PATH=$ERLROOT/bin:$ERLROOT/lib/erlang/bin:$PATH \
+    if [ ! -f "$SRCDIR/built" ]
+    then
+
+        RUN="env PATH=$ERLROOT/bin:$ERLROOT/lib/erlang/bin:$PATH \
              C_INCLUDE_PATH=$ERLROOT/usr/include \
              LD_LIBRARY_PATH=$ERLROOT/usr/lib"
-    fix_riak_1_3 $SRCDIR $TAG "$RUN"
 
-    echo " - Building stagedevrel in $SRCDIR (this could take a while)"
-    cd $SRCDIR
+        echo " - Building devrel in $SRCDIR (this could take a while)"
+        cd $SRCDIR
 
-    $RUN make all stagedevrel
-    RES=$?
-    if [ "$RES" -ne 0 ]; then
-        echo "[ERROR] make stagedevrel failed"
-        exit 1
+        if $LOCKED_DEPS
+        then
+            CMD="make locked-deps devrel"
+        else
+            CMD="make all devrel"
+        fi
+
+        $RUN $CMD
+        RES=$?
+        if [ "$RES" -ne 0 ]; then
+            echo "[ERROR] make devrel failed"
+            exit 1
+        fi
+        touch built
+        cd ..
+        echo " - $SRCDIR built."
+    else
+        echo " - already built"
     fi
-    cd ..
-    echo " - $SRCDIR built."
 }
 
-# Riak 1.3 has a few artifacts which need to be updated in order to build
-# properly
-fix_riak_1_3()
-{
-	SRCDIR=$1
-	TAG="$2"
-	RUN="$3"
-
-    if [ "`echo $TAG | cut -d . -f1-2`" != "1.3" ]; then
-        return 0
-    fi
-
-    echo "- Patching Riak 1.3.x"
-    cd $SRCDIR
-    cat <<EOF | patch
---- rebar.config
-+++ rebar.config
-@@ -12,6 +12,7 @@
- {deps, [
-        {lager_syslog, "1.2.2", {git, "git://github.com/basho/lager_syslog", {tag, "1.2.2"}}},
-        {cluster_info, "1.2.3", {git, "git://github.com/basho/cluster_info", {tag, "1.2.3"}}},
-+       {meck, "0.7.2", {git, "git://github.com/eproxus/meck", {tag, "0.7.2"}}},
-        {riak_kv, "1.3.2", {git, "git://github.com/basho/riak_kv", {tag, "1.3.2"}}},
-        {riak_search, "1.3.0", {git, "git://github.com/basho/riak_search",
-                                  {tag, "1.3.2"}}},
-EOF
-    $RUN make deps
-    cd deps/eleveldb/c_src/leveldb/include/leveldb
-    cat <<EOF | patch
---- env.h
-+++ env.h
-@@ -17,6 +17,7 @@
- #include <string>
- #include <vector>
- #include <stdint.h>
-+#include <pthread.h>
- #include "leveldb/perf_count.h"
- #include "leveldb/status.h"
-EOF
-    cd ../../../../../../..
-}
-
-build "riak-1.4.10" $R15B01 http://s3.amazonaws.com/downloads.basho.com/riak/1.4/1.4.10/riak-1.4.10.tar.gz
-echo
-if [ -z "$RT_USE_EE" ]; then
-	build "riak-1.3.2" $R15B01 1.3.2
-else
-	build "riak-1.3.4" $R15B01 1.3.4
-fi
+build "riak-1.4.12" $R15B01 1.4.12 false
+build "riak-2.0.2" $R16B02 2.0.2
+build "riak-2.0.4" $R16B02 2.0.4
+build "riak-2.0.6" $R16B02 2.0.6
 echo

@@ -60,7 +60,7 @@ host_entries(ClusterConnInfo) ->
     [riak_http(I) || {_,I} <- ClusterConnInfo].
 
 %% @doc Generate `SeqMax' keys. Yokozuna supports only UTF-8 compatible keys.
--spec gen_keys(pos_integer()) -> [binary()].
+-spec gen_keys(pos_integer()) -> list().
 gen_keys(SeqMax) ->
     [<<N:64/integer>> || N <- lists:seq(1, SeqMax),
                          not lists:any(

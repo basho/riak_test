@@ -14,7 +14,7 @@ contents of `$HOME/rt/riak` might look something like this:
 
 ```
 $ ls $HOME/rt/riak
-current riak-1.2.1 riak-1.3.2 riak-1.4.10
+current riak-1.4.12 riak-2.0.2 riak-2.0.4 riak-2.0.6
 ```
 
 Inside each of these directories is a `dev` folder, typically
@@ -73,7 +73,7 @@ The first one that we want to look at is `rtdev-build-releases.sh`. If
 left unchanged, this script is going to do the following:
 
 1. Download the source for the past three major Riak versions (e.g.
-   1.3.2, 1.4.10 and 2.0.0)
+   1.4.12, 2.0.6 and 2.1.2)
 1. Build the proper version of Erlang that release was built with,
    using kerl (which it will also download)
 1. Build those releases of Riak.
@@ -112,14 +112,6 @@ into a local git repository. Run this script from the
 same directory that you just built all of your releases into.
 By default this script initializes the repository into `$HOME/rt/riak` but
 you can override [`$RT_DEST_DIR`](https://github.com/basho/riak_test/blob/master/bin/rtdev-setup-releases.sh#L11).
-
-**Note**: There is a bug in 1.3.x `leveldb` which does not properly resolve
-the location of `pthread.h` when building on Macintosh OS X 10.9, aka
-Mavericks.  This has been fixed in subsequent releases, but for now a fix
-is to manually add `#include <pthread.h>` to the top of
-`deps/eleveldb/c_src/leveldb/include/leveldb/env.h`.  Also the version
-of `meck` needs to be updated, too.  This is handled autmatically by
-the script.
 
 ### rtdev-current.sh
 
@@ -188,8 +180,10 @@ to tell riak_test about them. The method of choice is to create a
     {rt_project, "riak"},
     {rtdev_path, [{root,     "/home/you/rt/riak"},
                   {current,  "/home/you/rt/riak/current"},
-                  {previous, "/home/you/rt/riak/riak-1.4.10"},
-                  {legacy,   "/home/you/rt/riak/riak-1.3.2"}
+                  {previous, "/home/you/rt/riak/riak-2.0.6"},
+                  {legacy,   "/home/you/rt/riak/riak-1.4.12"}
+                  {'2.0.2',   "/home/you/rt/riak/riak-2.0.2"}
+                  {'2.0.4',   "/home/you/rt/riak/riak-2.0.4"}
                  ]}
 ]}.
 ```
@@ -234,7 +228,9 @@ Tests that do not include coverage annotations will, if cover is enabled, honor 
 #### Web hooks
 When reporting is enabled, each test result is posted to [Giddy Up](http://giddyup.basho.com). You can specify
 any number of webhooks that will also receive a POST request with JSON formatted test information, plus the URL
-of the Giddy Up resource page.  
+of the Giddy Up resource page.
+
+N.B.: This configuration setting is optional, and *NOT* required any more for GiddyUp.
 
 ```erlang
     {webhooks, [
