@@ -1,3 +1,4 @@
+%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -24,13 +25,17 @@
 
 -behavior(riak_test).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([confirm/0]).
 
 confirm() ->
-    DDL  = timeseries_util:get_ddl(docs),
-    Data = timeseries_util:get_valid_select_data_spanning_quanta(),
-    Qry  = timeseries_util:get_valid_qry_spanning_quanta(),
+    DDL  = ts_util:get_ddl(docs),
+    Data = ts_util:get_valid_select_data_spanning_quanta(),
+    Qry  = ts_util:get_valid_qry_spanning_quanta(),
     Expected = {
-        timeseries_util:get_cols(docs),
-        timeseries_util:exclusive_result_from_data(Data, 2, 9)},
-    timeseries_util:confirm_select(multiple, normal, DDL, Data, Qry, Expected).
+        ts_util:get_cols(docs),
+        ts_util:exclusive_result_from_data(Data, 2, 9)},
+    Got = ts_util:ts_query(ts_util:cluster_and_connect(multiple), normal, DDL, Data, Qry),
+    ?assertEqual(Expected, Got),
+    pass.

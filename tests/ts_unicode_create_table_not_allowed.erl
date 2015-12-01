@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -19,29 +18,28 @@
 %%
 %% -------------------------------------------------------------------
 
--module(ts_A_put_bad_date).
+%% Test for creating a utf8 table name. This should fail
+%% because of mochijson decoding.
 
-%%
-%%
-%%
+-module(ts_unicode_create_table_not_allowed).
 
 -behavior(riak_test).
 
 -export([confirm/0]).
 
--include_lib("eunit/include/eunit.hrl").
-
 confirm() ->
-    ClusterType = single,
-    TestType = normal,
-    DDL = ts_util:get_ddl(docs),
-    Obj =
-        [[ts_util:get_varchar(),
-          ts_util:get_varchar(),
-          <<"abc">>,
-          ts_util:get_varchar(),
-          ts_util:get_float()]],
-    Expected = {error, {1003, <<"Invalid data">>}},
-    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Obj),
-    ?assertEqual(Expected, Got),
-    pass.
+    TableDef =
+        "CREATE TABLE Αισθητήρας ("
+        "family VARCHAR   NOT NULL, "
+        "series VARCHAR   NOT NULL, "
+        "time   TIMESTAMP NOT NULL, "
+        "PRIMARY KEY ((family, series, quantum(time, 15, 's')), family, series, time))",
+    [Node | _] = ts_util:build_cluster(single),
+    {[Node|_] = Cluster,_} = ts_util:cluster_and_connect(single),
+    {ok, Out} = ts_util:create_bucket_type(Cluster, TableDef, "Αισθητήρας"),
+    case binary:match(list_to_binary(Out), <<"invalid json">>) of
+        nomatch ->
+            {error,"Expecting this to fail, check implications for riak_ql"};
+        _ ->
+            pass
+    end.
