@@ -353,18 +353,18 @@ overloaded(Running, #rt{ppid = PPid, vpid = VPid}) ->
     {Overloaded, {VMsgs, PMsgs}, sys:get_status(PPid)}.
 
 overloaded_post(#tstate{threshold = undefined}, _A,
-                {R, _VnodeQ, _ProxyStatus}) ->
+                {R, _Messages, _ProxyStatus}) ->
     %% If there are no thresholds there should never be an overload
     eq(R, false);
 overloaded_post(#tstate{vnode_running = true}, _A,
-                {R, _VnodeQ = 0, _ProxyStatus}) ->
+                {R, _Messages, _ProxyStatus}) ->
     %% If the vnode is running, we have cleared queues so
     %% should not be in overload.
     eq(R, false);
 overloaded_post(#tstate{vnode_running = false,
                         proxy_msgs = ProxyMsgs,
                         threshold = Threshold}, _A,
-                {ResultOverload, _VnodeQ, _ProxyStatus}) ->
+                {ResultOverload, _Messages, _ProxyStatus}) ->
     %% Either
     %%   mailbox is completely an estimate based on proxy msgs
     %%   or mailbox is a check + estimate since
