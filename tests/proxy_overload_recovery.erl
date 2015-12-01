@@ -217,7 +217,16 @@ prepare(ThresholdSeed) ->
     undefined = whereis(RegName),
     %% Fail if we get back the dead vnode
     {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
-    ?assertNotEqual(VPid1, VPid0),
+    case VPid1 of
+        VPid0 ->
+            lager:debug("Vnode PID didn't change after killing vnode"),
+            VnodeTab = riak_core_vnode_manager:get_tab(),
+            lager:debug("~w", [VnodeTab]),
+            file:write_file("vnode_tab.terms", term_to_binary(VnodeTab)),
+            error("VNode PID didn't change");
+        _ ->
+            ok
+    end,
 
     {ok, PPid} = supervisor:restart_child(riak_core_vnode_proxy_sup, {riak_kv_vnode, Id}),
 
@@ -330,13 +339,18 @@ overloaded(Running, #rt{ppid = PPid, vpid = VPid}) ->
     case Running of
         true ->
             ok = drain(PPid), % make sure all proxy msgs processed/dropped
-            ok = drain(VPid); % make sure any pending ping/pongs are processed
+            sys:suspend(PPid),
+            ok = drain(VPid), % make sure any pending ping/pongs are processed
+            sys:suspend(VPid);
         _ ->
             ok
     end,
-    {riak_core_vnode_proxy:overloaded(PPid),
-     msgq_len(VPid), % just for debug so we can review in log output
-     sys:get_status(PPid)}. % ditto
+    {messages, PMsgs} = process_info(PPid, messages),
+    {messages, VMsgs} = process_info(VPid, messages),
+    Overloaded = riak_core_vnode_proxy:overloaded(PPid),
+    sys:resume(PPid),
+    sys:resume(VPid),
+    {Overloaded, {VMsgs, PMsgs}, sys:get_status(PPid)}.
 
 overloaded_post(#tstate{threshold = undefined}, _A,
                 {R, _VnodeQ, _ProxyStatus}) ->
