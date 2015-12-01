@@ -28,6 +28,8 @@
 -module(verify_sweep_reaper).
 -behavior(riak_test).
 -compile(export_all).
+
+-cover_modules([riak_kv_sweeper]).
 -export([confirm/0,
          manually_sweep_all/1,
          disable_sweep_scheduling/1,
@@ -96,6 +98,7 @@ confirm() ->
 
     pass.
 
+%% No reaps with long grace period.
 verify_no_reap([Node|_] = Nodes, KV) ->
     format_subtest(verify_no_reap),
     Client = rt:pbc(Node),
@@ -110,6 +113,7 @@ verify_no_reap([Node|_] = Nodes, KV) ->
     enable_sweep_scheduling(Nodes),
     riakc_pb_socket:stop(Client).
 
+%% Reap keys outside grace period.
 verify_reap([Node|_] = _Nodes, KV1, KV2) ->
     format_subtest(verify_reap),
     Client = rt:pbc(Node),
@@ -149,6 +153,7 @@ verify_remove_add_participant([Node|_] = Nodes, KV) ->
     true = check_reaps(Node, Client, KV),
     riakc_pb_socket:stop(Client).
 
+%% Verify that AAE only repair in the grace period
 verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
     format_subtest(verify_aae_in_grace),
     disable_sweep_scheduling(Nodes),
@@ -179,6 +184,7 @@ verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
 
     riakc_pb_socket:stop(Client).
 
+%% Verify that the sweeper schedules consistently
 verify_scheduling([Node|_] = Nodes) ->
     format_subtest(verify_scheduling),
     disable_sweep_scheduling(Nodes),
@@ -226,6 +232,9 @@ check_bucket_acc([Node|_] = Nodes, KV10, KV11) ->
     manually_sweep_all(Node),
     get_sweep_status(Node).
 
+%% If riak_kv_sweeper receive a request for a
+%% already running sweep it should stop it and
+%% start a new.
 test_restart_sweep([Node|_] = Nodes, KV) ->
     format_subtest(test_restart_sweep),
     set_sweep_concurrency(Nodes, 4),
