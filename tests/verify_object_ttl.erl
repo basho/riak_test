@@ -9,6 +9,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -define(BUCKET, <<"obj-ttl">>).
 
+-cover_modules([riak_kv_sweeper]).
+
 -import(verify_sweep_reaper, [manually_sweep_all/1,
                               disable_sweep_scheduling/1,
                               set_tombstone_grace/2,

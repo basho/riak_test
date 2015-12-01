@@ -168,6 +168,7 @@ verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
     delete_keys(Client, KV2, [{n_val, 1}]),
     true = verify_data(Node, KV2, delete, 30000),
     set_tombstone_grace(Nodes, ?SHORT_TOMBSTONE_GRACE),
+    timer:sleep(timer:seconds(1)),
     manually_sweep_all(Node),
     true = check_reaps(Node, Client, KV2),
 
@@ -223,7 +224,9 @@ create_all_possible_lists(List) ->
          end    || N <- lists:seq(1, length(List))].
 
 check_bucket_acc([Node|_] = Nodes, KV10, KV11) ->
-    format_subtest(check_bucket_acc),        disable_sweep_scheduling(Nodes),
+    format_subtest(check_bucket_acc),
+    stop_all_sweeps(Nodes),
+    disable_sweep_scheduling(Nodes),
     Client = rt:pbc(Node),
     write_data(Client, KV10),
     manually_sweep_all(Node),
@@ -366,6 +369,13 @@ set_sweep_throttle(Nodes, {Limit, Sleep}) ->
 set_sweep_concurrency(Nodes, N) ->
     lager:info("set_sweep_concurrency ~p ", [N]),
     rpc:multicall(Nodes, application, set_env, [riak_kv, sweep_concurrency,N]).
+
+stop_all_sweeps(Nodes) ->
+    lager:info("stop all sweeps"),
+    {Succ, Fail} = rpc:multicall(Nodes, riak_kv_sweeper, stop_all_sweeps, []),
+    FalseResults =
+        [false || false <- Succ],
+    0 = length(FalseResults) + length(Fail).
 
 disable_sweep_scheduling(Nodes) ->
     lager:info("disable sweep scheduling"),
