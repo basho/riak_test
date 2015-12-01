@@ -347,8 +347,8 @@ overloaded(Running, #rt{ppid = PPid, vpid = VPid}) ->
     end,
     {messages, PMsgs} = process_info(PPid, messages),
     {messages, VMsgs} = process_info(VPid, messages),
-    Overloaded = riak_core_vnode_proxy:overloaded(PPid),
     sys:resume(PPid),
+    Overloaded = riak_core_vnode_proxy:overloaded(PPid),
     sys:resume(VPid),
     {Overloaded, {VMsgs, PMsgs}, sys:get_status(PPid)}.
 
