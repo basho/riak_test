@@ -221,12 +221,8 @@ prepare(ThresholdSeed) ->
     ok = supervisor:terminate_child(riak_core_vnode_proxy_sup, {riak_kv_vnode, Id}),
     RegName = riak_core_vnode_proxy:reg_name(riak_kv_vnode, Index),
     undefined = whereis(RegName),
-    rt:wait_until(fun() ->
-        {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
-        VPid0 /= VPid1
-        end),
+    VPid1 = wait_for_vnode_change(VPid0, Index),
 
-    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
     {ok, PPid} = supervisor:restart_child(riak_core_vnode_proxy_sup, {riak_kv_vnode, Id}),
 
     %% Find the proxy pid and check it's alive and matches the supervisor
@@ -477,3 +473,14 @@ confirm() ->
     pass.
 
 -endif.
+
+
+wait_for_vnode_change(VPid0, Index) ->
+    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
+        case VPid1 of
+            VPid0 ->
+                timer:sleep(1),
+                wait_for_vnode_change(VPid0, Index);
+            _ ->
+                VPid1
+        end.
