@@ -338,18 +338,13 @@ overloaded_args(#tstate{vnode_running = Running, rt = RT}) ->
 overloaded(Running, #rt{ppid = PPid, vpid = VPid}) ->
     case Running of
         true ->
-            ok = drain(PPid), % make sure all proxy msgs processed/dropped
-            sys:suspend(PPid),
-            ok = drain(VPid), % make sure any pending ping/pongs are processed
-            sys:suspend(VPid);
+            ok = drain([PPid, VPid]);
         _ ->
             ok
     end,
     {messages, PMsgs} = process_info(PPid, messages),
     {messages, VMsgs} = process_info(VPid, messages),
-    sys:resume(PPid),
     Overloaded = riak_core_vnode_proxy:overloaded(PPid),
-    sys:resume(VPid),
     {Overloaded, {VMsgs, PMsgs}, sys:get_status(PPid)}.
 
 overloaded_post(#tstate{threshold = undefined}, _A,
@@ -412,15 +407,22 @@ prep_env(Var, Val) ->
 %% about future messages being sent, or that responses for the
 %% last message consumed have been transmitted.
 %%
-drain(Pid) ->
-    case erlang:process_info(Pid, message_queue_len) of
-        {message_queue_len, 0} ->
+drain(Pid) when is_pid(Pid) ->
+    drain([Pid]);
+
+drain(Pids) when is_list(Pids) ->
+    _ = [sys:suspend(Pid) || Pid <- Pids],
+    Len = lists:foldl(fun(Pid, Acc0) ->
+            {message_queue_len, Len} = erlang:process_info(Pid, message_queue_len),
+            Acc0 + Len
+            end, 0, Pids),
+    _ = [sys:resume(Pid) || Pid <- Pids],
+    case Len of
+        0 ->
             ok;
-        {message_queue_len, L} when L > 0 ->
-            timer:sleep(1), % give it a millisecond to drain
-            drain(Pid);
-        ER ->
-            ER
+        _ ->
+            timer:sleep(1),
+            drain(Pids)
     end.
 
 %% Return the length of the message queue (or crash if proc dead)
