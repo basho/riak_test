@@ -1,3 +1,24 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2015 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
+%% @doc A module to test riak_ts basic create bucket/put/select cycle.
+
 -module(ts_write_to_eleveldb).
 -compile({parse_transform, rt_intercept_pt}).
 -behavior(riak_test).
@@ -9,18 +30,18 @@
 confirm() ->
 
     lager:info("Building cluster"),
-    [Node | _] = rt:deploy_nodes(_ClusterSize = 1, _Config = []),
+    _Nodes = [Node1|_] = build_cluster(1),
 
-    lager:info("Creating and activating bucket"),
-    DDL = timeseries_util:get_ddl(docs),
-    {ok, _} = timeseries_util:create_bucket(Node, DDL, 3),
-    _ = timeseries_util:activate_bucket(Node, DDL),
+    DDL = ts_util:get_ddl(),
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [DDL]),
+    rt:admin(Node1, ["bucket-type", "create", binary_to_list(?BUCKET), lists:flatten(Props)]),
+    rt:admin(Node1, ["bucket-type", "activate", binary_to_list(?BUCKET)]),
 
-    lager:info("installing interceoptor"),
+    lager:info("installing interceptor"),
     Self = self(),
 
     %% Based on experimentation, the path used for puts in ts is async.
-    ok = rt_intercept:add(Node, {riak_kv_eleveldb_backend, [
+    ok = rt_intercept:add(Node1, {riak_kv_eleveldb_backend, [
         {{async_put, 5}, {[Self], fun(Context, Bucket, PrimaryKey, Val, State) ->
             DoingPid = self(),
             Obj = riak_object:from_binary(Bucket, PrimaryKey, Val),
@@ -30,7 +51,7 @@ confirm() ->
         end}}
     ]}),
 
-    C = rt:pbc(Node),
+    C = rt:pbc(Node1),
 
     lager:info("putting the datas"),
     Data = make_data(),
@@ -63,6 +84,12 @@ confirm() ->
     ?assertEqual(Data, SimplifiedIntercepted),
 
     pass.
+
+build_cluster(Size) ->
+    rt:set_backend(eleveldb),
+    [_Node1|_] = Nodes = rt:deploy_nodes(Size, []),
+    rt:join_cluster(Nodes),
+    Nodes.
 
 receive_intercepts() ->
     receive_intercepts([], undefined).
