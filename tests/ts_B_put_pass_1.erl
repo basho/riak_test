@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -28,12 +27,12 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    ClusterType = multiple,
     TestType = normal,
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Obj = [ts_util:get_valid_obj()],
     Expected = ok,
-    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Obj),
+    Got = ts_util:ts_put(
+            ts_util:cluster_and_connect(multiple), TestType, DDL, Obj),
     ?assertEqual(Expected, Got),
     pass.
 

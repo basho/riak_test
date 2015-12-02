@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -23,34 +22,22 @@
 
 -behavior(riak_test).
 
--export([
-     confirm/0
-    ]).
+-export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 -define(SPANNING_STEP, (1000)).
 
 confirm() ->
-    ClusterType = single,
     TestType = normal,
-    DDL = "CREATE TABLE GeoCheckin (" ++
-        "myfamily    varchar     not null, " ++
-        "myseries    varchar     not null, " ++
-        "time        timestamp   not null, " ++
-        "myint       sint64      not null, " ++
-        "myfloat     double      not null, " ++
-        "mybool      boolean     not null, " ++
-        "mytimestamp timestamp   not null, " ++
-        "myoptional  sint64, " ++
-        "PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), " ++
-        "myfamily, myseries, time))",
+    DDL = ts_util:get_ddl(big),
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     N = 10,
     Data = make_data(N, Family, Series, []),
     %% Expected is wrong but we can't write data at the moment
-    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), TestType, DDL, Data),
+    Got = ts_util:ts_put(
+            ts_util:cluster_and_connect(single), TestType, DDL, Data),
     ?assertEqual(ok, Got),
     pass.
 
@@ -68,5 +55,3 @@ make_data(N, F, S, Acc) when is_integer(N) andalso N > 0 ->
           ts_util:get_optional(N, N)
          ],
     make_data(N - 1, F, S, [NewAcc | Acc]).
-
-         

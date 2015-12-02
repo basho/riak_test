@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -33,11 +32,11 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    ClusterType = single,
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Obj = [ts_util:get_invalid_obj()],
-    Expected = {error, {1003,<<"Invalid data">>}},
-    Got = ts_util:ts_put(ts_util:cluster_and_connect(ClusterType), normal, DDL, Obj),
+    Expected = {error, {1003, <<"Invalid data">>}},
+    Got = ts_util:ts_put(
+            ts_util:cluster_and_connect(single), normal, DDL, Obj),
     ?assertEqual(Expected, Got),
     pass.
 

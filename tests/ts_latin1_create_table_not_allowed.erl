@@ -39,7 +39,7 @@ confirm() ->
     {ok, Out} = ts_util:create_bucket_type(Cluster, TableDef, "mytãble"),
     case binary:match(list_to_binary(Out), <<"invalid json">>) of
         nomatch ->
-            {error,"Expecting this to fail, check implications for riak_ql"};
+            {error, "Expecting this to fail, check implications for riak_ql"};
         _ ->
             pass
     end.

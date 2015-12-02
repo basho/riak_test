@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -31,7 +30,7 @@
 %% primary key.
 
 confirm() ->
-    DDL = ts_util:get_ddl(docs),
+    DDL = ts_util:get_ddl(),
     Data = ts_util:get_valid_select_data(),
     % weather is not part of the primary key, it is
     % randomly generated data so this should return
@@ -43,6 +42,7 @@ confirm() ->
         "AND myseries = 'seriesX' "
         "AND weather = 'summer rain'",
     Expected = {[], []},
-    Got = ts_util:ts_query(ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
+    Got = ts_util:ts_query(
+            ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
     pass.
