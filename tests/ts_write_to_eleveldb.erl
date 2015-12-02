@@ -107,7 +107,7 @@ receive_intercepts(Acc, FilterToPid) ->
 
 -define(DATA_POINTS, 10).
 make_data() ->
-    TimePoints = lists:seq(1, ?DATA_POINTS),
+    TimePoints = lists:seq(1, ?DATA_POINTS, 2) ++ lists:seq(0, ?DATA_POINTS, 2),
     lists:map(fun(T) ->
         [<<"family1">>, <<"series1">>, T, <<"weather-like">>, T / 2]
     end, TimePoints).
