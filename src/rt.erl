@@ -664,7 +664,7 @@ wait_until(Fun) when is_function(Fun) ->
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
--spec wait_until([node()], fun((node()) -> boolean())) -> ok.
+-spec wait_until(node(), fun(() -> boolean())) -> ok | {fail, Result :: term()}.
 wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
     wait_until(fun() -> Fun(Node) end);
 
