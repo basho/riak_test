@@ -39,7 +39,7 @@ confirm() ->
     Expected =
         {error,
          {1001,
-          <<"missing_param: Missing parameter myfamily in where clause.">>}},
+          <<"missing_key_clause: The 'myfamily' parameter is part the primary key but not specified in the where clause.">>}},
     Got = ts_util:ts_query(
             ts_util:cluster_and_connect(single), normal, DDL, Data, Query),
     ?assertEqual(Expected, Got),
