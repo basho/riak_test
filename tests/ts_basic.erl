@@ -41,11 +41,7 @@ run_tests(PvalP1, PvalP2) ->
     Data = make_data(PvalP1, PvalP2),
     io:format("Data to be written:\n~p\n...\n~p\n", [hd(Data), lists:last(Data)]),
 
-    ClusterSize = 3,
-    lager:info("Building cluster"),
-    _Nodes = [Node1,Node2|_] =
-        build_cluster(
-          ClusterSize),
+    Cluster = ts_util:build_cluster(multiple),
 
     %% use riak-admin to create a bucket
     TableDef = io_lib:format(
@@ -59,13 +55,10 @@ run_tests(PvalP1, PvalP2) ->
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
-    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": 3, \\\"table_def\\\": \\\"~s\\\"}}", [TableDef]),
-    rt:admin(Node1, ["bucket-type", "create", binary_to_list(?BUCKET), lists:flatten(Props)]),
-    rt:admin(Node1, ["bucket-type", "activate", binary_to_list(?BUCKET)]),
+    ts_util:create_and_activate_bucket_type(Cluster, lists:flatten(TableDef), ?BUCKET),
 
-    confirm_all_from_node(Node1, Data, PvalP1, PvalP2),
-    confirm_all_from_node(Node2, Data, PvalP1, PvalP2),
-
+    %% Make sure data is written to each node
+    lists:foreach(fun(Node) -> confirm_all_from_node(Node, Data, PvalP1, PvalP2) end, Cluster),
     pass.
 
 
@@ -91,16 +84,6 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_delete_all(C).
 
 
--spec build_cluster(non_neg_integer()) -> [node()].
-build_cluster(Size) ->
-    build_cluster(Size, []).
--spec build_cluster(pos_integer(), list()) -> [node()].
-build_cluster(Size, Config) ->
-    rt:set_backend(eleveldb),
-    [_Node1|_] = Nodes = rt:deploy_nodes(Size, Config),
-    rt:join_cluster(Nodes),
-    Nodes.
-
 -define(LIFESPAN, 300).  %% > 100, which is the default chunk size for list_keys
 make_data(PvalP1, PvalP2) ->
     lists:reverse(
@@ -115,7 +98,7 @@ make_data(PvalP1, PvalP2) ->
 
 confirm_put(C, Data) ->
     ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, Data),
-    io:format("Not put anything to a non-existent bucket: ~p\n", [ResFail]),
+    io:format("Nothing put in a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     %% Res = lists:map(fun(Datum) -> riakc_ts:put(C, ?BUCKET, [Datum]), timer:sleep(300) end, Data0),
@@ -127,7 +110,7 @@ confirm_put(C, Data) ->
 
 confirm_delete(C, [Pooter1, Pooter2, Timepoint | _] = Record) ->
     ResFail = riakc_ts:delete(C, <<"no-bucket-like-this">>, ?BADKEY, []),
-    io:format("Not deleted anything in a non-existent bucket: ~p\n", [ResFail]),
+    io:format("Nothing deleted from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     Key = [Pooter1, Pooter2, Timepoint],
@@ -176,7 +159,7 @@ confirm_select(C, PvalP1, PvalP2) ->
 
 confirm_get(C, Record = [Pooter1, Pooter2, Timepoint | _]) ->
     ResFail = riakc_ts:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
-    io:format("Not got anything from a non-existent bucket: ~p\n", [ResFail]),
+    io:format("Got nothing from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     Key = [Pooter1, Pooter2, Timepoint],
@@ -193,7 +176,7 @@ confirm_nx_get(C) ->
 
 confirm_list_keys(C) ->
     ResFail = riakc_ts:list_keys(C, <<"no-bucket-like-this">>, []),
-    io:format("Not listed anything in a non-existent bucket: ~p\n", [ResFail]),
+    io:format("Nothing listed from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     {keys, Keys} = _Res = riakc_ts:list_keys(C, ?BUCKET, []),
