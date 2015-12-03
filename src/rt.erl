@@ -449,7 +449,7 @@ staged_join(Node, PNode) ->
 
 plan_and_commit(Node) ->
     timer:sleep(500),
-    lager:info("planning cluster join"),
+    lager:info("planning and commiting cluster join"),
     case rpc:call(Node, riak_core_claimant, plan, []) of
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
@@ -461,7 +461,6 @@ plan_and_commit(Node) ->
     end.
 
 do_commit(Node) ->
-    lager:info("planning cluster commit"),
     case rpc:call(Node, riak_core_claimant, commit, []) of
         {error, plan_changed} ->
             lager:info("commit: plan changed"),
@@ -473,9 +472,8 @@ do_commit(Node) ->
             timer:sleep(100),
             maybe_wait_for_changes(Node),
             do_commit(Node);
-        {error, nothing_planned} ->
+        {error,nothing_planned} ->
             %% Assume plan actually committed somehow
-            lager:info("commit: nothing planned"),
             ok;
         ok ->
             ok
@@ -1440,6 +1438,19 @@ pbc(Node, Options) ->
     ConnInfo = proplists:get_value(Node, connection_info([Node])),
     {IP, PBPort} = proplists:get_value(pb, ConnInfo),
     {ok, Pid} = riakc_pb_socket:start_link(IP, PBPort, Options),
+    Pid.
+
+-spec pbc_explicit(node()) -> pid().
+pbc_explicit(Node) ->
+    pbc_explicit(Node, [{auto_reconnect, true}]).
+
+-spec pbc_explicit(node(), proplists:proplist()) -> pid().
+pbc_explicit(Node, Options) ->
+    rt:wait_for_service(Node, riak_kv),
+    ConnInfo = proplists:get_value(Node, connection_info([Node])),
+    {IP, PBPort} = proplists:get_value(pb, ConnInfo),
+    io:format("Inside pbc_explicit with options = ~p~n", [Options]),
+    {ok, Pid} = riakc_pb_socket:explicit_init([IP, PBPort, Options]),
     Pid.
 
 %% @doc does a read via the erlang protobuf client

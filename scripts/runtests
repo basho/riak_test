@@ -1,0 +1,286 @@
+#!/bin/bash
+
+shopt -s expand_aliases
+source ~/.aliases
+
+#============================================================
+# Checkout riak 2.1.1 and riak TS if they don't already exist
+#============================================================
+
+checkoutrepos()
+{
+    riakTestDir=`pwd`
+
+    if [ ! -d ./riak_2.1.1 ]
+    then
+	cd $riakTestDir
+	git clone https://github.com/basho/riak -b 2.1.1 riak_2.1.1
+	cd riak_2.1.1
+	make
+    fi
+
+    if [ ! -d ./riak_ts ]
+    then
+	cd $riakTestDir
+	git clone https://github.com/basho/riak -b end-to-end/timeseries riak_ts
+	cd riak_ts
+	make
+    fi
+
+    cd $riakTestDir
+}
+
+#============================================================
+# Create a directory for profiler results
+#============================================================
+
+createprofdir()
+{
+    if [ ! -d ./profiler_results ]
+    then
+	mkdir ./profiler_results
+    fi
+}
+
+#============================================================
+# Remove all profile results from the profiler directory
+#============================================================
+
+cleanprofdir()
+{
+    \rm ./profiler_results/*profile.txt
+}
+
+#============================================================
+# Copy all profile files to the specified directory
+#============================================================
+
+profcopy()
+{
+    dirname=$1
+    if [ ! -d ./profiler_results/$dirname ]
+    then
+	mkdir ./profiler_results/$dirname
+    fi
+    
+    cp ./profiler_results/*profile.txt ./profiler_results/$dirname
+}
+
+#============================================================
+# Generate the name of the erlang module to run
+#============================================================
+
+testname()
+{
+    prefix=$1
+    type=$2
+    n=$3
+    if [ $type == "w1c" ]
+    then
+	if [ $prefix == "riak_2.1.1" ]
+	then
+	    echo "ts_puttest_211_w1c_$n"
+	else
+	    echo "ts_puttest_ts_$n"
+	fi
+    else
+	echo "ts_puttest_nonts_$n"
+    fi
+}
+
+#============================================================
+# Generate the name of the directory into which we will copy 
+# profiler results for the current test
+#============================================================
+
+profdirname()
+{
+    prefix=$1
+    type=$2
+    n=$3
+    if [ $type == "w1c" ]
+    then
+	if [ $prefix == "riak_2.1.1" ]
+	then
+	    echo "ts_puttest_211_w1c_$n"
+	else
+	    echo "ts_puttest_ts_w1c_$n"
+	fi
+    else
+	if [ $prefix == "riak_2.1.1" ]
+	then
+	    echo "ts_puttest_211_put_$n"
+	else
+	    echo "ts_puttest_ts_put_$n"
+	fi
+    fi
+}
+
+#============================================================
+# Create the header for the erlang test file and compile it
+#============================================================
+
+createfilehead()
+{
+    mod=$1
+    file="tests/$mod.erl"
+
+    echo $file
+    echo "-module($mod)." > $file
+    echo "-behavior(riak_test)." >> $file
+    echo "-export([confirm/0])." >> $file
+    echo "" >> $file
+    echo "-include_lib(\"profiler/include/profiler.hrl\")." >> $file
+    echo "" >> $file
+}
+
+#============================================================
+# Create the erlang test file and compile it
+#============================================================
+
+createtest()
+{
+    prefix=$1
+    type=$2
+    n=$3
+
+#------------------------------------------------------------
+# write once test?
+#------------------------------------------------------------
+
+    if [ $type == "w1c" ]
+    then
+	if [ $prefix == "riak_2.1.1" ]
+	then
+	    mod="ts_puttest_211_w1c_$n"
+	    file="tests/$mod.erl"
+	    
+	    createfilehead $mod
+
+	    echo "confirm() ->" >> $file
+	    echo "    perf_profile({prefix, \"./profiler_results\"})," >> $file
+	    echo "    ts_api_util:setup_cluster_put(single, n_val_one, $n, true)," >> $file
+	    echo "    pass." >> $file
+	else
+	    mod="ts_puttest_ts_$n"
+	    file="tests/$mod.erl"
+	    
+	    createfilehead $mod
+
+	    echo "confirm() ->" >> $file
+	    echo "    perf_profile({prefix, \"./profiler_results\"})," >> $file
+	    echo "    DDL  = ts_api_util:get_ddl(api)," >> $file
+	    echo "    ts_api_util:setup_cluster_put(single, n_val_one, DDL, $n, true)," >> $file
+	    echo "    pass." >> $file
+	fi
+
+#------------------------------------------------------------
+# Else this is a normal put test, for either riak 2.1.1 or TS
+#------------------------------------------------------------
+
+    else
+	mod="ts_puttest_nonts_$n"
+	file="tests/$mod.erl"
+	
+	createfilehead $mod
+
+	echo "confirm() ->" >> $file
+	echo "    perf_profile({prefix, \"./profiler_results\"})," >> $file
+	echo "    ts_api_util:setup_cluster_put(single, n_val_one, $n, false)," >> $file
+	echo "    pass." >> $file
+    fi
+
+    make
+}
+
+#============================================================
+# Run niter ($4) iterations of a test at each value of nkeys ($3)
+#============================================================
+
+run()
+{
+    declare -a nkeys=("${!3}")
+
+    for i in "${nkeys[@]}"
+    do
+	runiter $1 $2 $i $4
+    done
+}
+
+#============================================================
+# Run a single test niter times for statistics
+#============================================================
+
+runiter()
+{
+    niter=$4
+
+    cleanprofdir
+    createtest $1 $2 $3
+
+    mod=$(testname $1 $2 $3)
+    profdir=$(profdirname $1 $2 $3)
+
+    i="0"
+    while [ $i -lt $niter ]
+    do
+	./riak_test -c riak_ts -t $mod
+	i=$[$i+1]
+    done
+    
+    profcopy $profdir
+}
+
+#------------------------------------------------------------
+# Set the current test directory to the requested version of riak
+#------------------------------------------------------------
+
+redev()
+{
+    riakTestDir=$1
+    \rm -rf dev
+    make devrel DEVNODES=1
+    $riakTestDir/bin/rtdev-current.sh
+}
+
+setcurrent()
+{
+    pushd .
+    riakTestDir=`pwd`
+    cd $1
+    redev $riakTestDir
+    popd
+}
+
+#============================================================
+# Start of actual script
+#============================================================
+
+# Create dir for profile results
+
+createprofdir
+
+# Checkout repos if they don't already exist
+
+checkoutrepos
+
+# Now run with nkeys=250 to 20000, 5 iterations each
+
+#declare -a nkeys=(250 500 1000 5000 10000 20000)
+declare -a nkeys=(1000)
+niter=1
+
+# First set to riak_2.1.1 and run all tests
+
+#setcurrent riak_2.1.1
+#run riak_2.1.1 w1c nkeys[@] $niter
+#run riak_2.1.1 put nkeys[@] $niter
+
+# Next set to riak_ts and run all tests
+
+#setcurrent riak_ts
+run riak_ts w1c nkeys[@] $niter
+#run riak_ts put nkeys[@] $niter
+
+
+

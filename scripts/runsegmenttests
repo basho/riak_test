@@ -1,0 +1,541 @@
+#!/bin/bash
+
+shopt -s expand_aliases
+source ~/.aliases
+
+filename()
+{
+    path=$1
+    riakTestDir=`pwd`
+    echo "$riakTestDir/$path"
+}
+
+commentedVar()
+{
+    var=$1
+    echo "%\-define($var, 1)"
+}
+
+uncommentedVar()
+{
+    var=$1
+    echo "\-define($var, 1)"
+}
+
+varIsCommented()
+{
+    path=$1
+    var=$2
+    str=$(commentedVar $var)
+    local file=$(filename $path)
+    res=`grep "$str" $file`
+
+    if [ ! -z "$res" ] 
+    then
+	echo "true"
+    else
+	echo "false"
+    fi
+}
+
+commentVar()
+{
+    path=$1
+    var=$2
+    if [ $(varIsCommented $path $var) == "false" ]
+    then
+	echo "Var is NOT commented"
+	substitute $path "$(uncommentedVar $var)" "$(commentedVar $var)"
+    fi
+}
+
+uncommentVar()
+{
+    path=$1
+    var=$2
+
+    echo $(commentedVar $var) 
+    echo $(uncommentedVar $var)
+
+    if [ $(varIsCommented $path $var) == "true" ]
+    then
+	substitute $path "$(commentedVar $var)" "$(uncommentedVar $var)"
+    fi
+}
+
+substitute()
+{
+    path=$1
+    fromStr=$2
+    toStr=$3
+
+    local file=$(filename $path)
+    sed -i '.sed' "s/$fromStr/$toStr/g" $file
+}
+
+redev()
+{
+   riakTestDir=`pwd`
+
+   cd riak_ts
+
+   make
+   \rm -rf dev
+   make devrel DEVNODES=1
+   $riakTestDir/bin/rtdev-current.sh
+
+   cd $riakTestDir
+   make
+}
+
+untruncateAll()
+{
+    commentVar "deps/riakc/src/riakc_ts.erl" "EMLTEST"
+    commentVar "deps/riakc/src/riakc_ts.erl" "EMLTEST_SERIALIZE"
+
+    commentVar "deps/riakc/src/riakc_pb_socket.erl" "EMLTEST"
+    commentVar "deps/riakc/src/riakc_pb_socket.erl" "EMLTEST_DECODE"
+    commentVar "deps/riakc/src/riakc_pb_socket.erl" "EMLTEST_ENCODE"
+    commentVar "deps/riakc/src/riakc_pb_socket.erl" "EMLTEST_REQUEST"
+    commentVar "deps/riakc/src/riakc_pb_socket.erl" "EMLTEST_SCHEDULE"
+
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl" "EMLTEST"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl" "EMLTEST_PROCESS"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl" "EMLTEST_BLOCK1"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl" "EMLTEST_BLOCK2"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl" "EMLTEST_BLOCK3"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl" "EMLTEST_BLOCK3_MULTENCODE"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl" "EMLTEST_BLOCK3_GETKEYS"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl" "EMLTEST_BLOCK4"
+
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_TRUNC0"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_BLOCK1"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_BLOCK2"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_BLOCK3"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_TRUNC1"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_TRUNC2"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_TRUNC20"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_TRUNC3"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_TRUNC31"
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"    "EMLTEST_TRUNC32"
+
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_eleveldb_backend.erl"    "EMLTEST"
+
+    commentVar "riak_ts/deps/riak_kv/src/riak_kv_vnode.erl"         "EMLTEST"
+
+    commentVar "riak_ts/deps/riak_api/src/riak_api_pb_server.erl"   "EMLTEST"
+    commentVar "riak_ts/deps/riak_api/src/riak_api_pb_server.erl"   "EMLTEST_DECODE"
+    commentVar "riak_ts/deps/riak_api/src/riak_api_pb_server.erl"   "EMLTEST_ENCODE"
+}
+
+untruncate()
+{
+    untruncateAll
+    redev
+}
+
+runWithMultipleClientSerialize()
+{
+    untruncateAll
+    local file="deps/riakc/src/riakc_ts.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_SERIALIZE"
+    echo "Uncommenting $file"
+    make
+}
+
+runWithMultipleClientDecode()
+{
+    untruncateAll
+    local file="deps/riakc/src/riakc_pb_socket.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_DECODE"
+    echo "Uncommenting $file"
+    make
+}
+
+runWithMultipleClientEncode()
+{
+    untruncateAll
+    local file="deps/riakc/src/riakc_pb_socket.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_ENCODE"
+    echo "Uncommenting $file"
+    make
+}
+
+runWithNoClientSend()
+{
+    untruncateAll
+    local file="deps/riakc/src/riakc_pb_socket.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_REQUEST"
+    echo "Uncommenting $file"
+    make
+}
+
+runWithForcedScheduler()
+{
+    untruncateAll
+    local file="deps/riakc/src/riakc_pb_socket.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_SCHEDULE"
+    echo "Uncommenting $file"
+    make
+}
+
+runWithMultSextEncoding()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_eleveldb_backend.erl"
+    uncommentVar $file "EMLTEST"
+    echo "Uncommenting $file"
+
+    redev
+}
+
+runWithMultipleServerDecode()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_api/src/riak_api_pb_server.erl"
+    echo "Uncommenting $file"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_DECODE"
+    commentVar   $file "EMLTEST_ENCODE"
+
+    redev
+}
+
+runWithMultipleServerEncode()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_api/src/riak_api_pb_server.erl"
+    echo "Uncommenting $file"
+    uncommentVar $file "EMLTEST"
+    commentVar   $file "EMLTEST_DECODE"
+    uncommentVar $file "EMLTEST_ENCODE"
+
+    redev
+}
+
+truncateAtRiakKvProcess()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_PROCESS"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithMultRiakKvProcessBlock1()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_BLOCK1"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithMultRiakKvProcessBlock2()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_BLOCK2"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithMultRiakKvProcessBlock3()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_BLOCK3"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithRiakKvProcessBlock3MultEncode()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_BLOCK3_MULTENCODE"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithRiakKvProcessBlock3Getkeys()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_BLOCK3_GETKEYS"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithMultRiakKvProcessBlock4()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_pb_timeseries.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_BLOCK4"
+    echo "Uncommenting $file"
+    redev
+}
+
+truncateAtRiakKvAsyncPut()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_TRUNC0"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithRiakKvAsyncPutMultBlock1()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_BLOCK1"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithRiakKvAsyncPutMultBlock3()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_BLOCK3"
+    echo "Uncommenting $file"
+    redev
+}
+
+truncateRiakKvAsyncPut2()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_TRUNC2"
+    echo "Uncommenting $file"
+    redev
+}
+
+truncateRiakKvAsyncPut20()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_TRUNC20"
+    echo "Uncommenting $file"
+    redev
+}
+
+truncateRiakKvAsyncPut3()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_TRUNC3"
+    echo "Uncommenting $file"
+    redev
+}
+
+truncateRiakKvAsyncPut31()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_TRUNC31"
+    echo "Uncommenting $file"
+    redev
+}
+
+truncateRiakKvAsyncPut32()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_w1c_worker.erl"
+    uncommentVar $file "EMLTEST"
+    uncommentVar $file "EMLTEST_TRUNC32"
+    echo "Uncommenting $file"
+    redev
+}
+
+truncateAtEleveldb()
+{
+    untruncateAll
+    local file="riak_ts/deps/riak_kv/src/riak_kv_vnode.erl"
+    uncommentVar $file "EMLTEST"
+    echo "Uncommenting $file"
+    redev
+}
+
+runWithMultipleClientDeserialize()
+{
+    untruncateAll
+    local file="deps/riakc/src/riakc_ts.erl"
+    uncommentVar $file "EMLTEST"
+    commentVar $file "EMLTEST_SERIALIZE"
+    echo "Uncommenting $file"
+    make
+}
+
+profcopy()
+{
+    dirname=$1
+    if [ ! -d ./profiler_results/$dirname ]
+    then
+	mkdir ./profiler_results/$dirname
+    fi
+    
+    cp ./profiler_results/*profile.txt ./profiler_results/$dirname
+}
+
+profdirname()
+{
+    prefix=$1
+    echo "segment_$prefix"
+}
+
+cleanProfDir()
+{
+    \rm ./profiler_results/*profile.txt
+}
+
+runSegmentTest()
+{
+    cleanProfDir
+
+    prefix=$1
+    local niter=$2
+
+    profdir=$(profdirname $prefix)
+
+    i="0"
+    while [ $i -lt $niter ]
+    do
+	./riak_test -c riak_ts -t ts_puttest_ts_1000
+	i=$[$i+1]
+    done
+
+    profdir=$(profdirname $prefix)
+    profcopy $profdir
+}
+
+runSegmentTests()
+{
+    local niter=$1
+
+    untruncateAll
+
+#    untruncate
+#    runSegmentTest "none" $niter
+
+#    runWithMultipleClientSerialize
+#    runSegmentTest "clientmultserialize" $niter
+#
+#    runWithMultipleClientDecode
+#    runSegmentTest "clientmultdecode" $niter
+
+#    runWithMultipleClientEncode
+#    runSegmentTest "clientmultencode" $niter
+
+#    runWithNoClientSend
+#    runSegmentTest "clientnosend" $niter
+
+    runWithForcedScheduler
+    runSegmentTest "clientforcescheduler" $niter
+#
+#    runWithMultSextEncoding
+#    runSegmentTest "multsext" $niter
+#  
+#   truncateAtRiakKvProcess
+#   runSegmentTest "process" $niter
+#
+#    runWithMultRiakKvProcessBlock1
+#    runSegmentTest "process_multblock1" $niter
+
+#    runWithMultRiakKvProcessBlock2
+#    runSegmentTest "process_multblock2" $niter
+
+#    runWithMultRiakKvProcessBlock3
+#    runSegmentTest "process_multblock3" $niter
+
+#    runWithRiakKvProcessBlock3MultEncode
+#    runSegmentTest "process_multblock3encode" $niter
+
+#    runWithRiakKvProcessBlock3Getkeys
+#    runSegmentTest "process_multblock3getkeys" $niter
+
+#    runWithMultRiakKvProcessBlock4
+#    runSegmentTest "process_multblock4" $niter
+
+#    truncateAtRiakKvAsyncPut
+#    runSegmentTest "asyncput" $niter
+#
+#    truncateRiakKvAsyncPut1
+#    runSegmentTest "asyncput_trunc1" $niter
+#
+#    truncateRiakKvAsyncPut2
+#    runSegmentTest "asyncput_trunc2" $niter
+#
+#    truncateRiakKvAsyncPut20
+#    runSegmentTest "asyncput_trunc20" $niter
+#
+#    truncateRiakKvAsyncPut3
+#    runSegmentTest "asyncput_trunc3" $niter
+#
+#    runWithRiakKvAsyncPutMultBlock1
+#    runSegmentTest "asyncput_multblock1" $niter
+
+#    runWithRiakKvAsyncPutMultBlock3
+#    runSegmentTest "asyncput_multblock3" $niter
+#
+#    untruncate
+#    runSegmentTest "none" $niter
+#
+#    truncateAtEleveldb
+#    runSegmentTest "eleveldb" $niter
+#
+#    runWithMultipleClientDeserialize
+#    runSegmentTest "clientmultdeserialize" $niter
+#
+#    runWithMultipleServerDecode
+#    runSegmentTest "pbservermultdecode" $niter
+#
+#    runWithMultipleServerEncode
+#    runSegmentTest "pbservermultencode" $niter
+#
+#    untruncate
+#    runSegmentTest "none" $niter
+}
+
+createprofdir()
+{
+    if [ ! -d ./profiler_results ]
+    then
+	mkdir ./profiler_results
+    fi
+}
+
+createprofdir
+runSegmentTests 1
+
+#iIter="0"
+#nIter=20
+#while [ $iIter -lt $nIter ]
+#do
+#    runSegmentTests 5
+#    iIter=$[$iIter+1]
+#done
+
+
+
