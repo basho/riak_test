@@ -33,10 +33,12 @@
 confirm() ->
     [Node1] = rt:build_cluster(1,
                                [{riak_kv,
-                                 [{anti_entropy, {off, []}},
+                                 [{sweep_tick, 500},
+                                  {sweep_concurrency, 100},
+                                  {anti_entropy, {off, []}},
                                   {anti_entropy_build_limit, {100, 500}},
                                   {anti_entropy_concurrency, 100},
-                                  {anti_entropy_tick, 200}]}]),
+                                  {anti_entropy_tick, 2000}]}]),
     rt_intercept:load_code(Node1),
     rt_intercept:add(Node1,
                      {riak_object,
@@ -111,21 +113,20 @@ do_tree_rebuild(Node) ->
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {0, 5000}])),
-    %% Make any tree expire on tick.
+    %% Make any tree expire.
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_expire,
                                                            1])),
-    %% Wait for a good number of ticks.
-    timer:sleep(5000),
-    %% Make sure things stop expiring on tick
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
-                                                           anti_entropy_expire,
-                                                           7 * 24 * 60 * 60 * 1000])),
+
     %% And let the manager start allowing builds again.
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {100, 1000}])),
     rt:wait_until_aae_trees_built([Node]),
+    %% Make sure things stop expiring now when all trees are rebuilt.
+    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+                                                           anti_entropy_expire,
+                                                           7 * 24 * 60 * 60 * 1000])),
     ok.
 
 %% Write objects without a 2i index. Test that running 2i repair will generate
