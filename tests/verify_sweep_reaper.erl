@@ -75,6 +75,11 @@ confirm() ->
 
     KV3 = test_data(201, 201),
     verify_manual_sweep(Nodes, KV3),
+    
+    %% Verify recovery
+    kill_riak_kv_sweeper(Nodes),
+    KV16 = test_data(16001, 16100),
+    verify_manual_sweep(Nodes, KV16),
 
     KV4 = test_data(301, 400),
     verify_remove_add_participant(Nodes, KV4),
@@ -95,6 +100,7 @@ confirm() ->
     test_restart_sweep(Nodes, KV12),
     KV15 = test_data(15001, 16000),
     test_status(Nodes, KV15),
+
 
     pass.
 
@@ -279,6 +285,13 @@ disable_aae(Node) ->
     lager:info("disable aae", []),
     rpc:call(Node, riak_kv_entropy_manager, disable, []).
 
+kill_riak_kv_sweeper(Nodes) ->
+    [begin
+         Pid = rpc:call(Node, erlang, whereis,[riak_kv_sweeper]),
+         ?assert(rpc:call(Node, erlang, exit, [Pid, kill])),
+         rt:wait_until(Node, fun(N) -> not(rpc:call(N, erlang, is_process_alive, [Pid])) end),
+         rt:wait_until(Node, fun(N) -> is_pid(rpc:call(N, erlang, whereis,[riak_kv_sweeper])) end)
+     end || Node <- Nodes].
 
 wait_for_sweep() ->
     wait_for_sweep(?WAIT_FOR_SWEEP).
