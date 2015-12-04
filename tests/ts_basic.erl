@@ -179,7 +179,7 @@ confirm_list_keys(C) ->
     io:format("Nothing listed from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
-    {keys, Keys} = _Res = riakc_ts:list_keys(C, ?BUCKET, []),
+    {keys, Keys} = _Res = riakc_ts:stream_list_keys(C, ?BUCKET, []),
     io:format("Listed ~b keys\n", [length(Keys)]),
     ?assertEqual(?LIFESPAN, length(Keys)),
     ok.
