@@ -1,4 +1,3 @@
-%% -*- Mode: Erlang -*-
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
@@ -175,21 +174,42 @@ confirm_nx_get(C) ->
     ok.
 
 confirm_list_keys(C) ->
-    ResFail = riakc_ts:list_keys(C, <<"no-bucket-like-this">>, []),
-    io:format("Nothing listed from a non-existent bucket: ~p\n", [ResFail]),
-    ?assertMatch({error, _}, ResFail),
+    {error, Reason} = list_keys(C, <<"no-bucket-like-this">>),
+    io:format("Nothing listed from a non-existent bucket: ~p\n", [Reason]),
 
-    {keys, Keys} = _Res = riakc_ts:stream_list_keys(C, ?BUCKET, []),
-    io:format("Listed ~b keys\n", [length(Keys)]),
-    ?assertEqual(?LIFESPAN, length(Keys)),
+    {Status, Keys2} = list_keys(C, ?BUCKET),
+    io:format("Listed keys streaming (~p): ~p\n", [Status, Keys2]),
+    %?assertEqual(?LIFESPAN, length(Keys) + 1),
     ok.
 
 confirm_delete_all(C) ->
-    {keys, Keys} = riakc_ts:list_keys(C, ?BUCKET, []),
+    {ok, Keys} = list_keys(C, ?BUCKET),
     lists:foreach(
       fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
       Keys),
-    {keys, Res} = riakc_ts:list_keys(C, ?BUCKET, []),
-    io:format("Deleted all: ~p\n", [Res]),
-    ?assertMatch([], Res),
+    Res2 = list_keys(C, ?BUCKET),
+    io:format("Deleted all: ~p\n", [Res2]),
+    ?assertMatch({ok, []}, Res2),
     ok.
+
+list_keys(C, Bucket) ->
+    {ok, ReqId1} = riakc_ts:stream_list_keys(C, Bucket, []),
+    receive_keys(ReqId1, []).
+
+receive_keys(ReqId, Acc) ->
+    receive
+        {ReqId, {keys, Keys}} ->
+            receive_keys(ReqId, lists:append(Keys, Acc));
+        {ReqId, {error, Reason}} ->
+            io:format("list_keys(~p) at ~b got an error: ~p\n", [ReqId, length(Acc), Reason]),
+            {error, Reason};
+        {ReqId, done} ->
+            {ok, Acc};
+        Else ->
+            io:format("What's that? ~p\n", [Else]),
+            receive_keys(ReqId, Acc)
+    after 5000 ->
+            io:format("Probably timed out\n", []),
+            {timeout, Acc}
+    end.
+
