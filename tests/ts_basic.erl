@@ -32,6 +32,7 @@
 -define(PVAL_P2, <<"PDP-11">>).
 -define(TIMEBASE, (10*1000*1000)).
 -define(BADKEY, [<<"b">>,<<"a">>, ?TIMEBASE-1]).
+-define(LIFESPAN, 300).  %% > 100, which is the default chunk size for list_keys
 
 confirm() ->
     run_tests(?PVAL_P1, ?PVAL_P2).
@@ -68,22 +69,22 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     %% 1. put some data
     ok = confirm_put(C, Data),
 
-    %% 4. delete one
-    ok = confirm_delete(C, lists:nth(15, Data)),
-    ok = confirm_nx_delete(C),
-
-    %% 5. select
-    ok = confirm_select(C, PvalP1, PvalP2),
-
-    %% 6. single-key get some data
     ok = confirm_get(C, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
-    ok = confirm_list_keys(C),
-    ok = confirm_delete_all(C).
+    ok = confirm_nx_list_keys(C),
+    {ok, _} = confirm_list_keys(C, ?LIFESPAN),
+
+    ok = confirm_delete(C, lists:nth(14, Data)),
+    {ok, RemainingKeys} = confirm_list_keys(C, ?LIFESPAN - 1),
+    ok = confirm_nx_delete(C),
+
+    ok = confirm_select(C, PvalP1, PvalP2),
+
+    ok = confirm_delete_all(C, RemainingKeys),
+    {ok, []} = confirm_list_keys(C, 0).
 
 
--define(LIFESPAN, 300).  %% > 100, which is the default chunk size for list_keys
 make_data(PvalP1, PvalP2) ->
     lists:reverse(
       lists:foldl(
@@ -150,7 +151,7 @@ confirm_select(C, PvalP1, PvalP2) ->
     io:format("Running query: ~p\n", [Query]),
     {_Columns, Rows} = riakc_ts:query(C, Query),
     io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
-    ?assertEqual( 10 - 1 - 1, length(Rows)),
+    ?assertEqual(10 - 1 - 1, length(Rows)),
     {_Columns, Rows} = riakc_ts:query(C, Query),
     io:format("Got ~b rows back again\n", [length(Rows)]),
     ?assertEqual(10 - 1 - 1, length(Rows)),
@@ -173,23 +174,33 @@ confirm_nx_get(C) ->
     ?assertMatch({ok, {[], []}}, Res),
     ok.
 
-confirm_list_keys(C) ->
-    {error, Reason} = list_keys(C, <<"no-bucket-like-this">>),
+confirm_nx_list_keys(C) ->
+    {Status, Reason} = list_keys(C, <<"no-bucket-like-this">>),
     io:format("Nothing listed from a non-existent bucket: ~p\n", [Reason]),
-
-    {Status, Keys2} = list_keys(C, ?BUCKET),
-    io:format("Listed keys streaming (~p): ~p\n", [Status, Keys2]),
-    %?assertEqual(?LIFESPAN, length(Keys) + 1),
+    ?assertMatch(error, Status),
     ok.
 
-confirm_delete_all(C) ->
-    {ok, Keys} = list_keys(C, ?BUCKET),
+confirm_list_keys(C, N) ->
+    confirm_list_keys(C, N, 15).
+confirm_list_keys(_C, _N, 0) ->
+    io:format("stream_list_keys is lying\n", []),
+    fail;
+confirm_list_keys(C, N, TriesToGo) ->
+    {Status, Keys} = list_keys(C, ?BUCKET),
+    case length(Keys) of
+        N ->
+            {ok, Keys};
+        _NotN ->
+            io:format("Listed ~b (expected ~b) keys streaming (~p). Retrying.\n", [length(Keys), N, Status]),
+            confirm_list_keys(C, N, TriesToGo - 1)
+    end.
+
+confirm_delete_all(C, AllKeys) ->
+    io:format("Deleting ~b keys\n", [length(AllKeys)]),
     lists:foreach(
       fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
-      Keys),
-    Res2 = list_keys(C, ?BUCKET),
-    io:format("Deleted all: ~p\n", [Res2]),
-    ?assertMatch({ok, []}, Res2),
+      AllKeys),
+    io:format("Deleted all\n", []),
     ok.
 
 list_keys(C, Bucket) ->
@@ -199,17 +210,19 @@ list_keys(C, Bucket) ->
 receive_keys(ReqId, Acc) ->
     receive
         {ReqId, {keys, Keys}} ->
+            io:format("received batch of ~b\n", [length(Keys)]),
             receive_keys(ReqId, lists:append(Keys, Acc));
         {ReqId, {error, Reason}} ->
             io:format("list_keys(~p) at ~b got an error: ~p\n", [ReqId, length(Acc), Reason]),
             {error, Reason};
         {ReqId, done} ->
-            {ok, Acc};
+            io:format("done receiving from one quantum\n", []),
+            receive_keys(ReqId, Acc);
         Else ->
             io:format("What's that? ~p\n", [Else]),
             receive_keys(ReqId, Acc)
-    after 5000 ->
-            io:format("Probably timed out\n", []),
-            {timeout, Acc}
+    after 3000 ->
+            io:format("Consider streaming done\n", []),
+            {ok, Acc}
     end.
 
