@@ -82,6 +82,18 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_get(C, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
+    %% Switch back to PB mode for a few tests
+    riakc_pb_socket:use_native_encoding(C, false),
+
+    %% 5 (redux). select
+    ok = confirm_select(C, PvalP1, PvalP2),
+
+    %% 6 (redux). single-key get some data
+    ok = confirm_get(C, lists:nth(12, Data)),
+    ok = confirm_nx_get(C),
+
+    riakc_pb_socket:use_native_encoding(C, true),
+
     ok = confirm_list_keys(C),
     ok = confirm_delete_all(C).
 
