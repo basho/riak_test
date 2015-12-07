@@ -87,7 +87,7 @@ write_data(Cluster, Pid, Index, {SchemaName, SchemaData},
            Bucket, Keys) ->
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
 
-    riakc_pb_socket:create_search_schema(Pid, SchemaName, SchemaData),
+    ok = riakc_pb_socket:create_search_schema(Pid, SchemaName, SchemaData),
 
     create_and_set_index(Cluster, Pid, Bucket, Index, SchemaName),
     timer:sleep(1000),
