@@ -74,6 +74,11 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_delete(C, lists:nth(15, Data)),
     ok = confirm_nx_delete(C),
 
+    %% Pause briefly. Deletions have a default 3 second
+    %% reaping interval, and our list keys test may run
+    %% afoul of that.
+    timer:sleep(3500),
+
     %% 5. select
     ok = confirm_select(C, PvalP1, PvalP2),
 
@@ -202,6 +207,7 @@ confirm_delete_all(C) ->
     lists:foreach(
       fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
       Keys),
+    timer:sleep(3500),
     {keys, Res} = riakc_ts:list_keys(C, ?BUCKET, []),
     io:format("Deleted all: ~p\n", [Res]),
     ?assertMatch([], Res),
