@@ -194,6 +194,7 @@ confirm_delete_all(C) ->
     lists:foreach(
       fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
       Keys),
+    timer:sleep(3500),
     {keys, Res} = riakc_ts:list_keys(C, ?BUCKET, []),
     io:format("Deleted all: ~p\n", [Res]),
     ?assertMatch([], Res),
