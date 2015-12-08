@@ -18,7 +18,8 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc A module to test riak_ts basic create bucket/put/select cycle.
+%% @doc A module to test riak_ts basic create bucket/put/select cycle,
+%% including testing native Erlang term_to_binary encoding.
 
 -module(ts_basic).
 -behavior(riak_test).
@@ -73,12 +74,29 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_delete(C, lists:nth(15, Data)),
     ok = confirm_nx_delete(C),
 
+    %% Pause briefly. Deletions have a default 3 second
+    %% reaping interval, and our list keys test may run
+    %% afoul of that.
+    timer:sleep(3500),
+
     %% 5. select
     ok = confirm_select(C, PvalP1, PvalP2),
 
     %% 6. single-key get some data
     ok = confirm_get(C, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
+
+    %% Switch to native mode and repeat a few tests
+    riakc_pb_socket:use_native_encoding(C, true),
+
+    %% 5 (redux). select
+    ok = confirm_select(C, PvalP1, PvalP2),
+
+    %% 6 (redux). single-key get some data
+    ok = confirm_get(C, lists:nth(12, Data)),
+    ok = confirm_nx_get(C),
+
+    riakc_pb_socket:use_native_encoding(C, false),
 
     ok = confirm_list_keys(C),
     ok = confirm_delete_all(C).
@@ -189,6 +207,7 @@ confirm_delete_all(C) ->
     lists:foreach(
       fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
       Keys),
+    timer:sleep(3500),
     {keys, Res} = riakc_ts:list_keys(C, ?BUCKET, []),
     io:format("Deleted all: ~p\n", [Res]),
     ?assertMatch([], Res),
