@@ -17,14 +17,14 @@
 %% cleared and the model is reset.  The main goal is to advance the proxy
 %% into interesting new states.
 %%
-%% This test can be run outside of riak_test while working on it. 
+%% This test can be run outside of riak_test while working on it.
 %% Symlink the source into a release build and run
-%%   c(proxy_overload_recovery). 
+%%   c(proxy_overload_recovery).
 %%   proxy_overload_recovery:run(300). % Run for 5 mins
 %%
 %% On failure you can re-run counter examples *and* print out the internal
 %% state with the run.
-%%   proxy_overload_recovery:check(). 
+%%   proxy_overload_recovery:check().
 %%
 %% TODO/Questions:
 %% 1) Is there a better way to do the initialization step?
@@ -137,7 +137,7 @@ prop_proxy_recovery() ->
                                           [catch msgq_len(VPid)])
                        end
                    end,
-                   measure(duration, Msecs, 
+                   measure(duration, Msecs,
                    aggregate(with_title("Commands"), command_names(Cmds),
                              pretty_commands(?MODULE, Cmds, {H, S, Res},
                                              Res == ok))))
@@ -173,13 +173,13 @@ precondition_common(#tstate{rt = undefined}, {call, _M, F, _A}) ->
 precondition_common(_, {call, _M, F, _A}) ->
     F /= prepare.
 
-%% %% Make sure we're still running what we think we're running - uncomment 
+%% %% Make sure we're still running what we think we're running - uncomment
 %% %% if having process death issues
 %% invariant(#tstate{rt = undefined}) ->
 %%     true;
 %% invariant(#tstate{rt = #rt{id = Index, ppid = PPid, vpid = VPid}}) ->
 %%     RegName = riak_core_vnode_proxy:reg_name(riak_kv_vnode, Index),
-%%     PPid = whereis(RegName), % Check process we think it is.    
+%%     PPid = whereis(RegName), % Check process we think it is.
 %%     true = is_process_alive(PPid),
 %%     true = is_process_alive(VPid),
 %%     true.
@@ -467,6 +467,17 @@ add_eqc_apps(Nodes) ->
      end || App <- Apps, Node <- Nodes],
     ok.
 
+
+wait_for_vnode_change(VPid0, Index) ->
+    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
+    case VPid1 of
+        VPid0 ->
+            timer:sleep(1),
+            wait_for_vnode_change(VPid0, Index);
+        _ ->
+            VPid1
+    end.
+
 -else.  %% no EQC
 
 -export([confirm/0]).
@@ -476,14 +487,3 @@ confirm() ->
     pass.
 
 -endif.
-
-
-wait_for_vnode_change(VPid0, Index) ->
-    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
-        case VPid1 of
-            VPid0 ->
-                timer:sleep(1),
-                wait_for_vnode_change(VPid0, Index);
-            _ ->
-                VPid1
-        end.
