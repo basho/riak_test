@@ -1,4 +1,4 @@
-%% -------------------------------------------------------------------
+% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
 %%
@@ -17,7 +17,8 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc A module to test riak_ts basic create bucket/put/select cycle.
+%% @doc A module to test riak_ts basic create bucket/put/select cycle,
+%% including testing native Erlang term_to_binary encoding.
 
 -module(ts_basic).
 -behavior(riak_test).
@@ -69,17 +70,42 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     %% 1. put some data
     ok = confirm_put(C, Data),
 
+    %% 2. get a single key
     ok = confirm_get(C, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
+    %% 3. list keys and delete one
     ok = confirm_nx_list_keys(C),
-    {ok, _} = confirm_list_keys(C, ?LIFESPAN),
+    {ok, First} = confirm_list_keys(C, ?LIFESPAN),
+    io:format("Before delete = ~p", [length(First)]),
 
     ok = confirm_delete(C, lists:nth(14, Data)),
-    {ok, RemainingKeys} = confirm_list_keys(C, ?LIFESPAN - 1),
     ok = confirm_nx_delete(C),
 
+    %% Pause briefly. Deletions have a default 3 second
+    %% reaping interval, and our list keys test may run
+    %% afoul of that.
+    timer:sleep(3500),
+    {ok, RemainingKeys} = confirm_list_keys(C, ?LIFESPAN - 1),
+
+    %% 5. select
     ok = confirm_select(C, PvalP1, PvalP2),
+
+    %% 6. single-key get some data
+    ok = confirm_get(C, lists:nth(12, Data)),
+    ok = confirm_nx_get(C),
+
+    %% Switch to native mode and repeat a few tests
+    riakc_pb_socket:use_native_encoding(C, true),
+
+    %% 5 (redux). select
+    ok = confirm_select(C, PvalP1, PvalP2),
+
+    %% 6 (redux). single-key get some data
+    ok = confirm_get(C, lists:nth(12, Data)),
+    ok = confirm_nx_get(C),
+
+    riakc_pb_socket:use_native_encoding(C, false),
 
     ok = confirm_delete_all(C, RemainingKeys),
     {ok, []} = confirm_list_keys(C, 0).
@@ -94,7 +120,7 @@ make_data(PvalP1, PvalP2) ->
                   ?TIMEBASE + ?LIFESPAN - T + 1,
                   math:sin(float(T) / 100 * math:pi())] | Q]
         end,
-        [], lists:seq(?LIFESPAN, 0, -1))).
+        [], lists:seq(?LIFESPAN, 1, -1))).
 
 confirm_put(C, Data) ->
     ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, Data),
@@ -200,7 +226,10 @@ confirm_delete_all(C, AllKeys) ->
     lists:foreach(
       fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
       AllKeys),
-    io:format("Deleted all\n", []),
+    timer:sleep(3500),
+    {ok, Res} = list_keys(C, ?BUCKET),
+    io:format("Deleted all: ~p\n", [Res]),
+    ?assertMatch([], Res),
     ok.
 
 list_keys(C, Bucket) ->
