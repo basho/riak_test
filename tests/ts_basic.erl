@@ -1,5 +1,4 @@
-%% -*- Mode: Erlang -*-
-%% -------------------------------------------------------------------
+% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2015 Basho Technologies, Inc.
 %%
@@ -34,6 +33,7 @@
 -define(PVAL_P2, <<"PDP-11">>).
 -define(TIMEBASE, (10*1000*1000)).
 -define(BADKEY, [<<"b">>,<<"a">>, ?TIMEBASE-1]).
+-define(LIFESPAN, 300).  %% > 100, which is the default chunk size for list_keys
 
 confirm() ->
     run_tests(?PVAL_P1, ?PVAL_P2).
@@ -70,14 +70,23 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     %% 1. put some data
     ok = confirm_put(C, Data),
 
-    %% 4. delete one
-    ok = confirm_delete(C, lists:nth(15, Data)),
+    %% 2. get a single key
+    ok = confirm_get(C, lists:nth(12, Data)),
+    ok = confirm_nx_get(C),
+
+    %% 3. list keys and delete one
+    ok = confirm_nx_list_keys(C),
+    {ok, First} = confirm_list_keys(C, ?LIFESPAN),
+    io:format("Before delete = ~p", [length(First)]),
+
+    ok = confirm_delete(C, lists:nth(14, Data)),
     ok = confirm_nx_delete(C),
 
     %% Pause briefly. Deletions have a default 3 second
     %% reaping interval, and our list keys test may run
     %% afoul of that.
     timer:sleep(3500),
+    {ok, RemainingKeys} = confirm_list_keys(C, ?LIFESPAN - 1),
 
     %% 5. select
     ok = confirm_select(C, PvalP1, PvalP2),
@@ -98,11 +107,10 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
 
     riakc_pb_socket:use_native_encoding(C, false),
 
-    ok = confirm_list_keys(C),
-    ok = confirm_delete_all(C).
+    ok = confirm_delete_all(C, RemainingKeys),
+    {ok, []} = confirm_list_keys(C, 0).
 
 
--define(LIFESPAN, 300).  %% > 100, which is the default chunk size for list_keys
 make_data(PvalP1, PvalP2) ->
     lists:reverse(
       lists:foldl(
@@ -112,7 +120,7 @@ make_data(PvalP1, PvalP2) ->
                   ?TIMEBASE + ?LIFESPAN - T + 1,
                   math:sin(float(T) / 100 * math:pi())] | Q]
         end,
-        [], lists:seq(?LIFESPAN, 0, -1))).
+        [], lists:seq(?LIFESPAN, 1, -1))).
 
 confirm_put(C, Data) ->
     ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, Data),
@@ -169,7 +177,7 @@ confirm_select(C, PvalP1, PvalP2) ->
     io:format("Running query: ~p\n", [Query]),
     {_Columns, Rows} = riakc_ts:query(C, Query),
     io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
-    ?assertEqual( 10 - 1 - 1, length(Rows)),
+    ?assertEqual(10 - 1 - 1, length(Rows)),
     {_Columns, Rows} = riakc_ts:query(C, Query),
     io:format("Got ~b rows back again\n", [length(Rows)]),
     ?assertEqual(10 - 1 - 1, length(Rows)),
@@ -192,23 +200,58 @@ confirm_nx_get(C) ->
     ?assertMatch({ok, {[], []}}, Res),
     ok.
 
-confirm_list_keys(C) ->
-    ResFail = riakc_ts:list_keys(C, <<"no-bucket-like-this">>, []),
-    io:format("Nothing listed from a non-existent bucket: ~p\n", [ResFail]),
-    ?assertMatch({error, _}, ResFail),
-
-    {keys, Keys} = _Res = riakc_ts:list_keys(C, ?BUCKET, []),
-    io:format("Listed ~b keys\n", [length(Keys)]),
-    ?assertEqual(?LIFESPAN, length(Keys)),
+confirm_nx_list_keys(C) ->
+    {Status, Reason} = list_keys(C, <<"no-bucket-like-this">>),
+    io:format("Nothing listed from a non-existent bucket: ~p\n", [Reason]),
+    ?assertMatch(error, Status),
     ok.
 
-confirm_delete_all(C) ->
-    {keys, Keys} = riakc_ts:list_keys(C, ?BUCKET, []),
+confirm_list_keys(C, N) ->
+    confirm_list_keys(C, N, 15).
+confirm_list_keys(_C, _N, 0) ->
+    io:format("stream_list_keys is lying\n", []),
+    fail;
+confirm_list_keys(C, N, TriesToGo) ->
+    {Status, Keys} = list_keys(C, ?BUCKET),
+    case length(Keys) of
+        N ->
+            {ok, Keys};
+        _NotN ->
+            io:format("Listed ~b (expected ~b) keys streaming (~p). Retrying.\n", [length(Keys), N, Status]),
+            confirm_list_keys(C, N, TriesToGo - 1)
+    end.
+
+confirm_delete_all(C, AllKeys) ->
+    io:format("Deleting ~b keys\n", [length(AllKeys)]),
     lists:foreach(
       fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
-      Keys),
+      AllKeys),
     timer:sleep(3500),
-    {keys, Res} = riakc_ts:list_keys(C, ?BUCKET, []),
+    {ok, Res} = list_keys(C, ?BUCKET),
     io:format("Deleted all: ~p\n", [Res]),
     ?assertMatch([], Res),
     ok.
+
+list_keys(C, Bucket) ->
+    {ok, ReqId1} = riakc_ts:stream_list_keys(C, Bucket, []),
+    receive_keys(ReqId1, []).
+
+receive_keys(ReqId, Acc) ->
+    receive
+        {ReqId, {keys, Keys}} ->
+            io:format("received batch of ~b\n", [length(Keys)]),
+            receive_keys(ReqId, lists:append(Keys, Acc));
+        {ReqId, {error, Reason}} ->
+            io:format("list_keys(~p) at ~b got an error: ~p\n", [ReqId, length(Acc), Reason]),
+            {error, Reason};
+        {ReqId, done} ->
+            io:format("done receiving from one quantum\n", []),
+            receive_keys(ReqId, Acc);
+        Else ->
+            io:format("What's that? ~p\n", [Else]),
+            receive_keys(ReqId, Acc)
+    after 3000 ->
+            io:format("Consider streaming done\n", []),
+            {ok, Acc}
+    end.
+
