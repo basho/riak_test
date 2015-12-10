@@ -53,6 +53,12 @@ confirm() ->
             Cluster,
             table_def("mytable", "#@#@", "series", "time"))
     ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster,
+            table_def("mytable", "\\|?%\\`{};:", "series", "time"))
+    ),
     pass.
 
 %%
@@ -75,12 +81,12 @@ table_def(TableName) ->
 %%
 table_def(TableName, FamilyName, SeriesName, TimeName) ->
     {TableName, lists:flatten(io_lib:format(
-        "CREATE TABLE ~p ("
-        " ~p VARCHAR   NOT NULL,"
-        " ~p VARCHAR   NOT NULL,"
-        " ~p   TIMESTAMP NOT NULL,"
-        " PRIMARY KEY ((~p, ~p, quantum(~p, 15, 'm')), "
-        " ~p, ~p, ~p))",
+        "CREATE TABLE ~s ("
+        " ~s VARCHAR   NOT NULL,"
+        " ~s VARCHAR   NOT NULL,"
+        " ~s   TIMESTAMP NOT NULL,"
+        " PRIMARY KEY ((~s, ~s, quantum(~s, 15, 'm')), "
+        " ~s, ~s, ~s))",
         [TableName,
          FamilyName, SeriesName, TimeName, % column defs
          FamilyName, SeriesName, TimeName,  % partition key
