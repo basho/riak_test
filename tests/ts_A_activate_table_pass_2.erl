@@ -44,20 +44,68 @@ confirm() ->
     ?assertMatch(
         {error_creating_bucket_type, _},
         create_and_activate_bucket_type(
-            Cluster,
-            table_def("mytable", "!", "series", "time"))
+            Cluster, table_def("mytable", "!", "series", "time"))
     ),
     ?assertMatch(
         {error_creating_bucket_type, _},
         create_and_activate_bucket_type(
-            Cluster,
-            table_def("mytable", "#@#@", "series", "time"))
+            Cluster, table_def("mytable", "#@#@", "series", "time"))
     ),
     ?assertMatch(
         {error_creating_bucket_type, _},
         create_and_activate_bucket_type(
-            Cluster,
-            table_def("mytable", "\\|?%\\`{};:", "series", "time"))
+            Cluster, table_def("mytable", "\\", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", "|", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", "?", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", "%", "series", "time"))
+    ),
+    % backticks need to be escaped or sh will error
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", "\\`", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", "{", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", "}", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", "[", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", "]", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", ";", "series", "time"))
+    ),
+    ?assertMatch(
+        {error_creating_bucket_type, _},
+        create_and_activate_bucket_type(
+            Cluster, table_def("mytable", ":", "series", "time"))
     ),
     pass.
 
