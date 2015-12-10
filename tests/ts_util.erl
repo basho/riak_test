@@ -22,6 +22,8 @@
 -module(ts_util).
 
 -export([
+    activate_bucket_type/2,
+    activate_bucket_type/3,
     build_cluster/1,
     cluster_and_connect/1,
     create_and_activate_bucket_type/2,
@@ -29,6 +31,7 @@
     create_and_activate_bucket_type/4,
     create_bucket_type/2,
     create_bucket_type/3,
+    create_bucket_type/4,
     exclusive_result_from_data/3,
     get_bool/1,
     get_cols/0, get_cols/1,
