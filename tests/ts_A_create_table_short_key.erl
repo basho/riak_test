@@ -36,11 +36,6 @@ confirm() ->
         " temperature double,"
         " PRIMARY KEY ((quantum(time, 15, 'm'), myfamily),"
         " time, myfamily))",
-    Expected =
-        {ok,
-         "Error validating table definition for bucket type GeoCheckin:\n"
-         "Primary key must consist of exactly 3 fields (has 2)\n"},
-    Got = ts_util:create_bucket_type(
-            ts_util:build_cluster(single), DDL),
-    ?assertEqual(Expected, Got),
+    {ok, Got} = ts_util:create_bucket_type(ts_util:build_cluster(single), DDL),
+    ?assertNotEqual(0, string:str(Got, "Primary key must consist of exactly 3 field")),
     pass.
