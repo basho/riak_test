@@ -36,11 +36,6 @@ confirm() ->
         " temperature double,"
         " PRIMARY KEY ((myfamily, myfamily, quantum(time, 15, 'm')),"
         " myfamily, myfamily, time))",
-    Expected =
-        {ok,
-         "Error validating table definition for bucket type GeoCheckin:\n"
-         "Primary key has duplicate fields (myfamily)\n"},
-    Got = ts_util:create_bucket_type(
-            ts_util:build_cluster(single), DDL),
-    ?assertEqual(Expected, Got),
+    {ok, Got} = ts_util:create_bucket_type(ts_util:build_cluster(single), DDL),
+    ?assertNotEqual(0, string:str(Got, "Primary key has duplicate fields")),
     pass.
