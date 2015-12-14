@@ -55,12 +55,12 @@ verify_object_ttl(Client) ->
 %% Tests that objects not visible after ttl expire on bucket
 verify_bucket_ttl(Client) ->
     TTLBucket = <<"ttl_bucket">>,
-    riakc_pb_socket:set_bucket(Client, TTLBucket, [{ttl, 5}]), %% 5s
+    riakc_pb_socket:set_bucket(Client, TTLBucket, [{ttl, 1}]), %% 1s
     Key2 = test_data(2),
     Key3 = test_data(3),
     put_object_without_ttl(Client, TTLBucket, Key2),
     put_object_without_ttl(Client, ?BUCKET, Key3),
-    timer:sleep(timer:seconds(6)),
+    timer:sleep(timer:seconds(2)),
     true = check_expired(Client, TTLBucket, Key2),
     false = check_expired(Client, ?BUCKET, Key3),
 

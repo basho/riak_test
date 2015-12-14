@@ -49,20 +49,22 @@
 -define(LONG_TOMBSTONE_GRACE, 1000).
 
 confirm() ->
-    Config = [{riak_core,
-               [{ring_creation_size, 4}
-               ]},
-              {riak_kv,
-               [{delete_mode, keep},
-                {tombstone_grace_period, 7 * 24 * 3600}, %% 1w in s
-                {reap_sweep_interval, 1},
-                {sweep_tick, ?SWEEP_TICK},       %% Speed up sweeping
-                {anti_entropy_build_limit, {100, 1000}},
-                {anti_entropy_concurrency, 10},
-                {anti_entropy, {on, [debug]}},
-                {anti_entropy_tick, 2000}
-               ]}
-             ],
+    
+    Config =
+        [{riak_core,
+          [{ring_creation_size, 4}
+          ]},
+         {riak_kv,
+          [{delete_mode, keep},
+           {tombstone_grace_period, 7 * 24 * 3600}, %% 1w in s
+           {reap_sweep_interval, 1},
+           {sweep_tick, ?SWEEP_TICK},       %% Speed up sweeping
+           {anti_entropy_build_limit, {100, 1000}},
+           {anti_entropy_concurrency, 10},
+           {anti_entropy, {on, [debug]}},
+           {anti_entropy_tick, 2000}
+          ]}
+        ],
 
     Nodes = rt:build_cluster(1, Config),
 
@@ -73,7 +75,7 @@ confirm() ->
     KV2 = test_data(101, 200),
     verify_reap(Nodes, KV1, KV2),
 
-    KV3 = test_data(201, 201),
+    KV3 = test_data(201, 300),
     verify_manual_sweep(Nodes, KV3),
     
     %% Verify recovery
@@ -84,9 +86,9 @@ confirm() ->
     KV4 = test_data(301, 400),
     verify_remove_add_participant(Nodes, KV4),
 
-    KV7 = test_data(501,  1500), %% AAE repair write {n_val, 1}
-    KV8 = test_data(1601, 1700), %% AAE repair delete {n_val, 1} then reap
-    KV9 = test_data(1701, 1800), %% AAE no repair then reap {n_val, 1}
+    KV7 = test_data(501,  600), %% AAE repair write {n_val, 1}
+    KV8 = test_data(601,  700), %% AAE repair delete {n_val, 1} then reap
+    KV9 = test_data(701,  800), %% AAE no repair then reap {n_val, 1}
 
     verify_aae_and_reaper_interaction(Nodes, KV7, KV8, KV9),
 
@@ -101,8 +103,8 @@ confirm() ->
     KV15 = test_data(15001, 16000),
     test_status(Nodes, KV15),
 
-
     pass.
+
 
 %% No reaps with long grace period.
 verify_no_reap([Node|_] = Nodes, KV) ->
@@ -165,30 +167,34 @@ verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
     disable_sweep_scheduling(Nodes),
     Client = rt:pbc(Node),
     timer:sleep(timer:seconds(5)),
-    set_tombstone_grace(Nodes, ?LONG_TOMBSTONE_GRACE),
     write_data(Client, KV1, [{n_val, 1}]),
     true = verify_data(Node, KV1, changed),
 
+    set_tombstone_grace(Nodes, ?LONG_TOMBSTONE_GRACE),
     format_subtest(verify_aae_repair_tombstone),
     write_data(Client, KV2),
     delete_keys(Client, KV2, [{n_val, 1}]),
     true = verify_data(Node, KV2, delete, 30000),
     set_tombstone_grace(Nodes, ?SHORT_TOMBSTONE_GRACE),
-    timer:sleep(timer:seconds(1)),
+    timer:sleep(?SHORT_TOMBSTONE_GRACE * 5000),
     manually_sweep_all(Node),
     true = check_reaps(Node, Client, KV2),
 
     format_subtest(verify_aae_no_repair_tombstone),
+    %% We need to disable AAE so it doesn't repair before
+    %% we can check the data 
     disable_aae(Node),
     write_data(Client, KV3),
     delete_keys(Client, KV3, [{n_val, 1}]),
+    %% Sleep to get outside grace period
     timer:sleep(?SHORT_TOMBSTONE_GRACE * 5000),
+    false = check_reaps(Node, Client, KV3),
     enable_aae(Node),
-    rt:wait_until_aae_trees_built(Nodes),
     false = verify_data(Node, KV3, delete, 30000),
+    lager:info("As expected since tombstones are outside grace period"),
     manually_sweep_all(Node),
     false = check_reaps(Node, Client, KV3),
-
+    false = check_reaps(Node, Client, KV3),
     riakc_pb_socket:stop(Client).
 
 %% Verify that the sweeper schedules consistently
@@ -246,21 +252,24 @@ check_bucket_acc([Node|_] = Nodes, KV10, KV11) ->
 %% start a new.
 test_restart_sweep([Node|_] = Nodes, KV) ->
     format_subtest(test_restart_sweep),
-    set_sweep_concurrency(Nodes, 4),
+    disable_aae(Node),
+    set_tombstone_grace(Nodes, ?SHORT_TOMBSTONE_GRACE),
+    disable_sweep_scheduling(Nodes),
     Client = rt:pbc(Node),
     write_data(Client, KV),
     delete_keys(Client, KV),
-
+    timer:sleep(timer:seconds(2 * ?SHORT_TOMBSTONE_GRACE)),
 
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_my_ring, []),
     Idxs = rpc:call(Node, riak_core_ring, my_indices, [Ring]),
-    [begin
-         spawn(fun() -> manual_sweep(Node, Index) end),
-         timer:sleep(timer:seconds(1))
-     end || Index <- Idxs, _N <- [1,2,3]],
-    timer:sleep(timer:seconds(10)),
+    enable_sweep_scheduling(Nodes),
+    [spawn(fun() -> manual_sweep(Node, Index) end)
+       || Index <- Idxs, _N <- lists:seq(1, 5)],
+    timer:sleep(timer:seconds(60)),
     true = check_reaps(Node, Client, KV),
-    get_sweep_status(Node).
+    get_sweep_status(Node),
+    enable_aae(Node),
+    enable_sweep_scheduling(Nodes).
 
 test_status([Node|_] = _Nodes, KV) ->
     format_subtest(test_status),
@@ -279,11 +288,11 @@ test_status([Node|_] = _Nodes, KV) ->
 
 enable_aae(Node) ->
     lager:info("enable aae", []),
-    rpc:call(Node, riak_kv_entropy_manager, enable, []).
+    rpc:call(Node, application, set_env, [riak_kv, anti_entropy_concurrency, 10]).
 
 disable_aae(Node) ->
     lager:info("disable aae", []),
-    rpc:call(Node, riak_kv_entropy_manager, disable, []).
+    rpc:call(Node, application, set_env, [riak_kv, anti_entropy_concurrency, 0]).
 
 kill_riak_kv_sweeper(Nodes) ->
     [begin
@@ -332,7 +341,7 @@ delete_keys(Client, KVs) ->
     delete_keys(Client, KVs, []).
 
 delete_keys(Client, KVs, Opt) ->
-    lager:info("Delete data ~p keys", [length(KVs)]),
+    lager:info("Delete data ~p keys ~p", [length(KVs), Opt]),
     [{delete_key(Client, K, Opt)}  || {K, _V} <- KVs].
 
 delete_key(Client, Key, Opt) ->
@@ -367,10 +376,10 @@ create_pb_clients(Nodes) ->
 
 set_tombstone_grace(Nodes, Time) ->
     lager:info("set_tombstone_grace ~p s ", [Time]),
-    rpc:multicall(Nodes, application, set_env, [riak_kv, tombstone_grace_period,Time]).
+    rpc:multicall(Nodes, application, set_env, [riak_kv, tombstone_grace_period, Time]).
 
 set_sweep_throttle(Nodes, {Limit, Sleep}) ->
-    lager:info("set_sweep_throttle ~p ~p s ", [Limit, Sleep]),
+    lager:info("set_sweep_throttle ~p ~p ms ", [Limit, Sleep]),
     rpc:multicall(Nodes, application, set_env, [riak_kv, sweep_throttle, {Limit, Sleep}]),
     Expected = [{Limit, Sleep} || _ <- Nodes],
     rt:wait_until(
