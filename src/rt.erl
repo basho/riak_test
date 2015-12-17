@@ -721,7 +721,13 @@ wait_until_no_pending_changes(Nodes) ->
                 rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
                 {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
                 Changes = [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
-                BadNodes =:= [] andalso length(Changes) =:= length(Nodes) andalso lists:all(fun(T) -> T end, Changes)
+                case BadNodes =:= [] andalso length(Changes) =:= length(Nodes) andalso lists:all(fun(T) -> T end, Changes) of
+                    true -> true;
+                    false ->
+                        NodesWithChanges = [Node || {Node, false} <- lists:zip(Nodes -- BadNodes, Changes)],
+                        lager:info("Changes not yet complete, or bad nodes. BadNodes=~p, Nodes with Pending Changes=~p~n", [BadNodes, NodesWithChanges]),
+                        false
+                end
         end,
     ?assertEqual(ok, wait_until(F)),
     ok.
