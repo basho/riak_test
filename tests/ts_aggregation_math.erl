@@ -41,23 +41,23 @@ confirm() ->
     FilteredTemp = lists:filter(fun(X) -> case X>10 of true -> true; _ -> false end end, Column4),
     FilteredSum4 = lists:sum(FilteredTemp),
     {_, Got} = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
-    ?assertEqual(Got, (FilteredSum4/length(FilteredTemp)) * (9/5) + 32),
+    ?assertEqual((FilteredSum4/length(FilteredTemp)) * (9/5) + 32, Got),
 
     Qry2 = "SELECT SUM(pressure/precipitation) FROM " ++ Bucket,
     {_, Got2} = ts_util:single_query(Conn, Qry2),
     SumDiv = lists:sum([Press/Precip || {Press, Precip} <- lists:zip(Column5, Column6)]),
-    ?assertEqual(Got2, SumDiv),
+    ?assertEqual(SumDiv, Got2),
 
     Qry3 = "SELECT 3+5, 2.0+8, 9/2, 9.0/2 FROM " ++ Bucket,
     {_, Got3} = ts_util:single_query(Conn, Qry3),
     Math = [[8, 10.0, 4, 4.5] || _ <- lists:seq(1, Count)],
-    ?assertEqual(Got3, Math),
+    ?assertEqual(Math, Got3),
 
     Qry4 = "SELECT SUM(temperature+10), AVG(pressure)/10 FROM " ++ Bucket,
     {_, Got4} = ts_util:single_query(Conn, Qry4),
     SumPlus = lists:sum([X+10 || X<-Column4]),
     AvgDiv = lists:sum(Column5)/Count/10,
-    ?assertEqual(Got4, [SumPlus, AvgDiv]),
+    ?assertEqual([SumPlus, AvgDiv], Got4),
     pass.
 
 

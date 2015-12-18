@@ -51,44 +51,44 @@ verify_aggregation(ClusterType) ->
     Qry = "SELECT COUNT(myseries) FROM " ++ Bucket,
     ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(ClusterType),
     {_, Got} = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
-    ?assertEqual(Got, Count),
+    ?assertEqual(Count, Got),
 
     Qry2 = "SELECT COUNT(timestamp) FROM " ++ Bucket,
     {_, Got2} = ts_util:single_query(Conn, Qry2),
-    ?assertEqual(Got2, Count),
+    ?assertEqual(Count, Got2),
 
     Qry3 = "SELECT COUNT(pressure), COUNT(temperature), COUNT(precipitation) FROM " ++ Bucket,
     {_, Got3} = ts_util:single_query(Conn, Qry3),
-    ?assertEqual(Got3, [Count, Count, Count]),
+    ?assertEqual([Count, Count, Count], Got3),
 
     Qry4 = "SELECT SUM(temperature) FROM " ++ Bucket,
     {_, Got4} = ts_util:single_query(Conn, Qry4),
     Sum4 = lists:sum(Column4),
-    ?assertEqual(Got4, Sum4),
+    ?assertEqual(Sum4, Got4),
 
     Qry5 = "SELECT SUM(temperature), SUM(pressure), SUM(\precipitation) FROM " ++ Bucket,
     {_, Got5} = ts_util:single_query(Conn, Qry5),
     Sum5 = lists:sum(Column5),
     Sum6 = lists:sum(Column6),
-    ?assertEqual(Got5, [Sum4, Sum5, Sum6]),
+    ?assertEqual([Sum4, Sum5, Sum6], Got5),
 
     Qry6 = "SELECT MIN(temperature), MIN(pressure) FROM " ++ Bucket,
     {_, Got6} = ts_util:single_query(Conn, Qry6),
     Min4 = lists:min(Column4),
     Min5 = lists:min(Column5),
-    ?assertEqual(Got6, [Min4, Min5]),
+    ?assertEqual([Min4, Min5], Got6),
 
     Qry7 = "SELECT MAX(temperature), MAX(pressure) FROM " ++ Bucket,
     {_, Got7} = ts_util:single_query(Conn, Qry7),
     Max4 = lists:max(Column4),
     Max5 = lists:max(Column5),
-    ?assertEqual(Got7, [Max4, Max5]),
+    ?assertEqual([Max4, Max5], Got7),
 
     Avg4 = Sum4 / Count,
     Avg5 = Sum5 / Count,
     Qry8 = "SELECT AVG(temperature), MEAN(pressure) FROM " ++ Bucket,
     {_, Got8} = ts_util:single_query(Conn, Qry8),
-    ?assertEqual(Got8, [Avg4, Avg5]),
+    ?assertEqual([Avg4, Avg5], Got8),
 
     StdDevFun4 = stddev_fun_builder(Avg4),
     StdDevFun5 = stddev_fun_builder(Avg5),
@@ -96,11 +96,11 @@ verify_aggregation(ClusterType) ->
     StdDev5 = math:sqrt(lists:foldl(StdDevFun5, 0, Column5) / (Count-1)),
     Qry9 = "SELECT STDDEV(temperature), STDDEV(pressure) FROM " ++ Bucket,
     {_, Got9} = ts_util:single_query(Conn, Qry9),
-    ?assertEqual(Got9, [StdDev4, StdDev5]),
+    ?assertEqual([StdDev4, StdDev5], Got9),
 
     Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ Bucket,
     {_, Got10} = ts_util:single_query(Conn, Qry10),
-    ?assertEqual(Got10, [Sum4, Min5, Avg5]).
+    ?assertEqual([Sum4, Min5, Avg5], Got10).
 
 
 

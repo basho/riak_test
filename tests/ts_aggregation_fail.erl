@@ -36,21 +36,21 @@ confirm() ->
     Qry = "SELECT SUM(mybool) FROM " ++ Bucket,
     ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
     Got = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
-    ?assertEqual(Got, some_error_value),
+    ?assertEqual(some_error_value, Got),
 
     Qry2 = "SELECT AVG(myfamily) FROM " ++ Bucket,
     Got2 = ts_util:single_query(Conn, Qry2),
-    ?assertEqual(Got2, some_error_value),
+    ?assertEqual(some_error_value, Got2),
 
     Qry3 = "SELECT MIN(myseries) FROM " ++ Bucket,
     Got3 = ts_util:single_query(Conn, Qry3),
-    ?assertEqual(Got3, some_error_value),
+    ?assertEqual(some_error_value, Got3),
 
     Qry4 = "SELECT MAX(mytimestamp) FROM " ++ Bucket,
     Got4 = ts_util:single_query(Conn, Qry4),
-    ?assertEqual(Got4, some_error_value),
+    ?assertEqual(some_error_value, Got4),
 
     Qry5 = "SELECT STDDEV(mybool) FROM " ++ Bucket,
     Got5 = ts_util:single_query(Conn, Qry5),
-    ?assertEqual(Got5, some_error_value),
+    ?assertEqual(some_error_value, Got5),
     pass.
