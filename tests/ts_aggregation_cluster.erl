@@ -18,21 +18,13 @@
 %%
 %% -------------------------------------------------------------------
 
--module(ts_A_put_all_datatypes).
-
--behavior(riak_test).
+-module(ts_aggregation_cluster).
 
 -export([confirm/0]).
 
--include_lib("eunit/include/eunit.hrl").
+% Test basic aggregation functionality on larger and broken clusters
 
 confirm() ->
-    TestType = normal,
-    DDL = ts_util:get_ddl(big),
-    N = 10,
-    Data = ts_util:get_valid_big_data(N),
-    Got = ts_util:ts_put(
-            ts_util:cluster_and_connect(single), TestType, DDL, Data),
-    ?assertEqual(ok, Got),
+    ts_aggregation_simple:verify_aggregation(multiple),
+    ts_aggregation_simple:verify_aggregation(one_down),
     pass.
-
