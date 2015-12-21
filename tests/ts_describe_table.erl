@@ -26,15 +26,21 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-%% Test basic aggregation functions
+%% Test basic table description
 
 confirm() ->
     TestType = normal,
     DDL = ts_util:get_ddl(),
     Data = ts_util:get_valid_select_data(),
-    Qry = "DESCRIBE GeoCheckin",
+    Qry = "DESCRIBE " ++ ts_util:get_default_bucket(),
     Got = ts_util:ts_query(
         ts_util:cluster_and_connect(single), TestType, DDL, Data, Qry),
-    Expected = some_table_description,
+    Expected =
+        {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
+        [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
+        {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
+        {<<"time">>,       <<"timestamp">>, false,  3,  3},
+        {<<"weather">>,    <<"varchar">>,   false, [], []},
+        {<<"temperature">>,<<"double">>,    true,  [], []}]},
     ?assertEqual(Expected, Got),
     pass.
