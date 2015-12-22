@@ -18,7 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 
--module(ts_A_put_all_datatypes).
+-module(ts_describe_table).
 
 -behavior(riak_test).
 
@@ -26,13 +26,21 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-confirm() ->
-    TestType = normal,
-    DDL = ts_util:get_ddl(big),
-    N = 10,
-    Data = ts_util:get_valid_big_data(N),
-    Got = ts_util:ts_put(
-            ts_util:cluster_and_connect(single), TestType, DDL, Data),
-    ?assertEqual(ok, Got),
-    pass.
+%% Test basic table description
 
+confirm() ->
+    DDL = ts_util:get_ddl(),
+    Bucket = ts_util:get_default_bucket(),
+    Qry = "DESCRIBE " ++ Bucket,
+    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
+    ts_util:create_and_activate_bucket_type(ClusterConn, DDL),
+    Got = ts_util:single_query(Conn, Qry),
+    Expected =
+        {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
+        [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
+        {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
+        {<<"time">>,       <<"timestamp">>, false,  3,  3},
+        {<<"weather">>,    <<"varchar">>,   false, [], []},
+        {<<"temperature">>,<<"double">>,    true,  [], []}]},
+    ?assertEqual(Expected, Got),
+    pass.
