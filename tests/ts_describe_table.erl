@@ -29,12 +29,12 @@
 %% Test basic table description
 
 confirm() ->
-    TestType = normal,
     DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
-    Qry = "DESCRIBE " ++ ts_util:get_default_bucket(),
-    Got = ts_util:ts_query(
-        ts_util:cluster_and_connect(single), TestType, DDL, Data, Qry),
+    Bucket = ts_util:get_default_bucket(),
+    Qry = "DESCRIBE " ++ Bucket,
+    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
+    ts_util:create_and_activate_bucket_type(ClusterConn, DDL),
+    Got = ts_util:single_query(Conn, Qry),
     Expected =
         {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
         [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
