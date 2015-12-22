@@ -68,7 +68,8 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     C = rt:pbc(Node),
 
     %% 1. put some data
-    ok = confirm_put(C, Data),
+    ok = confirm_put(C, doctor_data(Data)),
+    ok = confirm_overwrite(C, Data),
 
     %% 2. get a single key
     ok = confirm_get(C, lists:nth(12, Data)),
@@ -122,6 +123,9 @@ make_data(PvalP1, PvalP2) ->
         end,
         [], lists:seq(?LIFESPAN, 1, -1))).
 
+doctor_data(Data) ->
+    [[A, B, C, D + 0.42] || [A, B, C, D] <- Data].
+
 confirm_put(C, Data) ->
     ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, Data),
     io:format("Nothing put in a non-existent bucket: ~p\n", [ResFail]),
@@ -131,6 +135,12 @@ confirm_put(C, Data) ->
     %% (for future tests of batch put writing order)
     Res = riakc_ts:put(C, ?BUCKET, Data),
     io:format("Put ~b records: ~p\n", [length(Data), Res]),
+    ?assertEqual(ok, Res),
+    ok.
+
+confirm_overwrite(C, Data) ->
+    Res = riakc_ts:put(C, ?BUCKET, Data),
+    io:format("Overwrote ~b records: ~p\n", [length(Data), Res]),
     ?assertEqual(ok, Res),
     ok.
 
@@ -254,4 +264,3 @@ receive_keys(ReqId, Acc) ->
             io:format("Consider streaming done\n", []),
             {ok, Acc}
     end.
-
