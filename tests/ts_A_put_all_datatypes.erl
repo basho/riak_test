@@ -26,32 +26,13 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--define(SPANNING_STEP, (1000)).
-
 confirm() ->
     TestType = normal,
     DDL = ts_util:get_ddl(big),
-    Family = <<"family1">>,
-    Series = <<"seriesX">>,
     N = 10,
-    Data = make_data(N, Family, Series, []),
-    %% Expected is wrong but we can't write data at the moment
+    Data = ts_util:get_valid_big_data(N),
     Got = ts_util:ts_put(
             ts_util:cluster_and_connect(single), TestType, DDL, Data),
     ?assertEqual(ok, Got),
     pass.
 
-make_data(0, _, _, Acc) ->
-    Acc;
-make_data(N, F, S, Acc) when is_integer(N) andalso N > 0 ->
-    NewAcc = [
-          F,
-          S,
-          1 + N * ?SPANNING_STEP,
-          N,
-          N + 0.1,
-          ts_util:get_bool(N),
-          N + 100000,
-          ts_util:get_optional(N, N)
-         ],
-    make_data(N - 1, F, S, [NewAcc | Acc]).

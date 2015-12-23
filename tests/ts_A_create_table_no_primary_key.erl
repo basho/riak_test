@@ -34,11 +34,6 @@ confirm() ->
         " time        timestamp not null,"
         " weather     varchar   not null,"
         " temperature double)",
-    Expected =
-        {ok,
-         "Error validating table definition for bucket type GeoCheckin:\n"
-         "Missing primary key\n"},
-    Got = ts_util:create_bucket_type(
-            ts_util:build_cluster(single), DDL),
-    ?assertEqual(Expected, Got),
+    {ok, Got} = ts_util:create_bucket_type(ts_util:build_cluster(single), DDL),
+    ?assertNotEqual(0, string:str(Got, "Missing primary key")),
     pass.

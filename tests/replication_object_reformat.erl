@@ -11,7 +11,12 @@
         {riak_core,
             [
              {ring_creation_size, 8},
-             {default_bucket_props, [{n_val, ?N}]}
+             {default_bucket_props,
+                 [
+                     {n_val, ?N},
+                     {allow_mult, true},
+                     {dvv_enabled, true}
+                 ]}
             ]
         },
         {riak_kv,

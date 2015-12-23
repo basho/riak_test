@@ -53,7 +53,7 @@ confirm() ->
     PrivDir = rt:priv_dir(),
     Conf = [
             {riak_core, [
-                {default_bucket_props, [{allow_mult, true}]},
+                {default_bucket_props, [{allow_mult, true}, {dvv_enabled, true}]},
                 {ssl, [
                     {certfile, filename:join([CertDir,"site3.basho.com/cert.pem"])},
                     {keyfile, filename:join([CertDir, "site3.basho.com/key.pem"])},

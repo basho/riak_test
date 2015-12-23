@@ -60,7 +60,12 @@ confirm() ->
 
 create_config(Backend) ->
     [{riak_core, [
-        {default_bucket_props, [{n_val, 1}]},
+        {default_bucket_props,
+            [
+                {n_val, 1},
+                {allow_mult, true},
+                {dvv_enabled, true}
+            ]},
         {ring_creation_size, 8},
         {handoff_acksync_threshold, 20},
         {handoff_concurrency, 4},

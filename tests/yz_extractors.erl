@@ -207,6 +207,8 @@ confirm() ->
     %% Upgrade
     yokozuna_rt:rolling_upgrade(Cluster, current),
 
+    [rt:wait_until_ready(ANode) || ANode <- Cluster],
+
     [rt:assert_capability(ANode, ?YZ_CAP, true) || ANode <- Cluster],
     [rt:assert_supported(rt:capability(ANode, all), ?YZ_CAP, [true, false]) ||
         ANode <- Cluster],

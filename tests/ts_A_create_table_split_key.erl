@@ -36,11 +36,6 @@ confirm() ->
         " temperature double,"
         " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
         " time, myfamily, myseries, temperature))",
-    Expected =
-        {ok,
-         "Error validating table definition for bucket type GeoCheckin:\n"
-         "Local key does not match primary key\n"},
-    Got = ts_util:create_bucket_type(
-            ts_util:build_cluster(single), DDL),
-    ?assertEqual(Expected, Got),
+    {ok, Got} = ts_util:create_bucket_type(ts_util:build_cluster(single), DDL),
+    ?assertNotEqual(0, string:str(Got, "Local key does not match primary key")),
     pass.

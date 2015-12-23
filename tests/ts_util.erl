@@ -22,6 +22,8 @@
 -module(ts_util).
 
 -export([
+    activate_bucket_type/2,
+    activate_bucket_type/3,
     build_cluster/1,
     cluster_and_connect/1,
     create_and_activate_bucket_type/2,
@@ -29,6 +31,7 @@
     create_and_activate_bucket_type/4,
     create_bucket_type/2,
     create_bucket_type/3,
+    create_bucket_type/4,
     exclusive_result_from_data/3,
     get_bool/1,
     get_cols/0, get_cols/1,
@@ -43,6 +46,8 @@
     get_optional/2,
     get_string/1,
     get_timestamp/0,
+    get_valid_aggregation_data/1,
+    get_valid_big_data/1,
     get_valid_obj/0,
     get_valid_qry/0,
     get_valid_qry_spanning_quanta/0,
@@ -235,6 +240,33 @@ get_valid_select_data() ->
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
 
 
+-define(SPANNING_STEP_BIG, (1000)).
+
+get_valid_big_data(N) ->
+    Family = <<"family1">>,
+    Series = <<"seriesX">>,
+    Times = list:seq(1, N),
+    [[
+        Family,
+        Series,
+        1 + N * ?SPANNING_STEP_BIG,
+        N,
+        N + 0.1,
+        get_bool(X),
+        N + 100000,
+        get_optional(X, X)
+    ] || X <- Times].
+
+
+get_valid_aggregation_data(N) ->
+    Family = <<"family1">>,
+    Series = <<"seriesX">>,
+    Times = lists:seq(1, N),
+    [[Family, Series, X,
+      get_optional(X, get_float()),
+      get_optional(X+1, get_float()),
+      get_optional(X*3, get_float())] || X <- Times].
+
 -define(SPANNING_STEP, (1000*60*5)).
 
 get_valid_qry_spanning_quanta() ->
@@ -320,7 +352,20 @@ get_ddl(api) ->
     " myfloat     double      not null,"
     " mybool      boolean     not null,"
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
+    " myfamily, myseries, time))";
+
+%% DDL for testing aggregration behavior
+get_ddl(aggregration) ->
+    "CREATE TABLE WeatherData ("
+    " myfamily      varchar   not null,"
+    " myseries      varchar   not null,"
+    " time          timestamp not null,"
+    " temperature   double,"
+    " pressure      double,"
+    " precipitation double,"
+    " PRIMARY KEY ((myfamily, myseries, quantum(time, 10, 'm')), "
     " myfamily, myseries, time))".
+
 
 get_data(api) ->
     [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]] ++

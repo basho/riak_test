@@ -18,24 +18,29 @@
 %%
 %% -------------------------------------------------------------------
 
--module(ts_A_create_table_not_null_pk_fields).
+-module(ts_describe_table).
 
 -behavior(riak_test).
 
--include_lib("eunit/include/eunit.hrl").
-
 -export([confirm/0]).
 
+-include_lib("eunit/include/eunit.hrl").
+
+%% Test basic table description
+
 confirm() ->
-    DDL =
-        "CREATE TABLE GeoCheckin ("
-        " myfamily    varchar   not null,"
-        " myseries    varchar           ,"
-        " time        timestamp not null,"
-        " weather     varchar   not null,"
-        " temperature double,"
-        " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
-        " myfamily, myseries, time))",
-    {ok, Got} = ts_util:create_bucket_type(ts_util:build_cluster(single), DDL),
-    ?assertNotEqual(0, string:str(Got, "Primary key has 'null' fields")),
+    DDL = ts_util:get_ddl(),
+    Bucket = ts_util:get_default_bucket(),
+    Qry = "DESCRIBE " ++ Bucket,
+    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
+    ts_util:create_and_activate_bucket_type(ClusterConn, DDL),
+    Got = ts_util:single_query(Conn, Qry),
+    Expected =
+        {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
+        [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
+        {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
+        {<<"time">>,       <<"timestamp">>, false,  3,  3},
+        {<<"weather">>,    <<"varchar">>,   false, [], []},
+        {<<"temperature">>,<<"double">>,    true,  [], []}]},
+    ?assertEqual(Expected, Got),
     pass.

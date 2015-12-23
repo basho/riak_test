@@ -56,7 +56,7 @@ confirm() ->
     test_lose_minority_synctrees(PBC, Bucket, Key, Val, PL),
     test_lose_majority_synctrees(PBC, Bucket, Key, Val, PL),
     test_lose_minority_synctrees_one_node_partitioned(PBC, Bucket, Key, Val,
-        PL, Nodes),
+                                                      PL, Nodes),
     test_lose_all_data_and_trees_except_one_node(PBC, Bucket, Key, Val, PL),
     {ok, _NewVal} = test_backup_restore_data_not_trees(Bucket, Key, Val, PL),
     test_lose_all_data(PBC, Bucket, Key, PL),
@@ -64,7 +64,12 @@ confirm() ->
     pass.
 
 config() ->
-    [{riak_core, [{default_bucket_props, [{n_val, 5}]},
+    [{riak_core, [{default_bucket_props,
+                   [
+                    {n_val, 5},
+                    {allow_mult, true},
+                    {dvv_enabled, true}
+                   ]},
                   {vnode_management_timer, 1000},
                   {ring_creation_size, 16},
                   {enable_consensus, true},
@@ -79,7 +84,7 @@ test_lose_majority_synctrees(PBC, Bucket, Key, Val, PL) ->
     assert_lose_synctrees_and_recover(PBC, Bucket, Key, Val, PL, Majority).
 
 test_lose_minority_synctrees_one_node_partitioned(PBC, Bucket, Key, Val, PL,
-  Nodes) ->
+                                                  Nodes) ->
     Minority = minority_vnodes(PL),
     {{Idx0, Node0}, primary} = hd(PL),
     Ensemble = {kv, Idx0, 5},
@@ -251,7 +256,7 @@ kill_peers(Ensemble, Nodes) ->
     Peers = [P || P={_Id, N} <- View, lists:member(N, Nodes)],
     lager:info("Killing Peers: ~p", [Peers]),
     Pids = [rt:rpc_call(Node, riak_ensemble_manager, get_peer_pid,
-             [Ensemble, Peer]) || Peer <- Peers],
+                     [Ensemble, Peer]) || Peer <- Peers],
     [exit(Pid, kill) || Pid <- Pids, Pid =/= undefined].
 
 wipe_partitions(PL) ->

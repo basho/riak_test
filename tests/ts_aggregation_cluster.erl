@@ -18,24 +18,13 @@
 %%
 %% -------------------------------------------------------------------
 
--module(ts_A_create_table_not_null_pk_fields).
-
--behavior(riak_test).
-
--include_lib("eunit/include/eunit.hrl").
+-module(ts_aggregation_cluster).
 
 -export([confirm/0]).
 
+% Test basic aggregation functionality on larger and broken clusters
+
 confirm() ->
-    DDL =
-        "CREATE TABLE GeoCheckin ("
-        " myfamily    varchar   not null,"
-        " myseries    varchar           ,"
-        " time        timestamp not null,"
-        " weather     varchar   not null,"
-        " temperature double,"
-        " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
-        " myfamily, myseries, time))",
-    {ok, Got} = ts_util:create_bucket_type(ts_util:build_cluster(single), DDL),
-    ?assertNotEqual(0, string:str(Got, "Primary key has 'null' fields")),
+    ts_aggregation_simple:verify_aggregation(multiple),
+    ts_aggregation_simple:verify_aggregation(one_down),
     pass.
