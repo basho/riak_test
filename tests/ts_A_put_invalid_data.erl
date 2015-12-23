@@ -33,10 +33,28 @@
 
 confirm() ->
     DDL = ts_util:get_ddl(),
-    Obj = [ts_util:get_invalid_obj()],
+    ValidObj = ts_util:get_valid_obj(),
+    InvalidObj = ts_util:get_invalid_obj(),
+    ShortObj = ts_util:get_short_obj(),
+    LongObj = ts_util:get_long_obj(),
+    Bucket = ts_util:get_default_bucket(),
+    {_Cluster, Conn} = ClusterConn = ts_util:cluster_and_connect(single),
     Expected = {error, {1003, <<"Invalid data">>}},
-    Got = ts_util:ts_put(
-            ts_util:cluster_and_connect(single), normal, DDL, Obj),
+    Got = ts_util:ts_put(ClusterConn, normal, DDL, [InvalidObj]),
     ?assertEqual(Expected, Got),
-    pass.
 
+    Got2 = riakc_ts:put(Conn, Bucket, [ShortObj]),
+    ?assertEqual(Expected, Got2),
+
+    Got3 = riakc_ts:put(Conn, Bucket, [LongObj]),
+    ?assertEqual(Expected, Got3),
+
+    Got4 = riakc_ts:put(Conn, Bucket, [ValidObj, InvalidObj]),
+    ?assertEqual(Expected, Got4),
+
+    Got5 = riakc_ts:put(Conn, Bucket, [ValidObj, ShortObj]),
+    ?assertEqual(Expected, Got5),
+
+    Got6 = riakc_ts:put(Conn, Bucket, [ValidObj, LongObj]),
+    ?assertEqual(Expected, Got6),
+    pass.
