@@ -36,6 +36,7 @@ confirm() ->
     ok = confirm_create(C, DDL),
     ok = confirm_activate(Cluster, Table),
     ok = confirm_exists(C, Table),
+    ok = confirm_get(C, Table),
     pass.
 
 confirm_create(C, DDL) ->
@@ -55,10 +56,19 @@ confirm_exists(C, Table) ->
     Got = ts_util:single_query(C, Qry),
     Expected =
         {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
-        [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
-        {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
-        {<<"time">>,       <<"timestamp">>, false,  3,  3},
-        {<<"weather">>,    <<"varchar">>,   false, [], []},
-        {<<"temperature">>,<<"double">>,    true,  [], []}]},
+         [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
+          {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
+          {<<"time">>,       <<"timestamp">>, false,  3,  3},
+          {<<"weather">>,    <<"varchar">>,   false, [], []},
+          {<<"temperature">>,<<"double">>,    true,  [], []}]},
     ?assertEqual(Expected, Got),
+    io:format("DESCRIBE ~s:\n~p\n", [Table, Got]),
+    ok.
+
+confirm_get(C, Table) ->
+    Data = [[<<"a">>, <<"b">>, 10101010, <<"not bad">>, 42.24]],
+    Key = [<<"a">>, <<"b">>, 10101010],
+    ?assertMatch(ok, riakc_ts:put(C, Table, Data)),
+    ?assertMatch({ok, {_, Data}}, riakc_ts:get(C, Table, Key, [])),
+    io:format("Put a record, got it back\n", []),
     ok.
