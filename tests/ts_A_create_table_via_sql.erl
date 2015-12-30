@@ -35,6 +35,7 @@ confirm() ->
     Table = ts_util:get_default_bucket(),
 
     ok = confirm_create(C1, DDL),
+    ok = confirm_re_create_fail(C2, DDL),
     ok = confirm_exists(C2, Table),
     ok = confirm_get(C2, Table),
     pass.
@@ -44,6 +45,11 @@ confirm_create(C, DDL) ->
     Got = riakc_ts:query(C, DDL),
     ?assertEqual(Expected, Got),
     io:format("Created table via query:\n  ~s\n", [DDL]),
+    ok.
+confirm_re_create_fail(C, DDL) ->
+    Got = riakc_ts:query(C, DDL),
+    ?assertMatch({error, {1014, _}}, Got),
+    io:format("Not created same table via query:\n  ~s\n", [DDL]),
     ok.
 
 confirm_exists(C, Table) ->
