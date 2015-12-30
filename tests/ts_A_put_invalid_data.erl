@@ -39,22 +39,23 @@ confirm() ->
     LongObj = ts_util:get_long_obj(),
     Bucket = ts_util:get_default_bucket(),
     {_Cluster, Conn} = ClusterConn = ts_util:cluster_and_connect(single),
-    Expected = {error, {1003, <<"Invalid data">>}},
+    Expected1 = {error, {1003, <<"Invalid data found at row index(es) 1">>}},
+    Expected2 = {error, {1003, <<"Invalid data found at row index(es) 2">>}},
     Got = ts_util:ts_put(ClusterConn, normal, DDL, [InvalidObj]),
-    ?assertEqual(Expected, Got),
+    ?assertEqual(Expected1, Got),
 
     Got2 = riakc_ts:put(Conn, Bucket, [ShortObj]),
-    ?assertEqual(Expected, Got2),
+    ?assertEqual(Expected1, Got2),
 
     Got3 = riakc_ts:put(Conn, Bucket, [LongObj]),
-    ?assertEqual(Expected, Got3),
+    ?assertEqual(Expected1, Got3),
 
     Got4 = riakc_ts:put(Conn, Bucket, [ValidObj, InvalidObj]),
-    ?assertEqual(Expected, Got4),
+    ?assertEqual(Expected2, Got4),
 
     Got5 = riakc_ts:put(Conn, Bucket, [ValidObj, ShortObj]),
-    ?assertEqual(Expected, Got5),
+    ?assertEqual(Expected2, Got5),
 
     Got6 = riakc_ts:put(Conn, Bucket, [ValidObj, LongObj]),
-    ?assertEqual(Expected, Got6),
+    ?assertEqual(Expected2, Got6),
     pass.
