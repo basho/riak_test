@@ -27,16 +27,16 @@
 -export([confirm/0]).
 
 confirm() ->
-    [Node] = Cluster = ts_util:build_cluster(single),
-    C = rt:pbc(Node),
+    [Node1, Node2 | _] = _Cluster = ts_util:build_cluster(multiple),
+    C1 = rt:pbc(Node1),
+    C2 = rt:pbc(Node2),
 
     DDL = ts_util:get_ddl(),
     Table = ts_util:get_default_bucket(),
 
-    ok = confirm_create(C, DDL),
-    ok = confirm_activate(Cluster, Table),
-    ok = confirm_exists(C, Table),
-    ok = confirm_get(C, Table),
+    ok = confirm_create(C1, DDL),
+    ok = confirm_exists(C2, Table),
+    ok = confirm_get(C2, Table),
     pass.
 
 confirm_create(C, DDL) ->
@@ -44,11 +44,6 @@ confirm_create(C, DDL) ->
     Got = riakc_ts:query(C, DDL),
     ?assertEqual(Expected, Got),
     io:format("Created table via query:\n  ~s\n", [DDL]),
-    ok.
-
-confirm_activate(Cluster, Table) ->
-    Result = ts_util:activate_bucket_type(Cluster, Table, _Retries = 1),
-    ?assertMatch({ok, _}, Result),
     ok.
 
 confirm_exists(C, Table) ->
