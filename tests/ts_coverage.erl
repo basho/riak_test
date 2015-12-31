@@ -56,10 +56,8 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
     AdminPid = rt:pbc(lists:nth(3, Nodes)),
     OtherPid = rt:pbc(lists:nth(2, Nodes)),
     Qry = ts_util:get_valid_qry(-1, NumQuanta * QuantumMS),
-    ?debugFmt("Query: ~ts~n", [Qry]),
     {ok, CoverageEntries} = riakc_ts:get_coverage(AdminPid, Table, Qry),
 
-    ?debugFmt("Found ~B coverage entries~n", [length(CoverageEntries)]),
     Results = 
         lists:foldl(fun(#tscoverageentry{ip=IP, port=Port, cover_context=C,
                                          range=TsRange}, Acc) ->
@@ -67,6 +65,15 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                                                                    Port),
                             {_Headers, ThisQuantum} = riakc_ts:query(Pid, Qry, [], C),
                             riakc_pb_socket:stop(Pid),
+
+                            %% Open a connection to another node and
+                            %% make certain we get no results using
+                            %% this cover context
+                            {ok, WrongPid} = riakc_pb_socket:start_link(binary_to_list(IP),
+                                                                        alternate_port(Port)),
+                            ?assertMatch({[], []},
+                                         riakc_ts:query(WrongPid, Qry, [], C)),
+                            riakc_pb_socket:stop(WrongPid),
 
                             %% Let's compare the range data with the
                             %% query results to make sure the latter
@@ -77,7 +84,6 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                     end,
                     [],
                     CoverageEntries),
-    ?debugFmt("Found ~B results~n", [length(Results)]),
     ?assertEqual(lists:sort(ExpectedData), lists:sort(Results)),
 
     %% Expect {error,{1001,<<"{too_many_subqueries,13}">>}} if NumQuanta > 5
@@ -113,3 +119,11 @@ check_data_against_range(Data, #tsrange{lower_bound=Lower,
                                                                 Upper, UpperIncl)
                                   end,
                                   Data)).
+
+%% Cheap and easy. ts_util gives us 3 nodes, we know the ports.
+alternate_port(10017) ->
+    10027;
+alternate_port(10027) ->
+    10037;
+alternate_port(10037) ->
+    10017.
