@@ -61,10 +61,17 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
 
     ?debugFmt("Found ~B coverage entries~n", [length(CoverageEntries)]),
     Results = 
-        lists:foldl(fun(#tscoverageentry{ip=IP, port=Port, cover_context=C}, Acc) ->
+        lists:foldl(fun(#tscoverageentry{ip=IP, port=Port, cover_context=C,
+                                         range=TsRange}, Acc) ->
                             {ok, Pid} = riakc_pb_socket:start_link(binary_to_list(IP),
                                                                    Port),
                             {_Headers, ThisQuantum} = riakc_ts:query(Pid, Qry, [], C),
+
+                            %% Let's compare the range data with the
+                            %% query results to make sure the latter
+                            %% fall within the former
+                            check_data_against_range(ThisQuantum, TsRange),
+                            %% Now add to the pile and continue
                             ThisQuantum ++ Acc
                     end,
                     [],
@@ -81,3 +88,27 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
             ?assertEqual(lists:sort(ExpectedData), lists:sort(StraightQueryResults))
     end.
 
+
+time_within_range(Time, Lower, LowerIncl, Upper, UpperIncl) ->
+    if
+        Lower > Time ->
+            false;
+        Upper < Time ->
+            false;
+        Lower < Time andalso Time < Upper ->
+            true;
+        Lower == Time ->
+            LowerIncl;
+        Upper == Time ->
+            UpperIncl
+    end.
+
+check_data_against_range(Data, #tsrange{lower_bound=Lower,
+                                        lower_bound_inclusive=LowerIncl,
+                                        upper_bound=Upper,
+                                        upper_bound_inclusive=UpperIncl}) ->
+    ?assertEqual([], lists:filter(fun({_, _, Time, _, _}) ->
+                                          not time_within_range(Time, Lower, LowerIncl,
+                                                                Upper, UpperIncl)
+                                  end,
+                                  Data)).
