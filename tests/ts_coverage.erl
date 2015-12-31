@@ -66,6 +66,7 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                             {ok, Pid} = riakc_pb_socket:start_link(binary_to_list(IP),
                                                                    Port),
                             {_Headers, ThisQuantum} = riakc_ts:query(Pid, Qry, [], C),
+                            riakc_pb_socket:stop(Pid),
 
                             %% Let's compare the range data with the
                             %% query results to make sure the latter
