@@ -245,7 +245,7 @@ get_valid_select_data() ->
 get_valid_big_data(N) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
-    Times = list:seq(1, N),
+    Times = lists:seq(1, N),
     [[
         Family,
         Series,
@@ -256,7 +256,6 @@ get_valid_big_data(N) ->
         N + 100000,
         get_optional(X, X)
     ] || X <- Times].
-
 
 get_valid_aggregation_data(N) ->
     Family = <<"family1">>,
