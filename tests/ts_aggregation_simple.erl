@@ -75,7 +75,7 @@ verify_aggregation(ClusterType) ->
        <<"COUNT(precipitation)">>
       ],
       [{Count, Count, Count}]},
-     Result3 = assert("Many Counts", Expected3, Got3),
+    Result3 = assert("Many Counts", Expected3, Got3),
 
     Qry4 = "SELECT SUM(temperature) FROM " ++ Bucket ++ Where,
     Got4 = ts_util:single_query(Conn, Qry4),
@@ -108,35 +108,34 @@ verify_aggregation(ClusterType) ->
                  [{Max4, Max5}]},
     Result7 = assert("Max", Expected7, Got7),
 
-    Avg4 = Sum4 / Count,
-    Avg5 = Sum5 / Count,
-    io:format("Avg4 is ~p Avg5 is ~p~n", [Avg4, Avg5]),
+    C4 = [X || X <- Column4, is_number(X)],
+    C5 = [X || X <- Column5, is_number(X)],
+    Count4 = length(C4),
+    Count5 = length(C5),
+
+    Avg4 = Sum4 / Count4,
+    Avg5 = Sum5 / Count5,
     Qry8 = "SELECT AVG(temperature), MEAN(pressure) FROM " ++ Bucket ++ Where,
     Got8 = ts_util:single_query(Conn, Qry8),
     Expected8 = {[<<"AVG(temperature)">>, <<"MEAN(pressure)">>],
                  [{Avg4, Avg5}]},
     Result8 = assert("Avg and Mean", Expected8, Got8),
 
+    StdDevFun4 = stddev_fun_builder(Avg4),
+    StdDevFun5 = stddev_fun_builder(Avg5),
+    StdDev4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / Count4),
+    StdDev5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / Count5),
+    Qry9 = "SELECT STDEV(temperature), STDEV(pressure) FROM " ++ Bucket ++ Where,
+    Got9 = ts_util:single_query(Conn, Qry9),
+    Expected9 = {[<<"STDEV(temperature)">>, <<"STDEV(pressure)">>],
+                 [{StdDev4, StdDev5}]},
+    Result9 = assert_float("Standard Deviation", Expected9, Got9),
 
-    %% StdDevFun4 = stddev_fun_builder(Avg4),
-    %% StdDevFun5 = stddev_fun_builder(Avg5),
-    %% C4 = [X || X <- Column4, is_number(X)],
-    %% C5 = [X || X <- Column5, is_number(X)],
-    %% Count4 = length(C4),
-    %% Count5 = length(C5),
-    %% StdDev4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / (Count4-1)),
-    %% StdDev5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / (Count5-1)),
-    %% Qry9 = "SELECT STDDEV(temperature), STDDEV(pressure) FROM " ++ Bucket ++ Where,
-    %% Got9 = ts_util:single_query(Conn, Qry9),
-    %% Expected9 = {[<<"STDDEV(temperature)">>, <<"STDEV(pressure)">>],
-    %%              [{StdDev4, StdDev5}]},
-    %% Result9 = assert("Standard Deviation", Expected9, Got9),
-
-    %% Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ Bucket ++ Where,
-    %% Got10 = ts_util:single_query(Conn, Qry10),
-    %% Expected10 = {[<<"SUM(temperature)">>, <<"MIN(pressure)">>, <<"AVG(pressure)">>],
-    %%               [{Sum4, Min5, Avg5}]},
-    %% Result10 = assert("Mixter Maxter", Expected10, Got10),
+    Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ Bucket ++ Where,
+    Got10 = ts_util:single_query(Conn, Qry10),
+    Expected10 = {[<<"SUM(temperature)">>, <<"MIN(pressure)">>, <<"AVG(pressure)">>],
+                  [{Sum4, Min5, Avg5}]},
+    Result10 = assert("Mixter Maxter", Expected10, Got10),
 
     results([
              Result,
@@ -146,14 +145,40 @@ verify_aggregation(ClusterType) ->
              Result5,
              Result6,
              Result7,
-             Result8
-             %% Result9,
-             %% Result10
+             Result8,
+             Result9,
+             Result10
             ]).
 
 results(Results) ->
     Expected = lists:duplicate(length(Results), pass),
     ?assertEqual(Expected, Results).
+
+-define(DELTA, 1.0e-10).
+
+assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
+    case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
+        fail -> lager:info("*****************", []),
+                lager:info("Test ~p failed", [String]),
+                lager:info("Exp ~p", [Exp]),
+                lager:info("Got ~p", [Got]),
+                lager:info("*****************", []),
+                fail;
+        pass -> pass
+    end;            
+assert_float(String, Exp, Got) -> assert(String, Exp, Got).
+
+assertf2([], []) -> pass;
+assertf2([H1 | T1], [H2 | T2]) -> 
+    io:format("H1 is ~p H2 is ~p~n", [H1, H2]),
+    Diff = H1 - H2,
+    io:format("Diff is ~p~n", [Diff]),
+    Av = (H1 + H2)/2,
+    io:format("Av is ~p~n", [Av]),
+    io:format("Diff/Av is ~p Delta is ~p~n", [Diff/Av, ?DELTA]),
+    if Diff/Av > ?DELTA -> fail;
+       el/=se           -> assertf2(T1, T2)
+    end.
 
 assert(_,      X,   X)   -> pass;
 assert(String, Exp, Got) -> lager:info("*****************", []),
