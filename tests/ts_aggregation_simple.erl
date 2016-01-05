@@ -170,12 +170,8 @@ assert_float(String, Exp, Got) -> assert(String, Exp, Got).
 
 assertf2([], []) -> pass;
 assertf2([H1 | T1], [H2 | T2]) -> 
-    io:format("H1 is ~p H2 is ~p~n", [H1, H2]),
     Diff = H1 - H2,
-    io:format("Diff is ~p~n", [Diff]),
     Av = (H1 + H2)/2,
-    io:format("Av is ~p~n", [Av]),
-    io:format("Diff/Av is ~p Delta is ~p~n", [Diff/Av, ?DELTA]),
     if Diff/Av > ?DELTA -> fail;
        el/=se           -> assertf2(T1, T2)
     end.
