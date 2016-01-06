@@ -43,6 +43,7 @@ run_tests(PvalP1, PvalP2) ->
     io:format("Data to be written:\n~p\n...\n~p\n", [hd(Data), lists:last(Data)]),
 
     Cluster = ts_util:build_cluster(multiple),
+    C = rt:pbc(hd(Cluster)),
 
     %% use riak-admin to create a bucket
     TableDef = io_lib:format(
@@ -56,16 +57,14 @@ run_tests(PvalP1, PvalP2) ->
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
-    ts_util:create_and_activate_bucket_type(Cluster, lists:flatten(TableDef), ?BUCKET),
+    ts_util:single_query(C, lists:flatten(TableDef)),
 
     %% Make sure data is written to each node
-    lists:foreach(fun(Node) -> confirm_all_from_node(Node, Data, PvalP1, PvalP2) end, Cluster),
+    lists:foreach(fun(Node) -> confirm_all_from_node(C, Node, Data, PvalP1, PvalP2) end, Cluster),
     pass.
 
 
-confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
-    %% set up a client
-    C = rt:pbc(Node),
+confirm_all_from_node(C, _Node, Data, PvalP1, PvalP2) ->
 
     %% 1. put some data
     ok = confirm_put(C, doctor_data(Data)),
