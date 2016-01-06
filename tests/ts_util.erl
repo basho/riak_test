@@ -42,8 +42,10 @@
     get_integer/0,
     get_invalid_obj/0,
     get_invalid_qry/1,
+    get_long_obj/0,
     get_map/1,
     get_optional/2,
+    get_short_obj/0,
     get_string/1,
     get_timestamp/0,
     get_valid_aggregation_data/1,
@@ -395,6 +397,20 @@ get_invalid_obj() ->
      get_timestamp(),
      get_varchar(),
      get_float()].
+
+get_short_obj() ->
+    [get_varchar(),
+        get_varchar(),
+        get_timestamp(),
+        get_varchar()].
+
+get_long_obj() ->
+    [get_varchar(),
+        get_varchar(),
+        get_timestamp(),
+        get_varchar(),
+        get_float(),
+        get_float()].
 
 get_varchar() ->
     Len = random:uniform(?MAXVARCHARLEN),

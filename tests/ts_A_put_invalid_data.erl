@@ -33,10 +33,29 @@
 
 confirm() ->
     DDL = ts_util:get_ddl(),
-    Obj = [ts_util:get_invalid_obj()],
-    Expected = {error, {1003, <<"Invalid data found at row index(es) 1">>}},
-    Got = ts_util:ts_put(
-            ts_util:cluster_and_connect(single), normal, DDL, Obj),
-    ?assertEqual(Expected, Got),
-    pass.
+    ValidObj = ts_util:get_valid_obj(),
+    InvalidObj = ts_util:get_invalid_obj(),
+    ShortObj = ts_util:get_short_obj(),
+    LongObj = ts_util:get_long_obj(),
+    Bucket = ts_util:get_default_bucket(),
+    {_Cluster, Conn} = ClusterConn = ts_util:cluster_and_connect(single),
+    Expected1 = {error, {1003, <<"Invalid data found at row index(es) 1">>}},
+    Expected2 = {error, {1003, <<"Invalid data found at row index(es) 2">>}},
+    Got = ts_util:ts_put(ClusterConn, normal, DDL, [InvalidObj]),
+    ?assertEqual(Expected1, Got),
 
+    Got2 = riakc_ts:put(Conn, Bucket, [ShortObj]),
+    ?assertEqual(Expected1, Got2),
+
+    Got3 = riakc_ts:put(Conn, Bucket, [LongObj]),
+    ?assertEqual(Expected1, Got3),
+
+    Got4 = riakc_ts:put(Conn, Bucket, [ValidObj, InvalidObj]),
+    ?assertEqual(Expected2, Got4),
+
+    Got5 = riakc_ts:put(Conn, Bucket, [ValidObj, ShortObj]),
+    ?assertEqual(Expected2, Got5),
+
+    Got6 = riakc_ts:put(Conn, Bucket, [ValidObj, LongObj]),
+    ?assertEqual(Expected2, Got6),
+    pass.
