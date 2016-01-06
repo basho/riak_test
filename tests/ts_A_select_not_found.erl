@@ -41,7 +41,7 @@ confirm() ->
         "AND myfamily = 'family1' "
         "AND myseries = 'seriesX' "
         "AND weather = 'summer rain'",
-    Expected = {[], []},
+    Expected = {[<<"myfamily">>, <<"myseries">>, <<"time">>, <<"weather">>, <<"temperature">>], []},
     Got = ts_util:ts_query(
             ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
     ?assertEqual(Expected, Got),

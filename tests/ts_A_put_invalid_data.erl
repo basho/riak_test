@@ -34,7 +34,7 @@
 confirm() ->
     DDL = ts_util:get_ddl(),
     Obj = [ts_util:get_invalid_obj()],
-    Expected = {error, {1003, <<"Invalid data">>}},
+    Expected = {error, {1003, <<"Invalid data found at row index(es) 1">>}},
     Got = ts_util:ts_put(
             ts_util:cluster_and_connect(single), normal, DDL, Obj),
     ?assertEqual(Expected, Got),
