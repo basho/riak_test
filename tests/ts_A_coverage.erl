@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 %% @doc A module to test riak_ts cover plan retrieval/usage.
 
--module(ts_coverage).
+-module(ts_A_coverage).
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
@@ -47,7 +47,7 @@ confirm() ->
     test_quanta_range(Table, lists_to_tuples(Data), Nodes, QuantaTally, QuantumMS),
     pass.
 
-    
+
 %% We put data with each record as a list, but in the results it's a tuple
 lists_to_tuples(Rows) ->
     lists:map(fun erlang:list_to_tuple/1, Rows).
