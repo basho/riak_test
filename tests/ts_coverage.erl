@@ -104,7 +104,7 @@ assert_disjoint_ranges(Data1, Data2) ->
     Times2 = [A || [_, _, A|_] <- Data2],
     {Ta1, Tz1} = {hd(Times1), lists:last(Times1)},
     {Ta2, Tz2} = {hd(Times2), lists:last(Times2)},
-    Disjoint = ((Ta1 < Ta2) and (Tz1 < Ta2)) or ((Tz1 > Tz2) and (Ta1 > Tz2)),
+    Disjoint = (Tz1<Ta2) or (Tz2<Ta1),
     ?assert(Disjoint == true),
     ok.
 
