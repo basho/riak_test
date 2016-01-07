@@ -25,6 +25,7 @@
 % Test basic aggregation functionality on larger and broken clusters
 
 confirm() ->
-    ts_aggregation_simple:verify_aggregation(multiple),
-    ts_aggregation_simple:verify_aggregation(one_down),
+    Cluster = ts_aggregation_simple:verify_aggregation(multiple),
+    rt:clean_cluster(Cluster),
+    %_NewCluster = ts_aggregation_simple:verify_aggregation(one_down),
     pass.
