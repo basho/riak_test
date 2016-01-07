@@ -23,11 +23,13 @@
 -behavior(riak_test).
 
 -export([
-    confirm/0,
-    verify_aggregation/1
-]).
+         confirm/0,
+         verify_aggregation/1
+        ]).
 
 -include_lib("eunit/include/eunit.hrl").
+
+-compile(export_all).
 
 %% Test basic aggregation functions
 
@@ -38,76 +40,119 @@ confirm() ->
 stddev_fun_builder(Avg) ->
     fun(X, Acc) -> Acc + (Avg-X)*(Avg-X) end.
 
+test_name(ClusterType, Name) ->
+  lists:flatten(io_lib:format("~p:~p", [atom_to_list(ClusterType), Name])).
+
 verify_aggregation(ClusterType) ->
     DDL = ts_util:get_ddl(aggregration),
+    lager:info("DDL is ~p", [DDL]),
+
+    ClusterConn = {Cluster, Conn} = ts_util:cluster_and_connect(ClusterType),
+
     Count = 10,
     Data = ts_util:get_valid_aggregation_data(Count),
+    lager:info("Data is ~p", [Data]),
     Column4 = [lists:nth(4, X) || X <- Data],
     Column5 = [lists:nth(5, X) || X <- Data],
     Column6 = [lists:nth(6, X) || X <- Data],
     TestType = normal,
     Bucket = "WeatherData",
 
-    Qry = "SELECT COUNT(myseries) FROM " ++ Bucket,
-    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(ClusterType),
-    {_, Got} = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
-    ?assertEqual(Count, Got),
+    Where = " WHERE myfamily = 'family1' and myseries = 'seriesX' and time >= 1 and time <= 10",
 
-    Qry2 = "SELECT COUNT(timestamp) FROM " ++ Bucket,
-    {_, Got2} = ts_util:single_query(Conn, Qry2),
-    ?assertEqual(Count, Got2),
+    Qry = "SELECT COUNT(myseries) FROM " ++ Bucket ++ Where,
+    Got = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
+    Expected = {[<<"COUNT(myseries)">>], [{Count}]},
+    Result = ts_util:assert(test_name(ClusterType, "Count Strings"), Expected, Got),
 
-    Qry3 = "SELECT COUNT(pressure), COUNT(temperature), COUNT(precipitation) FROM " ++ Bucket,
-    {_, Got3} = ts_util:single_query(Conn, Qry3),
-    ?assertEqual([Count, Count, Count], Got3),
+    Qry2 = "SELECT COUNT(time) FROM " ++ Bucket ++ Where,
+    Got2 = ts_util:single_query(Conn, Qry2),
+    Expected2 = {[<<"COUNT(time)">>], [{Count}]},
+    Result2 = ts_util:assert(test_name(ClusterType, "Count Timestamps"), Expected2, Got2),
 
-    Qry4 = "SELECT SUM(temperature) FROM " ++ Bucket,
-    {_, Got4} = ts_util:single_query(Conn, Qry4),
-    Sum4 = lists:sum(Column4),
-    ?assertEqual(Sum4, Got4),
+    Qry3 = "SELECT COUNT(pressure), count(temperature), cOuNt(precipitation) FROM " ++ Bucket ++ Where,
+    Got3 = ts_util:single_query(Conn, Qry3),
+    Expected3 = {
+      [<<"COUNT(pressure)">>,
+       <<"COUNT(temperature)">>,
+       <<"COUNT(precipitation)">>
+      ],
+      [{Count, Count, Count}]},
+    Result3 = ts_util:assert(test_name(ClusterType, "Count Multiple Floats"), Expected3, Got3),
 
-    Qry5 = "SELECT SUM(temperature), SUM(pressure), SUM(\precipitation) FROM " ++ Bucket,
-    {_, Got5} = ts_util:single_query(Conn, Qry5),
-    Sum5 = lists:sum(Column5),
-    Sum6 = lists:sum(Column6),
-    ?assertEqual([Sum4, Sum5, Sum6], Got5),
+    Qry4 = "SELECT SUM(temperature) FROM " ++ Bucket ++ Where,
+    Got4 = ts_util:single_query(Conn, Qry4),
+    Sum4 = lists:sum([X || X <- Column4, is_number(X)]),
+    Expected4 = {[<<"SUM(temperature)">>],
+                 [{Sum4}]},
+    Result4 = ts_util:assert(test_name(ClusterType, "Single Float Sum"), Expected4, Got4),
 
-    Qry6 = "SELECT MIN(temperature), MIN(pressure) FROM " ++ Bucket,
-    {_, Got6} = ts_util:single_query(Conn, Qry6),
-    Min4 = lists:min(Column4),
-    Min5 = lists:min(Column5),
-    ?assertEqual([Min4, Min5], Got6),
+    Qry5 = "SELECT SUM(temperature), sum(pressure), sUM(precipitation) FROM " ++ Bucket ++ Where,
+    Got5 = ts_util:single_query(Conn, Qry5),
+    Sum5 = lists:sum([X || X <- Column5, is_number(X)]),
+    Sum6 = lists:sum([X || X <- Column6, is_number(X)]),
+    Expected5 = {[<<"SUM(temperature)">>, <<"SUM(pressure)">>, <<"SUM(precipitation)">>],
+                 [{Sum4, Sum5, Sum6}]},
+    Result5 = ts_util:assert(test_name(ClusterType, "Multiple Float Sums"), Expected5, Got5),
 
-    Qry7 = "SELECT MAX(temperature), MAX(pressure) FROM " ++ Bucket,
-    {_, Got7} = ts_util:single_query(Conn, Qry7),
-    Max4 = lists:max(Column4),
-    Max5 = lists:max(Column5),
-    ?assertEqual([Max4, Max5], Got7),
+    Qry6 = "SELECT MIN(temperature), MIN(pressure) FROM " ++ Bucket ++ Where,
+    Got6 = ts_util:single_query(Conn, Qry6),
+    Min4 = lists:min([X || X <- Column4, is_number(X)]),
+    Min5 = lists:min([X || X <- Column5, is_number(X)]),
+    Expected6 = {[<<"MIN(temperature)">>, <<"MIN(pressure)">>],
+                 [{Min4, Min5}]},
+    Result6 = ts_util:assert(test_name(ClusterType, "Min Floats"), Expected6, Got6),
 
-    Avg4 = Sum4 / Count,
-    Avg5 = Sum5 / Count,
-    Qry8 = "SELECT AVG(temperature), MEAN(pressure) FROM " ++ Bucket,
-    {_, Got8} = ts_util:single_query(Conn, Qry8),
-    ?assertEqual([Avg4, Avg5], Got8),
+    Qry7 = "SELECT MAX(temperature), MAX(pressure) FROM " ++ Bucket ++ Where,
+    Got7 = ts_util:single_query(Conn, Qry7),
+    Max4 = lists:max([X || X <- Column4, is_number(X)]),
+    Max5 = lists:max([X || X <- Column5, is_number(X)]),
+    Expected7 = {[<<"MAX(temperature)">>, <<"MAX(pressure)">>],
+                 [{Max4, Max5}]},
+    Result7 = ts_util:assert(test_name(ClusterType, "Max Floats"), Expected7, Got7),
+
+    C4 = [X || X <- Column4, is_number(X)],
+    C5 = [X || X <- Column5, is_number(X)],
+    Count4 = length(C4),
+    Count5 = length(C5),
+
+    Avg4 = Sum4 / Count4,
+    Avg5 = Sum5 / Count5,
+    Qry8 = "SELECT AVG(temperature), MEAN(pressure) FROM " ++ Bucket ++ Where,
+    Got8 = ts_util:single_query(Conn, Qry8),
+    Expected8 = {[<<"AVG(temperature)">>, <<"MEAN(pressure)">>],
+                 [{Avg4, Avg5}]},
+    Result8 = ts_util:assert(test_name(ClusterType, "Avg and Mean"), Expected8, Got8),
 
     StdDevFun4 = stddev_fun_builder(Avg4),
     StdDevFun5 = stddev_fun_builder(Avg5),
-    StdDev4 = math:sqrt(lists:foldl(StdDevFun4, 0, Column4) / (Count-1)),
-    StdDev5 = math:sqrt(lists:foldl(StdDevFun5, 0, Column5) / (Count-1)),
-    Qry9 = "SELECT STDDEV(temperature), STDDEV(pressure) FROM " ++ Bucket,
-    {_, Got9} = ts_util:single_query(Conn, Qry9),
-    ?assertEqual([StdDev4, StdDev5], Got9),
+    StdDev4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / Count4),
+    StdDev5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / Count5),
+    Qry9 = "SELECT STDEV(temperature), STDEV(pressure) FROM " ++ Bucket ++ Where,
+    Got9 = ts_util:single_query(Conn, Qry9),
+    Expected9 = {[<<"STDEV(temperature)">>, <<"STDEV(pressure)">>],
+                 [{StdDev4, StdDev5}]},
+    Result9 = ts_util:assert_float(test_name(ClusterType, "Standard Deviation"), Expected9, Got9),
 
-    Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ Bucket,
-    {_, Got10} = ts_util:single_query(Conn, Qry10),
-    ?assertEqual([Sum4, Min5, Avg5], Got10).
+    Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ Bucket ++ Where,
+    Got10 = ts_util:single_query(Conn, Qry10),
+    Expected10 = {[<<"SUM(temperature)">>, <<"MIN(pressure)">>, <<"AVG(pressure)">>],
+                  [{Sum4, Min5, Avg5}]},
+    Result10 = ts_util:assert(test_name(ClusterType, "Mixter Maxter"), Expected10, Got10),
 
+    ts_util:results([
+             Result,
+             Result2,
+             Result3,
+             Result4,
+             Result5,
+             Result6,
+             Result7,
+             Result8,
+             Result9,
+             Result10
+            ]),
 
-
-
-
-
-
-
-
+    riakc_pb_socket:stop(Conn),
+    Cluster.
 

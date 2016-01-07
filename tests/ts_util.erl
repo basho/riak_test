@@ -24,6 +24,8 @@
 -export([
     activate_bucket_type/2,
     activate_bucket_type/3,
+    assert/3,
+    assert_float/3,
     build_cluster/1,
     cluster_and_connect/1,
     create_and_activate_bucket_type/2,
@@ -42,8 +44,10 @@
     get_integer/0,
     get_invalid_obj/0,
     get_invalid_qry/1,
+    get_long_obj/0,
     get_map/1,
     get_optional/2,
+    get_short_obj/0,
     get_string/1,
     get_timestamp/0,
     get_valid_aggregation_data/1,
@@ -56,6 +60,7 @@
     get_varchar/0,
     maybe_stop_a_node/2,
     remove_last/1,
+    results/1,
     single_query/2,
     ts_get/6,
     ts_get/7,
@@ -245,7 +250,7 @@ get_valid_select_data() ->
 get_valid_big_data(N) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
-    Times = list:seq(1, N),
+    Times = lists:seq(1, N),
     [[
         Family,
         Series,
@@ -256,7 +261,6 @@ get_valid_big_data(N) ->
         N + 100000,
         get_optional(X, X)
     ] || X <- Times].
-
 
 get_valid_aggregation_data(N) ->
     Family = <<"family1">>,
@@ -397,6 +401,20 @@ get_invalid_obj() ->
      get_varchar(),
      get_float()].
 
+get_short_obj() ->
+    [get_varchar(),
+        get_varchar(),
+        get_timestamp(),
+        get_varchar()].
+
+get_long_obj() ->
+    [get_varchar(),
+        get_varchar(),
+        get_timestamp(),
+        get_varchar(),
+        get_float(),
+        get_float()].
+
 get_varchar() ->
     Len = random:uniform(?MAXVARCHARLEN),
     String = get_string(Len),
@@ -429,3 +447,38 @@ get_optional(N, X) ->
         0 -> X;
         1 -> []
     end.
+
+
+-define(DELTA, 1.0e-10).
+
+assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
+    case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
+        fail -> lager:info("*****************", []),
+            lager:info("Test ~p failed", [String]),
+            lager:info("Exp ~p", [Exp]),
+            lager:info("Got ~p", [Got]),
+            lager:info("*****************", []),
+            fail;
+        pass -> pass
+    end;
+assert_float(String, Exp, Got) -> assert(String, Exp, Got).
+
+assertf2([], []) -> pass;
+assertf2([H1 | T1], [H2 | T2]) ->
+    Diff = H1 - H2,
+    Av = (H1 + H2)/2,
+    if Diff/Av > ?DELTA -> fail;
+        el/=se           -> assertf2(T1, T2)
+    end.
+
+assert(_,      X,   X)   -> pass;
+assert(String, Exp, Got) -> lager:info("*****************", []),
+    lager:info("Test ~p failed", [String]),
+    lager:info("Exp ~p", [Exp]),
+    lager:info("Got ~p", [Got]),
+    lager:info("*****************", []),
+    fail.
+
+results(Results) ->
+    Expected = lists:duplicate(length(Results), pass),
+    ?assertEqual(Expected, Results).
