@@ -34,6 +34,7 @@
     create_bucket_type/2,
     create_bucket_type/3,
     create_bucket_type/4,
+    create_table/4,
     exclusive_result_from_data/3,
     get_bool/1,
     get_cols/0, get_cols/1,
@@ -53,9 +54,9 @@
     get_valid_aggregation_data/1,
     get_valid_big_data/1,
     get_valid_obj/0,
-    get_valid_qry/0,
+    get_valid_qry/0, get_valid_qry/2,
     get_valid_qry_spanning_quanta/0,
-    get_valid_select_data/0,
+    get_valid_select_data/0, get_valid_select_data/1,
     get_valid_select_data_spanning_quanta/0,
     get_varchar/0,
     maybe_stop_a_node/2,
@@ -227,6 +228,9 @@ get_default_bucket() ->
 get_valid_qry() ->
     "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX'".
 
+get_valid_qry(Lower, Upper) ->
+    lists:flatten(io_lib:format("select * from GeoCheckin Where time > ~B and time < ~B and myfamily = 'family1' and myseries ='seriesX'", [Lower, Upper])).
+
 get_invalid_qry(borked_syntax) ->
     "selectah * from GeoCheckin Where time > 1 and time < 10";
 get_invalid_qry(key_not_covered) ->
@@ -239,9 +243,12 @@ get_invalid_qry(type_error) ->
     "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX' and weather > true".
 
 get_valid_select_data() ->
+    get_valid_select_data(fun() -> lists:seq(1, 10) end).
+
+get_valid_select_data(SeqFun) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
-    Times = lists:seq(1, 10),
+    Times = SeqFun(),
     [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
 
 
