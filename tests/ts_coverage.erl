@@ -58,12 +58,12 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
     Qry = ts_util:get_valid_qry(-1, NumQuanta * QuantumMS),
     {ok, CoverageEntries} = riakc_ts:get_coverage(AdminPid, Table, Qry),
 
-    Results = 
+    Results =
         lists:foldl(fun(#tscoverageentry{ip=IP, port=Port, cover_context=C,
                                          range=TsRange}, Acc) ->
                             {ok, Pid} = riakc_pb_socket:start_link(binary_to_list(IP),
                                                                    Port),
-                            {_Headers, ThisQuantum} = riakc_ts:query(Pid, Qry, [], C),
+                            {_, ThisQuantum} = riakc_ts:query(Pid, Qry, [], C),
                             riakc_pb_socket:stop(Pid),
 
                             %% Open a connection to another node and
@@ -71,8 +71,8 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                             %% this cover context
                             {ok, WrongPid} = riakc_pb_socket:start_link(binary_to_list(IP),
                                                                         alternate_port(Port)),
-                            ?assertMatch({[], []},
-                                         riakc_ts:query(WrongPid, Qry, [], C)),
+                            {_, OtherQuantum} = riakc_ts:query(WrongPid, Qry, [], C),
+                            ok = assert_disjoint_ranges(ThisQuantum, OtherQuantum),
                             riakc_pb_socket:stop(WrongPid),
 
                             %% Let's compare the range data with the
@@ -95,6 +95,18 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
             ?assertEqual(lists:sort(ExpectedData), lists:sort(StraightQueryResults))
     end.
 
+assert_disjoint_ranges([], _) ->
+    ok;
+assert_disjoint_ranges(_, []) ->
+    ok;
+assert_disjoint_ranges(Data1, Data2) ->
+    Times1 = [A || [_, _, A|_] <- Data1],
+    Times2 = [A || [_, _, A|_] <- Data2],
+    {Ta1, Tz1} = {hd(Times1), lists:last(Times1)},
+    {Ta2, Tz2} = {hd(Times2), lists:last(Times2)},
+    Disjoint = ((Ta1 < Ta2) and (Tz1 < Ta2)) or ((Tz1 > Tz2) and (Ta1 > Tz2)),
+    ?assert(Disjoint == true),
+    ok.
 
 time_within_range(Time, Lower, LowerIncl, Upper, UpperIncl) ->
     if
