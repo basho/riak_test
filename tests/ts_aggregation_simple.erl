@@ -40,6 +40,12 @@ confirm() ->
 stddev_fun_builder(Avg) ->
     fun(X, Acc) -> Acc + (Avg-X)*(Avg-X) end.
 
+-define(SQL_NULL, []).
+
+-define(TEMPERATURE_COL_INDEX, 4).
+-define(PRESSURE_COL_INDEX, 5).
+-define(PRECIPITATION_COL_INDEX, 6).
+
 verify_aggregation(ClusterType) ->
     DDL = ts_util:get_ddl(aggregration),
     lager:info("DDL is ~p", [DDL]),
@@ -47,11 +53,12 @@ verify_aggregation(ClusterType) ->
     ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(ClusterType),
 
     Count = 10,
+
     Data = ts_util:get_valid_aggregation_data(Count),
     lager:info("Data is ~p", [Data]),
-    Column4 = [lists:nth(4, X) || X <- Data],
-    Column5 = [lists:nth(5, X) || X <- Data],
-    Column6 = [lists:nth(6, X) || X <- Data],
+    Column4 = [lists:nth(?TEMPERATURE_COL_INDEX, X) || X <- Data],
+    Column5 = [lists:nth(?PRESSURE_COL_INDEX, X) || X <- Data],
+    Column6 = [lists:nth(?PRECIPITATION_COL_INDEX, X) || X <- Data],
     TestType = normal,
     Bucket = "WeatherData",
 
@@ -74,7 +81,9 @@ verify_aggregation(ClusterType) ->
        <<"COUNT(temperature)">>,
        <<"COUNT(precipitation)">>
       ],
-      [{Count, Count, Count}]},
+      [{count_non_nulls(?PRESSURE_COL_INDEX, Data),
+        count_non_nulls(?TEMPERATURE_COL_INDEX, Data),
+        count_non_nulls(?PRECIPITATION_COL_INDEX, Data)}]},
     Result3 = assert("Many Counts", Expected3, Got3),
 
     Qry4 = "SELECT SUM(temperature) FROM " ++ Bucket ++ Where,
@@ -183,3 +192,7 @@ assert(String, Exp, Got) -> lager:info("*****************", []),
                             lager:info("Got ~p", [Got]),
                             lager:info("*****************", []),
                             fail.
+
+%%
+count_non_nulls(ColIndex, Rows) ->
+  length([lists:nth(ColIndex, X) || X <- Rows, lists:nth(ColIndex, X) /= ?SQL_NULL]).
