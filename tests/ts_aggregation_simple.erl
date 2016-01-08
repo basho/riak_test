@@ -164,40 +164,6 @@ verify_aggregation(ClusterType) ->
     riakc_pb_socket:stop(Conn),
     Cluster.
 
-results(Results) ->
-    Expected = lists:duplicate(length(Results), pass),
-    ?assertEqual(Expected, Results).
-
--define(DELTA, 1.0e-10).
-
-assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
-    case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
-        fail -> lager:info("*****************", []),
-                lager:info("Test ~p failed", [String]),
-                lager:info("Exp ~p", [Exp]),
-                lager:info("Got ~p", [Got]),
-                lager:info("*****************", []),
-                fail;
-        pass -> pass
-    end;            
-assert_float(String, Exp, Got) -> assert(String, Exp, Got).
-
-assertf2([], []) -> pass;
-assertf2([H1 | T1], [H2 | T2]) -> 
-    Diff = H1 - H2,
-    Av = (H1 + H2)/2,
-    if Diff/Av > ?DELTA -> fail;
-       el/=se           -> assertf2(T1, T2)
-    end.
-
-assert(_,      X,   X)   -> pass;
-assert(String, Exp, Got) -> lager:info("*****************", []),
-                            lager:info("Test ~p failed", [String]),
-                            lager:info("Exp ~p", [Exp]),
-                            lager:info("Got ~p", [Got]),
-                            lager:info("*****************", []),
-                            fail.
-
 %%
 count_non_nulls(ColIndex, Rows) ->
   length([lists:nth(ColIndex, X) || X <- Rows, lists:nth(ColIndex, X) /= ?SQL_NULL]).
