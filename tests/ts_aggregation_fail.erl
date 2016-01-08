@@ -50,9 +50,9 @@ confirm() ->
     Got4 = ts_util:single_query(Conn, Qry4),
     ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'MAX'/1 called with arguments of the wrong type [varchar].">>}}, Got4),
 
-    Qry5 = "SELECT STDEV(mybool) FROM " ++ Bucket,
+    Qry5 = "SELECT STDDEV(mybool) FROM " ++ Bucket,
     Got5 = ts_util:single_query(Conn, Qry5),
-    ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'STDEV'/1 called with arguments of the wrong type [boolean].">>}}, Got5),
+    ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'STDDEV'/1 called with arguments of the wrong type [boolean].">>}}, Got5),
 
     Qry6 = "SELECT Mean(mybool) FROM " ++ Bucket,
     Got6 = ts_util:single_query(Conn, Qry6),
