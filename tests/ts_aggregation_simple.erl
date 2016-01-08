@@ -40,6 +40,12 @@ confirm() ->
 stddev_fun_builder(Avg) ->
     fun(X, Acc) -> Acc + (Avg-X)*(Avg-X) end.
 
+-define(SQL_NULL, []).
+
+-define(TEMPERATURE_COL_INDEX, 4).
+-define(PRESSURE_COL_INDEX, 5).
+-define(PRECIPITATION_COL_INDEX, 6).
+
 test_name(ClusterType, Name) ->
   lists:flatten(io_lib:format("~p:~p", [atom_to_list(ClusterType), Name])).
 
@@ -50,11 +56,12 @@ verify_aggregation(ClusterType) ->
     ClusterConn = {Cluster, Conn} = ts_util:cluster_and_connect(ClusterType),
 
     Count = 10,
+
     Data = ts_util:get_valid_aggregation_data(Count),
     lager:info("Data is ~p", [Data]),
-    Column4 = [lists:nth(4, X) || X <- Data],
-    Column5 = [lists:nth(5, X) || X <- Data],
-    Column6 = [lists:nth(6, X) || X <- Data],
+    Column4 = [lists:nth(?TEMPERATURE_COL_INDEX, X) || X <- Data],
+    Column5 = [lists:nth(?PRESSURE_COL_INDEX, X) || X <- Data],
+    Column6 = [lists:nth(?PRECIPITATION_COL_INDEX, X) || X <- Data],
     TestType = normal,
     Bucket = "WeatherData",
 
@@ -77,7 +84,9 @@ verify_aggregation(ClusterType) ->
        <<"COUNT(temperature)">>,
        <<"COUNT(precipitation)">>
       ],
-      [{Count, Count, Count}]},
+      [{count_non_nulls(?PRESSURE_COL_INDEX, Data),
+        count_non_nulls(?TEMPERATURE_COL_INDEX, Data),
+        count_non_nulls(?PRECIPITATION_COL_INDEX, Data)}]},
     Result3 = ts_util:assert(test_name(ClusterType, "Count Multiple Floats"), Expected3, Got3),
 
     Qry4 = "SELECT SUM(temperature) FROM " ++ Bucket ++ Where,
@@ -150,9 +159,11 @@ verify_aggregation(ClusterType) ->
              Result7,
              Result8,
              Result9,
-             Result10
-            ]),
+             Result10]),
 
     riakc_pb_socket:stop(Conn),
     Cluster.
 
+%%
+count_non_nulls(ColIndex, Rows) ->
+  length([lists:nth(ColIndex, X) || X <- Rows, lists:nth(ColIndex, X) /= ?SQL_NULL]).
