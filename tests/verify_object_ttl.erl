@@ -44,7 +44,7 @@ confirm() ->
     verify_bucket_ttl(Client),
     set_tombstone_grace(Nodes, ?SHORT_TOMBSTONE_GRACE),
     verify_ttl_sweep(Client, hd(Nodes)),
-    verify_bucket_ttl_change(Client, hd(Nodes)),
+    verify_bucket_ttl_change(Client),
     pass.
 
 %% Tests that objects not visible after ttl expire
@@ -98,7 +98,7 @@ verify_ttl_sweep(Client, Node) ->
    true = check_reaps(Node, Client, KVs1000),
    ok.
 %% Verify that old objects get expired when we configure short ttl on bucket
-verify_bucket_ttl_change(Client, Node) ->
+verify_bucket_ttl_change(Client) ->
     KVs = test_data(301, 400),
     Bucket = <<"change_ttl_bucket">>,
     riakc_pb_socket:set_bucket(Client, Bucket, [{ttl, 50000}]),
