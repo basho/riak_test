@@ -62,7 +62,7 @@ confirm() ->
            {anti_entropy_build_limit, {100, 1000}},
            {anti_entropy_concurrency, 10},
            {anti_entropy, {on, [debug]}},
-           {anti_entropy_tick, 2000}
+           {anti_entropy_tick, 500}
           ]}
         ],
 
@@ -86,9 +86,9 @@ confirm() ->
     KV4 = test_data(301, 400),
     verify_remove_add_participant(Nodes, KV4),
 
-    KV7 = test_data(501,  600), %% AAE repair write {n_val, 1}
-    KV8 = test_data(601,  700), %% AAE repair delete {n_val, 1} then reap
-    KV9 = test_data(701,  800), %% AAE no repair then reap {n_val, 1}
+    KV7 = test_data(501,  510), %% AAE repair write {n_val, 1}
+    KV8 = test_data(601,  610), %% AAE repair delete {n_val, 1} then reap
+    KV9 = test_data(701,  710), %% AAE no repair then reap {n_val, 1}
 
     verify_aae_and_reaper_interaction(Nodes, KV7, KV8, KV9),
 
@@ -166,8 +166,8 @@ verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
     format_subtest(verify_aae_in_grace),
     disable_sweep_scheduling(Nodes),
     Client = rt:pbc(Node),
-    timer:sleep(timer:seconds(5)),
-    write_data(Client, KV1, [{n_val, 1}]),
+    timer:sleep(timer:seconds(10)),
+    write_data(Client, KV1, [{n_val, 1}]), 
     true = verify_data(Node, KV1, changed),
 
     set_tombstone_grace(Nodes, ?LONG_TOMBSTONE_GRACE),
@@ -436,7 +436,7 @@ get_read_repairs(Node) ->
     proplists:get_value(read_repairs_total, Stats).
 
 get_sweep_status(Node) ->
-    rpc:call(Node, riak_kv_console, sweep_status, [[]]).
+    rpc:call(Node, riak_kv_console, command, [["riak-admin", "sweeper", "status"]]).
 
 get_unformated_status(Node) ->
     rpc:call(Node, riak_kv_sweeper, status, []).
