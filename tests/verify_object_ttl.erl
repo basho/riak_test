@@ -113,10 +113,7 @@ verify_bucket_ttl_change(Client, Node) ->
     put_object_without_ttl(Client, Bucket, KVs1),
     timer:sleep(timer:seconds(2)),
     true = check_expired(Client, Bucket, KVs1),
-    riakc_pb_socket:set_bucket(Client, Bucket, [{ttl, 50000}]),
-    manually_sweep_all(Node),
-    %% resurrect all the data
-    false = check_expired(Client, Bucket, KVs1).
+    ok.
 
 %% ====================================================================
 %% Internal functions
