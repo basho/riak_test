@@ -1,15 +1,15 @@
 Time Series tests are organised in sets
-ts_A
-ts_B
-ts_C
+ts_simple
+ts_cluster
+ts_degraded
 etc, etc
 
-Basically, if a ts_A type test fails then there SHOULD also be failures
-in ts_B, ts_C series tests as well
+Basically, if a ts_simple type test fails then there SHOULD also be failures
+in ts_cluster, ts_degraded series tests as well
 
-Basically fix the ts_A tests first, and that 'should' fix a lot of
-ts_B, ts_C etc tests
+Basically fix the ts_simple tests first, and that 'should' fix a lot of
+ts_cluster, ts_degraded etc tests
 
-If you have a failure in say a ts_B test, but no failures in ts_C that
-indicates you might not have enough ts_C, ts_D tests written, consider
+If you have a failure in say a ts_cluster test, but no failures in ts_degraded that
+indicates you might not have enough ts_degraded, ts_etc tests written, consider
 extending the test suite
