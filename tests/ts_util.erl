@@ -41,6 +41,8 @@
     get_data/1,
     get_ddl/0, get_ddl/1,
     get_default_bucket/0,
+    get_default_table_schema/0,
+    get_default_table_schema/1,
     get_float/0,
     get_integer/0,
     get_invalid_obj/0,
@@ -377,6 +379,16 @@ get_ddl(aggregration) ->
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 10, 'm')), "
     " myfamily, myseries, time))".
 
+
+get_default_table_schema() ->
+    get_default_table_schema(small).
+get_default_table_schema(small) ->
+    {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
+     [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
+      {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
+      {<<"time">>,       <<"timestamp">>, false,  3,  3},
+      {<<"weather">>,    <<"varchar">>,   false, [], []},
+      {<<"temperature">>,<<"double">>,    true,  [], []}]}.
 
 get_data(api) ->
     [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]] ++

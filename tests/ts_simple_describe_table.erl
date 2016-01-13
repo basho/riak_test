@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015, 2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -35,12 +35,6 @@ confirm() ->
     ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
     ts_util:create_and_activate_bucket_type(ClusterConn, DDL),
     Got = ts_util:single_query(Conn, Qry),
-    Expected =
-        {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
-        [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
-        {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
-        {<<"time">>,       <<"timestamp">>, false,  3,  3},
-        {<<"weather">>,    <<"varchar">>,   false, [], []},
-        {<<"temperature">>,<<"double">>,    true,  [], []}]},
+    Expected = ts_util:get_default_table_schema(),
     ?assertEqual(Expected, Got),
     pass.
