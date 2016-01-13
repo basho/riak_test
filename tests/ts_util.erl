@@ -84,7 +84,6 @@ ts_put(ClusterConn, TestType, DDL, Obj) ->
     Bucket = get_default_bucket(),
     ts_put(ClusterConn, TestType, DDL, Obj, Bucket).
 ts_put({Cluster, Conn}, TestType, DDL, Obj, Bucket) ->
-
     create_table(TestType, Cluster, DDL, Bucket),
     lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Obj]),
     riakc_ts:put(Conn, Bucket, Obj).
@@ -148,7 +147,7 @@ create_bucket_type(Cluster, DDL, Bucket) ->
 
 -spec(create_bucket_type(node()|{[node()],term()}, string(), string(), non_neg_integer()) -> {ok, term()} | term()).
 create_bucket_type([Node|_Rest], DDL, Bucket, NVal) when is_integer(NVal) ->
-    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": ~s, \\\"table_def\\\": \\\"~s\\\"}}", [integer_to_list(NVal), DDL]),
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": ~b, \\\"table_def\\\": \\\"~s\\\"}}", [NVal, DDL]),
     rt:admin(Node, ["bucket-type", "create", bucket_to_list(Bucket), lists:flatten(Props)]).
 
 -spec(activate_bucket_type([node()], string()) -> {ok, string()} | term()).
