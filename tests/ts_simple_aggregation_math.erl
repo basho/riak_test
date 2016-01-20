@@ -29,7 +29,7 @@
 confirm() ->
     DDL = ts_util:get_ddl(aggregration),
     Count = 10,
-    Data = ts_util:get_valid_aggregation_data(Count),
+    Data = ts_util:get_valid_aggregation_data_not_null(Count),
     Column4 = [lists:nth(4, X) || X <- Data],
     Column5 = [lists:nth(5, X) || X <- Data],
     Column6 = [lists:nth(6, X) || X <- Data],
@@ -47,19 +47,20 @@ confirm() ->
 
     Qry2 = "SELECT SUM(pressure/precipitation) FROM " ++ Bucket ++ Where,
     {_, Got2} = ts_util:single_query(Conn, Qry2),
-    SumDiv = lists:sum([Press/Precip || {Press, Precip} <- lists:zip(Column5, Column6)]),
-    ?assertEqual(SumDiv, Got2),
+    SumDiv = lists:sum(
+        [Press/Precip || {Press, Precip} <- lists:zip(Column5, Column6), Press /= [], Precip /= []]),
+    ?assertEqual([{SumDiv}], Got2),
 
     Qry3 = "SELECT 3+5, 2.0+8, 9/2, 9.0/2 FROM " ++ Bucket ++ Where,
     {_, Got3} = ts_util:single_query(Conn, Qry3),
-    Math = [[8, 10.0, 4, 4.5] || _ <- lists:seq(1, Count)],
-    ?assertEqual(Math, Got3),
+    Maths = [{8, 10.0, 4, 4.5} || _ <- lists:seq(1, Count)],
+    ?assertEqual(Maths, Got3),
 
     Qry4 = "SELECT SUM(temperature+10), AVG(pressure)/10 FROM " ++ Bucket ++ Where,
     {_, Got4} = ts_util:single_query(Conn, Qry4),
     SumPlus = lists:sum([X+10 || X<-Column4]),
     AvgDiv = lists:sum(Column5)/Count/10,
-    ?assertEqual([SumPlus, AvgDiv], Got4),
+    ?assertEqual([{SumPlus, AvgDiv}], Got4),
     pass.
 
 

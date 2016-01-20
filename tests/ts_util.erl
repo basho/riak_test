@@ -52,6 +52,7 @@
     get_string/1,
     get_timestamp/0,
     get_valid_aggregation_data/1,
+    get_valid_aggregation_data_not_null/1,
     get_valid_big_data/1,
     get_valid_obj/0,
     get_valid_qry/0, get_valid_qry/2,
@@ -277,6 +278,15 @@ get_valid_aggregation_data(N) ->
       get_optional(X, get_float()),
       get_optional(X+1, get_float()),
       get_optional(X*3, get_float())] || X <- Times].
+
+get_valid_aggregation_data_not_null(N) ->
+    Family = <<"family1">>,
+    Series = <<"seriesX">>,
+    Times = lists:seq(1, N),
+    [[Family, Series, X,
+      get_float(),
+      get_float(),
+      get_float()] || X <- Times].
 
 -define(SPANNING_STEP, (1000*60*5)).
 
