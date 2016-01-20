@@ -27,6 +27,7 @@
         {riak_kv,
             [
              %% Specify fast building of AAE trees
+             {sweep_tick, 10000},
              {anti_entropy, {on, []}},
              {anti_entropy_build_limit, {100, 1000}},
              {anti_entropy_concurrency, 100}
