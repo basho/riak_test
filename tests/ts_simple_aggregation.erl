@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -29,7 +29,9 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
+-define(TEMPERATURE_COL_INDEX, 4).
+-define(PRESSURE_COL_INDEX, 5).
+-define(PRECIPITATION_COL_INDEX, 6).
 
 %% Test basic aggregation functions
 
@@ -52,9 +54,9 @@ verify_aggregation(ClusterType) ->
     Count = 10,
     Data = ts_util:get_valid_aggregation_data(Count),
     lager:info("Data is ~p", [Data]),
-    Column4 = [lists:nth(4, X) || X <- Data], % temperature
-    Column5 = [lists:nth(5, X) || X <- Data], % pressure
-    Column6 = [lists:nth(6, X) || X <- Data], % precipitation
+    Column4 = [lists:nth(?TEMPERATURE_COL_INDEX, X) || X <- Data],
+    Column5 = [lists:nth(?PRESSURE_COL_INDEX, X) || X <- Data],
+    Column6 = [lists:nth(?PRECIPITATION_COL_INDEX, X) || X <- Data],
     TestType = normal,
     Bucket = "WeatherData",
 

@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -53,8 +53,8 @@ confirm() ->
 
     Qry3 = "SELECT 3+5, 2.0+8, 9/2, 9.0/2 FROM " ++ Bucket ++ Where,
     {_, Got3} = ts_util:single_query(Conn, Qry3),
-    Maths = [{8, 10.0, 4, 4.5} || _ <- lists:seq(1, Count)],
-    ?assertEqual(Maths, Got3),
+    Arithmetic = [{8, 10.0, 4, 4.5} || _ <- lists:seq(1, Count)],
+    ?assertEqual(Arithmetic, Got3),
 
     Qry4 = "SELECT SUM(temperature+10), AVG(pressure)/10 FROM " ++ Bucket ++ Where,
     {_, Got4} = ts_util:single_query(Conn, Qry4),
