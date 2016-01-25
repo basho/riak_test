@@ -132,10 +132,16 @@ verify_aggregation(ClusterType) ->
     StdDevFun5 = stddev_fun_builder(Avg5),
     StdDev4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / Count4),
     StdDev5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / Count5),
-    Qry9 = "SELECT STDDEV(temperature), STDDEV(pressure) FROM " ++ Bucket ++ Where,
+    Sample4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / (Count4-1)),
+    Sample5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / (Count5-1)),
+    Qry9 = "SELECT STDDEV_POP(temperature), STDDEV_POP(pressure)," ++
+           " STDDEV(temperature), STDDEV(pressure), " ++
+           " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM " ++ Bucket ++ Where,
     Got9 = ts_util:single_query(Conn, Qry9),
-    Expected9 = {[<<"STDDEV(temperature)">>, <<"STDDEV(pressure)">>],
-                 [{StdDev4, StdDev5}]},
+    Expected9 = {[<<"STDDEV_POP(temperature)">>, <<"STDDEV_POP(pressure)">>,
+                  <<"STDDEV(temperature)">>, <<"STDDEV(pressure)">>,
+                  <<"STDDEV_SAMP(temperature)">>, <<"STDDEV_SAMP(pressure)">>],
+                 [{StdDev4, StdDev5, StdDev4, StdDev5, Sample4, Sample5}]},
     Result9 = ts_util:assert_float(test_name(ClusterType, "Standard Deviation"), Expected9, Got9),
 
     Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ Bucket ++ Where,
@@ -162,3 +168,4 @@ verify_aggregation(ClusterType) ->
 
 count_non_nulls(Col) ->
     length([V || V <- Col, V =/= []]).
+
