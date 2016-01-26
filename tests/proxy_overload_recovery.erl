@@ -467,17 +467,6 @@ add_eqc_apps(Nodes) ->
      end || App <- Apps, Node <- Nodes],
     ok.
 
--else.  %% no EQC
-
--export([confirm/0]).
-
-confirm() ->
-    lager:info("EQC not enabled, skipping test"),
-    pass.
-
--endif.
-
-
 wait_for_vnode_change(VPid0, Index) ->
     {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
         case VPid1 of
@@ -487,3 +476,13 @@ wait_for_vnode_change(VPid0, Index) ->
             _ ->
                 VPid1
         end.
+
+-else.  %% no EQC
+
+-export([confirm/0]).
+
+confirm() ->
+    lager:info("EQC not enabled, skipping test"),
+    pass.
+
+-endif.
