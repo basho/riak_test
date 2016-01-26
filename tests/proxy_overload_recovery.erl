@@ -236,6 +236,15 @@ prepare_next(S, RT, [ThresholdSeed]) ->
     {_RequestInterval, _Interval, Threshold} = get_params(ThresholdSeed),
     S#tstate{rt = RT, threshold = Threshold}.
 
+wait_for_vnode_change(VPid0, Index) ->
+    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
+        case VPid1 of
+            VPid0 ->
+                timer:sleep(1),
+                wait_for_vnode_change(VPid0, Index);
+            _ ->
+                VPid1
+        end.
 
 %%
 %% Suspend the vnode so it cannot process messages and builds
@@ -476,14 +485,3 @@ confirm() ->
     pass.
 
 -endif.
-
-
-wait_for_vnode_change(VPid0, Index) ->
-    {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
-        case VPid1 of
-            VPid0 ->
-                timer:sleep(1),
-                wait_for_vnode_change(VPid0, Index);
-            _ ->
-                VPid1
-        end.
