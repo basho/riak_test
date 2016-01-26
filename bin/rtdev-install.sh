@@ -37,5 +37,5 @@ echo " - Writing $RT_DEST_DIR/$RELEASE/VERSION"
 echo -n $VERSION > $RT_DEST_DIR/$RELEASE/VERSION
 cd $RT_DEST_DIR
 echo " - Reinitializing git state"
-git add .
+git add --all --force .
 git commit -a -m "riak_test init" --amend > /dev/null

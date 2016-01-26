@@ -46,6 +46,6 @@ git config user.email "dev@basho.com"
 ## (the latter is executed in rtdev-current.sh):
 echo "priv/" >.gitignore
 
-git add .
+git add --all --force .
 git commit -a -m "riak_test init" > /dev/null
 echo " - Successfully completed initial git commit of $RT_DEST_DIR"
