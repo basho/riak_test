@@ -150,11 +150,7 @@ check_lost_indexes(Node1, PBC, NumItems) ->
 
 check_kill_repair(Node1) ->
     lager:info("Test that killing 2i repair works as desired"),
-    spawn(fun() ->
-                  timer:sleep(1500),
-                  rt:admin(Node1, ["repair-2i", "kill"])
-          end),
-    ExitStatus = run_2i_repair(Node1),
+    ExitStatus = run_2i_repair(Node1, true),
     case ExitStatus of
         normal ->
             lager:info("Shucks. Repair finished before we could kill it");
@@ -165,13 +161,21 @@ check_kill_repair(Node1) ->
                        "trigger another repair immediately")
     end,
     pass.
-
 run_2i_repair(Node1) ->
+    run_2i_repair(Node1, false).
+
+run_2i_repair(Node1, Kill) ->
     lager:info("Run 2i AAE repair"),
     ?assertMatch({ok, _}, rt:admin(Node1, ["repair-2i"])),
     RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae]),
     lager:info("Wait for repair process to finish"),
     Mon = monitor(process, RepairPid),
+    case Kill of
+        true ->
+            rt:admin(Node1, ["repair-2i", "kill"]);
+        _ ->
+            ok
+    end,
     MaxWaitTime = rt_config:get(rt_max_wait_time),
     receive
         {'DOWN', Mon, _, _, Status} ->
