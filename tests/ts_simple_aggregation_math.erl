@@ -28,7 +28,7 @@
 
 confirm() ->
     DDL = ts_util:get_ddl(aggregration),
-Count = 10,
+    Count = 10,
     Data = ts_util:get_valid_aggregation_data_not_null(Count),
     Column4 = [lists:nth(4, X) || X <- Data],
     Column5 = [lists:nth(5, X) || X <- Data],
