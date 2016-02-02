@@ -192,15 +192,18 @@ bucket_to_list(Bucket) ->
     Bucket.
 
 %% @ignore
-maybe_stop_a_node(one_down, [Stop|_Rest]) ->
+maybe_stop_a_node(delayed_one_down, Cluster) ->
+    maybe_stop_a_node(one_down, Cluster);
+maybe_stop_a_node(one_down, Cluster) ->
     %% Shutdown the second node, since we connect to the first one
-    ok = rt:stop(Stop);
+    ok = rt:stop(hd(tl(Cluster)));
 maybe_stop_a_node(_, _) ->
     ok.
 
 build_cluster(single)   -> build_c2(1, all_up);
 build_cluster(multiple) -> build_c2(?MULTIPLECLUSTERSIZE, all_up);
-build_cluster(one_down) -> build_c2(?MULTIPLECLUSTERSIZE, one_down).
+build_cluster(one_down) -> build_c2(?MULTIPLECLUSTERSIZE, one_down);
+build_cluster(delayed_one_down) -> build_c2(?MULTIPLECLUSTERSIZE, all_up).
 
 %% Build a cluster and create a PBC connection to the first node
 -spec cluster_and_connect(single|multiple|one_down) -> {[node()], term()}.

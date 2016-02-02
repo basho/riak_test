@@ -49,7 +49,7 @@ verify_aggregation(ClusterType) ->
     DDL = ts_util:get_ddl(aggregration),
     lager:info("DDL is ~p", [DDL]),
 
-    ClusterConn = {Cluster, Conn} = ts_util:cluster_and_connect(ClusterType),
+    {Cluster, Conn} = ts_util:cluster_and_connect(ClusterType),
 
     Count = 10,
     Data = ts_util:get_valid_aggregation_data(Count),
@@ -63,7 +63,13 @@ verify_aggregation(ClusterType) ->
     Where = " WHERE myfamily = 'family1' and myseries = 'seriesX' and time >= 1 and time <= 10",
 
     Qry = "SELECT COUNT(myseries) FROM " ++ Bucket ++ Where,
-    Got = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
+
+    ts_util:create_table(TestType, Cluster, DDL, Bucket),
+
+    %% Degraded clusters need to have DDL applied BEFORE taking down a node
+    ts_util:maybe_stop_a_node(ClusterType, Cluster),
+    ok = riakc_ts:put(Conn, Bucket, Data),
+    Got = ts_util:single_query(Conn, Qry),
     Expected = {[<<"COUNT(myseries)">>], [{Count}]},
     Result = ts_util:assert(test_name(ClusterType, "Count Strings"), Expected, Got),
 
