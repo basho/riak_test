@@ -36,11 +36,10 @@
 confirm() ->
     Nodes = rt:deploy_nodes(2),
     [Node1, Node2] = Nodes,
-    %% Need to write some data to pump the stats system - seems at least 5 values before it starts counting
-    %% stolen from verify_riak_stats
+    %% Need to write some data to pump the stats system
     C = rt:httpc(Node1),
-    [rt:httpc_write(C, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
-    [rt:httpc_read(C, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
+    rt:httpc_write(C, <<"systest">>, <<1>>, <<"12345">>),
+    rt:httpc_read(C, <<"systest">>, <<1>>),
 
     %% Now, join the nodes into a cluster.
     rt:join(Node2, Node1),
@@ -61,6 +60,8 @@ get_stats_count_for_non_running_vnodes(Node1) ->
             NumStats;
         _Other ->
             throw("Failed to retrieve count of stats from vnode.")
+    after 60000 ->
+        throw("Timed out waiting to retrieve count of stats from vnode.")
     end.
 
 get_stats_remote(Sender) ->
@@ -72,6 +73,3 @@ get_stats_remote(Sender) ->
         ['_']), not lists:member(Idx, Running), Op == gets orelse Op == puts],
     Stats = Counters ++ Spirals,
     Sender ! {stats, length(Stats)}.
-
-
-%% Spirals = [N || {[riak, riak_kv, vnode, Op, time, Idx] = N, _, _} <- exometer:find_entries(['_']), Op == gets orelse Op == puts].
