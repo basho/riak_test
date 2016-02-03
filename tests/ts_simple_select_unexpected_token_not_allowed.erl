@@ -33,7 +33,7 @@ confirm() ->
     Qry =
         "selectah * from GeoCheckin "
         "Where time > 1 and time < 10",
-    {error, Got} = ts_util:ts_query(
+    Got = ts_util:ts_query(
                      ts_util:cluster_and_connect(single), TestType, DDL, Data, Qry),
-    ?assertNotEqual(0, string:str(binary_to_list(Got), "Unexpected token")),
+    ts_util:assert_error_regex({error, {1020, <<".*Unexpected token.*">>}}, Got),
     pass.
