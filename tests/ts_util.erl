@@ -25,6 +25,7 @@
     activate_bucket_type/2,
     activate_bucket_type/3,
     assert/3,
+    assert_error_regex/3,
     assert_float/3,
     build_cluster/1,
     cluster_and_connect/1,
@@ -495,6 +496,18 @@ assert(String, Exp, Got) -> lager:info("*****************", []),
     lager:info("Got ~p", [Got]),
     lager:info("*****************", []),
     fail.
+
+%% Match an error code and use a regex to match the error string
+assert_error_regex(String, {error, {Code, Regex}}, {error, {Code, Msg}}) ->
+    {ok, RE} = re:compile(Regex),
+    Match = re:run(Msg, RE),
+    assert_error_regex_result(Match, String, Regex, Msg);
+assert_error_regex(String, Got, Expected) ->
+    assert_error_regex_result(nomatch, String, Got, Expected).
+assert_error_regex_result(nomatch, String, Expected, Got) ->
+    assert(String, Expected, Got);
+assert_error_regex_result(_, _String, _Expected, _Got) ->
+    pass.
 
 results(Results) ->
     Expected = lists:duplicate(length(Results), pass),
