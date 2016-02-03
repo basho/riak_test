@@ -35,27 +35,54 @@ confirm() ->
 
     Qry = "SELECT SUM(mybool) FROM " ++ Bucket,
     ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
-    Got = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
-    ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'SUM'/1 called with arguments of the wrong type [boolean].">>}}, Got),
+    Got1 = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
+    Expected1 = {error, {1001, <<".*Function 'SUM' called with arguments of the wrong type [[]boolean[]].*">>}},
+    Result1 = ts_util:assert_error_regex("SUM - boolean", Expected1, Got1),
 
     Qry2 = "SELECT AVG(myfamily) FROM " ++ Bucket,
     Got2 = ts_util:single_query(Conn, Qry2),
-    ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'AVG'/1 called with arguments of the wrong type [varchar].">>}}, Got2),
+    Expected2 = {error, {1001, <<".*Function 'AVG' called with arguments of the wrong type [[]varchar[]].*">>}},
+    Result2 = ts_util:assert_error_regex("AVG - varchar", Expected2, Got2),
 
     Qry3 = "SELECT MIN(myseries) FROM " ++ Bucket,
     Got3 = ts_util:single_query(Conn, Qry3),
-    ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'MIN'/1 called with arguments of the wrong type [varchar].">>}}, Got3),
+    Expected3 = {error, {1001, <<".*Function 'MIN' called with arguments of the wrong type [[]varchar[]].*">>}},
+    Result3 = ts_util:assert_error_regex("MIN - varchar", Expected3, Got3),
 
     Qry4 = "SELECT MAX(myseries) FROM " ++ Bucket,
     Got4 = ts_util:single_query(Conn, Qry4),
-    ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'MAX'/1 called with arguments of the wrong type [varchar].">>}}, Got4),
+    Expected4 = {error, {1001, <<".*Function 'MAX' called with arguments of the wrong type [[]varchar[]].*">>}},
+    Result4 = ts_util:assert_error_regex("MIN - varchar", Expected4, Got4),
 
     Qry5 = "SELECT STDDEV(mybool) FROM " ++ Bucket,
     Got5 = ts_util:single_query(Conn, Qry5),
-    ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'STDDEV'/1 called with arguments of the wrong type [boolean].">>}}, Got5),
+    Expected5 = {error, {1001, <<".*Function 'STDDEV_SAMP' called with arguments of the wrong type [[]boolean[]].*">>}},
+    Result5 = ts_util:assert_error_regex("STDDEV - boolean", Expected5, Got5),
 
-    Qry6 = "SELECT Mean(mybool) FROM " ++ Bucket,
+    Qry6 = "SELECT STDDEV_SAMP(mybool) FROM " ++ Bucket,
     Got6 = ts_util:single_query(Conn, Qry6),
-    ?assertEqual({error, {1001, <<"invalid_query: \nFunction 'MEAN'/1 called with arguments of the wrong type [boolean].">>}}, Got6),
+    Expected6 = {error, {1001, <<".*Function 'STDDEV_SAMP' called with arguments of the wrong type [[]boolean[]].*">>}},
+    Result6 = ts_util:assert_error_regex("STDDEV_SAMP - boolean", Expected6, Got6),
+
+    Qry7 = "SELECT STDDEV_POP(time) FROM " ++ Bucket,
+    Got7 = ts_util:single_query(Conn, Qry7),
+    Expected7 = {error, {1001, <<".*Function 'STDDEV_POP' called with arguments of the wrong type [[]timestamp[]].*">>}},
+    Result7 = ts_util:assert_error_regex("STDDEV_POP - timestamp", Expected7, Got7),
+
+    Qry8 = "SELECT Mean(mybool) FROM " ++ Bucket,
+    Got8 = ts_util:single_query(Conn, Qry8),
+    Expected8 = {error, {1001, <<".*Function 'AVG' called with arguments of the wrong type [[]boolean[]].*">>}},
+    Result8 = ts_util:assert_error_regex("MEAN - boolean", Expected8, Got8),
+
+    ts_util:results([
+             Result1,
+             Result2,
+             Result3,
+             Result4,
+             Result5,
+             Result6,
+             Result7,
+             Result8
+            ]),
 
     pass.
