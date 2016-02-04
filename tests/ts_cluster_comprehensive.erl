@@ -167,9 +167,10 @@ confirm_delete(C, [Pooter1, Pooter2, Timepoint | _] = Record) ->
     ok.
 
 confirm_nx_delete(C) ->
-    Res = riakc_ts:delete(C, ?BUCKET, ?BADKEY, []),
-    io:format("Not deleted non-existing key: ~p\n", [Res]),
-    ?assertEqual(ok, Res),
+    ?assertEqual(
+        {error, {1021, <<"notfound">>}},
+        riakc_ts:delete(C, ?BUCKET, ?BADKEY, [])
+    ),
     ok.
 
 confirm_select(C, PvalP1, PvalP2) ->
