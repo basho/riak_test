@@ -17,13 +17,23 @@
 -record(state, {a_up = [], a_down = [], a_left = [], b_up= [], b_down= [], b_left =[]}).
 
 -define(Conf,
-        [{riak_kv, [{delete_mode, keep},
+        [
+         {riak_repl,
+         [
+          {fullsync_strategy, aae},
+          {fullsync_on_connect, false},
+          {fullsync_interval, disabled},
+          {max_fssource_soft_retries, 10},
+          {max_fssource_retries, 5}
+         ]},
+         {riak_kv, [{delete_mode, keep},
                     {tombstone_grace_period, 3600}, %% 1h in s
-                    {reap_sweep_interval, 1 * 60 * 3600}, %% 60 min
-                    {anti_entropy_expire, 1 * 60 * 1000},
-                    {obj_ttl_sweep_interval, 60 * 3600}, %% 60 min
+                    {reap_sweep_interval, 60}, %% 60 min
+                    {anti_entropy_expire, 1000 * 60}, %% 60 min sweep intercal
+                    {obj_ttl_sweep_interval, 60}, %% 60 min
                     {storage_backend, riak_kv_eleveldb_backend},
                     %%{sweep_window, {22, 7}},
+                    {sweep_tick, 10000},
                     {anti_entropy, {on, []}}
                    ]}
         ]).
@@ -49,25 +59,17 @@ confirm() ->
     put(test_start, now()),
     timer:sleep(timer:minutes(1)),
 
-    State = leave_join(State0),
-
     timer:sleep(timer:minutes(1)),
-    run_full_sync(State),
+    run_full_sync(State0),
     timer:sleep(timer:minutes(1)),
 
-    State2 = up_and_down_nodes(State),
-    run_full_sync(State2),
-    timer:sleep(timer:minutes(1)),
-    State3 = up_and_down_nodes(State2),
-
-    timer:sleep(timer:hours(1)),
-
-    State4 = up_and_down_nodes(State3),
-
-    run_full_sync(State4),
+    run_full_sync(State0),
     timer:sleep(timer:minutes(1)),
 
-    _State5 = up_and_down_nodes(State4),
+    run_full_sync(State0),
+    timer:sleep(timer:minutes(1)),
+
+    _State5 = up_and_down_nodes(State0),
 
     timer:sleep(trunc(BenchDuration* 60 * 1000 * 1.2)),
     get_status(hd(ANodes)),
