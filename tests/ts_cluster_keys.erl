@@ -1,9 +1,9 @@
 -module(ts_cluster_keys).
 
 -behavior(riak_test).
--compile([export_all]).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+
 confirm() ->
     [Node1|_] = ts_util:build_cluster(multiple),
     Pid = rt:pbc(Node1),
