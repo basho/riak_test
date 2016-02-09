@@ -11,8 +11,8 @@ confirm() ->
     create_table_def_1(Pid),
     delete_single_key_def_1_test(Pid),
 
-    create_table_def_2(Pid),
-    delete_single_key_def_2_test(Pid),
+    % create_table_def_2(Pid),
+    % delete_single_key_def_2_test(Pid),
 
     create_table_def_3(Pid),
     delete_single_key_def_3_test(Pid),
