@@ -71,8 +71,8 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                             %% this cover context
                             {ok, WrongPid} = riakc_pb_socket:start_link(binary_to_list(IP),
                                                                         alternate_port(Port)),
-                            ?assertEquals({[], []},
-                                          riakc_ts:query(WrongPid, Qry, [], C)),
+                            ?assertEqual({[], []},
+                                         riakc_ts:query(WrongPid, Qry, [], C)),
                             riakc_pb_socket:stop(WrongPid),
 
                             %% Let's compare the range data with the
