@@ -31,6 +31,9 @@ confirm() ->
     select_exclusive_def_4_test(Pid),
     select_inclusive_def_4_test(Pid),
 
+    create_data_def_5(Pid),
+    select_def_5_test(Pid),
+
     pass.
 
 %%%
@@ -165,5 +168,31 @@ select_inclusive_def_4_test(Pid) ->
          [{1,1,N} || N <- lists:seq(11,20)],
     ?assertEqual(
         {column_names_def_4(), Results},
+        riakc_ts:query(Pid, Query)
+    ).
+
+%%%
+%%% TABLE 5 no quanta
+%%%
+
+column_names_def_5() ->
+    [<<"a">>, <<"b">>, <<"c">>].
+
+table_def_5() ->
+    "CREATE TABLE table5 ("
+    "a SINT64 NOT NULL, "
+    "b SINT64 NOT NULL, "
+    "c TIMESTAMP NOT NULL, "
+    "PRIMARY KEY ((a,b,c),a,b,c))".
+
+create_data_def_5(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_5())),
+    ok = riakc_ts:put(Pid, <<"table5">>, [[1,1,N] || N <- lists:seq(1,200)]).
+
+select_def_5_test(Pid) ->
+    Query =
+        "SELECT * FROM table5 WHERE a = 1 AND b = 1 AND c = 20",
+    ?assertEqual(
+        {column_names_def_5(), [{1,1,20}]},
         riakc_ts:query(Pid, Query)
     ).
