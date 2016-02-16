@@ -207,7 +207,7 @@ verify_scheduling([Node|_] = Nodes) ->
     enable_sweep_scheduling(Nodes),
 
     timer:sleep(?SWEEP_TICK * length(Indices)),
-    {_Participants , Sweeps} = get_unformated_status(Node),
+    {_, Sweeps} = get_unformated_status(Node),
     %% 2 and 8 are postions in #sweep
     ScheduledIndices =
         [element(2, Sweep) || Sweep <- lists:keysort(8, Sweeps)],
@@ -218,12 +218,15 @@ verify_scheduling([Node|_] = Nodes) ->
     disable_sweep_scheduling(Nodes),
     [begin manual_sweep(Node, Index), timer:sleep(1000) end ||
       Index <- lists:reverse(Indices)],
-     enable_sweep_scheduling(Nodes),
+    rt:stop(Node),
+    rt:start_and_wait(Node),
+    rt:wait_for_service(Node, riak_kv),
+    enable_sweep_scheduling(Nodes),
 
     timer:sleep(?SWEEP_TICK * length(Indices)),
-    {_Participants , ReverseSweeps} = get_unformated_status(Node),
-                 ReverseScheduledIndices =
-                     [element(2, Sweep) || Sweep <- lists:keysort(8, ReverseSweeps)],
+     {_ , ReverseSweeps} = get_unformated_status(Node),
+    ReverseScheduledIndices =
+        [element(2, Sweep) || Sweep <- lists:keysort(8, ReverseSweeps)],
     lists:member(ReverseScheduledIndices, create_all_possible_lists(lists:reverse(Indices))).
 
 
@@ -380,8 +383,8 @@ set_tombstone_grace(Nodes, Time) ->
 
 set_sweep_throttle(Nodes, {Limit, Sleep}) ->
     lager:info("set_sweep_throttle ~p ~p ms ", [Limit, Sleep]),
-    rpc:multicall(Nodes, application, set_env, [riak_kv, sweep_throttle, {Limit, Sleep}]),
-    Expected = [{Limit, Sleep} || _ <- Nodes],
+    rpc:multicall(Nodes, application, set_env, [riak_kv, sweep_throttle, {pace, Limit, Sleep}]),
+    Expected = [{pace, Limit, Sleep} || _ <- Nodes],
     rt:wait_until(
       fun() ->
               {Expected, []} ==
