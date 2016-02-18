@@ -89,11 +89,14 @@ run_commands([sleep | T], Msg, State, ShouldIncrement) ->
 run_commands([{{match, Expected}, Cmd} | T], Msg, State, ShouldIncrement) ->
     {NewMsg, NewState, NewShdIncr} = run_cmd(Cmd, Msg, State, ShouldIncrement),
     %% when you start getting off-by-1 wierdness you will WANT to uncomment this
-    case lists:flatten(NewMsg) of
-        Expected -> lager:info("Successful match of ~p from ~p", [Expected, Cmd]),
-                    run_commands(T, NewMsg, NewState, NewShdIncr);
-        Got      -> print_error("Ran ~p:", Cmd, Expected, Got),
-                    fail
+    %% Trim off the newlines to aid in string comparison
+    ExpectedTrimmed = re:replace(Expected, "\n", "", [global,{return,list}]),
+    ResultTrimmed = re:replace(lists:flatten(NewMsg), "\n", "", [global,{return,list}]),
+    case ResultTrimmed of
+        ExpectedTrimmed -> lager:info("Successful match of ~p from ~p", [Expected, Cmd]),
+                           run_commands(T, NewMsg, NewState, NewShdIncr);
+        Got             -> print_error("Ran ~p:", Cmd, Expected, Got),
+                           fail
     end;
 run_commands([{run, Cmd} | T], Msg, State, ShouldIncrement) ->
     lager:info("Run command: ~p", [Cmd]),
@@ -114,8 +117,8 @@ print_error(Format, Cmd, Expected, Got) ->
     lager:info(?PREFIX ++ "Match Failure"),
     lager:info("**************************************************************"),
     lager:info(Format, [Cmd]),
-    lager:info("Exp: ~s", [Expected]),
-    lager:info("Got: " ++ Got, []),
+    lager:info("Exp: ~s", [list_to_binary(lists:flatten(Expected))]),
+    lager:info("Got: ~s", [list_to_binary(lists:flatten(Got))]),
     lager:info("**************************************************************").
 
 loop() ->
