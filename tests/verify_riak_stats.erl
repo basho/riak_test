@@ -649,6 +649,7 @@ common_stats() ->
         <<"protobuffs_version">>,
         <<"public_key_version">>,
         <<"riak_ql_version">>,
+        <<"riak_shell_version">>,
         <<"read_repairs">>,
         <<"read_repairs_counter">>,
         <<"read_repairs_counter_total">>,
