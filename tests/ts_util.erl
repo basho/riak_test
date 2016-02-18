@@ -42,6 +42,8 @@
     get_data/1,
     get_ddl/0, get_ddl/1,
     get_default_bucket/0,
+    get_default_table_schema/0,
+    get_default_table_schema/1,
     get_float/0,
     get_integer/0,
     get_invalid_obj/0,
@@ -84,7 +86,6 @@ ts_put(ClusterConn, TestType, DDL, Obj) ->
     Bucket = get_default_bucket(),
     ts_put(ClusterConn, TestType, DDL, Obj, Bucket).
 ts_put({Cluster, Conn}, TestType, DDL, Obj, Bucket) ->
-
     create_table(TestType, Cluster, DDL, Bucket),
     lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Obj]),
     riakc_ts:put(Conn, Bucket, Obj).
@@ -148,7 +149,7 @@ create_bucket_type(Cluster, DDL, Bucket) ->
 
 -spec(create_bucket_type(node()|{[node()],term()}, string(), string(), non_neg_integer()) -> {ok, term()} | term()).
 create_bucket_type([Node|_Rest], DDL, Bucket, NVal) when is_integer(NVal) ->
-    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": ~s, \\\"table_def\\\": \\\"~s\\\"}}", [integer_to_list(NVal), DDL]),
+    Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": ~b, \\\"table_def\\\": \\\"~s\\\"}}", [NVal, DDL]),
     rt:admin(Node, ["bucket-type", "create", bucket_to_list(Bucket), lists:flatten(Props)]).
 
 -spec(activate_bucket_type([node()], string()) -> {ok, string()} | term()).
@@ -391,6 +392,16 @@ get_ddl(aggregration) ->
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 10, 'm')), "
     " myfamily, myseries, time))".
 
+
+get_default_table_schema() ->
+    get_default_table_schema(small).
+get_default_table_schema(small) ->
+    {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
+     [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
+      {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
+      {<<"time">>,       <<"timestamp">>, false,  3,  3},
+      {<<"weather">>,    <<"varchar">>,   false, [], []},
+      {<<"temperature">>,<<"double">>,    true,  [], []}]}.
 
 get_data(api) ->
     [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]] ++
