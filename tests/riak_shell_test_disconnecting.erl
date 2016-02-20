@@ -32,16 +32,13 @@
 confirm() -> 
     Nodes = riak_shell_test_util:build_cluster(),
     lager:info("Built a cluster of ~p~n", [Nodes]),
-    Self = self(),
-    _Pid = spawn_link(fun() -> run_test(Self) end),
-    riak_shell_test_util:loop().
-
-run_test(Pid) ->
     State = riak_shell_test_util:shell_init(),
     lager:info("~n~nStart running the command set-------------------------", []),
     Cmds = [
+            {run,
+            "show_version;"},
             %% 'connection prompt on' means you need to do unicode printing and stuff
-            {run, 
+            {run,
              "connection_prompt off;"},
             {run, 
              "show_cookie;"},
@@ -64,9 +61,8 @@ run_test(Pid) ->
             {{match, "riak_shell is connected to: 'dev1@127.0.0.1' on port 10017"}, 
              "show_connection;"}
            ], 
-    Result = riak_shell_test_util:run_commands(Cmds, "Start", State,
-                                               ?DONT_INCREMENT_PROMPT),
+    Result = riak_shell_test_util:run_commands(Cmds, State, ?DONT_INCREMENT_PROMPT),
     lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),
-    Pid ! Result.
+    Result.
 

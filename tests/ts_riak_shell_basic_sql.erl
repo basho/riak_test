@@ -32,12 +32,9 @@
 confirm() ->
     {Nodes, Conn} = ts_util:cluster_and_connect(multiple),
     lager:info("Built a cluster of ~p~n", [Nodes]),
-    Self = self(),
-    _Pid = spawn_link(fun() -> create_table_test(Self) end),
-    Got1 = riak_shell_test_util:loop(),
+    Got1 = create_table_test(),
     Result1 = ts_util:assert("Create Table", pass, Got1),
-    _Pid2 = spawn_link(fun() -> query_table_test(Self, Conn) end),
-    Got2 = riak_shell_test_util:loop(),
+    Got2 = query_table_test(Conn),
     Result2 = ts_util:assert("Query Table", pass, Got2),
     ts_util:results([
         Result1,
@@ -45,7 +42,7 @@ confirm() ->
     ]),
     pass.
 
-create_table_test(Pid) ->
+create_table_test() ->
     State = riak_shell_test_util:shell_init(),
     lager:info("~n~nStart running the command set-------------------------", []),
     CreateTable = lists:flatten(io_lib:format("~s;", [ts_util:get_ddl(small)])),
@@ -60,7 +57,9 @@ create_table_test(Pid) ->
     "+-----------+---------+-------+-----------+---------+", []),
     Cmds = [
             %% 'connection prompt on' means you need to do unicode printing and stuff
-            {run,
+           {run,
+            "show_version;"},
+           {run,
              "connection_prompt off;"},
             {run,
              "show_cookie;"},
@@ -73,13 +72,13 @@ create_table_test(Pid) ->
             {{match, Describe},
              "DESCRIBE GeoCheckin;"}
            ],
-    Result = riak_shell_test_util:run_commands(Cmds, "Start", State,
-                                               ?DONT_INCREMENT_PROMPT),
+    Result = riak_shell_test_util:run_commands(Cmds, State, ?DONT_INCREMENT_PROMPT),
     lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),
-    Pid ! Result.
+    application:stop(riak_shell),
+    Result.
 
-query_table_test(Pid, Conn) ->
+query_table_test(Conn) ->
     %% Throw some tests data out there
     Data = ts_util:get_valid_select_data(),
     ok = riakc_ts:put(Conn, ts_util:get_default_bucket(), Data),
@@ -91,6 +90,8 @@ query_table_test(Pid, Conn) ->
     Cmds = [
         %% 'connection prompt on' means you need to do unicode printing and stuff
         {run,
+            "show_version;"},
+        {run,
             "connection_prompt off;"},
         {run,
             "show_cookie;"},
@@ -101,11 +102,11 @@ query_table_test(Pid, Conn) ->
         {{match, Expected},
             Select}
     ],
-    Result = riak_shell_test_util:run_commands(Cmds, "Start", State,
-        ?DONT_INCREMENT_PROMPT),
+    Result = riak_shell_test_util:run_commands(Cmds, State, ?DONT_INCREMENT_PROMPT),
     lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),
-    Pid ! Result.
+    application:stop(riak_shell),
+    Result.
 
 %% Stolen from the innards of riak_shell
 query(Conn, SQL) ->
@@ -116,7 +117,7 @@ query(Conn, SQL) ->
             Hdr = [binary_to_list(X) || X <- Header],
             Rs = [begin
                       Row = tuple_to_list(RowTuple),
-                      [to_list(X) || X <- Row]
+                      [riak_shell_util:to_list(X) || X <- Row]
                   end || RowTuple <- Rows],
             case {Hdr, Rs} of
                 {[], []} ->
@@ -126,8 +127,3 @@ query(Conn, SQL) ->
             end
     end.
 
-to_list(A) when is_atom(A)    -> atom_to_list(A);
-to_list(B) when is_binary(B)  -> binary_to_list(B);
-to_list(I) when is_integer(I) -> integer_to_list(I);
-to_list(F) when is_float(F)   -> float_to_list(F);
-to_list(L) when is_list(L)    -> L.
