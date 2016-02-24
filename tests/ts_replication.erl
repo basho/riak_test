@@ -110,4 +110,4 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     ?assertEqual(ok, put_records(AFirst, 101, 200)),
 
     lager:info("Reading 100 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
-    ?assertEqual(100, qty_records_present(BFirst, 101, 200)).
+    ok = rt:wait_until(fun() -> 100 == qty_records_present(BFirst, 101, 200) end).
