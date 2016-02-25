@@ -34,6 +34,13 @@ confirm() ->
     create_data_def_5(Pid),
     select_def_5_test(Pid),
 
+    create_data_def_6(Pid),
+    select_def_6_test(Pid),
+
+    create_data_def_7(Pid),
+    select_exclusive_def_7_test(Pid),
+    select_inclusive_def_7_test(Pid),
+
     pass.
 
 %%%
@@ -194,5 +201,68 @@ select_def_5_test(Pid) ->
         "SELECT * FROM table5 WHERE a = 1 AND b = 1 AND c = 20",
     ?assertEqual(
         {column_names_def_5(), [{1,1,20}]},
+        riakc_ts:query(Pid, Query)
+    ).
+
+%%%
+%%% TABLE 6 quantum is not the last key
+%%%
+
+table_def_6() ->
+    "CREATE TABLE table6 ("
+    "a SINT64 NOT NULL, "
+    "b TIMESTAMP NOT NULL, "
+    "c SINT64 NOT NULL, "
+    "d VARCHAR NOT NULL, "
+    "PRIMARY KEY ((a,quantum(b,1,'s'),c),a,b,c,d))".
+
+create_data_def_6(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_6())),
+    ok = riakc_ts:put(Pid, <<"table6">>, [[1,N,1,<<"table6">>] || N <- lists:seq(1,200)]).
+
+select_def_6_test(Pid) ->
+    Query =
+        "SELECT * FROM table6 WHERE b > 7 AND b < 14 AND a = 1 AND c = 1",
+    Results =
+         [{1,N,1,<<"table6">>} || N <- lists:seq(8,13)],
+    ?assertEqual(
+        {[<<"a">>, <<"b">>, <<"c">>,<<"d">>], Results},
+        riakc_ts:query(Pid, Query)
+    ).
+
+
+%%%
+%%% TABLE 7 quantum is the first key
+%%%
+
+table_def_7() ->
+    "CREATE TABLE table7 ("
+    "a TIMESTAMP NOT NULL, "
+    "b SINT64 NOT NULL, "
+    "c SINT64 NOT NULL, "
+    "d VARCHAR NOT NULL, "
+    "PRIMARY KEY ((quantum(a,1,'s'),b,c),a,b,c,d))".
+
+create_data_def_7(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_7())),
+    ok = riakc_ts:put(Pid, <<"table7">>, [[N,1,1,<<"table7">>] || N <- lists:seq(1,200)]).
+
+select_exclusive_def_7_test(Pid) ->
+    Query =
+        "SELECT * FROM table7 WHERE a > 44 AND a < 55 AND b = 1 AND c = 1",
+    Results =
+         [{N,1,1,<<"table7">>} || N <- lists:seq(45,54)],
+    ?assertEqual(
+        {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results},
+        riakc_ts:query(Pid, Query)
+    ).
+
+select_inclusive_def_7_test(Pid) ->
+    Query =
+        "SELECT * FROM table7 WHERE a >= 44 AND a < 55 AND b = 1 AND c = 1",
+    Results =
+         [{N,1,1,<<"table7">>} || N <- lists:seq(44,54)],
+    ?assertEqual(
+        {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results},
         riakc_ts:query(Pid, Query)
     ).
