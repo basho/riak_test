@@ -35,6 +35,13 @@
 -define(BADKEY, [<<"b">>,<<"a">>, ?TIMEBASE-1]).
 -define(LIFESPAN, 300).  %% > 100, which is the default chunk size for list_keys
 
+%% passed to Client:get and :delete, for riakhttpc to properly
+%% construct URLs for the case of {send_key_as,
+%% path_elements}. Ignored by riakc.
+-define(EXTRA_SINGLE_KEY_OPTIONS,
+        [{key_column_names, [?PKEY_P1, ?PKEY_P2, ?PKEY_P3]}]).
+
+
 confirm() ->
     inets:start(),
     run_tests(?PVAL_P1, ?PVAL_P2).
@@ -69,6 +76,7 @@ get_client_at_node(Node, ClientMod) ->
         rhc_ts ->
             {ok, [{IP, Port}]} = rt:get_http_conn_info(Node),
             rhc_ts:create(IP, Port, [])
+            %% select mode with {send_key_as, json|path_elements}
     end.
 
 confirm_create_table({Mod, C}) ->
@@ -178,29 +186,29 @@ confirm_overwrite({Mod, C}, Data) ->
     ok.
 
 confirm_delete({Mod, C}, [Pooter1, Pooter2, Timepoint | _] = Record) ->
-    ResFail = Mod:delete(C, <<"no-bucket-like-this">>, ?BADKEY, []),
+    ResFail = Mod:delete(C, <<"no-bucket-like-this">>, ?BADKEY, ?EXTRA_SINGLE_KEY_OPTIONS),
     io:format("Nothing deleted from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     Key = [Pooter1, Pooter2, Timepoint],
 
     BadKey1 = [Pooter1],
-    BadRes1 = Mod:delete(C, ?BUCKET, BadKey1, []),
+    BadRes1 = Mod:delete(C, ?BUCKET, BadKey1, ?EXTRA_SINGLE_KEY_OPTIONS),
     io:format("Not deleted because short key: ~p\n", [BadRes1]),
     ?assertMatch({error, _}, BadRes1),
 
     BadKey2 = Key ++ [43],
-    BadRes2 = Mod:delete(C, ?BUCKET, BadKey2, []),
+    BadRes2 = Mod:delete(C, ?BUCKET, BadKey2, ?EXTRA_SINGLE_KEY_OPTIONS),
     io:format("Not deleted because long key: ~p\n", [BadRes2]),
     ?assertMatch({error, _}, BadRes2),
 
-    Res = Mod:delete(C, ?BUCKET, Key, []),
+    Res = Mod:delete(C, ?BUCKET, Key, ?EXTRA_SINGLE_KEY_OPTIONS),
     io:format("Deleted record ~p: ~p\n", [Record, Res]),
     ?assertEqual(ok, Res),
     ok.
 
 confirm_nx_delete({Mod, C}) ->
-    Res = Mod:delete(C, ?BUCKET, ?BADKEY, []),
+    Res = Mod:delete(C, ?BUCKET, ?BADKEY, ?EXTRA_SINGLE_KEY_OPTIONS),
     io:format("Not deleted non-existing key: ~p\n", [Res]),
     case Mod of
         riakc_ts ->
@@ -235,18 +243,22 @@ confirm_select({Mod, C}, PvalP1, PvalP2) ->
     ok.
 
 confirm_get({Mod, C}, Record = [Pooter1, Pooter2, Timepoint | _]) ->
-    ResFail = Mod:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
+    ResFail = Mod:get(C, <<"no-bucket-like-this">>, ?BADKEY, ?EXTRA_SINGLE_KEY_OPTIONS),
     io:format("Got nothing from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     Key = [Pooter1, Pooter2, Timepoint],
-    Res = Mod:get(C, ?BUCKET, Key, []),
-    io:format("Get a single record: ~p\n", [Res]),
+    Res = Mod:get(C, ?BUCKET, Key, ?EXTRA_SINGLE_KEY_OPTIONS),
+    io:format("Get a single record (with column names for riakhttpc): ~p\n", [Res]),
     ?assertMatch({ok, {_, [Record]}}, Res),
+
+    Res2 = Mod:get(C, ?BUCKET, Key, []),  %% no column names
+    io:format("Get a single record (no column names): ~p\n", [Res2]),
+    ?assertMatch({ok, {_, [Record]}}, Res2),
     ok.
 
 confirm_nx_get({Mod, C}) ->
-    Res = Mod:get(C, ?BUCKET, ?BADKEY, []),
+    Res = Mod:get(C, ?BUCKET, ?BADKEY, ?EXTRA_SINGLE_KEY_OPTIONS),
     io:format("Not got a nonexistent single record: ~p\n", [Res]),
     ?assertMatch({error, notfound}, Res),
     ok.
@@ -281,6 +293,11 @@ confirm_delete_all({Mod, C}, AllKeys) ->
     io:format("Deleting ~b keys\n", [length(AllKeys)]),
     lists:foreach(
       fun(K) -> ok = Mod:delete(C, ?BUCKET, tuple_to_list(K), []) end,
+      %% Here we call delete with no options, specifically without
+      %% key_column_names, which causes rhc_ts:delete to construct
+      %% URLs with just bare values. This is to cover both modes in
+      %% delete invocations. (Wrt get, both modes are explicitly
+      %% tested in confirm_get.)
       AllKeys),
     timer:sleep(3500),
     {ok, Res} = ts_list_keys(C, ?BUCKET),

@@ -24,8 +24,10 @@
 -behavior(riak_test).
 -export([confirm/0]).
 
--define(PVAL_P1, <<"ZXC11">>).
--define(PVAL_P2, <<"PDP-11">>).
+%% inject characters to check transit of keys over http barrier
+%% (involves urlendofing/decoding of field values)
+-define(PVAL_P1, <<"ZXC1/1">>).
+-define(PVAL_P2, <<"PDP -11">>).
 
 confirm() ->
     ts_cluster_comprehensive:run_tests(?PVAL_P1, ?PVAL_P2, rhc_ts).
