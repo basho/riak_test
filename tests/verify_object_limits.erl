@@ -36,6 +36,7 @@
 confirm() ->
     [Node1] = rt:build_cluster(1, [{riak_kv, [
                         {ring_creation_size, 8},
+                        {anti_entropy, {off,[]}},
                         {max_object_size, ?MAX_SIZE},
                         {warn_object_size, ?WARN_SIZE},
                         {max_siblings, ?MAX_SIBLINGS},
@@ -51,6 +52,9 @@ confirm() ->
                                                 [{allow_mult, true}])),
     verify_size_limits(C, Node1),
     verify_sibling_limits(C, Node1),
+    lager:notice("Starting readrepair section of test"),
+    verify_readrepair_ignore_max_size(C, Node1),
+    verify_readrepair_ignore_max_sib(C, Node1),
     pass.
 
 verify_size_limits(C, Node1) ->
@@ -128,3 +132,49 @@ verify_sibling_limits(C, Node1) ->
     lager:info("Result when too many siblings : ~p", [Res]),
     ?assertMatch({error,_},  Res),
     ok.
+
+verify_readrepair_ignore_max_size(C, Node1) ->
+    % Add intercept to treat all vnode puts as readrepairs
+    Intercept = {riak_kv_vnode, [{{put, 6}, put_as_readrepair},{{coord_put,6}, coord_put_as_readrepair}]},
+    ok = rt_intercept:add(Node1, Intercept),
+    timer:sleep(100),
+    % Do put with value greater than max size and confirm warning
+    lager:info("Checking readrepair put of size ~p, expecting ok result and log warning", [?MAX_SIZE*2]),
+    K = <<"rrsizetest">>,
+    V = <<0:(?MAX_SIZE*2)/integer-unit:8>>,
+    O = riakc_obj:new(?BUCKET, K, V),
+    ?assertMatch(ok, riakc_pb_socket:put(C, O)),
+    verify_size_write_warning(Node1, K, ?MAX_SIZE*2),
+    % Clean intercept
+    ok = rt_intercept:clean(Node1, riak_kv_vnode),
+    ok.
+
+verify_readrepair_ignore_max_sib(C, Node1) ->
+    lager:info("Checking sibling warning on readrepair above max siblings=~p", [?MAX_SIBLINGS]),
+    K = <<"rrsibtest">>,
+    V = <<"sibtest">>,
+    O = riakc_obj:new(?BUCKET, K, V),
+    % Force sibling error
+    [?assertMatch(ok, riakc_pb_socket:put(C, O)) 
+     || _ <- lists:seq(1, ?MAX_SIBLINGS)],
+    Res = riakc_pb_socket:put(C, O),
+    lager:info("Result when too many siblings : ~p", [Res]),
+    ?assertMatch({error,_},  Res),
+    % Add intercept to spoof writes as readrepair
+    Intercept = {riak_kv_vnode, [{{put, 6}, put_as_readrepair},{{coord_put,6}, coord_put_as_readrepair}]},
+    ok = rt_intercept:add(Node1, Intercept),
+    timer:sleep(100),
+    % Verify readrepair writes return ok and log warning
+    lager:info("Verifying succesful put above max_siblings with readrepair"),
+    ?assertMatch(ok, riakc_pb_socket:put(C, O)),
+    P = io_lib:format("warning.*siblings.*~p.*~p.*(~p)",
+                      [?BUCKET, K, ?MAX_SIBLINGS+1]),
+    Found = rt:expect_in_log(Node1, P),
+    lager:info("Looking for sibling warning: ~p", [Found]),
+    ?assertEqual(true, Found),
+    % Clean intercept
+    ok = rt_intercept:clean(Node1, riak_kv_vnode),
+    ok.
+
+
+
