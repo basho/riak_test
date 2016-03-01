@@ -1,6 +1,6 @@
 -module(ts_replication).
 -behavior(riak_test).
--export([confirm/0, replication/2]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rt, [join/2,
@@ -37,12 +37,19 @@ confirm() ->
 
     %% TS-ize the clusters
     DDL = ts_util:get_ddl(),
-    Bucket = ts_util:get_default_bucket(),
-    ts_util:create_table(normal, ANodes, DDL, Bucket),
-    ts_util:create_table(normal, BNodes, DDL, Bucket),
+    Table = ts_util:get_default_bucket(),
+    ts_util:create_table(normal, ANodes, DDL, Table),
+    ts_util:create_table(normal, BNodes, DDL, Table),
 
-    replication(ANodes, BNodes),
+    replication(ANodes, BNodes, Table, <<"hey look ma no w1c">>),
     pass.
+
+create_normal_type(Nodes, BucketType) ->
+    TypeProps = [{n_val, 3}],
+    lager:info("Create bucket type ~p, wait for propagation", [BucketType]),
+    rt:create_and_activate_bucket_type(hd(Nodes), BucketType, TypeProps),
+    rt:wait_until_bucket_type_status(BucketType, active, Nodes),
+    rt:wait_until_bucket_props(Nodes, {BucketType, <<"bucket">>}, TypeProps).
 
 qty_records_present(Node, Lower, Upper) ->
     %% Queries use strictly greater/less than
@@ -50,32 +57,79 @@ qty_records_present(Node, Lower, Upper) ->
     {_Hdrs, Results} = riakc_ts:query(rt:pbc(Node), Qry),
     length(Results).
 
-put_records(Node, Lower, Upper) ->
-    riakc_ts:put(rt:pbc(Node), ts_util:get_default_bucket(),
+put_records(Node, Table, Lower, Upper) ->
+    riakc_ts:put(rt:pbc(Node), Table,
                  ts_util:get_valid_select_data(
                    fun() -> lists:seq(Lower, Upper) end)).
 
-replication(ANodes, BNodes) ->
+replication(ANodes, BNodes, Table, NormalType) ->
 
     log_to_nodes(ANodes ++ BNodes, "Starting ts_replication test"),
 
-    lager:info("Real Time Replication test"),
-    real_time_replication_test(ANodes, BNodes),
+    LeaderA = get_leader(hd(ANodes)),
+    PortB = get_mgr_port(hd(BNodes)),
+
+    create_normal_type(ANodes, NormalType),
+    create_normal_type(BNodes, NormalType),
+
+    lager:info("Testing a non-w1c bucket type"),
+    real_time_replication_test(ANodes, BNodes, LeaderA, PortB, {NormalType, <<"bucket">>}),
+    lager:info("Testing the timeseries bucket type, non-ts-managed bucket"),
+    real_time_replication_test(ANodes, BNodes, LeaderA, PortB, {Table, <<"bucket">>}),
+
+    lager:info("Testing timeseries data"),
+    ts_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, Table),
 
     lager:info("Tests passed"),
 
     fin.
 
 
-
-%% @doc Real time replication test
-real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
+real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Bucket) ->
 
     %% Before connecting clusters, write some initial data to Cluster A
     lager:info("Writing 100 keys to ~p", [AFirst]),
-    ?assertEqual(ok, put_records(AFirst, 1, 100)),
+    ?assertEqual([], repl_util:do_write(AFirst, 1, 100, Bucket, 2)),
+
+    lager:info("Connecting clusters"),
+    connect_clusters(ANodes, BNodes, LeaderA, PortB),
+    lager:info("Starting real-time MDC"),
+    start_mdc(ANodes, LeaderA, "B", false),
+
+    log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify replication to Cluster B via realtime"),
+    lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
+    ?assertEqual([], repl_util:do_write(LeaderA, 101, 200, Bucket, 2)),
+
+    lager:info("Reading 100 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, PortB]),
+    ?assertEqual(0, repl_util:wait_for_reads(BFirst, 101, 200, Bucket, 2)),
+
+    disconnect_clusters(ANodes, LeaderA, "B").
+
+
+%% @doc Real time replication test
+ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Table) ->
+
+    lager:info("Writing 100 keys to ~p", [AFirst]),
+    ?assertEqual(ok, put_records(AFirst, Table, 1, 100)),
     ?assertEqual(100, qty_records_present(AFirst, 1, 100)),
 
+    connect_clusters(ANodes, BNodes, LeaderA, PortB),
+    start_mdc(ANodes, LeaderA, "B", false),
+
+    lager:info("Verifying none of the records on A are on B"),
+    ?assertEqual(0, qty_records_present(BFirst, 1, 100)),
+
+    log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify replication to Cluster B via realtime"),
+    lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
+    ?assertEqual(ok, put_records(AFirst, Table, 101, 200)),
+
+    lager:info("Reading 100 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
+    ?assertEqual(ok, rt:wait_until(fun() -> 100 == qty_records_present(BFirst, 101, 200) end)),
+
+    disconnect_clusters(ANodes, LeaderA, "B").
+
+connect_clusters([AFirst|_] = ANodes, [BFirst|_] = BNodes,
+                 LeaderA, PortB) ->
     repl_util:name_cluster(AFirst, "A"),
     repl_util:name_cluster(BFirst, "B"),
 
@@ -88,26 +142,32 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
     lager:info("Waiting for leader to converge on cluster B"),
     ?assertEqual(ok, repl_util:wait_until_leader_converge(BNodes)),
 
-    %% Get the leader for the first cluster.
-    LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []), %% Ask Cluster "A" Node 1 who the leader is.
+    lager:info("connect cluster A:~p to B on port ~p", [LeaderA, PortB]),
+    repl_util:connect_cluster(LeaderA, "127.0.0.1", PortB),
+    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")).
 
-    {ok, {_IP, BFirstPort}} = rpc:call(BFirst, application, get_env, [riak_core, cluster_mgr]),
+disconnect_clusters(SourceNodes, SourceLeader, RemoteClusterName) ->
+    lager:info("Disconnect the 2 clusters"),
+    repl_util:disable_realtime(SourceLeader, RemoteClusterName),
+    rt:wait_until_ring_converged(SourceNodes),
+    repl_util:disconnect_cluster(SourceLeader, RemoteClusterName),
+    repl_util:wait_until_no_connection(SourceLeader),
+    rt:wait_until_ring_converged(SourceNodes).
 
-    lager:info("connect cluster A:~p to B on port ~p", [LeaderA, BFirstPort]),
-    repl_util:connect_cluster(LeaderA, "127.0.0.1", BFirstPort),
-    ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
+%% Last argument: do fullsync or not
+start_mdc(SourceNodes, SourceLeader, RemoteClusterName, true) ->
+    start_mdc(SourceNodes, SourceLeader, RemoteClusterName, false),
+    repl_util:enable_fullsync(SourceLeader, RemoteClusterName),
+    rt:wait_until_ring_converged(SourceNodes);
+start_mdc(SourceNodes, SourceLeader, RemoteClusterName, false) ->
+    repl_util:enable_realtime(SourceLeader, RemoteClusterName),
+    rt:wait_until_ring_converged(SourceNodes),
+    repl_util:start_realtime(SourceLeader, RemoteClusterName),
+    rt:wait_until_ring_converged(SourceNodes).
 
-    repl_util:enable_realtime(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),
-    repl_util:start_realtime(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),
+get_leader(Node) ->
+    rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
 
-    lager:info("Verifying none of the records on A are on B"),
-    ?assertEqual(0, qty_records_present(BFirst, 1, 100)),
-
-    log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify replication to Cluster B via realtime"),
-    lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
-    ?assertEqual(ok, put_records(AFirst, 101, 200)),
-
-    lager:info("Reading 100 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
-    ok = rt:wait_until(fun() -> 100 == qty_records_present(BFirst, 101, 200) end).
+get_mgr_port(Node) ->
+    {ok, {_IP, Port}} = rpc:call(Node, application, get_env, [riak_core, cluster_mgr]),
+    Port.
