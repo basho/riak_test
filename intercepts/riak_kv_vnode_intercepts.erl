@@ -159,3 +159,6 @@ corrupting_handle_handoff_data(BinObj0, State) ->
 
 corrupt_binary(O) ->
     crypto:rand_bytes(byte_size(O)).
+
+put_as_readrepair(Preflist, BKey, Obj, ReqId, StartTime, Options) ->
+    ?M:put_orig(Preflist, BKey, Obj, ReqId, StartTime, [rr | Options]).
