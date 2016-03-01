@@ -162,3 +162,6 @@ corrupt_binary(O) ->
 
 put_as_readrepair(Preflist, BKey, Obj, ReqId, StartTime, Options) ->
     ?M:put_orig(Preflist, BKey, Obj, ReqId, StartTime, [rr | Options]).
+
+coord_put_as_readrepair(Preflist, BKey, Obj, ReqId, StartTime, Options) ->
+    ?M:coord_put_orig(Preflist, BKey, Obj, ReqId, StartTime, [rr | Options]).
