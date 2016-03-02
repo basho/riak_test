@@ -41,7 +41,7 @@ confirm() ->
     ts_util:create_table(normal, ANodes, DDL, Table),
     ts_util:create_table(normal, BNodes, DDL, Table),
 
-    replication(ANodes, BNodes, Table, <<"hey look ma no w1c">>),
+    replication(ANodes, BNodes, list_to_binary(Table), <<"hey look ma no w1c">>),
     pass.
 
 create_normal_type(Nodes, BucketType) ->
@@ -51,11 +51,16 @@ create_normal_type(Nodes, BucketType) ->
     rt:wait_until_bucket_type_status(BucketType, active, Nodes),
     rt:wait_until_bucket_props(Nodes, {BucketType, <<"bucket">>}, TypeProps).
 
-qty_records_present(Node, Lower, Upper) ->
+ts_num_records_present(Node, Lower, Upper) ->
     %% Queries use strictly greater/less than
     Qry = ts_util:get_valid_qry(Lower-1, Upper+1),
     {_Hdrs, Results} = riakc_ts:query(rt:pbc(Node), Qry),
     length(Results).
+
+kv_num_objects_present(Node, Lower, Upper, Bucket) ->
+    FailedMatches = rt:systest_read(Node, Lower, Upper, Bucket, 2),
+    PotentialQty = Upper - Lower + 1,
+    PotentialQty - length(FailedMatches).
 
 put_records(Node, Table, Lower, Upper) ->
     riakc_ts:put(rt:pbc(Node), Table,
@@ -69,28 +74,65 @@ replication(ANodes, BNodes, Table, NormalType) ->
     LeaderA = get_leader(hd(ANodes)),
     PortB = get_mgr_port(hd(BNodes)),
 
+    KVBucket = {NormalType, <<"bucket">>},
+    KVBucketInTS = {Table, <<"bucket">>},
+
     create_normal_type(ANodes, NormalType),
     create_normal_type(BNodes, NormalType),
 
-    lager:info("Testing a non-w1c bucket type"),
-    real_time_replication_test(ANodes, BNodes, LeaderA, PortB, {NormalType, <<"bucket">>}),
-    lager:info("Testing the timeseries bucket type, non-ts-managed bucket"),
-    real_time_replication_test(ANodes, BNodes, LeaderA, PortB, {Table, <<"bucket">>}),
+    %% Before connecting clusters, write some initial data to Cluster A
+    lager:info("Writing 100 KV values to ~p (~p)", [hd(ANodes), KVBucket]),
+    ?assertEqual([], repl_util:do_write(hd(ANodes), 1, 100, KVBucket, 2)),
 
-    lager:info("Testing timeseries data"),
-    ts_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, Table),
+    lager:info("Writing 100 KV values to ~p (~p)", [hd(ANodes), KVBucketInTS]),
+    ?assertEqual([], repl_util:do_write(hd(ANodes), 1, 100, KVBucketInTS, 2)),
+
+    lager:info("Writing 100 TS records to ~p (~p)", [hd(ANodes), Table]),
+    ?assertEqual(ok, put_records(hd(ANodes), Table, 1, 100)),
+    ?assertEqual(100, ts_num_records_present(hd(ANodes), 1, 100)),
+
+    lager:info("Testing a non-w1c bucket type (realtime)"),
+    real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket),
+
+    %% XXX: Currently commented out to reach the fullsync tests
+
+    %% lager:info("Testing the timeseries bucket type, non-ts-managed bucket (realtime)"),
+    %% real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucketInTS),
+
+    %% lager:info("Testing timeseries data (realtime)"),
+    %% ts_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, Table),
+
+    lager:info("Testing all buckets with fullsync"),
+    full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS),
 
     lager:info("Tests passed"),
 
     fin.
 
+full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS) ->
+    BNode = hd(BNodes),
 
-real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Bucket) ->
+    lager:info("Verifying first 100 keys not present on 2nd cluster (non-w1c)"),
+    ?assertEqual(0, kv_num_objects_present(BNode, 1, 100, KVBucket)),
+    lager:info("Verifying first 100 keys not present on 2nd cluster (ts bucket type, non-ts bucket)"),
+    ?assertEqual(0, kv_num_objects_present(BNode, 1, 100, KVBucketInTS)),
+    lager:info("Verifying first 100 keys not present on 2nd cluster (ts bucket type, non-ts bucket)"),
+    ?assertEqual(0, ts_num_records_present(BNode, 1, 100)),
 
-    %% Before connecting clusters, write some initial data to Cluster A
-    lager:info("Writing 100 keys to ~p", [AFirst]),
-    ?assertEqual([], repl_util:do_write(AFirst, 1, 100, Bucket, 2)),
+    lager:info("Starting and waiting for fullsync"),
+    connect_clusters(ANodes, BNodes, LeaderA, PortB),
+    start_mdc(ANodes, LeaderA, "B", true),
+    repl_util:start_and_wait_until_fullsync_complete(hd(ANodes), "B"),
 
+    lager:info("Verifying first 100 keys present on 2nd cluster (non-w1c)"),
+    ?assertEqual(100, kv_num_objects_present(BNode, 1, 100, KVBucket)),
+    lager:info("Verifying first 100 keys present on 2nd cluster (ts bucket type, non-ts bucket)"),
+    ?assertEqual(100, kv_num_objects_present(BNode, 1, 100, KVBucketInTS)),
+    lager:info("Verifying first 100 keys present on 2nd cluster (ts bucket)"),
+    ?assertEqual(100, ts_num_records_present(BNode, 1, 100)),
+    disconnect_clusters(ANodes, LeaderA, "B").
+
+real_time_replication_test(ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Bucket) ->
     lager:info("Connecting clusters"),
     connect_clusters(ANodes, BNodes, LeaderA, PortB),
     lager:info("Starting real-time MDC"),
@@ -108,23 +150,18 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, Po
 
 %% @doc Real time replication test
 ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Table) ->
-
-    lager:info("Writing 100 keys to ~p", [AFirst]),
-    ?assertEqual(ok, put_records(AFirst, Table, 1, 100)),
-    ?assertEqual(100, qty_records_present(AFirst, 1, 100)),
-
     connect_clusters(ANodes, BNodes, LeaderA, PortB),
     start_mdc(ANodes, LeaderA, "B", false),
 
     lager:info("Verifying none of the records on A are on B"),
-    ?assertEqual(0, qty_records_present(BFirst, 1, 100)),
+    ?assertEqual(0, ts_num_records_present(BFirst, 1, 100)),
 
     log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify replication to Cluster B via realtime"),
     lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
     ?assertEqual(ok, put_records(AFirst, Table, 101, 200)),
 
     lager:info("Reading 100 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
-    ?assertEqual(ok, rt:wait_until(fun() -> 100 == qty_records_present(BFirst, 101, 200) end)),
+    ?assertEqual(ok, rt:wait_until(fun() -> 100 == ts_num_records_present(BFirst, 101, 200) end)),
 
     disconnect_clusters(ANodes, LeaderA, "B").
 
