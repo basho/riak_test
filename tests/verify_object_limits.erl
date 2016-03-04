@@ -137,7 +137,6 @@ verify_readrepair_ignore_max_size(C, Node1) ->
     % Add intercept to treat all vnode puts as readrepairs
     Intercept = {riak_kv_vnode, [{{put, 6}, put_as_readrepair},{{coord_put,6}, coord_put_as_readrepair}]},
     ok = rt_intercept:add(Node1, Intercept),
-    timer:sleep(100),
     % Do put with value greater than max size and confirm warning
     lager:info("Checking readrepair put of size ~p, expecting ok result and log warning", [?MAX_SIZE*2]),
     K = <<"rrsizetest">>,
@@ -163,7 +162,6 @@ verify_readrepair_ignore_max_sib(C, Node1) ->
     % Add intercept to spoof writes as readrepair
     Intercept = {riak_kv_vnode, [{{put, 6}, put_as_readrepair},{{coord_put,6}, coord_put_as_readrepair}]},
     ok = rt_intercept:add(Node1, Intercept),
-    timer:sleep(100),
     % Verify readrepair writes return ok and log warning
     lager:info("Verifying succesful put above max_siblings with readrepair"),
     ?assertMatch(ok, riakc_pb_socket:put(C, O)),
