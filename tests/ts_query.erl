@@ -15,7 +15,7 @@ confirm() ->
     Query = "SELECT * FROM GeoCheckin WHERE time >= 0 AND time < 1000 AND myfamily = 'family1' AND myseries = 'seriesX'",
 
     profiler:perf_profile({start, 0}),
-    ts_api_util:runQuery(Query, 1000),
+    ts_api_util:runQuery(Query, 10),
     profiler:perf_profile({stop, 0}),
 
     pass.
