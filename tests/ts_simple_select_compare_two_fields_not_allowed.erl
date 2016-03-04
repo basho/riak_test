@@ -38,7 +38,7 @@ confirm() ->
         "AND myfamily = 'fa2mily1' "
         "AND myseries ='seriesX' "
         "AND weather = myseries",
-    {error, Got} = ts_util:ts_query(
+    {error, {1001, Got}} = ts_util:ts_query(
                      ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
     ?assertNotEqual(0, string:str(
                          binary_to_list(Got),

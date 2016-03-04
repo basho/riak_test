@@ -71,8 +71,8 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                             %% this cover context
                             {ok, WrongPid} = riakc_pb_socket:start_link(binary_to_list(IP),
                                                                         alternate_port(Port)),
-                            {_, OtherQuantum} = riakc_ts:query(WrongPid, Qry, [], C),
-                            ok = assert_disjoint_ranges(ThisQuantum, OtherQuantum),
+                            ?assertEqual({[], []},
+                                         riakc_ts:query(WrongPid, Qry, [], C)),
                             riakc_pb_socket:stop(WrongPid),
 
                             %% Let's compare the range data with the
@@ -94,19 +94,6 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
             {_, StraightQueryResults} = riakc_ts:query(OtherPid, Qry),
             ?assertEqual(lists:sort(ExpectedData), lists:sort(StraightQueryResults))
     end.
-
-assert_disjoint_ranges([], _) ->
-    ok;
-assert_disjoint_ranges(_, []) ->
-    ok;
-assert_disjoint_ranges(Data1, Data2) ->
-    Times1 = [A || [_, _, A|_] <- Data1],
-    Times2 = [A || [_, _, A|_] <- Data2],
-    {Ta1, Tz1} = {hd(Times1), lists:last(Times1)},
-    {Ta2, Tz2} = {hd(Times2), lists:last(Times2)},
-    Disjoint = (Tz1<Ta2) or (Tz2<Ta1),
-    ?assert(Disjoint == true),
-    ok.
 
 time_within_range(Time, Lower, LowerIncl, Upper, UpperIncl) ->
     if

@@ -25,5 +25,5 @@
 % Test basic aggregation functionality on larger and broken clusters
 
 confirm() ->
-    ts_simple_aggregation:verify_aggregation(one_down),
+    ts_simple_aggregation:verify_aggregation(delayed_one_down),
     pass.

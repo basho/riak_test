@@ -61,8 +61,25 @@ confirm() ->
     SumPlus = lists:sum([X+10 || X<-Column4]),
     AvgDiv = lists:sum(Column5)/Count/10,
     ?assertEqual([{SumPlus, AvgDiv}], Got4),
+
+    div_by_zero_test(Conn, Bucket, Where),
+
+    div_aggregate_function_by_zero_test(Conn, Bucket, Where),
+
     pass.
 
+%%
+div_by_zero_test(Conn, Bucket, Where) ->
+    Query = "SELECT 5 / 0 FROM " ++ Bucket ++ Where,
+    ?assertEqual(
+        {error,{1001,<<"divide_by_zero">>}},
+        ts_util:single_query(Conn, Query)
+    ).
 
-
-
+%%
+div_aggregate_function_by_zero_test(Conn, Bucket, Where) ->
+    Query = "SELECT COUNT(*) / 0 FROM " ++ Bucket ++ Where,
+    ?assertEqual(
+        {error,{1001,<<"divide_by_zero">>}},
+        ts_util:single_query(Conn, Query)
+    ).

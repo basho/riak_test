@@ -25,6 +25,7 @@
     activate_bucket_type/2,
     activate_bucket_type/3,
     assert/3,
+    assert_error_regex/3,
     assert_float/3,
     build_cluster/1,
     cluster_and_connect/1,
@@ -192,15 +193,18 @@ bucket_to_list(Bucket) ->
     Bucket.
 
 %% @ignore
-maybe_stop_a_node(one_down, [Stop|_Rest]) ->
+maybe_stop_a_node(delayed_one_down, Cluster) ->
+    maybe_stop_a_node(one_down, Cluster);
+maybe_stop_a_node(one_down, Cluster) ->
     %% Shutdown the second node, since we connect to the first one
-    ok = rt:stop(Stop);
+    ok = rt:stop(hd(tl(Cluster)));
 maybe_stop_a_node(_, _) ->
     ok.
 
 build_cluster(single)   -> build_c2(1, all_up);
 build_cluster(multiple) -> build_c2(?MULTIPLECLUSTERSIZE, all_up);
-build_cluster(one_down) -> build_c2(?MULTIPLECLUSTERSIZE, one_down).
+build_cluster(one_down) -> build_c2(?MULTIPLECLUSTERSIZE, one_down);
+build_cluster(delayed_one_down) -> build_c2(?MULTIPLECLUSTERSIZE, all_up).
 
 %% Build a cluster and create a PBC connection to the first node
 -spec cluster_and_connect(single|multiple|one_down) -> {[node()], term()}.
@@ -495,6 +499,18 @@ assert(String, Exp, Got) -> lager:info("*****************", []),
     lager:info("Got ~p", [Got]),
     lager:info("*****************", []),
     fail.
+
+%% Match an error code and use a regex to match the error string
+assert_error_regex(String, {error, {Code, Regex}}, {error, {Code, Msg}}) ->
+    {ok, RE} = re:compile(Regex),
+    Match = re:run(Msg, RE),
+    assert_error_regex_result(Match, String, Regex, Msg);
+assert_error_regex(String, Got, Expected) ->
+    assert_error_regex_result(nomatch, String, Got, Expected).
+assert_error_regex_result(nomatch, String, Expected, Got) ->
+    assert(String, Expected, Got);
+assert_error_regex_result(_, _String, _Expected, _Got) ->
+    pass.
 
 results(Results) ->
     Expected = lists:duplicate(length(Results), pass),
