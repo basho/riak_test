@@ -8,26 +8,20 @@ confirm() ->
     [Node1|_] = ts_util:build_cluster(multiple),
     Pid = rt:pbc(Node1),
 
-    %% table setup and population
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_1())),
-    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,200)]),
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_2())),
-    ok = riakc_ts:put(Pid, <<"table2">>, [[N,1,1,1] || N <- lists:seq(1,200)]),
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_3())),
-    ok = riakc_ts:put(Pid, <<"table3">>, [[1,N] || N <- lists:seq(1,200)]),
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_4())),
-    ok = riakc_ts:put(Pid, <<"table4">>, [[1,1,N] || N <- lists:seq(1,200)]),
-
     %% actual tests
+    create_data_def_1(Pid),
     select_exclusive_def_1_test(Pid),
     select_inclusive_def_1_test(Pid),
 
+    create_data_def_2(Pid),
     select_exclusive_def_2_test(Pid),
     select_inclusive_def_2_test(Pid),
 
+    create_data_def_3(Pid),
     select_exclusive_def_3_test(Pid),
     select_inclusive_def_3_test(Pid),
 
+    create_data_def_4(Pid),
     select_exclusive_def_4_test(Pid),
     select_inclusive_def_4_test(Pid),
 
@@ -46,6 +40,10 @@ confirm() ->
 %%%
 %%% TABLE 1
 %%%
+
+create_data_def_1(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_1())),
+    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,200)]).
 
 column_names_def_1() ->
     [<<"a">>, <<"b">>, <<"c">>, <<"d">>].
@@ -82,6 +80,10 @@ select_inclusive_def_1_test(Pid) ->
 %%% TABLE 2 (same columns as table 1)
 %%%
 
+create_data_def_2(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_2())),
+    ok = riakc_ts:put(Pid, <<"table2">>, [[N,1,1,1] || N <- lists:seq(1,200)]).
+
 table_def_2() ->
     "CREATE TABLE table2 ("
     "a TIMESTAMP NOT NULL, "
@@ -113,6 +115,10 @@ select_inclusive_def_2_test(Pid) ->
 %%%
 %%% TABLE 3, small key where partition and local are the same
 %%%
+
+create_data_def_3(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_3())),
+    ok = riakc_ts:put(Pid, <<"table3">>, [[1,N] || N <- lists:seq(1,200)]).
 
 column_names_def_3() ->
     [<<"a">>, <<"b">>].
@@ -147,6 +153,10 @@ select_inclusive_def_3_test(Pid) ->
 %%%
 %%% TABLE 4, small key where partition and local are the same
 %%%
+
+create_data_def_4(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_4())),
+    ok = riakc_ts:put(Pid, <<"table4">>, [[1,1,N] || N <- lists:seq(1,200)]).
 
 column_names_def_4() ->
     [<<"a">>, <<"b">>, <<"c">>].
