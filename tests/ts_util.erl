@@ -109,7 +109,12 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
     create_table(TestType, Cluster, DDL, Bucket),
 
     lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Data]),
+    lager:info("2a - Connection is ~p~n", [Conn]),
+    Ret = code:load_file(riakc_ts),
+    RiakCFile = code:is_loaded(riakc_ts),
+    gg:format("the riak client is ~p after ~p~n", [RiakCFile, Ret]),
     ok = riakc_ts:put(Conn, Bucket, Data),
+    gg:format("2b - Data put ~p", [here]),
 
     single_query(Conn, Qry).
 
