@@ -27,6 +27,7 @@
     assert/3,
     assert_error_regex/3,
     assert_float/3,
+    assert_row_sets/2,
     build_cluster/1,
     cluster_and_connect/1,
     create_and_activate_bucket_type/2,
@@ -109,7 +110,12 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
     create_table(TestType, Cluster, DDL, Bucket),
 
     lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Data]),
+    lager:info("2a - Connection is ~p~n", [Conn]),
+    Ret = code:load_file(riakc_ts),
+    RiakCFile = code:is_loaded(riakc_ts),
+    gg:format("the riak client is ~p after ~p~n", [RiakCFile, Ret]),
     ok = riakc_ts:put(Conn, Bucket, Data),
+    gg:format("2b - Data put ~p", [here]),
 
     single_query(Conn, Qry).
 
@@ -483,6 +489,39 @@ assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
         pass -> pass
     end;
 assert_float(String, Exp, Got) -> assert(String, Exp, Got).
+
+%% 
+assert_row_sets({ColExpected, Expected}, {ColsActual,Actual}) ->
+    ?assertEqual(ColExpected,ColsActual),
+    case tdiff:diff(Expected, Actual) of
+        [{eq,_}] ->
+            pass;
+        [] ->
+            pass;
+        Diff ->
+            ct:pal("ROW DIFF~n" ++ format_diff(0, Diff)),
+            ct:fail(row_set_mismatch)
+    end.
+
+%%
+format_diff(EqCount,[]) ->
+    format_diff_eq_count(EqCount);
+format_diff(EqCount,[{eq,Rows}|Tail]) ->
+    format_diff(EqCount+length(Rows), Tail);
+format_diff(EqCount,[{Type, Row}|Tail]) ->
+    Fmt = io_lib:format("~s~s ~p~n",
+        [format_diff_eq_count(EqCount), format_diff_type(Type), Row]),
+    [Fmt | format_diff(0, Tail)].
+
+%%
+format_diff_type(del) -> "-";
+format_diff_type(ins) -> "+".
+
+%%
+format_diff_eq_count(0) ->
+    "";
+format_diff_eq_count(Count) ->
+    [lists:duplicate(Count, $.), $\n].
 
 assertf2([], []) -> pass;
 assertf2([H1 | T1], [H2 | T2]) ->
