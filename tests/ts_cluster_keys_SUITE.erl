@@ -44,6 +44,7 @@ init_per_suite(Config) ->
     create_data_def_5(Pid),
     create_data_def_6(Pid),
     create_data_def_7(Pid),
+    create_data_def_8(Pid),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -77,7 +78,7 @@ client_pid(Ctx) ->
 
 create_data_def_1(Pid) ->
     ts_util:assert_row_sets({[],[]},riakc_ts:query(Pid, table_def_1())),
-    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,20000)]).
+    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,6000)]).
 
 column_names_def_1() ->
     [<<"a">>, <<"b">>, <<"c">>, <<"d">>].
@@ -365,6 +366,56 @@ select_inclusive_def_7_test(Ctx) ->
          [{N,1,1,<<"table7">>} || N <- lists:seq(44,54)],
     ts_util:assert_row_sets(
         {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%%%
+%%% Tests for where clause filters on additional fields in the local key.
+%%%
+
+create_data_def_8(Pid) ->
+    ts_util:assert_row_sets(
+        {[],[]},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table8 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "d SINT64 NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c,d))"
+    )),
+    ok = riakc_ts:put(Pid, <<"table8">>, [[1,1,N,N] || N <- lists:seq(1,6000)]).
+
+d_greater_than_filter_test(Ctx) ->
+    Query =
+        "SELECT * FROM table8 "
+        "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d > 3000",
+    Results =
+         [{1,1,N,N} || N <- lists:seq(3001,4500)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+d_greater_or_equal_to_filter_test(Ctx) ->
+    Query =
+        "SELECT * FROM table8 "
+        "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d >= 3000",
+    Results =
+         [{1,1,N,N} || N <- lists:seq(3000,4500)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+d_not_filter_test(Ctx) ->
+    Query =
+        "SELECT * FROM table8 "
+        "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d != 3000",
+    Results =
+         [{1,1,N,N} || N <- lists:seq(2500,4500), N /= 3000],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, Results},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
