@@ -77,7 +77,7 @@ client_pid(Ctx) ->
 
 create_data_def_1(Pid) ->
     ts_util:assert_row_sets({[],[]},riakc_ts:query(Pid, table_def_1())),
-    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,20000)]).
 
 column_names_def_1() ->
     [<<"a">>, <<"b">>, <<"c">>, <<"d">>].
@@ -105,6 +105,27 @@ select_exclusive_def_1_2_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 44 AND c < 54",
     Results =
          [{1,1,N,1} || N <- lists:seq(45,53)],
+    ts_util:assert_row_sets(
+        {column_names_def_1(), Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+select_exclusive_def_1_across_quanta_1_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 1500",
+    Results =
+         [{1,1,N,1} || N <- lists:seq(501,1499)],
+    ts_util:assert_row_sets(
+        {column_names_def_1(), Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%% Across more quanta
+select_exclusive_def_1_across_quanta_2_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 4500",
+    Results =
+         [{1,1,N,1} || N <- lists:seq(501,4499)],
     ts_util:assert_row_sets(
         {column_names_def_1(), Results},
         riakc_ts:query(client_pid(Ctx), Query)
@@ -321,7 +342,7 @@ select_inclusive_def_7_test(Ctx) ->
     ).
 
 %%%
-%%% NULL CHECKING TESTS
+%%% ERROR CASE TESTS
 %%%
 
 nulls_in_additional_local_key_not_allowed_test(Ctx) ->
@@ -337,4 +358,52 @@ nulls_in_additional_local_key_not_allowed_test(Ctx) ->
         )
     ).
 
+duplicate_fields_in_local_key_1_not_allowed_test(Ctx) ->
+    ?assertMatch(
+        {error, {1020, <<_/binary>>}},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE table1 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c,c))"
+        )
+    ).
 
+duplicate_fields_in_local_key_2_not_allowed_test(Ctx) ->
+    ?assertMatch(
+        {error, {1020, <<_/binary>>}},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE table1 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "d SINT64  NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c,d,d))"
+        )
+    ).
+
+duplicate_fields_in_partition_key_1_not_allowed_test(Ctx) ->
+    ?assertMatch(
+        {error, {1020, <<_/binary>>}},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE table1 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "d SINT64, "
+            "PRIMARY KEY  ((a,a,quantum(c, 1, 's')), a,a,c))"
+        )
+    ).
+
+multiple_quantum_functions_in_partition_key_not_allowed(Ctx) ->
+    ?assertMatch(
+        {error, {1020, <<_/binary>>}},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE table1 ("
+            "a SINT64 NOT NULL, "
+            "b TIMESTAMP NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,quantum(b, 1, 's'),quantum(c, 1, 's')), a,b,c))"
+        )
+    ).
