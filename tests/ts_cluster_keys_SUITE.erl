@@ -386,6 +386,15 @@ create_data_def_8(Pid) ->
     )),
     ok = riakc_ts:put(Pid, <<"table8">>, [[1,1,N,N] || N <- lists:seq(1,6000)]).
 
+d_equal_than_filter_test(Ctx) ->
+    Query =
+        "SELECT * FROM table8 "
+        "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d = 3000",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{1,1,3000,3000}]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
 d_greater_than_filter_test(Ctx) ->
     Query =
         "SELECT * FROM table8 "
@@ -484,4 +493,140 @@ multiple_quantum_functions_in_partition_key_not_allowed(Ctx) ->
             "c TIMESTAMP NOT NULL, "
             "PRIMARY KEY  ((a,quantum(b, 1, 's'),quantum(c, 1, 's')), a,b,c))"
         )
+    ).
+
+%%%
+%%% Keys with different types
+%%%
+
+double_pk_double_boolean_lk_test(Ctx) ->
+    ?assertEqual(
+        {[],[]},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE double_pk_double_boolean_lk_test ("
+            "a DOUBLE NOT NULL, "
+            "b BOOLEAN NOT NULL, "
+            "PRIMARY KEY  ((a), a,b))"
+    )),
+    Doubles = [N * 0.1 || N <- lists:seq(1,100)],
+    ok = riakc_ts:put(client_pid(Ctx), <<"double_pk_double_boolean_lk_test">>,
+        [[F,B] || F <- Doubles, B <- [true,false]]),
+    Query =
+        "SELECT * FROM double_pk_double_boolean_lk_test "
+        "WHERE a = 0.5 AND b = true",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{0.5,true}]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+boolean_pk_boolean_double_lk_test(Ctx) ->
+    ?assertEqual(
+        {[],[]},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE boolean_pk_boolean_double_lk_test ("
+            "a BOOLEAN NOT NULL, "
+            "b DOUBLE NOT NULL, "
+            "PRIMARY KEY  ((a), a,b))"
+    )),
+    Doubles = [N * 0.1 || N <- lists:seq(1,100)],
+    ok = riakc_ts:put(client_pid(Ctx), <<"boolean_pk_boolean_double_lk_test">>,
+        [[B,F] || F <- Doubles, B <- [true,false]]),
+    Query =
+        "SELECT * FROM boolean_pk_boolean_double_lk_test "
+        "WHERE a = false AND b = 0.5",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{false,0.5}]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+all_the_booleans_test(Ctx) ->
+    ?assertEqual(
+        {[],[]},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE all_the_booleans_test ("
+            "a BOOLEAN NOT NULL, "
+            "b BOOLEAN NOT NULL, "
+            "c BOOLEAN NOT NULL, "
+            "d BOOLEAN NOT NULL, "
+            "e BOOLEAN NOT NULL, "
+            "f BOOLEAN NOT NULL, "
+            "g BOOLEAN NOT NULL, "
+            "PRIMARY KEY  ((a,b,c), a,b,c,d,e,f,g))"
+    )),
+    Booleans = [false,true], % false > true
+    ok = riakc_ts:put(client_pid(Ctx), <<"all_the_booleans_test">>,
+        [[Ba,Bb,Bc,Bd,Be,Bf,Bg] || Ba <- Booleans,
+                                   Bb <- Booleans,Bc <- Booleans,
+                                   Bd <- Booleans,Be <- Booleans,
+                                   Bf <- Booleans,Bg <- Booleans]),
+    Query =
+        "SELECT * FROM all_the_booleans_test "
+        "WHERE a = true AND b = true AND c = true",
+    Results =
+        [{true,true,true,Bd,Be,Bf,Bg} || Bd <- Booleans,Be <- Booleans,
+                                         Bf <- Booleans,Bg <- Booleans],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+all_the_booleans_filter_on_g_test(Ctx) ->
+    ?assertEqual(
+        {[],[]},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE all_the_booleans_filter_on_g_test ("
+            "a BOOLEAN NOT NULL, "
+            "b BOOLEAN NOT NULL, "
+            "c BOOLEAN NOT NULL, "
+            "d BOOLEAN NOT NULL, "
+            "e BOOLEAN NOT NULL, "
+            "f BOOLEAN NOT NULL, "
+            "g BOOLEAN NOT NULL, "
+            "PRIMARY KEY  ((a,b,c), a,b,c,d,e,f,g))"
+    )),
+    Booleans = [false,true], % false > true
+    ok = riakc_ts:put(client_pid(Ctx), <<"all_the_booleans_filter_on_g_test">>,
+        [[Ba,Bb,Bc,Bd,Be,Bf,Bg] || Ba <- Booleans,
+                                   Bb <- Booleans,Bc <- Booleans,
+                                   Bd <- Booleans,Be <- Booleans,
+                                   Bf <- Booleans,Bg <- Booleans]),
+    Query =
+        "SELECT * FROM all_the_booleans_filter_on_g_test "
+        "WHERE a = true AND b = true AND c = true AND g = false",
+    Results =
+        [{true,true,true,Bd,Be,Bf,false} || Bd <- Booleans,Be <- Booleans,
+                                         Bf <- Booleans],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+all_the_booleans_filter_on_d_and_f_test(Ctx) ->
+    ?assertEqual(
+        {[],[]},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE all_the_booleans_filter_on_d_and_f_test ("
+            "a BOOLEAN NOT NULL, "
+            "b BOOLEAN NOT NULL, "
+            "c BOOLEAN NOT NULL, "
+            "d BOOLEAN NOT NULL, "
+            "e BOOLEAN NOT NULL, "
+            "f BOOLEAN NOT NULL, "
+            "g BOOLEAN NOT NULL, "
+            "PRIMARY KEY  ((a,b,c), a,b,c,d,e,f,g))"
+    )),
+    Booleans = [false,true], % false > true
+    ok = riakc_ts:put(client_pid(Ctx), <<"all_the_booleans_filter_on_d_and_f_test">>,
+        [[Ba,Bb,Bc,Bd,Be,Bf,Bg] || Ba <- Booleans,
+                                   Bb <- Booleans,Bc <- Booleans,
+                                   Bd <- Booleans,Be <- Booleans,
+                                   Bf <- Booleans,Bg <- Booleans]),
+    Query =
+        "SELECT * FROM all_the_booleans_filter_on_d_and_f_test "
+        "WHERE a = true AND b = true AND c = true AND d = false AND f = true",
+    Results =
+        [{true,true,true,false,Be,true,Bg} || Be <- Booleans,Bg <- Booleans],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        riakc_ts:query(client_pid(Ctx), Query)
     ).

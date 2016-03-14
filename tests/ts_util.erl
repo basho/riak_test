@@ -491,6 +491,8 @@ assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
 assert_float(String, Exp, Got) -> assert(String, Exp, Got).
 
 %% If `ColExpected' is the atom `rt_ignore_columns' then do not assert columns.
+assert_row_sets(_, {error,_} = Error) ->
+    ct:fail(Error);
 assert_row_sets({ColExpected, Expected}, {ColsActual,Actual}) ->
     case ColExpected of
         rt_ignore_columns ->
