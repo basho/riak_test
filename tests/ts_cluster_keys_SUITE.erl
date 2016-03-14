@@ -659,3 +659,22 @@ all_timestamps_single_quanta_test(Ctx) ->
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
     ).
+
+%%%
+%%% NULL CHECKING TESTS
+%%%
+
+nulls_in_additional_local_key_not_allowed_test(Ctx) ->
+    ?assertMatch(
+        {error, {1020, <<_/binary>>}},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE table1 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "d SINT64, "       %% d is in the local key and set as nullable
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c,d))"
+        )
+    ).
+
+
