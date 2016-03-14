@@ -141,6 +141,33 @@ select_inclusive_def_1_test(Ctx) ->
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
+%% Missing an a
+where_clause_must_cover_the_partition_key_missing_a_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE b = 1 AND c > 0 AND c < 11",
+    ?assertMatch(
+        {error, {1001,<<_/binary>>}},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%% Missing a b
+where_clause_must_cover_the_partition_key_missing_b_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1  AND c > 0 AND c < 11",
+    ?assertMatch(
+        {error, {1001,<<_/binary>>}},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%% Missing an c, the the quantum
+where_clause_must_cover_the_partition_key_missing_c_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE b = 1",
+    ?assertMatch(
+        {error, {1001,<<_/binary>>}},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
 %%%
 %%% TABLE 2 (same columns as table 1)
 %%%
