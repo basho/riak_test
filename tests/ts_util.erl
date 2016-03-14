@@ -490,9 +490,14 @@ assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
     end;
 assert_float(String, Exp, Got) -> assert(String, Exp, Got).
 
-%% 
+%% If `ColExpected' is the atom `ignore_columns' then do not assert columns.
 assert_row_sets({ColExpected, Expected}, {ColsActual,Actual}) ->
-    ?assertEqual(ColExpected,ColsActual),
+    case ColExpected of
+        ignore_columns ->
+            ok;
+        _ ->
+            ?assertEqual(ColExpected,ColsActual)
+    end,
     case tdiff:diff(Expected, Actual) of
         [{eq,_}] ->
             pass;

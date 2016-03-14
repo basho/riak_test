@@ -1,48 +1,82 @@
--module(ts_cluster_keys).
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2016 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%s
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% Tests for the different combinations of keys supported by
+%% Riak Time Series.
+%%
+%% -------------------------------------------------------------------
+-module(ts_cluster_keys_SUITE).
+-compile(export_all).
 
--behavior(riak_test).
--export([confirm/0]).
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-confirm() ->
-    [Node1|_] = ts_util:build_cluster(multiple),
-    Pid = rt:pbc(Node1),
+%%--------------------------------------------------------------------
+%% COMMON TEST CALLBACK FUNCTIONS
+%%--------------------------------------------------------------------
 
-    %% actual tests
+suite() ->
+    [{timetrap,{minutes,10}}].
+
+init_per_suite(Config) ->
+    [Node|_] = Cluster = ts_util:build_cluster(multiple),
+    Pid = rt:pbc(Node),
+    % create tables and populate them with data
     create_data_def_1(Pid),
-    select_exclusive_def_1_test(Pid),
-    select_inclusive_def_1_test(Pid),
-
     create_data_def_2(Pid),
-    select_exclusive_def_2_test(Pid),
-    select_inclusive_def_2_test(Pid),
-
     create_data_def_3(Pid),
-    select_exclusive_def_3_test(Pid),
-    select_inclusive_def_3_test(Pid),
-
     create_data_def_4(Pid),
-    select_exclusive_def_4_test(Pid),
-    select_inclusive_def_4_test(Pid),
-
     create_data_def_5(Pid),
-    select_def_5_test(Pid),
-
     create_data_def_6(Pid),
-    select_def_6_test(Pid),
-
     create_data_def_7(Pid),
-    select_exclusive_def_7_test(Pid),
-    select_inclusive_def_7_test(Pid),
+    [{cluster, Cluster} | Config].
 
-    pass.
+end_per_suite(_Config) ->
+    ok.
+
+init_per_group(_GroupName, Config) ->
+    Config.
+
+end_per_group(_GroupName, _Config) ->
+    ok.
+
+init_per_testcase(_TestCase, Config) ->
+    Config.
+
+end_per_testcase(_TestCase, _Config) ->
+    ok.
+
+groups() ->
+    [].
+
+all() ->
+    rt:grep_test_functions(?MODULE).
+
+client_pid(Ctx) ->
+    [Node|_] = proplists:get_value(cluster, Ctx),
+    rt:pbc(Node).
 
 %%%
 %%% TABLE 1
 %%%
 
 create_data_def_1(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_1())),
+    ts_util:assert_row_sets({[],[]},riakc_ts:query(Pid, table_def_1())),
     ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,200)]).
 
 column_names_def_1() ->
@@ -56,24 +90,34 @@ table_def_1() ->
     "d SINT64 NOT NULL, "
     "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c,d))".
 
-select_exclusive_def_1_test(Pid) ->
+select_exclusive_def_1_test(Ctx) ->
     Query =
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 0 AND c < 11",
     Results =
          [{1,1,N,1} || N <- lists:seq(1,10)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_1(), Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
-select_inclusive_def_1_test(Pid) ->
+select_exclusive_def_1_2_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 44 AND c < 54",
+    Results =
+         [{1,1,N,1} || N <- lists:seq(45,53)],
+    ts_util:assert_row_sets(
+        {column_names_def_1(), Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+select_inclusive_def_1_test(Ctx) ->
     Query =
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 11 AND c <= 20",
     Results =
          [{1,1,N,1} || N <- lists:seq(11,20)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_1(), Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
 %%%
@@ -81,7 +125,7 @@ select_inclusive_def_1_test(Pid) ->
 %%%
 
 create_data_def_2(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_2())),
+    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_2())),
     ok = riakc_ts:put(Pid, <<"table2">>, [[N,1,1,1] || N <- lists:seq(1,200)]).
 
 table_def_2() ->
@@ -92,24 +136,24 @@ table_def_2() ->
     "d SINT64 NOT NULL, "
     "PRIMARY KEY  ((quantum(a, 1, 's')), a,b,c,d))".
 
-select_exclusive_def_2_test(Pid) ->
+select_exclusive_def_2_test(Ctx) ->
     Query =
         "SELECT * FROM table2 WHERE a > 0 AND a < 11",
     Results =
          [{N,1,1,1} || N <- lists:seq(1,10)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_1(), Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
-select_inclusive_def_2_test(Pid) ->
+select_inclusive_def_2_test(Ctx) ->
     Query =
         "SELECT * FROM table2 WHERE a >= 11 AND a <= 20",
     Results =
          [{N,1,1,1} || N <- lists:seq(11,20)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_1(), Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
 %%%
@@ -117,7 +161,7 @@ select_inclusive_def_2_test(Pid) ->
 %%%
 
 create_data_def_3(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_3())),
+    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_3())),
     ok = riakc_ts:put(Pid, <<"table3">>, [[1,N] || N <- lists:seq(1,200)]).
 
 column_names_def_3() ->
@@ -129,24 +173,24 @@ table_def_3() ->
     "b TIMESTAMP NOT NULL, "
     "PRIMARY KEY ((a,quantum(b, 1, 's')),a,b))".
 
-select_exclusive_def_3_test(Pid) ->
+select_exclusive_def_3_test(Ctx) ->
     Query =
         "SELECT * FROM table3 WHERE b > 0 AND b < 11 AND a = 1",
     Results =
          [{1,N} || N <- lists:seq(1,10)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_3(), Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
-select_inclusive_def_3_test(Pid) ->
+select_inclusive_def_3_test(Ctx) ->
     Query =
         "SELECT * FROM table3 WHERE b >= 11 AND b <= 20 AND a = 1",
     Results =
          [{1,N} || N <- lists:seq(11,20)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_3(), Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
 
@@ -155,7 +199,7 @@ select_inclusive_def_3_test(Pid) ->
 %%%
 
 create_data_def_4(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_4())),
+    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_4())),
     ok = riakc_ts:put(Pid, <<"table4">>, [[1,1,N] || N <- lists:seq(1,200)]).
 
 column_names_def_4() ->
@@ -168,24 +212,24 @@ table_def_4() ->
     "c TIMESTAMP NOT NULL, "
     "PRIMARY KEY ((a,b,quantum(c, 1, 's')),a,b,c))".
 
-select_exclusive_def_4_test(Pid) ->
+select_exclusive_def_4_test(Ctx) ->
     Query =
         "SELECT * FROM table4 WHERE a = 1 AND b = 1 AND c > 0 AND c < 11",
     Results =
          [{1,1,N} || N <- lists:seq(1,10)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_4(), Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
-select_inclusive_def_4_test(Pid) ->
+select_inclusive_def_4_test(Ctx) ->
     Query =
         "SELECT * FROM table4 WHERE a = 1 AND b = 1 AND c >= 11 AND c <= 20",
     Results =
          [{1,1,N} || N <- lists:seq(11,20)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_4(), Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
 %%%
@@ -203,15 +247,15 @@ table_def_5() ->
     "PRIMARY KEY ((a,b,c),a,b,c))".
 
 create_data_def_5(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_5())),
+    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_5())),
     ok = riakc_ts:put(Pid, <<"table5">>, [[1,1,N] || N <- lists:seq(1,200)]).
 
-select_def_5_test(Pid) ->
+select_def_5_test(Ctx) ->
     Query =
         "SELECT * FROM table5 WHERE a = 1 AND b = 1 AND c = 20",
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {column_names_def_5(), [{1,1,20}]},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
 %%%
@@ -227,19 +271,18 @@ table_def_6() ->
     "PRIMARY KEY ((a,quantum(b,1,'s'),c),a,b,c,d))".
 
 create_data_def_6(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_6())),
+    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_6())),
     ok = riakc_ts:put(Pid, <<"table6">>, [[1,N,1,<<"table6">>] || N <- lists:seq(1,200)]).
 
-select_def_6_test(Pid) ->
+select_def_6_test(Ctx) ->
     Query =
         "SELECT * FROM table6 WHERE b > 7 AND b < 14 AND a = 1 AND c = 1",
     Results =
          [{1,N,1,<<"table6">>} || N <- lists:seq(8,13)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {[<<"a">>, <<"b">>, <<"c">>,<<"d">>], Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
-
 
 %%%
 %%% TABLE 7 quantum is the first key
@@ -254,25 +297,25 @@ table_def_7() ->
     "PRIMARY KEY ((quantum(a,1,'s'),b,c),a,b,c,d))".
 
 create_data_def_7(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_7())),
+    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_7())),
     ok = riakc_ts:put(Pid, <<"table7">>, [[N,1,1,<<"table7">>] || N <- lists:seq(1,200)]).
 
-select_exclusive_def_7_test(Pid) ->
+select_exclusive_def_7_test(Ctx) ->
     Query =
         "SELECT * FROM table7 WHERE a > 44 AND a < 55 AND b = 1 AND c = 1",
     Results =
          [{N,1,1,<<"table7">>} || N <- lists:seq(45,54)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
-select_inclusive_def_7_test(Pid) ->
+select_inclusive_def_7_test(Ctx) ->
     Query =
         "SELECT * FROM table7 WHERE a >= 44 AND a < 55 AND b = 1 AND c = 1",
     Results =
          [{N,1,1,<<"table7">>} || N <- lists:seq(44,54)],
-    ?assertEqual(
+    ts_util:assert_row_sets(
         {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results},
-        riakc_ts:query(Pid, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).

@@ -57,20 +57,7 @@ groups() ->
     [].
 
 all() -> 
-    [
-     start_key_query_greater_than_1999_test
-    ,start_key_query_greater_than_2000_test
-    ,start_key_query_greater_than_2001_test
-    ,start_key_query_greater_or_equal_to_1999_test
-    ,start_key_query_greater_or_equal_to_2000_test
-    ,start_key_query_greater_or_equal_to_2001_test
-    ,end_key_query_less_than_3999_test
-    ,end_key_query_less_than_4000_test
-    ,end_key_query_less_than_4001_test
-    ,end_key_query_less_than_or_equal_to_3999_test
-    ,end_key_query_less_than_or_equal_to_4000_test
-    ,end_key_query_less_than_or_equal_to_4001_test
-    ].
+    rt:grep_test_functions(?MODULE).
 
 %%%
 %%% TABLE 1 local key one element longer than partition key
@@ -217,6 +204,38 @@ end_key_query_less_than_or_equal_to_4001_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4001",
     Results =
          [{1,1,N} || N <- lists:seq(2500,4001)],
+    ts_util:assert_row_sets(
+        {column_names_def_1(), Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+start_key_query_greater_than_500_one_quantum_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 700",
+    Results =
+         [{1,1,N} || N <- lists:seq(501,699)],
+    ts_util:assert_row_sets(
+        {column_names_def_1(), Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+
+
+start_key_query_greater_or_equal_to_500_one_quantum_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 500 AND c < 700",
+    Results =
+         [{1,1,N} || N <- lists:seq(500,699)],
+    ts_util:assert_row_sets(
+        {column_names_def_1(), Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+start_key_query_greater_than_500_two_quantum_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 1500",
+    Results =
+         [{1,1,N} || N <- lists:seq(501,1499)],
     ts_util:assert_row_sets(
         {column_names_def_1(), Results},
         riakc_ts:query(client_pid(Ctx), Query)
