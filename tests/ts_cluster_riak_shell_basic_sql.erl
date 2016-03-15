@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(ts_riak_shell_basic_sql).
+-module(ts_cluster_riak_shell_basic_sql).
 
 -behavior(riak_test).
 
@@ -73,7 +73,7 @@ create_table_test(Pid) ->
             {{match, Describe},
              "DESCRIBE GeoCheckin;"}
            ],
-    Result = riak_shell_test_util:run_commands(Cmds, "Start", State,
+    Result = riak_shell_test_util:run_commands(Cmds, State,
                                                ?DONT_INCREMENT_PROMPT),
     lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),
@@ -101,7 +101,7 @@ query_table_test(Pid, Conn) ->
         {{match, Expected},
             Select}
     ],
-    Result = riak_shell_test_util:run_commands(Cmds, "Start", State,
+    Result = riak_shell_test_util:run_commands(Cmds, State,
         ?DONT_INCREMENT_PROMPT),
     lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),
