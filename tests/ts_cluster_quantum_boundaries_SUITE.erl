@@ -219,8 +219,6 @@ start_key_query_greater_than_500_one_quantum_test(Ctx) ->
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
-
-
 start_key_query_greater_or_equal_to_500_one_quantum_test(Ctx) ->
     Query =
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 500 AND c < 700",
@@ -238,5 +236,41 @@ start_key_query_greater_than_500_two_quantum_test(Ctx) ->
          [{1,1,N} || N <- lists:seq(501,1499)],
     ts_util:assert_row_sets(
         {column_names_def_1(), Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%%%
+%%% Return one key before and after the quanta.
+%%%
+
+one_key_before_quantum_start_key_greater_than_or_equal_to_2999_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2999 AND c < 3000",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{1,1,2999}]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+one_key_before_quantum_start_key_greater_than_2998_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2998 AND c < 3000",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{1,1,2999}]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+one_key_after_quantum_end_key_less_than_3001_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2999 AND c < 3001",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{1,1,3000}]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+one_key_after_quantum_less_than_or_equal_to_3000_test(Ctx) ->
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2999 AND c <= 3000",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{1,1,3000}]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).

@@ -46,6 +46,7 @@ init_per_suite(Config) ->
     create_data_def_7(Pid),
     create_data_def_8(Pid),
     all_the_booleans_create_data(Pid),
+    all_types_create_data(Pid),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -539,6 +540,86 @@ boolean_pk_boolean_double_lk_test(Ctx) ->
         {rt_ignore_columns, [{false,0.5}]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
+
+all_types_create_data(Pid) ->
+    ?assertEqual(
+        {[],[]},
+        riakc_ts:query(Pid,
+            "CREATE TABLE all_types ("
+            "a VARCHAR NOT NULL, "
+            "b TIMESTAMP NOT NULL, "
+            "c SINT64 NOT NULL, "
+            "d BOOLEAN NOT NULL, "
+            "e DOUBLE NOT NULL, "
+            "f VARCHAR NOT NULL, "
+            "g TIMESTAMP NOT NULL, "
+            "h SINT64 NOT NULL, "
+            "i BOOLEAN NOT NULL, "
+            "j DOUBLE NOT NULL, "
+            "k VARCHAR NOT NULL, "
+            "l TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,c,d,e,f,g), a,b,c,d,e,f,g,h,i,j,k,l))"
+    )),
+    %% increasing `Num' increases the result set massivey
+    Num = 3,
+    Varchars = [<<"a">>,<<"b">>,<<"c">>],
+    Timestamps = lists:seq(1,Num),
+    Sint64s = lists:seq(1,Num),
+    Booleans = ts_booleans(),
+    Doubles = [N * 0.1 || N <- lists:seq(1,2)],
+    %% hard code some of the local key values to reduce the result set
+    H = 1,
+    K = <<"k">>,
+    L = 1,
+    ok = riakc_ts:put(Pid, <<"all_types">>,
+        [[A,B,C,D,E,F,G,H,I,J,K,L] || A <- Varchars,   B <- Timestamps,
+                                      C <- Sint64s,    D <- Booleans,
+                                      E <- Doubles,    F <- Varchars,
+                                      G <- Timestamps,
+                                      I <- Booleans,   J <- Doubles]).
+
+all_types_1_test(Ctx) ->
+    H = 1,
+    K = <<"k">>,
+    L = 1,
+    Doubles = [N * 0.1 || N <- lists:seq(1,2)],
+    Query =
+        "SELECT * FROM all_types "
+        "WHERE a = 'b' AND b = 1 AND c = 3 AND d = true AND e = 0.1 "
+        "AND f = 'a' AND g = 2",
+    Results =
+        [{<<"b">>,1,3,true,0.1,<<"a">>,2,H,I,J,K,L} || 
+            I <- ts_booleans()
+           ,J <- Doubles
+        ],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+all_types_or_filter_test(Ctx) ->
+    H = 1,
+    K = <<"k">>,
+    L = 1,
+    Doubles = [N * 0.1 || N <- lists:seq(1,2)],
+    Query =
+        "SELECT * FROM all_types "
+        "WHERE a = 'b' AND b = 1 AND c = 3 AND d = true AND e = 0.1 "
+        "AND f = 'a' AND g = 2 AND (i = true OR j = 0.2)",
+    Results =
+        [{<<"b">>,1,3,true,0.1,<<"a">>,2,H,I,J,K,L} || 
+            I <- ts_booleans(),
+            J <- Doubles,
+            I == true orelse J == 0.2
+        ],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%%%
+%%% Boolean Keys
+%%%
 
 all_the_booleans_create_data(Pid) ->
     ?assertEqual(
