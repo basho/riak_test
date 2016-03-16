@@ -45,7 +45,8 @@ init_per_suite(Config) ->
     create_data_def_6(Pid),
     create_data_def_7(Pid),
     create_data_def_8(Pid),
-    all_the_booleans_create_data(Pid),
+    all_booleans_create_data(Pid),
+    all_timestamps_create_data(Pid),
     all_types_create_data(Pid),
     [{cluster, Cluster} | Config].
 
@@ -621,11 +622,11 @@ all_types_or_filter_test(Ctx) ->
 %%% Boolean Keys
 %%%
 
-all_the_booleans_create_data(Pid) ->
+all_booleans_create_data(Pid) ->
     ?assertEqual(
         {[],[]},
         riakc_ts:query(Pid,
-            "CREATE TABLE all_the_booleans ("
+            "CREATE TABLE all_booleans ("
             "a BOOLEAN NOT NULL, "
             "b BOOLEAN NOT NULL, "
             "c BOOLEAN NOT NULL, "
@@ -635,7 +636,7 @@ all_the_booleans_create_data(Pid) ->
             "g BOOLEAN NOT NULL, "
             "PRIMARY KEY  ((a,b,c), a,b,c,d,e,f,g))"
     )),
-    ok = riakc_ts:put(Pid, <<"all_the_booleans">>,
+    ok = riakc_ts:put(Pid, <<"all_booleans">>,
         [[Ba,Bb,Bc,Bd,Be,Bf,Bg] || Ba <- ts_booleans(),
                                    Bb <- ts_booleans(), Bc <- ts_booleans(),
                                    Bd <- ts_booleans(), Be <- ts_booleans(),
@@ -644,9 +645,9 @@ all_the_booleans_create_data(Pid) ->
 ts_booleans() ->
     [false,true]. %% false > true
 
-all_the_booleans_test(Ctx) ->
+all_booleans_test(Ctx) ->
     Query =
-        "SELECT * FROM all_the_booleans "
+        "SELECT * FROM all_booleans "
         "WHERE a = true AND b = true AND c = true",
     Results =
         [{true,true,true,Bd,Be,Bf,Bg} || Bd <- ts_booleans(), Be <- ts_booleans(),
@@ -656,9 +657,9 @@ all_the_booleans_test(Ctx) ->
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
-all_the_booleans_filter_on_g_test(Ctx) ->
+all_booleans_filter_on_g_test(Ctx) ->
     Query =
-        "SELECT * FROM all_the_booleans "
+        "SELECT * FROM all_booleans "
         "WHERE a = true AND b = true AND c = true AND g = false",
     Results =
         [{true,true,true,Bd,Be,Bf,false} || Bd <- ts_booleans(), Be <- ts_booleans(),
@@ -668,12 +669,53 @@ all_the_booleans_filter_on_g_test(Ctx) ->
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
-all_the_booleans_filter_on_d_and_f_test(Ctx) ->
+all_booleans_filter_on_d_and_f_test(Ctx) ->
     Query =
-        "SELECT * FROM all_the_booleans "
+        "SELECT * FROM all_booleans "
         "WHERE a = true AND b = true AND c = true AND d = false AND f = true",
     Results =
         [{true,true,true,false,Be,true,Bg} || Be <- ts_booleans(), Bg <- ts_booleans()],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%%%
+%%% Time Stamp Keys
+%%%
+
+all_timestamps_create_data(Pid) ->
+    ?assertEqual(
+        {[],[]},
+        riakc_ts:query(Pid,
+            "CREATE TABLE all_timestamps ("
+            "a TIMESTAMP NOT NULL, "
+            "b TIMESTAMP NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "d TIMESTAMP NOT NULL, "
+            "e TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,quantum(b,15,s),c), a,b,c,d,e))"
+    )),
+    ok = riakc_ts:put(Pid, <<"all_timestamps">>,
+        [[A,B,3,4,5] || A <- [1,2,3], B <- lists:seq(100, 10000, 100)]).
+
+all_timestamps_across_quanta_test(Ctx) ->
+    Query =
+        "SELECT * FROM all_timestamps "
+        "WHERE a = 2 AND b > 200 AND b < 3000 AND c = 3",
+    Results =
+        [{2,B,3,4,5} || B <- lists:seq(300, 2900, 100)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+all_timestamps_single_quanta_test(Ctx) ->
+    Query =
+        "SELECT * FROM all_timestamps "
+        "WHERE a = 2 AND b > 200 AND b <= 900 AND c = 3",
+    Results =
+        [{2,B,3,4,5} || B <- lists:seq(300, 900, 100)],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
         riakc_ts:query(client_pid(Ctx), Query)
