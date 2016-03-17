@@ -205,6 +205,13 @@ delete_data_existing_row_test(Cfg) ->
 delete_data_nonexisting_row_test(Cfg) ->
     {ok, "404", _Headers, _ } = delete("bob", "q1", "w1", 500, Cfg).
 
+delete_data_nonexisting_table_test(Cfg) ->
+    {ok, "404", _Headers, _ } = delete("bill", "q1", "w1", 20, Cfg).
+
+delete_data_wrong_path_test(Cfg) ->
+    {ok, "404", _Headers,
+     "lookup on [\"a\",\"q1\",\"b\",\"w1\",\"d\",\"20\"] failed"++_} =
+        delete_wrong_path("bob", "q1", "w1", 20, Cfg).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
@@ -264,6 +271,17 @@ delete_url(Node, Table, A, B, C) ->
     {IP, Port} = node_ip_and_port(Node),
     lists:flatten(
      io_lib:format("http://~s:~B/ts/v1/tables/~s/keys/a/~s/b/~s/c/~B",
+                   [IP, Port, Table, A, B, C])).
+
+delete_wrong_path(Table, A, B, C, Cfg) ->
+    Node = get_node(Cfg),
+    URL = delete_url_wrong_path(Node, Table, A, B, C),
+    ibrowse:send_req(URL, [], delete).
+
+delete_url_wrong_path(Node, Table, A, B, C) ->
+    {IP, Port} = node_ip_and_port(Node),
+    lists:flatten(
+     io_lib:format("http://~s:~B/ts/v1/tables/~s/keys/a/~s/b/~s/d/~B",
                    [IP, Port, Table, A, B, C])).
 
 
