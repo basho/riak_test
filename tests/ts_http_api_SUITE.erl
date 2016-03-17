@@ -57,8 +57,8 @@ groups() ->
 
 all() ->
     [ create_table_test,
-      create_bad_table_test
-    ].
+      create_bad_table_test,
+      create_existing_table_test    ].
 
 
 %% column_names_def_1() ->
@@ -89,23 +89,30 @@ bad_table_def() ->
 
 create_table_test(Cfg) ->
     Query = table_def_bob(),
-    Node = get_node(Cfg),
-    URL = query_url(Node, Query),
-    ct:log("URL=~s", [URL]),
-    {ok, "200", _Headers, Body } = ibrowse:send_req(URL, [], post),
+    {ok, "200", _Headers, Body } = execute_query(Query, Cfg),
     Body = success_body().
 
 
 
 create_bad_table_test(Cfg) ->
     Query = bad_table_def(),
-    Node = get_node(Cfg),
-    URL = query_url(Node, Query),
-    {ok, "400", _Headers, "bad query:"++_} = ibrowse:send_req(URL, [], post).
+    {ok, "400", _Headers, "bad query:"++_} = execute_query(Query, Cfg).
+
+create_existing_table_test(Cfg) ->
+    Query = table_def_bob(),
+    {ok, "500", _Headers,
+     "query error: {table_create_fail,<<\"bob\">>,already_active}"} =
+        execute_query(Query, Cfg).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+execute_query(Query, Cfg) ->
+    Node = get_node(Cfg),
+    URL = query_url(Node, Query),
+    ibrowse:send_req(URL, [], post).
+
+
 get_node(Cfg) ->
     [Node|_] = ?config(cluster, Cfg),
     Node.
