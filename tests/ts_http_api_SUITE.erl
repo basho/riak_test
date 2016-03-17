@@ -165,7 +165,10 @@ post_row_to_nonexisting_table_test(Cfg) ->
         post_data("bill", RowStr, Cfg).
 
 list_keys_test(Cfg) ->
-   {ok, "200", _Headers, _} = list_keys("bob", Cfg).
+    {ok, "200", _Headers, _} = list_keys("bob", Cfg).
+
+list_keys_nonexisting_table_test(Cfg) ->
+    {ok, "404", _Headers, _} = list_keys("john", Cfg).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
