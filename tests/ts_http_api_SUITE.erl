@@ -61,7 +61,8 @@ all() ->
       create_existing_table_test,
       describe_table_test,
       describe_nonexisting_table_test,
-      bad_describe_query_test
+      bad_describe_query_test,
+      post_single_row_test
     ].
 
 
@@ -91,6 +92,7 @@ bad_table_def() ->
 %%% HTTP API tests
 %%%
 
+%%% query
 create_table_test(Cfg) ->
     Query = table_def_bob(),
     {ok, "200", _Headers, Body } = execute_query(Query, Cfg),
@@ -119,6 +121,12 @@ bad_describe_query_test(Cfg) ->
     Query = "descripe bob",
     {ok, "400", _Headers, "bad query: \"parse error"++_} = execute_query(Query, Cfg).
 
+%%% put
+post_single_row_test(Cfg) ->
+    RowStr = row("q1", "w1", 11, 110),
+    {ok, "200", _Headers, RespBody} = post_data("bob", RowStr, Cfg),
+    RespBody = success_body().
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -126,6 +134,12 @@ execute_query(Query, Cfg) ->
     Node = get_node(Cfg),
     URL = query_url(Node, Query),
     ibrowse:send_req(URL, [], post).
+
+post_data(Table, Body, Cfg) ->
+    Node = get_node(Cfg),
+    URL = post_data_url(Node, Table),
+    ct:log("URL=~p", [URL]),
+    ibrowse:send_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body)).
 
 
 get_node(Cfg) ->
@@ -145,6 +159,16 @@ query_url(IP, Port, Query) ->
     lists:flatten(
       io_lib:format("http://~s:~B/ts/v1/query?query=~s",
                     [IP, Port, EncodedQuery])).
+
+post_data_url(Node, Table) ->
+    {IP, Port} = node_ip_and_port(Node),
+    lists:flatten(
+      io_lib:format("http://~s:~B/ts/v1/tables/~s/keys",
+                    [IP, Port, Table])).
+
+row(A, B, C, D) ->
+    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~B}",
+                  [A, B, C, D]).
 
 success_body() ->
     "{\"success\":true}".
