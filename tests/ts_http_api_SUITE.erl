@@ -59,7 +59,8 @@ all() ->
     [ create_table_test,
       create_bad_table_test,
       create_existing_table_test,
-      describe_table_test
+      describe_table_test,
+      describe_nonexisting_table_test
     ].
 
 
@@ -108,6 +109,10 @@ create_existing_table_test(Cfg) ->
 describe_table_test(Cfg) ->
     Query = "describe bob",
     {ok, "200", _Headers,  "{\"columns\":"++_ } = execute_query(Query, Cfg).
+
+describe_nonexisting_table_test(Cfg) ->
+    Query = "describe john",
+    {ok, "404", _Headers, _} = execute_query(Query, Cfg).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
