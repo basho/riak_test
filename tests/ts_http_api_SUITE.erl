@@ -63,7 +63,16 @@ all() ->
       describe_nonexisting_table_test,
       bad_describe_query_test,
       post_single_row_test,
-      post_single_row_missing_field_test
+      post_single_row_missing_field_test,
+      post_single_row_wrong_field_test,
+      post_several_rows_test,
+      post_row_to_nonexisting_table_test,
+      list_keys_test_test,
+      list_keys_nonexisting_table_test,
+      delete_data_existing_row_test,
+      delete_data_nonexisting_row_test,
+      delete_data_nonexisting_table_test,
+      delete_data_wrong_path_test
     ].
 
 
@@ -134,6 +143,24 @@ post_single_row_missing_field_test(Cfg) ->
      "wrong body: {data_problem,{missing_field,<<\"b\">>}}"} =
         post_data("bob", RowStr, Cfg).
 
+post_single_row_wrong_field_test(Cfg) ->
+    RowStr = wrong_field_type_row("q1", "w1", 12, "raining"),
+    {ok,"400",_Headers,
+     "wrong body: {data_problem,{wrong_type,sint64,<<\"raining\">>}}"} =
+        post_data("bob", RowStr, Cfg).
+
+post_several_rows_test(Cfg) ->
+    RowStrs = string:join([row("q1", "w2", 20, 150), row("q1", "w1", 20, 119)],
+                          ", "),
+    Body = io_lib:format("[~s]", [RowStrs]),
+    {ok, "200", _Headers, RespBody} = post_data("bob", Body, Cfg),
+    RespBody = success_body().
+
+post_row_to_nonexisting_table_test(Cfg) ->
+    RowStr = row("q1", "w1", 30, 142),
+    {ok,"404", _Headers, "table 'riak_ql_table_bill$1' not created"} =
+        post_data("bill", RowStr, Cfg).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -180,6 +207,11 @@ row(A, B, C, D) ->
 missing_field_row(A, C, D) ->
     io_lib:format("{\"a\": \"~s\", \"c\": ~B, \"d\":~B}",
                   [A, C, D]).
+
+wrong_field_type_row(A, B, C, D) ->
+    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~p}",
+                  [A, B, C, D]).
+
 
 success_body() ->
     "{\"success\":true}".
