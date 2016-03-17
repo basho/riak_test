@@ -62,7 +62,8 @@ all() ->
       describe_table_test,
       describe_nonexisting_table_test,
       bad_describe_query_test,
-      post_single_row_test
+      post_single_row_test,
+      post_single_row_missing_field_test
     ].
 
 
@@ -127,6 +128,12 @@ post_single_row_test(Cfg) ->
     {ok, "200", _Headers, RespBody} = post_data("bob", RowStr, Cfg),
     RespBody = success_body().
 
+post_single_row_missing_field_test(Cfg) ->
+    RowStr = missing_field_row("q1", 12, 200),
+    {ok, "400", _Headers,
+     "wrong body: {data_problem,{missing_field,<<\"b\">>}}"} =
+        post_data("bob", RowStr, Cfg).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -169,6 +176,10 @@ post_data_url(Node, Table) ->
 row(A, B, C, D) ->
     io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~B}",
                   [A, B, C, D]).
+
+missing_field_row(A, C, D) ->
+    io_lib:format("{\"a\": \"~s\", \"c\": ~B, \"d\":~B}",
+                  [A, C, D]).
 
 success_body() ->
     "{\"success\":true}".
