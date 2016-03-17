@@ -60,7 +60,8 @@ all() ->
       create_bad_table_test,
       create_existing_table_test,
       describe_table_test,
-      describe_nonexisting_table_test
+      describe_nonexisting_table_test,
+      bad_describe_query_test
     ].
 
 
@@ -113,6 +114,10 @@ describe_table_test(Cfg) ->
 describe_nonexisting_table_test(Cfg) ->
     Query = "describe john",
     {ok, "404", _Headers, _} = execute_query(Query, Cfg).
+
+bad_describe_query_test(Cfg) ->
+    Query = "descripe bob",
+    {ok, "400", _Headers, "bad query: \"parse error"++_} = execute_query(Query, Cfg).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
