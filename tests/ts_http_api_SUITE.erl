@@ -73,7 +73,7 @@ all() ->
       delete_data_nonexisting_row_test,
       delete_data_nonexisting_table_test,
       delete_data_wrong_path_test,
-      select_all_test,
+      select_test,
       select_subset_test,
       invalid_select_test
     ].
@@ -164,11 +164,28 @@ post_row_to_nonexisting_table_test(Cfg) ->
     {ok,"404", _Headers, "table 'riak_ql_table_bill$1' not created"} =
         post_data("bill", RowStr, Cfg).
 
+%%% list_keys
 list_keys_test(Cfg) ->
     {ok, "200", _Headers, _} = list_keys("bob", Cfg).
 
 list_keys_nonexisting_table_test(Cfg) ->
     {ok, "404", _Headers, _} = list_keys("john", Cfg).
+
+%%% select
+select_test(Cfg) ->
+    Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
+    {ok, "200", _Headers,
+    "{\"columns\":[\"a\",\"b\",\"c\",\"d\"]," ++
+         "\"rows\":[[\"q1\",\"w1\",11,110]," ++
+         "[\"q1\",\"w1\",20,119]]}"} =
+        execute_query(Select, Cfg).
+
+
+
+%%% delete
+delete_data_existing_row_test(Cfg) ->
+    ok = Cfg.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
