@@ -196,7 +196,14 @@ invalid_select_test(Cfg) ->
 %%% delete
 delete_data_existing_row_test(Cfg) ->
     {ok, "200", _Headers, Body} = delete("bob", "q1", "w1", 11, Cfg),
-    Body = success_body().
+    Body = success_body(),
+    Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
+    {ok, "200", _Headers2,
+     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],\"rows\":[[\"q1\",\"w1\",20,119]]}"} =
+        execute_query(Select, Cfg).
+
+delete_data_nonexisting_row_test(Cfg) ->
+    {ok, "404", _Headers, _ } = delete("bob", "q1", "w1", 500, Cfg).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
