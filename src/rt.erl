@@ -73,6 +73,7 @@
          get_ring/1,
          get_version/0,
          get_version/1,
+         grep_test_functions/1,
          heal/1,
          http_url/1,
          https_url/1,
@@ -1705,6 +1706,15 @@ get_version(Vsn) ->
 -spec get_version() -> binary().
 get_version() ->
     ?HARNESS:get_version().
+
+%% @doc Return all functions in the module as atoms that end with 'test'.
+-spec grep_test_functions(module()) -> [atom()].
+grep_test_functions(Module) when is_atom(Module) ->
+    Functions = Module:module_info(exports),
+    [Fn || {Fn,1} <- Functions, is_ending_with_test(Fn)].
+
+is_ending_with_test(Fn) ->
+    lists:suffix("test", atom_to_list(Fn)).
 
 %% @doc outputs some useful information about nodes that are up
 whats_up() ->
