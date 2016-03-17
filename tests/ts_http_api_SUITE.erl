@@ -58,7 +58,9 @@ groups() ->
 all() ->
     [ create_table_test,
       create_bad_table_test,
-      create_existing_table_test    ].
+      create_existing_table_test,
+      describe_table_test
+    ].
 
 
 %% column_names_def_1() ->
@@ -92,8 +94,6 @@ create_table_test(Cfg) ->
     {ok, "200", _Headers, Body } = execute_query(Query, Cfg),
     Body = success_body().
 
-
-
 create_bad_table_test(Cfg) ->
     Query = bad_table_def(),
     {ok, "400", _Headers, "bad query:"++_} = execute_query(Query, Cfg).
@@ -103,6 +103,11 @@ create_existing_table_test(Cfg) ->
     {ok, "500", _Headers,
      "query error: {table_create_fail,<<\"bob\">>,already_active}"} =
         execute_query(Query, Cfg).
+
+
+describe_table_test(Cfg) ->
+    Query = "describe bob",
+    {ok, "200", _Headers,  "{\"columns\":"++_ } = execute_query(Query, Cfg).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
