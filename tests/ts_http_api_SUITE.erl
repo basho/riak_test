@@ -69,13 +69,13 @@ all() ->
       post_row_to_nonexisting_table_test,
       list_keys_test,
       list_keys_nonexisting_table_test,
+      select_test,
+      select_subset_test,
+      invalid_select_test,
       delete_data_existing_row_test,
       delete_data_nonexisting_row_test,
       delete_data_nonexisting_table_test,
-      delete_data_wrong_path_test,
-      select_test,
-      select_subset_test,
-      invalid_select_test
+      delete_data_wrong_path_test
     ].
 
 
@@ -180,11 +180,23 @@ select_test(Cfg) ->
          "[\"q1\",\"w1\",20,119]]}"} =
         execute_query(Select, Cfg).
 
+select_subset_test(Cfg) ->
+    Select = "select * from bob where a='q1' and b='w1' and c>1 and c<15",
+    {ok, "200", _Headers,
+    "{\"columns\":[\"a\",\"b\",\"c\",\"d\"]," ++
+         "\"rows\":[[\"q1\",\"w1\",11,110]]}"} =
+        execute_query(Select, Cfg).
 
+invalid_select_test(Cfg) ->
+    Select = "select * from bob where a='q1' and c>1 and c<15",
+    {ok, "500", _Headers,
+     "select query execution error: {missing_key_clause"++_}
+        = execute_query(Select, Cfg).
 
 %%% delete
 delete_data_existing_row_test(Cfg) ->
-    ok = Cfg.
+    {ok, "200", _Headers, Body} = delete("bob", "q1", "w1", 11, Cfg),
+    Body = success_body().
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -235,6 +247,18 @@ list_keys_url(Node, Table) ->
     lists:flatten(
       io_lib:format("http://~s:~B/ts/v1/tables/~s/list_keys",
                    [IP, Port, Table])).
+
+delete(Table, A, B, C, Cfg) ->
+    Node = get_node(Cfg),
+    URL = delete_url(Node, Table, A, B, C),
+    ibrowse:send_req(URL, [], delete).
+
+delete_url(Node, Table, A, B, C) ->
+    {IP, Port} = node_ip_and_port(Node),
+    lists:flatten(
+     io_lib:format("http://~s:~B/ts/v1/tables/~s/keys/a/~s/b/~s/c/~B",
+                   [IP, Port, Table, A, B, C])).
+
 
 row(A, B, C, D) ->
     io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~B}",
