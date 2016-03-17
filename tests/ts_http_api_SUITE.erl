@@ -67,12 +67,15 @@ all() ->
       post_single_row_wrong_field_test,
       post_several_rows_test,
       post_row_to_nonexisting_table_test,
-      list_keys_test_test,
+      list_keys_test,
       list_keys_nonexisting_table_test,
       delete_data_existing_row_test,
       delete_data_nonexisting_row_test,
       delete_data_nonexisting_table_test,
-      delete_data_wrong_path_test
+      delete_data_wrong_path_test,
+      select_all_test,
+      select_subset_test,
+      invalid_select_test
     ].
 
 
@@ -161,6 +164,9 @@ post_row_to_nonexisting_table_test(Cfg) ->
     {ok,"404", _Headers, "table 'riak_ql_table_bill$1' not created"} =
         post_data("bill", RowStr, Cfg).
 
+list_keys_test(Cfg) ->
+   {ok, "200", _Headers, _} = list_keys("bob", Cfg).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -172,7 +178,6 @@ execute_query(Query, Cfg) ->
 post_data(Table, Body, Cfg) ->
     Node = get_node(Cfg),
     URL = post_data_url(Node, Table),
-    ct:log("URL=~p", [URL]),
     ibrowse:send_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body)).
 
 
@@ -199,6 +204,17 @@ post_data_url(Node, Table) ->
     lists:flatten(
       io_lib:format("http://~s:~B/ts/v1/tables/~s/keys",
                     [IP, Port, Table])).
+
+list_keys(Table, Cfg) ->
+    Node = get_node(Cfg),
+    URL  = list_keys_url(Node, Table),
+    ibrowse:send_req(URL, [], get).
+
+list_keys_url(Node, Table) ->
+    {IP, Port} = node_ip_and_port(Node),
+    lists:flatten(
+      io_lib:format("http://~s:~B/ts/v1/tables/~s/list_keys",
+                   [IP, Port, Table])).
 
 row(A, B, C, D) ->
     io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~B}",
