@@ -28,6 +28,7 @@ confirm() ->
              [
                 {fullsync_on_connect, false},
                 {fullsync_interval, disabled},
+                {ts_realtime, true},
                 {diff_batch_size, 10}
              ]}
     ],
@@ -94,13 +95,14 @@ replication(ANodes, BNodes, Table, NormalType) ->
     lager:info("Testing a non-w1c bucket type (realtime)"),
     real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket),
 
-    %% XXX: Currently commented out to reach the fullsync tests
-
     %% lager:info("Testing the timeseries bucket type, non-ts-managed bucket (realtime)"),
     %% real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucketInTS),
 
-    %% lager:info("Testing timeseries data (realtime)"),
-    %% ts_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, Table),
+    lager:info("Testing timeseries data (realtime)"),
+    ts_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, Table),
+
+    lager:info("Testing a change of bucket properties to disable realtime"),
+    no_ts_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, Table),
 
     lager:info("Testing all buckets with fullsync"),
     full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS),
@@ -162,6 +164,30 @@ ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA,
 
     lager:info("Reading 100 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
     ?assertEqual(ok, rt:wait_until(fun() -> 100 == ts_num_records_present(BFirst, 101, 200) end)),
+
+    disconnect_clusters(ANodes, LeaderA, "B").
+
+
+%% @doc No real time replication test (bucket properties set to fullsync)
+no_ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Table) ->
+    connect_clusters(ANodes, BNodes, LeaderA, PortB),
+    start_mdc(ANodes, LeaderA, "B", false),
+
+    %% Set bucket properties to {repl, fullsync} before writing data
+    rt:pbc_set_bucket_type(rt:pbc(AFirst), Table, [{repl, fullsync}]),
+
+    log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify no replication to Cluster B via realtime"),
+    lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
+    ?assertEqual(ok, put_records(AFirst, Table, 201, 300)),
+
+    lager:info("Pausing 2 seconds"),
+    timer:sleep(2000),
+
+    lager:info("Verifying none of the new records are on B"),
+    ?assertEqual(0, ts_num_records_present(BFirst, 201, 300)),
+
+    %% "Undo" (sort of) the bucket property
+    rt:pbc_set_bucket_type(rt:pbc(AFirst), Table, [{repl, both}]),
 
     disconnect_clusters(ANodes, LeaderA, "B").
 
