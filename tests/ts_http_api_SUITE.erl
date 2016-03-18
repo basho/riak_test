@@ -185,12 +185,15 @@ post_row_to_nonexisting_table_test(Cfg) ->
 list_keys_test(Cfg) ->
     {ok, "200", Headers, Body} = list_keys("bob", Cfg),
     "application/json" = content_type(Headers),
-    ok = Body.
+    {match, _} = re:run(Body, "{\"url\":\"http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w2/c/20/\"}"),
+    {match, _} = re:run(Body,     "{\"url\":\"http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w1/c/20/\"}"),
+    {match, _} = re:run(Body, "{\"url\":\"http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w1/c/11/\"}").
+
 
 list_keys_nonexisting_table_test(Cfg) ->
     {ok, "404", Headers, Body} = list_keys("john", Cfg),
     "application/json" = content_type(Headers),
-    ok = Body.
+    "{\"error\":\"table <<\\\"john\\\">> does not exist\"}" = Body.
 
 %%% select
 select_test(Cfg) ->
@@ -212,7 +215,8 @@ invalid_select_test(Cfg) ->
     Select = "select * from bob where a='q1' and c>1 and c<15",
     {ok, "500", Headers, Body} = execute_query(Select, Cfg),
     "application/json" = content_type(Headers),
-    "select query execution error: {missing_key_clause" ++ _ = Body.
+    "{\"error\":\"select query execution error: {missing_key_clause,\\n"++_
+        = Body.
 
 %%% delete
 delete_data_existing_row_test(Cfg) ->
@@ -227,17 +231,20 @@ delete_data_existing_row_test(Cfg) ->
 delete_data_nonexisting_row_test(Cfg) ->
     {ok, "404", Headers, Body } = delete("bob", "q1", "w1", 500, Cfg),
     "application/json" = content_type(Headers),
-    ok = Body.
+    "{\"error\":\"resource \\\"/ts/v1/tables/bob/keys/a/q1/b/w1/c/500\\\" does not exist - impossible to delete\"}"
+        = Body.
 
 delete_data_nonexisting_table_test(Cfg) ->
     {ok, "404", Headers, Body } = delete("bill", "q1", "w1", 20, Cfg),
     "application/json" = content_type(Headers),
-    ok = Body.
+    "{\"error\":\"table 'riak_ql_table_bill$1' not created\"}" = Body.
 
 delete_data_wrong_path_test(Cfg) ->
     {ok, "404", Headers, Body} = delete_wrong_path("bob", "q1", "w1", 20, Cfg),
     "application/json" = content_type(Headers),
-    "lookup on [\"a\",\"q1\",\"b\",\"w1\",\"d\",\"20\"] failed" ++ _ = Body.
+    "{\"error\":\"deletion of [\\\"a\\\",\\\"q1\\\",\\\"b\\\",\\\"w1\\\",\\\"d\\\",\\\"20\\\"]"++
+        " failed due to [105,110,99,111,114"++_
+        = Body.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
