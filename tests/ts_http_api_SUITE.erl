@@ -218,8 +218,8 @@ delete_data_wrong_path_test(Cfg) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 execute_query(Query, Cfg) ->
     Node = get_node(Cfg),
-    URL = query_url(Node, Query),
-    ibrowse:send_req(URL, [], post).
+    URL = query_url(Node),
+    ibrowse:send_req(URL, [], post, Query).
 
 post_data(Table, Body, Cfg) ->
     Node = get_node(Cfg),
@@ -235,15 +235,14 @@ node_ip_and_port(Node) ->
     {ok, [{IP, Port}]} = rpc:call(Node, application, get_env, [riak_api, http]),
     {IP, Port}.
 
-query_url(Node, Query) ->
+query_url(Node) ->
      {IP, Port} = node_ip_and_port(Node),
-     query_url(IP, Port, Query).
+     query_url(IP, Port).
 
-query_url(IP, Port, Query) ->
-    EncodedQuery = ibrowse_lib:url_encode(Query),
+query_url(IP, Port) ->
     lists:flatten(
-      io_lib:format("http://~s:~B/ts/v1/query?query=~s",
-                    [IP, Port, EncodedQuery])).
+      io_lib:format("http://~s:~B/ts/v1/query",
+                    [IP, Port])).
 
 post_data_url(Node, Table) ->
     {IP, Port} = node_ip_and_port(Node),
