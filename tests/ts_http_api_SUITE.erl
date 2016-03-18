@@ -113,89 +113,111 @@ create_table_test(Cfg) ->
 
 create_bad_table_test(Cfg) ->
     Query = bad_table_def(),
-    {ok, "400", _Headers, "bad query:"++_} = execute_query(Query, Cfg).
+    {ok, "400", Headers, Body} = execute_query(Query, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"error\":\"bad query: parse error: {0,riak_ql_parser,<<\\\"Missing primary key\\\">>}\"}" = Body.
+
 
 create_existing_table_test(Cfg) ->
     Query = table_def_bob(),
-    {ok, "409", _Headers,
-     "table <<\"bob\">> already exists"} =
-        execute_query(Query, Cfg).
+    {ok, "409", Headers, Body} =
+        execute_query(Query, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"error\":\"table <<\\\"bob\\\">> already exists\"}" = Body.
 
 
 describe_table_test(Cfg) ->
     Query = "describe bob",
-    {ok, "200", _Headers,  "{\"columns\":"++_ } = execute_query(Query, Cfg).
+    {ok, "200", Headers,  Body } = execute_query(Query, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"columns\":"++_ = Body.
 
 describe_nonexisting_table_test(Cfg) ->
     Query = "describe john",
-    {ok, "404", _Headers, _} = execute_query(Query, Cfg).
+    {ok, "404", Headers, Body} = execute_query(Query, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"error\":\"table <<\\\"john\\\">> does not exist\"}" = Body.
 
 bad_describe_query_test(Cfg) ->
     Query = "descripe bob",
-    {ok, "400", _Headers, "bad query: \"parse error"++_} = execute_query(Query, Cfg).
+    {ok, "400", Headers, Body} = execute_query(Query, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"error\":\"bad query: parse error: {<<\\\"descripe\\\">>,riak_ql_parser,\\n              [\\\"syntax error before: \\\",\\\"identifier\\\"]}\"}" = Body.
 
 %%% put
 post_single_row_test(Cfg) ->
     RowStr = row("q1", "w1", 11, 110),
-    {ok, "200", _Headers, RespBody} = post_data("bob", RowStr, Cfg),
+    {ok, "200", Headers, RespBody} = post_data("bob", RowStr, Cfg),
+    "application/json" = content_type(Headers),
     RespBody = success_body().
 
 post_single_row_missing_field_test(Cfg) ->
     RowStr = missing_field_row("q1", 12, 200),
-    {ok, "400", _Headers,
-     "wrong body: {data_problem,{missing_field,<<\"b\">>}}"} =
-        post_data("bob", RowStr, Cfg).
+    {ok, "400", Headers, Body} =
+        post_data("bob", RowStr, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"error\":\"wrong body: {data_problem,{missing_field,<<\\\"b\\\">>}}\"}"
+        = Body.
 
 post_single_row_wrong_field_test(Cfg) ->
     RowStr = wrong_field_type_row("q1", "w1", 12, "raining"),
-    {ok,"400",_Headers,
-     "wrong body: {data_problem,{wrong_type,sint64,<<\"raining\">>}}"} =
-        post_data("bob", RowStr, Cfg).
+    {ok,"400", Headers, Body} = post_data("bob", RowStr, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"error\":\"wrong body: {data_problem,{wrong_type,sint64,<<\\\"raining\\\">>}}\"}"
+        = Body.
+
 
 post_several_rows_test(Cfg) ->
     RowStrs = string:join([row("q1", "w2", 20, 150), row("q1", "w1", 20, 119)],
                           ", "),
     Body = io_lib:format("[~s]", [RowStrs]),
-    {ok, "200", _Headers, RespBody} = post_data("bob", Body, Cfg),
+    {ok, "200", Headers, RespBody} = post_data("bob", Body, Cfg),
+    "application/json" = content_type(Headers),
     RespBody = success_body().
 
 post_row_to_nonexisting_table_test(Cfg) ->
     RowStr = row("q1", "w1", 30, 142),
-    {ok,"404", _Headers, "table 'riak_ql_table_bill$1' not created"} =
-        post_data("bill", RowStr, Cfg).
+    {ok,"404", Headers, Body} = post_data("bill", RowStr, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"error\":\"table 'riak_ql_table_bill$1' not created\"}" = Body.
 
 %%% list_keys
 list_keys_test(Cfg) ->
-    {ok, "200", _Headers, _} = list_keys("bob", Cfg).
+    {ok, "200", Headers, Body} = list_keys("bob", Cfg),
+    "application/json" = content_type(Headers),
+    ok = Body.
 
 list_keys_nonexisting_table_test(Cfg) ->
-    {ok, "404", _Headers, _} = list_keys("john", Cfg).
+    {ok, "404", Headers, Body} = list_keys("john", Cfg),
+    "application/json" = content_type(Headers),
+    ok = Body.
 
 %%% select
 select_test(Cfg) ->
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
-    {ok, "200", _Headers,
+    {ok, "200", Headers, Body} = execute_query(Select, Cfg),
+    "application/json" = content_type(Headers),
     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"]," ++
-         "\"rows\":[[\"q1\",\"w1\",11,110]," ++
-         "[\"q1\",\"w1\",20,119]]}"} =
-        execute_query(Select, Cfg).
+        "\"rows\":[[\"q1\",\"w1\",11,110]," ++
+        "[\"q1\",\"w1\",20,119]]}" = Body.
 
 select_subset_test(Cfg) ->
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<15",
-    {ok, "200", _Headers,
+    {ok, "200", Headers, Body} = execute_query(Select, Cfg),
+    "application/json" = content_type(Headers),
     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"]," ++
-         "\"rows\":[[\"q1\",\"w1\",11,110]]}"} =
-        execute_query(Select, Cfg).
+        "\"rows\":[[\"q1\",\"w1\",11,110]]}" = Body.
 
 invalid_select_test(Cfg) ->
     Select = "select * from bob where a='q1' and c>1 and c<15",
-    {ok, "500", _Headers,
-     "select query execution error: {missing_key_clause"++_}
-        = execute_query(Select, Cfg).
+    {ok, "500", Headers, Body} = execute_query(Select, Cfg),
+    "application/json" = content_type(Headers),
+    "select query execution error: {missing_key_clause" ++ _ = Body.
 
 %%% delete
 delete_data_existing_row_test(Cfg) ->
-    {ok, "200", _Headers, Body} = delete("bob", "q1", "w1", 11, Cfg),
+    {ok, "200", Headers, Body} = delete("bob", "q1", "w1", 11, Cfg),
+    "application/json" = content_type(Headers),
     Body = success_body(),
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
     {ok, "200", _Headers2,
@@ -203,15 +225,19 @@ delete_data_existing_row_test(Cfg) ->
         execute_query(Select, Cfg).
 
 delete_data_nonexisting_row_test(Cfg) ->
-    {ok, "404", _Headers, _ } = delete("bob", "q1", "w1", 500, Cfg).
+    {ok, "404", Headers, Body } = delete("bob", "q1", "w1", 500, Cfg),
+    "application/json" = content_type(Headers),
+    ok = Body.
 
 delete_data_nonexisting_table_test(Cfg) ->
-    {ok, "404", _Headers, _ } = delete("bill", "q1", "w1", 20, Cfg).
+    {ok, "404", Headers, Body } = delete("bill", "q1", "w1", 20, Cfg),
+    "application/json" = content_type(Headers),
+    ok = Body.
 
 delete_data_wrong_path_test(Cfg) ->
-    {ok, "404", _Headers,
-     "lookup on [\"a\",\"q1\",\"b\",\"w1\",\"d\",\"20\"] failed"++_} =
-        delete_wrong_path("bob", "q1", "w1", 20, Cfg).
+    {ok, "404", Headers, Body} = delete_wrong_path("bob", "q1", "w1", 20, Cfg),
+    "application/json" = content_type(Headers),
+    "lookup on [\"a\",\"q1\",\"b\",\"w1\",\"d\",\"20\"] failed" ++ _ = Body.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
@@ -299,3 +325,6 @@ wrong_field_type_row(A, B, C, D) ->
 
 success_body() ->
     "{\"success\":true}".
+
+content_type(Headers) ->
+    proplists:get_value("Content-Type", Headers).
