@@ -117,8 +117,8 @@ create_bad_table_test(Cfg) ->
 
 create_existing_table_test(Cfg) ->
     Query = table_def_bob(),
-    {ok, "500", _Headers,
-     "query error: {table_create_fail,<<\"bob\">>,already_active}"} =
+    {ok, "409", _Headers,
+     "table <<\"bob\">> already exists"} =
         execute_query(Query, Cfg).
 
 
