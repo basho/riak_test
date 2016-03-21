@@ -135,6 +135,7 @@
          stop_tracing/0,
          stop_and_wait/1,
          str/2,
+         str_mult/2,
          systest_read/2,
          systest_read/3,
          systest_read/5,
@@ -225,6 +226,11 @@ str(String, Substr) ->
         0 -> false;
         _ -> true
     end.
+
+%% @doc if String contains any of Substrs, return true.
+-spec str_mult(string(), [string()]) -> boolean().
+str_mult(String, Substrs) ->
+    lists:any(fun(S) -> str(String, S) end, Substrs).
 
 -spec set_conf(atom(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
