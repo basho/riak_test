@@ -685,7 +685,6 @@ common_stats() ->
         <<"poolboy_version">>,
         <<"postcommit_fail">>,
         <<"precommit_fail">>,
-        <<"protobuffs_version">>,
         <<"public_key_version">>,
         <<"read_repairs">>,
         <<"read_repairs_counter">>,
