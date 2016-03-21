@@ -57,7 +57,12 @@ default_config(#config{
     fsm_limit = FsmLimit
 }) ->
     [{riak_core, [{ring_creation_size, 8},
-        {default_bucket_props, [{n_val, 5}]},
+        {default_bucket_props,
+            [
+                {n_val, 5},
+                {allow_mult, true},
+                {dvv_enabled, true}
+            ]},
         {vnode_management_timer, 1000},
         {enable_health_checks, false},
         {enable_consensus, true},
