@@ -118,7 +118,7 @@ ping_down_test(Node) ->
 attach_down_test(Node) ->
     lager:info("Testing riak attach while down"),
     {ok, AttachOut} = rt:riak(Node, ["attach"]),
-    ?assert(rt:str(AttachOut, "Node is not running!")),
+    ?assert(rt:str(AttachOut, "Node did not respond to ping!")),
     ok.
 
 attach_direct_up_test(Node) ->
@@ -133,7 +133,7 @@ attach_direct_up_test(Node) ->
 attach_direct_down_test(Node) ->
     lager:info("Testing riak attach-direct while down"),
     {ok, AttachOut} = rt:riak(Node, ["attach-direct"]),
-    ?assert(rt:str(AttachOut, "Node is not running!")),
+    ?assert(rt:str(AttachOut, "Node did not respond to ping!")),
     ok.
 
 status_up_test(Node) ->
@@ -151,7 +151,7 @@ status_down_test(Node) ->
     lager:info("Test riak-admin status while down"),
     {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     ?assertEqual(1, ExitCode),
-    ?assert(rt:str(StatusOut, "Node is not running!")),
+    ?assert(rt:str(StatusOut, "Node did not respond to ping!")),
     ok.
 
 getpid_up_test(Node) ->
