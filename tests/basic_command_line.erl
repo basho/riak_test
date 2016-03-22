@@ -168,5 +168,5 @@ getpid_up_test(Node) ->
 getpid_down_test(Node) ->
     lager:info("Test riak getpid fails on ~s", [Node]),
     {ok, PidOut} = rt:riak(Node, ["getpid"]),
-    ?assert(rt:str(PidOut, "Node is not running!")),
+    ?assert(rt:str_mult(PidOut, ?PING_FAILURE_OUTPUT)),
     ok.
