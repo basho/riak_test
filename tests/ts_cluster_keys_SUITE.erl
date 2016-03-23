@@ -48,6 +48,7 @@ init_per_suite(Config) ->
     all_booleans_create_data(Pid),
     all_timestamps_create_data(Pid),
     all_types_create_data(Pid),
+    create_data_def_desc_on_quantum_table(Pid),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -718,5 +719,60 @@ all_timestamps_single_quanta_test(Ctx) ->
         [{2,B,3,4,5} || B <- lists:seq(300, 900, 100)],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%%%
+%%% DESCENDING KEYS
+%%%
+
+table_def_desc_on_quantum_table() ->
+    "CREATE TABLE desc_on_quantum_table ("
+    "a SINT64 NOT NULL, "
+    "b SINT64 NOT NULL, "
+    "c TIMESTAMP NOT NULL, "
+    "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c DESC))".
+
+create_data_def_desc_on_quantum_table(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_desc_on_quantum_table())),
+    ok = riakc_ts:put(Pid, <<"desc_on_quantum_table">>, [[1,1,N] || N <- lists:seq(200,200*100,100)]).
+
+desc_on_quantum_table_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 3000 AND c <= 4800",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4800,3000,-100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+desc_on_quantum_one_subquery_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 4200 AND c <= 4800",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4800,4200,-100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+desc_on_quantum_one_subquery_exclusive_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c > 4200 AND c < 4800",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4600,4400,-100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+desc_on_quantum_one_subquery_inclusive_quanta_boundaries_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 4000 AND c <= 5000",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(5000,4000,-100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+desc_on_quantum_one_subquery_inclusive_across_quanta_boundaries_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 3500 AND c <= 5500",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(5500,3500,-100)]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
