@@ -1,0 +1,614 @@
+#!/bin/bash
+
+shopt -s expand_aliases
+source ~/.aliases
+
+getColorizedString()
+{
+    local str=$1
+    local color=$2
+    GREEN="\033[32m"
+    YELLOW="\033[33m"
+    LIGHTRED="\033[91m"
+    NORM="\033[0m"
+
+    case $color in
+	"green")
+	    outStr=$GREEN$str$NORM
+	    echo "$outStr"
+	    ;;
+	"yellow")
+	    outStr=$YELLOW$str$NORM
+	    echo "$outStr"
+	    ;;
+	"lightred")
+	    outStr=$LIGHTRED$str$NORM
+	    echo "$outStr"
+	    ;;
+	*)
+	    ;;
+    esac
+}
+
+colorize()
+{
+    local inStr=$1
+    local color=$2
+    
+    echo -e $(getColorizedString "$inStr" "$color")
+}
+
+annotate()
+{
+    line=$1
+    color=$2
+
+    colorize "============================================================" $color
+    colorize $line $color
+    colorize "============================================================" $color
+}
+
+mytest()
+{
+    colorize "this is a test" "green"
+}
+
+filename()
+{
+    path=$1
+    riakTestDir=`pwd`
+    echo "$riakTestDir/$path"
+}
+
+commentedVar()
+{
+    var=$1
+    echo "%\-define($var, 1)"
+}
+
+uncommentedVar()
+{
+    var=$1
+    echo "\-define($var, 1)"
+}
+
+varIsCommented()
+{
+    path=$1
+    var=$2
+    str=$(commentedVar $var)
+    local file=$(filename $path)
+    res=`grep "$str" $file`
+
+    if [ ! -z "$res" ] 
+    then
+	echo "true"
+    else
+	echo "false"
+    fi
+}
+
+commentVar()
+{
+    path=$1
+    var=$2
+    if [ $(varIsCommented $path $var) == "false" ]
+    then
+	echo "Var is NOT commented"
+	substitute $path "$(uncommentedVar $var)" "$(commentedVar $var)"
+    fi
+}
+
+uncommentVar()
+{
+    path=$1
+    var=$2
+
+    echo $(commentedVar $var) 
+    echo $(uncommentedVar $var)
+
+    if [ $(varIsCommented $path $var) == "true" ]
+    then
+	substitute $path "$(commentedVar $var)" "$(uncommentedVar $var)"
+    fi
+}
+
+substitute()
+{
+    path=$1
+    fromStr=$2
+    toStr=$3
+
+    local file=$(filename $path)
+    sed -i '.sed' "s/$fromStr/$toStr/g" $file
+}
+
+remake()
+{
+   riakTestDir=`pwd`
+
+   target=$1
+   
+   cd riak_ee
+
+   \rm -rf dev
+   make devrel DEVNODES=1
+   $riakTestDir/bin/rtdev-current.sh
+
+   cd $riakTestDir
+   make
+}
+
+untruncate()
+{
+    commentAll
+    remake
+}
+
+commentAll()
+{
+    commentVar deps/riakc/src/riakc_ts.erl                           PROF_QUERY
+    
+    commentVar riak_ee/deps/riak_api/src/riak_api_pb_server.erl      PROF_QUERY
+    commentVar riak_ee/deps/riak_kv/src/riak_kv_pb_timeseries.erl    PROF_QUERY
+    commentVar riak_ee/deps/riak_kv/src/riak_kv_qry.erl              PROF_QUERY
+    commentVar riak_ee/deps/riak_kv/src/riak_kv_qry_worker.erl       PROF_QUERY
+    commentVar riak_ee/deps/riak_core/src/riak_core_coverage_fsm.erl PROF_QUERY
+    commentVar riak_ee/deps/riak_core/src/riak_core_vnode.erl        PROF_QUERY
+    commentVar riak_ee/deps/riak_kv/src/riak_kv_worker.erl           PROF_QUERY
+}
+
+profcopy()
+{
+    dirname=$1
+    if [ ! -d ./profiler_results/$dirname ]
+    then
+	mkdir ./profiler_results/$dirname
+    fi
+    
+    cp ./profiler_results/*profile.txt ./profiler_results/$dirname
+}
+
+profdirname()
+{
+    prefix=$1
+    echo "segment_$prefix"
+}
+
+cleanProfDir()
+{
+    \rm ./profiler_results/*profile.txt
+}
+
+runSegmentTest()
+{
+    cleanProfDir
+
+    target=$1
+    prefix=$1
+    local niter=$2
+
+    profdir=$(profdirname $prefix)
+
+    remake
+    
+    i="0"
+    while [ $i -lt $niter ]
+    do
+	./riak_test -c riak_ts -t ts_query
+	i=$[$i+1]
+    done
+
+    profdir=$(profdirname $prefix)
+    profcopy $profdir
+}
+
+runSegment()
+{
+    local segment=$1
+    local niter=$2
+    
+    commentAll
+    uncomment $segment
+    runSegmentTest $segment $niter
+}
+
+uncomment()
+{
+    local segment=$1
+    echo "segment = $segment"
+    case $segment in
+	"none")
+	    ;;
+	"prof00")
+	    uncommentVar deps/riakc/src/riakc_ts.erl                           PROF_QUERY
+	    ;;
+	"prof0")
+	    uncommentVar riak_ee/deps/riak_api/src/riak_api_pb_server.erl      PROF_QUERY
+	    ;;
+	"prof1")
+	    uncommentVar riak_ee/deps/riak_kv/src/riak_kv_pb_timeseries.erl    PROF_QUERY
+	    ;;
+	"prof2")
+	    uncommentVar riak_ee/deps/riak_kv/src/riak_kv_qry.erl              PROF_QUERY
+	    ;;
+	"prof3")
+	    uncommentVar riak_ee/deps/riak_kv/src/riak_kv_qry_worker.erl       PROF_QUERY
+	    ;;
+	"prof4")
+	    uncommentVar riak_ee/deps/riak_core/src/riak_core_coverage_fsm.erl PROF_QUERY
+	    ;;
+	"prof6")
+	    uncommentVar riak_ee/deps/riak_kv/src/riak_kv_worker.erl           PROF_QUERY
+	    ;;
+	*)
+	    echo "Other"
+	    ;;
+    esac
+}
+
+writeQueryFiles()
+{
+    if [ $# -lt 2 ]
+    then
+	echo "Usage: writeQueryFile nRecord nQuery"
+	return
+    fi
+
+    nRecord=$1
+    nQuery=$2
+
+    useFilter='false'
+    if [ $# -eq 3 ]
+    then
+	useFilter=$3
+    fi
+
+    #------------------------------------------------------------
+    # Create the test file, that just writes the records and runs the
+    # queries
+    #------------------------------------------------------------
+
+    prefix="ts_query_"$nRecord"_"$nQuery"_"$useFilter
+    filename="tests/"$prefix".erl"
+
+    echo "-module($prefix)." > $filename
+    echo "-behavior(riak_test)." >> $filename
+    echo "-export([confirm/0])." >> $filename
+    echo "" >> $filename
+    echo "-include_lib(\"profiler/include/profiler.hrl\")." >> $filename
+    echo "" >> $filename
+    echo "confirm() ->" >> $filename
+    echo "  profiler:profile({prefix, \"./client_profiler_results\"})," >> $filename
+    echo "" >> $filename
+    echo "  DDL  = ts_api_util:get_ddl(api)," >> $filename
+    echo "  UseNativeEncoding=true," >> $filename
+    echo "  ts_api_util:setup_cluster_put_mod_time(single, n_val_one, DDL, $nRecord, true, UseNativeEncoding)," >> $filename
+
+    if [ $useFilter == 'true' ]
+    then
+	echo "  Query = \"SELECT * FROM GeoCheckin WHERE time >= 0 AND time <= "$nRecord" AND myfamily = 'family1' AND myseries = 'seriesX' and myint > 0\"," >> $filename
+    else
+	echo "  Query = \"SELECT * FROM GeoCheckin WHERE time >= 0 AND time <= "$nRecord" AND myfamily = 'family1' AND myseries = 'seriesX'\"," >> $filename
+    fi
+    
+
+    echo "" >> $filename
+    echo "  profiler:profile({start, 0})," >> $filename
+    echo "  ts_api_util:runQuery(Query, $nQuery)," >> $filename
+    echo "  profiler:profile({stop, 0})," >> $filename
+    echo "" >> $filename
+    echo "  pass." >> $filename
+
+    #------------------------------------------------------------
+    # Now create a baseline file, that just writes the records
+    #------------------------------------------------------------
+    
+    prefix="ts_query_"$nRecord"_"$nQuery"_"$useFilter"_base"
+    filename="tests/"$prefix".erl"
+
+    echo "-module($prefix)." > $filename
+    echo "-behavior(riak_test)." >> $filename
+    echo "-export([confirm/0])." >> $filename
+    echo "" >> $filename
+    echo "-include_lib(\"profiler/include/profiler.hrl\")." >> $filename
+    echo "" >> $filename
+    echo "confirm() ->" >> $filename
+    echo "  profiler:profile({prefix, \"./client_profiler_results\"})," >> $filename
+    echo "" >> $filename
+    echo "  DDL  = ts_api_util:get_ddl(api)," >> $filename
+    echo "  UseNativeEncoding=true," >> $filename
+    echo "  ts_api_util:setup_cluster_put_mod_time(single, n_val_one, DDL, $nRecord, true, UseNativeEncoding)," >> $filename
+    echo "" >> $filename
+    echo "  pass." >> $filename
+}
+
+redev_fn()
+{
+    riakTestDir=$1
+    \rm -rf dev
+
+    if [ $# -eq 2 ]
+    then
+	annotate "Making target $2" "green"
+	make $2
+    fi
+	
+    make devrel DEVNODES=1
+    $riakTestDir/bin/rtdev-current.sh
+}
+
+runProfile()
+{
+    echo "Narg = $#"
+    
+    if [ $# -lt 2 ]
+    then
+	echo "Usage: runProfile nRecord nQuery [useFilter (true|false)] [riak_ee makeTarget]"
+	return
+    fi
+
+    nRecord=$1
+    nQuery=$2
+
+    #------------------------------------------------------------
+    # Create the test files
+    #------------------------------------------------------------
+
+    annotate "Creating test files" "green"
+
+    useFilter='false'
+    if [ $# -gt 2 ]
+    then
+	useFilter=$3
+    fi
+
+    writeQueryFiles $nRecord $nQuery $useFilter
+    
+    filePrefix="ts_query_"$nRecord"_"$nQuery"_"$useFilter
+
+    makeTarget=''
+    if [ $# -eq 4 ]
+    then
+	makeTarget=$4
+	outDir=$filePrefix"_"$makeTarget"_output"
+	graphPrefix=$filePrefix"_"$makeTarget
+    else
+	outDir=$filePrefix"_output"
+	graphPrefix=$filePrefix
+    fi
+    
+    basePrefix=$filePrefix"_base"
+
+    #------------------------------------------------------------
+    # Create the output directory if it doesn't exist
+    #------------------------------------------------------------
+
+    annotate "Creating output directory $outDir" "green"
+
+    echo "dir = $outDir"
+    echo "base = $basePrefix"
+    echo "file = $filePrefix"
+    
+    if [ ! -d $outDir ]
+    then
+	git clone https://gist.github.com/erikleitch/8191db35b09bc8357df4
+	mv 8191db35b09bc8357df4 $outDir
+    else
+	cd $outDir
+	git pull
+	cd ../
+    fi
+
+    echo "import riak_ts_query as rq" > $outDir/makeGraph.py
+    echo "rq.makeQueryGraph('$graphPrefix', $nRecord, $nQuery, 'client.txt', 'server.txt', 'clientbase.txt', 'serverbase.txt', 'clientcomp.txt', 'profbase.txt')" >> $outDir/makeGraph.py
+
+    #------------------------------------------------------------
+    # Make sure profiler output directories exist
+    #------------------------------------------------------------
+    
+    if [ ! -d ./client_profiler_results ]
+    then
+	mkdir ./client_profiler_results
+    fi
+
+    if [ ! -d ./server_profiler_results ]
+    then
+	mkdir ./server_profiler_results
+    fi
+
+    #------------------------------------------------------------
+    # Comment out the profiler macros, and run the test, to get an
+    # idea of the impact of the profiling
+    #------------------------------------------------------------
+
+    annotate "Compiling with profiler macros commented out " "green"
+    
+    riakTestDir=`pwd`
+
+    cd $riakTestDir
+    commentVar deps/profiler/include/profiler.hrl PROFILE
+    cd $riakTestDir/deps/profiler
+    make
+
+    cd $riakTestDir
+    commentVar riak_ee/deps/profiler/include/profiler.hrl PROFILE
+    cd $riakTestDir/riak_ee/deps/profiler
+    make
+
+    cd $riakTestDir/riak_ee
+    redev_fn $riakTestDir $makeTarget
+
+    cd $riakTestDir
+    make
+
+    annotate "Running test with profiler macros commented out " "green"
+
+    riaktest $filePrefix
+    copylast $outDir "comp"
+
+    #------------------------------------------------------------
+    # Now make sure the profile preprocessor directive is defined in
+    # both the client and server, and run first the baseline, then a
+    # test measuring the profiler timing, then the actual test itself
+    # ------------------------------------------------------------
+
+    annotate "Compiling with profiler macros uncommented..." "green"
+    
+    cd $riakTestDir
+    uncommentVar deps/profiler/include/profiler.hrl PROFILE
+    cd $riakTestDir/deps/profiler
+    make
+
+    cd $riakTestDir
+    uncommentVar riak_ee/deps/profiler/include/profiler.hrl PROFILE
+    cd $riakTestDir/riak_ee/deps/profiler
+    make
+    
+    cd $riakTestDir/riak_ee
+    redev_fn $riakTestDir $makeTarget
+
+    cd $riakTestDir
+    make
+    
+    #------------------------------------------------------------
+    # Run the baseline
+    #------------------------------------------------------------
+
+    annotate "Running baseline test..." "green"
+    
+    riaktest $basePrefix
+    copylast $outDir "base"
+
+    annotate "Measuring profiler..." "green"
+    
+    riaktest ts_query_profiler_baseline
+    copylast $outDir "profbase"
+
+    annotate "Running query test..." "green"
+    
+    riaktest $filePrefix
+    copylast $outDir "test"
+}
+
+getlast()
+{
+    if [ $# -lt 1 ]
+    then
+	echo "Usage: getlast dir"
+	return
+    fi
+
+    dir=$1
+
+    unset files
+    unset times
+    
+    iFile=0
+    for file in $dir/*.txt
+    do 
+	times[iFile]=`stat -t %s $file | awk '{print $10}'`
+	files[iFile]=$file
+	iFile=$[$iFile+1]
+    done
+
+    arr2=( $(
+	    for el in "${times[@]}"
+	    do
+		echo "$el"
+	    done | sort -r) )
+
+    latest=${arr2[0]}
+
+    iFile=0
+    for el in "${files[@]}"
+    do
+	if [ ${times[iFile]} = $latest ] 
+	then
+	    file=${files[iFile]}
+	    echo $file
+	fi
+	iFile=$[$iFile+1]
+    done
+}
+
+copylast()
+{
+    dir=$1
+    type=$2
+
+    case $type in
+	"test")
+	    cp $(getlast client_profiler_results) $dir/client.txt
+	    cp $(getlast server_profiler_results) $dir/server.txt
+	    ;;
+	"base")
+	    cp $(getlast client_profiler_results) $dir/clientbase.txt
+	    cp $(getlast server_profiler_results) $dir/serverbase.txt
+	    ;;
+	"profbase")
+	    cp $(getlast client_profiler_results) $dir/profbase.txt
+	    ;;
+	"comp")
+	    cp $(getlast client_profiler_results) $dir/clientcomp.txt
+	    ;;
+	*)
+	    ;;
+    esac
+}
+
+emltest()
+{
+    riakTestDir=`pwd`
+    
+    cd $riakTestDir
+    uncommentVar deps/profiler/include/profiler.hrl PROFILE
+    cd $riakTestDir/deps/profiler
+    make
+
+    cd $riakTestDir
+    uncommentVar riak_ee/deps/profiler/include/profiler.hrl PROFILE
+    cd $riakTestDir/riak_ee/deps/profiler
+    make
+    
+    cd $riakTestDir/riak_ee
+    redev_fn ../
+}
+
+runSegmentTests()
+{
+    local niter=$1
+    commentAll
+
+    runSegment "none" $niter
+#    runSegment "prof00" $niter
+#    runSegment "prof0" $niter
+#    runSegment "prof1" $niter
+#    runSegment "prof2" $niter
+#    runSegment "prof3" $niter
+#    runSegment "prof4" $niter
+#    runSegment "prof6" $niter
+}
+
+createprofdir()
+{
+    if [ ! -d ./profiler_results ]
+    then
+	mkdir ./profiler_results
+    fi
+}
+
+runTestProfile()
+{
+    #    runProfile 1000 1000 uc_debug7
+    #    runProfile 1000 1000 true
+        runProfile 1000 1000
+}
+
+runProfiles()
+{
+    runProfile 1 10000
+    runProfile 10 1000
+    runProfile 100 1000
+    runProfile 1000 1000
+}
