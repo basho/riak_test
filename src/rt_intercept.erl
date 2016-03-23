@@ -78,6 +78,12 @@ add(Node, {Target, Intercept, Mapping}, OutDir) ->
     NMapping = [transform_anon_fun(M) || M <- Mapping],
     ok = rpc:call(Node, intercept, add, [Target, Intercept, NMapping, OutDir]).
 
+clean(Node, Targets) when is_list(Targets) ->
+    [ok = clean(Node, T) || T <- Targets],
+    ok;
+clean(Node, Target) ->
+    ok = rpc:call(Node, intercept, clean, [Target]).
+
 %% The following function transforms anonymous function mappings passed
 %% from an Erlang shell. Anonymous intercept functions from compiled code
 %% require the developer to supply free variables themselves, and also
