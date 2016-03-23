@@ -126,6 +126,12 @@ to a release number, e.g. `2.0.0`.  It will automatically be prefixed with
 the repo name, e.g. `riak_ee-2.0.0`.  To use `riak_ee` instead of `riak` set [`$RT_USE_EE`](https://github.com/basho/riak_test/blob/master/bin/rtdev-setup-releases.sh#L23)
 to any non-empty string.
 
+### rtdev-install.sh
+
+`rtdev-install.sh` is exactly the same as `rtdev-current.sh`, however,
+you can use arbitrary names like `riak-2.1.2` instead of just `current`.
+The single argument supplied to this script is that directory name.
+
 ####  reset-current-env.sh
 
 `reset-current-env.sh` resets test environments setup using `rtdev-current.sh`
@@ -175,8 +181,8 @@ to tell riak_test about them. The method of choice is to create a
     {rtdev_path, [{root,     "/home/you/rt/riak"},
                   {current,  "/home/you/rt/riak/current"},
                   {previous, "/home/you/rt/riak/riak-2.0.6"},
-                  {legacy,   "/home/you/rt/riak/riak-1.4.12"}
-                  {'2.0.2',   "/home/you/rt/riak/riak-2.0.2"}
+                  {legacy,   "/home/you/rt/riak/riak-1.4.12"},
+                  {'2.0.2',   "/home/you/rt/riak/riak-2.0.2"},
                   {'2.0.4',   "/home/you/rt/riak/riak-2.0.4"}
                  ]}
 ]}.

@@ -24,11 +24,17 @@
 -include_lib("eunit/include/eunit.hrl").
 -compile({parse_transform, rt_intercept_pt}).
 
+-define(FIRST_CLUSTER, "cluster-1").
+-define(OTHER_CLUSTERS, ["cluster-2", "cluster-3"]).
+-define(CLUSTERS, [?FIRST_CLUSTER] ++ ?OTHER_CLUSTERS).
+
 confirm() ->
-    Clusters = make_clusters(["cluster-1", "cluster-2", "cluster-3"], 1),
+    Clusters = make_clusters(?CLUSTERS, 1),
     [{_, Leader, _}|_] = Clusters,
     intercept_riak_snmp_stat_poller(Leader),
-    wait_for_snmp_stat_poller().
+    wait_for_snmp_stat_poller(),
+    verify_snmp_cluster_stats(Clusters),
+    pass.
 
 make_clusters(Names, NodeCount) ->
     ClusterCount = length(Names),
@@ -57,6 +63,7 @@ intercept_riak_snmp_stat_poller(Node) ->
                     RiakTestProcess ! pass
                 catch
                     Exception:Reason ->
+                        lager:error("Failure in riak_snmp_stat_poller_orig:set_rows_orig: ~p~n", [{Exception, Reason}]),
                         RiakTestProcess ! {fail, {Exception, Reason}},
                         error({Exception, Reason})
                 end
@@ -64,11 +71,19 @@ intercept_riak_snmp_stat_poller(Node) ->
 
 wait_for_snmp_stat_poller() ->
     receive
-        pass -> pass;
-        {fail, Reason} -> {fail, Reason};
-        X -> {fail, {unknown, X}}
+        pass ->
+            pass;
+        {fail, Reason} ->
+            lager:error("Failure in wait_for_snmp_stat_poller: ~p~n", [Reason]),
+            error({fail, Reason});
+        X ->
+            lager:error("Unknown failure in wait_for_snmp_stat_poller: ~p~n", [X]),
+            error(X)
     after
-        1000 -> {fail, timeout}
+        1000 ->
+            Message =  "Timeout waiting for snmp_stat_poller.",
+            lager:error(Message),
+            error({timeout, Message})
     end.
 
 make_nodes(NodeCount, ClusterCount, Config) ->
@@ -93,7 +108,22 @@ wait_until_leader_converge({_Name, Nodes}) ->
 enable_realtime([{_, Node, _}|OtherClusters]) ->
     lists:foreach(
         fun({Cluster, _, _}) ->
-            repl_util:enable_realtime(Node, Cluster)
+            repl_util:enable_realtime(Node, Cluster),
+            timer:sleep(1000)
         end,
         OtherClusters).
+
+%% snmpwalk gives the following output containing the OIDs we're interested in:
+%%   SNMPv2-SMI::enterprises.31130.200.1.1.1.99.108.117.115.116.101.114.45.50 = STRING: "cluster-2"
+%%   SNMPv2-SMI::enterprises.31130.200.1.1.1.99.108.117.115.116.101.114.45.51 = STRING: "cluster-3"
+-define(CLUSTER_OIDS,
+        [[1,3,6,1,4,1,31130,200,1,1,1,99,108,117,115,116,101,114,45] ++ [Tail]
+         || Tail <- [50, 51]]).
+
+verify_snmp_cluster_stats(Clusters) ->
+    [{_Name, Leader, [_Nodes]} | _Rest] = Clusters,
+    rpc:call(Leader, riak_core, wait_for_application, [snmp]),
+    rpc:call(Leader, riak_core, wait_for_application, [riak_snmp]),
+    ClusterJoins = rpc:call(Leader, snmpa, get, [snmp_master_agent, ?CLUSTER_OIDS]),
+    ?assertEqual(?OTHER_CLUSTERS, ClusterJoins).
 
