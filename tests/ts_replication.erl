@@ -95,6 +95,8 @@ replication(ANodes, BNodes, Table, NormalType) ->
     lager:info("Testing a non-w1c bucket type (realtime)"),
     real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket),
 
+    %% XXX We do not have realtime sync for w1c, non-TS data, so this
+    %% test is disabled
     %% lager:info("Testing the timeseries bucket type, non-ts-managed bucket (realtime)"),
     %% real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucketInTS),
 
@@ -114,11 +116,13 @@ replication(ANodes, BNodes, Table, NormalType) ->
 full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS) ->
     BNode = hd(BNodes),
 
+    %% Revisit data written before realtime was tested to verify that
+    %% it is still absent on the sink cluster
     lager:info("Verifying first 100 keys not present on 2nd cluster (non-w1c)"),
     ?assertEqual(0, kv_num_objects_present(BNode, 1, 100, KVBucket)),
     lager:info("Verifying first 100 keys not present on 2nd cluster (ts bucket type, non-ts bucket)"),
     ?assertEqual(0, kv_num_objects_present(BNode, 1, 100, KVBucketInTS)),
-    lager:info("Verifying first 100 keys not present on 2nd cluster (ts bucket type, non-ts bucket)"),
+    lager:info("Verifying first 100 TS keys not present on 2nd cluster"),
     ?assertEqual(0, ts_num_records_present(BNode, 1, 100)),
 
     lager:info("Starting and waiting for fullsync"),
@@ -130,7 +134,7 @@ full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInT
     ?assertEqual(100, kv_num_objects_present(BNode, 1, 100, KVBucket)),
     lager:info("Verifying first 100 keys present on 2nd cluster (ts bucket type, non-ts bucket)"),
     ?assertEqual(100, kv_num_objects_present(BNode, 1, 100, KVBucketInTS)),
-    lager:info("Verifying first 100 keys present on 2nd cluster (ts bucket)"),
+    lager:info("Verifying first 100 TS keys present on 2nd cluster"),
     ?assertEqual(100, ts_num_records_present(BNode, 1, 100)),
     disconnect_clusters(ANodes, LeaderA, "B").
 
