@@ -279,7 +279,7 @@ writeQueryFiles()
     echo "-include_lib(\"profiler/include/profiler.hrl\")." >> $filename
     echo "" >> $filename
     echo "confirm() ->" >> $filename
-    echo "  profiler:profile({prefix, \"./client_profiler_results\"})," >> $filename
+    echo "  profiler:profile({prefix, \"/tmp/client_profiler_results\"})," >> $filename
     echo "" >> $filename
     echo "  DDL  = ts_api_util:get_ddl(api)," >> $filename
     echo "  UseNativeEncoding=true," >> $filename
@@ -350,6 +350,18 @@ runProfile()
 
     nRecord=$1
     nQuery=$2
+
+    annotate "Creating profiler output directories" "green"
+
+    if [ ! -d /tmp/client_profiler_results ]
+    then
+	mkdir /tmp/client_profiler_results
+    fi
+
+    if [ ! -d /tmp/server_profiler_results ]
+    then
+	mkdir /tmp/server_profiler_results
+    fi
 
     #------------------------------------------------------------
     # Create the test files
