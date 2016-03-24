@@ -37,6 +37,7 @@
     create_bucket_type/4,
     create_table/4,
     exclusive_result_from_data/3,
+    flat_format/2,
     get_bool/1,
     get_cols/0, get_cols/1,
     get_data/1,
@@ -67,6 +68,8 @@
     single_query/2,
     ts_get/6,
     ts_get/7,
+    ts_insert/4,
+    ts_insert_no_columns/3,
     ts_put/4,
     ts_put/5,
     ts_query/5,
@@ -116,6 +119,35 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
 single_query(Conn, Qry) ->
     lager:info("3 - Now run the query ~ts", [Qry]),
     Got = riakc_ts:query(Conn, Qry),
+    lager:info("Result is ~p", [Got]),
+    Got.
+
+insert_term_format(Data, Acc) when is_binary(Data) ->
+    Acc ++ flat_format("'~s',", [Data]);
+insert_term_format(Data, Acc) ->
+    Acc ++ flat_format("~p,", [Data]).
+
+ts_insert(Conn, Table, Columns, Data) ->
+    ColFn = fun(Col, Acc) ->
+        Acc ++ flat_format("~s,", [Col])
+        end,
+    TermFn = fun insert_term_format/2,
+    ColClause = string:strip(lists:foldl(ColFn, [], Columns), right, $,),
+    ValClause = string:strip(lists:foldl(TermFn, [], Data), right, $,),
+    SQL = flat_format("INSERT INTO ~s (~s) VALUES (~s)",
+                      [Table, ColClause, ValClause]),
+    lager:info("~ts", [SQL]),
+    Got = riakc_ts:query(Conn, SQL),
+    lager:info("Result is ~p", [Got]),
+    Got.
+
+ts_insert_no_columns(Conn, Table, Data) ->
+    TermFn = fun insert_term_format/2,
+    ValClause = string:strip(lists:foldl(TermFn, [], Data), right, $,),
+    SQL = flat_format("INSERT INTO ~s VALUES (~s)",
+        [Table, ValClause]),
+    lager:info("~ts", [SQL]),
+    Got = riakc_ts:query(Conn, SQL),
     lager:info("Result is ~p", [Got]),
     Got.
 
@@ -515,3 +547,6 @@ assert_error_regex_result(_, _String, _Expected, _Got) ->
 results(Results) ->
     Expected = lists:duplicate(length(Results), pass),
     ?assertEqual(Expected, Results).
+
+flat_format(Format, Args) ->
+    lists:flatten(io_lib:format(Format, Args)).
