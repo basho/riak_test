@@ -166,7 +166,6 @@ main(Args) ->
                     TestB ++ TestA
             end,
 
-    io:format("Tests to run: ~p~n", [Test || {_Type, Test} <- Tests]),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
     add_deps("deps"),
@@ -288,7 +287,7 @@ filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
 is_runnable(TestSpec, {Tests, NotTests}) ->
     case is_runnable_test(TestSpec) of
         {Type, true}  -> {[{Type, TestSpec} | Tests], NotTests};
-        {Type, false} -> {[Tests,                     {Type, TestSpec} | NotTests]}
+        {Type, false} -> {Tests,                      [{Type, TestSpec} | NotTests]}
     end.
 
 is_runnable_test({TestModule, _}) ->
