@@ -44,7 +44,7 @@ annotate()
     color=$2
 
     colorize "============================================================" $color
-    colorize $line $color
+    colorize "$line" $color
     colorize "============================================================" $color
 }
 
@@ -314,13 +314,44 @@ writeQueryFiles()
     echo "-include_lib(\"profiler/include/profiler.hrl\")." >> $filename
     echo "" >> $filename
     echo "confirm() ->" >> $filename
-    echo "  profiler:profile({prefix, \"./client_profiler_results\"})," >> $filename
+    echo "  profiler:profile({prefix, \"/tmp/client_profiler_results\"})," >> $filename
     echo "" >> $filename
     echo "  DDL  = ts_api_util:get_ddl(api)," >> $filename
     echo "  UseNativeEncoding=true," >> $filename
     echo "  ts_api_util:setup_cluster_put_mod_time(single, n_val_one, DDL, $nRecord, true, UseNativeEncoding)," >> $filename
     echo "" >> $filename
     echo "  pass." >> $filename
+
+    #------------------------------------------------------------
+    # Now create a file to measure the profiler itself
+    #------------------------------------------------------------
+
+    filename="tests/ts_query_profiler_baseline.erl"
+
+    echo "-module(ts_query_profiler_baseline)." > $filename
+    echo "-behavior(riak_test)." >> $filename
+    echo "-export([confirm/0])." >> $filename
+    echo "" >> $filename
+    echo "-include_lib(\"profiler/include/profiler.hrl\")." >> $filename
+    echo "" >> $filename
+    echo "foldProf(N) ->" >> $filename
+    echo "    foldProf(N, N)." >> $filename
+    echo "" >> $filename
+    echo "foldProf(_N, 0) ->" >> $filename
+    echo "    ok;" >> $filename
+    echo "foldProf(N, Acc) ->" >> $filename
+    echo "    profiler:perf_profile({start, 1, ?FNNAME()})," >> $filename
+    echo "    profiler:perf_profile({stop, 1})," >> $filename
+    echo "    foldProf(N, Acc-1)." >> $filename
+    echo "" >> $filename
+    echo "confirm() ->" >> $filename
+    echo "    profiler:profile({prefix, \"/tmp/client_profiler_results\"})," >> $filename
+    echo "" >> $filename
+    echo "    profiler:perf_profile({start, 0, ?FNNAME()})," >> $filename
+    echo "    foldProf(1000000)," >> $filename
+    echo "    profiler:perf_profile({stop, 0})," >> $filename
+    echo "" >> $filename
+    echo "    pass." >> $filename
 }
 
 redev_fn()
@@ -412,6 +443,17 @@ runProfile()
 	cd ../
     fi
 
+    if [ ! -d riak_graphviz ]
+    then
+	git clone ssh://erikleitch@github.com/erikleitch/riak_graphviz.git riak_graphviz
+    else
+	cd riak_graphviz
+	git pull
+	cd ../
+    fi
+
+    cp riak_graphviz/riak_graphviz.py $outDir
+    
     echo "import riak_ts_query as rq" > $outDir/makeGraph.py
     echo "rq.makeQueryGraph('$graphPrefix', $nRecord, $nQuery, 'client.txt', 'server.txt', 'clientbase.txt', 'serverbase.txt', 'clientcomp.txt', 'profbase.txt')" >> $outDir/makeGraph.py
 
@@ -457,7 +499,7 @@ runProfile()
     annotate "Running test with profiler macros commented out " "green"
 
     riaktest $filePrefix
-    copylast $outDir "comp"
+    copylast /tmp $outDir "comp"
 
     #------------------------------------------------------------
     # Now make sure the profile preprocessor directive is defined in
@@ -490,17 +532,26 @@ runProfile()
     annotate "Running baseline test..." "green"
     
     riaktest $basePrefix
-    copylast $outDir "base"
+    copylast /tmp $outDir "base"
 
     annotate "Measuring profiler..." "green"
     
     riaktest ts_query_profiler_baseline
-    copylast $outDir "profbase"
+    copylast /tmp $outDir "profbase"
 
     annotate "Running query test..." "green"
     
     riaktest $filePrefix
-    copylast $outDir "test"
+    copylast /tmp $outDir "test"
+
+    #------------------------------------------------------------
+    # Finally generate the graph
+    #------------------------------------------------------------
+
+    cd $outDir
+    python makeGraph.py
+    cd ../
+    preview $outDir"/"$graphPrefix".png"
 }
 
 getlast()
@@ -546,23 +597,24 @@ getlast()
 
 copylast()
 {
-    dir=$1
-    type=$2
+    inDir=$1
+    outDir=$2
+    type=$3
 
     case $type in
 	"test")
-	    cp $(getlast client_profiler_results) $dir/client.txt
-	    cp $(getlast server_profiler_results) $dir/server.txt
+	    cp $(getlast $inDir/client_profiler_results) $outDir/client.txt
+	    cp $(getlast $inDir/server_profiler_results) $outDir/server.txt
 	    ;;
 	"base")
-	    cp $(getlast client_profiler_results) $dir/clientbase.txt
-	    cp $(getlast server_profiler_results) $dir/serverbase.txt
+	    cp $(getlast $inDir/client_profiler_results) $outDir/clientbase.txt
+	    cp $(getlast $inDir/server_profiler_results) $outDir/serverbase.txt
 	    ;;
 	"profbase")
-	    cp $(getlast client_profiler_results) $dir/profbase.txt
+	    cp $(getlast $inDir/client_profiler_results) $outDir/profbase.txt
 	    ;;
 	"comp")
-	    cp $(getlast client_profiler_results) $dir/clientcomp.txt
+	    cp $(getlast $inDir/client_profiler_results) $outDir/clientcomp.txt
 	    ;;
 	*)
 	    ;;
