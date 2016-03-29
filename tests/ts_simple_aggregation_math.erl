@@ -66,6 +66,8 @@ confirm() ->
 
     div_aggregate_function_by_zero_test(Conn, Bucket, Where),
 
+    negate_an_aggregation_test(Conn, Bucket, Where),
+
     pass.
 
 %%
@@ -81,5 +83,13 @@ div_aggregate_function_by_zero_test(Conn, Bucket, Where) ->
     Query = "SELECT COUNT(*) / 0 FROM " ++ Bucket ++ Where,
     ?assertEqual(
         {error,{1001,<<"divide_by_zero">>}},
+        ts_util:single_query(Conn, Query)
+    ).
+
+%%
+negate_an_aggregation_test(Conn, Bucket, Where) ->
+    Query = "SELECT -COUNT(*), COUNT(*) FROM " ++ Bucket ++ Where,
+    ?assertEqual(
+        {[<<"-COUNT(*)">>, <<"COUNT(*)">>],[{-10, 10}]},
         ts_util:single_query(Conn, Query)
     ).
