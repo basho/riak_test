@@ -31,7 +31,6 @@
          override_schema/5,
          remove_index_dirs/2,
          rolling_upgrade/2,
-         rolling_upgrade/3,
          search/4,
          search/5,
          search_expect/5,
@@ -100,30 +99,16 @@ write_data(Cluster, Pid, Index, {SchemaName, SchemaData},
 %% @doc Peform a rolling upgrade of the `Cluster' to a different `Version' based
 %%      on current | previous | legacy.
 -spec rolling_upgrade([node()], current | previous | legacy) -> ok.
-rolling_upgrade(Cluster, Vsn) ->
-    rolling_upgrade(Cluster, Vsn, []).
-
--spec rolling_upgrade([node()], current | previous | legacy, proplists:proplist()) -> ok.
-rolling_upgrade(Cluster, Vsn, YZCfgChanges) ->
+rolling_upgrade(Cluster, Version) ->
+    rolling_upgrade(Cluster, Version, same, [riak_kv, yokozuna]).
+-spec rolling_upgrade([node()], current | previous | legacy, [term()] | same, [atom()]) -> ok.
+rolling_upgrade(Cluster, Version, UpgradeConfig, WaitForServices) when is_list(Cluster) ->
     lager:info("Perform rolling upgrade on cluster ~p", [Cluster]),
-    SolrPorts = lists:seq(11000, 11000 + length(Cluster) - 1),
-    Cluster2 = lists:zip(SolrPorts, Cluster),
-    [begin
-         Cfg = [{riak_kv, [{anti_entropy, {on, [debug]}},
-                           {anti_entropy_concurrency, 8},
-                           {anti_entropy_build_limit, {100, 1000}}
-                          ]},
-                {yokozuna, [{anti_entropy, {on, [debug]}},
-                            {anti_entropy_concurrency, 8},
-                            {anti_entropy_build_limit, {100, 1000}},
-                            {anti_entropy_tick, 1000},
-                            {enabled, true},
-                            {solr_port, SolrPort}]}],
-         MergeC = config_merge(Cfg, YZCfgChanges),
-         rt:upgrade(Node, Vsn, MergeC),
-         rt:wait_for_service(Node, riak_kv),
-         rt:wait_for_service(Node, yokozuna)
-     end || {SolrPort, Node} <- Cluster2],
+    [rolling_upgrade(Node, Version, UpgradeConfig, WaitForServices) || Node <- Cluster],
+    ok;
+rolling_upgrade(Node, Version, UpgradeConfig, WaitForServices) ->
+    rt:upgrade(Node, Version, UpgradeConfig),
+    [rt:wait_for_service(Node, Service) || Service <- WaitForServices],
     ok.
 
 %% @doc Use AAE status to verify that exchange has occurred for all
@@ -350,21 +335,6 @@ riak_pb({_Node, ConnInfo}) ->
     riak_pb(ConnInfo);
 riak_pb(ConnInfo) ->
     proplists:get_value(pb, ConnInfo).
-
--spec config_merge(proplists:proplist(), proplists:proplist()) ->
-                          orddict:orddict() | proplists:proplist().
-config_merge(DefaultCfg, NewCfg) when NewCfg /= [] ->
-    orddict:update(yokozuna,
-                   fun(V) ->
-                           orddict:merge(fun(_, _X, Y) -> Y end,
-                                         orddict:from_list(V),
-                                         orddict:from_list(
-                                           orddict:fetch(
-                                             yokozuna, NewCfg)))
-                   end,
-                   DefaultCfg);
-config_merge(DefaultCfg, _NewCfg) ->
-    DefaultCfg.
 
 -spec create_and_set_index([node()], pid(), bucket(), index_name()) -> ok.
 create_and_set_index(Cluster, Pid, Bucket, Index) ->
