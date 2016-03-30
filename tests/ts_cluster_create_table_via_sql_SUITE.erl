@@ -54,7 +54,6 @@ create_fail_because_bad_properties_test(Ctx) ->
           [ddl_common(), "plain_id"]),
     Got = riakc_ts:query(C, BadDDL),
     ?assertMatch({error, {1020, _}}, Got),
-    io:format("Not created table with bad properties: ~p\n", [Got]),
     pass.
 
 create_test(Ctx) ->
@@ -65,14 +64,12 @@ create_test(Ctx) ->
           [ddl_common(), ?CUSTOM_NVAL, ?CUSTOM_MVAL]),
     Got1 = riakc_ts:query(C, GoodDDL),
     ?assertEqual({[],[]}, Got1),
-    io:format("Created table via query: ~p\n", [Got1]),
     pass.
 
 re_create_fail_test(Ctx) ->
     C = client_pid(Ctx),
     Got = riakc_ts:query(C, ddl_common()),
     ?assertMatch({error, {1014, _}}, Got),
-    io:format("Not created same table via query: ~p\n", [Got]),
     pass.
 
 describe_test(Ctx) ->
@@ -88,7 +85,6 @@ get_put_data_test(Ctx) ->
     Key = [<<"a">>, <<"b">>, 10101010],
     ?assertMatch(ok, riakc_ts:put(C, ts_util:get_default_bucket(), Data)),
     ?assertMatch({ok, {_, Data}}, riakc_ts:get(C, ts_util:get_default_bucket(), Key, [])),
-    io:format("Put a record, got it back\n", []),
     pass.
 
 get_set_property_test(Ctx) ->
@@ -107,15 +103,12 @@ get_set_property_test(Ctx) ->
         end,
     ?assertEqual(ExpectedPL, GetBucketPropsF(Node1)),
     ?assertEqual(ExpectedPL, GetBucketPropsF(Node2)),
-    io:format("Verified these properties are set: ~p\n", [ExpectedPL]),
     pass.
 
 
 client_pid(Ctx) ->
-    client_pid(1, Ctx).
-client_pid(N, Ctx) ->
     Nodes = ?config(cluster, Ctx),
-    rt:pbc(lists:nth(N, Nodes)).
+    rt:pbc(hd(Nodes)).
 
 custom_bucket_properties() ->
     [{n_val, ?CUSTOM_NVAL}, {m_val, ?CUSTOM_MVAL}].
