@@ -72,6 +72,7 @@ all() ->
       select_test,
       select_subset_test,
       invalid_select_test,
+      invalid_query_test,
       delete_data_existing_row_test,
       delete_data_nonexisting_row_test,
       delete_data_nonexisting_table_test,
@@ -213,10 +214,18 @@ select_subset_test(Cfg) ->
 
 invalid_select_test(Cfg) ->
     Select = "select * from bob where a='q1' and c>1 and c<15",
+    %% @todo: this really ought to be a 4XX error, but digging into the errors
+    %% from riak_ql might be too much for this API.
     {ok, "500", Headers, Body} = execute_query(Select, Cfg),
     "application/json" = content_type(Headers),
     "{\"error\":\"select query execution error: {missing_key_clause,\\n"++_
         = Body.
+
+invalid_query_test(Cfg) ->
+    Select = "OHNOES A DANGLING QUOTE ' ",
+    {ok, "400", Headers, Body} = execute_query(Select, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"error\":\"bad query: query error: error:<<\\\"Unexpected token '''.\\\">>\"}" = Body.
 
 %%% delete
 delete_data_existing_row_test(Cfg) ->
