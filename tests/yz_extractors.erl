@@ -253,8 +253,6 @@ confirm() ->
     test_extractor_works(Cluster, Packet),
     test_extractor_with_aae_expire(Cluster, ?INDEX2, ?BUCKET2, Packet),
 
-    rt:clean_cluster(Cluster),
-
     pass.
 
 %%%===================================================================
