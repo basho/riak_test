@@ -82,6 +82,9 @@ setup_cluster_put(ClusterType, TestType, N, WriteOnce, UseNativeEncoding) ->
     Data = [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]],
     ok = putData(C, Bucket, Data, N, false).
 
+setup_cluster_normal(ClusterType, TestType, WriteOnce, UseNativeEncoding) ->
+    build_and_activate_cluster_normal(ClusterType, TestType, WriteOnce, UseNativeEncoding).
+
 %------------------------------------------------------------
 % Writes N copies of a fixed record via either the normal
 % put path, or the timeseries path (switch on Ts)
@@ -102,6 +105,9 @@ setup_cluster_for_single_query(ClusterType, TestType, DDL, Ts, Data, UseNativeEn
     riakc_pb_socket:use_native_encoding(C, UseNativeEncoding),
     ok = putData(C, Bucket, Data, 1, Ts),
     C.
+
+setup_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncoding) ->
+    build_and_activate_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncoding).
 
 %------------------------------------------------------------
 % Writes N sequential records (incrementing time) via either the
