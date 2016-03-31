@@ -184,7 +184,7 @@ post_row_to_nonexisting_table_test(Cfg) ->
 
 %%% list_keys
 list_keys_test(Cfg) ->
-    {ok, "200", Headers, Body} = list_keys("bob", Cfg),
+    {"200", Headers, Body} = list_keys("bob", Cfg),
     "text/plain" = content_type(Headers),
     {match, _} = re:run(Body, "http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w2/c/20/"),
     {match, _} = re:run(Body, "http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w1/c/20/"),
@@ -192,14 +192,14 @@ list_keys_test(Cfg) ->
 
 
 list_keys_nonexisting_table_test(Cfg) ->
-    {ok, "404", Headers, Body} = list_keys("john", Cfg),
+    {"404", Headers, Body} = list_keys("john", Cfg),
     "application/json" = content_type(Headers),
     "{\"error\":\"table <<\\\"john\\\">> does not exist\"}" = Body.
 
 %%% select
 select_test(Cfg) ->
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
-    {ok, "200", Headers, Body} = execute_query(Select, Cfg),
+    {ok,"200", Headers, Body} = execute_query(Select, Cfg),
     "application/json" = content_type(Headers),
     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"]," ++
         "\"rows\":[[\"q1\",\"w1\",11,110]," ++
@@ -295,7 +295,27 @@ post_data_url(Node, Table) ->
 list_keys(Table, Cfg) ->
     Node = get_node(Cfg),
     URL  = list_keys_url(Node, Table),
-    ibrowse:send_req(URL, [], get).
+    {ibrowse_req_id, ReqID} = ibrowse:send_req(URL, [], get, [], [{stream_to, self()}]),
+    collect_stream(ReqID).
+
+collect_stream(ReqID) ->
+    {Code, Headers} = collect_headers(ReqID),
+    Body = collect_body(ReqID),
+    {Code, Headers, Body}.
+
+collect_headers(ReqID) ->
+    receive
+        {ibrowse_async_headers, ReqID, Code, Headers} ->
+            {Code, Headers}
+    end.
+
+collect_body(ReqID) ->
+    receive
+        {ibrowse_async_response, ReqID, BodyPart}  ->
+            BodyPart ++ collect_body(ReqID);
+        {ibrowse_async_response_end, ReqID} ->
+            []
+    end.
 
 list_keys_url(Node, Table) ->
     {IP, Port} = node_ip_and_port(Node),
