@@ -185,10 +185,10 @@ post_row_to_nonexisting_table_test(Cfg) ->
 %%% list_keys
 list_keys_test(Cfg) ->
     {ok, "200", Headers, Body} = list_keys("bob", Cfg),
-    "application/json" = content_type(Headers),
-    {match, _} = re:run(Body, "{\"url\":\"http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w2/c/20/\"}"),
-    {match, _} = re:run(Body,     "{\"url\":\"http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w1/c/20/\"}"),
-    {match, _} = re:run(Body, "{\"url\":\"http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w1/c/11/\"}").
+    "text/plain" = content_type(Headers),
+    {match, _} = re:run(Body, "http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w2/c/20/"),
+    {match, _} = re:run(Body, "http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w1/c/20/"),
+    {match, _} = re:run(Body, "http://127.0.0.1:10018/ts/v1/tables/bob/keys/a/q1/b/w1/c/11/").
 
 
 list_keys_nonexisting_table_test(Cfg) ->
