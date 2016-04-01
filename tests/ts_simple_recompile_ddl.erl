@@ -39,7 +39,6 @@ confirm() ->
     rt:stop(Node),
     simulate_old_dets_entries(),
     rt:start(Node),
-    timer:sleep(15000),
     verify_resulting_dets_entries(),
     pass.
 
@@ -62,35 +61,14 @@ simulate_old_dets_entries() ->
     dets:close(?TABLE).
 
 verify_resulting_dets_entries() ->
-    wait_for_recompilation(),
-    %% Requery the DETS table to ensure new version exists
     open_dets(),
+    lager:debug("DETS =~p", [dets:match(?TABLE, {'$1', '$2','$3','$4','$5'})]),
     lists:foreach(fun(T) ->
         ?assertEqual(
             [[2, compiled]],
             dets:match(?TABLE, {T,'$1','_','_','$2'}))
         end, test_tables()),
     dets:close(?TABLE).
-
-wait_for_recompilation() ->
-    open_dets(),
-    lager:debug("DETS =~p", [dets:match(?TABLE, {'$1', '$2','$3','$4','$5'})]),
-    Pids = dets:match(?TABLE, {'_','_','_','$1',compiling}),
-    dets:sync(?TABLE),
-    dets:close(?TABLE),
-    %% Set up monitoring for compiling jobs
-    MonitorRefs = lists:foldl(fun([CompilerPid], Acc) ->
-                                [monitor(process, CompilerPid)|Acc]
-                              end, [], Pids),
-    %% Receive completed compilation messages for each process
-    lists:foreach(fun(Ref) ->
-        receive
-            {'DOWN', Ref, _Type, _Object, _Info} ->
-                ok
-        after 10000 ->
-            ?assertEqual("DDL compiliation timed out", timeout)
-        end
-    end, MonitorRefs).
 
 test_tables() ->
     [<<"Table1">>,<<"Table2">>,<<"Table3">>].
