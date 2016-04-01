@@ -25,10 +25,15 @@
 -include_lib("eunit/include/eunit.hrl").
 
 suite() ->
-    [{timetrap,{minutes, 10}}].
+    [{timetrap, {minutes, 10}}].
 
 -define(CUSTOM_NVAL, 4).
--define(CUSTOM_MVAL, <<"bo o''oo">>).
+-define(PROP_NO_QUOTES, <<"no quotes">>).
+-define(PROP_WITH_QUOTES, <<"with ' quoted '' quotes''">>).
+-define(CUSTOM_PROPERTIES,
+        [{n_val, ?CUSTOM_NVAL},
+         {no_quotes_prop, ?PROP_NO_QUOTES},
+         {with_quotes_prop, ?PROP_WITH_QUOTES}]).
 
 init_per_suite(Config) ->
     Cluster = ts_util:build_cluster(multiple),
@@ -60,8 +65,10 @@ create_test(Ctx) ->
     C = client_pid(Ctx),
     GoodDDL =
         io_lib:format(
-          "~s WITH (n_val=~b, m_val = '~s')",
-          [ddl_common(), ?CUSTOM_NVAL, ?CUSTOM_MVAL]),
+          "~s WITH (n_val=~b, no_quotes_prop = '~s', with_quotes_prop = '~s')",
+          [ddl_common(), ?CUSTOM_NVAL,
+           enquote_varchar(?PROP_NO_QUOTES),
+           enquote_varchar(?PROP_WITH_QUOTES)]),
     Got1 = riakc_ts:query(C, GoodDDL),
     ?assertEqual({[],[]}, Got1),
     pass.
@@ -89,29 +96,30 @@ get_put_data_test(Ctx) ->
 
 get_set_property_test(Ctx) ->
     [Node1, Node2 | _] = ?config(cluster, Ctx),
-    ExpectedPL = unenquote_varchars(
-                   lists:usort(
-                     custom_bucket_properties())),
-    GetBucketPropsF =
+    %% these are the custom properties we have explicitly set in
+    %% CREATE WITH, filtered out of the default ones and sorted
+    ExpectedPL = lists:usort(?CUSTOM_PROPERTIES),
+    %% make sure bucket properties are the same retrieved from
+    %% different nodes
+    GetCustomBucketPropsF =
         fun(Node) ->
-                ActualProps =
-                    lists:usort(
-                      rpc:call(
-                        Node, riak_core_claimant, get_bucket_type,
-                        [list_to_binary(ts_util:get_default_bucket()), undefined, false])),
+                ActualProps = lists:usort(get_bucket_props_from_node(Node)),
+                %% only select our custom properties:
                 [PV || {P, _} = PV <- ActualProps, lists:keymember(P, 1, ExpectedPL)]
         end,
-    ?assertEqual(ExpectedPL, GetBucketPropsF(Node1)),
-    ?assertEqual(ExpectedPL, GetBucketPropsF(Node2)),
+    ?assertEqual(ExpectedPL, GetCustomBucketPropsF(Node1)),
+    ?assertEqual(ExpectedPL, GetCustomBucketPropsF(Node2)),
     pass.
 
+
+get_bucket_props_from_node(Node) ->
+    rpc:call(
+      Node, riak_core_claimant, get_bucket_type,
+      [list_to_binary(ts_util:get_default_bucket()), undefined, false]).
 
 client_pid(Ctx) ->
     Nodes = ?config(cluster, Ctx),
     rt:pbc(hd(Nodes)).
-
-custom_bucket_properties() ->
-    [{n_val, ?CUSTOM_NVAL}, {m_val, ?CUSTOM_MVAL}].
 
 ddl_common() ->
     ts_util:get_ddl(small).
@@ -124,10 +132,7 @@ table_described() ->
       {<<"weather">>,    <<"varchar">>,   false, [], []},
       {<<"temperature">>,<<"double">>,    true,  [], []}]}.
 
-unenquote_varchars(PP) ->
-    lists:map(
-      fun({P, V}) when is_binary(V) ->
-              {P, binary:replace(V, <<"''">>, <<"'">>)};
-         (PV) -> PV
-      end,
-      PP).
+enquote_varchar(P) when is_binary(P) ->
+    re:replace(P, "'", "''", [global, {return, binary}]);
+enquote_varchar(P) ->
+    P.
