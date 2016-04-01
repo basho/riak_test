@@ -36,10 +36,10 @@ create_table_def_1(Pid) ->
     ok = riakc_ts:put(Pid, <<"table1">>, [[1,2,N,4] || N <- lists:seq(1,200)]).
 
 delete_single_key_def_1_test(Pid) ->
-	?assertEqual(
-		ok,
-		riakc_ts:delete(Pid, <<"table1">>, [1,2,4], [])
-	).
+  ?assertEqual(
+    ok,
+    riakc_ts:delete(Pid, <<"table1">>, [1,2,4], [])
+  ).
 
 %%%
 %%% TABLE 2
@@ -58,10 +58,10 @@ delete_single_key_def_1_test(Pid) ->
 %     ok = riakc_ts:put(Pid, <<"table2">>, [[1,2,N,4] || N <- lists:seq(1,200)]).
 
 % delete_single_key_def_2_test(Pid) ->
-% 	?assertEqual(
-% 		ok,
-% 		riakc_ts:delete(Pid, <<"table2">>, [4,1,10], [])
-% 	).
+%   ?assertEqual(
+%     ok,
+%     riakc_ts:delete(Pid, <<"table2">>, [4,1,10], [])
+%   ).
 
 %%%
 %%% TABLE 3
@@ -81,7 +81,7 @@ create_table_def_3(Pid) ->
     ok = riakc_ts:put(Pid, <<"table3">>, [[1,2,3,N,4] || N <- lists:seq(1,200)]).
 
 delete_single_key_def_3_test(Pid) ->
-	?assertEqual(
-		ok,
-		riakc_ts:delete(Pid, <<"table3">>, [1,2,20], [])
-	).
+  ?assertEqual(
+    ok,
+    riakc_ts:delete(Pid, <<"table3">>, [1,2,20], [])
+  ).
