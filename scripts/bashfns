@@ -454,8 +454,8 @@ runProfile()
 
     cp riak_graphviz/riak_graphviz.py $outDir
     
-    echo "import riak_ts_query as rq" > $outDir/makeGraph.py
-    echo "rq.makeQueryGraph('$graphPrefix', $nRecord, $nQuery, 'client.txt', 'server.txt', 'clientbase.txt', 'serverbase.txt', 'clientcomp.txt', 'profbase.txt')" >> $outDir/makeGraph.py
+    echo "import riak_ts_profiles as rp" > $outDir/makeGraph.py
+    echo "rp.makeQueryGraph('$graphPrefix', $nRecord, $nQuery, 'client.txt', 'server.txt', 'clientbase.txt', 'serverbase.txt', 'clientcomp.txt', 'profbase.txt')" >> $outDir/makeGraph.py
 
     #------------------------------------------------------------
     # Make sure profiler output directories exist
