@@ -55,6 +55,11 @@ simulate_old_dets_entries() ->
     Table1DDL = sql_to_ddl(create_table_sql("Table1")),
     Table2DDL = sql_to_ddl(create_table_sql("Table2")),
     Table3DDL = sql_to_ddl(create_table_sql("Table3")),
+
+    %% Here we want to test 3 degenerate cases:
+    %% 1) An old DETS entry (pre-1.3) which does not a DDL compiler version
+    %% 2) A compiled table with an older (pre-1.3) version
+    %% 3) A table which seemingly was stuck in the compiling state
     ok = dets:insert(?TABLE, {<<"Table1">>, Table1DDL, Pid, compiled}),
     ok = dets:insert(?TABLE, {<<"Table2">>, 1, Table2DDL, Pid2, compiled}),
     ok = dets:insert(?TABLE, {<<"Table3">>, 1, Table3DDL, Pid3, compiling}),
