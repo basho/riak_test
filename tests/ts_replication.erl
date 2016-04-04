@@ -3,6 +3,8 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+%% Test both realtime and fullsync replication for timeseries data.
+
 -import(rt, [join/2,
              log_to_nodes/2,
              log_to_nodes/3,
