@@ -4,6 +4,6 @@
 
 confirm() ->
     DDL  = ts_api_util:get_ddl(api),
-    ts_api_util:setup_cluster_timeseries(single, n_val_one, DDL, true),
+    ts_api_util:setup_cluster_timeseries(single, n_val_one, DDL),
     pass.
 
