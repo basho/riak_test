@@ -30,7 +30,7 @@
 % Cluster setup only. 
 %------------------------------------------------------------
 
-build_and_activate_cluster_normal(ClusterType, TestType, WriteOnce, UseNativeEncoding) ->
+build_and_activate_cluster_normal(ClusterType, TestType, WriteOnce) ->
     [Node | _] = timeseries_util:build_cluster(ClusterType),
     
     case TestType of
@@ -48,10 +48,9 @@ build_and_activate_cluster_normal(ClusterType, TestType, WriteOnce, UseNativeEnc
     end,
     Bucket = list_to_binary(timeseries_util:get_bucket()),
     C = rt:pbc(Node),
-    riakc_pb_socket:use_native_encoding(C, UseNativeEncoding),
     [C, Bucket].
 
-build_and_activate_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncoding) ->
+build_and_activate_cluster_timeseries(ClusterType, TestType, DDL) ->
     [Node | _] = timeseries_util:build_cluster(ClusterType),
     
     case TestType of
@@ -69,7 +68,6 @@ build_and_activate_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncod
     end,
     Bucket = list_to_binary(timeseries_util:get_bucket()),
     C = rt:pbc(Node),
-    riakc_pb_socket:use_native_encoding(C, UseNativeEncoding),
     [C, Bucket].
     
 %------------------------------------------------------------
@@ -77,22 +75,21 @@ build_and_activate_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncod
 % put path
 %------------------------------------------------------------
 
-setup_cluster_put(ClusterType, TestType, N, WriteOnce, UseNativeEncoding) ->
-    [C, Bucket] = build_and_activate_cluster_normal(ClusterType, TestType, WriteOnce, UseNativeEncoding),
+setup_cluster_put(ClusterType, TestType, N, WriteOnce) ->
+    [C, Bucket] = build_and_activate_cluster_normal(ClusterType, TestType, WriteOnce),
     Data = [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]],
     ok = putData(C, Bucket, Data, N, false).
 
-setup_cluster_normal(ClusterType, TestType, WriteOnce, UseNativeEncoding) ->
-    build_and_activate_cluster_normal(ClusterType, TestType, WriteOnce, UseNativeEncoding).
+setup_cluster_normal(ClusterType, TestType, WriteOnce) ->
+    build_and_activate_cluster_normal(ClusterType, TestType, WriteOnce).
 
 %------------------------------------------------------------
 % Writes N copies of a fixed record via either the normal
 % put path, or the timeseries path (switch on Ts)
 %------------------------------------------------------------
 
-setup_cluster_put(ClusterType, TestType, DDL, N, Ts, UseNativeEncoding) ->
-    [C, Bucket] = build_and_activate_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncoding),
-    riakc_pb_socket:use_native_encoding(C, UseNativeEncoding),
+setup_cluster_put(ClusterType, TestType, DDL, N, Ts) ->
+    [C, Bucket] = build_and_activate_cluster_timeseries(ClusterType, TestType, DDL),
 
     Data = [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]],
     io:format("Time before = ~p~n", [my_time()]),
@@ -100,22 +97,21 @@ setup_cluster_put(ClusterType, TestType, DDL, N, Ts, UseNativeEncoding) ->
     io:format("Time after = ~p~n", [my_time()]),
     C.
 
-setup_cluster_for_single_query(ClusterType, TestType, DDL, Ts, Data, UseNativeEncoding) ->
-    [C, Bucket] = build_and_activate_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncoding),
-    riakc_pb_socket:use_native_encoding(C, UseNativeEncoding),
+setup_cluster_for_single_query(ClusterType, TestType, DDL, Ts, Data) ->
+    [C, Bucket] = build_and_activate_cluster_timeseries(ClusterType, TestType, DDL),
     ok = putData(C, Bucket, Data, 1, Ts),
     C.
 
-setup_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncoding) ->
-    build_and_activate_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncoding).
-
+setup_cluster_timeseries(ClusterType, TestType, DDL) ->
+    build_and_activate_cluster_timeseries(ClusterType, TestType, DDL).
+    
 %------------------------------------------------------------
 % Writes N sequential records (incrementing time) via either the
 % normal put path, or the timeseries path (switch on Ts)
 %------------------------------------------------------------
 
-setup_cluster_put_mod_time(ClusterType, TestType, DDL, N, Ts, UseNativeEncoding) ->
-    [C, Bucket] = build_and_activate_cluster_timeseries(ClusterType, TestType, DDL, UseNativeEncoding),
+setup_cluster_put_mod_time(ClusterType, TestType, DDL, N, Ts) ->
+    [C, Bucket] = build_and_activate_cluster_timeseries(ClusterType, TestType, DDL),
 
     Data = [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]],
     io:format("Time before = ~p~n", [my_time()]),
