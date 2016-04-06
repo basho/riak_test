@@ -97,10 +97,10 @@ replication(ANodes, BNodes, Table, NormalType) ->
     lager:info("Testing a non-w1c bucket type (realtime)"),
     real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket),
 
-    %% XXX We do not have realtime sync for w1c, non-TS data, so this
-    %% test is disabled
-    %% lager:info("Testing the timeseries bucket type, non-ts-managed bucket (realtime)"),
-    %% real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucketInTS),
+    %% We do not have realtime sync for w1c, but make sure we can
+    %% still write and read the data from the source cluster
+    lager:info("Testing the timeseries bucket type, non-ts-managed bucket (realtime)"),
+    no_w1c_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucketInTS),
 
     lager:info("Testing timeseries data (realtime)"),
     ts_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, Table),
@@ -168,11 +168,34 @@ ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA,
     lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
     ?assertEqual(ok, put_records(AFirst, Table, 101, 200)),
 
-    lager:info("Reading 100 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
-    ?assertEqual(ok, rt:wait_until(fun() -> 100 == ts_num_records_present(BFirst, 101, 200) end)),
+    lager:info("Writing a single key to Cluster A-LeaderNode: ~p", [LeaderA]),
+    ?assertEqual(ok, put_records(AFirst, Table, 201, 201)),
+
+    lager:info("Reading 101 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
+    ?assertEqual(ok, rt:wait_until(fun() -> 101 == ts_num_records_present(BFirst, 101, 201) end)),
 
     disconnect_clusters(ANodes, LeaderA, "B").
 
+
+%% @doc No w1c replication test (feature is not yet implemented)
+no_w1c_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Bucket) ->
+    connect_clusters(ANodes, BNodes, LeaderA, PortB),
+    start_mdc(ANodes, LeaderA, "B", false),
+
+    log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify no replication to Cluster B via realtime"),
+    lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
+    ?assertEqual([], repl_util:do_write(LeaderA, 1001, 1100, Bucket, 2)),
+
+    lager:info("Verifying all of the new records are on A"),
+    ?assertEqual(0, repl_util:wait_for_reads(AFirst, 1001, 1100, Bucket, 2)),
+
+    lager:info("Pausing 2 seconds"),
+    timer:sleep(2000),
+
+    lager:info("Verifying none of the new records are on B"),
+    ?assertEqual(100, repl_util:wait_for_reads(BFirst, 1001, 1100, Bucket, 2)),
+
+    disconnect_clusters(ANodes, LeaderA, "B").
 
 %% @doc No real time replication test (bucket properties set to fullsync)
 no_ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Table) ->
@@ -184,13 +207,13 @@ no_ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Leade
 
     log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify no replication to Cluster B via realtime"),
     lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
-    ?assertEqual(ok, put_records(AFirst, Table, 201, 300)),
+    ?assertEqual(ok, put_records(AFirst, Table, 202, 301)),
 
     lager:info("Pausing 2 seconds"),
     timer:sleep(2000),
 
     lager:info("Verifying none of the new records are on B"),
-    ?assertEqual(0, ts_num_records_present(BFirst, 201, 300)),
+    ?assertEqual(0, ts_num_records_present(BFirst, 202, 301)),
 
     %% "Undo" (sort of) the bucket property
     rt:pbc_set_bucket_type(rt:pbc(AFirst), Table, [{repl, both}]),
