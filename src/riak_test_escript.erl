@@ -166,7 +166,6 @@ main(Args) ->
                     TestB ++ TestA
             end,
 
-    io:format("Tests to run: ~p~n", [Test || {_Type, Test} <- Tests]),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
     add_deps("deps"),

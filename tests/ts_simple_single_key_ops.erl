@@ -17,6 +17,12 @@ confirm() ->
     create_table_def_3(Pid),
     delete_single_key_def_3_test(Pid),
 
+    create_data_table_def_desc_on_quantum_table(Pid),
+    delete_single_key_desc_on_quantum_test(Pid),
+
+    create_data_table_def_desc_on_varchar_table(Pid),
+    delete_single_key_desc_on_varchar_test(Pid),
+    get_single_key_desc_on_varchar_test(Pid),
     pass.
 
 %%%
@@ -84,4 +90,50 @@ delete_single_key_def_3_test(Pid) ->
     ?assertEqual(
         ok,
         riakc_ts:delete(Pid, <<"table3">>, [1,2,20], [])
+    ).
+
+%%%
+%%% DESC ON QUANTUM TABLE
+%%%
+
+create_data_table_def_desc_on_quantum_table(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid,
+        "CREATE TABLE desc_on_quantum_table ("
+        "a SINT64 NOT NULL, "
+        "b SINT64 NOT NULL, "
+        "c TIMESTAMP NOT NULL, "
+        "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c DESC))")),
+    ok = riakc_ts:put(Pid, <<"desc_on_quantum_table">>, [[1,2,N] || N <- lists:seq(1,200)]).
+
+delete_single_key_desc_on_quantum_test(Pid) ->
+    ?assertEqual(
+        ok,
+        riakc_ts:delete(Pid, <<"desc_on_quantum_table">>, [1,2,20], [])
+    ).
+
+%%%
+%%% DESC ON VARCHAR TABLE
+%%%
+
+create_data_table_def_desc_on_varchar_table(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid,
+        "CREATE TABLE desc_on_varchar_table ("
+        "a SINT64 NOT NULL, "
+        "b VARCHAR NOT NULL, "
+        "c TIMESTAMP NOT NULL, "
+        "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b DESC,c))")),
+    ok = riakc_ts:put(Pid, <<"desc_on_varchar_table">>, [[1,<<N:8>>,N] || N <- lists:seq(1,50)]).
+
+delete_single_key_desc_on_varchar_test(Pid) ->
+    ?assertEqual(
+        ok,
+        riakc_ts:delete(Pid, <<"desc_on_varchar_table">>, [1,<<2:8>>,2], [])
+    ).
+
+get_single_key_desc_on_varchar_test(Pid) ->
+    ?assertEqual(
+        {ok,
+            {[<<"a">>,<<"b">>,<<"c">>],
+             [[1,<<5:8>>,5]]}},
+        riakc_ts:get(Pid, <<"desc_on_varchar_table">>, [1,<<5:8>>,5], [])
     ).

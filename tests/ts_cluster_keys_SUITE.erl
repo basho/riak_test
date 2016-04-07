@@ -49,6 +49,8 @@ init_per_suite(Config) ->
     all_timestamps_create_data(Pid),
     all_types_create_data(Pid),
     create_data_def_desc_on_quantum_table(Pid),
+    create_data_def_desc_on_varchar_table(Pid),
+    table_def_desc_on_additional_local_key_field_create_data(Pid),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -590,7 +592,7 @@ all_types_1_test(Ctx) ->
         "WHERE a = 'b' AND b = 1 AND c = 3 AND d = true AND e = 0.1 "
         "AND f = 'a' AND g = 2",
     Results =
-        [{<<"b">>,1,3,true,0.1,<<"a">>,2,H,I,J,K,L} || 
+        [{<<"b">>,1,3,true,0.1,<<"a">>,2,H,I,J,K,L} ||
             I <- ts_booleans()
            ,J <- Doubles
         ],
@@ -609,7 +611,7 @@ all_types_or_filter_test(Ctx) ->
         "WHERE a = 'b' AND b = 1 AND c = 3 AND d = true AND e = 0.1 "
         "AND f = 'a' AND g = 2 AND (i = true OR j = 0.2)",
     Results =
-        [{<<"b">>,1,3,true,0.1,<<"a">>,2,H,I,J,K,L} || 
+        [{<<"b">>,1,3,true,0.1,<<"a">>,2,H,I,J,K,L} ||
             I <- ts_booleans(),
             J <- Doubles,
             I == true orelse J == 0.2
@@ -737,11 +739,35 @@ create_data_def_desc_on_quantum_table(Pid) ->
     ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_desc_on_quantum_table())),
     ok = riakc_ts:put(Pid, <<"desc_on_quantum_table">>, [[1,1,N] || N <- lists:seq(200,200*100,100)]).
 
-desc_on_quantum_table_test(Ctx) ->
+desc_on_quantum___one_quantum_not_against_bounds_inclusive_test(Ctx) ->
     Query =
-        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 3000 AND c <= 4800",
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 3100 AND c <= 4800",
     ts_util:assert_row_sets(
-        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4800,3000,-100)]},
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4800,3100,-100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+desc_on_quantum___one_quanta_not_against_bounds_exclusive_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c > 3100 AND c < 4800",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4700,3200,-100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+desc_on_quantum___one_quanta_at_bounds_inclusive_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 3000 AND c <= 5000",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(5000,3000,-100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+desc_on_quantum___one_quanta_at_bounds_exclusive_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c > 3000 AND c < 5000",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4900,3100,-100)]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -757,14 +783,14 @@ desc_on_quantum_one_subquery_exclusive_test(Ctx) ->
     Query =
         "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c > 4200 AND c < 4800",
     ts_util:assert_row_sets(
-        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4600,4400,-100)]},
+        {rt_ignore_columns,[{1,1,N} || N <- lists:seq(4700,4300,-100)]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
 desc_on_quantum_one_subquery_inclusive_quanta_boundaries_test(Ctx) ->
     Query =
         "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 4000 AND c <= 5000",
-    ts_util:assert_row_sets(
+   ts_util:assert_row_sets(
         {rt_ignore_columns,[{1,1,N} || N <- lists:seq(5000,4000,-100)]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -774,5 +800,61 @@ desc_on_quantum_one_subquery_inclusive_across_quanta_boundaries_test(Ctx) ->
         "SELECT * FROM desc_on_quantum_table WHERE a = 1 AND b = 1 AND c >= 3500 AND c <= 5500",
     ts_util:assert_row_sets(
         {rt_ignore_columns,[{1,1,N} || N <- lists:seq(5500,3500,-100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%%%
+%%%
+%%%
+
+table_def_desc_on_additional_local_key_field() ->
+    "CREATE TABLE lk_desc_1 ("
+    "a SINT64 NOT NULL, "
+    "b SINT64 NOT NULL, "
+    "c TIMESTAMP NOT NULL, "
+    "d SINT64 NOT NULL, "
+    "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c,d DESC))".
+
+table_def_desc_on_additional_local_key_field_create_data(Pid) ->
+    ?assertEqual(
+        {[],[]}, 
+        riakc_ts:query(Pid,
+            "CREATE TABLE lk_desc_1 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "d SINT64 NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c,d DESC))")),
+    ok = riakc_ts:put(Pid, <<"lk_desc_1">>, 
+        [[1,1,N,N] || N <- lists:seq(200,200*100,100)]).
+
+
+table_def_desc_on_additional_local_key_field_test(Ctx) ->
+    Query =
+        "SELECT * FROM lk_desc_1 WHERE a = 1 AND b = 1 AND c >= 3500 AND c <= 5500",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,N,N} || N <- lists:seq(3500,5500,100)]},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
+
+%%%
+%%%
+%%%
+
+create_data_def_desc_on_varchar_table(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid,
+        "CREATE TABLE desc_on_varchar_table ("
+        "a SINT64 NOT NULL, "
+        "b SINT64 NOT NULL, "
+        "c TIMESTAMP NOT NULL, "
+        "d VARCHAR NOT NULL, "
+        "PRIMARY KEY ((a,b), a,b,d DESC))")),
+    ok = riakc_ts:put(Pid, <<"desc_on_varchar_table">>, [[1,1,1,<<N>>] || N <- "abcdefghijklmnopqrstuvwxyz"]).
+
+sdfsfsf_test(Ctx) ->
+    Query =
+        "SELECT * FROM desc_on_varchar_table WHERE a = 1 AND b = 1",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,[{1,1,1,<<N>>} || N <- lists:reverse("abcdefghijklmnopqrstuvwxyz")]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).

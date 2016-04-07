@@ -111,11 +111,11 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
 
     lager:info("2 - writing to bucket ~ts with:~n- ~p", [Bucket, Data]),
     lager:info("2a - Connection is ~p~n", [Conn]),
-    Ret = code:load_file(riakc_ts),
-    RiakCFile = code:is_loaded(riakc_ts),
-    gg:format("the riak client is ~p after ~p~n", [RiakCFile, Ret]),
+    _Ret = code:load_file(riakc_ts),
+    _RiakCFile = code:is_loaded(riakc_ts),
+    % gg:format("the riak client is ~p after ~p~n", [RiakCFile, Ret]),
     ok = riakc_ts:put(Conn, Bucket, Data),
-    gg:format("2b - Data put ~p", [here]),
+    % gg:format("2b - Data put ~p", [here]),
 
     single_query(Conn, Qry).
 
@@ -500,6 +500,8 @@ assert_row_sets({ColExpected, Expected}, {ColsActual,Actual}) ->
         _ ->
             ?assertEqual(ColExpected,ColsActual)
     end,
+    assert_row_sets(Expected, Actual);
+assert_row_sets(Expected, Actual) ->
     case tdiff:diff(Expected, Actual) of
         [{eq,_}] ->
             pass;
