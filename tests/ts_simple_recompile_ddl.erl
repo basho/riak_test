@@ -25,9 +25,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([confirm/0]).
--define(TABLE, ?MODULE).
--define(DETS_TABLE, riak_kv_compile_tab_v2).
 -define(LEGACY_TABLE, riak_kv_compile_tab).
+-define(DETS_TABLE, riak_kv_compile_tab_v2).
 
 confirm() ->
     {Cluster, _Conn} = ts_util:cluster_and_connect(single),
@@ -43,13 +42,14 @@ confirm() ->
     verify_resulting_dets_entries(),
     pass.
 
-open_dets() ->
+open_dets(Table) ->
     FileDir = rtdev:riak_data(1),
-    FilePath = filename:join(FileDir, [?DETS_TABLE, ".dets"]),
-    {ok, ?TABLE} = dets:open_file(?TABLE, [{type, set}, {repair, force}, {file, FilePath}]).
+    FilePath = filename:join(FileDir, [Table, ".dets"]),
+    {ok, Table} = dets:open_file(Table, [{type, set}, {repair, force}, {file, FilePath}]).
 
 simulate_old_dets_entries() ->
-    open_dets(),
+    open_dets(?DETS_TABLE),
+    open_dets(?LEGACY_TABLE),
     Pid = spawn_link(fun() -> ok end),
     Pid2 = spawn_link(fun() -> ok end),
     Pid3 = spawn_link(fun() -> ok end),
@@ -62,19 +62,22 @@ simulate_old_dets_entries() ->
     %% 2) A compiled table with an older (pre-1.3) version
     %% 3) A table which seemingly was stuck in the compiling state
     ok = dets:insert(?LEGACY_TABLE, {<<"Table1">>, Table1DDL, Pid, compiled}),
-    ok = dets:insert(?TABLE, {<<"Table2">>, 1, Table2DDL, Pid2, compiled}),
-    ok = dets:insert(?TABLE, {<<"Table3">>, 1, Table3DDL, Pid3, compiling}),
-    dets:close(?TABLE).
+    ok = dets:insert(?DETS_TABLE, {<<"Table2">>, 1, Table2DDL, Pid2, compiled}),
+    ok = dets:insert(?DETS_TABLE, {<<"Table3">>, 1, Table3DDL, Pid3, compiling}),
+    dets:close(?LEGACY_TABLE),
+    dets:close(?DETS_TABLE).
 
 verify_resulting_dets_entries() ->
-    open_dets(),
-    lager:debug("DETS =~p", [dets:match(?TABLE, {'$1', '$2','$3','$4','$5'})]),
+    open_dets(?DETS_TABLE),
+    open_dets(?LEGACY_TABLE),
+    lager:debug("DETS =~p", [dets:match(?DETS_TABLE, {'$1', '$2','$3','$4','$5'})]),
     lists:foreach(fun(T) ->
         ?assertEqual(
             [[2, compiled]],
-            dets:match(?TABLE, {T,'$1','_','_','$2'}))
+            dets:match(?DETS_TABLE, {T,'$1','_','_','$2'}))
         end, test_tables()),
-    dets:close(?TABLE).
+    dets:close(?LEGACY_TABLE),
+    dets:close(?DETS_TABLE).
 
 test_tables() ->
     [<<"Table1">>,<<"Table2">>,<<"Table3">>].
