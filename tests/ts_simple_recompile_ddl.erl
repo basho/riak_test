@@ -27,6 +27,7 @@
 -export([confirm/0]).
 -define(TABLE, ?MODULE).
 -define(DETS_TABLE, riak_kv_compile_tab_v2).
+-define(LEGACY_TABLE, riak_kv_compile_tab).
 
 confirm() ->
     {Cluster, _Conn} = ts_util:cluster_and_connect(single),
@@ -60,7 +61,7 @@ simulate_old_dets_entries() ->
     %% 1) An old DETS entry (pre-1.3) which does not a DDL compiler version
     %% 2) A compiled table with an older (pre-1.3) version
     %% 3) A table which seemingly was stuck in the compiling state
-    ok = dets:insert(?TABLE, {<<"Table1">>, Table1DDL, Pid, compiled}),
+    ok = dets:insert(?LEGACY_TABLE, {<<"Table1">>, Table1DDL, Pid, compiled}),
     ok = dets:insert(?TABLE, {<<"Table2">>, 1, Table2DDL, Pid2, compiled}),
     ok = dets:insert(?TABLE, {<<"Table3">>, 1, Table3DDL, Pid3, compiling}),
     dets:close(?TABLE).
