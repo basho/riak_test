@@ -44,9 +44,9 @@ confirm() ->
 prop_ts(ClusterConn) ->
     ?FORALL({Table, DDL},
             ts_sql_eqc_util:gen_valid_create_table(),
-            run_query(ClusterConn, Table, DDL)).
+            create_and_activate(ClusterConn, Table, DDL)).
 
-run_query(ClusterConn, Table, DDL) ->
+create_and_activate(ClusterConn, Table, DDL) ->
     lager:info("Creating table ~p~n- from ~p~n", [Table, DDL]),
     {ok, _} = ts_util:create_and_activate_bucket_type(ClusterConn, DDL, Table, ?DEFAULT_NVAL),
     true.
