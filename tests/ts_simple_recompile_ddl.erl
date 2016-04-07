@@ -26,7 +26,7 @@
 
 -export([confirm/0]).
 -define(TABLE, ?MODULE).
--define(KV_MODULE, riak_kv_compile_tab).
+-define(DETS_TABLE, riak_kv_compile_tab_v2).
 
 confirm() ->
     {Cluster, _Conn} = ts_util:cluster_and_connect(single),
@@ -44,7 +44,7 @@ confirm() ->
 
 open_dets() ->
     FileDir = rtdev:riak_data(1),
-    FilePath = filename:join(FileDir, [?KV_MODULE, ".dets"]),
+    FilePath = filename:join(FileDir, [?DETS_TABLE, ".dets"]),
     {ok, ?TABLE} = dets:open_file(?TABLE, [{type, set}, {repair, force}, {file, FilePath}]).
 
 simulate_old_dets_entries() ->
