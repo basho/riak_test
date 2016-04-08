@@ -24,7 +24,7 @@
 
 -compile(export_all).
 
-%-ifdef(EQC).
+-ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riak_ql/include/riak_ql_ddl.hrl").
@@ -196,4 +196,4 @@ make_q(#hash_fn_v1{mod  = riak_ql_quanta,
 lk_to_sql(LK) ->
     string:join([binary_to_list(X#param_v1.name) || X <- LK#key_v1.ast], ", ").
 
-%-endif.
+-endif.
