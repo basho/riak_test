@@ -22,9 +22,9 @@
 -module(ts_simple_create_table_eqc).
 -compile(export_all).
 
+-ifdef(EQC).
 -behavior(riak_test).
 
-%-ifdef(EQC).
 -include_lib("riakc/include/riakc.hrl").
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_fsm.hrl").
@@ -51,3 +51,4 @@ create_and_activate(ClusterConn, Table, DDL) ->
     {ok, _} = ts_util:create_and_activate_bucket_type(ClusterConn, DDL, Table, ?DEFAULT_NVAL),
     true.
 
+-endif.
