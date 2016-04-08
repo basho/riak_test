@@ -79,6 +79,9 @@ run_riak(N, Path, Cmd) ->
             R
     end.
 
+riak_data(N) when is_integer(N) ->
+    lists:flatten(io_lib:format("~s/dev/dev~b/data", [relpath(current), N])).
+
 run_riak_repl(N, Path, Cmd) ->
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
     os:cmd(riakreplcmd(Path, N, Cmd)).
