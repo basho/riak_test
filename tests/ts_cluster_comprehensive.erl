@@ -56,7 +56,7 @@ run_tests(PvalP1, PvalP2) ->
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
-    ts_util:create_and_activate_bucket_type(Cluster, lists:flatten(TableDef), ?BUCKET),
+    ?assertEqual({[], []}, riakc_ts:query(rt:pbc(hd(Cluster)), TableDef)),
 
     %% Make sure data is written to each node
     lists:foreach(fun(Node) -> confirm_all_from_node(Node, Data, PvalP1, PvalP2) end, Cluster),
