@@ -24,7 +24,7 @@
 
 -compile(export_all).
 
-%-ifdef(EQC).
+-ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riak_ql/include/riak_ql_ddl.hrl").
@@ -36,7 +36,7 @@
 %%
 
 gen_valid_create_table() ->
-    ?LET(DDL, gen_valid_ddl(), {DDL#ddl_v1.table, make_valid_create_table(DDL)}).
+    ?LET(DDL, gen_valid_ddl(), DDL).
 
 %%
 %% These generators generate DDL records
@@ -98,7 +98,7 @@ gen_optional() ->
 
 %% can't have a quantum of 0 so add one
 gen_quantum() ->
-    ?LET({Unit, No}, 
+    ?LET({Unit, No},
          {oneof([d, h, m, s]), int()},
          {Unit, abs(No + 1)}).
 
@@ -148,7 +148,7 @@ make_pk([Family, Series, TS], {Unit, No}) ->
                             type = timestamp}],
     AST = [#param_v1{name = X#riak_field_v1.name} || X <- [Family, Series]] ++ Quantum,
     #key_v1{ast = AST}.
-    
+
 make_lk(Key) ->
     #key_v1{ast = [#param_v1{name = X#riak_field_v1.name} || X <- Key]}.
 
@@ -157,43 +157,14 @@ is_valid_ddl(#ddl_v1{fields = Fs}) ->
     _IsValid = case lists:usort(Fs2) of
                    Fs2 -> true;
                    _   -> false
-end.
+               end.
 
-make_valid_create_table(#ddl_v1{table         = Tb,
-                                fields        = Fs,
-                                partition_key = PK,
-                                local_key     = LK}) ->
-    "CREATE TABLE " ++ binary_to_list(Tb) ++ " (" ++ make_fields(Fs) ++ "PRIMARY KEY ((" ++ pk_to_sql(PK) ++ "), " ++ lk_to_sql(LK) ++ "))".
+make_timestamp() ->
+    {Mega, Secs, Micro} = erlang:now(),
+    string:join([
+                 integer_to_list(Mega),
+                 integer_to_list(Secs),
+                 integer_to_list(Micro)
+                ], "_").
 
-make_fields(Fs) ->
-    make_f2(Fs, []).
-
-make_f2([], Acc) ->
-    lists:flatten(lists:reverse(Acc));
-make_f2([#riak_field_v1{name    = Nm,
-                       type     = Ty,
-                       optional = IsOpt} | T], Acc) ->
-    Args = [
-            binary_to_list(Nm),
-            atom_to_list(Ty)
-           ] ++ case IsOpt of
-                    true  -> [];
-                    false -> ["not null"]
-                end,
-    NewAcc = string:join(Args, " ") ++ ", ",
-    make_f2(T, [NewAcc | Acc]).
-
-pk_to_sql(#key_v1{ast = [Fam, Series, TS]}) ->
-    string:join([binary_to_list(X#param_v1.name) || X <- [Fam, Series]] ++ [make_q(TS)], ", ").
-
-make_q(#hash_fn_v1{mod  = riak_ql_quanta,
-                   fn   = quantum,
-                   args = Args,
-                   type = timestamp}) ->
-              [#param_v1{name = Nm}, Unit, No] = Args,
-    _Q = "quantum(" ++ string:join([binary_to_list(Nm), integer_to_list(No), "'" ++ atom_to_list(Unit) ++ "'"], ", ") ++ ")".
-
-lk_to_sql(LK) ->
-    string:join([binary_to_list(X#param_v1.name) || X <- LK#key_v1.ast], ", ").
-
-%-endif.
+-endif.
