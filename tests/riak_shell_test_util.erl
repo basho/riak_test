@@ -64,11 +64,11 @@ build_cluster() ->
 run_commands([], _State, _ShouldIncrement) ->
     pass;
 run_commands([{drain, discard} | T], State, ShouldIncrement) ->
-    {NewMsg, NewState, NewShdIncr} = riak_shell:loop_TEST(riak_shell:make_cmd(), State, ShouldIncrement),
-    lager:info("Message drained and discared unchecked ~p", [lists:flatten(NewMsg)]),
+    {_Error, Response, NewState, NewShdIncr} = riak_shell:loop_TEST(riak_shell:make_cmd(), State, ShouldIncrement),
+    lager:info("Message drained and discared unchecked ~p", [lists:flatten(Response)]),
     run_commands(T, NewState, NewShdIncr);
 run_commands([{drain, Expected} | T], State, ShouldIncrement) ->
-    {Response, NewState, NewShdIncr} = riak_shell:loop_TEST(riak_shell:make_cmd(), State, ShouldIncrement),
+    {_Error, Response, NewState, NewShdIncr} = riak_shell:loop_TEST(riak_shell:make_cmd(), State, ShouldIncrement),
     case lists:flatten(Response) of
         Expected -> lager:info("Message drained successfully ~p", [Expected]),
                     run_commands(T, NewState, NewShdIncr);
