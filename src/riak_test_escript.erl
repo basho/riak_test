@@ -151,6 +151,8 @@ main(Args) ->
                 {Offset, Workers} ->
                     TestCount = length(Tests0),
                     %% Avoid dividing by zero, computers hate that
+                    %% TODO: don't anthropomorphise the computers
+                    %% they don't like that either
                     Denominator = case Workers rem (TestCount+1) of
                                       0 -> 1;
                                       D -> D
@@ -163,7 +165,6 @@ main(Args) ->
                     TestB ++ TestA
             end,
 
-    io:format("Tests to run: ~p~n", [Tests]),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
     add_deps("deps"),
@@ -176,7 +177,7 @@ main(Args) ->
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
 
-    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
+    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {TestType, {Test, TestMetaData}} <- Tests]),
     [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) || R <- TestResults],
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
@@ -239,7 +240,7 @@ extract_test_names(Test, {CodePaths, TestNames}) ->
 
 which_tests_to_run(undefined, CommandLineTests) ->
     {Tests, NonTests} =
-        lists:partition(fun is_runnable_test/1, CommandLineTests),
+        lists:foldl(fun is_runnable/2, {[], []}, CommandLineTests),
     lager:info("These modules are not runnable tests: ~p",
                [[NTMod || {NTMod, _} <- NonTests]]),
     Tests;
@@ -247,7 +248,7 @@ which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
 which_tests_to_run(Platform, CommandLineTests) ->
     Suite = filter_zip_suite(Platform, CommandLineTests),
     {Tests, NonTests} =
-        lists:partition(fun is_runnable_test/1,
+        lists:foldl(fun is_runnable/2, {[], []},
                         lists:foldr(fun filter_merge_tests/2, [], Suite)),
 
     lager:info("These modules are not runnable tests: ~p",
@@ -282,14 +283,28 @@ filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
     end.
 
 %% Check for api compatibility
+is_runnable(TestSpec, {Tests, NotTests}) ->
+    case is_runnable_test(TestSpec) of
+        {Type, true}  -> {[{Type, TestSpec} | Tests], NotTests};
+        {Type, false} -> {Tests,                      [{Type, TestSpec} | NotTests]}
+    end.
+
 is_runnable_test({TestModule, _}) ->
     {Mod, Fun} = riak_test_runner:function_name(TestModule),
-    code:ensure_loaded(Mod),
-    erlang:function_exported(Mod, Fun, 0).
+    {module, Mod} = code:ensure_loaded(Mod),
+    %% yeah, I woulda thunk you could call beam_lib:chunks on the
+    %% Mod but it gives a posix enoent, so go figure
+    {file, File} = code:is_loaded(Mod),
+    {ok, {Mod, [{abstract_code, {raw_abstract_v1, AST}}]}} = beam_lib:chunks(File, [abstract_code]),
+    case is_common_test(AST) of
+        false -> {riak_test, erlang:function_exported(Mod, Fun, 0)};
+        true  -> {common_test, true}
+    end.
 
-run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
+run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
+    io:format("in run_test Test is ~p~n", [Test]),
     rt_cover:maybe_start(Test),
-    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData,
+    SingleTestResult = riak_test_runner:confirm(Test, TestType, Outdir, TestMetaData,
                                                 HarnessArgs),
     CoverDir = rt_config:get(cover_output, "coverage"),
     case NumTests of
@@ -429,3 +444,13 @@ so_kill_riak_maybe() ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
     end.
+
+is_common_test([]) -> 
+    false;
+is_common_test([{attribute, _, file, {File, _}} | T]) ->
+    case filename:basename(File) of
+        "ct.hrl" -> true;
+        _        -> is_common_test(T)
+    end;
+is_common_test([_H | T]) -> 
+    is_common_test(T).
