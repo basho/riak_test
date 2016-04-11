@@ -144,13 +144,13 @@ set_p2([H | T], N, Acc) ->
 make_pk([Family, Series, TS], {Unit, No}) ->
     Quantum =  [#hash_fn_v1{mod  = riak_ql_quanta,
                             fn   = quantum,
-                            args = [#param_v1{name = TS#riak_field_v1.name}, Unit, No],
+                            args = [#param_v1{name = [TS#riak_field_v1.name]}, Unit, No],
                             type = timestamp}],
-    AST = [#param_v1{name = X#riak_field_v1.name} || X <- [Family, Series]] ++ Quantum,
+    AST = [#param_v1{name = [X#riak_field_v1.name]} || X <- [Family, Series]] ++ Quantum,
     #key_v1{ast = AST}.
 
 make_lk(Key) ->
-    #key_v1{ast = [#param_v1{name = X#riak_field_v1.name} || X <- Key]}.
+    #key_v1{ast = [#param_v1{name = [X#riak_field_v1.name]} || X <- Key]}.
 
 is_valid_ddl(#ddl_v1{fields = Fs}) ->
     Fs2 = lists:sort([X#riak_field_v1.name || X <- Fs]),

@@ -49,7 +49,7 @@ prop_ts(ClusterConn) ->
 create_and_activate(ClusterConn, #ddl_v1{table = Table} = DDL) ->
     Postfix = ts_sql_eqc_util:make_timestamp(),
     Table2 = list_to_binary(binary_to_list(Table) ++ Postfix),
-    SQL = riak_ql_to_string:ddl_req_to_sql(DDL#ddl_v1{table = Table2}),
+    SQL = riak_ql_to_string:ddl_rec_to_sql(DDL#ddl_v1{table = Table2}),
     lager:info("Creating table ~p~n", [SQL]),
     {ok, _} = ts_util:create_and_activate_bucket_type(ClusterConn, SQL, Table2, 
                                                       ?DEFAULT_NVAL),
