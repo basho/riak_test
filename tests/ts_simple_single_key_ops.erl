@@ -17,6 +17,9 @@ confirm() ->
     create_table_def_3(Pid),
     delete_single_key_def_3_test(Pid),
 
+    create_table_def_4(Pid),
+    query_key_after_it_has_been_deleted_test(Pid),
+    query_key_in_range_after_it_has_been_deleted_test(Pid),
     pass.
 
 %%%
@@ -85,3 +88,33 @@ delete_single_key_def_3_test(Pid) ->
     ok,
     riakc_ts:delete(Pid, <<"table3">>, [1,2,20], [])
   ).
+
+%%%
+%%% TABLE 4
+%%%
+
+
+create_table_def_4(Pid) ->
+    ?assertEqual({[],[]}, riakc_ts:query(Pid, 
+        "CREATE TABLE table4 ("
+        "a SINT64 NOT NULL, "
+        "b SINT64 NOT NULL, "
+        "c TIMESTAMP NOT NULL, "
+        "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")),
+    ok = riakc_ts:put(Pid, <<"table4">>, [[1,2,N] || N <- lists:seq(1,50)]).
+
+%% query just the key that has been deleted
+query_key_after_it_has_been_deleted_test(Pid) ->
+    riakc_ts:delete(Pid, <<"table4">>, [1,2,4], []),
+    ?assertEqual(
+        {[],[]},
+        riakc_ts:query(Pid, "SELECT * FROM table4 WHERE a = 1 AND b = 2 AND c >= 4 AND c <= 4", [])
+    ).
+
+%% delete another key and make sure that it does not get returned in the results
+query_key_in_range_after_it_has_been_deleted_test(Pid) ->
+    riakc_ts:delete(Pid, <<"table4">>, [1,2,15], []),
+    ?assertEqual(
+        {[<<"a">>, <<"b">>, <<"c">>],[{1,2,N} || N <- lists:seq(11,19), N /= 15]},
+        riakc_ts:query(Pid, "SELECT * FROM table4 WHERE a = 1 AND b = 2 AND c > 10 AND c < 20", [])
+    ).
