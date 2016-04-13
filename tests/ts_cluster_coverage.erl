@@ -39,18 +39,13 @@ confirm() ->
     ts_util:create_table(normal, Nodes, DDL, Table),
     ok = riakc_ts:put(rt:pbc(hd(Nodes)), Table, Data),
     %% First test on a small range well within the size of a normal query
-    SmallData = lists:filter(fun([_, _, Time, _, _]) ->
+    SmallData = lists:filter(fun({_, _, Time, _, _}) ->
                                      Time < (4 * QuantumMS)
                              end, Data),
-    test_quanta_range(Table, lists_to_tuples(SmallData), Nodes, 4, QuantumMS),
+    test_quanta_range(Table, SmallData, Nodes, 4, QuantumMS),
     %% Now test the full range
-    test_quanta_range(Table, lists_to_tuples(Data), Nodes, QuantaTally, QuantumMS),
+    test_quanta_range(Table, Data, Nodes, QuantaTally, QuantumMS),
     pass.
-
-
-%% We put data with each record as a list, but in the results it's a tuple
-lists_to_tuples(Rows) ->
-    lists:map(fun erlang:list_to_tuple/1, Rows).
 
 test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
     AdminPid = rt:pbc(lists:nth(3, Nodes)),

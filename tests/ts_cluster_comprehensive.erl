@@ -96,8 +96,8 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_get(C, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
-    %% Switch to native mode and repeat a few tests
-    riakc_pb_socket:use_native_encoding(C, true),
+    %% Switch to protocol buffer mode and repeat a few tests
+    %% riakc_pb_socket:use_native_encoding(C, true),
 
     %% 5 (redux). select
     ok = confirm_select(C, PvalP1, PvalP2),
@@ -106,7 +106,7 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_get(C, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
-    riakc_pb_socket:use_native_encoding(C, false),
+    %%riakc_pb_socket:use_native_encoding(C, false),
 
     ok = confirm_delete_all(C, RemainingKeys),
     {ok, []} = confirm_list_keys(C, 0).
@@ -116,10 +116,10 @@ make_data(PvalP1, PvalP2) ->
     lists:reverse(
       lists:foldl(
         fun(T, Q) ->
-                [[PvalP1,
+                [{PvalP1,
                   PvalP2,
                   ?TIMEBASE + ?LIFESPAN - T + 1,
-                  math:sin(float(T) / 100 * math:pi())] | Q]
+                  math:sin(float(T) / 100 * math:pi())} | Q]
         end,
         [], lists:seq(?LIFESPAN, 1, -1))).
 
@@ -144,7 +144,7 @@ confirm_overwrite(C, Data) ->
     ?assertEqual(ok, Res),
     ok.
 
-confirm_delete(C, [Pooter1, Pooter2, Timepoint | _] = Record) ->
+confirm_delete(C, {Pooter1, Pooter2, Timepoint, _} = Record) ->
     ResFail = riakc_ts:delete(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Nothing deleted from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
@@ -194,7 +194,7 @@ confirm_select(C, PvalP1, PvalP2) ->
     ?assertEqual(10 - 1 - 1, length(Rows)),
     ok.
 
-confirm_get(C, Record = [Pooter1, Pooter2, Timepoint | _]) ->
+confirm_get(C, Record = {Pooter1, Pooter2, Timepoint, _}) ->
     ResFail = riakc_ts:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Got nothing from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
