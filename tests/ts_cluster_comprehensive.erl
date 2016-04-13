@@ -97,16 +97,13 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_nx_get(C),
 
     %% Switch to protocol buffer mode and repeat a few tests
-    %% riakc_pb_socket:use_native_encoding(C, true),
 
     %% 5 (redux). select
-    ok = confirm_select(C, PvalP1, PvalP2),
+    ok = confirm_select(C, PvalP1, PvalP2, [{use_ttb, false}]),
 
     %% 6 (redux). single-key get some data
-    ok = confirm_get(C, lists:nth(12, Data)),
-    ok = confirm_nx_get(C),
-
-    %%riakc_pb_socket:use_native_encoding(C, false),
+    ok = confirm_get(C, lists:nth(12, Data), [{use_ttb, false}]),
+    ok = confirm_nx_get(C, [{use_ttb, false}]),
 
     ok = confirm_delete_all(C, RemainingKeys),
     {ok, []} = confirm_list_keys(C, 0).
@@ -174,6 +171,8 @@ confirm_nx_delete(C) ->
     ok.
 
 confirm_select(C, PvalP1, PvalP2) ->
+    confirm_select(C, PvalP1, PvalP2, []).
+confirm_select(C, PvalP1, PvalP2, Options) ->
     Query =
         lists:flatten(
           io_lib:format(
@@ -186,27 +185,31 @@ confirm_select(C, PvalP1, PvalP2) ->
             ?PKEY_P2, PvalP2,
             ?PKEY_P3, ?TIMEBASE + 10, ?PKEY_P3, ?TIMEBASE + 20])),
     io:format("Running query: ~p\n", [Query]),
-    {_Columns, Rows} = riakc_ts:query(C, Query),
+    {_Columns, Rows} = riakc_ts:query(C, Query, Options),
     io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
     ?assertEqual(10 - 1 - 1, length(Rows)),
-    {_Columns, Rows} = riakc_ts:query(C, Query),
+    {_Columns, Rows} = riakc_ts:query(C, Query, Options),
     io:format("Got ~b rows back again\n", [length(Rows)]),
     ?assertEqual(10 - 1 - 1, length(Rows)),
     ok.
 
-confirm_get(C, Record = {Pooter1, Pooter2, Timepoint, _}) ->
+confirm_get(C, Record) ->
+    confirm_get(C, Record, []).
+confirm_get(C, Record = {Pooter1, Pooter2, Timepoint, _}, Options) ->
     ResFail = riakc_ts:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Got nothing from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     Key = [Pooter1, Pooter2, Timepoint],
-    Res = riakc_ts:get(C, ?BUCKET, Key, []),
+    Res = riakc_ts:get(C, ?BUCKET, Key, Options),
     io:format("Get a single record: ~p\n", [Res]),
     ?assertMatch({ok, {_, [Record]}}, Res),
     ok.
 
 confirm_nx_get(C) ->
-    Res = riakc_ts:get(C, ?BUCKET, ?BADKEY, []),
+    confirm_nx_get(C, []).
+confirm_nx_get(C, Options) ->
+    Res = riakc_ts:get(C, ?BUCKET, ?BADKEY, Options),
     io:format("Not got a nonexistent single record: ~p\n", [Res]),
     ?assertMatch({ok, {[], []}}, Res),
     ok.
