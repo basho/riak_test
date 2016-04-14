@@ -36,7 +36,7 @@ table_def_1() ->
 
 create_table_def_1(Pid) ->
     ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_1())),
-    ok = riakc_ts:put(Pid, <<"table1">>, [[1,2,N,4] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table1">>, [{1,2,N,4} || N <- lists:seq(1,200)]).
 
 delete_single_key_def_1_test(Pid) ->
     ?assertEqual(
@@ -81,7 +81,7 @@ table_def_3() ->
 
 create_table_def_3(Pid) ->
     ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_3())),
-    ok = riakc_ts:put(Pid, <<"table3">>, [[1,2,3,N,4] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table3">>, [{1,2,3,N,4} || N <- lists:seq(1,200)]).
 
 delete_single_key_def_3_test(Pid) ->
     ?assertEqual(
@@ -101,7 +101,7 @@ create_table_def_4(Pid) ->
         "b SINT64 NOT NULL, "
         "c TIMESTAMP NOT NULL, "
         "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")),
-    ok = riakc_ts:put(Pid, <<"table4">>, [[1,2,N] || N <- lists:seq(1,50)]).
+    ok = riakc_ts:put(Pid, <<"table4">>, [{1,2,N} || N <- lists:seq(1,50)]).
 
 %% query just the key that has been deleted
 query_key_after_it_has_been_deleted_test(Pid) ->

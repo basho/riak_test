@@ -54,9 +54,9 @@ verify_aggregation(ClusterType) ->
     Count = 10,
     Data = ts_util:get_valid_aggregation_data(Count),
     lager:info("Data is ~p", [Data]),
-    Column4 = [lists:nth(?TEMPERATURE_COL_INDEX, X) || X <- Data],
-    Column5 = [lists:nth(?PRESSURE_COL_INDEX, X) || X <- Data],
-    Column6 = [lists:nth(?PRECIPITATION_COL_INDEX, X) || X <- Data],
+    Column4 = [element(?TEMPERATURE_COL_INDEX, X) || X <- Data],
+    Column5 = [element(?PRESSURE_COL_INDEX, X) || X <- Data],
+    Column6 = [element(?PRECIPITATION_COL_INDEX, X) || X <- Data],
     TestType = normal,
     Bucket = "WeatherData",
 
