@@ -45,7 +45,19 @@ confirm() ->
     ts_util:create_table(normal, BNodes, DDL, Table),
 
     replication(ANodes, BNodes, list_to_binary(Table), <<"hey look ma no w1c">>),
+    test_ddl_comparison(ANodes, BNodes),
     pass.
+
+test_ddl_comparison(ANodes, BNodes) ->
+    lager:info("Testing TS realtime fails with incompatible DDLs"),
+    Table = "house_of_horrors",
+    SmallDDL = ts_util:get_ddl(small, Table),
+    BigDDL = ts_util:get_ddl(big, Table),
+    ts_util:create_table(normal, ANodes, SmallDDL, Table),
+    ts_util:create_table(normal, BNodes, BigDDL, Table),
+    LeaderA = get_leader(hd(ANodes)),
+    PortB = get_mgr_port(hd(BNodes)),
+    prop_failure_replication_test(ANodes, BNodes, LeaderA, PortB, Table).
 
 create_normal_type(Nodes, BucketType) ->
     TypeProps = [{n_val, 3}],
@@ -54,9 +66,11 @@ create_normal_type(Nodes, BucketType) ->
     rt:wait_until_bucket_type_status(BucketType, active, Nodes),
     rt:wait_until_bucket_props(Nodes, {BucketType, <<"bucket">>}, TypeProps).
 
-ts_num_records_present(Node, Lower, Upper) ->
+ts_num_records_present(Node, Lower, Upper, Table) when is_binary(Table) ->
+    ts_num_records_present(Node, Lower, Upper, unicode:characters_to_list(Table));
+ts_num_records_present(Node, Lower, Upper, Table) ->
     %% Queries use strictly greater/less than
-    Qry = ts_util:get_valid_qry(Lower-1, Upper+1),
+    Qry = ts_util:get_valid_qry(Lower-1, Upper+1, Table),
     {_Hdrs, Results} = riakc_ts:query(rt:pbc(Node), Qry),
     length(Results).
 
@@ -92,7 +106,7 @@ replication(ANodes, BNodes, Table, NormalType) ->
 
     lager:info("Writing 100 TS records to ~p (~p)", [hd(ANodes), Table]),
     ?assertEqual(ok, put_records(hd(ANodes), Table, 1, 100)),
-    ?assertEqual(100, ts_num_records_present(hd(ANodes), 1, 100)),
+    ?assertEqual(100, ts_num_records_present(hd(ANodes), 1, 100, Table)),
 
     lager:info("Testing a non-w1c bucket type (realtime)"),
     real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket),
@@ -109,13 +123,13 @@ replication(ANodes, BNodes, Table, NormalType) ->
     no_ts_real_time_replication_test(ANodes, BNodes, LeaderA, PortB, Table),
 
     lager:info("Testing all buckets with fullsync"),
-    full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS),
+    full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS, Table),
 
     lager:info("Tests passed"),
 
     fin.
 
-full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS) ->
+full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS, Table) ->
     BNode = hd(BNodes),
 
     %% Revisit data written before realtime was tested to verify that
@@ -125,7 +139,7 @@ full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInT
     lager:info("Verifying first 100 keys not present on 2nd cluster (ts bucket type, non-ts bucket)"),
     ?assertEqual(0, kv_num_objects_present(BNode, 1, 100, KVBucketInTS)),
     lager:info("Verifying first 100 TS keys not present on 2nd cluster"),
-    ?assertEqual(0, ts_num_records_present(BNode, 1, 100)),
+    ?assertEqual(0, ts_num_records_present(BNode, 1, 100, Table)),
 
     lager:info("Starting and waiting for fullsync"),
     connect_clusters(ANodes, BNodes, LeaderA, PortB),
@@ -137,7 +151,7 @@ full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInT
     lager:info("Verifying first 100 keys present on 2nd cluster (ts bucket type, non-ts bucket)"),
     ?assertEqual(100, kv_num_objects_present(BNode, 1, 100, KVBucketInTS)),
     lager:info("Verifying first 100 TS keys present on 2nd cluster"),
-    ?assertEqual(100, ts_num_records_present(BNode, 1, 100)),
+    ?assertEqual(100, ts_num_records_present(BNode, 1, 100, Table)),
     disconnect_clusters(ANodes, LeaderA, "B").
 
 real_time_replication_test(ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Bucket) ->
@@ -162,7 +176,7 @@ ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA,
     start_mdc(ANodes, LeaderA, "B", false),
 
     lager:info("Verifying none of the records on A are on B"),
-    ?assertEqual(0, ts_num_records_present(BFirst, 1, 100)),
+    ?assertEqual(0, ts_num_records_present(BFirst, 1, 100, Table)),
 
     log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify replication to Cluster B via realtime"),
     lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
@@ -172,7 +186,7 @@ ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA,
     ?assertEqual(ok, put_records(AFirst, Table, 201, 201)),
 
     lager:info("Reading 101 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
-    ?assertEqual(ok, rt:wait_until(fun() -> 101 == ts_num_records_present(BFirst, 101, 201) end)),
+    ?assertEqual(ok, rt:wait_until(fun() -> 101 == ts_num_records_present(BFirst, 101, 201, Table) end)),
 
     disconnect_clusters(ANodes, LeaderA, "B").
 
@@ -213,10 +227,27 @@ no_ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Leade
     timer:sleep(2000),
 
     lager:info("Verifying none of the new records are on B"),
-    ?assertEqual(0, ts_num_records_present(BFirst, 202, 301)),
+    ?assertEqual(0, ts_num_records_present(BFirst, 202, 301, Table)),
 
     %% "Undo" (sort of) the bucket property
     rt:pbc_set_bucket_type(rt:pbc(AFirst), Table, [{repl, both}]),
+
+    disconnect_clusters(ANodes, LeaderA, "B").
+
+%% @doc No real time replication test (incompatible DDLs)
+prop_failure_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Table) ->
+    connect_clusters(ANodes, BNodes, LeaderA, PortB),
+    start_mdc(ANodes, LeaderA, "B", false),
+
+    log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify no replication to Cluster B via realtime because DDL comparison failed"),
+    lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
+    ?assertEqual(ok, put_records(AFirst, Table, 202, 301)),
+
+    lager:info("Pausing 2 seconds"),
+    timer:sleep(2000),
+
+    lager:info("Verifying none of the new records are on B"),
+    ?assertEqual(0, ts_num_records_present(BFirst, 202, 301, Table)),
 
     disconnect_clusters(ANodes, LeaderA, "B").
 
