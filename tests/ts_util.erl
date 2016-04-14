@@ -286,7 +286,7 @@ get_valid_select_data(SeqFun) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = SeqFun(),
-    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+    [{Family, Series, X, get_varchar(), get_float()} || X <- Times].
 
 
 -define(SPANNING_STEP_BIG, (1000)).
