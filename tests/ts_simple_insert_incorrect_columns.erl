@@ -30,8 +30,8 @@ confirm() ->
     DDL = ts_util:get_ddl(),
     Table = ts_util:get_default_bucket(),
     Data = ts_util:get_valid_select_data(),
-    TooMuchData = [[<<"rubbish">> | Row] || Row <- Data],
-    TooLittleData = [lists:reverse(tl(lists:reverse(Row))) || Row <- Data],
+    TooMuchData = [list_to_tuple([<<"rubbish">> | tuple_to_list(Row)]) || Row <- Data],
+    TooLittleData = [list_to_tuple(lists:reverse(tl(lists:reverse(tuple_to_list(Row))))) || Row <- Data],
     WrongColumns = TooMuchData ++ TooLittleData,
     Columns = ts_util:get_cols(),
     Expected =

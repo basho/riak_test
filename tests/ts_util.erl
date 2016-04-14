@@ -133,7 +133,7 @@ ts_insert(Conn, Table, Columns, Data) ->
         end,
     TermFn = fun insert_term_format/2,
     ColClause = string:strip(lists:foldl(ColFn, [], Columns), right, $,),
-    ValClause = string:strip(lists:foldl(TermFn, [], Data), right, $,),
+    ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
     SQL = flat_format("INSERT INTO ~s (~s) VALUES (~s)",
                       [Table, ColClause, ValClause]),
     lager:info("~ts", [SQL]),
@@ -143,7 +143,7 @@ ts_insert(Conn, Table, Columns, Data) ->
 
 ts_insert_no_columns(Conn, Table, Data) ->
     TermFn = fun insert_term_format/2,
-    ValClause = string:strip(lists:foldl(TermFn, [], Data), right, $,),
+    ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
     SQL = flat_format("INSERT INTO ~s VALUES (~s)",
         [Table, ValClause]),
     lager:info("~ts", [SQL]),
@@ -295,7 +295,7 @@ get_valid_big_data(N) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, N),
-    [[
+    [{
         Family,
         Series,
         1 + N * ?SPANNING_STEP_BIG,
@@ -304,25 +304,25 @@ get_valid_big_data(N) ->
         get_bool(X),
         N + 100000,
         get_optional(X, X)
-    ] || X <- Times].
+    } || X <- Times].
 
 get_valid_aggregation_data(N) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, N),
-    [[Family, Series, X,
+    [{Family, Series, X,
       get_optional(X, get_float()),
       get_optional(X+1, get_float()),
-      get_optional(X*3, get_float())] || X <- Times].
+      get_optional(X*3, get_float())} || X <- Times].
 
 get_valid_aggregation_data_not_null(N) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, N),
-    [[Family, Series, X,
+    [{Family, Series, X,
       get_float(),
       get_float(),
-      get_float()] || X <- Times].
+      get_float()} || X <- Times].
 
 -define(SPANNING_STEP, (1000*60*5)).
 
@@ -338,7 +338,7 @@ get_valid_select_data_spanning_quanta() ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1 + ?SPANNING_STEP, 1 + ?SPANNING_STEP * 10, ?SPANNING_STEP),  %% five-minute intervals, to span 15-min buckets
-    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+    [{Family, Series, X, get_varchar(), get_float()} || X <- Times].
 
 get_cols() ->
     get_cols(small).
@@ -357,12 +357,13 @@ get_cols(api) ->
      <<"myfloat">>,
      <<"mybool">>].
 
+
 exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
                                                      is_integer(Finish)  andalso
                                                      Start  > 0          andalso
                                                      Finish > 0          andalso
                                                      Finish > Start ->
-    [list_to_tuple(X) || X <- lists:sublist(Data, Start, Finish - Start + 1)].
+    lists:sublist(Data, Start, Finish - Start + 1).
 
 remove_last(Data) ->
     lists:reverse(tl(lists:reverse(Data))).
@@ -425,10 +426,10 @@ get_ddl(aggregration) ->
 
 
 get_data(api) ->
-    [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]] ++
-    [[<<"family1">>, <<"seriesX">>, 200, 2, <<"test2">>, 2.0, false]] ++
-    [[<<"family1">>, <<"seriesX">>, 300, 3, <<"test3">>, 3.0, true]] ++
-    [[<<"family1">>, <<"seriesX">>, 400, 4, <<"test4">>, 4.0, false]].
+    [{<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true}] ++
+    [{<<"family1">>, <<"seriesX">>, 200, 2, <<"test2">>, 2.0, false}] ++
+    [{<<"family1">>, <<"seriesX">>, 300, 3, <<"test3">>, 3.0, true}] ++
+    [{<<"family1">>, <<"seriesX">>, 400, 4, <<"test4">>, 4.0, false}].
 
 get_map(api) ->
     [{<<"myfamily">>, 1},
@@ -441,32 +442,32 @@ get_map(api) ->
 
 
 get_valid_obj() ->
-    [get_varchar(),
+    {get_varchar(),
      get_varchar(),
      get_timestamp(),
      get_varchar(),
-     get_float()].
+     get_float()}.
 
 get_invalid_obj() ->
-    [get_varchar(),
+    {get_varchar(),
      get_integer(),   % this is the duff field
      get_timestamp(),
      get_varchar(),
-     get_float()].
+     get_float()}.
 
 get_short_obj() ->
-    [get_varchar(),
+    {get_varchar(),
         get_varchar(),
         get_timestamp(),
-        get_varchar()].
+        get_varchar()}.
 
 get_long_obj() ->
-    [get_varchar(),
+    {get_varchar(),
         get_varchar(),
         get_timestamp(),
         get_varchar(),
         get_float(),
-        get_float()].
+        get_float()}.
 
 get_varchar() ->
     Len = random:uniform(?MAXVARCHARLEN),
