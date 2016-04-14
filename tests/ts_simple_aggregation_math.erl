@@ -30,9 +30,9 @@ confirm() ->
     DDL = ts_util:get_ddl(aggregration),
     Count = 10,
     Data = ts_util:get_valid_aggregation_data_not_null(Count),
-    Column4 = [lists:nth(4, X) || X <- Data],
-    Column5 = [lists:nth(5, X) || X <- Data],
-    Column6 = [lists:nth(6, X) || X <- Data],
+    Column4 = [element(4, X) || X <- Data],
+    Column5 = [element(5, X) || X <- Data],
+    Column6 = [element(6, X) || X <- Data],
     TestType = normal,
     Bucket = "WeatherData",
 

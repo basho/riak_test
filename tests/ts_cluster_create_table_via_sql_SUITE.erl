@@ -88,10 +88,12 @@ describe_test(Ctx) ->
 
 get_put_data_test(Ctx) ->
     C = client_pid(Ctx),
-    Data = [[<<"a">>, <<"b">>, 10101010, <<"not bad">>, 42.24]],
+    Data = [{<<"a">>, <<"b">>, 10101010, <<"not bad">>, 42.24}],
     Key = [<<"a">>, <<"b">>, 10101010],
     ?assertMatch(ok, riakc_ts:put(C, ts_util:get_default_bucket(), Data)),
-    ?assertMatch({ok, {_, Data}}, riakc_ts:get(C, ts_util:get_default_bucket(), Key, [])),
+    Got = riakc_ts:get(C, ts_util:get_default_bucket(), Key, []),
+    lager:info("get_put_data_test Got ~p", [Got]),
+    ?assertMatch({ok, {_, Data}}, Got),
     pass.
 
 get_set_property_test(Ctx) ->
