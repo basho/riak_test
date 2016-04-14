@@ -720,3 +720,23 @@ all_timestamps_single_quanta_test(Ctx) ->
         {rt_ignore_columns,Results},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
+
+%%%
+%%%
+%%%
+
+partition_key_appears_twice_test(Ctx) ->
+    ts_util:assert_row_sets({[],[]},riakc_ts:query(client_pid(Ctx), 
+        "CREATE TABLE table1 ("
+        "a SINT64 NOT NULL, "
+        "c TIMESTAMP NOT NULL, "
+        "PRIMARY KEY  ((a,c,quantum(c, 1, 's')), a,c,c))")),
+    ok = riakc_ts:put(client_pid(Ctx), <<"table1">>, [[1,N] || N <- lists:seq(1,3000)]),
+    Query =
+        "SELECT * FROM table1 WHERE a = 1 AND c > 0 AND c < 11",
+    Results =
+         [{1,N} || N <- lists:seq(1,10)],
+    ts_util:assert_row_sets(
+        {column_names_def_1(), Results},
+        riakc_ts:query(client_pid(Ctx), Query)
+    ).
