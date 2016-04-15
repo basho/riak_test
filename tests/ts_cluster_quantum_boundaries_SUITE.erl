@@ -65,7 +65,7 @@ all() ->
 
 create_data_def_1(Pid) ->
     ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_1())),
-    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N] || N <- lists:seq(1,10000)]).
+    ok = riakc_ts:put(Pid, <<"table1">>, [{1,1,N} || N <- lists:seq(1,10000)]).
 
 column_names_def_1() ->
     [<<"a">>, <<"b">>, <<"c">>].

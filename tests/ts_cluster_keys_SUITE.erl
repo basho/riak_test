@@ -81,7 +81,7 @@ client_pid(Ctx) ->
 
 create_data_def_1(Pid) ->
     ts_util:assert_row_sets({[],[]},riakc_ts:query(Pid, table_def_1())),
-    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,6000)]).
+    ok = riakc_ts:put(Pid, <<"table1">>, [{1,1,N,1} || N <- lists:seq(1,6000)]).
 
 column_names_def_1() ->
     [<<"a">>, <<"b">>, <<"c">>, <<"d">>].
@@ -178,7 +178,7 @@ where_clause_must_cover_the_partition_key_missing_c_test(Ctx) ->
 
 create_data_def_2(Pid) ->
     ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_2())),
-    ok = riakc_ts:put(Pid, <<"table2">>, [[N,1,1,1] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table2">>, [{N,1,1,1} || N <- lists:seq(1,200)]).
 
 table_def_2() ->
     "CREATE TABLE table2 ("
@@ -214,7 +214,7 @@ select_inclusive_def_2_test(Ctx) ->
 
 create_data_def_3(Pid) ->
     ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_3())),
-    ok = riakc_ts:put(Pid, <<"table3">>, [[1,N] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table3">>, [{1,N} || N <- lists:seq(1,200)]).
 
 column_names_def_3() ->
     [<<"a">>, <<"b">>].
@@ -252,7 +252,7 @@ select_inclusive_def_3_test(Ctx) ->
 
 create_data_def_4(Pid) ->
     ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_4())),
-    ok = riakc_ts:put(Pid, <<"table4">>, [[1,1,N] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table4">>, [{1,1,N} || N <- lists:seq(1,200)]).
 
 column_names_def_4() ->
     [<<"a">>, <<"b">>, <<"c">>].
@@ -300,7 +300,7 @@ table_def_5() ->
 
 create_data_def_5(Pid) ->
     ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_5())),
-    ok = riakc_ts:put(Pid, <<"table5">>, [[1,1,N] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table5">>, [{1,1,N} || N <- lists:seq(1,200)]).
 
 select_def_5_test(Ctx) ->
     Query =
@@ -324,7 +324,7 @@ table_def_6() ->
 
 create_data_def_6(Pid) ->
     ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_6())),
-    ok = riakc_ts:put(Pid, <<"table6">>, [[1,N,1,<<"table6">>] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table6">>, [{1,N,1,<<"table6">>} || N <- lists:seq(1,200)]).
 
 select_def_6_test(Ctx) ->
     Query =
@@ -350,7 +350,7 @@ table_def_7() ->
 
 create_data_def_7(Pid) ->
     ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_7())),
-    ok = riakc_ts:put(Pid, <<"table7">>, [[N,1,1,<<"table7">>] || N <- lists:seq(1,200)]).
+    ok = riakc_ts:put(Pid, <<"table7">>, [{N,1,1,<<"table7">>} || N <- lists:seq(1,200)]).
 
 select_exclusive_def_7_test(Ctx) ->
     Query =
@@ -387,7 +387,7 @@ create_data_def_8(Pid) ->
             "d SINT64 NOT NULL, "
             "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c,d))"
     )),
-    ok = riakc_ts:put(Pid, <<"table8">>, [[1,1,N,N] || N <- lists:seq(1,6000)]).
+    ok = riakc_ts:put(Pid, <<"table8">>, [{1,1,N,N} || N <- lists:seq(1,6000)]).
 
 d_equal_than_filter_test(Ctx) ->
     Query =
@@ -513,7 +513,7 @@ double_pk_double_boolean_lk_test(Ctx) ->
     )),
     Doubles = [N * 0.1 || N <- lists:seq(1,100)],
     ok = riakc_ts:put(client_pid(Ctx), <<"double_pk_double_boolean_lk_test">>,
-        [[F,B] || F <- Doubles, B <- [true,false]]),
+        [{F,B} || F <- Doubles, B <- [true,false]]),
     Query =
         "SELECT * FROM double_pk_double_boolean_lk_test "
         "WHERE a = 0.5 AND b = true",
@@ -533,7 +533,7 @@ boolean_pk_boolean_double_lk_test(Ctx) ->
     )),
     Doubles = [N * 0.1 || N <- lists:seq(1,100)],
     ok = riakc_ts:put(client_pid(Ctx), <<"boolean_pk_boolean_double_lk_test">>,
-        [[B,F] || F <- Doubles, B <- [true,false]]),
+        [{B,F} || F <- Doubles, B <- [true,false]]),
     Query =
         "SELECT * FROM boolean_pk_boolean_double_lk_test "
         "WHERE a = false AND b = 0.5",
@@ -573,7 +573,7 @@ all_types_create_data(Pid) ->
     K = <<"k">>,
     L = 1,
     ok = riakc_ts:put(Pid, <<"all_types">>,
-        [[A,B,C,D,E,F,G,H,I,J,K,L] || A <- Varchars,   B <- Timestamps,
+        [{A,B,C,D,E,F,G,H,I,J,K,L} || A <- Varchars,   B <- Timestamps,
                                       C <- Sint64s,    D <- Booleans,
                                       E <- Doubles,    F <- Varchars,
                                       G <- Timestamps,
@@ -637,7 +637,7 @@ all_booleans_create_data(Pid) ->
             "PRIMARY KEY  ((a,b,c), a,b,c,d,e,f,g))"
     )),
     ok = riakc_ts:put(Pid, <<"all_booleans">>,
-        [[Ba,Bb,Bc,Bd,Be,Bf,Bg] || Ba <- ts_booleans(),
+        [{Ba,Bb,Bc,Bd,Be,Bf,Bg} || Ba <- ts_booleans(),
                                    Bb <- ts_booleans(), Bc <- ts_booleans(),
                                    Bd <- ts_booleans(), Be <- ts_booleans(),
                                    Bf <- ts_booleans(), Bg <- ts_booleans()]).
@@ -697,7 +697,7 @@ all_timestamps_create_data(Pid) ->
             "PRIMARY KEY  ((a,quantum(b,15,s),c), a,b,c,d,e))"
     )),
     ok = riakc_ts:put(Pid, <<"all_timestamps">>,
-        [[A,B,3,4,5] || A <- [1,2,3], B <- lists:seq(100, 10000, 100)]).
+        [{A,B,3,4,5} || A <- [1,2,3], B <- lists:seq(100, 10000, 100)]).
 
 all_timestamps_across_quanta_test(Ctx) ->
     Query =
@@ -718,25 +718,5 @@ all_timestamps_single_quanta_test(Ctx) ->
         [{2,B,3,4,5} || B <- lists:seq(300, 900, 100)],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
-        riakc_ts:query(client_pid(Ctx), Query)
-    ).
-
-%%%
-%%%
-%%%
-
-partition_key_appears_twice_test(Ctx) ->
-    ts_util:assert_row_sets({[],[]},riakc_ts:query(client_pid(Ctx), 
-        "CREATE TABLE table1 ("
-        "a SINT64 NOT NULL, "
-        "c TIMESTAMP NOT NULL, "
-        "PRIMARY KEY  ((a,c,quantum(c, 1, 's')), a,c,c))")),
-    ok = riakc_ts:put(client_pid(Ctx), <<"table1">>, [[1,N] || N <- lists:seq(1,3000)]),
-    Query =
-        "SELECT * FROM table1 WHERE a = 1 AND c > 0 AND c < 11",
-    Results =
-         [{1,N} || N <- lists:seq(1,10)],
-    ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
