@@ -58,7 +58,7 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                                          range=TsRange}, Acc) ->
                             {ok, Pid} = riakc_pb_socket:start_link(binary_to_list(IP),
                                                                    Port),
-                            {_, ThisQuantum} = riakc_ts:query(Pid, Qry, [], C),
+                            {ok, {_, ThisQuantum}} = riakc_ts:query(Pid, Qry, [], C),
                             riakc_pb_socket:stop(Pid),
 
                             %% Open a connection to another node and
@@ -66,7 +66,7 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                             %% this cover context
                             {ok, WrongPid} = riakc_pb_socket:start_link(binary_to_list(IP),
                                                                         alternate_port(Port)),
-                            ?assertEqual({[], []},
+                            ?assertEqual({ok, {[], []}},
                                          riakc_ts:query(WrongPid, Qry, [], C)),
                             riakc_pb_socket:stop(WrongPid),
 
@@ -86,7 +86,7 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
         true ->
             ?assertMatch({error, {1001, _}}, riakc_ts:query(OtherPid, Qry));
         false ->
-            {_, StraightQueryResults} = riakc_ts:query(OtherPid, Qry),
+            {ok, {_, StraightQueryResults}} = riakc_ts:query(OtherPid, Qry),
             ?assertEqual(lists:sort(ExpectedData), lists:sort(StraightQueryResults))
     end.
 
