@@ -27,6 +27,7 @@
     assert/3,
     assert_error_regex/3,
     assert_float/3,
+    assert_row_sets/2,
     build_cluster/1,
     cluster_and_connect/1,
     create_and_activate_bucket_type/2,
@@ -544,6 +545,47 @@ assert_error_regex_result(nomatch, String, Expected, Got) ->
     assert(String, Expected, Got);
 assert_error_regex_result(_, _String, _Expected, _Got) ->
     pass.
+
+%% If `ColExpected' is the atom `rt_ignore_columns' then do not assert columns.
+assert_row_sets(_, {error,_} = Error) ->
+    ct:fail(Error);
+assert_row_sets({ColExpected, Expected}, {ColsActual,Actual}) ->
+    case ColExpected of
+        rt_ignore_columns ->
+            ok;
+        _ ->
+            ?assertEqual(ColExpected,ColsActual)
+    end,
+    case tdiff:diff(Expected, Actual) of
+        [{eq,_}] ->
+            pass;
+        [] ->
+            pass;
+        Diff ->
+            ct:pal("ROW DIFF~n" ++ format_diff(0, Diff)),
+            ct:fail(row_set_mismatch)
+    end.
+
+%%
+format_diff(EqCount,[]) ->
+    format_diff_eq_count(EqCount);
+format_diff(EqCount,[{eq,Rows}|Tail]) ->
+    format_diff(EqCount+length(Rows), Tail);
+format_diff(EqCount,[{Type, Row}|Tail]) ->
+    Fmt = io_lib:format("~s~s ~p~n",
+        [format_diff_eq_count(EqCount), format_diff_type(Type), Row]),
+    [Fmt | format_diff(0, Tail)].
+
+%%
+format_diff_type(del) -> "-";
+format_diff_type(ins) -> "+".
+
+%%
+format_diff_eq_count(0) ->
+    "";
+format_diff_eq_count(Count) ->
+    [lists:duplicate(Count, $.), $\n].
+
 
 results(Results) ->
     Expected = lists:duplicate(length(Results), pass),

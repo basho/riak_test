@@ -24,4 +24,4 @@ dialyzer_unhandled_warnings
 dialyzer_warnings
 .idea
 riak_test.iml
-
+variables-riak_test@127.0.0.1
