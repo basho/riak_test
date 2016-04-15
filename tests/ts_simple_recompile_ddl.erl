@@ -39,6 +39,7 @@ confirm() ->
     rt:stop(Node),
     simulate_old_dets_entries(),
     rt:start(Node),
+    rt:wait_until_nodes_ready(Cluster),
     verify_resulting_dets_entries(),
     pass.
 
