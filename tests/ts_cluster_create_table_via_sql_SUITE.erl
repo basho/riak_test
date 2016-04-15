@@ -70,7 +70,7 @@ create_test(Ctx) ->
            enquote_varchar(?PROP_NO_QUOTES),
            enquote_varchar(?PROP_WITH_QUOTES)]),
     Got1 = riakc_ts:query(C, GoodDDL),
-    ?assertEqual({[],[]}, Got1),
+    ?assertEqual({ok, {[],[]}}, Got1),
     pass.
 
 re_create_fail_test(Ctx) ->
@@ -127,12 +127,12 @@ ddl_common() ->
     ts_util:get_ddl(small).
 
 table_described() ->
-    {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
+    {ok, {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
      [{<<"myfamily">>,   <<"varchar">>,   false,  1,  1},
       {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
       {<<"time">>,       <<"timestamp">>, false,  3,  3},
       {<<"weather">>,    <<"varchar">>,   false, [], []},
-      {<<"temperature">>,<<"double">>,    true,  [], []}]}.
+      {<<"temperature">>,<<"double">>,    true,  [], []}]}}.
 
 enquote_varchar(P) when is_binary(P) ->
     re:replace(P, "'", "''", [global, {return, binary}]);

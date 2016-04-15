@@ -549,13 +549,13 @@ assert_error_regex_result(_, _String, _Expected, _Got) ->
 %% If `ColExpected' is the atom `rt_ignore_columns' then do not assert columns.
 assert_row_sets(_, {error,_} = Error) ->
     ct:fail(Error);
-assert_row_sets({ColExpected, Expected}, {ColsActual,Actual}) ->
-    case ColExpected of
-        rt_ignore_columns ->
-            ok;
-        _ ->
-            ?assertEqual(ColExpected,ColsActual)
-    end,
+assert_row_sets({rt_ignore_columns, Expected}, {_, {_, Actual}}) ->
+    ct_verify_rows(Expected, Actual);
+assert_row_sets({_, {ColExpected, Expected}}, {_, {ColsActual, Actual}}) ->
+    ?assertEqual(ColExpected, ColsActual),
+    ct_verify_rows(Expected, Actual).
+
+ct_verify_rows(Expected, Actual) ->
     case tdiff:diff(Expected, Actual) of
         [{eq,_}] ->
             pass;

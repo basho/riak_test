@@ -45,12 +45,12 @@ confirm() ->
                    [ts_util:ts_insert(Conn, Table, Columns, Datum) | Acc]
                end,
     Got1 = lists:reverse(lists:foldl(Insert1Fn, [], Data1)),
-    Expected1 = lists:duplicate(10, {[],[]}),
+    Expected1 = lists:duplicate(10, {ok,{[],[]}}),
     Result1 = ts_util:assert("Insert With Columns", Expected1, Got1),
 
     Qry2 = "select * from GeoCheckin Where time >= 1 and time <= 10 and myfamily = 'family1' and myseries ='seriesX'",
     Got2 = ts_util:single_query(Conn, Qry2),
-    Expected2 = {Columns, ts_util:exclusive_result_from_data(Data1, 1, 10)},
+    Expected2 = {ok, {Columns, ts_util:exclusive_result_from_data(Data1, 1, 10)}},
     Result2 = ts_util:assert("Insert With Columns (results)", Expected2, Got2),
 
     Data3 = ts_util:get_valid_select_data(fun() -> lists:seq(11, 20) end),
@@ -62,7 +62,7 @@ confirm() ->
 
     Qry4 = "select * from GeoCheckin Where time >= 11 and time <= 20 and myfamily = 'family1' and myseries ='seriesX'",
     Got4 = ts_util:single_query(Conn, Qry4),
-    Expected4 = {Columns, ts_util:exclusive_result_from_data(Data3, 1, 10)},
+    Expected4 = {ok, {Columns, ts_util:exclusive_result_from_data(Data3, 1, 10)}},
     Result4 = ts_util:assert("Insert Without Columns (results)", Expected4, Got4),
 
     ts_util:results([

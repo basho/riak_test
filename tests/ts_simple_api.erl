@@ -112,7 +112,7 @@ confirm_NeqOps(C) ->
 
 confirm_pass(C, Qry, Expected) ->
     Got = ts_util:single_query(C, Qry),
-    {_Cols, Records} = Got,
+    {ok, {_Cols, Records}} = Got,
     N = length(Records),
     ?assertEqual(Expected, Got),
     ?assert(N > 0).
@@ -183,9 +183,9 @@ expected(Type, Data, Fields, CompVals, CompFn) ->
     Records = recordsMatching(Type, Data, Fields, CompVals, CompFn),
     case Records of
         [] ->
-            {[],[]};
+            {ok, {[],[]}};
         _ ->
-            {ts_util:get_cols(Type), Records}
+            {ok, {ts_util:get_cols(Type), Records}}
     end.
 
 %------------------------------------------------------------
