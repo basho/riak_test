@@ -46,7 +46,7 @@ test_name(ClusterType, Name) ->
   lists:flatten(io_lib:format("~p:~p", [atom_to_list(ClusterType), Name])).
 
 verify_aggregation(ClusterType) ->
-    DDL = ts_util:get_ddl(aggregration),
+    DDL = ts_util:get_ddl(aggregation),
     lager:info("DDL is ~p", [DDL]),
 
     {Cluster, Conn} = ts_util:cluster_and_connect(ClusterType),

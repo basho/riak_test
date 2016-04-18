@@ -42,7 +42,7 @@
     get_bool/1,
     get_cols/0, get_cols/1,
     get_data/1,
-    get_ddl/0, get_ddl/1,
+    get_ddl/0, get_ddl/1, get_ddl/2,
     get_default_bucket/0,
     get_float/0,
     get_integer/0,
@@ -67,6 +67,7 @@
     remove_last/1,
     results/1,
     single_query/2,
+    single_query/3,
     ts_get/6,
     ts_get/7,
     ts_insert/4,
@@ -118,8 +119,11 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
     single_query(Conn, Qry).
 
 single_query(Conn, Qry) ->
+    single_query(Conn, Qry, []).
+
+single_query(Conn, Qry, Opts) ->
     lager:info("3 - Now run the query ~ts", [Qry]),
-    Got = riakc_ts:query(Conn, Qry),
+    Got = riakc_ts:query(Conn, Qry, Opts),
     lager:info("Result is ~p", [Got]),
     Got.
 
@@ -370,10 +374,13 @@ remove_last(Data) ->
     lists:reverse(tl(lists:reverse(Data))).
 
 %% a valid DDL - the one used in the documents
-get_ddl() ->
-    get_ddl(small).
-get_ddl(small) ->
-    "CREATE TABLE GeoCheckin ("
+get_ddl() -> get_ddl(small).
+
+get_ddl(aggregation) -> get_ddl(aggregation, "WeatherData");
+get_ddl(Type)        -> get_ddl(Type, "GeoCheckin").
+
+get_ddl(small, TableName) when is_list(TableName) ->
+    "CREATE TABLE " ++ TableName ++ " ("
     " myfamily    varchar   not null,"
     " myseries    varchar   not null,"
     " time        timestamp not null,"
@@ -384,8 +391,8 @@ get_ddl(small) ->
 
 %% another valid DDL - one with all the good stuff like
 %% different types and optional blah-blah
-get_ddl(big) ->
-    "CREATE TABLE GeoCheckin ("
+get_ddl(big, TableName) when is_list(TableName) ->
+    "CREATE TABLE " ++ TableName ++ " ("
     " myfamily    varchar     not null,"
     " myseries    varchar     not null,"
     " time        timestamp   not null,"
@@ -401,8 +408,8 @@ get_ddl(big) ->
 %% in a corresponding ts_A_create_*_fail module, have been moved to
 %% those respective modules
 
-get_ddl(api) ->
-    "CREATE TABLE GeoCheckin ("
+get_ddl(api, TableName) when is_list(TableName) ->
+    "CREATE TABLE " ++ TableName ++ " ("
     " myfamily    varchar     not null,"
     " myseries    varchar     not null,"
     " time        timestamp   not null,"
@@ -413,9 +420,9 @@ get_ddl(api) ->
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
     " myfamily, myseries, time))";
 
-%% DDL for testing aggregration behavior
-get_ddl(aggregration) ->
-    "CREATE TABLE WeatherData ("
+%% DDL for testing aggregation behavior
+get_ddl(aggregation, TableName) when is_list(TableName) ->
+    "CREATE TABLE " ++ TableName ++ " ("
     " myfamily      varchar   not null,"
     " myseries      varchar   not null,"
     " time          timestamp not null,"
@@ -424,7 +431,6 @@ get_ddl(aggregration) ->
     " precipitation double,"
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 10, 'm')), "
     " myfamily, myseries, time))".
-
 
 get_data(api) ->
     [{<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true}] ++
@@ -506,7 +512,7 @@ get_optional(N, X) ->
 
 -define(DELTA, 1.0e-10).
 
-assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
+assert_float(String, {ok, {Cols, [ValsA]}} = Exp, {_, {Cols, [ValsB]}} = Got) ->
     case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
         fail -> lager:info("*****************", []),
             lager:info("Test ~p failed", [String]),
