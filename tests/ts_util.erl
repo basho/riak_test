@@ -504,7 +504,7 @@ get_optional(N, X) ->
     end.
 
 
--define(DELTA, 1.0e-10).
+-define(DELTA, 1.0e-15).
 
 assert_float(String, {_, {Cols, [ValsA]}} = Exp, {_, {Cols, [ValsB]}} = Got) ->
     case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
