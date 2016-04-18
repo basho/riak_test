@@ -506,7 +506,7 @@ get_optional(N, X) ->
 
 -define(DELTA, 1.0e-10).
 
-assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
+assert_float(String, {_, {Cols, [ValsA]}} = Exp, {_, {Cols, [ValsB]}} = Got) ->
     case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
         fail -> lager:info("*****************", []),
             lager:info("Test ~p failed", [String]),
@@ -523,7 +523,7 @@ assertf2([H1 | T1], [H2 | T2]) ->
     Diff = H1 - H2,
     Av = (H1 + H2)/2,
     if Diff/Av > ?DELTA -> fail;
-        el/=se           -> assertf2(T1, T2)
+        el/=se          -> assertf2(T1, T2)
     end.
 
 assert(_,      X,   X)   -> pass;
