@@ -147,7 +147,7 @@ verify_aggregation(ClusterType) ->
     Expected9 = {ok, {[<<"STDDEV_POP(temperature)">>, <<"STDDEV_POP(pressure)">>,
                   <<"STDDEV(temperature)">>, <<"STDDEV(pressure)">>,
                   <<"STDDEV_SAMP(temperature)">>, <<"STDDEV_SAMP(pressure)">>],
-                 [{StdDev4, StdDev5, StdDev4, StdDev5, Sample4, Sample5}]}},
+                 [{StdDev4, StdDev5, Sample4, Sample5, Sample4, Sample5}]}},
     Result9 = ts_util:assert_float(test_name(ClusterType, "Standard Deviation"), Expected9, Got9),
 
     Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ Bucket ++ Where,
