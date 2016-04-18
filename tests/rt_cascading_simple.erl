@@ -21,8 +21,8 @@
 %% | beginning | -> | middle | -> | end |
 %% +-----------+    +--------+    +-----+
 %% -------------------------------------------------------------------
-
 -module(rt_cascading_simple).
+-behavior(riak_test).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -37,6 +37,9 @@
 -define(bucket, <<"objects">>).
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+
     State = simple_setup(),
     simple_tests(State),
     pass.

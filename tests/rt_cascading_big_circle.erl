@@ -1,13 +1,47 @@
-%%%-------------------------------------------------------------------
-%%% @author doug
-%%% @copyright (C) 2016, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 14. Apr 2016 2:13 PM
-%%%-------------------------------------------------------------------
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% Topology for this cascading replication test:
+%%     +---+
+%%     | 1 |
+%%     +---+
+%%     ^   ^
+%%    /     \
+%%   V       V
+%% +---+   +---+
+%% | 6 |   | 2 |
+%% +---+   +---+
+%%   ^       ^
+%%   |       |
+%%   V       V
+%% +---+   +---+
+%% | 5 |   | 3 |
+%% +---+   +---+
+%%     ^   ^
+%%      \ /
+%%       V
+%%     +---+
+%%     | 4 |
+%%     +---+
+%% -------------------------------------------------------------------
+
 -module(rt_cascading_big_circle).
--author("doug").
+-behavior(riak_test).
 
 %% API
 -export([confirm/0]).
@@ -15,6 +49,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+    %% test requires allow_mult=false b/c of rt:systest_read
+    rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
+
     State = big_circle_setup(),
     _ = big_circle_tests(State),
     pass.
@@ -41,27 +78,7 @@ big_circle_setup() ->
 big_circle_tests(Nodes) ->
     % Initally just 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 1, but then 2 way is
     % added later.
-    %     +---+
-    %     | 1 |
-    %     +---+
-    %     ^   ^
-    %    /     \
-    %   V       V
-    % +---+   +---+
-    % | 6 |   | 2 |
-    % +---+   +---+
-    %   ^       ^
-    %   |       |
-    %   V       V
-    % +---+   +---+
-    % | 5 |   | 3 |
-    % +---+   +---+
-    %     ^   ^
-    %      \ /
-    %       V
-    %     +---+
-    %     | 4 |
-    %     +---+
+
     Tests = [
 
         {"circle it", fun() ->
