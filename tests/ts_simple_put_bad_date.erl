@@ -30,11 +30,11 @@ confirm() ->
     TestType = normal,
     DDL = ts_util:get_ddl(),
     Obj =
-        [[ts_util:get_varchar(),
+        [{ts_util:get_varchar(),
           ts_util:get_varchar(),
           <<"abc">>,
           ts_util:get_varchar(),
-          ts_util:get_float()]],
+          ts_util:get_float()}],
     Expected = {error, {1003, <<"Invalid data found at row index(es) 1">>}},
     Got = ts_util:ts_put(
             ts_util:cluster_and_connect(single), TestType, DDL, Obj),

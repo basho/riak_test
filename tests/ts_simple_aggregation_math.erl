@@ -74,7 +74,7 @@ confirm() ->
 div_by_zero_test(Conn, Bucket, Where) ->
     Query = "SELECT 5 / 0 FROM " ++ Bucket ++ Where,
     ?assertEqual(
-        {error,{1001,<<"divide_by_zero">>}},
+        {error,{1001,<<"Divide by zero">>}},
         ts_util:single_query(Conn, Query)
     ).
 
@@ -82,7 +82,7 @@ div_by_zero_test(Conn, Bucket, Where) ->
 div_aggregate_function_by_zero_test(Conn, Bucket, Where) ->
     Query = "SELECT COUNT(*) / 0 FROM " ++ Bucket ++ Where,
     ?assertEqual(
-        {error,{1001,<<"divide_by_zero">>}},
+        {error,{1001,<<"Divide by zero">>}},
         ts_util:single_query(Conn, Query)
     ).
 

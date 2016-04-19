@@ -87,4 +87,4 @@ where() ->
     "AND time >= 1 AND time <= 10 ".
 
 error_divide_by_zero() ->
-    {error,{1001,<<"divide_by_zero">>}}.
+    {error,{1001,<<"Divide by zero">>}}.
