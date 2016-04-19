@@ -48,6 +48,7 @@ init_per_suite(Config) ->
     all_booleans_create_data(Pid),
     all_timestamps_create_data(Pid),
     all_types_create_data(Pid),
+    create_data_def_levon(Pid),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -721,5 +722,25 @@ all_timestamps_single_quanta_test(Ctx) ->
         [{2,B,3,4,5} || B <- lists:seq(300, 900, 100)],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
+        run_query(Ctx, Query)
+    ).
+
+%%%
+%%%
+%%%
+
+create_data_def_levon(Pid) ->
+    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid,
+        "create table Levon (a varchar not null, b timestamp not null, Primary key ((a, quantum(b, 3, 'h')), a, b));")),
+    ok = riakc_ts:put(Pid, <<"Levon">>, [{<<"a1">>,555}]).
+
+column_names_def_levon() ->
+    [<<"a">>, <<"b">>].
+
+select_from_def_levon_test(Ctx) ->
+    Query =
+        "select * from Levon where a = 'a1' and b > 500 and b < 600;",
+    ?assertEqual(
+        {ok, {column_names_def_levon(), [{<<"a1">>,555}]}},
         run_query(Ctx, Query)
     ).
