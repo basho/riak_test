@@ -34,8 +34,8 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    [_Node|_] = Cluster = ts_util:build_cluster(single),
-    rt:wait_until_nodes_ready(Cluster),
+    [Node|_] = Cluster = ts_util:build_cluster(single),
+    rt:wait_for_service(Node, riak_kv),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
