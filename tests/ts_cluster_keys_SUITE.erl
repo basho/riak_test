@@ -729,10 +729,13 @@ all_timestamps_single_quanta_test(Ctx) ->
 %%%
 %%%
 
+
+
 create_data_def_levon(Pid) ->
     ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid,
-        "create table Levon (a varchar not null, b timestamp not null, Primary key ((a, quantum(b, 3, 'h')), a, b));")),
-    ok = riakc_ts:put(Pid, <<"Levon">>, [{<<"a1">>,555}]).
+        "create table Levon (a VARCHAR not null, b timestamp not null, Primary key ((a, quantum(b, 3, 'h')), a, b));")),
+    ok = riakc_ts:put(Pid, <<"Levon">>, [{<<"a1">>,555} ]),
+    ok = riakc_ts:put(Pid, <<"Levon">>, [{<<"a1">>,556} ]).
 
 column_names_def_levon() ->
     [<<"a">>, <<"b">>].
