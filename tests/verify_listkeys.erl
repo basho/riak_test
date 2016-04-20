@@ -29,7 +29,8 @@
 -define(UNDEFINED_BUCKET_TYPE,  <<"880bf69d-5dab-44ee-8762-d24c6f759ce1">>).
 
 confirm() ->
-    [Node1, Node2, Node3, Node4] = Nodes = rt:deploy_nodes(4),
+    NewConfig = [{riak_core, [{handoff_concurrency, 1024}]}],
+    [Node1, Node2, Node3, Node4, Node5] = Nodes = rt:deploy_nodes(5, NewConfig),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
 
     lager:info("Nodes deployed, but not joined."),
@@ -51,7 +52,7 @@ confirm() ->
             lager:info("Check keys and buckets after transfer"),
             check_it_all(Ns),
             Ns
-        end, [Node1], [Node2, Node3, Node4]),
+        end, [Node1], [Node2, Node3, Node4, Node5]),
 
     lager:info("Checking basic HTTP"),
     check_it_all(Nodes, http),
@@ -75,20 +76,21 @@ confirm() ->
             lager:info("Check keys and buckets"),
             check_it_all(UpNodes),
             Node
-        end, Node1, [Node2, Node3, Node4]),
+        end, Node1, [Node2, Node3, Node4, Node5]),
 
-    lager:info("Stopping Node2"),
-    rt:stop(Node2),
-    rt:wait_until_unpingable(Node2),
-
-    lager:info("Stopping Node3"),
-    rt:stop(Node3),
-    rt:wait_until_unpingable(Node3),
+    stop_node("Node2", Node2),
+    stop_node("Node3", Node3),
+    stop_node("Node4", Node4),
 
     lager:info("Only Node1 is up, so test should fail!"),
 
     check_it_all([Node1], pbc, false),
     pass.
+
+stop_node(NodeName, Node) ->
+    lager:info("Stopping ~p", [NodeName]),
+    rt:stop(Node),
+    rt:wait_until_unpingable(Node).
 
 put_keys(Node, Bucket, Num) ->
     Pid = rt:pbc(Node),
@@ -98,21 +100,14 @@ put_keys(Node, Bucket, Num) ->
     riakc_pb_socket:stop(Pid).
 
 list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
-    case Interface of
-        pbc ->
-            Pid = rt:pbc(Node),
-            Mod = riakc_pb_socket;
-        http ->
-            Pid = rt:httpc(Node),
-            Mod = rhc
-    end,
+    {Pid, Mod} = get_pid_and_module(Interface, Node),
     lager:info("Listing keys on ~p using ~p. Attempt #~p",
                [Node, Interface, Attempt]),
     case ShouldPass of
         true ->
             {ok, Keys} = Mod:list_keys(Pid, Bucket),
-            ActualKeys = lists:usort(Keys),
-            ExpectedKeys = lists:usort([list_to_binary(["", integer_to_list(Ki)])
+            ActualKeys = lists:sort(Keys),
+            ExpectedKeys = lists:sort([list_to_binary(["", integer_to_list(Ki)])
                                         || Ki <- lists:seq(0, Num - 1)]),
             assert_equal(ExpectedKeys, ActualKeys);
         _ ->
@@ -125,24 +120,25 @@ list_keys(Node, Interface, Bucket, Attempt, Num, ShouldPass) ->
         _ -> ok
     end.
 
-list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass) ->
+get_pid_and_module(Interface, Node) ->
     case Interface of
         pbc ->
-            Pid = rt:pbc(Node),
-            Mod = riakc_pb_socket;
+            {rt:pbc(Node), riakc_pb_socket};
         http ->
-            Pid = rt:httpc(Node),
-            Mod = rhc
-    end,
+            {rt:httpc(Node), rhc}
+    end.
+
+list_keys_for_undefined_bucket_type(Node, Interface, Bucket, Attempt, ShouldPass) ->
+    {Pid, Mod} = get_pid_and_module(Interface, Node),
 
     lager:info("Listing keys using undefined bucket type ~p on ~p using ~p. Attempt #~p",
                [?UNDEFINED_BUCKET_TYPE, Node, Interface, Attempt]),
     case ShouldPass of
-	true -> ok;
-	_ ->
-	    {Status, Message} = Mod:list_keys(Pid, { ?UNDEFINED_BUCKET_TYPE, Bucket }),
-	    ?assertEqual(error, Status),
-	    ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
+    true -> ok;
+    _ ->
+        {Status, Message} = Mod:list_keys(Pid, { ?UNDEFINED_BUCKET_TYPE, Bucket }),
+        ?assertEqual(error, Status),
+        ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
     end,
 
     case Interface of
@@ -160,14 +156,7 @@ put_buckets(Node, Num) ->
     riakc_pb_socket:stop(Pid).
 
 list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
-    case Interface of
-        pbc ->
-            Pid = rt:pbc(Node),
-            Mod = riakc_pb_socket;
-        http ->
-            Pid = rt:httpc(Node),
-            Mod = rhc
-    end,
+    {Pid, Mod} = get_pid_and_module(Interface, Node),
     lager:info("Listing buckets on ~p using ~p. Attempt #~p",
                [Node, Interface, Attempt]),
 
@@ -194,37 +183,34 @@ list_buckets(Node, Interface, Attempt, Num, ShouldPass) ->
     end.
 
 list_buckets_for_undefined_bucket_type(Node, Interface, Attempt, ShouldPass) ->
-    case Interface of
-	pbc ->
-	    Pid = rt:pbc(Node),
-	    Mod = riakc_pb_socket;
-	http ->
-	    Pid = rt:httpc(Node),
-	    Mod = rhc
-    end,
+    {Pid, Mod} = get_pid_and_module(Interface, Node),
 
     lager:info("Listing buckets on ~p for undefined bucket type ~p using ~p.  Attempt ~p.",
-	       [Node, ?UNDEFINED_BUCKET_TYPE, Interface, Attempt]),
+           [Node, ?UNDEFINED_BUCKET_TYPE, Interface, Attempt]),
 
     case ShouldPass of
-	true -> ok;
-	_ ->
-	    {Status, Message} = Mod:list_buckets(Pid, ?UNDEFINED_BUCKET_TYPE, []),
-	    lager:info("Received status ~p and message ~p", [Status, Message]),
-	    ?assertEqual(error, Status),
-	    ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
+    true -> ok;
+    _ ->
+        {Status, Message} = Mod:list_buckets(Pid, ?UNDEFINED_BUCKET_TYPE, []),
+        lager:info("Received status ~p and message ~p", [Status, Message]),
+        ?assertEqual(error, Status),
+        ?assertEqual(<<"No bucket-type named '880bf69d-5dab-44ee-8762-d24c6f759ce1'">>, Message)
     end,
 
     case Interface of
-	pbc ->
-	    riakc_pb_socket:stop(Pid);
-	_ -> ok
+    pbc ->
+        riakc_pb_socket:stop(Pid);
+    _ -> ok
     end.
 
 assert_equal(Expected, Actual) ->
     case Expected -- Actual of
         [] -> ok;
         Diff -> lager:info("Expected -- Actual: ~p", [Diff])
+    end,
+    case Actual -- Expected of
+        [] -> ok;
+        Diff2 -> lager:info("Actual -- Expected: ~p", [Diff2])
     end,
     ?assertEqual(length(Actual), length(Expected)),
     ?assertEqual(Actual, Expected).
