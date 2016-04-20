@@ -71,7 +71,7 @@ ts_num_records_present(Node, Lower, Upper, Table) when is_binary(Table) ->
 ts_num_records_present(Node, Lower, Upper, Table) ->
     %% Queries use strictly greater/less than
     Qry = ts_util:get_valid_qry(Lower-1, Upper+1, Table),
-    {_Hdrs, Results} = riakc_ts:query(rt:pbc(Node), Qry),
+    {ok, {_Hdrs, Results}} = riakc_ts:query(rt:pbc(Node), Qry),
     length(Results).
 
 kv_num_objects_present(Node, Lower, Upper, Bucket) ->
