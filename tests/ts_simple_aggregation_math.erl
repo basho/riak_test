@@ -42,22 +42,22 @@ confirm() ->
     ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
     FilteredTemp = lists:filter(fun(X) -> case X>10 andalso is_number(X) of true -> true; _ -> false end end, Column4),
     _FilteredSum4 = lists:sum(FilteredTemp),
-    {_, _Got} = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
+    {_, {_, _Got}} = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
     %% ?assertEqual((FilteredSum4/length(FilteredTemp)) * (9/5) + 32, Got),
 
     Qry2 = "SELECT SUM(pressure/precipitation) FROM " ++ Bucket ++ Where,
-    {_, Got2} = ts_util:single_query(Conn, Qry2),
+    {ok, {_, Got2}} = ts_util:single_query(Conn, Qry2),
     SumDiv = lists:sum(
         [Press/Precip || {Press, Precip} <- lists:zip(Column5, Column6), Press /= [], Precip /= []]),
     ?assertEqual([{SumDiv}], Got2),
 
     Qry3 = "SELECT 3+5, 2.0+8, 9/2, 9.0/2 FROM " ++ Bucket ++ Where,
-    {_, Got3} = ts_util:single_query(Conn, Qry3),
+    {ok, {_, Got3}} = ts_util:single_query(Conn, Qry3),
     Arithmetic = [{8, 10.0, 4, 4.5} || _ <- lists:seq(1, Count)],
     ?assertEqual(Arithmetic, Got3),
 
     Qry4 = "SELECT SUM(temperature+10), AVG(pressure)/10 FROM " ++ Bucket ++ Where,
-    {_, Got4} = ts_util:single_query(Conn, Qry4),
+    {ok, {_, Got4}} = ts_util:single_query(Conn, Qry4),
     SumPlus = lists:sum([X+10 || X<-Column4]),
     AvgDiv = lists:sum(Column5)/Count/10,
     ?assertEqual([{SumPlus, AvgDiv}], Got4),
@@ -74,7 +74,7 @@ confirm() ->
 div_by_zero_test(Conn, Bucket, Where) ->
     Query = "SELECT 5 / 0 FROM " ++ Bucket ++ Where,
     ?assertEqual(
-        {error,{1001,<<"divide_by_zero">>}},
+        {error,{1001,<<"Divide by zero">>}},
         ts_util:single_query(Conn, Query)
     ).
 
@@ -82,7 +82,7 @@ div_by_zero_test(Conn, Bucket, Where) ->
 div_aggregate_function_by_zero_test(Conn, Bucket, Where) ->
     Query = "SELECT COUNT(*) / 0 FROM " ++ Bucket ++ Where,
     ?assertEqual(
-        {error,{1001,<<"divide_by_zero">>}},
+        {error,{1001,<<"Divide by zero">>}},
         ts_util:single_query(Conn, Query)
     ).
 
@@ -90,6 +90,6 @@ div_aggregate_function_by_zero_test(Conn, Bucket, Where) ->
 negate_an_aggregation_test(Conn, Bucket, Where) ->
     Query = "SELECT -COUNT(*), COUNT(*) FROM " ++ Bucket ++ Where,
     ?assertEqual(
-        {[<<"-COUNT(*)">>, <<"COUNT(*)">>],[{-10, 10}]},
+        {ok, {[<<"-COUNT(*)">>, <<"COUNT(*)">>],[{-10, 10}]}},
         ts_util:single_query(Conn, Query)
     ).

@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(riak_shell_test_util).
 
--define(CLUSTERSIZE, 2).
+-define(CLUSTERSIZE, 3).
 -define(EMPTYCONFIG, []).
 
 -export([

@@ -27,6 +27,7 @@
     assert/3,
     assert_error_regex/3,
     assert_float/3,
+    assert_row_sets/2,
     build_cluster/1,
     cluster_and_connect/1,
     create_and_activate_bucket_type/2,
@@ -521,9 +522,9 @@ get_optional(N, X) ->
     end.
 
 
--define(DELTA, 1.0e-10).
+-define(DELTA, 1.0e-15).
 
-assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
+assert_float(String, {_, {Cols, [ValsA]}} = Exp, {_, {Cols, [ValsB]}} = Got) ->
     case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
         fail -> lager:info("*****************", []),
             lager:info("Test ~p failed", [String]),
@@ -540,7 +541,7 @@ assertf2([H1 | T1], [H2 | T2]) ->
     Diff = H1 - H2,
     Av = (H1 + H2)/2,
     if Diff/Av > ?DELTA -> fail;
-        el/=se           -> assertf2(T1, T2)
+        el/=se          -> assertf2(T1, T2)
     end.
 
 assert(_,      X,   X)   -> pass;
@@ -562,6 +563,47 @@ assert_error_regex_result(nomatch, String, Expected, Got) ->
     assert(String, Expected, Got);
 assert_error_regex_result(_, _String, _Expected, _Got) ->
     pass.
+
+%% If `ColExpected' is the atom `rt_ignore_columns' then do not assert columns.
+assert_row_sets(_, {error,_} = Error) ->
+    ct:fail(Error);
+assert_row_sets({rt_ignore_columns, Expected}, {_, {_, Actual}}) ->
+    ct_verify_rows(Expected, Actual);
+assert_row_sets({_, {ColExpected, Expected}}, {_, {ColsActual, Actual}}) ->
+    ?assertEqual(ColExpected, ColsActual),
+    ct_verify_rows(Expected, Actual).
+
+ct_verify_rows(Expected, Actual) ->
+    case tdiff:diff(Expected, Actual) of
+        [{eq,_}] ->
+            pass;
+        [] ->
+            pass;
+        Diff ->
+            ct:pal("ROW DIFF~n" ++ format_diff(0, Diff)),
+            ct:fail(row_set_mismatch)
+    end.
+
+%%
+format_diff(EqCount,[]) ->
+    format_diff_eq_count(EqCount);
+format_diff(EqCount,[{eq,Rows}|Tail]) ->
+    format_diff(EqCount+length(Rows), Tail);
+format_diff(EqCount,[{Type, Row}|Tail]) ->
+    Fmt = io_lib:format("~s~s ~p~n",
+        [format_diff_eq_count(EqCount), format_diff_type(Type), Row]),
+    [Fmt | format_diff(0, Tail)].
+
+%%
+format_diff_type(del) -> "-";
+format_diff_type(ins) -> "+".
+
+%%
+format_diff_eq_count(0) ->
+    "";
+format_diff_eq_count(Count) ->
+    [lists:duplicate(Count, $.), $\n].
+
 
 results(Results) ->
     Expected = lists:duplicate(length(Results), pass),

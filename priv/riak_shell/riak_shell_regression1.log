@@ -32,8 +32,8 @@
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,28);\n"}, {result, "Error (1003): Invalid data found at row index(es) 1"}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,'hail',38.1);\n"}, {result, ""}}.
 {{command, "select time, weather, temperature from GeoCheckin where myfamily='family1' and myseries='seriesX' and time > 10 and time < 1000;\n"}, {result, ""}}.
-{{command, "select * from GeoCheckin;\n"}, {result, "Error (1001): no_where_clause: The query must have a where clause."}}.
-{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1420113600000 and time <= 1420119300000;\n"}, {result, "Error (1001): {too_many_subqueries,7}"}}.
+{{command, "select * from GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1420113600000 and time <= 1420119300000;\n"}, {result, "Error (1001): Too many subqueries (7)"}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1 and time <= 2;\n"}, {result, "+--------+--------+----+-------+--------------------------+
 |myfamily|myseries|time|weather|       temperature        |
 +--------+--------+----+-------+--------------------------+
@@ -41,9 +41,9 @@
 |family1 |series1 | 2  | rain  |2.45000000000000000000e+01|
 +--------+--------+----+-------+--------------------------+
 "}}.
-{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10 and time <= 8;\n"}, {result, "Error (1001): lower_bound_must_be_less_than_upper_bound: The lower time bound is greater than the upper time bound."}}.
-{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10;\n"}, {result, "Error (1001): incomplete_where_clause: Where clause has no upper bound."}}.
-{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time <= 8;\n"}, {result, "Error (1001): incomplete_where_clause: Where clause has no lower bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10 and time <= 8;\n"}, {result, "Error (1001): The lower time bound is greater than the upper time bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10;\n"}, {result, "Error (1001): Where clause has no upper bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time <= 8;\n"}, {result, "Error (1001): Where clause has no lower bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 2 and time <= 7;\n"}, {result, "+--------+--------+----+-------+--------------------------+
 |myfamily|myseries|time|weather|       temperature        |
 +--------+--------+----+-------+--------------------------+

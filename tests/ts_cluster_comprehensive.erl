@@ -56,7 +56,7 @@ run_tests(PvalP1, PvalP2) ->
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
-    ts_util:create_and_activate_bucket_type(Cluster, lists:flatten(TableDef), ?BUCKET),
+    ?assertEqual({ok, {[], []}}, riakc_ts:query(rt:pbc(hd(Cluster)), TableDef)),
 
     %% Make sure data is written to each node
     lists:foreach(fun(Node) -> confirm_all_from_node(Node, Data, PvalP1, PvalP2) end, Cluster),
@@ -185,10 +185,10 @@ confirm_select(C, PvalP1, PvalP2, Options) ->
             ?PKEY_P2, PvalP2,
             ?PKEY_P3, ?TIMEBASE + 10, ?PKEY_P3, ?TIMEBASE + 20])),
     io:format("Running query: ~p\n", [Query]),
-    {_Columns, Rows} = riakc_ts:query(C, Query, Options),
+    {ok, {_Columns, Rows}} = riakc_ts:query(C, Query, Options),
     io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
     ?assertEqual(10 - 1 - 1, length(Rows)),
-    {_Columns, Rows} = riakc_ts:query(C, Query, Options),
+    {ok, {_Columns, Rows}} = riakc_ts:query(C, Query, Options),
     io:format("Got ~b rows back again\n", [length(Rows)]),
     ?assertEqual(10 - 1 - 1, length(Rows)),
     ok.

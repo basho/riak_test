@@ -36,11 +36,11 @@ confirm() ->
     ts_util:create_and_activate_bucket_type(ClusterConn, DDL),
     Got = ts_util:single_query(Conn, Qry),
     Expected =
-        {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
+        {ok, {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>],
         [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1},
         {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
         {<<"time">>,       <<"timestamp">>, false,  3,  3},
         {<<"weather">>,    <<"varchar">>,   false, [], []},
-        {<<"temperature">>,<<"double">>,    true,  [], []}]},
+        {<<"temperature">>,<<"double">>,    true,  [], []}]}},
     ?assertEqual(Expected, Got),
     pass.

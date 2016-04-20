@@ -54,31 +54,31 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
     {ok, CoverageEntries} = riakc_ts:get_coverage(AdminPid, Table, Qry),
 
     Results =
-        lists:foldl(fun(#tscoverageentry{ip=IP, port=Port, cover_context=C,
-                                         range=TsRange}, Acc) ->
-                            {ok, Pid} = riakc_pb_socket:start_link(binary_to_list(IP),
-                                                                   Port),
-                            {_, ThisQuantum} = riakc_ts:query(Pid, Qry, [], C),
-                            riakc_pb_socket:stop(Pid),
+        lists:foldl(
+          fun({{IP, Port}, Context, TsRange, _Description}, Acc) ->
+                  {ok, Pid} = riakc_pb_socket:start_link(
+                                binary_to_list(IP), Port),
+                  {ok, {_, ThisQuantum}} = riakc_ts:query(Pid, Qry, [], Context),
+                  riakc_pb_socket:stop(Pid),
 
-                            %% Open a connection to another node and
-                            %% make certain we get no results using
-                            %% this cover context
-                            {ok, WrongPid} = riakc_pb_socket:start_link(binary_to_list(IP),
-                                                                        alternate_port(Port)),
-                            ?assertEqual({[], []},
-                                         riakc_ts:query(WrongPid, Qry, [], C)),
-                            riakc_pb_socket:stop(WrongPid),
+                  %% Open a connection to another node and
+                  %% make certain we get no results using
+                  %% this cover context
+                  {ok, WrongPid} = riakc_pb_socket:start_link(
+                                     binary_to_list(IP), alternate_port(Port)),
+                  ?assertEqual({ok, {[], []}},
+                               riakc_ts:query(WrongPid, Qry, [], Context)),
+                  riakc_pb_socket:stop(WrongPid),
 
-                            %% Let's compare the range data with the
-                            %% query results to make sure the latter
-                            %% fall within the former
-                            check_data_against_range(ThisQuantum, TsRange),
-                            %% Now add to the pile and continue
-                            ThisQuantum ++ Acc
-                    end,
-                    [],
-                    CoverageEntries),
+                  %% Let's compare the range data with the
+                  %% query results to make sure the latter
+                  %% fall within the former
+                  check_data_against_range(ThisQuantum, TsRange),
+                  %% Now add to the pile and continue
+                  ThisQuantum ++ Acc
+          end,
+          [],
+          CoverageEntries),
     ?assertEqual(lists:sort(ExpectedData), lists:sort(Results)),
 
     %% Expect {error,{1001,<<"{too_many_subqueries,13}">>}} if NumQuanta > 5
@@ -86,7 +86,7 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
         true ->
             ?assertMatch({error, {1001, _}}, riakc_ts:query(OtherPid, Qry));
         false ->
-            {_, StraightQueryResults} = riakc_ts:query(OtherPid, Qry),
+            {ok, {_, StraightQueryResults}} = riakc_ts:query(OtherPid, Qry),
             ?assertEqual(lists:sort(ExpectedData), lists:sort(StraightQueryResults))
     end.
 
@@ -104,10 +104,7 @@ time_within_range(Time, Lower, LowerIncl, Upper, UpperIncl) ->
             UpperIncl
     end.
 
-check_data_against_range(Data, #tsrange{lower_bound=Lower,
-                                        lower_bound_inclusive=LowerIncl,
-                                        upper_bound=Upper,
-                                        upper_bound_inclusive=UpperIncl}) ->
+check_data_against_range(Data, {_FieldName, {{Lower, LowerIncl}, {Upper, UpperIncl}}}) ->
     ?assertEqual([], lists:filter(fun({_, _, Time, _, _}) ->
                                           not time_within_range(Time, Lower, LowerIncl,
                                                                 Upper, UpperIncl)
