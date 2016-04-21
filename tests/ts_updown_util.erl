@@ -25,7 +25,7 @@
          init_per_suite_data_write/1,
          do_node_transition/3,
          run_init_per_suite_queries/1,
-         run_init_per_suite_queries/2
+         run_init_per_suite_queries/3
         ]).
 
 -define(TEMPERATURE_COL_INDEX, 4).
@@ -39,7 +39,6 @@ init_per_suite_data_write(Nodes) ->
 
     AggTable = "Aggregation_written_on_old_cluster",
     DDL = ts_util:get_ddl(aggregation, AggTable),
-
     ct:pal("DDL is ~p~n", [DDL]),
 
     {ok, _} = ts_util:create_and_activate_bucket_type({Nodes, StartingNode}, DDL, AggTable),
@@ -125,7 +124,7 @@ init_per_suite_data_write(Nodes) ->
        <<"STDDEV(temperature)">>, <<"STDDEV(pressure)">>,
        <<"STDDEV_SAMP(temperature)">>, <<"STDDEV_SAMP(pressure)">>
       ],
-      [{StdDev4, StdDev5, StdDev4, StdDev5, Sample4, Sample5}]
+      [{StdDev4, StdDev5, Sample4, Sample5, Sample4, Sample5}]
      },
 
     Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ 
@@ -158,27 +157,34 @@ do_node_transition(Config, N, Version) ->
     {nodes, Nodes} = lists:keyfind(nodes, 1, Config),
     {N, Node} = lists:keyfind(N, 1, Nodes),
     {Version, ToVsn} = lists:keyfind(Version, 1, Config),
-    ct:pal("Upgrading ~p to ~p", [Node, ToVsn]),
-    rt:upgrade(Node, ToVsn),
-    rt:wait_for_service(Node, riak_kv),
+    ok = rt:upgrade(Node, ToVsn),
+    ok = rt:wait_for_service(Node, riak_kv),
+    timer:sleep(5000),
     pass.
 
 run_init_per_suite_queries(_) -> 
     "Run a set of queries against data written in the init_per_suite stage".
 
-run_init_per_suite_queries(Config, TestNo) when is_integer(TestNo) andalso 
+run_init_per_suite_queries(Config, ClientVsn, TestNo) when is_integer(TestNo) andalso 
                                                 TestNo > 0 -> 
-    ct:pal("in run_init_per_suite~n- Config is ~p~n", [Config]),
     {init_per_suite_queries, Queries} = lists:keyfind(init_per_suite_queries, 1, Config),
-    ct:pal("Queries is ~p~n", [Queries]),
     {TestNo, {Query, Exp}} = lists:keyfind(TestNo, 1, Queries),
-    ct:pal("gonnae run the query ~p", [Query]),
+    ct:pal("gonnae run the query (~p ~p) ~p", [ClientVsn, TestNo, Query]),
     {nodes, Nodes} = lists:keyfind(nodes, 1, Config),
     {1, Node} = lists:keyfind(1, 1, Nodes),
+    ct:pal("connecting to node (~p, ~p) ~p~n", [ClientVsn, TestNo, Node]),
     Conn = rt:pbc(Node),
-    Opts = [{use_ttb, false}],
-    {ok, Got} = ts_util:single_query(Conn, Query, Opts),
-    ?assertEqual(Exp, Got).
+    Opts = case ClientVsn of
+               "1.2" -> [];
+               "1.3" -> [{use_ttb, false}]
+           end,
+    Got = case {ClientVsn, ts_util:single_query(Conn, Query, Opts)} of
+              {"1.2", G}       -> G;
+              {"1.3", {ok, G}} -> G
+          end,
+    ct:pal("query returned (~p, ~p) ~p~n", [ClientVsn, TestNo, Got]),
+    ok = dump_load_info(),
+    ts_util:assert("reading data query " ++ integer_to_list(TestNo), Exp, Got).
 
 %%
 %% helper fns
@@ -188,3 +194,16 @@ count_non_nulls(Col) ->
 
 stddev_fun_builder(Avg) ->
     fun(X, Acc) -> Acc + (Avg-X)*(Avg-X) end.
+
+dump_load_info() ->
+    Mods = [riakc_ts, protobuffer],
+    [ok = dump2(Mod) || Mod <- Mods],
+    ok.
+
+dump2(Mod) ->
+    case code:is_loaded(Mod) of
+        {file, Loaded} ->
+            ct:pal("The ~p loaded is ~p~n", [Mod, Loaded]);
+        false ->
+            ct:pal("The ~p is not loaded~n", [Mod])
+    end.

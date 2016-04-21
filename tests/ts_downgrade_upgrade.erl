@@ -30,6 +30,7 @@ suite() ->
     [{timetrap,{seconds,9000}}].
 
 init_per_suite(Config) ->
+    ct:pal("in init per suite~n", []),
     lager:info("****************************************~n", []),
 
     %% get the test meta data from the riak_test runner
@@ -41,7 +42,7 @@ init_per_suite(Config) ->
 
     %% build the starting (old cluster)
     Nodes = rt:build_cluster([OldVsn, OldVsn, OldVsn, OldVsn, OldVsn]),
-    
+
     %% document the configuration of the nodes so that this can be added
     %% to the Config that is passed to all the tests
     NodeConfig = [
@@ -57,8 +58,11 @@ init_per_suite(Config) ->
     %% Gonnae do a complex aggregation query and a simple read for functional
     %% coverage
     QueryConfig = ts_updown_util:init_per_suite_data_write(Nodes),
+
     %% now stuff the config with the expected values
-    QueryConfig ++ NodeConfig ++ Config.
+    FullConfig = QueryConfig ++ NodeConfig ++ Config,
+    ct:pal("Starting common test with config~n- ~p~n", [FullConfig]),
+    FullConfig.
 
 end_per_suite(_Config) ->
     lager:info("in end_per_suite", []),
@@ -66,137 +70,198 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_group(_GroupName, Config) ->
-    lager:info("in init_per_group", []),
     Config.
 
 end_per_group(_GroupName, _Config) ->
-    lager:info("in end_per_group", []),
     ok.
 
 init_per_testcase(_TestCase, Config) ->
-    lager:info("in init_per_testcase", []),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
-    lager:info("in end_per_testcase", []),
     ok.
 
 %% we need to break up the read tests into groups to stop the system going into
 %% query overload
 groups() ->
     [
-     {can_still_read_tests_1, [parallel], [
-                                           can_still_read_query1,
-                                           can_still_read_query2,
-                                           can_still_read_query3
+     {can_still_read_1_2_tests_1, [parallel], [
+                                               can_still_read_1_2_query1,
+                                               can_still_read_1_2_query2,
+                                               can_still_read_1_2_query3
+                                              ]},
+     {can_still_read_1_2_tests_2, [parallel], [
+                                               can_still_read_1_2_query4,
+                                               can_still_read_1_2_query5,
+                                               can_still_read_1_2_query6
+                                              ]},
+     {can_still_read_1_2_tests_3, [parallel], [
+                                               can_still_read_1_2_query7,
+                                               can_still_read_1_2_query8,
+                                               can_still_read_1_2_query9
+                                              ]},
+     {can_still_read_1_2_tests_4, [parallel], [
+                                               can_still_read_1_2_query10
+                                              ]},
+     {can_still_read_1_3_tests_1, [parallel], [
+                                               can_still_read_1_3_query1,
+                                               can_still_read_1_3_query2,
+                                               can_still_read_1_3_query3
                                           ]},
-     {can_still_read_tests_2, [parallel], [
-                                           can_still_read_query4,
-                                           can_still_read_query5,
-                                           can_still_read_query6
-                                          ]},
-     {can_still_read_tests_3, [parallel], [
-                                           can_still_read_query7,
-                                           can_still_read_query8,
-                                           can_still_read_query9
-                                          ]},
-     {can_still_read_tests_4, [parallel], [
-                                           can_still_read_query10
-                                          ]}
+     {can_still_read_1_3_tests_2, [parallel], [
+                                               can_still_read_1_3_query4,
+                                               can_still_read_1_3_query5,
+                                               can_still_read_1_3_query6
+                                              ]},
+     {can_still_read_1_3_tests_3, [parallel], [
+                                               can_still_read_1_3_query7,
+                                               can_still_read_1_3_query8,
+                                               can_still_read_1_3_query9
+                                              ]},
+     {can_still_read_1_3_tests_4, [parallel], [
+                                               can_still_read_1_3_query10
+                                              ]}
     ].
 
  all() -> 
      [
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+      {group, can_still_read_1_3_tests_1},
+      {group, can_still_read_1_3_tests_2},
+      {group, can_still_read_1_3_tests_3},
+      {group, can_still_read_1_3_tests_4},
+
       downgrade5,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+
+      {group, can_still_read_1_3_tests_1},
+      {group, can_still_read_1_3_tests_2},
+      {group, can_still_read_1_3_tests_3},
+      {group, can_still_read_1_3_tests_4},
+
       downgrade4,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+      
+      {group, can_still_read_1_3_tests_1},
+      {group, can_still_read_1_3_tests_2},
+      {group, can_still_read_1_3_tests_3},
+      {group, can_still_read_1_3_tests_4},
+      
       downgrade3,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+      
+      {group, can_still_read_1_3_tests_1},
+      {group, can_still_read_1_3_tests_2},
+      {group, can_still_read_1_3_tests_3},
+      {group, can_still_read_1_3_tests_4},
+      
       downgrade2,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+      
+      {group, can_still_read_1_3_tests_1},
+      {group, can_still_read_1_3_tests_2},
+      {group, can_still_read_1_3_tests_3},
+      {group, can_still_read_1_3_tests_4},
+      
       downgrade1,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+      load_1_2_client,
+      
+      {group, can_still_read_1_2_tests_1},
+      {group, can_still_read_1_2_tests_2},
+      {group, can_still_read_1_2_tests_3},
+      {group, can_still_read_1_2_tests_4},
+
       upgrade1,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+
+      {group, can_still_read_1_2_tests_1},
+      {group, can_still_read_1_2_tests_2},
+      {group, can_still_read_1_2_tests_3},
+      {group, can_still_read_1_2_tests_4},
+
       upgrade2,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+
+      {group, can_still_read_1_2_tests_1},
+      {group, can_still_read_1_2_tests_2},
+      {group, can_still_read_1_2_tests_3},
+      {group, can_still_read_1_2_tests_4},
+
       upgrade3,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+
+      {group, can_still_read_1_2_tests_1},
+      {group, can_still_read_1_2_tests_2},
+      {group, can_still_read_1_2_tests_3},
+      {group, can_still_read_1_2_tests_4},
+
       upgrade4,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4},
+
+      {group, can_still_read_1_2_tests_1},
+      {group, can_still_read_1_2_tests_2},
+      {group, can_still_read_1_2_tests_3},
+      {group, can_still_read_1_2_tests_4},
+
       upgrade5,
-      {group, can_still_read_tests_1},
-      {group, can_still_read_tests_2},
-      {group, can_still_read_tests_3},
-      {group, can_still_read_tests_4}
+
+      {group, can_still_read_1_2_tests_1},
+      {group, can_still_read_1_2_tests_2},
+      {group, can_still_read_1_2_tests_3},
+      {group, can_still_read_1_2_tests_4}
      ].
 
 %%%
 %%% Tests
 %%
 
-upgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, newvsn).
-upgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, newvsn).
-upgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, newvsn).
-upgrade4(Config) -> ts_updown_util:do_node_transition(Config, 4, newvsn).
-upgrade5(Config) -> ts_updown_util:do_node_transition(Config, 5, newvsn).
+load_1_2_client(_Config) -> rt_load_client:load(previous).
 
-downgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, oldvsn).
-downgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, oldvsn).
-downgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, oldvsn).
-downgrade4(Config) -> ts_updown_util:do_node_transition(Config, 4, oldvsn).
-downgrade5(Config) -> ts_updown_util:do_node_transition(Config, 5, oldvsn).
+load_1_3_client(_Config) -> rt_load_client:load(current).
 
-can_still_read_query1()  -> ts_updown_util:run_init_per_suite_queries(1).
-can_still_read_query2()  -> ts_updown_util:run_init_per_suite_queries(2).
-can_still_read_query3()  -> ts_updown_util:run_init_per_suite_queries(3).
-can_still_read_query4()  -> ts_updown_util:run_init_per_suite_queries(4).
-can_still_read_query5()  -> ts_updown_util:run_init_per_suite_queries(5).
-can_still_read_query6()  -> ts_updown_util:run_init_per_suite_queries(6).
-can_still_read_query7()  -> ts_updown_util:run_init_per_suite_queries(7).
-can_still_read_query8()  -> ts_updown_util:run_init_per_suite_queries(8).
-can_still_read_query9()  -> ts_updown_util:run_init_per_suite_queries(9).
-can_still_read_query10() -> ts_updown_util:run_init_per_suite_queries(10).
+upgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, oldvsn).
+upgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, oldvsn).
+upgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, oldvsn).
+upgrade4(Config) -> ts_updown_util:do_node_transition(Config, 4, oldvsn).
+upgrade5(Config) -> ts_updown_util:do_node_transition(Config, 5, oldvsn).
 
-can_still_read_query1(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 1).
-can_still_read_query2(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 2).
-can_still_read_query3(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 3).
-can_still_read_query4(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 4).
-can_still_read_query5(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 5).
-can_still_read_query6(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 6).
-can_still_read_query7(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 7).
-can_still_read_query8(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 8).
-can_still_read_query9(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 9).
-can_still_read_query10(Config) -> ts_updown_util:run_init_per_suite_queries(Config, 10).
+downgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, newvsn).
+downgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, newvsn).
+downgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, newvsn).
+downgrade4(Config) -> ts_updown_util:do_node_transition(Config, 4, newvsn).
+downgrade5(Config) -> ts_updown_util:do_node_transition(Config, 5, newvsn).
+
+can_still_read_1_2_query1()  -> ts_updown_util:run_init_per_suite_queries(1).
+can_still_read_1_2_query2()  -> ts_updown_util:run_init_per_suite_queries(2).
+can_still_read_1_2_query3()  -> ts_updown_util:run_init_per_suite_queries(3).
+can_still_read_1_2_query4()  -> ts_updown_util:run_init_per_suite_queries(4).
+can_still_read_1_2_query5()  -> ts_updown_util:run_init_per_suite_queries(5).
+can_still_read_1_2_query6()  -> ts_updown_util:run_init_per_suite_queries(6).
+can_still_read_1_2_query7()  -> ts_updown_util:run_init_per_suite_queries(7).
+can_still_read_1_2_query8()  -> ts_updown_util:run_init_per_suite_queries(8).
+can_still_read_1_2_query9()  -> ts_updown_util:run_init_per_suite_queries(9).
+can_still_read_1_2_query10() -> ts_updown_util:run_init_per_suite_queries(10).
+
+can_still_read_1_3_query1()  -> ts_updown_util:run_init_per_suite_queries(1).
+can_still_read_1_3_query2()  -> ts_updown_util:run_init_per_suite_queries(2).
+can_still_read_1_3_query3()  -> ts_updown_util:run_init_per_suite_queries(3).
+can_still_read_1_3_query4()  -> ts_updown_util:run_init_per_suite_queries(4).
+can_still_read_1_3_query5()  -> ts_updown_util:run_init_per_suite_queries(5).
+can_still_read_1_3_query6()  -> ts_updown_util:run_init_per_suite_queries(6).
+can_still_read_1_3_query7()  -> ts_updown_util:run_init_per_suite_queries(7).
+can_still_read_1_3_query8()  -> ts_updown_util:run_init_per_suite_queries(8).
+can_still_read_1_3_query9()  -> ts_updown_util:run_init_per_suite_queries(9).
+can_still_read_1_3_query10() -> ts_updown_util:run_init_per_suite_queries(10).
+
+can_still_read_1_2_query1(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 1).
+can_still_read_1_2_query2(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 2).
+can_still_read_1_2_query3(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 3).
+can_still_read_1_2_query4(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 4).
+can_still_read_1_2_query5(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 5).
+can_still_read_1_2_query6(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 6).
+can_still_read_1_2_query7(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 7).
+can_still_read_1_2_query8(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 8).
+can_still_read_1_2_query9(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 9).
+can_still_read_1_2_query10(Config) -> ts_updown_util:run_init_per_suite_queries(Config, "1.2", 10).
+
+can_still_read_1_3_query1(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 1).
+can_still_read_1_3_query2(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 2).
+can_still_read_1_3_query3(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 3).
+can_still_read_1_3_query4(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 4).
+can_still_read_1_3_query5(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 5).
+can_still_read_1_3_query6(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 6).
+can_still_read_1_3_query7(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 7).
+can_still_read_1_3_query8(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 8).
+can_still_read_1_3_query9(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 9).
+can_still_read_1_3_query10(Config) -> ts_updown_util:run_init_per_suite_queries(Config, "1.3", 10).
