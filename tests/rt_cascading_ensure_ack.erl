@@ -33,7 +33,7 @@ confirm() ->
     pass.
 
 ensure_ack_setup() ->
-    Clusters = rt_cluster:make_clusters([{"A", 1, ["B"]}, {"B", 1}]),
+    Clusters = rt_cascading:make_clusters([{"A", 1, ["B"]}, {"B", 1}]),
     lists:flatten([Nodes || {_, Nodes} <- Clusters]).
 
 ensure_ack_tests(Nodes) ->

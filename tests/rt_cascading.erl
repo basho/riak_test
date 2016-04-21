@@ -40,6 +40,7 @@
 -module(rt_cascading).
 -export([
     conf/0,
+    connect_rt/3,
     get_cluster_mgr_port/1,
     get_node/2,
     get_port/2,
