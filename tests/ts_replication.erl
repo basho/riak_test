@@ -207,7 +207,7 @@ no_w1c_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Lead
     timer:sleep(2000),
 
     lager:info("Verifying none of the new records are on B"),
-    ?assertEqual(100, repl_util:wait_for_reads(BFirst, 1001, 1100, Bucket, 2)),
+    ?assertEqual(true, repl_util:confirm_missing(BFirst, 1001, 1100, Bucket, 2)),
 
     disconnect_clusters(ANodes, LeaderA, "B").
 
