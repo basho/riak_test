@@ -74,7 +74,6 @@
 -export([confirm/0]).
 
 -define(NEG_LIMIT, -1000000). %% Due to sext encoding bug, do not permit negative numbers less than this to be generated.
-
 -define(MAX_CLUSTER_SIZE, 1).
 -define(MAX_FIELDS, 1).
 -define(FIELDS, ["i" ++ integer_to_list(N) || N <- lists:seq(1, ?MAX_FIELDS)]).

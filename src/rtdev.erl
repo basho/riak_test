@@ -79,6 +79,9 @@ run_riak(N, Path, Cmd) ->
             R
     end.
 
+riak_data(N) when is_integer(N) ->
+    lists:flatten(io_lib:format("~s/dev/dev~b/data", [relpath(current), N])).
+
 run_riak_repl(N, Path, Cmd) ->
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
     os:cmd(riakreplcmd(Path, N, Cmd)).
@@ -636,9 +639,9 @@ admin(Node, Args, Options) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Cmd = riak_admin_cmd(Path, N, Args),
-    lager:info("Running: ~s", [Cmd]),
+    lager:info("Running: ~ts", [Cmd]),
     Result = execute_admin_cmd(Cmd, Options),
-    lager:info("~p", [Result]),
+    lager:info("~ts", [Result]),
     {ok, Result}.
 
 execute_admin_cmd(Cmd, Options) ->
