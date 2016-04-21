@@ -413,8 +413,8 @@ get_ddl(api) ->
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
     " myfamily, myseries, time))";
 
-%% DDL for testing aggregration behavior
-get_ddl(aggregration) ->
+%% DDL for testing aggregation behavior
+get_ddl(aggregation) ->
     "CREATE TABLE WeatherData ("
     " myfamily      varchar   not null,"
     " myseries      varchar   not null,"

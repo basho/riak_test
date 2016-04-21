@@ -27,7 +27,7 @@
 % Ensure aggregation functions only work on desired data types
 
 confirm() ->
-    DDL = ts_util:get_ddl(aggregration),
+    DDL = ts_util:get_ddl(aggregation),
     Count = 10,
     Data = ts_util:get_valid_aggregation_data_not_null(Count),
     Column4 = [element(4, X) || X <- Data],
