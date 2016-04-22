@@ -56,8 +56,10 @@ end_per_testcase(_TestCase, _Config) ->
 groups() ->
     [].
 
+%% Don't change the order of these tests, tests rely on each other!
 all() ->
-    [ create_table_test,
+    [ create_desc_table_test,
+      create_table_test,
       create_bad_table_test,
       create_existing_table_test,
       describe_table_test,
@@ -72,6 +74,7 @@ all() ->
       list_keys_nonexisting_table_test,
       select_test,
       select_subset_test,
+      select_on_desc_table_test,
       invalid_select_test,
       invalid_query_test,
       delete_data_existing_row_test,
@@ -99,9 +102,13 @@ bad_table_def() ->
     " b timestamp not null,"
     " c timestamp not null)".
 
-%% client_pid(Ctx) ->
-%%     [Node|_] = proplists:get_value(cluster, Ctx),
-%%     rt:pbc(Node).
+%% Table with a descending key
+desc_table_def() ->
+    "create table desc_tab ("
+    " a sint64 not null,"
+    " b sint64 not null,"
+    " c timestamp not null,"
+    " primary key ((a, b, quantum(c, 1, s)), a, b, c DESC))".
 
 %%%
 %%% HTTP API tests
@@ -110,6 +117,11 @@ bad_table_def() ->
 %%% query
 create_table_test(Cfg) ->
     Query = table_def_bob(),
+    {ok, "200", _Headers, Body } = execute_query(Query, Cfg),
+    Body = success_body().
+
+create_desc_table_test(Cfg) ->
+    Query = desc_table_def(),
     {ok, "200", _Headers, Body } = execute_query(Query, Cfg),
     Body = success_body().
 
@@ -215,6 +227,27 @@ select_subset_test(Cfg) ->
     "application/json" = content_type(Headers),
     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
         "\"rows\":[[\"q1\",\"w1\",11,110]]}" = Body.
+
+select_on_desc_table_test(Cfg) ->
+    %% generate the data to be written
+    Fmt = "{\"a\": 1, \"b\": 1, \"c\": ~B}",
+    Rows = [io_lib:format(Fmt, [C]) || C <- lists:seq(1, 100)],
+    Body = [$[,string:join(Rows, ", "),$]],
+    %% write the data
+    {ok, "200", Headers, RespBody} = post_data("desc_tab", Body, Cfg),
+    "application/json" = content_type(Headers),
+    RespBody = success_body(),
+    %% query the data
+    Select = "select * from desc_tab where a = 1 and b = 1 and c > 10 and c < 20",
+    {ok, "200", _, QueryBody} = execute_query(Select, Cfg),
+    %% generate the expected results
+    ExpectedRows = string:join(
+        [io_lib:format("[1,1,~p]", [C]) || C <- lists:seq(19, 11, -1)],","),
+    Expected = lists:flatten([
+     "{\"columns\":[\"a\",\"b\",\"c\"],"
+        "\"rows\":[", ExpectedRows, "]}"]),
+    %% assertions on query results
+    ?assertEqual(Expected, QueryBody).
 
 invalid_select_test(Cfg) ->
     Select = "select * from bob where a='q1' and c>1 and c<15",
