@@ -66,7 +66,7 @@ run_query(Ctx, Query) ->
 %% The columns for describe should not be different depending
 %% on the query 
 static_columns() ->
-    [<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>].
+    [<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>, <<"Order">>].
 
 %%%
 %%% Test basic table description
@@ -87,10 +87,33 @@ basic_table_test(Ctx) ->
     ?assertEqual(
         {ok, {
             static_columns(),
-            [{<<"myfamily">>,   <<"varchar">>,   false,  1,  1},
-             {<<"myseries">>,   <<"varchar">>,   false,  2,  2},
-             {<<"time">>,       <<"timestamp">>, false,  3,  3},
-             {<<"weather">>,    <<"varchar">>,   false, [], []},
-             {<<"temperature">>,<<"double">>,    true,  [], []}]}},
+            [{<<"myfamily">>,   <<"varchar">>,   false,  1,  1, <<"ASC">>},
+             {<<"myseries">>,   <<"varchar">>,   false,  2,  2, <<"ASC">>},
+             {<<"time">>,       <<"timestamp">>, false,  3,  3, <<"ASC">>},
+             {<<"weather">>,    <<"varchar">>,   false, [], [], []},
+             {<<"temperature">>,<<"double">>,    true,  [], [], []}]}},
         run_query(Ctx, "DESCRIBE GeoCheckin")
+    ).
+
+desc_table_test(Ctx) ->
+    Table_def =
+        "CREATE TABLE desc_ts ("
+        "a VARCHAR NOT NULL,"
+        "b VARCHAR NOT NULL,"
+        "c TIMESTAMP NOT NULL,"
+        "d VARCHAR NOT NULL,"
+        "e DOUBLE,"
+        "PRIMARY KEY ("
+            "(a, b, quantum(c, 15, 'm')), a, b, c DESC)"
+        ")",
+    {ok,_} = run_query(Ctx, Table_def),
+    ?assertEqual(
+        {ok, {
+            static_columns(),
+            [{<<"a">>, <<"varchar">>,   false,  1,  1, <<"ASC">>},
+             {<<"b">>, <<"varchar">>,   false,  2,  2, <<"ASC">>},
+             {<<"c">>, <<"timestamp">>, false,  3,  3, <<"DESC">>},
+             {<<"d">>, <<"varchar">>,   false, [], [], []},
+             {<<"e">>, <<"double">>,    true,  [], [], []}]}},
+        run_query(Ctx, "DESCRIBE desc_ts")
     ).
