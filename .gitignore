@@ -1,6 +1,7 @@
 deps
 ebin
 log
+ct_logs/
 riak_test
 smoke_test
 .eunit

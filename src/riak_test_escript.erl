@@ -287,7 +287,7 @@ filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
 is_runnable(TestSpec, {Tests, NotTests}) ->
     case is_runnable_test(TestSpec) of
         {Type, true}  -> {[{Type, TestSpec} | Tests], NotTests};
-        {Type, false} -> {[Tests,                     {Type, TestSpec} | NotTests]}
+        {Type, false} -> {Tests,                      [{Type, TestSpec} | NotTests]}
     end.
 
 is_runnable_test({TestModule, _}) ->

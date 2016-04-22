@@ -78,13 +78,15 @@ client_pid(Ctx) ->
     [Node|_] = proplists:get_value(cluster, Ctx),
     rt:pbc(Node).
 
+run_query(Ctx, Query) ->
+    riakc_ts:query(client_pid(Ctx), Query).
 %%%
 %%% TABLE 1
 %%%
 
 create_data_def_1(Pid) ->
-    ts_util:assert_row_sets({[],[]},riakc_ts:query(Pid, table_def_1())),
-    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N,1] || N <- lists:seq(1,6000)]).
+    ts_util:assert_row_sets({ok, {[],[]}},riakc_ts:query(Pid, table_def_1())),
+    ok = riakc_ts:put(Pid, <<"table1">>, [{1,1,N,1} || N <- lists:seq(1,6000)]).
 
 column_names_def_1() ->
     [<<"a">>, <<"b">>, <<"c">>, <<"d">>].
@@ -103,8 +105,8 @@ select_exclusive_def_1_test(Ctx) ->
     Results =
          [{1,1,N,1} || N <- lists:seq(1,10)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_1(), Results}},
+        run_query(Ctx, Query)
     ).
 
 select_exclusive_def_1_2_test(Ctx) ->
@@ -113,8 +115,8 @@ select_exclusive_def_1_2_test(Ctx) ->
     Results =
          [{1,1,N,1} || N <- lists:seq(45,53)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_1(), Results}},
+        run_query(Ctx, Query)
     ).
 
 select_exclusive_def_1_across_quanta_1_test(Ctx) ->
@@ -123,8 +125,8 @@ select_exclusive_def_1_across_quanta_1_test(Ctx) ->
     Results =
          [{1,1,N,1} || N <- lists:seq(501,1499)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_1(), Results}},
+        run_query(Ctx, Query)
     ).
 
 %% Across more quanta
@@ -134,8 +136,8 @@ select_exclusive_def_1_across_quanta_2_test(Ctx) ->
     Results =
          [{1,1,N,1} || N <- lists:seq(501,4499)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_1(), Results}},
+        run_query(Ctx, Query)
     ).
 
 select_inclusive_def_1_test(Ctx) ->
@@ -144,8 +146,8 @@ select_inclusive_def_1_test(Ctx) ->
     Results =
          [{1,1,N,1} || N <- lists:seq(11,20)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_1(), Results}},
+        run_query(Ctx, Query)
     ).
 
 %% Missing an a
@@ -154,7 +156,7 @@ where_clause_must_cover_the_partition_key_missing_a_test(Ctx) ->
         "SELECT * FROM table1 WHERE b = 1 AND c > 0 AND c < 11",
     ?assertMatch(
         {error, {1001,<<_/binary>>}},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 %% Missing a b
@@ -163,7 +165,7 @@ where_clause_must_cover_the_partition_key_missing_b_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1  AND c > 0 AND c < 11",
     ?assertMatch(
         {error, {1001,<<_/binary>>}},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 %% Missing an c, the the quantum
@@ -172,7 +174,7 @@ where_clause_must_cover_the_partition_key_missing_c_test(Ctx) ->
         "SELECT * FROM table1 WHERE b = 1",
     ?assertMatch(
         {error, {1001,<<_/binary>>}},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -180,8 +182,8 @@ where_clause_must_cover_the_partition_key_missing_c_test(Ctx) ->
 %%%
 
 create_data_def_2(Pid) ->
-    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_2())),
-    ok = riakc_ts:put(Pid, <<"table2">>, [[N,1,1,1] || N <- lists:seq(1,200)]).
+    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_2())),
+    ok = riakc_ts:put(Pid, <<"table2">>, [{N,1,1,1} || N <- lists:seq(1,200)]).
 
 table_def_2() ->
     "CREATE TABLE table2 ("
@@ -197,8 +199,8 @@ select_exclusive_def_2_test(Ctx) ->
     Results =
          [{N,1,1,1} || N <- lists:seq(1,10)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_1(), Results}},
+        run_query(Ctx, Query)
     ).
 
 select_inclusive_def_2_test(Ctx) ->
@@ -207,8 +209,8 @@ select_inclusive_def_2_test(Ctx) ->
     Results =
          [{N,1,1,1} || N <- lists:seq(11,20)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_1(), Results}},
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -216,8 +218,8 @@ select_inclusive_def_2_test(Ctx) ->
 %%%
 
 create_data_def_3(Pid) ->
-    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_3())),
-    ok = riakc_ts:put(Pid, <<"table3">>, [[1,N] || N <- lists:seq(1,200)]).
+    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_3())),
+    ok = riakc_ts:put(Pid, <<"table3">>, [{1,N} || N <- lists:seq(1,200)]).
 
 column_names_def_3() ->
     [<<"a">>, <<"b">>].
@@ -234,8 +236,8 @@ select_exclusive_def_3_test(Ctx) ->
     Results =
          [{1,N} || N <- lists:seq(1,10)],
     ts_util:assert_row_sets(
-        {column_names_def_3(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_3(), Results}},
+        run_query(Ctx, Query)
     ).
 
 select_inclusive_def_3_test(Ctx) ->
@@ -244,8 +246,8 @@ select_inclusive_def_3_test(Ctx) ->
     Results =
          [{1,N} || N <- lists:seq(11,20)],
     ts_util:assert_row_sets(
-        {column_names_def_3(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_3(), Results}},
+        run_query(Ctx, Query)
     ).
 
 
@@ -254,8 +256,8 @@ select_inclusive_def_3_test(Ctx) ->
 %%%
 
 create_data_def_4(Pid) ->
-    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_4())),
-    ok = riakc_ts:put(Pid, <<"table4">>, [[1,1,N] || N <- lists:seq(1,200)]).
+    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_4())),
+    ok = riakc_ts:put(Pid, <<"table4">>, [{1,1,N} || N <- lists:seq(1,200)]).
 
 column_names_def_4() ->
     [<<"a">>, <<"b">>, <<"c">>].
@@ -273,8 +275,8 @@ select_exclusive_def_4_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(1,10)],
     ts_util:assert_row_sets(
-        {column_names_def_4(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_4(), Results}},
+        run_query(Ctx, Query)
     ).
 
 select_inclusive_def_4_test(Ctx) ->
@@ -283,8 +285,8 @@ select_inclusive_def_4_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(11,20)],
     ts_util:assert_row_sets(
-        {column_names_def_4(), Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_4(), Results}},
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -302,15 +304,15 @@ table_def_5() ->
     "PRIMARY KEY ((a,b,c),a,b,c))".
 
 create_data_def_5(Pid) ->
-    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_5())),
-    ok = riakc_ts:put(Pid, <<"table5">>, [[1,1,N] || N <- lists:seq(1,200)]).
+    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_5())),
+    ok = riakc_ts:put(Pid, <<"table5">>, [{1,1,N} || N <- lists:seq(1,200)]).
 
 select_def_5_test(Ctx) ->
     Query =
         "SELECT * FROM table5 WHERE a = 1 AND b = 1 AND c = 20",
     ts_util:assert_row_sets(
-        {column_names_def_5(), [{1,1,20}]},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {column_names_def_5(), [{1,1,20}]}},
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -326,8 +328,8 @@ table_def_6() ->
     "PRIMARY KEY ((a,quantum(b,1,'s'),c),a,b,c,d))".
 
 create_data_def_6(Pid) ->
-    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_6())),
-    ok = riakc_ts:put(Pid, <<"table6">>, [[1,N,1,<<"table6">>] || N <- lists:seq(1,200)]).
+    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_6())),
+    ok = riakc_ts:put(Pid, <<"table6">>, [{1,N,1,<<"table6">>} || N <- lists:seq(1,200)]).
 
 select_def_6_test(Ctx) ->
     Query =
@@ -335,8 +337,8 @@ select_def_6_test(Ctx) ->
     Results =
          [{1,N,1,<<"table6">>} || N <- lists:seq(8,13)],
     ts_util:assert_row_sets(
-        {[<<"a">>, <<"b">>, <<"c">>,<<"d">>], Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {[<<"a">>, <<"b">>, <<"c">>,<<"d">>], Results}},
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -352,8 +354,8 @@ table_def_7() ->
     "PRIMARY KEY ((quantum(a,1,'s'),b,c),a,b,c,d))".
 
 create_data_def_7(Pid) ->
-    ts_util:assert_row_sets({[],[]}, riakc_ts:query(Pid, table_def_7())),
-    ok = riakc_ts:put(Pid, <<"table7">>, [[N,1,1,<<"table7">>] || N <- lists:seq(1,200)]).
+    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_7())),
+    ok = riakc_ts:put(Pid, <<"table7">>, [{N,1,1,<<"table7">>} || N <- lists:seq(1,200)]).
 
 select_exclusive_def_7_test(Ctx) ->
     Query =
@@ -361,8 +363,8 @@ select_exclusive_def_7_test(Ctx) ->
     Results =
          [{N,1,1,<<"table7">>} || N <- lists:seq(45,54)],
     ts_util:assert_row_sets(
-        {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results}},
+        run_query(Ctx, Query)
     ).
 
 select_inclusive_def_7_test(Ctx) ->
@@ -371,8 +373,8 @@ select_inclusive_def_7_test(Ctx) ->
     Results =
          [{N,1,1,<<"table7">>} || N <- lists:seq(44,54)],
     ts_util:assert_row_sets(
-        {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        {ok, {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results}},
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -381,7 +383,7 @@ select_inclusive_def_7_test(Ctx) ->
 
 create_data_def_8(Pid) ->
     ts_util:assert_row_sets(
-        {[],[]},
+        {ok, {[],[]}},
         riakc_ts:query(Pid,
             "CREATE TABLE table8 ("
             "a SINT64 NOT NULL, "
@@ -390,7 +392,7 @@ create_data_def_8(Pid) ->
             "d SINT64 NOT NULL, "
             "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c,d))"
     )),
-    ok = riakc_ts:put(Pid, <<"table8">>, [[1,1,N,N] || N <- lists:seq(1,6000)]).
+    ok = riakc_ts:put(Pid, <<"table8">>, [{1,1,N,N} || N <- lists:seq(1,6000)]).
 
 d_equal_than_filter_test(Ctx) ->
     Query =
@@ -398,7 +400,7 @@ d_equal_than_filter_test(Ctx) ->
         "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d = 3000",
     ts_util:assert_row_sets(
         {rt_ignore_columns, [{1,1,3000,3000}]},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 d_greater_than_filter_test(Ctx) ->
@@ -409,7 +411,7 @@ d_greater_than_filter_test(Ctx) ->
          [{1,1,N,N} || N <- lists:seq(3001,4500)],
     ts_util:assert_row_sets(
         {rt_ignore_columns, Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 d_greater_or_equal_to_filter_test(Ctx) ->
@@ -420,7 +422,7 @@ d_greater_or_equal_to_filter_test(Ctx) ->
          [{1,1,N,N} || N <- lists:seq(3000,4500)],
     ts_util:assert_row_sets(
         {rt_ignore_columns, Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 d_not_filter_test(Ctx) ->
@@ -431,7 +433,7 @@ d_not_filter_test(Ctx) ->
          [{1,1,N,N} || N <- lists:seq(2500,4500), N /= 3000],
     ts_util:assert_row_sets(
         {rt_ignore_columns, Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -507,7 +509,7 @@ multiple_quantum_functions_in_partition_key_not_allowed(Ctx) ->
 
 double_pk_double_boolean_lk_test(Ctx) ->
     ?assertEqual(
-        {[],[]},
+        {ok, {[],[]}},
         riakc_ts:query(client_pid(Ctx),
             "CREATE TABLE double_pk_double_boolean_lk_test ("
             "a DOUBLE NOT NULL, "
@@ -516,18 +518,18 @@ double_pk_double_boolean_lk_test(Ctx) ->
     )),
     Doubles = [N * 0.1 || N <- lists:seq(1,100)],
     ok = riakc_ts:put(client_pid(Ctx), <<"double_pk_double_boolean_lk_test">>,
-        [[F,B] || F <- Doubles, B <- [true,false]]),
+        [{F,B} || F <- Doubles, B <- [true,false]]),
     Query =
         "SELECT * FROM double_pk_double_boolean_lk_test "
         "WHERE a = 0.5 AND b = true",
     ts_util:assert_row_sets(
         {rt_ignore_columns, [{0.5,true}]},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 boolean_pk_boolean_double_lk_test(Ctx) ->
     ?assertEqual(
-        {[],[]},
+        {ok, {[],[]}},
         riakc_ts:query(client_pid(Ctx),
             "CREATE TABLE boolean_pk_boolean_double_lk_test ("
             "a BOOLEAN NOT NULL, "
@@ -536,18 +538,18 @@ boolean_pk_boolean_double_lk_test(Ctx) ->
     )),
     Doubles = [N * 0.1 || N <- lists:seq(1,100)],
     ok = riakc_ts:put(client_pid(Ctx), <<"boolean_pk_boolean_double_lk_test">>,
-        [[B,F] || F <- Doubles, B <- [true,false]]),
+        [{B,F} || F <- Doubles, B <- [true,false]]),
     Query =
         "SELECT * FROM boolean_pk_boolean_double_lk_test "
         "WHERE a = false AND b = 0.5",
     ts_util:assert_row_sets(
         {rt_ignore_columns, [{false,0.5}]},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 all_types_create_data(Pid) ->
     ?assertEqual(
-        {[],[]},
+        {ok, {[],[]}},
         riakc_ts:query(Pid,
             "CREATE TABLE all_types ("
             "a VARCHAR NOT NULL, "
@@ -576,7 +578,7 @@ all_types_create_data(Pid) ->
     K = <<"k">>,
     L = 1,
     ok = riakc_ts:put(Pid, <<"all_types">>,
-        [[A,B,C,D,E,F,G,H,I,J,K,L] || A <- Varchars,   B <- Timestamps,
+        [{A,B,C,D,E,F,G,H,I,J,K,L} || A <- Varchars,   B <- Timestamps,
                                       C <- Sint64s,    D <- Booleans,
                                       E <- Doubles,    F <- Varchars,
                                       G <- Timestamps,
@@ -598,7 +600,7 @@ all_types_1_test(Ctx) ->
         ],
     ts_util:assert_row_sets(
         {rt_ignore_columns, Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 all_types_or_filter_test(Ctx) ->
@@ -618,7 +620,7 @@ all_types_or_filter_test(Ctx) ->
         ],
     ts_util:assert_row_sets(
         {rt_ignore_columns, Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -627,7 +629,7 @@ all_types_or_filter_test(Ctx) ->
 
 all_booleans_create_data(Pid) ->
     ?assertEqual(
-        {[],[]},
+        {ok, {[],[]}},
         riakc_ts:query(Pid,
             "CREATE TABLE all_booleans ("
             "a BOOLEAN NOT NULL, "
@@ -640,7 +642,7 @@ all_booleans_create_data(Pid) ->
             "PRIMARY KEY  ((a,b,c), a,b,c,d,e,f,g))"
     )),
     ok = riakc_ts:put(Pid, <<"all_booleans">>,
-        [[Ba,Bb,Bc,Bd,Be,Bf,Bg] || Ba <- ts_booleans(),
+        [{Ba,Bb,Bc,Bd,Be,Bf,Bg} || Ba <- ts_booleans(),
                                    Bb <- ts_booleans(), Bc <- ts_booleans(),
                                    Bd <- ts_booleans(), Be <- ts_booleans(),
                                    Bf <- ts_booleans(), Bg <- ts_booleans()]).
@@ -657,7 +659,7 @@ all_booleans_test(Ctx) ->
                                          Bf <- ts_booleans(), Bg <- ts_booleans()],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 all_booleans_filter_on_g_test(Ctx) ->
@@ -669,7 +671,7 @@ all_booleans_filter_on_g_test(Ctx) ->
                                          Bf <- ts_booleans()],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 all_booleans_filter_on_d_and_f_test(Ctx) ->
@@ -680,7 +682,7 @@ all_booleans_filter_on_d_and_f_test(Ctx) ->
         [{true,true,true,false,Be,true,Bg} || Be <- ts_booleans(), Bg <- ts_booleans()],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 %%%
@@ -689,7 +691,7 @@ all_booleans_filter_on_d_and_f_test(Ctx) ->
 
 all_timestamps_create_data(Pid) ->
     ?assertEqual(
-        {[],[]},
+        {ok, {[],[]}},
         riakc_ts:query(Pid,
             "CREATE TABLE all_timestamps ("
             "a TIMESTAMP NOT NULL, "
@@ -700,7 +702,7 @@ all_timestamps_create_data(Pid) ->
             "PRIMARY KEY  ((a,quantum(b,15,s),c), a,b,c,d,e))"
     )),
     ok = riakc_ts:put(Pid, <<"all_timestamps">>,
-        [[A,B,3,4,5] || A <- [1,2,3], B <- lists:seq(100, 10000, 100)]).
+        [{A,B,3,4,5} || A <- [1,2,3], B <- lists:seq(100, 10000, 100)]).
 
 all_timestamps_across_quanta_test(Ctx) ->
     Query =
@@ -710,7 +712,7 @@ all_timestamps_across_quanta_test(Ctx) ->
         [{2,B,3,4,5} || B <- lists:seq(300, 2900, 100)],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).
 
 all_timestamps_single_quanta_test(Ctx) ->
@@ -736,8 +738,8 @@ table_def_desc_on_quantum_table() ->
     "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c DESC))".
 
 create_data_def_desc_on_quantum_table(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_desc_on_quantum_table())),
-    ok = riakc_ts:put(Pid, <<"desc_on_quantum_table">>, [[1,1,N] || N <- lists:seq(200,200*100,100)]).
+    ?assertEqual({ok, {[],[]}}, riakc_ts:query(Pid, table_def_desc_on_quantum_table())),
+    ok = riakc_ts:put(Pid, <<"desc_on_quantum_table">>, [{1,1,N} || N <- lists:seq(200,200*100,100)]).
 
 desc_on_quantum___one_quantum_not_against_bounds_inclusive_test(Ctx) ->
     Query =
@@ -817,7 +819,7 @@ table_def_desc_on_additional_local_key_field() ->
 
 table_def_desc_on_additional_local_key_field_create_data(Pid) ->
     ?assertEqual(
-        {[],[]}, 
+        {ok, {[],[]}}, 
         riakc_ts:query(Pid,
             "CREATE TABLE lk_desc_1 ("
             "a SINT64 NOT NULL, "
@@ -826,7 +828,7 @@ table_def_desc_on_additional_local_key_field_create_data(Pid) ->
             "d SINT64 NOT NULL, "
             "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c,d DESC))")),
     ok = riakc_ts:put(Pid, <<"lk_desc_1">>, 
-        [[1,1,N,N] || N <- lists:seq(200,200*100,100)]).
+        [{1,1,N,N} || N <- lists:seq(200,200*100,100)]).
 
 
 table_def_desc_on_additional_local_key_field_test(Ctx) ->
@@ -842,19 +844,19 @@ table_def_desc_on_additional_local_key_field_test(Ctx) ->
 %%%
 
 create_data_def_desc_on_varchar_table(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid,
+    ?assertEqual({ok,{[],[]}}, riakc_ts:query(Pid,
         "CREATE TABLE desc_on_varchar_table ("
         "a SINT64 NOT NULL, "
         "b SINT64 NOT NULL, "
         "c TIMESTAMP NOT NULL, "
         "d VARCHAR NOT NULL, "
         "PRIMARY KEY ((a,b), a,b,d DESC))")),
-    ok = riakc_ts:put(Pid, <<"desc_on_varchar_table">>, [[1,1,1,<<N>>] || N <- "abcdefghijklmnopqrstuvwxyz"]).
+    ok = riakc_ts:put(Pid, <<"desc_on_varchar_table">>, [{1,1,1,<<N>>} || N <- "abcdefghijklmnopqrstuvwxyz"]).
 
 sdfsfsf_test(Ctx) ->
     Query =
         "SELECT * FROM desc_on_varchar_table WHERE a = 1 AND b = 1",
     ts_util:assert_row_sets(
         {rt_ignore_columns,[{1,1,1,<<N>>} || N <- lists:reverse("abcdefghijklmnopqrstuvwxyz")]},
-        riakc_ts:query(client_pid(Ctx), Query)
+        run_query(Ctx, Query)
     ).

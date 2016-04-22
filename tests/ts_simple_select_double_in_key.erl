@@ -41,7 +41,7 @@ confirm() ->
         "AND myseries = 'series' "
         "AND myfamily = 13.777744543543500002342342342342342340000000017777445435435000023423423423423423400000000177774454354350000234234234234234234000000001",
     ?assertEqual(
-        {[<<"myfamily">>, <<"myseries">>, <<"time">>], result_data()},
+        {ok, {[<<"myfamily">>, <<"myseries">>, <<"time">>], input_data()}},
         ts_util:ts_query(
             ts_util:cluster_and_connect(single), TestType, TableDef, input_data(), Query)),
     pass.
@@ -49,8 +49,5 @@ confirm() ->
 %%
 input_data() ->
     Times = lists:seq(1, 10),
-    [[13.777744543543500002342342342342342340000000017777445435435000023423423423423423400000000177774454354350000234234234234234234000000001, <<"series">>, T] || T <- Times].
+    [{13.777744543543500002342342342342342340000000017777445435435000023423423423423423400000000177774454354350000234234234234234234000000001, <<"series">>, T} || T <- Times].
 
-%%
-result_data() ->
-    [list_to_tuple(R) || R <- input_data()].

@@ -64,8 +64,8 @@ all() ->
 %%%
 
 create_data_def_1(Pid) ->
-    ?assertEqual({[],[]}, riakc_ts:query(Pid, table_def_1())),
-    ok = riakc_ts:put(Pid, <<"table1">>, [[1,1,N] || N <- lists:seq(1,10000)]).
+    ?assertEqual({ok, {[],[]}}, riakc_ts:query(Pid, table_def_1())),
+    ok = riakc_ts:put(Pid, <<"table1">>, [{1,1,N} || N <- lists:seq(1,10000)]).
 
 column_names_def_1() ->
     [<<"a">>, <<"b">>, <<"c">>].
@@ -91,7 +91,7 @@ start_key_query_greater_than_1999_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2000,3800)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -101,7 +101,7 @@ start_key_query_greater_than_2000_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2001,3800)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -111,7 +111,7 @@ start_key_query_greater_than_2001_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2002,3800)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -121,7 +121,7 @@ start_key_query_greater_or_equal_to_1999_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(1999,3800)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -131,7 +131,7 @@ start_key_query_greater_or_equal_to_2000_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2000,3800)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -141,7 +141,7 @@ start_key_query_greater_or_equal_to_2001_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2002,3800)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -155,7 +155,7 @@ end_key_query_less_than_3999_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2500,3998)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -165,7 +165,7 @@ end_key_query_less_than_4000_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2500,3999)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -175,7 +175,7 @@ end_key_query_less_than_4001_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2500,4000)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -185,7 +185,7 @@ end_key_query_less_than_or_equal_to_3999_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2500,3999)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -195,7 +195,7 @@ end_key_query_less_than_or_equal_to_4000_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2500,4000)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -205,7 +205,7 @@ end_key_query_less_than_or_equal_to_4001_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(2500,4001)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -215,7 +215,7 @@ start_key_query_greater_than_500_one_quantum_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(501,699)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -225,7 +225,7 @@ start_key_query_greater_or_equal_to_500_one_quantum_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(500,699)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 
@@ -235,7 +235,7 @@ start_key_query_greater_than_500_two_quantum_test(Ctx) ->
     Results =
          [{1,1,N} || N <- lists:seq(501,1499)],
     ts_util:assert_row_sets(
-        {column_names_def_1(), Results},
+        {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 

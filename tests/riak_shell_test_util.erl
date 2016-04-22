@@ -19,12 +19,12 @@
 %% -------------------------------------------------------------------
 -module(riak_shell_test_util).
 
--define(CLUSTERSIZE, 2).
+-define(CLUSTERSIZE, 3).
 -define(EMPTYCONFIG, []).
 
 -export([
          shell_init/0,
-         run_commands/4,
+         run_commands/3,
          build_cluster/0,
          loop/0
         ]).
@@ -61,49 +61,50 @@ build_cluster() ->
     rt:set_backend(eleveldb),
     _Nodes  = rt:build_cluster(?CLUSTERSIZE, ?EMPTYCONFIG).
 
-run_commands([], _Msg, _State, _ShouldIncrement) ->
+run_commands([], _State, _ShouldIncrement) ->
     pass;
-run_commands([{drain, discard} | T], Msg, State, ShouldIncrement) ->
-    {NewMsg, NewState, NewShdIncr} = riak_shell:loop_TEST(Msg, State, ShouldIncrement),
-    lager:info("Message drained and discared unchecked ~p", [lists:flatten(NewMsg)]),
-    run_commands(T, Msg, NewState, NewShdIncr);    
-run_commands([{drain, Response} | T], Msg, State, ShouldIncrement) ->
-    {NewMsg, NewState, NewShdIncr} = riak_shell:loop_TEST(Msg, State, ShouldIncrement),
-    case lists:flatten(NewMsg) of
-        Response -> lager:info("Message drained successfully ~p", [Response]),
-                    run_commands(T, Msg, NewState, NewShdIncr);    
-        Got      -> print_error("Message Expected", "", Response, Got),
+run_commands([{drain, discard} | T], State, ShouldIncrement) ->
+    {_Error, Response, NewState, NewShdIncr} = riak_shell:loop_TEST(riak_shell:make_cmd(), State, ShouldIncrement),
+    lager:info("Message drained and discared unchecked ~p", [lists:flatten(Response)]),
+    run_commands(T, NewState, NewShdIncr);
+run_commands([{drain, Expected} | T], State, ShouldIncrement) ->
+    {_Error, Response, NewState, NewShdIncr} = riak_shell:loop_TEST(riak_shell:make_cmd(), State, ShouldIncrement),
+    case lists:flatten(Response) of
+        Expected -> lager:info("Message drained successfully ~p", [Expected]),
+                    run_commands(T, NewState, NewShdIncr);
+        Got      -> print_error("Message Expected", "", Expected, Got),
                     fail
     end;
-run_commands([{start_node, Node} | T], Msg, State, ShouldIncrement) ->
+run_commands([{start_node, Node} | T], State, ShouldIncrement) ->
     rt:start(Node),
     rt:wait_until_pingable(Node),
-    run_commands(T, Msg, State, ShouldIncrement);    
-run_commands([{stop_node, Node} | T], Msg, State, ShouldIncrement) ->
+    run_commands(T, State, ShouldIncrement);
+run_commands([{stop_node, Node} | T], State, ShouldIncrement) ->
     rt:stop(Node),
     rt:wait_until_unpingable(Node),
-    run_commands(T, Msg, State, ShouldIncrement);    
-run_commands([sleep | T], Msg, State, ShouldIncrement) ->
+    run_commands(T, State, ShouldIncrement);
+run_commands([sleep | T], State, ShouldIncrement) ->
     timer:sleep(1000),
-    run_commands(T, Msg, State, ShouldIncrement);
-run_commands([{{match, Expected}, Cmd} | T], Msg, State, ShouldIncrement) ->
-    {NewMsg, NewState, NewShdIncr} = run_cmd(Cmd, Msg, State, ShouldIncrement),
-    %% when you start getting off-by-1 wierdness you will WANT to uncomment this
+    run_commands(T, State, ShouldIncrement);
+run_commands([{{match, Expected}, Cmd} | T], State, ShouldIncrement) ->
+    {_Error, Response, NewState, NewShdIncr} = run_cmd(Cmd, State, ShouldIncrement),
+    %% when you start getting off-by-1 weirdness you will WANT to uncomment this
     %% Trim off the newlines to aid in string comparison
     ExpectedTrimmed = re:replace(Expected, "\n", "", [global,{return,list}]),
-    ResultTrimmed = re:replace(lists:flatten(NewMsg), "\n", "", [global,{return,list}]),
+    ResultTrimmed = re:replace(lists:flatten(Response), "\n", "", [global,{return,list}]),
     case ResultTrimmed of
         ExpectedTrimmed -> lager:info("Successful match of ~p from ~p", [Expected, Cmd]),
-                           run_commands(T, NewMsg, NewState, NewShdIncr);
+                           run_commands(T, NewState, NewShdIncr);
         Got             -> print_error("Ran ~p:", Cmd, Expected, Got),
                            fail
     end;
-run_commands([{run, Cmd} | T], Msg, State, ShouldIncrement) ->
+run_commands([{run, Cmd} | T], State, ShouldIncrement) ->
     lager:info("Run command: ~p", [Cmd]),
-    {NewMsg, NewState, NewShdIncr} = run_cmd(Cmd, Msg, State, ShouldIncrement),
-    run_commands(T, NewMsg, NewState, NewShdIncr).
+    {_Error, Result, NewState, NewShdIncr} = run_cmd(Cmd, State, ShouldIncrement),
+    lists:map(fun(X) -> lager:info("~s~n", [X]) end, re:split(Result, "\n", [trim])),
+    run_commands(T, NewState, NewShdIncr).
 
-run_cmd(Cmd, Msg, State, ShouldIncrement) ->
+run_cmd(Cmd, State, ShouldIncrement) ->
     %% the riak-shell works by spawning a process that has captured
     %% standard input and then dropping into a receive that the spawned
     %% process sends a message to
@@ -111,7 +112,7 @@ run_cmd(Cmd, Msg, State, ShouldIncrement) ->
     %% we are going to send a message at some time in the future
     %% and then go into a loop waiting for it
     timer:apply_after(500, riak_shell, send_to_shell, [self(), {command, Cmd}]),
-    riak_shell:loop_TEST(Msg, State, ShouldIncrement).
+    riak_shell:loop_TEST(riak_shell:make_cmd(Cmd), State, ShouldIncrement).
 
 print_error(Format, Cmd, Expected, Got) ->
     lager:info(?PREFIX ++ "Match Failure"),

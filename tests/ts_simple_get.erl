@@ -32,7 +32,7 @@ confirm() ->
     DDL = ts_util:get_ddl(),
     Data = ts_util:get_valid_select_data(),
     DataRow = hd(Data),
-    Key = lists:sublist(DataRow, 3),
+    Key = lists:sublist(tuple_to_list(DataRow), 3),
     Expected = {ts_util:get_cols(),[DataRow]},
     {ok, Got} = ts_util:ts_get(
                   ts_util:cluster_and_connect(single),

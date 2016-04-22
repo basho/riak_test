@@ -112,7 +112,7 @@ confirm_NeqOps(C) ->
 
 confirm_pass(C, Qry, Expected) ->
     Got = ts_util:single_query(C, Qry),
-    {_Cols, Records} = Got,
+    {ok, {_Cols, Records}} = Got,
     N = length(Records),
     ?assertEqual(Expected, Got),
     ?assert(N > 0).
@@ -139,15 +139,6 @@ buildList(Acc, Next) ->
     end.
 
 %------------------------------------------------------------
-% Given a list of lists, return a list of tuples
-%------------------------------------------------------------
-
-ltot(Lists) ->
-    lists:foldl(fun(Entry, Acc) ->
-        buildList(Acc, list_to_tuple(Entry))
-                end, [], Lists).
-
-%------------------------------------------------------------
 % Return a list of indices corresponding to the passed list of field
 % names
 %------------------------------------------------------------
@@ -166,7 +157,7 @@ indexOf(Type, FieldNames) ->
 valuesOf(Type, FieldNames, Record) ->
     Indices = indexOf(Type, FieldNames),
     lists:foldl(fun(Index, Acc) ->
-        buildList(Acc, lists:nth(Index, Record))
+        buildList(Acc, element(Index, Record))
                 end, [], Indices).
 
 %------------------------------------------------------------
@@ -174,7 +165,7 @@ valuesOf(Type, FieldNames, Record) ->
 %------------------------------------------------------------
 
 recordsMatching(Type, Data, FieldNames, CompVals, CompFun) ->
-    ltot(lists:foldl(fun(Record, Acc) ->
+    lists:foldl(fun(Record, Acc) ->
         Vals = valuesOf(Type, FieldNames, Record),
         case CompFun(Vals, CompVals) of
             true ->
@@ -182,7 +173,7 @@ recordsMatching(Type, Data, FieldNames, CompVals, CompFun) ->
             false ->
                 Acc
         end
-                     end, [], Data)).
+                     end, [], Data).
 
 %------------------------------------------------------------
 % Return the expected data from a query
@@ -192,9 +183,9 @@ expected(Type, Data, Fields, CompVals, CompFn) ->
     Records = recordsMatching(Type, Data, Fields, CompVals, CompFn),
     case Records of
         [] ->
-            {[],[]};
+            {ok, {[],[]}};
         _ ->
-            {ts_util:get_cols(Type), Records}
+            {ok, {ts_util:get_cols(Type), Records}}
     end.
 
 %------------------------------------------------------------

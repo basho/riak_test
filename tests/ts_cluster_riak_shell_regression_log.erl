@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(riak_shell_test_disconnecting).
+-module(ts_cluster_riak_shell_regression_log).
 
 -behavior(riak_test).
 
@@ -26,47 +26,30 @@
 -export([confirm/0]).
 
 -define(DONT_INCREMENT_PROMPT, false).
+-define(LOG_FILE, "priv/riak_shell/riak_shell_regression1.log").
 
 %% we cant run the test in this process as it receives various messages
 %% and the running test interprets then as being messages to the shell
-confirm() -> 
-    Nodes = riak_shell_test_util:build_cluster(),
+confirm() ->
+    {Nodes, _Conn} = ts_util:cluster_and_connect(multiple),
     lager:info("Built a cluster of ~p~n", [Nodes]),
     Self = self(),
-    _Pid = spawn_link(fun() -> run_test(Self) end),
-    riak_shell_test_util:loop().
+    _Pid = spawn_link(fun() -> load_log_file(Self) end),
+    Got1 = riak_shell_test_util:loop(),
+    Result = ts_util:assert("Regression Log", pass, Got1),
+    ts_util:results([
+        Result
+    ]),
+    pass.
 
-run_test(Pid) ->
+load_log_file(Pid) ->
     State = riak_shell_test_util:shell_init(),
-    lager:info("~n~nStart running the command set-------------------------", []),
+    lager:info("~n~nLoad the log -------------------------", []),
     Cmds = [
-            %% 'connection prompt on' means you need to do unicode printing and stuff
-            {run, 
-             "connection_prompt off;"},
-            {run, 
-             "show_cookie;"},
-            {run, 
-             "show_connection;"},
-            {stop_node, 
-             'dev1@127.0.0.1'},
-            {drain, 
-             "Connected..."},
-            {{match, "riak_shell is connected to: 'dev2@127.0.0.1' on port 10027"}, 
-             "show_connection;"},
-            {start_node, 
-             'dev1@127.0.0.1'},
-            {drain,
-             discard},
-            {run, 
-             "reconnect;"},
-            {drain, 
-             "Reconnected to 'dev1@127.0.0.1' on port 10017"},
-            {{match, "riak_shell is connected to: 'dev1@127.0.0.1' on port 10017"}, 
-             "show_connection;"}
-           ], 
+            {{match, "No Regression Errors."},
+              ts_util:flat_format("regression_log \"~s\";", [?LOG_FILE])}
+           ],
     Result = riak_shell_test_util:run_commands(Cmds, State,
                                                ?DONT_INCREMENT_PROMPT),
-    lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),
     Pid ! Result.
-

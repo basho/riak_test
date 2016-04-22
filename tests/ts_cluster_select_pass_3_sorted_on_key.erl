@@ -35,9 +35,9 @@ confirm() ->
     Data = ts_util:get_valid_select_data(),
     ShuffledData = shuffle_list(Data),
     Qry = ts_util:get_valid_qry(),
-    Expected = {
+    Expected = {ok, {
         ts_util:get_cols(),
-        ts_util:exclusive_result_from_data(Data, 2, 9)},
+        ts_util:exclusive_result_from_data(Data, 2, 9)}},
     % write the shuffled TS records but expect the
     % unshuffled records
     Got = ts_util:ts_query(
