@@ -98,6 +98,9 @@ make_clusters(UnNormalClusterConfs) ->
     NamesAndNodes = lists:map(fun({Name, ForClusterNodes}) ->
         {Name, make_cluster(Name, ForClusterNodes)}
                               end, NamesAndNodes),
+    ok = lists:foreach(fun({_Name, Cluster}) ->
+                           repl_util:wait_until_leader_converge(Cluster)
+                       end, NamesAndNodes),
     ok = lists:foreach(fun({Name, _Size, ConnectsTo}) ->
         lists:foreach(fun(ConnectToName) ->
             connect_rt(get_node(Name, NamesAndNodes), get_port(ConnectToName, NamesAndNodes), ConnectToName)
