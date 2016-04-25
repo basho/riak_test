@@ -79,6 +79,13 @@ kv_num_objects_present(Node, Lower, Upper, Bucket) ->
     PotentialQty = Upper - Lower + 1,
     PotentialQty - length(FailedMatches).
 
+delete_record(Node, Table, Time) ->
+    [RecordAsTuple] = ts_util:get_valid_select_data(fun() -> lists:seq(Time, Time) end),
+    RecordAsList = tuple_to_list(RecordAsTuple),
+    KeyAsList = lists:sublist(RecordAsList, 3),
+    lager:info("Deleting ~p from ~ts~n", [KeyAsList, Table]),
+    riakc_ts:delete(rt:pbc(Node), Table, KeyAsList, []).
+
 put_records(Node, Table, Lower, Upper) ->
     riakc_ts:put(rt:pbc(Node), Table,
                  ts_util:get_valid_select_data(
@@ -129,7 +136,7 @@ replication(ANodes, BNodes, Table, NormalType) ->
 
     fin.
 
-full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInTS, Table) ->
+full_sync_replication_test([AFirst|_]=ANodes, [BFirst|_]=BNodes, LeaderA, PortB, KVBucket, KVBucketInTS, Table) ->
     BNode = hd(BNodes),
 
     %% Revisit data written before realtime was tested to verify that
@@ -152,6 +159,16 @@ full_sync_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket, KVBucketInT
     ?assertEqual(100, kv_num_objects_present(BNode, 1, 100, KVBucketInTS)),
     lager:info("Verifying first 100 TS keys present on 2nd cluster"),
     ?assertEqual(100, ts_num_records_present(BNode, 1, 100, Table)),
+
+    lager:info("Deleting a record on Cluster A"),
+    delete_record(AFirst, Table, 23),
+    timer:sleep(500),
+    lager:info("Verifying record is no longer on Cluster A"),
+    ?assertEqual(0, ts_num_records_present(AFirst, 23, 23, Table)),
+    repl_util:start_and_wait_until_fullsync_complete(hd(ANodes), "B"),
+    lager:info("Verifying record is no longer on Cluster B"),
+    ?assertEqual(0, ts_num_records_present(BFirst, 23, 23, Table)),
+
     disconnect_clusters(ANodes, LeaderA, "B").
 
 real_time_replication_test(ANodes, [BFirst|_] = BNodes, LeaderA, PortB, Bucket) ->
@@ -187,6 +204,15 @@ ts_real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA,
 
     lager:info("Reading 101 keys written to Cluster A-LeaderNode: ~p from Cluster B-Node: ~p", [LeaderA, BFirst]),
     ?assertEqual(ok, rt:wait_until(fun() -> 101 == ts_num_records_present(BFirst, 101, 201, Table) end)),
+
+    lager:info("Deleting a record on Cluster A"),
+    delete_record(AFirst, Table, 174),
+    timer:sleep(500),
+    lager:info("Verifying record is no longer on Cluster A"),
+    ?assertEqual(0, ts_num_records_present(AFirst, 174, 174, Table)),
+    lager:info("Verifying record is no longer on Cluster B"),
+    ?assertEqual(0, ts_num_records_present(BFirst, 174, 174, Table)),
+
 
     disconnect_clusters(ANodes, LeaderA, "B").
 
