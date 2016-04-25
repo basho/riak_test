@@ -431,8 +431,8 @@ get_ddl(api, Table) ->
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
     " myfamily, myseries, time))";
 
-%% DDL for testing aggregration behavior
-get_ddl(aggregration, Table) ->
+%% DDL for testing aggregation behavior
+get_ddl(aggregation, Table) ->
     "CREATE TABLE " ++ Table ++ " ("
     " myfamily      varchar   not null,"
     " myseries      varchar   not null,"
