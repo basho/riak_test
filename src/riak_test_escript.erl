@@ -325,7 +325,16 @@ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
                     [giddyup:post_artifact(Base, {filename:basename(CoverageFile) ++ ".gz",
                                                   zlib:gzip(element(2,file:read_file(CoverageFile)))}) || CoverageFile /= cover_disabled ],
                     ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
-                    [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ]
+                    [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ],
+                    CTLogTarFile = "/tmp/ctlogs_" ++ integer_to_list(erlang:phash2(make_ref())),
+                    case erl_tar:create(CTLogTarFile, ["ct_logs"], [compressed]) of
+                        ok ->
+                            giddyup:post_artifact(Base, {"ct_logs.tar.gz",
+                                element(2,file:read_file(CTLogTarFile))});
+                            file:delete(CTLogTarFile);
+                        %% We can't load them for whatever reason so skip
+                        _ -> ok
+                    end
             end
     end,
     rt_cover:stop(),
