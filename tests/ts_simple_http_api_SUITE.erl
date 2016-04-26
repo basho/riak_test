@@ -26,6 +26,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-define(N_RETRIES_ON_TIMEOUT, 3).
+
 %%--------------------------------------------------------------------
 %% COMMON TEST CALLBACK FUNCTIONS
 %%--------------------------------------------------------------------
@@ -263,12 +265,23 @@ delete_data_wrong_path_test(Cfg) ->
 execute_query(Query, Cfg) ->
     Node = get_node(Cfg),
     URL = query_url(Node),
-    ibrowse:send_req(URL, [], post, Query).
+    patient_req(URL, [], post, Query, ?N_RETRIES_ON_TIMEOUT).
 
 post_data(Table, Body, Cfg) ->
     Node = get_node(Cfg),
     URL = post_data_url(Node, Table),
-    ibrowse:send_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body)).
+    patient_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body), ?N_RETRIES_ON_TIMEOUT).
+
+patient_req(_URL, _Headers, _ReqType, _Body, 0) ->
+    {error, timeout};
+patient_req(URL, Headers, ReqType, Body, TriesLeft) ->
+    case ibrowse:send_req(URL, Headers, ReqType, Body) of
+        {ok, "503", _Headers, _Body} ->
+            timer:sleep(1000),
+            patient_req(URL, Headers, ReqType, Body, TriesLeft - 1);
+        OtherResponse ->
+            OtherResponse
+    end.
 
 
 get_node(Cfg) ->
