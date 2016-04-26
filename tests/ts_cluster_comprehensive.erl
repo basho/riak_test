@@ -32,7 +32,7 @@
 -define(PVAL_P1, <<"ZXC11">>).
 -define(PVAL_P2, <<"PDP-11">>).
 -define(TIMEBASE, (10*1000*1000)).
--define(BADKEY, [<<"b">>,<<"a">>, ?TIMEBASE-1]).
+-define(BADKEY, [<<"b">>,?TIMEBASE-1]).
 -define(LIFESPAN, 300).  %% > 100, which is the default chunk size for list_keys
 
 confirm() ->
@@ -42,7 +42,7 @@ run_tests(PvalP1, PvalP2) ->
     Data = make_data(PvalP1, PvalP2),
     io:format("Data to be written:\n~p\n...\n~p\n", [hd(Data), lists:last(Data)]),
 
-    Cluster = ts_util:build_cluster(multiple),
+    Cluster = ts_util:build_cluster(single),
 
     %% use riak-admin to create a bucket
     TableDef = io_lib:format(
@@ -51,11 +51,11 @@ run_tests(PvalP1, PvalP2) ->
                  " ~s varchar not null, "
                  " ~s timestamp not null, "
                  " score double not null, "
-                 " PRIMARY KEY ((~s, ~s, quantum(~s, 10, s)), ~s, ~s, ~s))",
+                 " PRIMARY KEY ((~s, quantum(~s, 10, s)), ~s, ~s))",
                  [?BUCKET,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
-                  ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
-                  ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
+                  ?PKEY_P1,           ?PKEY_P3,
+                  ?PKEY_P1,           ?PKEY_P3]),
     ?assertEqual({ok, {[], []}}, riakc_ts:query(rt:pbc(hd(Cluster)), TableDef)),
 
     %% Make sure data is written to each node
@@ -141,12 +141,12 @@ confirm_overwrite(C, Data) ->
     ?assertEqual(ok, Res),
     ok.
 
-confirm_delete(C, {Pooter1, Pooter2, Timepoint, _} = Record) ->
+confirm_delete(C, {Pooter1, _Pooter2, Timepoint, _} = Record) ->
     ResFail = riakc_ts:delete(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Nothing deleted from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
-    Key = [Pooter1, Pooter2, Timepoint],
+    Key = [Pooter1, Timepoint],
 
     BadKey1 = [Pooter1],
     BadRes1 = riakc_ts:delete(C, ?BUCKET, BadKey1, []),
@@ -195,12 +195,12 @@ confirm_select(C, PvalP1, PvalP2, Options) ->
 
 confirm_get(C, Record) ->
     confirm_get(C, Record, []).
-confirm_get(C, Record = {Pooter1, Pooter2, Timepoint, _}, Options) ->
+confirm_get(C, Record = {Pooter1, _Pooter2, Timepoint, _}, Options) ->
     ResFail = riakc_ts:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Got nothing from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
-    Key = [Pooter1, Pooter2, Timepoint],
+    Key = [Pooter1, Timepoint],
     Res = riakc_ts:get(C, ?BUCKET, Key, Options),
     io:format("Get a single record: ~p\n", [Res]),
     ?assertMatch({ok, {_, [Record]}}, Res),
