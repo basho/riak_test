@@ -36,6 +36,7 @@ suite() ->
 init_per_suite(Config) ->
     [Node|_] = Cluster = ts_util:build_cluster(single),
     rt:wait_for_service(Node, riak_kv),
+    rpc:call(Node, riak_core, wait_for_application, [webmachine]),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
