@@ -42,8 +42,6 @@ init_per_suite(Config) ->
     create_data_def_3(Pid),
     create_data_def_4(Pid),
     create_data_def_5(Pid),
-    create_data_def_6(Pid),
-    create_data_def_7(Pid),
     create_data_def_8(Pid),
     all_booleans_create_data(Pid),
     all_timestamps_create_data(Pid),
@@ -310,68 +308,6 @@ select_def_5_test(Ctx) ->
         "SELECT * FROM table5 WHERE a = 1 AND b = 1 AND c = 20",
     ts_util:assert_row_sets(
         {ok, {column_names_def_5(), [{1,1,20}]}},
-        run_query(Ctx, Query)
-    ).
-
-%%%
-%%% TABLE 6 quantum is not the last key
-%%%
-
-table_def_6() ->
-    "CREATE TABLE table6 ("
-    "a SINT64 NOT NULL, "
-    "b TIMESTAMP NOT NULL, "
-    "c SINT64 NOT NULL, "
-    "d VARCHAR NOT NULL, "
-    "PRIMARY KEY ((a,quantum(b,1,'s'),c),a,b,c,d))".
-
-create_data_def_6(Pid) ->
-    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_6())),
-    ok = riakc_ts:put(Pid, <<"table6">>, [{1,N,1,<<"table6">>} || N <- lists:seq(1,200)]).
-
-select_def_6_test(Ctx) ->
-    Query =
-        "SELECT * FROM table6 WHERE b > 7 AND b < 14 AND a = 1 AND c = 1",
-    Results =
-         [{1,N,1,<<"table6">>} || N <- lists:seq(8,13)],
-    ts_util:assert_row_sets(
-        {ok, {[<<"a">>, <<"b">>, <<"c">>,<<"d">>], Results}},
-        run_query(Ctx, Query)
-    ).
-
-%%%
-%%% TABLE 7 quantum is the first key
-%%%
-
-table_def_7() ->
-    "CREATE TABLE table7 ("
-    "a TIMESTAMP NOT NULL, "
-    "b SINT64 NOT NULL, "
-    "c SINT64 NOT NULL, "
-    "d VARCHAR NOT NULL, "
-    "PRIMARY KEY ((quantum(a,1,'s'),b,c),a,b,c,d))".
-
-create_data_def_7(Pid) ->
-    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_7())),
-    ok = riakc_ts:put(Pid, <<"table7">>, [{N,1,1,<<"table7">>} || N <- lists:seq(1,200)]).
-
-select_exclusive_def_7_test(Ctx) ->
-    Query =
-        "SELECT * FROM table7 WHERE a > 44 AND a < 55 AND b = 1 AND c = 1",
-    Results =
-         [{N,1,1,<<"table7">>} || N <- lists:seq(45,54)],
-    ts_util:assert_row_sets(
-        {ok, {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results}},
-        run_query(Ctx, Query)
-    ).
-
-select_inclusive_def_7_test(Ctx) ->
-    Query =
-        "SELECT * FROM table7 WHERE a >= 44 AND a < 55 AND b = 1 AND c = 1",
-    Results =
-         [{N,1,1,<<"table7">>} || N <- lists:seq(44,54)],
-    ts_util:assert_row_sets(
-        {ok, {[<<"a">>, <<"b">>, <<"c">>, <<"d">>], Results}},
         run_query(Ctx, Query)
     ).
 
@@ -697,7 +633,7 @@ all_timestamps_create_data(Pid) ->
             "c TIMESTAMP NOT NULL, "
             "d TIMESTAMP NOT NULL, "
             "e TIMESTAMP NOT NULL, "
-            "PRIMARY KEY  ((a,quantum(b,15,s),c), a,b,c,d,e))"
+            "PRIMARY KEY  ((a,c,quantum(b,15,s)), a,c,b,d,e))"
     )),
     ok = riakc_ts:put(Pid, <<"all_timestamps">>,
         [{A,B,3,4,5} || A <- [1,2,3], B <- lists:seq(100, 10000, 100)]).
