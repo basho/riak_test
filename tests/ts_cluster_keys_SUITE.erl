@@ -50,6 +50,7 @@ init_per_suite(Config) ->
     all_types_create_data(Pid),
     quantum_first_table_create_data(Pid),
     quantum_first_table_three_fields_create_data(Pid),
+    quantum_second_table_three_fields_create_data(Pid),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -772,6 +773,30 @@ select_on_quantum_first_table_three_fields_test(Ctx) ->
         "WHERE  a > 200 AND a < 3000 AND b = 3 AND c = 'x'",
     Results =
         [{A,3,<<"x">>} || A <- lists:seq(300, 2900, 100)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        run_query(Ctx, Query)
+    ).
+
+quantum_second_table_three_fields_create_data(Pid) ->
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE qf_table3 ("
+            "a SINT64 NOT NULL, "
+            "b TIMESTAMP NOT NULL, "
+            "c VARCHAR NOT NULL, "
+            "PRIMARY KEY  ((a,quantum(b,1,s),c), a,b,c))"
+    )),
+    ok = riakc_ts:put(Pid, <<"qf_table3">>,
+        [{A,B,C} || A <- [3,4,5], B <- lists:seq(100, 10000, 100), C <- [<<"x">>, <<"y">>]]).
+
+select_on_quantum_second_table_three_fields_test(Ctx) ->
+    Query =
+        "SELECT * FROM qf_table3 "
+        "WHERE  a = 3 AND b > 200 AND b < 3000 AND c = 'x'",
+    Results =
+        [{3,B,<<"x">>} || B <- lists:seq(300, 2900, 100)],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
