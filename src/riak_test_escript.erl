@@ -326,19 +326,24 @@ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
                                                   zlib:gzip(element(2,file:read_file(CoverageFile)))}) || CoverageFile /= cover_disabled ],
                     ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
                     [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ],
-                    CTLogTarFile = "/tmp/ctlogs_" ++ integer_to_list(erlang:phash2(make_ref())),
-                    case erl_tar:create(CTLogTarFile, ["ct_logs"], [compressed]) of
-                        ok ->
-                            giddyup:post_artifact(Base, {"ct_logs.tar.gz",
-                                element(2,file:read_file(CTLogTarFile))});
-                            file:delete(CTLogTarFile);
-                        %% We can't load them for whatever reason so skip
-                        _ -> ok
-                    end
+                    archive_ct_logs_to_giddyup(Base)
             end
     end,
     rt_cover:stop(),
     [{coverdata, CoverageFile} | SingleTestResult].
+
+archive_ct_logs_to_giddyup(Base) ->
+    CTLogTarFile = "/tmp/ctlogs_" ++ integer_to_list(erlang:phash2(make_ref())),
+    Result = erl_tar:create(CTLogTarFile, ["ct_logs"], [compressed]),
+    maybe_post_ct_to_giddyup(Result, Base, CTLogTarFile).
+
+maybe_post_ct_to_giddyup(ok, Base, CTLogTarFile) ->
+    giddyup:post_artifact(Base, {"ct_logs.tar.gz",
+                          element(2,file:read_file(CTLogTarFile))}),
+    file:delete(CTLogTarFile);
+%% If we fail to create the tar file for any reason, skip the upload
+maybe_post_ct_to_giddyup(_Error, _Base, _CTLogTarFile) ->
+    ok.
 
 get_webhooks() ->
     Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
