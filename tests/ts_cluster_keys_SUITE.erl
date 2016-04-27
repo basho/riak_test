@@ -48,6 +48,9 @@ init_per_suite(Config) ->
     all_booleans_create_data(Pid),
     all_timestamps_create_data(Pid),
     all_types_create_data(Pid),
+    quantum_first_table_create_data(Pid),
+    quantum_first_table_three_fields_create_data(Pid),
+    quantum_second_table_three_fields_create_data(Pid),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -719,6 +722,110 @@ all_timestamps_single_quanta_test(Ctx) ->
         "WHERE a = 2 AND b > 200 AND b <= 900 AND c = 3",
     Results =
         [{2,B,3,4,5} || B <- lists:seq(300, 900, 100)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        run_query(Ctx, Query)
+    ).
+
+%%%
+%%% Tables where the quantum is not last.
+%%%
+
+quantum_first_table_create_data(Pid) ->
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE qf_table ("
+            "a TIMESTAMP NOT NULL, "
+            "b VARCHAR NOT NULL, "
+            "PRIMARY KEY  ((quantum(a,1,s),b), a,b))"
+    )),
+    ok = riakc_ts:put(Pid, <<"qf_table">>,
+        [{A,B} || A<- lists:seq(100, 10000, 100), B <- [<<"x">>, <<"y">>]]).
+
+select_on_quantum_first_table_test(Ctx) ->
+    Query =
+        "SELECT * FROM qf_table "
+        "WHERE  a > 200 AND a < 3000 AND b = 'x'",
+    Results =
+        [{A,<<"x">>} || A <- lists:seq(300, 2900, 100)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        run_query(Ctx, Query)
+    ).
+
+quantum_first_table_three_fields_create_data(Pid) ->
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE qf_table2 ("
+            "a TIMESTAMP NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c VARCHAR NOT NULL, "
+            "PRIMARY KEY  ((quantum(a,1,s),b,c), a,b,c))"
+    )),
+    ok = riakc_ts:put(Pid, <<"qf_table2">>,
+        [{A,B,C} || A <- lists:seq(100, 10000, 100), B <- [3,4,5], C <- [<<"x">>, <<"y">>]]).
+
+select_on_quantum_first_table_three_fields_test(Ctx) ->
+    Query =
+        "SELECT * FROM qf_table2 "
+        "WHERE  a > 200 AND a < 3000 AND b = 3 AND c = 'x'",
+    Results =
+        [{A,3,<<"x">>} || A <- lists:seq(300, 2900, 100)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        run_query(Ctx, Query)
+    ).
+
+quantum_second_table_three_fields_create_data(Pid) ->
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE qf_table3 ("
+            "a SINT64 NOT NULL, "
+            "b TIMESTAMP NOT NULL, "
+            "c VARCHAR NOT NULL, "
+            "PRIMARY KEY  ((a,quantum(b,1,s),c), a,b,c))"
+    )),
+    ok = riakc_ts:put(Pid, <<"qf_table3">>,
+        [{A,B,C} || A <- [3,4,5], B <- lists:seq(100, 10000, 100), C <- [<<"x">>, <<"y">>]]).
+
+select_on_quantum_second_table_three_fields_test(Ctx) ->
+    Query =
+        "SELECT * FROM qf_table3 "
+        "WHERE  a = 3 AND b > 200 AND b < 3000 AND c = 'x'",
+    Results =
+        [{3,B,<<"x">>} || B <- lists:seq(300, 2900, 100)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        run_query(Ctx, Query)
+    ).
+
+select_on_quantum_second_table_with_filters_test(Ctx) ->
+    %% setup
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE qf_table4 ("
+            "a SINT64 NOT NULL, "
+            "b TIMESTAMP NOT NULL, "
+            "c VARCHAR NOT NULL, "
+            "d VARCHAR NOT NULL, "
+            "PRIMARY KEY  ((a,quantum(b,1,s),c), a,b,c))"
+    )),
+    ok = riakc_ts:put(client_pid(Ctx), <<"qf_table4">>,
+        [{A,B,C,<<"w">>} || A <- [3,4,5], B <- lists:seq(100, 1500, 100),
+                      C <- [<<"x">>, <<"y">>]]),
+    ok = riakc_ts:put(client_pid(Ctx), <<"qf_table4">>,
+        [{A,B,C,<<"z">>} || A <- [3,4,5], B <- lists:seq(1600, 3000, 100),
+                      C <- [<<"x">>, <<"y">>]]),
+    % query
+    Query =
+        "SELECT * FROM qf_table4 "
+        "WHERE  a = 3 AND b > 200 AND b < 3000 AND c = 'x' AND d = 'w'",
+    Results =
+        [{3,B,<<"x">>,<<"w">>} || B <- lists:seq(300, 1500, 100)],
     ts_util:assert_row_sets(
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
