@@ -801,3 +801,32 @@ select_on_quantum_second_table_three_fields_test(Ctx) ->
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
     ).
+
+select_on_quantum_second_table_with_filters_test(Ctx) ->
+    %% setup
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE qf_table4 ("
+            "a SINT64 NOT NULL, "
+            "b TIMESTAMP NOT NULL, "
+            "c VARCHAR NOT NULL, "
+            "d VARCHAR NOT NULL, "
+            "PRIMARY KEY  ((a,quantum(b,1,s),c), a,b,c))"
+    )),
+    ok = riakc_ts:put(client_pid(Ctx), <<"qf_table4">>,
+        [{A,B,C,<<"w">>} || A <- [3,4,5], B <- lists:seq(100, 1500, 100),
+                      C <- [<<"x">>, <<"y">>]]),
+    ok = riakc_ts:put(client_pid(Ctx), <<"qf_table4">>,
+        [{A,B,C,<<"z">>} || A <- [3,4,5], B <- lists:seq(1600, 3000, 100),
+                      C <- [<<"x">>, <<"y">>]]),
+    % query
+    Query =
+        "SELECT * FROM qf_table4 "
+        "WHERE  a = 3 AND b > 200 AND b < 3000 AND c = 'x' AND d = 'w'",
+    Results =
+        [{3,B,<<"x">>,<<"w">>} || B <- lists:seq(300, 1500, 100)],
+    ts_util:assert_row_sets(
+        {rt_ignore_columns,Results},
+        run_query(Ctx, Query)
+    ).
