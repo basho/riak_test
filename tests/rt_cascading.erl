@@ -44,6 +44,7 @@
     get_cluster_mgr_port/1,
     get_node/2,
     get_port/2,
+    generate_test_bucket/0,
     make_cluster/2,
     make_clusters/1,
     maybe_eventually_exists/3,
@@ -55,7 +56,7 @@
     wait_exit/2,
     wait_for_rt_started/2,
     wait_until_pending_count_zero/1,
-    write_n_keys/4
+    write_n_keys/5
 ]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -98,9 +99,6 @@ make_clusters(UnNormalClusterConfs) ->
     NamesAndNodes = lists:map(fun({Name, ForClusterNodes}) ->
         {Name, make_cluster(Name, ForClusterNodes)}
                               end, NamesAndNodes),
-    ok = lists:foreach(fun({_Name, Cluster}) ->
-                           repl_util:wait_until_leader_converge(Cluster)
-                       end, NamesAndNodes),
     ok = lists:foreach(fun({Name, _Size, ConnectsTo}) ->
         lists:foreach(fun(ConnectToName) ->
             connect_rt(get_node(Name, NamesAndNodes), get_port(ConnectToName, NamesAndNodes), ConnectToName)
@@ -110,7 +108,8 @@ make_clusters(UnNormalClusterConfs) ->
 
 make_cluster(Name, Nodes) ->
     repl_util:make_cluster(Nodes),
-    _ = [repl_util:wait_until_is_leader(N) || N <- Nodes],
+    _ = rt:wait_until_all_members(Nodes),
+    _ = repl_util:wait_until_leader_converge(Nodes),
     [ANode | _] = Nodes,
     repl_util:name_cluster(ANode, Name),
     Nodes.
@@ -218,21 +217,24 @@ wait_for_rt_started(Node, ToName) ->
           end,
     rt:wait_until(Node, Fun).
 
-write_n_keys(Source, Destination, M, N) ->
-    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
-        <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
-    TestBucket = <<TestHash/binary, "-rt_test_a">>,
+write_n_keys(Source, Destination, TestBucket, M, N) ->
     First = M,
     Last = N,
 
     %% Write some objects to the source cluster (A),
     lager:info("Writing ~p keys to ~p, which should RT repl to ~p",
         [Last-First+1, Source, Destination]),
+    lager:debug("Writing to bucket ~p", [TestBucket]),
     ?assertEqual([], repl_util:do_write(Source, First, Last, TestBucket, 2)),
 
     %% verify data is replicated to B
     lager:info("Reading ~p keys written from ~p", [Last-First+1, Destination]),
     ?assertEqual(0, repl_util:wait_for_reads(Destination, First, Last, TestBucket, 2)).
+
+generate_test_bucket() ->
+    TestHash =  list_to_binary([io_lib:format("~2.16.0b", [X]) ||
+    <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
+     <<TestHash/binary, "-rt_test_a">>.
 
 timeout(MultiplyBy) ->
     case rt_config:get(default_timeout, 1000) of

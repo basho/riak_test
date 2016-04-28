@@ -28,25 +28,26 @@ confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
-    State = ensure_unacked_and_queue_setup(),
-    _ = ensure_unacked_and_queue_tests(State),
+    LeadersAndClusters = ensure_unacked_and_queue_setup(),
+    TestBucket = rt_cascading:generate_test_bucket(),
+    _ = ensure_unacked_and_queue_tests(LeadersAndClusters, TestBucket),
     pass.
 
 ensure_unacked_and_queue_setup() ->
     Clusters = rt_cascading:make_clusters([{"n123", 3, ["n456"]}, {"n456", 3, ["n123"]}]),
-    [{"n123", N123}, {"n456", N456}] = Clusters,
-    {N123, N456}.
+    %% Determine the actual leader for each cluster
+    LeadersAndClusters = lists:map(fun({_Name, Cluster}) ->
+                  {repl_util:get_leader(hd(Cluster)), Cluster}
+              end, Clusters),
+    LeadersAndClusters.
 
-ensure_unacked_and_queue_tests({N123, N456}) ->
+ensure_unacked_and_queue_tests([{N123Leader, N123}, {N456Leader, N456}], TestBucket) ->
     Tests = [
 
         {"unacked does not increase when there are skips", fun() ->
-            N123Leader = hd(N123),
-            N456Leader = hd(N456),
+            rt_cascading:write_n_keys(N123Leader, N456Leader, TestBucket, 1, 10000),
 
-            rt_cascading:write_n_keys(N123Leader, N456Leader, 1, 10000),
-
-            rt_cascading:write_n_keys(N456Leader, N123Leader, 10001, 20000),
+            rt_cascading:write_n_keys(N456Leader, N123Leader, TestBucket, 10001, 20000),
 
             Res = rt:wait_until(fun() ->
                 RTQStatus = rpc:call(N123Leader, riak_repl2_rtq, status, []),
@@ -81,15 +82,13 @@ ensure_unacked_and_queue_tests({N123, N456}) ->
                                                       end},
 
         {"dual loads keeps unacked satisfied", fun() ->
-            N123Leader = hd(N123),
-            N456Leader = hd(N456),
             LoadN123Pid = spawn(fun() ->
-                {Time, Val} = timer:tc(fun rt_cascading:write_n_keys/4, [N123Leader, N456Leader, 20001, 30000]),
+                {Time, Val} = timer:tc(fun rt_cascading:write_n_keys/5, [N123Leader, N456Leader, TestBucket, 20001, 30000]),
                 ?debugFmt("loading 123 to 456 took ~p to get ~p", [Time, Val]),
                 Val
                                 end),
             LoadN456Pid = spawn(fun() ->
-                {Time, Val} = timer:tc(fun rt_cascading:write_n_keys/4, [N456Leader, N123Leader, 30001, 40000]),
+                {Time, Val} = timer:tc(fun rt_cascading:write_n_keys/5, [N456Leader, N123Leader, TestBucket, 30001, 40000]),
                 ?debugFmt("loading 456 to 123 took ~p to get ~p", [Time, Val]),
                 Val
                                 end),
