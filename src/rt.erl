@@ -99,6 +99,7 @@
          pbc_read_check/4,
          pbc_read_check/5,
          pbc_set_bucket_prop/3,
+         pbc_set_bucket_type/3,
          pbc_write/4,
          pbc_put_dir/3,
          pbc_put_file/4,
@@ -1494,6 +1495,11 @@ pbc_write(Pid, Bucket, Key, Value, CT) ->
 -spec pbc_set_bucket_prop(pid(), binary(), [proplists:property()]) -> atom().
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
+
+%% @doc sets a bucket type property/properties via the erlang protobuf client
+-spec pbc_set_bucket_type(pid(), binary(), [proplists:property()]) -> atom().
+pbc_set_bucket_type(Pid, Bucket, PropList) ->
+    riakc_pb_socket:set_bucket_type(Pid, Bucket, PropList).
 
 %% @doc Puts the contents of the given file into the given bucket using the
 %% filename as a key and assuming a plain text content type.

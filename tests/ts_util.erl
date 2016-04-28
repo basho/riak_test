@@ -42,7 +42,7 @@
     get_bool/1,
     get_cols/0, get_cols/1,
     get_data/1,
-    get_ddl/0, get_ddl/1,
+    get_ddl/0, get_ddl/1, get_ddl/2,
     get_default_bucket/0,
     get_float/0,
     get_integer/0,
@@ -58,7 +58,8 @@
     get_valid_aggregation_data_not_null/1,
     get_valid_big_data/1,
     get_valid_obj/0,
-    get_valid_qry/0, get_valid_qry/2,
+    get_valid_qry/0, get_valid_qry/1,
+    get_valid_qry/2, get_valid_qry/3,
     get_valid_qry_spanning_quanta/0,
     get_valid_select_data/0, get_valid_select_data/1,
     get_valid_select_data_spanning_quanta/0,
@@ -264,10 +265,16 @@ get_default_bucket() ->
     "GeoCheckin".
 
 get_valid_qry() ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX'".
+    get_valid_qry(get_default_bucket()).
+
+get_valid_qry(Table) ->
+    "select * from " ++ Table ++ " Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX'".
 
 get_valid_qry(Lower, Upper) ->
-    lists:flatten(io_lib:format("select * from GeoCheckin Where time > ~B and time < ~B and myfamily = 'family1' and myseries ='seriesX'", [Lower, Upper])).
+    get_valid_qry(Lower, Upper, get_default_bucket()).
+
+get_valid_qry(Lower, Upper, Table) ->
+    lists:flatten(io_lib:format("select * from " ++ Table ++ " Where time > ~B and time < ~B and myfamily = 'family1' and myseries ='seriesX'", [Lower, Upper])).
 
 get_invalid_qry(borked_syntax) ->
     "selectah * from GeoCheckin Where time > 1 and time < 10";
@@ -372,8 +379,19 @@ remove_last(Data) ->
 %% a valid DDL - the one used in the documents
 get_ddl() ->
     get_ddl(small).
+
 get_ddl(small) ->
-    "CREATE TABLE GeoCheckin ("
+    get_ddl(small, get_default_bucket());
+get_ddl(big) ->
+    get_ddl(big, get_default_bucket());
+get_ddl(api) ->
+    get_ddl(api, get_default_bucket());
+get_ddl(aggregation) ->
+    get_ddl(aggregation, "WeatherData").
+
+
+get_ddl(small, Table) ->
+    "CREATE TABLE " ++ Table ++ " ("
     " myfamily    varchar   not null,"
     " myseries    varchar   not null,"
     " time        timestamp not null,"
@@ -384,8 +402,8 @@ get_ddl(small) ->
 
 %% another valid DDL - one with all the good stuff like
 %% different types and optional blah-blah
-get_ddl(big) ->
-    "CREATE TABLE GeoCheckin ("
+get_ddl(big, Table) ->
+    "CREATE TABLE " ++ Table ++ " ("
     " myfamily    varchar     not null,"
     " myseries    varchar     not null,"
     " time        timestamp   not null,"
@@ -401,8 +419,8 @@ get_ddl(big) ->
 %% in a corresponding ts_A_create_*_fail module, have been moved to
 %% those respective modules
 
-get_ddl(api) ->
-    "CREATE TABLE GeoCheckin ("
+get_ddl(api, Table) ->
+    "CREATE TABLE " ++ Table ++ " ("
     " myfamily    varchar     not null,"
     " myseries    varchar     not null,"
     " time        timestamp   not null,"
@@ -414,8 +432,8 @@ get_ddl(api) ->
     " myfamily, myseries, time))";
 
 %% DDL for testing aggregation behavior
-get_ddl(aggregation) ->
-    "CREATE TABLE WeatherData ("
+get_ddl(aggregation, Table) ->
+    "CREATE TABLE " ++ Table ++ " ("
     " myfamily      varchar   not null,"
     " myseries      varchar   not null,"
     " time          timestamp not null,"
