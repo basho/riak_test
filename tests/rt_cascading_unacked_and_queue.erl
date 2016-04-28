@@ -24,12 +24,20 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(POSTCOMMIT_HOOKS, [{postcommit, [{struct, [{<<"mod">>, <<"riak_repl_leader">>},
+                                                   {<<"fun">>, <<"postcommit">>}]},
+                                         {struct, [{<<"mod">>, <<"riak_repl2_rt">>},
+                                                   {<<"fun">>, <<"postcommit">>}]}]}]).
+
 confirm() ->
     %% test requires allow_mult=false b/c of rt:systest_read
     rt:set_conf(all, [{"buckets.default.allow_mult", "false"}]),
 
     LeadersAndClusters = ensure_unacked_and_queue_setup(),
     TestBucket = rt_cascading:generate_test_bucket(),
+
+    [rt:wait_until_bucket_props(Cluster, TestBucket, ?POSTCOMMIT_HOOKS) || {_, Cluster}
+                                                                           <- LeadersAndClusters],
     _ = ensure_unacked_and_queue_tests(LeadersAndClusters, TestBucket),
     pass.
 
