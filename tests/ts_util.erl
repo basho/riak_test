@@ -37,6 +37,7 @@
     create_bucket_type/3,
     create_bucket_type/4,
     create_table/4,
+    ct_verify_rows/2,
     exclusive_result_from_data/3,
     flat_format/2,
     get_bool/1,
@@ -526,9 +527,9 @@ assert_float(String, Exp, Got) -> assert(String, Exp, Got).
 %% If `ColExpected' is the atom `rt_ignore_columns' then do not assert columns.
 assert_row_sets(_, {error,_} = Error) ->
     ct:fail(Error);
-assert_row_sets({rt_ignore_columns, Expected}, {_, {_, Actual}}) ->
+assert_row_sets({rt_ignore_columns, Expected}, {ok, {_, Actual}}) ->
     ct_verify_rows(Expected, Actual);
-assert_row_sets({_, {ColExpected, Expected}}, {_, {ColsActual, Actual}}) ->
+assert_row_sets({_, {ColExpected, Expected}}, {ok, {ColsActual, Actual}}) ->
     ?assertEqual(ColExpected, ColsActual),
     ct_verify_rows(Expected, Actual).
 

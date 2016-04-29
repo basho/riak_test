@@ -745,14 +745,6 @@ desc_on_quantum_one_subquery_inclusive_across_quanta_boundaries_test(Ctx) ->
 %%%
 %%%
 
-table_def_desc_on_additional_local_key_field() ->
-    "CREATE TABLE lk_desc_1 ("
-    "a SINT64 NOT NULL, "
-    "b SINT64 NOT NULL, "
-    "c TIMESTAMP NOT NULL, "
-    "d SINT64 NOT NULL, "
-    "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c,d DESC))".
-
 table_def_desc_on_additional_local_key_field_create_data(Pid) ->
     ?assertEqual(
         {ok, {[],[]}}, 
@@ -764,14 +756,14 @@ table_def_desc_on_additional_local_key_field_create_data(Pid) ->
             "d SINT64 NOT NULL, "
             "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c,d DESC))")),
     ok = riakc_ts:put(Pid, <<"lk_desc_1">>, 
-        [{1,1,N,N} || N <- lists:seq(200,200*100,100)]).
+        [{1,1,1,N} || N <- lists:seq(200,200*100,100)]).
 
 
 table_def_desc_on_additional_local_key_field_test(Ctx) ->
     Query =
-        "SELECT * FROM lk_desc_1 WHERE a = 1 AND b = 1 AND c >= 3500 AND c <= 5500",
+        "SELECT * FROM lk_desc_1 WHERE a = 1 AND b = 1 AND c >= 1 AND c <= 1 AND d >= 3500 AND d <= 5500",
     ts_util:assert_row_sets(
-        {rt_ignore_columns,[{1,1,N,N} || N <- lists:seq(3500,5500,100)]},
+        {rt_ignore_columns,[{1,1,1,N} || N <- lists:seq(5500,3500,-100)]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
 

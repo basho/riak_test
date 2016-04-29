@@ -83,11 +83,11 @@ table_def_basic_create_data(Cluster, Pid) ->
             "c TIMESTAMP NOT NULL, "
             "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c))", <<"basic_table">> ),
     ok = riakc_ts:put(Pid, <<"basic_table">>,
-            [[1,1,N] || N <- lists:seq(100,5000,100)]).
+            [{1,1,N} || N <- lists:seq(100,5000,100)]).
 
 basic_table_stream_list_keys_test(Ctx) ->
     {ok, ReqId} = riakc_ts:stream_list_keys(client_pid(Ctx), <<"basic_table">>, infinity),
-    ts_util:assert_row_sets(
+    ts_util:ct_verify_rows(
         [{1,1,N} || N <- lists:seq(100,5000,100)],
         stream_list_keys_receive(ReqId)
     ).
@@ -104,11 +104,11 @@ create_data_in_basic_varchar_table(Cluster, Pid) ->
             "c TIMESTAMP NOT NULL, "
             "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c))", <<"basic_varchar_table">> ),
     ok = riakc_ts:put(Pid, <<"basic_varchar_table">>,
-            [[1,<<N:32>>,N] || N <- lists:seq(100,5000,100)]).
+            [{1,<<N:32>>,N} || N <- lists:seq(100,5000,100)]).
 
 basic_varchar_table_stream_list_keys_test(Ctx) ->
     {ok, ReqId} = riakc_ts:stream_list_keys(client_pid(Ctx), <<"basic_varchar_table">>, infinity),
-    ts_util:assert_row_sets(
+    ts_util:ct_verify_rows(
         [{1,<<N:32>>,N} || N <- lists:seq(100,5000,100)],
         stream_list_keys_receive(ReqId)
     ).
@@ -119,7 +119,7 @@ basic_varchar_table_stream_list_keys_test(Ctx) ->
 
 desc_on_quantum_table_create_data(Pid) ->
     ?assertEqual(
-        {[],[]},
+        {ok,{[],[]}},
         riakc_ts:query(Pid, 
             "CREATE TABLE desc_on_quantum_table ("
             "a SINT64 NOT NULL, "
@@ -128,12 +128,12 @@ desc_on_quantum_table_create_data(Pid) ->
             "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c DESC))")
     ),
     ok = riakc_ts:put(Pid, <<"desc_on_quantum_table">>,
-            [[1,1,N] || N <- lists:seq(100,5000,100)]).
+            [{1,1,N} || N <- lists:seq(100,5000,100)]).
 
 desc_on_quantum_stream_list_keys_test(Ctx) ->
     {ok, ReqId} = riakc_ts:stream_list_keys(
         client_pid(Ctx), <<"desc_on_quantum_table">>, []),
-    ts_util:assert_row_sets(
+    ts_util:ct_verify_rows(
         [{1,1,N} || N <- lists:seq(100,5000,100)],
         stream_list_keys_receive(ReqId)
     ).
@@ -144,7 +144,7 @@ desc_on_quantum_stream_list_keys_test(Ctx) ->
 
 desc_on_varchar_table_create_data(Pid) ->
     ?assertEqual(
-        {[],[]},
+        {ok,{[],[]}},
         riakc_ts:query(Pid, 
             "CREATE TABLE desc_on_varchar_table ("
             "a SINT64 NOT NULL, "
@@ -153,11 +153,11 @@ desc_on_varchar_table_create_data(Pid) ->
             "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b DESC,c))")
     ),
     ok = riakc_ts:put(Pid, <<"desc_on_varchar_table">>,
-            [[1,<<N:32>>,N] || N <- lists:seq(100,5000,100)]).
+            [{1,<<N:32>>,N} || N <- lists:seq(100,5000,100)]).
 
 desc_on_varchar_stream_list_keys_test(Ctx) ->
     {ok, ReqId} = riakc_ts:stream_list_keys(client_pid(Ctx), <<"desc_on_varchar_table">>, []),
-    ts_util:assert_row_sets(
+    ts_util:ct_verify_rows(
         [{1,<<N:32>>,N} || N <- lists:seq(100,5000,100)],
         stream_list_keys_receive(ReqId)
     ).
