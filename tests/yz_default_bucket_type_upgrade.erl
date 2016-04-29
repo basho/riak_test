@@ -38,7 +38,12 @@
         [{riak_core,
           [
            {ring_creation_size, 16},
-           {default_bucket_props, [{n_val, ?N}]},
+           {default_bucket_props,
+               [
+                   {n_val, ?N},
+                   {allow_mult, true},
+                   {dvv_enabled, true}
+               ]},
            {anti_entropy_build_limit, {100, 1000}},
            {anti_entropy_concurrency, 8}
           ]},
