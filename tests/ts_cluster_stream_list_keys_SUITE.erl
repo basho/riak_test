@@ -87,7 +87,7 @@ table_def_basic_create_data(Cluster, Pid) ->
 
 basic_table_stream_list_keys_test(Ctx) ->
     {ok, ReqId} = riakc_ts:stream_list_keys(client_pid(Ctx), <<"basic_table">>, infinity),
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         [{1,1,N} || N <- lists:seq(100,5000,100)],
         stream_list_keys_receive(ReqId)
     ).
@@ -108,7 +108,7 @@ create_data_in_basic_varchar_table(Cluster, Pid) ->
 
 basic_varchar_table_stream_list_keys_test(Ctx) ->
     {ok, ReqId} = riakc_ts:stream_list_keys(client_pid(Ctx), <<"basic_varchar_table">>, infinity),
-    ts_util:assert_row_sets(
+    ts_util:ct_verify_rows(
         [{1,<<N:32>>,N} || N <- lists:seq(100,5000,100)],
         stream_list_keys_receive(ReqId)
     ).
@@ -133,7 +133,7 @@ desc_on_quantum_table_create_data(Pid) ->
 desc_on_quantum_stream_list_keys_test(Ctx) ->
     {ok, ReqId} = riakc_ts:stream_list_keys(
         client_pid(Ctx), <<"desc_on_quantum_table">>, []),
-    ts_util:assert_row_sets(
+    ts_util:ct_verify_rows(
         [{1,1,N} || N <- lists:seq(100,5000,100)],
         stream_list_keys_receive(ReqId)
     ).
@@ -157,7 +157,7 @@ desc_on_varchar_table_create_data(Pid) ->
 
 desc_on_varchar_stream_list_keys_test(Ctx) ->
     {ok, ReqId} = riakc_ts:stream_list_keys(client_pid(Ctx), <<"desc_on_varchar_table">>, []),
-    ts_util:assert_row_sets(
+    ts_util:ct_verify_rows(
         [{1,<<N:32>>,N} || N <- lists:seq(100,5000,100)],
         stream_list_keys_receive(ReqId)
     ).
