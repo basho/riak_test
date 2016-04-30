@@ -1,5 +1,5 @@
 {{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
-{{command, "show_connection; "}, {result, "riak_shell is connected to: 'dev1@127.0.0.1' on port 10017"}}.
+{{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev1@127.0.0.1' on port 10017"}}.
 {{command, "show_nodes; "}, {result, "The connected nodes are: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']"}}.
 {{command, "show_history; "}, {result, "The history contains:
 - 1: reconnect; 
@@ -64,4 +64,4 @@
 "}}.
 {{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
 {{command, "connect dev2@127.0.0.1; "}, {result, "Connected to 'dev2@127.0.0.1' on port 10027"}}.
-{{command, "show_connection; "}, {result, "riak_shell is connected to: 'dev2@127.0.0.1' on port 10027"}}.
+{{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev2@127.0.0.1' on port 10027"}}.

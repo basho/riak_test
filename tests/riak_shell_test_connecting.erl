@@ -49,7 +49,7 @@ run_test(Pid) ->
              "show_connection;"},
             {run,
              "connect 'dev1@127.0.0.1';"},
-            {{match, "riak_shell is connected to: 'dev1@127.0.0.1' on port 10017"},
+            {{match, "riak-shell is connected to: 'dev1@127.0.0.1' on port 10017"},
              "show_connection;"}
            ],
     Result = riak_shell_test_util:run_commands(Cmds, State,
