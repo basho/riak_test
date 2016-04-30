@@ -51,7 +51,7 @@ run_test(Pid) ->
              'dev1@127.0.0.1'},
             {drain, 
              "Connected..."},
-            {{match, "riak_shell is connected to: 'dev2@127.0.0.1' on port 10027"}, 
+            {{match, "riak-shell is connected to: 'dev2@127.0.0.1' on port 10027"},
              "show_connection;"},
             {start_node, 
              'dev1@127.0.0.1'},
@@ -61,7 +61,7 @@ run_test(Pid) ->
              "reconnect;"},
             {drain, 
              "Reconnected to 'dev1@127.0.0.1' on port 10017"},
-            {{match, "riak_shell is connected to: 'dev1@127.0.0.1' on port 10017"}, 
+            {{match, "riak-shell is connected to: 'dev1@127.0.0.1' on port 10017"},
              "show_connection;"}
            ], 
     Result = riak_shell_test_util:run_commands(Cmds, State,
