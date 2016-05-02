@@ -55,7 +55,7 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
 
     Results =
         lists:foldl(
-          fun({{IP, Port}, Context, TsRange, _Description}, Acc) ->
+          fun({{IP, Port}, Context, TsRange, Description}, Acc) ->
                   {ok, Pid} = riakc_pb_socket:start_link(
                                 binary_to_list(IP), Port),
                   {ok, {_, ThisQuantum}} = riakc_ts:query(Pid, Qry, [], Context),
@@ -66,8 +66,11 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                   %% this cover context
                   {ok, WrongPid} = riakc_pb_socket:start_link(
                                      binary_to_list(IP), alternate_port(Port)),
-                  ?assertEqual({ok, {[], []}},
-                               riakc_ts:query(WrongPid, Qry, [], Context)),
+                  make_noise_if_results_not_empty(
+                    ThisQuantum,
+                    riakc_ts:query(WrongPid, Qry, [], Context),
+                    Port, Description, Context
+                   ),
                   riakc_pb_socket:stop(WrongPid),
 
                   %% Let's compare the range data with the
@@ -118,3 +121,25 @@ alternate_port(10027) ->
     10037;
 alternate_port(10037) ->
     10017.
+
+make_noise_if_results_not_empty(_RealResults, {ok, {[], []}},
+                                _Port, _Description, _Context) ->
+    ok;
+make_noise_if_results_not_empty(RealResults, {ok, {_, RealResults}},
+                                Port, Description, Context) ->
+    lager:info("Stopping test, we got results when we didn't want any"),
+    ContextUnwrapped = binary_to_term(Context),
+    lager:info("Retrieved real data from ~p : ~p~n", [Port, Description]),
+    lager:info("Context: ~p~n", [ContextUnwrapped]),
+    lager:info("Asked from wrong port: ~p~n", [alternate_port(Port)]),
+    lager:info("Got same results from both nodes"),
+    throw(got_right_results_from_wrong_vnode);
+make_noise_if_results_not_empty(_RealResults, {ok, {_, _BogusResults}},
+                                Port, Description, Context) ->
+    lager:info("Stopping test, we got results when we didn't want any"),
+    ContextUnwrapped = binary_to_term(Context),
+    lager:info("Retrieved real data from ~p : ~p~n", [Port, Description]),
+    lager:info("Context: ~p~n", [ContextUnwrapped]),
+    lager:info("Asked from wrong port: ~p~n", [alternate_port(Port)]),
+    lager:info("Got different (non-empty) results from second node"),
+    throw(got_wrong_results_from_wrong_vnode).
