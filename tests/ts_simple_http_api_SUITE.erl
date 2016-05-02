@@ -42,7 +42,7 @@ init_per_suite(Config) ->
     URL = query_url(Node),
     ?assertNotEqual(
        {error, timeout},
-       patient_req(URL, [], post, "describe table fafa", 3)),
+       patient_req(URL, [], post, "describe table fafa", 30)),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
