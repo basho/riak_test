@@ -38,6 +38,11 @@ suite() ->
 init_per_suite(Config) ->
     [Node|_] = Cluster = ts_util:build_cluster(single),
     rt:wait_for_service(Node, riak_kv),
+    %% do a test query to overcome any initial eleveldb hiccups
+    URL = query_url(Node),
+    ?assertNotEqual(
+       {error, timeout},
+       patient_req(URL, [], post, "describe table fafa", 3)),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -284,12 +289,12 @@ delete_data_wrong_path_test(Cfg) ->
 execute_query(Query, Cfg) ->
     Node = get_node(Cfg),
     URL = query_url(Node),
-    patient_req(URL, [], post, Query, ?N_RETRIES_ON_TIMEOUT).
+    patient_req(URL, [], post, Query, 1).
 
 post_data(Table, Body, Cfg) ->
     Node = get_node(Cfg),
     URL = post_data_url(Node, Table),
-    patient_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body), ?N_RETRIES_ON_TIMEOUT).
+    patient_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body), 1).
 
 patient_req(_URL, _Headers, _ReqType, _Body, 0) ->
     {error, timeout};
