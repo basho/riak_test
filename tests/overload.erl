@@ -59,7 +59,12 @@ default_config(#config{
     fsm_limit = FsmLimit
 }) ->
     [{riak_core, [{ring_creation_size, 8},
-        {default_bucket_props, [{n_val, 5}]},
+        {default_bucket_props,
+            [
+                {n_val, 5},
+                {allow_mult, true},
+                {dvv_enabled, true}
+            ]},
         {vnode_management_timer, 1000},
         {enable_health_checks, false},
         {enable_consensus, true},
@@ -100,6 +105,7 @@ confirm() ->
             BKV <- [?NORMAL_BKV,
                     ?CONSISTENT_BKV,
                     ?WRITE_ONCE_BKV]],
+
     %% Test cover queries doesn't depend on bucket/keyvalue, just run it once
     test_cover_queries_overload(Nodes),
     pass.
@@ -163,12 +169,15 @@ test_vnode_protection(Nodes, BKV) ->
     Pid ! resume,
     ok.
 
-%% Don't check on fast path
-test_fsm_protection(_, ?WRITE_ONCE_BKV) ->
-    ok;
-%% Or consistent gets, as they don't use the FSM either
+
+%% Don't check consistent gets, as they don't use the FSM
 test_fsm_protection(_, ?CONSISTENT_BKV) ->
     ok;
+
+%% Don't check on fast path either.
+test_fsm_protection(_, ?WRITE_ONCE_BKV) ->
+    ok;
+
 test_fsm_protection(Nodes, BKV) ->
     lager:info("Testing with coordinator protection enabled"),
     lager:info("Setting FSM limit to ~b", [?THRESHOLD]),
