@@ -196,14 +196,17 @@ wait_until_fullsync_stopped(SourceLeader) ->
                   end).
 
 wait_for_reads(Node, Start, End, Bucket, R) ->
-    rt:wait_until(Node,
+    ok = rt:wait_until(Node,
         fun(_) ->
                 Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
                 Reads == []
         end),
-    Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
-    lager:info("Reads: ~p", [Reads]),
-    length(Reads).
+    %% rt:systest_read/6 returns a list of errors encountered while performing
+    %% the requested reads. Since we are asserting this list is empty above,
+    %% we already know that if we reached here, that the list of reads has
+    %% no errors. Therefore, we simply return 0 and do not execute another
+    %% systest_read call.
+    0.
 
 confirm_missing(Node, Start, End, Bucket, R) ->
     Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),

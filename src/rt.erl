@@ -146,6 +146,7 @@
          upgrade/2,
          upgrade/3,
          versions/0,
+         wait_for_any_webmachine_route/2,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -672,7 +673,7 @@ wait_until(Fun) when is_function(Fun) ->
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
--spec wait_until([node()], fun((node()) -> boolean())) -> ok.
+-spec wait_until(node(), fun(() -> boolean())) -> ok | {fail, Result :: term()}.
 wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
     wait_until(fun() -> Fun(Node) end);
 
@@ -1954,30 +1955,31 @@ wait_for_control(_Vsn, Node) when is_atom(Node) ->
                 end
         end),
 
-    lager:info("Waiting for routes to be added to supervisor..."),
-
     %% Wait for routes to be added by supervisor.
-    rt:wait_until(Node, fun(N) ->
-                case rpc:call(N,
-                              webmachine_router,
-                              get_routes,
-                              []) of
-                    {badrpc, Error} ->
-                        lager:info("Error was ~p.", [Error]),
-                        false;
-                    Routes ->
-                        case is_control_gui_route_loaded(Routes) of
-                            false ->
-                                false;
-                            _ ->
-                                true
-                        end
-                end
-        end).
+    wait_for_any_webmachine_route(Node, [admin_gui, riak_control_wm_gui]).
 
-%% @doc Is the riak_control GUI route loaded?
-is_control_gui_route_loaded(Routes) ->
-    lists:keymember(admin_gui, 2, Routes) orelse lists:keymember(riak_control_wm_gui, 2, Routes).
+wait_for_any_webmachine_route(Node, Routes) ->
+    lager:info("Waiting for routes ~p to be added to webmachine.", [Routes]),
+    rt:wait_until(Node, fun(N) ->
+        case rpc:call(N, webmachine_router, get_routes, []) of
+            {badrpc, Error} ->
+                lager:info("Error was ~p.", [Error]),
+                false;
+            RegisteredRoutes ->
+                case is_any_route_loaded(Routes, RegisteredRoutes) of
+                    false ->
+                        false;
+                    _ ->
+                        true
+                end
+        end
+    end).
+
+is_any_route_loaded(SearchRoutes, RegisteredRoutes) ->
+    lists:any(fun(Route) -> is_route_loaded(Route, RegisteredRoutes) end, SearchRoutes).
+
+is_route_loaded(Route, Routes) ->
+    lists:keymember(Route, 2, Routes).
 
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
