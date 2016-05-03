@@ -23,7 +23,7 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
--define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
+-define(DEVS(N), lists:concat([rt_config:get(node_base_name, "dev"), N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
 -define(PATH, (rt_config:get(rtdev_path))).
 
