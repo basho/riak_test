@@ -13,6 +13,7 @@
          wait_until_connection/1,
          wait_until_no_connection/1,
          wait_for_reads/5,
+         wait_for_deletes/5,
          wait_until_fullsync_started/1,
          wait_until_fullsync_stopped/1,
          start_and_wait_until_fullsync_complete/1,
@@ -195,9 +196,15 @@ wait_until_fullsync_stopped(SourceLeader) ->
                   end).
 
 wait_for_reads(Node, Start, End, Bucket, R) ->
+    wait_for_x(Node, fun() -> rt:systest_read(Node, Start, End, Bucket, R, <<>>, true) end).
+
+wait_for_deletes(Node, Start, End, Bucket, R) ->
+    wait_for_x(Node, fun() -> rt:systest_verify_delete(Node, Start, End, Bucket, R) end).
+
+wait_for_x(Node, Fun) ->
     ok = rt:wait_until(Node,
         fun(_) ->
-                Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
+                Reads = Fun(),
                 Reads == []
         end),
     %% rt:systest_read/6 returns a list of errors encountered while performing
