@@ -26,6 +26,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-define(N_RETRIES_ON_TIMEOUT, 3).
+
 %%--------------------------------------------------------------------
 %% COMMON TEST CALLBACK FUNCTIONS
 %%--------------------------------------------------------------------
@@ -37,6 +39,11 @@ init_per_suite(Config) ->
     application:start(ibrowse),
     [Node|_] = Cluster = ts_util:build_cluster(single),
     rt:wait_for_service(Node, riak_kv),
+    %% do a test query to overcome any initial eleveldb hiccups
+    URL = query_url(Node),
+    ?assertNotEqual(
+       {error, timeout},
+       patient_req(URL, [], post, "describe table fafa", 30)),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -112,13 +119,13 @@ bad_table_def() ->
 create_table_test(Cfg) ->
     Query = table_def_bob(),
     {ok, "200", _Headers, Body } = execute_query(Query, Cfg),
-    Body = success_body().
+    ?assertEqual(success_body(), Body).
 
 create_bad_table_test(Cfg) ->
     Query = bad_table_def(),
     {ok, "400", Headers, Body} = execute_query(Query, Cfg),
     "text/plain" = content_type(Headers),
-    "Query error: Missing primary key" = Body.
+    ?assertEqual("Query error: Missing primary key", Body).
 
 
 create_existing_table_test(Cfg) ->
@@ -126,61 +133,70 @@ create_existing_table_test(Cfg) ->
     {ok, "409", Headers, Body} =
         execute_query(Query, Cfg),
     "text/plain" = content_type(Headers),
-    "Table \"bob\" already exists" = Body.
+    ?assertEqual("Table \"bob\" already exists", Body).
 
 
 describe_table_test(Cfg) ->
     Query = "describe bob",
     {ok, "200", Headers,  Body } = execute_query(Query, Cfg),
     "application/json" = content_type(Headers),
-    "{\"columns\":"++_ = Body.
+    {struct, DataOut} = mochijson2:decode(Body),
+    ?assertMatch([{<<"columns">>,
+                   [<<"Column">>,<<"Type">>,<<"Is Null">>,
+                    <<"Primary Key">>,<<"Local Key">>]},
+                  {<<"rows">>,
+                   [[<<"a">>,<<"varchar">>,false,1,1],
+                    [<<"b">>,<<"varchar">>,false,2,2],
+                    [<<"c">>,<<"timestamp">>,false,3,3],
+                    [<<"d">>,<<"sint64">>,true,[],[]]]}],
+                 DataOut).
 
 describe_nonexisting_table_test(Cfg) ->
     Query = "describe john",
     {ok, "404", Headers, Body} = execute_query(Query, Cfg),
     "text/plain" = content_type(Headers),
-    "Table \"john\" does not exist" = Body.
+    ?assertEqual("Table \"john\" does not exist", Body).
 
 bad_describe_query_test(Cfg) ->
     Query = "descripe bob",
     {ok, "400", Headers, Body} = execute_query(Query, Cfg),
     "text/plain" = content_type(Headers),
-    "Query error: Unexpected token: 'descripe'" = Body.
+    ?assertEqual("Query error: Unexpected token: 'descripe'", Body).
 
 %%% put
 post_single_row_test(Cfg) ->
-    RowStr = row("q1", "w1", 11, 110),
+    RowStr = row(<<"q1">>, <<"w1">>, 11, 110),
     {ok, "200", Headers, RespBody} = post_data("bob", RowStr, Cfg),
     "application/json" = content_type(Headers),
-    RespBody = success_body().
+    ?assertEqual(success_body(), RespBody).
 
 post_single_row_missing_field_test(Cfg) ->
-    RowStr = missing_field_row("q1", 12, 200),
+    RowStr = missing_field_row(<<"q1">>, 12, 200),
     {ok, "400", Headers, Body} =
         post_data("bob", RowStr, Cfg),
     "text/plain" = content_type(Headers),
-    "Missing field \"b\" for key in table \"bob\"" = Body.
+    ?assertEqual("Missing field \"b\" for key in table \"bob\"", Body).
 
 post_single_row_wrong_field_test(Cfg) ->
-    RowStr = wrong_field_type_row("q1", "w1", 12, "raining"),
+    RowStr = wrong_field_type_row(<<"q1">>, <<"w1">>, 12, "raining"),
     {ok,"400", Headers, Body} = post_data("bob", RowStr, Cfg),
     "text/plain" = content_type(Headers),
-    "Bad value for field \"d\" of type sint64 in table \"bob\"" = Body.
+    ?assertEqual("Bad value for field \"d\" of type sint64 in table \"bob\"", Body).
 
 
 post_several_rows_test(Cfg) ->
-    RowStrs = string:join([row("q1", "w2", 20, 150), row("q1", "w1", 20, 119)],
-                          ", "),
-    Body = io_lib:format("[~s]", [RowStrs]),
+    Body = rows([[<<"q1">>, <<"w2">>, 20, 150],
+                 [<<"q1">>, <<"w1">>, 20, 119]]),
+    io:format("Body ~p\n", [Body]),
     {ok, "200", Headers, RespBody} = post_data("bob", Body, Cfg),
     "application/json" = content_type(Headers),
-    RespBody = success_body().
+    ?assertEqual(success_body(), RespBody).
 
 post_row_to_nonexisting_table_test(Cfg) ->
-    RowStr = row("q1", "w1", 30, 142),
-    {ok,"404", Headers, Body} = post_data("bill", RowStr, Cfg),
+    RowStr = row(<<"q1">>, <<"w1">>, 30, 142),
+    {ok, "404", Headers, Body} = post_data("bill", RowStr, Cfg),
     "text/plain" = content_type(Headers),
-    "Table \"bill\" does not exist" = Body.
+    ?assertEqual("Table \"bill\" does not exist", Body).
 
 %%% list_keys
 list_keys_test(Cfg) ->
@@ -206,16 +222,20 @@ select_test(Cfg) ->
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
     {ok,"200", Headers, Body} = execute_query(Select, Cfg),
     "application/json" = content_type(Headers),
-    "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
-        "\"rows\":[[\"q1\",\"w1\",11,110],"
-        "[\"q1\",\"w1\",20,119]]}" = Body.
+    {struct, DataOut} = mochijson2:decode(Body),
+    ?assertEqual([{<<"columns">>, [<<"a">>,<<"b">>,<<"c">>,<<"d">>]},
+                  {<<"rows">>, [[<<"q1">>,<<"w1">>,11,110],
+                                [<<"q1">>,<<"w1">>,20,119]]}],
+                  DataOut).
 
 select_subset_test(Cfg) ->
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<15",
     {ok, "200", Headers, Body} = execute_query(Select, Cfg),
     "application/json" = content_type(Headers),
-    "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
-        "\"rows\":[[\"q1\",\"w1\",11,110]]}" = Body.
+    {struct, DataOut} = mochijson2:decode(Body),
+    ?assertEqual([{<<"columns">>, [<<"a">>,<<"b">>,<<"c">>,<<"d">>]},
+                  {<<"rows">>, [[<<"q1">>,<<"w1">>,11,110]]}],
+                 DataOut).
 
 invalid_select_test(Cfg) ->
     Select = "select * from bob where a='q1' and c>1 and c<15",
@@ -223,40 +243,46 @@ invalid_select_test(Cfg) ->
     %% from riak_ql might be too much for this API.
     {ok, "500", Headers, Body} = execute_query(Select, Cfg),
     "text/plain" = content_type(Headers),
-    "Execution of select query failed on table \"bob\" (The 'b' parameter is part the primary key but not specified in the where clause.)"
-        = Body.
+    ?assertEqual(
+       "Execution of select query failed on table \"bob\""
+       " (The 'b' parameter is part the primary key but not specified in the where clause.)",
+       Body).
 
 invalid_query_test(Cfg) ->
     Select = "OHNOES A DANGLING QUOTE ' ",
     {ok, "400", Headers, Body} = execute_query(Select, Cfg),
     "text/plain" = content_type(Headers),
-    "Query error: Unexpected token '''." = Body.
+    ?assertEqual("Query error: Unexpected token '''.", Body).
 
 %%% delete
 delete_data_existing_row_test(Cfg) ->
-    {ok, "200", Headers, Body} = delete("bob", "q1", "w1", 11, Cfg),
+    {ok, "200", Headers, Body1} = delete("bob", "q1", "w1", 11, Cfg),
     "application/json" = content_type(Headers),
-    Body = success_body(),
+    ?assertEqual(success_body(), Body1),
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
-    {ok, "200", _Headers2,
-     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],\"rows\":[[\"q1\",\"w1\",20,119]]}"} =
-        execute_query(Select, Cfg).
+    {ok, "200", _Headers2, Body2} =
+        execute_query(Select, Cfg),
+    {struct, RemainingRows} = mochijson2:decode(Body2),
+    ?assertEqual(
+       [{<<"columns">>, [<<"a">>,<<"b">>,<<"c">>,<<"d">>]},
+        {<<"rows">>, [[<<"q1">>,<<"w1">>,20,119]]}],
+       RemainingRows).
+
 
 delete_data_nonexisting_row_test(Cfg) ->
     {ok, "404", Headers, Body } = delete("bob", "q1", "w1", 500, Cfg),
     "text/plain" = content_type(Headers),
-    "Key not found"
-        = Body.
+    ?assertEqual("Key not found", Body).
 
 delete_data_nonexisting_table_test(Cfg) ->
     {ok, "404", Headers, Body } = delete("bill", "q1", "w1", 20, Cfg),
     "text/plain" = content_type(Headers),
-    "Table \"bill\" does not exist" = Body.
+    ?assertEqual("Table \"bill\" does not exist", Body).
 
 delete_data_wrong_path_test(Cfg) ->
     {ok, "400", Headers, Body} = delete_wrong_path("bob", "q1", "w1", 20, Cfg),
     "text/plain" = content_type(Headers),
-    "Not all key-constituent fields given on URL" = Body.
+    ?assertEqual("Not all key-constituent fields given on URL", Body).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Helper functions
@@ -264,12 +290,23 @@ delete_data_wrong_path_test(Cfg) ->
 execute_query(Query, Cfg) ->
     Node = get_node(Cfg),
     URL = query_url(Node),
-    ibrowse:send_req(URL, [], post, Query).
+    patient_req(URL, [], post, Query, 1).
 
 post_data(Table, Body, Cfg) ->
     Node = get_node(Cfg),
     URL = post_data_url(Node, Table),
-    ibrowse:send_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body)).
+    patient_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body), 1).
+
+patient_req(_URL, _Headers, _ReqType, _Body, 0) ->
+    {error, timeout};
+patient_req(URL, Headers, ReqType, Body, TriesLeft) ->
+    case ibrowse:send_req(URL, Headers, ReqType, Body) of
+        {ok, "503", _Headers, _Body} ->
+            timer:sleep(1000),
+            patient_req(URL, Headers, ReqType, Body, TriesLeft - 1);
+        OtherResponse ->
+            OtherResponse
+    end.
 
 
 get_node(Cfg) ->
@@ -350,16 +387,17 @@ delete_url_wrong_path(Node, Table, A, B, C) ->
 
 
 row(A, B, C, D) ->
-    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~B}",
-                  [A, B, C, D]).
+    mochijson2:encode({struct, [{"a", A}, {"b", B}, {"c", C}, {"d", D}]}).
+
+rows(RR) ->
+    mochijson2:encode(
+      [ [{"a", A}, {"b", B}, {"c", C}, {"d", D}] || [A, B, C, D] <- RR ]).
 
 missing_field_row(A, C, D) ->
-    io_lib:format("{\"a\": \"~s\", \"c\": ~B, \"d\":~B}",
-                  [A, C, D]).
+    mochijson2:encode({struct, [{"a", A}, {"c", C}, {"d", D}]}).
 
 wrong_field_type_row(A, B, C, D) ->
-    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~p}",
-                  [A, B, C, D]).
+    mochijson2:encode({struct, [{"a", A}, {"b", B}, {"c", C}, {"d", D}]}).
 
 
 success_body() ->
