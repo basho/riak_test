@@ -80,6 +80,8 @@ replication(ANodes, BNodes, Connected) ->
 %%        Write some keys with full sync enabled.
 %%        Check for keys written prior to full sync.
 %%        Check all keys.
+%%        Delete some keys.
+%%        Verify the deletions are propagated.
 real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
     TestHash = list_to_binary([io_lib:format("~2.16.0b", [X]) || <<X>> <= erlang:md5(term_to_binary(os:timestamp()))]),
@@ -168,8 +170,13 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) 
             ?assertEqual(0, repl_util:wait_for_reads(BFirst, 1, 200, TestBucket, 2));
         _ ->
             ok
-    end.
+    end,
 
+    log_to_nodes(ANodes ++ BNodes, "Delete data from Cluster A, verify replication to Cluster B via realtime"),
+    lager:info("Deleting 100 keys on Cluster A"),
+
+    ?assertEqual([], rt:systest_delete(LeaderA, 1, 100, TestBucket, 2)),
+    ?assertEqual(0, repl_util:wait_for_deletes(BFirst, 1, 100, TestBucket, 2)).
 
 %% @doc Disconnected Clusters Full Sync Test
 %%      Test Cycle:
