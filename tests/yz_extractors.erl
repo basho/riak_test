@@ -145,7 +145,9 @@
            %% allow AAE to build trees and exchange rapidly
            {anti_entropy_build_limit, {100, 1000}},
            {anti_entropy_concurrency, 8},
-           {anti_entropy_tick, 1000}
+           {anti_entropy_tick, 1000},
+           %% but start with AAE turned off so as not to interfere with earlier parts of the test
+           {anti_entropy, {off, []}}
           ]},
          {yokozuna,
           [
@@ -253,8 +255,6 @@ confirm() ->
     test_extractor_works(Cluster, Packet),
     test_extractor_with_aae_expire(Cluster, ?INDEX2, ?BUCKET2, Packet),
 
-    rt:clean_cluster(Cluster),
-
     pass.
 
 %%%===================================================================
@@ -319,6 +319,8 @@ test_extractor_with_aae_expire(Cluster, Index, Bucket, Packet) ->
 
     yokozuna_rt:search_expect({Host, Port}, Index, <<"host">>,
                               <<"www*">>, 1),
+
+    rpc:multicall(Cluster, riak_kv_entropy_manager, enable, []),
 
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:wait_for_full_exchange_round(Cluster, erlang:now()),
