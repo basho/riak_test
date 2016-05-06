@@ -176,7 +176,7 @@ real_time_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) 
     lager:info("Deleting 100 keys on Cluster A"),
 
     ?assertEqual([], rt:systest_delete(LeaderA, 1, 100, TestBucket, 2)),
-    ?assertEqual(0, repl_util:wait_for_deletes(BFirst, 1, 100, TestBucket, 2)).
+    ?assertEqual(0, repl_util:wait_for_all_notfound(BFirst, 1, 100, TestBucket, 2)).
 
 %% @doc Disconnected Clusters Full Sync Test
 %%      Test Cycle:
