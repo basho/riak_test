@@ -34,7 +34,9 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    Cluster = ts_util:build_cluster(single),
+    [Node|_] = Cluster = ts_util:build_cluster(single),
+    Pid = rt:pbc(Node),
+    create_data_stream_table_1(Pid),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -69,24 +71,37 @@ run_query(Ctx, Query) ->
 %%%
 %%%
 
-stream_query_1_test(Ctx) ->
+create_data_stream_table_1(Pid) ->
     ?assertEqual(
         {ok, {[],[]}},
-        riakc_ts:query(client_pid(Ctx),
+        riakc_ts:query(Pid,
             "CREATE TABLE streamtable1 ("
             "a SINT64 NOT NULL, "
             "b SINT64 NOT NULL, "
             "c TIMESTAMP NOT NULL, "
             "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))"
     )),
-    ok = riakc_ts:put(client_pid(Ctx), <<"streamtable1">>,
-        [{1,1,N} || N <- lists:seq(1, 100)]),
+    ok = riakc_ts:put(Pid, <<"streamtable1">>,
+        [{1,1,N} || N <- lists:seq(1, 100)]).
+
+stream_query_1_test(Ctx) ->
     Query =
         "SELECT * FROM streamtable1 WHERE a = 1 AND b = 1 AND c > 0 AND c < 11",
     {ok, ReqId} = riakc_ts:stream_query(
             client_pid(Ctx), Query, [], []),
     ts_util:ct_verify_rows(
         [{1,1,N} || N <- lists:seq(1, 10)],
+        stream_query_receive(ReqId)
+    ).
+
+stream_query_with_aggregates_not_supported_test(Ctx) ->
+    Query =
+        "SELECT MAX(c) FROM streamtable1 "
+        "WHERE a = 1 AND b = 1 AND c > 0 AND c < 11",
+    {ok, ReqId} = riakc_ts:stream_query(
+            client_pid(Ctx), Query, [], []),
+    ?assertMatch(
+        {error,{1001, <<_/binary>>}},
         stream_query_receive(ReqId)
     ).
 
