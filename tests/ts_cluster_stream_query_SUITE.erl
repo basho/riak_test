@@ -82,7 +82,7 @@ create_data_stream_table_1(Pid) ->
             "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))"
     )),
     ok = riakc_ts:put(Pid, <<"streamtable1">>,
-        [{1,1,N} || N <- lists:seq(1, 100)]).
+        [{1,1,N} || N <- lists:seq(1, 5000)]).
 
 stream_query_1_test(Ctx) ->
     Query =
@@ -91,6 +91,16 @@ stream_query_1_test(Ctx) ->
             client_pid(Ctx), Query, [], []),
     ts_util:ct_verify_rows(
         [{1,1,N} || N <- lists:seq(1, 10)],
+        stream_query_receive(ReqId)
+    ).
+
+stream_query_with_multiple_quantas_test(Ctx) ->
+    Query =
+        "SELECT * FROM streamtable1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 2500",
+    {ok, ReqId} = riakc_ts:stream_query(
+            client_pid(Ctx), Query, [], []),
+    ts_util:ct_verify_rows(
+        [{1,1,N} || N <- lists:seq(501, 2499)],
         stream_query_receive(ReqId)
     ).
 
