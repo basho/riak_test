@@ -37,6 +37,7 @@
     create_bucket_type/3,
     create_bucket_type/4,
     create_table/4,
+    ct_verify_rows/2,
     exclusive_result_from_data/3,
     flat_format/2,
     get_bool/1,
