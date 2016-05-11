@@ -29,15 +29,40 @@ confirm() ->
 
     ?assertEqual(E1, E2),
 
+    lager:info("partition"),
     %% partition the cluster
+    PartInfo = rt:partition([N1], [N2]),
 
+    lager:info("update ~p", [N1]),
     %% add and remove from one side only
+    ToRem = lists:keyfind(<<"1">>, 1, E1), %% contains the ctx
 
-    %% wait for hand-off
+    ?assertNotEqual(false, ToRem),
 
-    %% check the remove is reflected on the hand-off target
-    %% @TODO(HOW!!!!)  create only 2 nodes, partition them, update one
-    %% side, heal, wait for handoff, re-partition, read the side that
-    %% was not written too?
+    ok = bigset_client:update(?SET, [<<"7">>], [ToRem], [], N1Client),
 
+    %% Heal and wait for hand-off
+    lager:info("Healling"),
+    ok = rt:heal(PartInfo),
+    ok = rt:wait_for_cluster_service(Nodes, bigset),
+
+    rt:wait_until_no_pending_changes([N1, N2]),
+    rt:wait_until_transfers_complete([N1]),
+    rt:wait_until_transfers_complete([N2]),
+
+    %% re-partition, and read the side that was not written too (since
+    %% that is the only way to get an read without the updated node
+    lager:info("Partition again"),
+    PartInfo = rt:partition([N1], [N2]),
+    
+    lager:info("fetch and verify from ~p", [N2Client]),
+    %% TODO(rdb) set is not found? There is an timeout here??
+    {ok, {ctx, <<>>}, {elems, E3}} = bigset_client:read(?SET, [], N2Client),
+    {ok, {ctx, <<>>}, {elems, E31}} = bigset_client:read(?SET, [], N1Client),
+
+    lager:info("Out ~p~n", [E31]),
+    
+    ?assertMatch({_, _}, lists:keyfind(<<"7">>, 1, E3)),
+    ?assertEqual(false, lists:keyfind(<<"1">>, 1, E3)),
+    
     pass.

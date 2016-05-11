@@ -518,6 +518,11 @@ down(Node, OtherNode) ->
 %% @doc partition the `P1' from `P2' nodes
 %%      note: the nodes remained connected to riak_test@local,
 %%      which is how `heal/1' can still work.
+-spec partition(P1::[node()], P1::[node()]) ->
+                       {NewCookie::atom(),
+                        OldCookie::atom(),
+                        P1::[node()],
+                        P2::[node()]}.
 partition(P1, P2) ->
     OldCookie = rpc:call(hd(P1), erlang, get_cookie, []),
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
@@ -528,6 +533,11 @@ partition(P1, P2) ->
 
 %% @doc heal the partition created by call to `partition/2'
 %%      `OldCookie' is the original shared cookie
+-spec heal({NewCookie::atom(),
+            OldCookie::atom(),
+            P1::[node()],
+            P2::[node()]}) ->
+                  ok.
 heal({_NewCookie, OldCookie, P1, P2}) ->
     Cluster = P1 ++ P2,
     % set OldCookie on P1 Nodes
