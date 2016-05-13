@@ -43,15 +43,4 @@ confirm() ->
 
     ?assertEqual(tl(E1), E3),
 
-    %% partition the cluster
-
-    %% add and remove from one side only
-
-    %% wait for hand-off
-
-    %% check the remove is reflected on the hand-off target
-    %% @TODO(HOW!!!!)  create only 2 nodes, partition them, update one
-    %% side, heal, wait for handoff, re-partition, read the side that
-    %% was not written too?
-
     pass.
