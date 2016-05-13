@@ -17,6 +17,7 @@ confirm() ->
 
     [N1, N2]=Nodes = rt:deploy_nodes(2, Config, [bigset]),
     rt:join_cluster(Nodes),
+
     N1Client = bigset_client:new(N1),
     N2Client = bigset_client:new(N2),
 
@@ -24,13 +25,14 @@ confirm() ->
     ok = bigset_client:update(?SET, [<<"1">>, <<"2">>, <<"3">>, <<"4">>, <<"5">>], N1Client),
     ok = bigset_client:update(?SET, [<<"6">>], N2Client),
 
-    {ok, {ctx, <<>>}, {elems, E1}} = bigset_client:read(?SET, [], N1Client),
-    {ok, {ctx, <<>>}, {elems, E2}} = bigset_client:read(?SET, [], N2Client),
+    E1 = read(N1Client),
+    E2 = read(N2Client),
 
     ?assertEqual(E1, E2),
 
     lager:info("partition"),
     %% partition the cluster
+
     PartInfo = rt:partition([N1], [N2]),
 
     lager:info("update ~p", [N1]),
@@ -41,8 +43,17 @@ confirm() ->
 
     ok = bigset_client:update(?SET, [<<"7">>], [ToRem], [], N1Client),
 
+    PRead = read(N1Client),
+
+    ?assertMatch({_, _}, lists:keyfind(<<"7">>, 1, PRead)),
+    ?assertEqual(false, lists:keyfind(<<"1">>, 1, PRead)),
+
+    %% @TODO(rdb) add tunable R for reads, or not_found_ok=false
+    ?assertEqual(E2, read(N2Client)), %% ie no change yet (partitioned)
+
     %% Heal and wait for hand-off
-    lager:info("Healling"),
+    lager:info("Healing"),
+
     ok = rt:heal(PartInfo),
     ok = rt:wait_for_cluster_service(Nodes, bigset),
 
@@ -51,18 +62,19 @@ confirm() ->
     rt:wait_until_transfers_complete([N2]),
 
     %% re-partition, and read the side that was not written too (since
-    %% that is the only way to get an read without the updated node
+    %% that is the only way to get a read without the updated node
+
     lager:info("Partition again"),
     PartInfo = rt:partition([N1], [N2]),
-    
-    lager:info("fetch and verify from ~p", [N2Client]),
-    %% TODO(rdb) set is not found? There is an timeout here??
-    {ok, {ctx, <<>>}, {elems, E3}} = bigset_client:read(?SET, [], N2Client),
-    {ok, {ctx, <<>>}, {elems, E31}} = bigset_client:read(?SET, [], N1Client),
 
-    lager:info("Out ~p~n", [E31]),
-    
+    lager:info("fetch and verify from ~p", [N2Client]),
+    Res  = bigset_client:read(?SET, [], N2Client),
+    {ok, {ctx, <<>>}, {elems, E3}} = Res,
     ?assertMatch({_, _}, lists:keyfind(<<"7">>, 1, E3)),
     ?assertEqual(false, lists:keyfind(<<"1">>, 1, E3)),
-    
+
     pass.
+
+read(Client) ->
+    {ok, {ctx, <<>>}, {elems, E1}} = bigset_client:read(?SET, [], Client),
+    E1.
