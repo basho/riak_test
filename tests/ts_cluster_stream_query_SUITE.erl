@@ -124,7 +124,7 @@ stream_query_receive(ReqId) ->
 
 stream_query_receive2(ReqId, Acc) ->
     receive
-        {ReqId, {rows, Keys}} ->
+        {ReqId, {rows, _, Keys}} ->
             stream_query_receive2(ReqId, lists:append(Keys, Acc));
         {ReqId, {error, Reason}} ->
             {error, Reason};

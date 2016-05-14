@@ -139,9 +139,9 @@ ts_insert(Conn, Table, Columns, Data) ->
     ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
     SQL = flat_format("INSERT INTO ~s (~s) VALUES (~s)",
                       [Table, ColClause, ValClause]),
-    lager:info("~ts", [SQL]),
+    % lager:info("~ts", [SQL]),
     Got = riakc_ts:query(Conn, SQL),
-    lager:info("Result is ~p", [Got]),
+    % lager:info("Result is ~p", [Got]),
     Got.
 
 ts_insert_no_columns(Conn, Table, Data) ->
@@ -149,9 +149,9 @@ ts_insert_no_columns(Conn, Table, Data) ->
     ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
     SQL = flat_format("INSERT INTO ~s VALUES (~s)",
         [Table, ValClause]),
-    lager:info("~ts", [SQL]),
+    % lager:info("~ts", [SQL]),
     Got = riakc_ts:query(Conn, SQL),
-    lager:info("Result is ~p", [Got]),
+    % lager:info("Result is ~p", [Got]),
     Got.
 
 %%
