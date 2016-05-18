@@ -78,7 +78,8 @@ all() ->
       delete_data_existing_row_test,
       delete_data_nonexisting_row_test,
       delete_data_nonexisting_table_test,
-      delete_data_wrong_path_test
+      delete_data_wrong_path_test,
+      post_single_row_with_null_test
     ].
 
 
@@ -150,6 +151,12 @@ bad_describe_query_test(Cfg) ->
 %%% put
 post_single_row_test(Cfg) ->
     RowStr = row("q1", "w1", 11, 110),
+    {ok, "200", Headers, RespBody} = post_data("bob", RowStr, Cfg),
+    "application/json" = content_type(Headers),
+    RespBody = success_body().
+
+post_single_row_with_null_test(Cfg) ->
+    RowStr = "{\"a\": \"a22\", \"b\": \"b22\", \"c\":22000, \"d\":null}",
     {ok, "200", Headers, RespBody} = post_data("bob", RowStr, Cfg),
     "application/json" = content_type(Headers),
     RespBody = success_body().
