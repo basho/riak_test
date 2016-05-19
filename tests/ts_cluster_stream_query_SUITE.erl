@@ -120,18 +120,24 @@ stream_query_with_aggregates_not_supported_test(Ctx) ->
 %%--------------------------------------------------------------------
 
 stream_query_receive(ReqId) ->
-    stream_query_receive2(ReqId, []).
+    case stream_query_receive2(ReqId, []) of
+        {ok, Chunks1} ->
+            Chunks2 = lists:sort(Chunks1),
+            lists:foldl(fun(E,Acc) -> Acc ++ element(4,E) end, [], Chunks2);
+        Error ->
+            Error
+    end.
 
 stream_query_receive2(ReqId, Acc) ->
     receive
-        {ReqId, {rows, _, Keys}} ->
-            stream_query_receive2(ReqId, lists:append(Keys, Acc));
+        {ReqId, {rows, _, _, _} = RowsChunk} ->
+            stream_query_receive2(ReqId, [RowsChunk|Acc]);
         {ReqId, {error, Reason}} ->
             {error, Reason};
         {ReqId, done} ->
-            Acc;
+            {ok,Acc};
         Else ->
             {error, {unknown_message, Else}}
     after 3000 ->
-            {ok, Acc}
+            {error,timeout}
     end.
