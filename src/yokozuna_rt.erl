@@ -26,6 +26,7 @@
          clear_trees/1,
          commit/2,
          expire_trees/1,
+         ensure_complete_aae_round/1,
          gen_keys/1,
          host_entries/1,
          override_schema/5,
@@ -115,9 +116,15 @@ rolling_upgrade(Node, Version, UpgradeConfig, WaitForServices) ->
 %%      partitions since the time this function was invoked.
 -spec wait_for_aae([node()]) -> ok.
 wait_for_aae(Cluster) ->
+    wait_for_aae(Cluster, os:timestamp()).
+
+%% @doc Use AAE status to verify that exchange has occurred for all
+%%      partitions since Timestamp
+-spec wait_for_aae([node()], erlang:timestamp()) -> ok.
+wait_for_aae(Cluster, Timestamp) ->
     lager:info("Wait for AAE to migrate/repair indexes"),
     wait_for_all_trees(Cluster),
-    wait_for_full_exchange_round(Cluster, erlang:now()),
+    wait_for_full_exchange_round(Cluster, Timestamp),
     ok.
 
 %% @doc Wait for all AAE trees to be built.
@@ -138,22 +145,42 @@ wait_for_all_trees(Cluster) ->
 -spec wait_for_full_exchange_round([node()], os:now()) -> ok.
 wait_for_full_exchange_round(Cluster, Timestamp) ->
     lager:info("wait for full AAE exchange round on cluster ~p", [Cluster]),
-    MoreRecent =
-        fun({_Idx, _, undefined, _RepairStats}) ->
-                false;
-           ({_Idx, _, AllExchangedTime, _RepairStats}) ->
-                AllExchangedTime > Timestamp
-        end,
     AllExchanged =
         fun(Node) ->
-                Exchanges = rpc:call(Node, yz_kv, compute_exchange_info, []),
-                {_Recent, WaitingFor1} = lists:partition(MoreRecent, Exchanges),
-                WaitingFor2 = [element(1,X) || X <- WaitingFor1],
-                lager:info("Still waiting for AAE of ~p ~p", [Node, WaitingFor2]),
-                [] == WaitingFor2
+            Exchanges = get_exchanges_for_node(Node),
+            WaitingFor = get_exchanges_older_than(Timestamp, Exchanges),
+            lager:info("Still waiting for AAE of ~p ~p", [Node, WaitingFor]),
+            [] == WaitingFor
         end,
     rt:wait_until(Cluster, AllExchanged),
     ok.
+
+%% @doc In order to ensure all KV->YZ exchanges have occurred since a given timestamp,
+%% use yz_kv:compute_exchange_info to get list of exchanges to date. If any completed before
+%% timestamp, force them to run again using yz_entropy_mgr:manual_exchange.
+-spec force_exchanges_if_older_than([node()], erlang:timestamp()) -> ok.
+force_exchanges_if_older_than(Cluster, Timestamp) ->
+    lists:foreach(fun(Node) ->
+        Exchanges = get_exchanges_for_node(Node),
+        OldExchanges = get_exchanges_older_than(Timestamp, Exchanges),
+        _ = [rpc:call(Node, yz_entropy_mgr, manual_exchange, [Index]) || Index <- OldExchanges]
+        end, Cluster),
+    ok.
+
+get_exchanges_older_than(Timestamp, Exchanges) ->
+    {_Recent, WaitingFor} = lists:partition(exchange_is_more_recent_than(Timestamp), Exchanges),
+    [element(1,X) || X <- WaitingFor].
+
+get_exchanges_for_node(Node) ->
+    rpc:call(Node, yz_kv, compute_exchange_info, []).
+
+exchange_is_more_recent_than(Timestamp) ->
+    fun({_Idx, _, undefined, _RepairStats}) ->
+            false;
+       ({_Idx, _, AllExchangedTime, _RepairStats}) ->
+            AllExchangedTime > Timestamp
+    end.
+
 
 %% @doc Wait for index creation. This is to handle *legacy* versions of yokozuna
 %%      in upgrade tests
@@ -210,6 +237,28 @@ expire_trees(Cluster) ->
     %% The expire is async so just give it a moment
     timer:sleep(100),
     ok.
+
+%% @doc cancel any ongoing exchanges
+-spec cancel_all_exchanges([node()]) -> ok.
+cancel_all_exchanges(Cluster) ->
+    lager:info("Expire all trees"),
+    _ = [_ = rpc:call(Node, yz_entropy_mgr, cancel_exchanges, [])
+        || Node <- Cluster],
+
+    %% The expire is async so just give it a moment
+    timer:sleep(100),
+    ok.
+
+%% @doc Expire trees and wait for aae. If any indexes were exchanged
+%% before this function is called, they will be forced to rerun
+%% via a call to yz_entropy_mgr:manual_exchange
+-spec ensure_complete_aae_round([node()]) -> ok.
+ensure_complete_aae_round(Cluster) ->
+    Timestamp = os:timestamp(),
+    cancel_all_exchanges(Cluster),
+    force_exchanges_if_older_than(Cluster, Timestamp),
+    expire_trees(Cluster),
+    wait_for_aae(Cluster, Timestamp).
 
 %% @doc Expire YZ trees
 -spec clear_trees([node()]) -> ok.
