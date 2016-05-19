@@ -174,7 +174,6 @@ confirm() ->
 
     yokozuna_rt:write_data(Cluster, OldPid, ?INDEX1,
                            {?SCHEMANAME, ?TEST_SCHEMA}, ?BUCKET1, GenKeys),
-    yokozuna_rt:commit(Cluster, ?INDEX1),
 
     ok = rt:stop_tracing(),
 
@@ -317,7 +316,8 @@ test_extractor_with_aae_expire(Cluster, Index, Bucket, Packet) ->
 
     yokozuna_rt:commit(Cluster, Index),
 
-    yokozuna_rt:search_expect({Host, Port}, Index, <<"host">>,
+    ANode = rt:select_random(Cluster),
+    yokozuna_rt:search_expect(ANode, Index, <<"host">>,
                               <<"www*">>, 1),
 
     rpc:multicall(Cluster, riak_kv_entropy_manager, enable, []),
@@ -325,7 +325,7 @@ test_extractor_with_aae_expire(Cluster, Index, Bucket, Packet) ->
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:wait_for_full_exchange_round(Cluster, erlang:now()),
 
-    yokozuna_rt:search_expect({Host, Port}, Index, <<"host">>,
+    yokozuna_rt:search_expect(ANode, Index, <<"host">>,
                               <<"www*">>, 1),
 
     APid = rt:pbc(rt:select_random(Cluster)),
@@ -341,12 +341,12 @@ test_extractor_with_aae_expire(Cluster, Index, Bucket, Packet) ->
                           put, Packet),
     yokozuna_rt:commit(Cluster, Index),
 
-    yokozuna_rt:search_expect({Host, Port}, Index, <<"method">>,
+    yokozuna_rt:search_expect(ANode, Index, <<"method">>,
                               <<"GET">>, 1),
 
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:wait_for_full_exchange_round(Cluster, erlang:now()),
 
-    yokozuna_rt:search_expect({Host, Port}, Index, <<"method">>,
+    yokozuna_rt:search_expect(ANode, Index, <<"method">>,
                               <<"GET">>, 1),
     riakc_pb_socket:stop(APid).

@@ -50,6 +50,7 @@
 -type portnum() :: integer().
 -type count() :: non_neg_integer().
 -type json_string() :: atom | string() | binary().
+-type search_type() :: solr | yokozuna.
 
 -define(FMT(S, Args), lists:flatten(io_lib:format(S, Args))).
 -define(SOFTCOMMIT, 1000).
@@ -73,7 +74,7 @@ write_data(Cluster, Pid, Index, Bucket, Keys) ->
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
 
     create_and_set_index(Cluster, Pid, Bucket, Index),
-    timer:sleep(1000),
+    yokozuna_rt:commit(Cluster, Index),
 
     %% Write keys
     lager:info("Writing ~p keys", [length(Keys)]),
@@ -129,7 +130,7 @@ wait_for_all_trees(Cluster) ->
                 NotBuilt = [X || {_,undefined}=X <- Info],
                 NotBuilt == []
         end,
-    rt:wait_until(Cluster, F),
+    wait_until(Cluster, F),
     ok.
 
 %% @doc Wait for a full exchange round since `Timestamp'.  This means
@@ -152,7 +153,7 @@ wait_for_full_exchange_round(Cluster, Timestamp) ->
                 lager:info("Still waiting for AAE of ~p ~p", [Node, WaitingFor2]),
                 [] == WaitingFor2
         end,
-    rt:wait_until(Cluster, AllExchanged),
+    wait_until(Cluster, AllExchanged),
     ok.
 
 %% @doc Wait for index creation. This is to handle *legacy* versions of yokozuna
@@ -165,7 +166,7 @@ wait_for_index(Cluster, Index) ->
                            [Index, Node]),
                 rpc:call(Node, yz_solr, ping, [Index])
         end,
-    [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster],
+    wait_until(Cluster, IsIndexUp),
     ok.
 
 %% @see wait_for_schema/3
@@ -197,7 +198,7 @@ wait_for_schema(Cluster, Name, Content) ->
                         false
                 end
         end,
-    rt:wait_until(Cluster,  F),
+    wait_until(Cluster,  F),
     ok.
 
 %% @doc Expire YZ trees
@@ -235,7 +236,7 @@ remove_index_dirs(Nodes, IndexName) ->
 %% @doc Check if index/core exists in metadata, disk via yz_index:exists.
 -spec check_exists([node()], index_name()) -> ok.
 check_exists(Nodes, IndexName) ->
-    rt:wait_until(Nodes,
+    wait_until(Nodes,
                   fun(N) ->
                           rpc:call(N, yz_index, exists, [IndexName])
                   end).
@@ -249,25 +250,61 @@ verify_num_found_query(Cluster, Index, ExpectedCount) ->
                            [ExpectedCount, NumFound]),
                 ExpectedCount =:= NumFound
         end,
-    rt:wait_until(Cluster, F),
+    wait_until(Cluster, F),
     ok.
 
-search_expect(HP, Index, Name, Term, Expect) ->
-    search_expect(yokozuna, HP, Index, Name, Term, Expect).
+%% @doc Brought over from yz_rt in the yokozuna repo - FORNOW.
+-spec search_expect(node()|[node()], index_name(), string(), string(),
+                    non_neg_integer()) -> ok.
+search_expect(NodeOrNodes, Index, Name, Term, Expect) ->
+    search_expect(NodeOrNodes, yokozuna, Index, Name, Term, Expect).
 
-search_expect(Type, HP, Index, Name, Term, Expect) ->
-    {ok, "200", _, R} = search(Type, HP, Index, Name, Term),
-    verify_count_http(Expect, R).
-
-search_expect(solr, {Host, Port}, Index, Name0, Term0, Shards, Expect)
-  when is_list(Shards), length(Shards) > 0 ->
+-spec search_expect(node()|[node()], search_type(), index_name(),
+                    string(), string(), [string()], non_neg_integer()) -> ok.
+search_expect(Nodes, solr, Index, Name0, Term0, Shards, Expect)
+  when is_list(Shards), length(Shards) > 0, is_list(Nodes) ->
     Name = quote_unicode(Name0),
     Term = quote_unicode(Term0),
+    Node = rt:select_random(Nodes),
+    {Host, Port} = solr_hp(Node, Nodes),
     URL = internal_solr_url(Host, Port, Index, Name, Term, Shards),
-    lager:info("Run search ~s", [URL]),
+    lager:info("Run solr search ~s", [URL]),
     Opts = [{response_format, binary}],
-    {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts),
-    verify_count_http(Expect, R).
+    F = fun(_) ->
+                {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts),
+                verify_count_http(Expect, R)
+        end,
+    wait_until(Nodes, F);
+search_expect(Node, solr=Type, Index, Name, Term, Shards, Expect)
+  when is_list(Shards), length(Shards) > 0 ->
+    search_expect([Node], Type, Index, Name, Term, Shards, Expect).
+
+-spec search_expect(node()|[node()], search_type(), index_name(),
+                    string(), string(), non_neg_integer()) -> ok.
+search_expect(Nodes, solr=Type, Index, Name, Term, Expect) when is_list(Nodes) ->
+    Node = rt:select_random(Nodes),
+    HP = solr_hp(Node, Nodes),
+
+    %% F could actually be returned in a shared fun, but w/ so much arity,
+    %% just using it twice makes sense.
+    F = fun(_) ->
+                {ok, "200", _, R} = search(Type, HP, Index, Name, Term),
+                verify_count_http(Expect, R)
+        end,
+
+    wait_until(Nodes, F);
+search_expect(Nodes, yokozuna=Type, Index, Name, Term, Expect)
+  when is_list(Nodes) ->
+    HP = hd(host_entries(rt:connection_info(Nodes))),
+
+    F = fun(_) ->
+                {ok, "200", _, R} = search(Type, HP, Index, Name, Term),
+                verify_count_http(Expect, R)
+        end,
+
+    wait_until(Nodes, F);
+search_expect(Node, Type, Index, Name, Term, Expect) ->
+    search_expect([Node], Type, Index, Name, Term, Expect).
 
 assert_search(Pid, Cluster, Index, Search, SearchExpect, Params) ->
     F = fun(_) ->
@@ -285,7 +322,7 @@ assert_search(Pid, Cluster, Index, Search, SearchExpect, Params) ->
                         false
                 end
         end,
-    rt:wait_until(Cluster, F).
+    wait_until(Cluster, F).
 
 search(HP, Index, Name, Term) ->
     search(yokozuna, HP, Index, Name, Term).
@@ -315,7 +352,7 @@ search(Type, {Host, Port}, Index, Name0, Term0) ->
 verify_count_http(Expected, Resp) ->
     Count = get_count_http(Resp),
     lager:info("Expected: ~p, Actual: ~p", [Expected, Count]),
-    ?assertEqual(Expected, Count).
+    Expected =:= Count.
 
 -spec get_count_http(json_string()) -> count().
 get_count_http(Resp) ->
@@ -341,8 +378,9 @@ create_and_set_index(Cluster, Pid, Bucket, Index) ->
     %% Create a search index and associate with a bucket
     lager:info("Create a search index ~s and associate it with bucket ~s",
                [Index, Bucket]),
-    ok = riakc_pb_socket:create_search_index(Pid, Index),
-    %% For possible legacy upgrade reasons, wrap create index in a wait
+    _ = riakc_pb_socket:create_search_index(Pid, Index),
+    %% For possible legacy upgrade reasons or general check around the cluster,
+    %% wrap create index in a wait
     wait_for_index(Cluster, Index),
     set_index(Pid, hd(Cluster), Bucket, Index).
 -spec create_and_set_index([node()], pid(), bucket(), index_name(),
@@ -351,8 +389,9 @@ create_and_set_index(Cluster, Pid, Bucket, Index, Schema) ->
     %% Create a search index and associate with a bucket
     lager:info("Create a search index ~s with a custom schema named ~s and " ++
                "associate it with bucket ~p", [Index, Schema, Bucket]),
-    ok = riakc_pb_socket:create_search_index(Pid, Index, Schema, []),
-    %% For possible legacy upgrade reasons, wrap create index in a wait
+    _ = riakc_pb_socket:create_search_index(Pid, Index, Schema, []),
+    %% For possible legacy upgrade reasons or general check around the cluster,
+    %% wrap create index in a wait
     wait_for_index(Cluster, Index),
     set_index(Pid, hd(Cluster), Bucket, Index).
 
@@ -393,3 +432,36 @@ override_schema(Pid, Cluster, Index, Schema, RawUpdate) ->
     yokozuna_rt:wait_for_schema(Cluster, Schema, RawUpdate),
     [Node|_] = Cluster,
     {ok, _} = rpc:call(Node, yz_index, reload, [Index]).
+
+%% @doc Wrapper around `rt:wait_until' to verify `F' against multiple
+%%      nodes.  The function `F' is passed one of the `Nodes' as
+%%      argument and must return a `boolean()' delcaring whether the
+%%      success condition has been met or not.
+-spec wait_until([node()], fun((node()) -> boolean())) -> ok.
+wait_until(Nodes, F) ->
+    [?assertEqual(ok, rt:wait_until(Node, F)) || Node <- Nodes],
+    ok.
+
+-spec solr_hp(node(), [node()]) -> {host(), portnum()}.
+solr_hp(Node, Cluster) ->
+    CI = connection_info(Cluster),
+    solr_http(proplists:get_value(Node, CI)).
+
+-spec connection_info(list()) -> orddict:orddict().
+connection_info(Cluster) ->
+    CI = orddict:from_list(rt:connection_info(Cluster)),
+    SolrInfo = orddict:from_list([{Node, [{solr_http, get_yz_conn_info(Node)}]}
+                                  || Node <- Cluster]),
+    orddict:merge(fun(_,V1,V2) -> V1 ++ V2 end, CI, SolrInfo).
+
+-spec solr_http({node(), orddict:orddict()}) -> {host(), portnum()}.
+solr_http({_Node, ConnInfo}) ->
+    solr_http(ConnInfo);
+solr_http(ConnInfo) ->
+    proplists:get_value(solr_http, ConnInfo).
+
+-spec get_yz_conn_info(node()) -> {string(), string()}.
+get_yz_conn_info(Node) ->
+    {ok, SolrPort} = rpc:call(Node, application, get_env, [yokozuna, solr_port]),
+    %% Currently Yokozuna hardcodes listener to all interfaces
+    {"127.0.0.1", SolrPort}.

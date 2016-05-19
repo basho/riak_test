@@ -58,13 +58,11 @@ confirm() ->
 
     %% Create a search index and associate with a bucket
     lager:info("Create and set Index ~p for Bucket ~p~n", [?INDEX, ?BUCKET]),
-    ok = riakc_pb_socket:create_search_index(Pid, ?INDEX),
+    _ = riakc_pb_socket:create_search_index(Pid, ?INDEX),
     yokozuna_rt:wait_for_index(Cluster, ?INDEX),
     ok = rt:create_and_activate_bucket_type(Node,
                                             ?TYPE,
                                             [{search_index, ?INDEX}]),
-    timer:sleep(1000),
-
     %% Write keys and wait for soft commit
     lager:info("Writing ~p keys", [KeyCount]),
     [ok = rt:pbc_write(Pid, ?BUCKET, Key, Key, "text/plain") || Key <- Keys],
