@@ -98,8 +98,7 @@ test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid) ->
 
     yokozuna_rt:check_exists(Cluster, ?INDEX),
 
-    yokozuna_rt:expire_trees(Cluster),
-    yokozuna_rt:wait_for_aae(Cluster),
+    yokozuna_rt:ensure_complete_aae_round(Cluster),
 
     lager:info("Write second piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"food">>, <<"foody">>, "text/plain"),
@@ -117,8 +116,7 @@ test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
 
     yokozuna_rt:check_exists(Cluster, ?INDEX),
 
-    yokozuna_rt:expire_trees(Cluster),
-    yokozuna_rt:wait_for_aae(Cluster),
+    yokozuna_rt:ensure_complete_aae_round(Cluster),
 
     lager:info("Write third piece of data"),
     ok = rt:pbc_write(Pid, ?BUCKET, <<"baz">>, <<"bar">>, "text/plain"),

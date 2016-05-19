@@ -26,6 +26,7 @@
          clear_trees/1,
          commit/2,
          expire_trees/1,
+         ensure_complete_aae_round/1,
          gen_keys/1,
          host_entries/1,
          override_schema/5,
@@ -39,12 +40,15 @@
          assert_search/6,
          verify_num_found_query/3,
          wait_for_aae/1,
+         wait_for_full_exchange_round/1,
          wait_for_full_exchange_round/2,
+         wait_for_full_exchange_round/3,
          wait_for_index/2,
          wait_for_schema/2,
          wait_for_schema/3,
          write_data/5,
-         write_data/6]).
+         write_data/6]
+         ).
 
 -type host() :: string().
 -type portnum() :: integer().
@@ -115,9 +119,21 @@ rolling_upgrade(Node, Version, UpgradeConfig, WaitForServices) ->
 %%      partitions since the time this function was invoked.
 -spec wait_for_aae([node()]) -> ok.
 wait_for_aae(Cluster) ->
+    wait_for_aae(Cluster, os:timestamp()).
+
+%% @doc Use AAE status to verify that exchange has occurred for all
+%%      partitions since Timestamp
+-spec wait_for_aae([node()], erlang:timestamp()) -> ok.
+wait_for_aae(Cluster, Timestamp) ->
+    wait_for_aae(Cluster, Timestamp, false).
+
+%% @doc Use AAE status to verify that exchange has occurred for all
+%%      partitions since Timestamp
+-spec wait_for_aae([node()], erlang:timestamp(), boolean()) -> ok.
+wait_for_aae(Cluster, Timestamp, ForceExchanges) ->
     lager:info("Wait for AAE to migrate/repair indexes"),
     wait_for_all_trees(Cluster),
-    wait_for_full_exchange_round(Cluster, erlang:now()),
+    wait_for_full_exchange_round(Cluster, Timestamp, ForceExchanges),
     ok.
 
 %% @doc Wait for all AAE trees to be built.
@@ -131,29 +147,56 @@ wait_for_all_trees(Cluster) ->
         end,
     rt:wait_until(Cluster, F),
     ok.
+-spec wait_for_full_exchange_round([node()]) -> ok.
+wait_for_full_exchange_round(Cluster) ->
+    wait_for_full_exchange_round(Cluster, erlang:now()).
 
 %% @doc Wait for a full exchange round since `Timestamp'.  This means
-%%      that all `{Idx,N}' for all partitions must have exchanged after
-%%      `Timestamp'.
--spec wait_for_full_exchange_round([node()], os:now()) -> ok.
+%% that all `{Idx,N}' for all partitions must have exchanged after
+%% `Timestamp'.
+-spec wait_for_full_exchange_round([node()], erlang:timestamp()) -> ok.
 wait_for_full_exchange_round(Cluster, Timestamp) ->
+    wait_for_full_exchange_round(Cluster, Timestamp, false).
+%% @doc Wait for a full exchange round since `Timestamp'.  This means
+%% that all `{Idx,N}' for all partitions must have exchanged after
+%% `Timestamp'. If `ForceExchangeRound` is true, will also call manual_exchange
+%% for any waiting exchanges.
+-spec wait_for_full_exchange_round([node()], erlang:timestamp(), boolean()) -> ok.
+wait_for_full_exchange_round(Cluster, Timestamp, ForceExchanges) ->
     lager:info("wait for full AAE exchange round on cluster ~p", [Cluster]),
-    MoreRecent =
-        fun({_Idx, _, undefined, _RepairStats}) ->
-                false;
-           ({_Idx, _, AllExchangedTime, _RepairStats}) ->
-                AllExchangedTime > Timestamp
-        end,
     AllExchanged =
         fun(Node) ->
-                Exchanges = rpc:call(Node, yz_kv, compute_exchange_info, []),
-                {_Recent, WaitingFor1} = lists:partition(MoreRecent, Exchanges),
-                WaitingFor2 = [element(1,X) || X <- WaitingFor1],
-                lager:info("Still waiting for AAE of ~p ~p", [Node, WaitingFor2]),
-                [] == WaitingFor2
+            Exchanges = get_exchanges_for_node(Node),
+            WaitingFor = get_exchanges_older_than(Timestamp, Exchanges),
+            lager:info("Still waiting for AAE of ~p ~p", [Node, WaitingFor]),
+            case ForceExchanges of
+                true -> force_exchanges(Node, WaitingFor);
+                _ -> ok
+            end,
+            [] == WaitingFor
         end,
     rt:wait_until(Cluster, AllExchanged),
     ok.
+
+-spec force_exchanges(node(), non_neg_integer()) -> ok.
+force_exchanges(Node, Indexes) ->
+    _ = [rpc:call(Node, yz_entropy_mgr, manual_exchange, [Index]) || Index <- Indexes],
+    ok.
+
+get_exchanges_older_than(Timestamp, Exchanges) ->
+    {_Recent, WaitingFor} = lists:partition(exchange_is_more_recent_than(Timestamp), Exchanges),
+    [element(1,X) || X <- WaitingFor].
+
+get_exchanges_for_node(Node) ->
+    rpc:call(Node, yz_kv, compute_exchange_info, []).
+
+exchange_is_more_recent_than(Timestamp) ->
+    fun({_Idx, _, undefined, _RepairStats}) ->
+            false;
+       ({_Idx, _, AllExchangedTime, _RepairStats}) ->
+            AllExchangedTime > Timestamp
+    end.
+
 
 %% @doc Wait for index creation. This is to handle *legacy* versions of yokozuna
 %%      in upgrade tests
@@ -210,6 +253,15 @@ expire_trees(Cluster) ->
     %% The expire is async so just give it a moment
     timer:sleep(100),
     ok.
+
+%% @doc Expire trees and wait for aae. If any indexes were exchanged
+%% before this function is called, they will be forced to rerun
+%% via a call to yz_entropy_mgr:manual_exchange
+-spec ensure_complete_aae_round([node()]) -> ok.
+ensure_complete_aae_round(Cluster) ->
+    Timestamp = os:timestamp(),
+    expire_trees(Cluster),
+    wait_for_aae(Cluster, Timestamp, true).
 
 %% @doc Expire YZ trees
 -spec clear_trees([node()]) -> ok.

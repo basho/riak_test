@@ -202,8 +202,7 @@ confirm() ->
 
     lager:info("Expire and re-check count before updating schema"),
 
-    yokozuna_rt:expire_trees(Cluster),
-    yokozuna_rt:wait_for_aae(Cluster),
+    yokozuna_rt:ensure_complete_aae_round(Cluster),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 3),
 
@@ -239,8 +238,7 @@ confirm() ->
     lager:info("Expire and re-check count to make sure we're correctly indexed
                by the new schema"),
 
-    yokozuna_rt:expire_trees(Cluster),
-    yokozuna_rt:wait_for_aae(Cluster),
+    yokozuna_rt:ensure_complete_aae_round(Cluster),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 5),
 
