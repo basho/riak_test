@@ -45,13 +45,65 @@ confirm() ->
     test_quanta_range(Table, SmallData, Nodes, 4, QuantumMS),
     %% Now test the full range
     test_quanta_range(Table, Data, Nodes, QuantaTally, QuantumMS),
+    test_replacement_quanta(Table, Data, Nodes, QuantaTally, QuantumMS),
     pass.
+
+test_replacement_quanta(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
+    AdminPid = rt:pbc(lists:nth(3, Nodes)),
+    Qry = ts_util:get_valid_qry(-1, NumQuanta * QuantumMS),
+    {ok, CoverageEntries} = riakc_ts:get_coverage(AdminPid, Table, Qry),
+    ?assertEqual(NumQuanta, length(CoverageEntries)),
+
+    Results =
+        lists:foldl(
+          fun({{IP, Port}, Context, TsRange, Description}, Acc) ->
+                  %% Replace this chunk
+                  {ok, NewCover} = riakc_ts:replace_coverage(AdminPid, Table, Qry, Context),
+
+                  %% Validate that the new cover is distinct from the
+                  %% old one but shares the same range and
+                  %% description. IP2 should equal IP as long as we're
+                  %% running devrel, but someday we may have tests
+                  %% against true clusters
+                  {{IP2, Port2}, Context2, TsRange, Description} = NewCover,
+                  ?assertNotEqual(Context, Context2),
+                  ?assertNotEqual(Port, Port2),
+
+                  {ok, Pid} = riakc_pb_socket:start_link(
+                                binary_to_list(IP2), Port2),
+                  {ok, {_, ThisQuantum}} = riakc_ts:query(Pid, Qry, [], Context2),
+                  riakc_pb_socket:stop(Pid),
+
+                  %% Open a connection to another node and make
+                  %% certain we get no results using this cover
+                  %% context. This assumes a common IP, so it only
+                  %% works for devrel tests
+                  {ok, WrongPid} = riakc_pb_socket:start_link(
+                                     binary_to_list(IP), alternate_port(Port2)),
+                  make_noise_if_results_not_empty(
+                    ThisQuantum,
+                    riakc_ts:query(WrongPid, Qry, [], Context2),
+                    Port2, Description, Context2
+                   ),
+                  riakc_pb_socket:stop(WrongPid),
+
+                  %% Let's compare the range data with the
+                  %% query results to make sure the latter
+                  %% fall within the former
+                  check_data_against_range(ThisQuantum, TsRange),
+                  %% Now add to the pile and continue
+                  ThisQuantum ++ Acc
+          end,
+          [],
+          CoverageEntries),
+    ?assertEqual(lists:sort(ExpectedData), lists:sort(Results)).
 
 test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
     AdminPid = rt:pbc(lists:nth(3, Nodes)),
     OtherPid = rt:pbc(lists:nth(2, Nodes)),
     Qry = ts_util:get_valid_qry(-1, NumQuanta * QuantumMS),
     {ok, CoverageEntries} = riakc_ts:get_coverage(AdminPid, Table, Qry),
+    ?assertEqual(NumQuanta, length(CoverageEntries)),
 
     Results =
         lists:foldl(
@@ -61,9 +113,10 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
                   {ok, {_, ThisQuantum}} = riakc_ts:query(Pid, Qry, [], Context),
                   riakc_pb_socket:stop(Pid),
 
-                  %% Open a connection to another node and
-                  %% make certain we get no results using
-                  %% this cover context
+                  %% Open a connection to another node and make
+                  %% certain we get no results using this cover
+                  %% context. This assumes a common IP, so it only
+                  %% works for devrel tests
                   {ok, WrongPid} = riakc_pb_socket:start_link(
                                      binary_to_list(IP), alternate_port(Port)),
                   make_noise_if_results_not_empty(
