@@ -57,8 +57,8 @@ test_replacement_quanta(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
     Results =
         lists:foldl(
           fun({{IP, Port}, Context, TsRange, Description}, Acc) ->
-                  %% Replace this chunk
-                  {ok, NewCover} = riakc_ts:replace_coverage(AdminPid, Table, Qry, Context),
+                  %% Replace this chunk. Will result in only one item.
+                  {ok, [NewCover]} = riakc_ts:replace_coverage(AdminPid, Table, Qry, Context),
 
                   %% Validate that the new cover is distinct from the
                   %% old one but shares the same range and
