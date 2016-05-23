@@ -116,10 +116,12 @@
 -define(CFG,
         [{riak_core,
           [
-           {ring_creation_size, 16},
-           {anti_entropy_build_limit, {100, 1000}},
-           {anti_entropy_concurrency, 8}
+           {ring_creation_size, 16}
           ]},
+         {riak_kv, [
+             {anti_entropy_concurrency, 8},
+             {anti_entropy_build_limit, {100, 1000}}
+         ]},
          {yokozuna,
           [
            {anti_entropy_tick, 1000},

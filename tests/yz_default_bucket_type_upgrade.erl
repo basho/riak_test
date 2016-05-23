@@ -43,10 +43,14 @@
                    {n_val, ?N},
                    {allow_mult, true},
                    {dvv_enabled, true}
-               ]},
-           {anti_entropy_build_limit, {100, 1000}},
-           {anti_entropy_concurrency, 8}
+               ]}
           ]},
+         {riak_kv,
+             [
+                 {anti_entropy_build_limit, {100, 1000}},
+                 {anti_entropy_concurrency, 8}
+             ]
+         },
          {yokozuna,
           [
            {anti_entropy_tick, 1000},
