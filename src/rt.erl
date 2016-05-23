@@ -1819,6 +1819,13 @@ setup_harness(Test, Args) ->
 get_node_logs() ->
     ?HARNESS:get_node_logs().
 
+%% @doc Performs a search against the log files on `Node' and returns all
+%% matching lines.
+-spec search_logs(node(), Pattern::iodata()) ->
+    [{Path::string(), LineNum::pos_integer(), MatchingLine::string()}].
+search_logs(Node, Pattern) ->
+    ?HARNESS:search_logs(Node, Pattern).
+
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
         {status, _Pid, {module, gen_server} ,_} -> ok
@@ -1965,6 +1972,17 @@ expect_in_log(Node, Pattern) ->
         ok ->
             true;
         _ ->
+            false
+    end.
+
+%% @doc Returns `true' if Pattern is _not_ found in the logs for `Node',
+%% `false' if it _is_ found.
+-spec expect_not_in_logs(Node::node(), Pattern::iodata()) -> boolean().
+expect_not_in_logs(Node, Pattern) ->
+    case search_logs(Node, Pattern) of
+        [] ->
+            true;
+        _Matches ->
             false
     end.
 
