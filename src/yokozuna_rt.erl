@@ -53,6 +53,7 @@
 -type search_type() :: solr | yokozuna.
 
 -define(FMT(S, Args), lists:flatten(io_lib:format(S, Args))).
+-define(IBROWSE_TIMEOUT, 60000).
 -define(SOFTCOMMIT, 1000).
 
 -spec host_entries(rt:conn_info()) -> [{host(), portnum()}].
@@ -276,7 +277,8 @@ search_expect(Nodes, solr, Index, Name0, Term0, Shards, Expect)
     lager:info("Run solr search ~s", [URL]),
     Opts = [{response_format, binary}],
     F = fun(_) ->
-                {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts),
+                {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts,
+                                                     ?IBROWSE_TIMEOUT),
                 verify_count_http(Expect, R)
         end,
     wait_until(Nodes, F);
@@ -347,7 +349,7 @@ search(Type, {Host, Port}, Index, Name0, Term0) ->
     URL = ?FMT(FmtStr, [Host, Port, Index, Name, Term]),
     lager:info("Run search ~s", [URL]),
     Opts = [{response_format, binary}],
-    ibrowse:send_req(URL, [], get, [], Opts).
+    ibrowse:send_req(URL, [], get, [], Opts, ?IBROWSE_TIMEOUT).
 
 %%%===================================================================
 %%% Private
