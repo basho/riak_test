@@ -90,7 +90,7 @@ write_data(Cluster, Pid, Index, {SchemaName, SchemaData},
     riakc_pb_socket:create_search_schema(Pid, SchemaName, SchemaData),
 
     create_and_set_index(Cluster, Pid, Bucket, Index, SchemaName),
-    timer:sleep(1000),
+    yokozuna_rt:commit(Cluster, Index),
 
     %% Write keys
     lager:info("Writing ~p keys", [length(Keys)]),
