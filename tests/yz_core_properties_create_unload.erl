@@ -96,7 +96,7 @@ test_core_props_removal(Cluster, RandNodes, KeyCount, Pid) ->
 
 test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid) ->
     lager:info("Remove index directories on each node and let them recreate/reindex"),
-    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX),
+    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX, [riak_kv, yokozuna]),
 
     yokozuna_rt:check_exists(Cluster, ?INDEX),
 
@@ -115,7 +115,7 @@ test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
 
     lager:info("To fix, we remove index directories on each node and let them recreate/reindex"),
 
-    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX),
+    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX, [riak_kv, yokozuna]),
 
     yokozuna_rt:check_exists(Cluster, ?INDEX),
 

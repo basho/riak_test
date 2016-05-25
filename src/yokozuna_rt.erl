@@ -29,7 +29,7 @@
          gen_keys/1,
          host_entries/1,
          override_schema/5,
-         remove_index_dirs/2,
+         remove_index_dirs/3,
          rolling_upgrade/2,
          search/4,
          search/5,
@@ -222,16 +222,21 @@ clear_trees(Cluster) ->
 
 
 %% @doc Remove index directories, removing the index.
--spec remove_index_dirs([node()], index_name()) -> ok.
-remove_index_dirs(Nodes, IndexName) ->
+-spec remove_index_dirs([node()], index_name(), WaitForServices :: [atom()])
+                       -> ok.
+remove_index_dirs(Nodes, IndexName, Services) ->
     IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
                     Node <- Nodes],
     lager:info("Remove index dirs: ~p, on nodes: ~p~n",
                [IndexDirs, Nodes]),
     [rt:stop(ANode) || ANode <- Nodes],
     [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
-    [rt:start(ANode) || ANode <- Nodes],
+    [start_and_wait(ANode, Services) || ANode <- Nodes],
     ok.
+
+start_and_wait(Node, WaitForServices) ->
+    rt:start(Node),
+    [rt:wait_for_service(Node, Service) || Service <- WaitForServices].
 
 %% @doc Check if index/core exists in metadata, disk via yz_index:exists.
 -spec check_exists([node()], index_name()) -> ok.
