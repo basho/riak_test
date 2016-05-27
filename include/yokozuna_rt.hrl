@@ -21,3 +21,5 @@
 -type schema_name() :: string().
 -type raw_schema() :: binary().
 -type bucket() :: bucket() | {bucket(), bucket()}.
+
+-define(IBROWSE_TIMEOUT, 60000).

@@ -135,7 +135,7 @@ search_url(Host, Port, Index) ->
 verify_count(Url, ExpectedCount) ->
     AreUp =
         fun() ->
-                {ok, "200", _, DBody} = ibrowse:send_req(Url, [], get, []),
+                {ok, "200", _, DBody} = yokozuna_rt:http(get, Url, [], [], "", 60000),
                 FoundCount = get_count(DBody),
                 lager:info("FoundCount: ~b, ExpectedCount: ~b",
                            [FoundCount, ExpectedCount]),
@@ -149,7 +149,7 @@ get_count(Resp) ->
     kvc:path([<<"response">>, <<"numFound">>], Struct).
 
 get_keys_count(BucketURL) ->
-    {ok, "200", _, RBody} = ibrowse:send_req(BucketURL, [], get, []),
+    {ok, "200", _, RBody} = yokozuna_rt:http(get, BucketURL, [], []),
     Struct = mochijson2:decode(RBody),
     length(kvc:path([<<"keys">>], Struct)).
 
@@ -158,8 +158,8 @@ check_counts(Pid, InitKeyCount, BucketURL) ->
                                        Pid, ?INDEX, <<"*:*">>),
                         Resp#search_results.num_found
                   end || _ <- lists:seq(1,?TESTCYCLE)],
-    HTTPCounts = [begin {ok, "200", _, RBody} = ibrowse:send_req(
-                                                  BucketURL, [], get, []),
+    HTTPCounts = [begin {ok, "200", _, RBody} = yokozuna_rt:http(
+                                                  get, BucketURL, [], []),
                         Struct = mochijson2:decode(RBody),
                         length(kvc:path([<<"keys">>], Struct))
                   end || _ <- lists:seq(1,?TESTCYCLE)],

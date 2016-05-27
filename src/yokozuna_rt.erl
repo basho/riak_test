@@ -44,16 +44,22 @@
          wait_for_schema/2,
          wait_for_schema/3,
          write_data/5,
-         write_data/6]).
+         write_data/6,
+         http/4,
+         http/5,
+         http/6]).
 
 -type host() :: string().
 -type portnum() :: integer().
 -type count() :: non_neg_integer().
 -type json_string() :: atom | string() | binary().
 -type search_type() :: solr | yokozuna.
+-type method() :: get | post | head | options | put | delete | trace |
+        mkcol | propfind | proppatch | lock | unlock | move | copy.
+-type response() :: {ok, string(), [{string(), string()}], string()|binary()} |
+        {error, term()}.
 
 -define(FMT(S, Args), lists:flatten(io_lib:format(S, Args))).
--define(IBROWSE_TIMEOUT, 60000).
 -define(SOFTCOMMIT, 1000).
 
 -spec host_entries(rt:conn_info()) -> [{host(), portnum()}].
@@ -233,6 +239,7 @@ remove_index_dirs(Nodes, IndexName, Services) ->
     [rt:stop(ANode) || ANode <- Nodes],
     [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
     [start_and_wait(ANode, Services) || ANode <- Nodes],
+    wait_for_index(Nodes, IndexName),
     ok.
 
 start_and_wait(Node, WaitForServices) ->
@@ -472,3 +479,22 @@ get_yz_conn_info(Node) ->
     {ok, SolrPort} = rpc:call(Node, application, get_env, [yokozuna, solr_port]),
     %% Currently Yokozuna hardcodes listener to all interfaces
     {"127.0.0.1", SolrPort}.
+
+-spec http(method(), string(), list(), binary()|[]) -> response().
+http(Method, URL, Headers, Body) ->
+    Opts = [],
+    ibrowse:send_req(URL, Headers, Method, Body, Opts, ?IBROWSE_TIMEOUT).
+
+-spec http(method(), string(), list(), binary()|[], list()|timeout())
+        -> response().
+http(Method, URL, Headers, Body, Opts) when is_list(Opts)  ->
+    ibrowse:send_req(URL, Headers, Method, Body, Opts, ?IBROWSE_TIMEOUT);
+http(Method, URL, Headers, Body, Timeout) when is_integer(Timeout) ->
+    Opts = [],
+    ibrowse:send_req(URL, Headers, Method, Body, Opts, Timeout).
+
+-spec http(method(), string(), list(), binary()|[], list(), timeout())
+        -> response().
+http(Method, URL, Headers, Body, Opts, Timeout) when
+    is_list(Opts) andalso is_integer(Timeout) ->
+    ibrowse:send_req(URL, Headers, Method, Body, Opts, Timeout).
