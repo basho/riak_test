@@ -70,6 +70,7 @@
          get_ip/1,
          get_node_logs/0,
          get_replica/5,
+         get_retry_settings/0,
          get_ring/1,
          get_version/0,
          get_version/1,
@@ -658,10 +659,14 @@ is_ring_ready(Node) ->
 %%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
 wait_until(Fun) when is_function(Fun) ->
+    {Delay, Retry} = get_retry_settings(),
+    wait_until(Fun, Retry, Delay).
+
+get_retry_settings() ->
     MaxTime = rt_config:get(rt_max_wait_time),
     Delay = rt_config:get(rt_retry_delay),
     Retry = MaxTime div Delay,
-    wait_until(Fun, Retry, Delay).
+    {Delay, Retry}.
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
@@ -1953,8 +1958,11 @@ setup_log_capture(Nodes) when is_list(Nodes) ->
 setup_log_capture(Node) when not is_list(Node) ->
     setup_log_capture([Node]).
 
-
 expect_in_log(Node, Pattern) ->
+    {Delay, Retry} = get_retry_settings(),
+    expect_in_log(Node, Pattern, Retry, Delay).
+
+expect_in_log(Node, Pattern, Retry, Delay) ->
     CheckLogFun = fun() ->
             Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
             lager:info("looking for pattern ~s in logs for ~p",
@@ -1968,7 +1976,7 @@ expect_in_log(Node, Pattern) ->
                     false
             end
     end,
-    case rt:wait_until(CheckLogFun) of
+    case rt:wait_until(CheckLogFun, Retry, Delay) of
         ok ->
             true;
         _ ->
