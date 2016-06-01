@@ -118,7 +118,10 @@ confirm() ->
     pass.
 
 test_supervision() ->
-    JMXPort = 22,
+    %% Specifically invalid port number to make JMX startup fail.
+    %% NOTE: using a priveleged port doesn't work in some test environments
+    %% as tests/riak are running as root. For this test, -1 is fine.
+    JMXPort = -1,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
     [Node|[]] = rt:deploy_nodes(1, Config),
     timer:sleep(20000),
@@ -148,11 +151,11 @@ test_supervision() ->
     %% Error logging is 0-based, so look for Retry #9
     {Delay, _Retry} = rt:get_retry_settings(),
     TwoMinutes = 2*60*1000,
-    TwoMinutsOfRetry = TwoMinutes div Delay,
+    Retries = TwoMinutes div Delay,
     ?assertEqual(true, rt:expect_in_log(Node, "JMX server monitor .* exited with code .*\. Retry #9",
-        TwoMinutsOfRetry, Delay)),
+        Retries, Delay)),
     ?assertEqual(true, rt:expect_in_log(Node, "JMX server monitor .* exited with code .*\. Reached maximum retries of 10",
-        TwoMinutsOfRetry, Delay)),
+        Retries, Delay)),
     rt:stop(Node),
     ok_ok.
 
