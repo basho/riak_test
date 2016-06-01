@@ -48,6 +48,7 @@ run_tests(PvalP1, PvalP2) ->
     TableDef = io_lib:format(
                  "CREATE TABLE ~s "
                  "(~s varchar not null, "
+                 " moog varchar,"
                  " ~s varchar not null, "
                  " ~s timestamp not null, "
                  " score double not null, "
@@ -114,6 +115,7 @@ make_data(PvalP1, PvalP2) ->
       lists:foldl(
         fun(T, Q) ->
                 [{PvalP1,
+                  <<"moo">>,
                   PvalP2,
                   ?TIMEBASE + ?LIFESPAN - T + 1,
                   math:sin(float(T) / 100 * math:pi())} | Q]
@@ -121,7 +123,7 @@ make_data(PvalP1, PvalP2) ->
         [], lists:seq(?LIFESPAN, 1, -1))).
 
 doctor_data(Data) ->
-    [[A, B, C, D + 0.42] || [A, B, C, D] <- Data].
+    [[A, X, B, C, D + 0.42] || [A, X, B, C, D] <- Data].
 
 confirm_put(C, Data) ->
     ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, Data),
@@ -141,7 +143,7 @@ confirm_overwrite(C, Data) ->
     ?assertEqual(ok, Res),
     ok.
 
-confirm_delete(C, {Pooter1, Pooter2, Timepoint, _} = Record) ->
+confirm_delete(C, {Pooter1, _X, Pooter2, Timepoint, _} = Record) ->
     ResFail = riakc_ts:delete(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Nothing deleted from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
@@ -195,7 +197,7 @@ confirm_select(C, PvalP1, PvalP2, Options) ->
 
 confirm_get(C, Record) ->
     confirm_get(C, Record, []).
-confirm_get(C, Record = {Pooter1, Pooter2, Timepoint, _}, Options) ->
+confirm_get(C, Record = {Pooter1, _X, Pooter2, Timepoint, _}, Options) ->
     ResFail = riakc_ts:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Got nothing from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
