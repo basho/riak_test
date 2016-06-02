@@ -71,6 +71,7 @@ confirm() ->
     Res  = bigset_client:read(?SET, [], N2Client),
     {ok, {ctx, <<>>}, {elems, E3}} = Res,
     ?assertMatch({_, _}, lists:keyfind(<<"7">>, 1, E3)),
+    %% Remove should have been propagated by hand off
     ?assertEqual(false, lists:keyfind(<<"1">>, 1, E3)),
 
     pass.
