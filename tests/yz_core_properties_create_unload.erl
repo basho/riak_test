@@ -58,19 +58,21 @@ confirm() ->
 
     %% Create a search index and associate with a bucket
     lager:info("Create and set Index ~p for Bucket ~p~n", [?INDEX, ?BUCKET]),
-    ok = riakc_pb_socket:create_search_index(Pid, ?INDEX),
+    _ = riakc_pb_socket:create_search_index(Pid, ?INDEX),
     yokozuna_rt:wait_for_index(Cluster, ?INDEX),
+
     ok = rt:create_and_activate_bucket_type(Node,
                                             ?TYPE,
                                             [{search_index, ?INDEX}]),
-    timer:sleep(1000),
+
+    rt:wait_until_bucket_type_visible(Cluster, ?TYPE),
 
     %% Write keys and wait for soft commit
     lager:info("Writing ~p keys", [KeyCount]),
     [ok = rt:pbc_write(Pid, ?BUCKET, Key, Key, "text/plain") || Key <- Keys],
     yokozuna_rt:commit(Cluster, ?INDEX),
 
-    verify_count(Pid, KeyCount),
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount),
 
     test_core_props_removal(Cluster, RandNodes, KeyCount, Pid),
     test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid),
@@ -90,11 +92,11 @@ test_core_props_removal(Cluster, RandNodes, KeyCount, Pid) ->
     ok = rt:pbc_write(Pid, ?BUCKET, <<"foo">>, <<"foo">>, "text/plain"),
     yokozuna_rt:commit(Cluster, ?INDEX),
 
-    verify_count(Pid, KeyCount + 1).
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount+1).
 
 test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid) ->
     lager:info("Remove index directories on each node and let them recreate/reindex"),
-    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX),
+    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX, [riak_kv, yokozuna]),
 
     yokozuna_rt:check_exists(Cluster, ?INDEX),
 
@@ -105,7 +107,7 @@ test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid) ->
     ok = rt:pbc_write(Pid, ?BUCKET, <<"food">>, <<"foody">>, "text/plain"),
     yokozuna_rt:commit(Cluster, ?INDEX),
 
-    verify_count(Pid, KeyCount + 2).
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount+2).
 
 test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
     lager:info("Remove segment info files in each index data dir"),
@@ -113,7 +115,7 @@ test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
 
     lager:info("To fix, we remove index directories on each node and let them recreate/reindex"),
 
-    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX),
+    yokozuna_rt:remove_index_dirs(RandNodes, ?INDEX, [riak_kv, yokozuna]),
 
     yokozuna_rt:check_exists(Cluster, ?INDEX),
 
@@ -124,18 +126,7 @@ test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
     ok = rt:pbc_write(Pid, ?BUCKET, <<"baz">>, <<"bar">>, "text/plain"),
     yokozuna_rt:commit(Cluster, ?INDEX),
 
-    verify_count(Pid, KeyCount + 3).
-
-%% @doc Verify search count.
-verify_count(Pid, ExpectedKeyCount) ->
-    case riakc_pb_socket:search(Pid, ?INDEX, <<"*:*">>) of
-        {ok ,{search_results, _, _, NumFound}} ->
-            lager:info("Check Count, Expected: ~p | Actual: ~p~n",
-                       [ExpectedKeyCount, NumFound]),
-            ?assertEqual(ExpectedKeyCount, NumFound);
-        E ->
-            lager:info("No results because ~p~n", [E])
-    end.
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount+3).
 
 %% @doc Remove core properties file on nodes.
 remove_core_props(Nodes, IndexName) ->
