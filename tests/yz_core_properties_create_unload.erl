@@ -24,8 +24,9 @@
 -define(CFG, [{riak_kv,
                [
                 %% allow AAE to build trees and exchange rapidly
-                {anti_entropy_build_limit, {100, 1000}},
-                {anti_entropy_concurrency, 8}
+                {anti_entropy_build_limit, {1000, 1000}},
+                {anti_entropy_concurrency, 64},
+                {anti_entropy_tick, 1000}
                ]},
               {yokozuna,
                [
@@ -74,9 +75,11 @@ confirm() ->
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount),
 
+
     test_core_props_removal(Cluster, RandNodes, KeyCount, Pid),
     test_remove_index_dirs(Cluster, RandNodes, KeyCount, Pid),
     test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid),
+    test_brutal_kill_and_delete_index_dirs(Cluster, RandNodes, KeyCount, Pid),
 
     riakc_pb_socket:stop(Pid),
 
@@ -127,6 +130,21 @@ test_remove_segment_infos_and_rebuild(Cluster, RandNodes, KeyCount, Pid) ->
     yokozuna_rt:commit(Cluster, ?INDEX),
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount+3).
+
+test_brutal_kill_and_delete_index_dirs(Cluster, RandNodes, KeyCount, Pid) ->
+    lager:info("Remove index directories on each node and let them recreate/reindex"),
+    yokozuna_rt:brutal_kill_remove_index_dirs(RandNodes, ?INDEX, [riak_kv, yokozuna]),
+
+    yokozuna_rt:check_exists(Cluster, ?INDEX),
+
+    yokozuna_rt:expire_trees(Cluster),
+    yokozuna_rt:wait_for_aae(Cluster),
+
+    lager:info("Write fourth piece of data"),
+    ok = rt:pbc_write(Pid, ?BUCKET, <<"food">>, <<"foody">>, "text/plain"),
+    yokozuna_rt:commit(Cluster, ?INDEX),
+
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 4).
 
 %% @doc Remove core properties file on nodes.
 remove_core_props(Nodes, IndexName) ->
