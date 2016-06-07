@@ -14,8 +14,6 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    lager:info("Testing handoff"),
-
     lager:info("Start cluster"),
 
 
