@@ -22,7 +22,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("yokozuna_rt.hrl").
 
--export([check_exists/2,
+-export([brutal_kill_remove_index_dirs/3,
+         check_exists/2,
          clear_trees/1,
          commit/2,
          expire_trees/1,
@@ -227,20 +228,30 @@ clear_trees(Cluster) ->
          || Node <- Cluster],
     ok.
 
+brutal_kill_remove_index_dirs(Nodes, IndexName, Services) ->
+    IndexDirs = get_index_dirs(IndexName, Nodes),
+    rt:brutal_kill(hd(Nodes)),
+    [rt:stop(ANode) || ANode <- tl(Nodes)],
+    remove_index_dirs2(Nodes, IndexDirs, Services),
+    ok.
 
 %% @doc Remove index directories, removing the index.
--spec remove_index_dirs([node()], index_name(), WaitForServices :: [atom()])
-                       -> ok.
+-spec remove_index_dirs([node()], index_name(), [atom()]) -> ok.
 remove_index_dirs(Nodes, IndexName, Services) ->
-    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
-                    Node <- Nodes],
-    lager:info("Remove index dirs: ~p, on nodes: ~p~n",
-               [IndexDirs, Nodes]),
-    [rt:stop(ANode) || ANode <- Nodes],
-    [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
-    [start_and_wait(ANode, Services) || ANode <- Nodes],
-    wait_for_index(Nodes, IndexName),
+    IndexDirs = get_index_dirs(IndexName, Nodes),
+    remove_index_dirs2(Nodes, IndexDirs, Services),
     ok.
+
+remove_index_dirs2(Nodes, IndexDirs, Services) ->
+    lager:info("Remove index dirs: ~p, on nodes: ~p~n",
+        [IndexDirs, Nodes]),
+    [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
+    [start_and_wait(ANode, Services) || ANode <- Nodes].
+
+get_index_dirs(IndexName, Nodes) ->
+    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+        Node <- Nodes],
+    IndexDirs.
 
 start_and_wait(Node, WaitForServices) ->
     rt:start(Node),
