@@ -930,6 +930,7 @@ wait_until_capability(Node, Capability, Value, Default) ->
                           cap_equal(Value, Cap)
                   end).
 
+-spec wait_until_capability_contains(node(), atom() | {atom(), atom()}, list()) -> ok.
 wait_until_capability_contains(Node, Capability, Value) ->
     rt:wait_until(Node,
                 fun(_) ->
