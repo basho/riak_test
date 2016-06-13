@@ -189,7 +189,7 @@ confirm() ->
     upgrade(Node1, current),
     lager:notice("Upgraded 2.0.2 node to ~s", [CurrentVer]),
 
-    rt:wait_until_capability_contains(Node1, {riak_kv,crdt_epoch_versions}, {riak_dt_map,2}),
+    rt:wait_until_capability_contains(Node1, {riak_kv,crdt_epoch_versions}, [{riak_dt_map,2}]),
 
     %% read and write maps
     N1C3 = rt:pbc(Node1),
