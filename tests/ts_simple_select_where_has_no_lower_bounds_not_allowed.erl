@@ -37,9 +37,8 @@ confirm() ->
     Expected =
         {error,
          {1001,
-          <<"incomplete_where_clause: Where clause has no lower bound.">>}},
+          <<"Where clause has no lower bound.">>}},
     Got = ts_util:ts_query(
             ts_util:cluster_and_connect(single), TestType, DDL, Data, Qry),
-    ?assertEqual(Expected, Got),
-    pass.
+    ts_util:assert_error_regex("No lower bound", Expected, Got).
 

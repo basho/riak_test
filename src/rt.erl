@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013-2014 Basho Technologies, Inc.
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -73,6 +73,7 @@
          get_ring/1,
          get_version/0,
          get_version/1,
+         grep_test_functions/1,
          heal/1,
          http_url/1,
          https_url/1,
@@ -98,6 +99,7 @@
          pbc_read_check/4,
          pbc_read_check/5,
          pbc_set_bucket_prop/3,
+         pbc_set_bucket_type/3,
          pbc_write/4,
          pbc_put_dir/3,
          pbc_put_file/4,
@@ -130,6 +132,7 @@
          stop_tracing/0,
          stop_and_wait/1,
          str/2,
+         str_mult/2,
          systest_read/2,
          systest_read/3,
          systest_read/5,
@@ -143,6 +146,7 @@
          upgrade/2,
          upgrade/3,
          versions/0,
+         wait_for_any_webmachine_route/2,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -218,6 +222,11 @@ str(String, Substr) ->
         0 -> false;
         _ -> true
     end.
+
+%% @doc if String contains any of Substrs, return true.
+-spec str_mult(string(), [string()]) -> boolean().
+str_mult(String, Substrs) ->
+    lists:any(fun(S) -> str(String, S) end, Substrs).
 
 -spec set_conf(atom(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
@@ -664,7 +673,7 @@ wait_until(Fun) when is_function(Fun) ->
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
--spec wait_until([node()], fun((node()) -> boolean())) -> ok.
+-spec wait_until(node(), fun(() -> boolean())) -> ok | {fail, Result :: term()}.
 wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
     wait_until(fun() -> Fun(Node) end);
 
@@ -1488,6 +1497,11 @@ pbc_write(Pid, Bucket, Key, Value, CT) ->
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
 
+%% @doc sets a bucket type property/properties via the erlang protobuf client
+-spec pbc_set_bucket_type(pid(), binary(), [proplists:property()]) -> atom().
+pbc_set_bucket_type(Pid, Bucket, PropList) ->
+    riakc_pb_socket:set_bucket_type(Pid, Bucket, PropList).
+
 %% @doc Puts the contents of the given file into the given bucket using the
 %% filename as a key and assuming a plain text content type.
 pbc_put_file(Pid, Bucket, Key, Filename) ->
@@ -1705,6 +1719,15 @@ get_version(Vsn) ->
 -spec get_version() -> binary().
 get_version() ->
     ?HARNESS:get_version().
+
+%% @doc Return all functions in the module as atoms that end with 'test'.
+-spec grep_test_functions(module()) -> [atom()].
+grep_test_functions(Module) when is_atom(Module) ->
+    Functions = Module:module_info(exports),
+    [Fn || {Fn,1} <- Functions, is_ending_with_test(Fn)].
+
+is_ending_with_test(Fn) ->
+    lists:suffix("test", atom_to_list(Fn)).
 
 %% @doc outputs some useful information about nodes that are up
 whats_up() ->
@@ -1932,30 +1955,31 @@ wait_for_control(_Vsn, Node) when is_atom(Node) ->
                 end
         end),
 
-    lager:info("Waiting for routes to be added to supervisor..."),
-
     %% Wait for routes to be added by supervisor.
-    rt:wait_until(Node, fun(N) ->
-                case rpc:call(N,
-                              webmachine_router,
-                              get_routes,
-                              []) of
-                    {badrpc, Error} ->
-                        lager:info("Error was ~p.", [Error]),
-                        false;
-                    Routes ->
-                        case is_control_gui_route_loaded(Routes) of
-                            false ->
-                                false;
-                            _ ->
-                                true
-                        end
-                end
-        end).
+    wait_for_any_webmachine_route(Node, [admin_gui, riak_control_wm_gui]).
 
-%% @doc Is the riak_control GUI route loaded?
-is_control_gui_route_loaded(Routes) ->
-    lists:keymember(admin_gui, 2, Routes) orelse lists:keymember(riak_control_wm_gui, 2, Routes).
+wait_for_any_webmachine_route(Node, Routes) ->
+    lager:info("Waiting for routes ~p to be added to webmachine.", [Routes]),
+    rt:wait_until(Node, fun(N) ->
+        case rpc:call(N, webmachine_router, get_routes, []) of
+            {badrpc, Error} ->
+                lager:info("Error was ~p.", [Error]),
+                false;
+            RegisteredRoutes ->
+                case is_any_route_loaded(Routes, RegisteredRoutes) of
+                    false ->
+                        false;
+                    _ ->
+                        true
+                end
+        end
+    end).
+
+is_any_route_loaded(SearchRoutes, RegisteredRoutes) ->
+    lists:any(fun(Route) -> is_route_loaded(Route, RegisteredRoutes) end, SearchRoutes).
+
+is_route_loaded(Route, Routes) ->
+    lists:keymember(Route, 2, Routes).
 
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->

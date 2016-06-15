@@ -181,8 +181,8 @@ to tell riak_test about them. The method of choice is to create a
     {rtdev_path, [{root,     "/home/you/rt/riak"},
                   {current,  "/home/you/rt/riak/current"},
                   {previous, "/home/you/rt/riak/riak-2.0.6"},
-                  {legacy,   "/home/you/rt/riak/riak-1.4.12"}
-                  {'2.0.2',   "/home/you/rt/riak/riak-2.0.2"}
+                  {legacy,   "/home/you/rt/riak/riak-1.4.12"},
+                  {'2.0.2',   "/home/you/rt/riak/riak-2.0.2"},
                   {'2.0.4',   "/home/you/rt/riak/riak-2.0.4"}
                  ]}
 ]}.
