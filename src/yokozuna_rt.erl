@@ -29,6 +29,8 @@
          expire_trees/1,
          gen_keys/1,
          host_entries/1,
+         create_indexed_bucket_type/3,
+         create_indexed_bucket_type/4,
          override_schema/5,
          remove_index_dirs/3,
          rolling_upgrade/2,
@@ -59,6 +61,8 @@
         mkcol | propfind | proppatch | lock | unlock | move | copy.
 -type response() :: {ok, string(), [{string(), string()}], string()|binary()} |
         {error, term()}.
+-type cluster() :: [node()].
+
 
 -define(FMT(S, Args), lists:flatten(io_lib:format(S, Args))).
 -define(SOFTCOMMIT, 1000).
@@ -509,3 +513,41 @@ http(Method, URL, Headers, Body, Timeout) when is_integer(Timeout) ->
 http(Method, URL, Headers, Body, Opts, Timeout) when
     is_list(Opts) andalso is_integer(Timeout) ->
     ibrowse:send_req(URL, Headers, Method, Body, Opts, Timeout).
+
+-spec create_indexed_bucket_type(cluster(), binary(), index_name()) -> ok.
+create_indexed_bucket_type(Cluster, BucketType, IndexName) ->
+    ok = create_index(Cluster, IndexName),
+    ok = create_bucket_type(Cluster, BucketType, [{search_index, IndexName}]).
+
+-spec create_indexed_bucket_type(cluster(), binary(), index_name(),
+    schema_name()) -> ok.
+create_indexed_bucket_type(Cluster, BucketType, IndexName, SchemaName) ->
+    ok = create_index(Cluster, IndexName, SchemaName),
+    ok = create_bucket_type(Cluster, BucketType, [{search_index, IndexName}]).
+
+-spec create_index(cluster(), index_name()) -> ok.
+create_index(Cluster, Index) ->
+    Node = select_random(Cluster),
+    lager:info("Creating index ~s [~p]", [Index, Node]),
+    rpc:call(Node, yz_index, create, [Index]),
+    ok = wait_for_index(Cluster, Index).
+
+-spec create_index(cluster(), index_name(), schema_name()) -> ok.
+create_index(Cluster, Index, SchemaName) ->
+    Node = select_random(Cluster),
+    lager:info("Creating index ~s with schema ~s [~p]",
+        [Index, SchemaName, Node]),
+    rpc:call(Node, yz_index, create, [Index, SchemaName]),
+    ok = wait_for_index(Cluster, Index).
+
+select_random(List) ->
+    Length = length(List),
+    Idx = random:uniform(Length),
+    lists:nth(Idx, List).
+
+-spec create_bucket_type(cluster(), binary(), [term()]) -> ok.
+create_bucket_type(Cluster, BucketType, Props) ->
+    Node = select_random(Cluster),
+    rt:create_and_activate_bucket_type(Node, BucketType, Props),
+    rt:wait_until_bucket_type_status(BucketType, active, Node),
+    rt:wait_until_bucket_type_visible(Cluster, BucketType).
