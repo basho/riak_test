@@ -41,8 +41,23 @@ confirm() ->
     Expected =
         {ts_util:get_cols(small),
          ts_util:exclusive_result_from_data(Data, ?LOWER_QRY-?LOWER_DATA+2, (?LOWER_QRY-?LOWER_DATA)+(?UPPER_QRY-?LOWER_QRY))},
-    Conn = ts_util:cluster_and_connect(single),
+    {[Node], _Pid} = Conn = ts_util:cluster_and_connect(single),
+
+
+    rt_intercept:add(Node, {riak_kv_eleveldb_backend,
+                            [{{batch_put, 4}, batch_put}]}),
+
     ts_util:ts_put(Conn, TestType, DDL, Data),
     Got = ts_util:ts_query(Conn, TestType, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
+    Tally = rpc:call(Node, riak_core_metadata, fold,
+                     [fun tally_tallies/2, 0, {riak_test, backend_intercept}]),
+
+    %% 3 batches, n_val=3, 9 total writes to eleveldb
+    ?assertEqual(Tally, 9),
     pass.
+
+tally_tallies({_Pid, Vals}, Acc) when is_list(Vals) ->
+    Acc + lists:sum(Vals);
+tally_tallies({_Pid, Val}, Acc) ->
+    Acc + Val.

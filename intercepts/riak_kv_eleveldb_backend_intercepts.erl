@@ -25,9 +25,9 @@
 -define(M, riak_kv_eleveldb_backend_orig).
 
 corrupting_put(Bucket, Key, IndexSpecs, Val0, ModState) ->
-    Val = 
-        case random:uniform(20) of 
-            10 -> 
+    Val =
+        case random:uniform(20) of
+            10 ->
                 corrupt_binary(Val0);
             _ -> Val0
         end,
@@ -37,7 +37,7 @@ corrupting_get(Bucket, Key, ModState) ->
     case ?M:get_orig(Bucket, Key, ModState) of
         {ok, BinVal0, UpdModState} ->
             BinVal =
-                case random:uniform(20) of 
+                case random:uniform(20) of
                     10 ->
                         corrupt_binary(BinVal0);
                     _ -> BinVal0
@@ -45,6 +45,17 @@ corrupting_get(Bucket, Key, ModState) ->
             {ok, BinVal, UpdModState};
         Else -> Else
     end.
-            
+
 corrupt_binary(O) ->
     crypto:rand_bytes(byte_size(O)).
+
+batch_put(Context, Values, IndexSpecs, State) ->
+    Tally = riak_core_metadata:get(
+              {riak_test, backend_intercept},
+              self(),
+              0),
+    riak_core_metadata:put(
+      {riak_test, backend_intercept},
+      self(),
+      Tally+1),
+    ?M:batch_put_orig(Context, Values, IndexSpecs, State).
