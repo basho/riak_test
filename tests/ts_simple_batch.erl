@@ -34,27 +34,38 @@
 -define(UPPER_QRY,  900050).
 
 confirm() ->
-    TestType = normal,
     DDL = ts_util:get_ddl(),
     Qry = ts_util:get_valid_qry(?LOWER_QRY, ?UPPER_QRY),
     Data = ts_util:get_valid_select_data(fun() -> lists:seq(?LOWER_DATA,?UPPER_DATA) end),
     Expected =
         {ts_util:get_cols(small),
          ts_util:exclusive_result_from_data(Data, ?LOWER_QRY-?LOWER_DATA+2, (?LOWER_QRY-?LOWER_DATA)+(?UPPER_QRY-?LOWER_QRY))},
-    {[Node], _Pid} = Conn = ts_util:cluster_and_connect(single),
+    {[Node], Pid} = ts_util:cluster_and_connect(single),
 
 
     rt_intercept:add(Node, {riak_kv_eleveldb_backend,
                             [{{batch_put, 4}, batch_put}]}),
 
-    ts_util:ts_put(Conn, TestType, DDL, Data),
-    Got = ts_util:ts_query(Conn, TestType, DDL, Data, Qry),
-    ?assertEqual(Expected, Got),
-    Tally = rpc:call(Node, riak_core_metadata, fold,
-                     [fun tally_tallies/2, 0, {riak_test, backend_intercept}]),
+    %% Buried in the bowels of the code path behind ts_util:ts_put/4
+    %% is a calculation that n_val is the same as the cluster size. I
+    %% want a single node cluster for this test, but n_val of 4, so
+    %% I'll duplicate the path here
+    Bucket = ts_util:get_default_bucket(),
+    {ok, _} = ts_util:create_bucket_type([Node], DDL, Bucket, 4),
+    ts_util:activate_bucket_type([Node], Bucket),
 
-    %% 3 batches, n_val=3, 9 total writes to eleveldb
-    ?assertEqual(Tally, 9),
+    riakc_ts:put(Pid, Bucket, Data),
+
+    Tallies = rpc:call(Node, riak_core_metadata, to_list,
+                       [{riak_test, backend_intercept}]),
+    FullTally = lists:foldl(fun tally_tallies/2, 0, Tallies),
+
+    %% 2 batches, n_val=4, 8 total writes to eleveldb
+    ?assertEqual(8, FullTally),
+
+    {ok, Got} = riakc_ts:query(Pid, Qry),
+    ?assertEqual(Expected, Got),
+
     pass.
 
 tally_tallies({_Pid, Vals}, Acc) when is_list(Vals) ->

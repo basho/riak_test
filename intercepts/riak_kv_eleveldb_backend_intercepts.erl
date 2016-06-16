@@ -53,7 +53,7 @@ batch_put(Context, Values, IndexSpecs, State) ->
     Tally = riak_core_metadata:get(
               {riak_test, backend_intercept},
               self(),
-              0),
+              [{default, 0}]),
     riak_core_metadata:put(
       {riak_test, backend_intercept},
       self(),
