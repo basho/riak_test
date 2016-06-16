@@ -62,8 +62,8 @@ confirm() ->
                        [{riak_test, backend_intercept}]),
     FullTally = lists:foldl(fun tally_tallies/2, 0, Tallies),
 
-    %% 2 batches, n_val=4, 8 total writes to eleveldb
-    ?assertEqual(8, FullTally),
+    %% 3 batches, n_val=4, 12 total writes to eleveldb
+    ?assertEqual(12, FullTally),
 
     {ok, Got} = riakc_ts:query(Pid, Qry),
     ?assertEqual(Expected, Got),
