@@ -26,11 +26,13 @@
 
 -export([confirm/0]).
 
-%% 900000 is a quantum boundary. Dump several batches in around the
-%% boundary, select a much smaller chunk around it
+%% 900000 is a quantum boundary. Sample records are around 80 bytes.
+%% Try to create 3 batches: one below 900000, and two above. (Batches
+%% are constrained to roughly 1MB in size, so ~13k records per batch;
+%% the batch below 900000 will be terminated by the quantum boundary).
 -define(LOWER_DATA, 899000).
 -define(LOWER_QRY,  899990).
--define(UPPER_DATA, 901000).
+-define(UPPER_DATA, 920000).
 -define(UPPER_QRY,  900050).
 
 confirm() ->
