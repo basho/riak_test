@@ -158,17 +158,35 @@ do_node_transition(Config, N, Version) ->
 
 run_init_per_suite_queries(Config, TestNo)
   when is_integer(TestNo) andalso TestNo > 0 ->
-    {init_per_suite_queries, Queries} = lists:keyfind(init_per_suite_queries, 1, Config),
+    Queries = proplists:get_value(init_per_suite_queries, Config),
     {TestNo, {Query, Exp}} = lists:keyfind(TestNo, 1, Queries),
-    {nodes, Nodes} = lists:keyfind(nodes, 1, Config),
-    {1, Node} = lists:keyfind(1, 1, Nodes),
-    Conn = rt:pbc(Node),
-    Got = ts_util:single_query(Conn, Query, []),
-    case ts_util:assert_float("reading data query " ++ integer_to_list(TestNo), Exp, Got) of
-        pass ->
+    Nodes = proplists:get_value(nodes, Config),
+
+    %% try reading data from all nodes: we will thus cover both reading
+    %%
+    %% (a) from upgraded and downgraded nodes when other nodes are,
+    %%     similarly, upgraded or downgraded;
+    %%
+    %% (b) from both the node the initial writing was done at, as well
+    %%     as from other nodes.
+    Success =
+        lists:all(
+          fun({NodeNo, Node}) ->
+                  Conn = rt:pbc(Node),
+                  Got = riakc_ts:query(Conn, Query),
+                  case ts_util:assert_float("reading data query " ++ integer_to_list(TestNo), Exp, Got) of
+                      pass ->
+                          true;
+                      fail ->
+                          ct:pal("failed query ~b issued at node ~b", [TestNo, NodeNo]),
+                          false
+                  end
+          end,
+          Nodes),
+    if Success ->
             pass;
-        fail ->
-            ct:fail("failed query ~b", [TestNo])
+       el/=se ->
+            ct:fail("some queries failed (see above)")
     end.
 
 %%
