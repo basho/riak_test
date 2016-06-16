@@ -39,7 +39,7 @@ init_per_suite_data_write(Nodes) ->
     AggTable = "Aggregation_written_on_old_cluster",
     DDL = ts_util:get_ddl(aggregation, AggTable),
 
-    {ok, _} = ts_util:create_and_activate_bucket_type({Nodes, StartingNode}, DDL, AggTable),
+    {ok, _} = riakc_ts:query(Conn, DDL),
 
     %% generate data and hoy it into the cluster
     Count = 10,
