@@ -28,19 +28,6 @@
     forwardable :: boolean(),
     opts = [] :: list()}).
 
--record(fitting,
-{
-    pid :: pid(),
-    ref :: reference(),
-    chashfun,
-    nval
-}).
-
--record(cmd_enqueue, {fitting :: #fitting{},
-    input :: term(),
-    timeout,
-    usedpreflist}).
-
 -define(M, riak_core_vnode_master_orig).
 
 
@@ -67,31 +54,25 @@ stop_vnode_after_bloom_fold_request_succeeds(IndexNode, Req, Sender, VMaster) ->
         false -> ?M:command_return_vnode_orig(IndexNode, Req, Sender, VMaster)
     end.
 
-stop_pipe_vnode_after_request_sent(IndexNode, Req, Sender, VMaster) ->
-    case Req of
-        #cmd_enqueue{} = _Req ->
-            %% ?I_INFO("Intercepting riak_core_vnode_master:command_returning_vnode"),
-            random:seed(os:timestamp()),
-            case random:uniform(20) of
-                5 ->
-                    %% Simulate what happens when a VNode completes handoff between command_returning_vnode
-                    %% and the fold attempting to start - other attempts to intercept and slow
-                    %% certain parts of Riak to invoke the particular race condition were unsuccessful
-                    ?I_INFO("Replaced VNode with spawned function in command_returning_vnode"),
-                    Runner = self(),
-                    VNodePid = spawn(fun() ->
-                                        Runner ! go,
-                                        exit(normal)
-                                     end),
-                    receive
-                        go -> ok
-                    end,
-                    %% Still need to send the work
-                    ?M:command_return_vnode_orig(IndexNode, Req, Sender, VMaster),
-                    {ok, VNodePid};
-                _ ->
-                    ?M:command_return_vnode_orig(IndexNode, Req, Sender, VMaster)
-            end;
+return_dead_process_pid_from_get_vnode_pid(Node, Index, VNodeMod = riak_pipe_vnode) ->
+    %% ?I_INFO("Intercepting riak_core_vnode_master:get_vnode_pid"),
+    random:seed(os:timestamp()),
+    case random:uniform(100) of
+        7 ->
+            %% Simulate what happens when a VNode completes handoff between get_vnode_pid
+            %% and the fold attempting to start - other attempts to intercept and slow
+            %% certain parts of Riak to invoke the particular race condition were unsuccessful
+            ?I_INFO("Replaced VNode with spawned function in get_vnode_pid"),
+            VNodePid = spawn(fun() ->
+                                ok
+                             end),
+            MonRef = erlang:monitor(VNodePid),
+            receive
+                {'DOWN', MonRef, process, VNodePid, _Reason} -> ok
+            end,
+            {ok, VNodePid};
         _ ->
-            ?M:command_return_vnode_orig(IndexNode, Req, Sender, VMaster)
-    end.
+            ?M:get_vnode_pid_orig(Node, Index, VNodeMod)
+    end;
+return_dead_process_pid_from_get_vnode_pid(Node, Index, VNodeMod) ->
+    ?M:get_vnode_pid_orig(Node, Index, VNodeMod).

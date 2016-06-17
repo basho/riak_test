@@ -110,6 +110,7 @@ confirm() ->
 
     ok = rt:wait_until_transfers_complete(Nodes),
 
+    lager:info("Check input count"),
     FillerInputCount = stop_fillers(Fillers),
 
     %% if we make it this far, then no filler ever saw the vnode_down
@@ -118,7 +119,7 @@ confirm() ->
     %% with `{error,[{vnode_down,noproc}]}}` errors, as the `noproc` case
     %% should be handled similarly to the `normal` exit case in
     %% `riak_pipe_vnode:queue_work_wait`
-
+    lager:info("Check pipe status"),
     _Status2 = pipe_status(Primary, Pipe),
 
     lager:info("Send eoi and collect results"),
@@ -138,8 +139,8 @@ confirm() ->
 set_up_vnode_crashing_intercept(Primary) ->
     lager:info("Add intercept to kill vnode before calling the wait function"),
     rt_intercept:add(Primary, {riak_core_vnode_master,
-        [{{command_return_vnode, 4},
-            stop_pipe_vnode_after_request_sent}]}).
+        [{{get_vnode_pid, 3},
+            return_dead_process_pid_from_get_vnode_pid}]}).
 
 %% queue filling
 
@@ -177,8 +178,14 @@ queue_filler(Node, Pipe, Inputs, Count) ->
         {stop, Owner} -> Owner ! {done, Count}
     after 0 ->
             {{value, I}, Q} = queue:out(Inputs),
-            ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, I]),
-            queue_filler(Node, Pipe, queue:in(I, Q), Count+1)
+            case rpc:call(Node, riak_pipe, queue_work, [Pipe, I], 40000) of
+                ok ->
+                    lager:info("Received response from queue_work"),
+                    queue_filler(Node, Pipe, queue:in(I, Q), Count+1);
+                _ ->
+                    lager:info("Timed out waiting for response from queue_work"),
+                    queue_filler(Node, Pipe, queue:in(I, Q), Count+1)
+            end
     end.
 
 %% @doc tell all fillers to stop and collect and sum their send counts
