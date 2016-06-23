@@ -23,6 +23,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 
+-define(CLUSTER_NODES, 3).
 
 %% Callbacks
 
@@ -38,15 +39,29 @@ init_per_suite(Config) ->
     NewVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
     %% build the starting (old cluster)
-    Nodes = rt:build_cluster([OldVsn, OldVsn, OldVsn]),
+    Nodes = rt:build_cluster(
+              lists:duplicate(?CLUSTER_NODES, OldVsn)),
 
     %% document the configuration of the nodes so that this can be added
     %% to the Config that is passed to all the tests
     NodeConfig = [
-                  {nodes, lists:zip(lists:seq(1,3), Nodes)},
-                  {oldvsn, OldVsn},
-                  {newvsn, NewVsn}
+                  {nodes, lists:zip(lists:seq(1, ?CLUSTER_NODES), Nodes)},
+                  {previous, OldVsn},
+                  {current, NewVsn}
                  ],
+
+    %% set up a separate, slave node for the 'previous' version
+    %% client, to talk to downgraded nodes
+    _ = application:start(crypto),
+    Suffix = [crypto:rand_uniform($a, $z) || _ <- lists:seq(1,8)],
+    PrevRiakcNode = list_to_atom("alsoran_"++Suffix++"@127.0.0.1"),
+    ClientConfig = [
+                    {previous_client_node, rt_client:set_up_slave_for_previous_client(PrevRiakcNode)}
+                   ],
+    ct:pal("~p", [code:which(rt_client)]),
+    %% ct:pal("Client versions (current/previous): ~s/~s",
+    %%        [rt_client:client_vsn(),
+    %%         rpc:call(PrevRiakcNode, rt_client, client_vsn, [])]),  %% need to add -pa `pwd`/ebin to erl command for previous_client_node
 
     %% now we are going to write some data to the old cluster
     %% and generate some queries that will operate on it
@@ -57,11 +72,13 @@ init_per_suite(Config) ->
     QueryConfig = ts_updown_util:init_per_suite_data_write(Nodes),
 
     %% now stuff the config with the expected values
-    FullConfig = QueryConfig ++ NodeConfig ++ Config,
+    FullConfig = QueryConfig ++ NodeConfig ++ ClientConfig ++ Config,
     %% ct:pal("CT config: ~p", [FullConfig]),
     FullConfig.
 
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
+    rt_slave:stop(
+      proplists:get_value(previous_client_node, Config)),
     ok.
 
 init_per_group(_GroupName, Config) ->
@@ -154,13 +171,13 @@ groups() ->
 %%% Tests
 %%
 
-upgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, oldvsn).
-upgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, oldvsn).
-upgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, oldvsn).
+upgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, previous).
+upgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, previous).
+upgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, previous).
 
-downgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, newvsn).
-downgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, newvsn).
-downgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, newvsn).
+downgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, current).
+downgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, current).
+downgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, current).
 
 query_1()  -> ts_updown_util:run_init_per_suite_queries(1).
 query_2()  -> ts_updown_util:run_init_per_suite_queries(2).

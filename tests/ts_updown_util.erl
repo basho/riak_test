@@ -27,18 +27,16 @@
          run_init_per_suite_queries/2
         ]).
 
+-define(TABLE, "Aggregation_written_on_old_cluster").
 -define(TEMPERATURE_COL_INDEX, 4).
 -define(PRESSURE_COL_INDEX, 5).
 -define(PRECIPITATION_COL_INDEX, 6).
 
+-define(CFG(K, C), proplists:get_value(K, C)).
+
 init_per_suite_data_write(Nodes) ->
-    StartingNode = hd(Nodes),
-    Conn = rt:pbc(StartingNode),
-    ?assert(is_pid(Conn)),
-
-    AggTable = "Aggregation_written_on_old_cluster",
-    DDL = ts_util:get_ddl(aggregation, AggTable),
-
+    DDL = ts_util:get_ddl(aggregation, ?TABLE),
+    Conn = rt:pbc(hd(Nodes)),
     {ok, _} = riakc_ts:query(Conn, DDL),
 
     %% generate data and hoy it into the cluster
@@ -47,20 +45,20 @@ init_per_suite_data_write(Nodes) ->
     Column4 = [element(?TEMPERATURE_COL_INDEX,   X) || X <- Data],
     Column5 = [element(?PRESSURE_COL_INDEX,      X) || X <- Data],
     Column6 = [element(?PRECIPITATION_COL_INDEX, X) || X <- Data],
-    ok = riakc_ts:put(Conn, AggTable, Data),
+    ok = riakc_ts:put(Conn, ?TABLE, Data),
 
     %% now lets create some queries with their expected results
     Where = " WHERE myfamily = 'family1' and myseries = 'seriesX' "
         "and time >= 1 and time <= " ++ integer_to_list(Count),
 
-    Qry1 = "SELECT COUNT(myseries) FROM " ++ AggTable ++ Where,
+    Qry1 = "SELECT COUNT(myseries) FROM " ++ ?TABLE ++ Where,
     Expected1 = {[<<"COUNT(myseries)">>], [{Count}]},
 
-    Qry2 = "SELECT COUNT(time) FROM " ++ AggTable ++ Where,
+    Qry2 = "SELECT COUNT(time) FROM " ++ ?TABLE ++ Where,
     Expected2 = {[<<"COUNT(time)">>], [{Count}]},
 
     Qry3 = "SELECT COUNT(pressure), count(temperature), cOuNt(precipitation) FROM " ++
-        AggTable ++ Where,
+        ?TABLE ++ Where,
     Expected3 = {
       [<<"COUNT(pressure)">>,
        <<"COUNT(temperature)">>,
@@ -70,25 +68,25 @@ init_per_suite_data_write(Nodes) ->
         count_non_nulls(Column4),
         count_non_nulls(Column6)}]},
 
-    Qry4 = "SELECT SUM(temperature) FROM " ++ AggTable ++ Where,
+    Qry4 = "SELECT SUM(temperature) FROM " ++ ?TABLE ++ Where,
     Sum4 = lists:sum([X || X <- Column4, is_number(X)]),
     Expected4 = {[<<"SUM(temperature)">>],
                  [{Sum4}]},
 
     Qry5 = "SELECT SUM(temperature), sum(pressure), sUM(precipitation) FROM " ++
-        AggTable ++ Where,
+        ?TABLE ++ Where,
     Sum5 = lists:sum([X || X <- Column5, is_number(X)]),
     Sum6 = lists:sum([X || X <- Column6, is_number(X)]),
     Expected5 = {[<<"SUM(temperature)">>, <<"SUM(pressure)">>, <<"SUM(precipitation)">>],
                  [{Sum4, Sum5, Sum6}]},
 
-    Qry6 = "SELECT MIN(temperature), MIN(pressure) FROM " ++ AggTable ++ Where,
+    Qry6 = "SELECT MIN(temperature), MIN(pressure) FROM " ++ ?TABLE ++ Where,
     Min4 = lists:min([X || X <- Column4, is_number(X)]),
     Min5 = lists:min([X || X <- Column5, is_number(X)]),
     Expected6 = {[<<"MIN(temperature)">>, <<"MIN(pressure)">>],
                  [{Min4, Min5}]},
 
-    Qry7 = "SELECT MAX(temperature), MAX(pressure) FROM " ++ AggTable ++ Where,
+    Qry7 = "SELECT MAX(temperature), MAX(pressure) FROM " ++ ?TABLE ++ Where,
     Max4 = lists:max([X || X <- Column4, is_number(X)]),
     Max5 = lists:max([X || X <- Column5, is_number(X)]),
     Expected7 = {[<<"MAX(temperature)">>, <<"MAX(pressure)">>],
@@ -101,7 +99,7 @@ init_per_suite_data_write(Nodes) ->
 
     Avg4 = Sum4 / Count4,
     Avg5 = Sum5 / Count5,
-    Qry8 = "SELECT AVG(temperature), MEAN(pressure) FROM " ++ AggTable ++ Where,
+    Qry8 = "SELECT AVG(temperature), MEAN(pressure) FROM " ++ ?TABLE ++ Where,
     Expected8 = {[<<"AVG(temperature)">>, <<"MEAN(pressure)">>],
                  [{Avg4, Avg5}]},
 
@@ -113,7 +111,7 @@ init_per_suite_data_write(Nodes) ->
     Sample5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / (Count5-1)),
     Qry9 = "SELECT STDDEV_POP(temperature), STDDEV_POP(pressure),"
            " STDDEV(temperature), STDDEV(pressure), "
-           " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM " ++ AggTable ++ Where,
+           " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM " ++ ?TABLE ++ Where,
     Expected9 = {
       [
        <<"STDDEV_POP(temperature)">>, <<"STDDEV_POP(pressure)">>,
@@ -124,43 +122,43 @@ init_per_suite_data_write(Nodes) ->
      },
 
     Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++
-        AggTable ++ Where,
+        ?TABLE ++ Where,
     Expected10 = {
       [<<"SUM(temperature)">>, <<"MIN(pressure)">>, <<"AVG(pressure)">>],
       [{Sum4, Min5, Avg5}]
      },
 
-    QueryConfig = [
-                    {init_per_suite_queries,
-                     [
-                      {1,  {Qry1,  {ok, Expected1}}},
-                      {2,  {Qry2,  {ok, Expected2}}},
-                      {3,  {Qry3,  {ok, Expected3}}},
-                      {4,  {Qry4,  {ok, Expected4}}},
-                      {5,  {Qry5,  {ok, Expected5}}},
-                      {6,  {Qry6,  {ok, Expected6}}},
-                      {7,  {Qry7,  {ok, Expected7}}},
-                      {8,  {Qry8,  {ok, Expected8}}},
-                      {9,  {Qry9,  {ok, Expected9}}},
-                      {10, {Qry10, {ok, Expected10}}}
-                     ]
-                    }
-                  ],
-    QueryConfig.
+    [
+     {init_per_suite_queries,
+      [
+       {1,  {Qry1,  {ok, Expected1}}},
+       {2,  {Qry2,  {ok, Expected2}}},
+       {3,  {Qry3,  {ok, Expected3}}},
+       {4,  {Qry4,  {ok, Expected4}}},
+       {5,  {Qry5,  {ok, Expected5}}},
+       {6,  {Qry6,  {ok, Expected6}}},
+       {7,  {Qry7,  {ok, Expected7}}},
+       {8,  {Qry8,  {ok, Expected8}}},
+       {9,  {Qry9,  {ok, Expected9}}},
+       {10, {Qry10, {ok, Expected10}}}
+      ]
+     }
+    ].
+
 
 do_node_transition(Config, N, Version) ->
-    {nodes, Nodes} = lists:keyfind(nodes, 1, Config),
-    {N, Node} = lists:keyfind(N, 1, Nodes),
-    {Version, ToVsn} = lists:keyfind(Version, 1, Config),
+    Nodes = ?CFG(nodes, Config),
+    Node  = ?CFG(N, Nodes),
+    ToVsn = ?CFG(Version, Config),
     ok = rt:upgrade(Node, ToVsn),
     ok = rt:wait_for_service(Node, riak_kv),
     pass.
 
-run_init_per_suite_queries(Config, TestNo)
-  when is_integer(TestNo) andalso TestNo > 0 ->
-    Queries = proplists:get_value(init_per_suite_queries, Config),
-    {TestNo, {Query, Exp}} = lists:keyfind(TestNo, 1, Queries),
-    Nodes = proplists:get_value(nodes, Config),
+
+run_init_per_suite_queries(Config, TestNo) ->
+    Queries = ?CFG(init_per_suite_queries, Config),
+    {Query, Exp} = ?CFG(TestNo, Queries),
+    Nodes = ?CFG(nodes, Config),
 
     %% try reading data from all nodes: we will thus cover both reading
     %%
@@ -172,13 +170,14 @@ run_init_per_suite_queries(Config, TestNo)
     Success =
         lists:all(
           fun({NodeNo, Node}) ->
-                  Conn = rt:pbc(Node),
-                  Got = riakc_ts:query(Conn, Query),
-                  case ts_util:assert_float("reading data query " ++ integer_to_list(TestNo), Exp, Got) of
+                  Got = query_via_client(        %% select previous/current client vsn, depending on
+                          Query, Node, Config),  %% whether Node is downgraded or not
+                  case ts_util:assert_float("query " ++ integer_to_list(TestNo), Exp, Got) of
                       pass ->
                           true;
                       fail ->
-                          ct:pal("failed query ~b issued at node ~b", [TestNo, NodeNo]),
+                          ct:log("failed query ~b issued at node ~b (~p)",
+                                 [TestNo, NodeNo, rtdev:node_version(rtdev:node_id(Node))]),
                           false
                   end
           end,
@@ -187,6 +186,26 @@ run_init_per_suite_queries(Config, TestNo)
             pass;
        el/=se ->
             ct:fail("some queries failed (see above)")
+    end.
+
+
+client_node(current, _Config) ->
+    node();
+client_node(previous, Config) ->
+    ?CFG(previous_client_node, Config).
+
+query_via_client(Query, Node, Config) ->
+    VersionSlot = rtdev:node_version(
+                    rtdev:node_id(Node)),
+    ct:log("using ~s client with ~p to issue\n  ~s", [VersionSlot, Node, Query]),
+    Client = rt:pbc(Node),
+    case VersionSlot of
+        current ->
+            riakc_ts:query(Client, Query);
+        previous ->
+            rpc:call(
+              client_node(VersionSlot, Config),
+              riakc_ts, query, [Client, Query])
     end.
 
 %%
