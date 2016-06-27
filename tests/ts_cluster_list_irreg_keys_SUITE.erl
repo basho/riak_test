@@ -30,7 +30,7 @@
 %% b, c, ts, d], but with different participation of the first four in
 %% the primary key. The atoms are mnemonics for the field order in the
 %% key.
--define(ALL_VARIANTS, [abct, acbt, bat]).
+-define(ALL_VARIANTS, [abct, acbt, abtc, bat]).
 
 -define(LIFESPAN, 250).  %% two and a half quanta
 
@@ -71,7 +71,8 @@ all() ->
     [
      list_key1_test,
      list_key2_test,
-     list_key3_test
+     list_key3_test,
+     list_key4_test
     ].
 
 %% -----------------------------
@@ -80,7 +81,8 @@ all() ->
 
 list_key1_test(Cfg) -> list_keysN(abct, Cfg).
 list_key2_test(Cfg) -> list_keysN(acbt, Cfg).
-list_key3_test(Cfg) -> list_keysN(bat,  Cfg).
+list_key3_test(Cfg) -> list_keysN(abtc, Cfg).
+list_key4_test(Cfg) -> list_keysN(bat,  Cfg).
 
 list_keysN(Variant, Cfg) ->
     [Node|_] = ?config(cluster, Cfg),
@@ -149,6 +151,7 @@ make_data() ->
 
 make_keys(abct, Data) -> [{A, B, C, TS} || {A, B,  C, TS, _D} <- Data];
 make_keys(acbt, Data) -> [{A, C, B, TS} || {A, B,  C, TS, _D} <- Data];
+make_keys(abtc, Data) -> [{A, B, TS, C} || {A, B,  C, TS, _D} <- Data];
 make_keys(bat,  Data) -> [{B, A,    TS} || {A, B, _C, TS, _D} <- Data].
 
 
@@ -156,6 +159,8 @@ make_keys(bat,  Data) -> [{B, A,    TS} || {A, B, _C, TS, _D} <- Data].
 make_pk_definition(abct) -> "primary key ((a, b, c, quantum(ts, 100, s)), a, b, c, ts)";
 %% order is not the same
 make_pk_definition(acbt) -> "primary key ((a, c, b, quantum(ts, 100, s)), a, c, b, ts)";
+%% order is not the same, pk is subkey of lk
+make_pk_definition(abtc) -> "primary key ((a, b,    quantum(ts, 100, s)), a, b, ts, c)";
 %% order not the same, and one field is missing in the key
 make_pk_definition(bat)  -> "primary key ((b, a,    quantum(ts, 100, s)), b, a,    ts)".
 
