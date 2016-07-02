@@ -39,7 +39,6 @@ set_up_slave_for_previous_client(SlaveNode) ->
              filename:join(
                [rtdev:relpath(previous),
                 "dev/dev1/lib/riakc-*/ebin"]))),
-    ct:pal("Previous client path: ~p", [PrevRiakcPath]),
     true = rpc:call(
              SlaveNode, code, replace_path, ["riakc", PrevRiakcPath]),
     SlaveNode.

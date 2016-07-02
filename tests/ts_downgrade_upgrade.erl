@@ -58,18 +58,13 @@ init_per_suite(Config) ->
     ClientConfig = [
                     {previous_client_node, rt_client:set_up_slave_for_previous_client(PrevRiakcNode)}
                    ],
-    ct:pal("~p", [code:which(rt_client)]),
+    %% ct:pal("~p", [code:which(rt_client)]),
     %% ct:pal("Client versions (current/previous): ~s/~s",
     %%        [rt_client:client_vsn(),
     %%         rpc:call(PrevRiakcNode, rt_client, client_vsn, [])]),  %% need to add -pa `pwd`/ebin to erl command for previous_client_node
 
-    %% now we are going to write some data to the old cluster
-    %% and generate some queries that will operate on it
-    %% the query and the expected results will be put in the Config
-    %% so that we can rerun them as we walk the upgrade/downgrade ladder
-    %% Gonnae do a complex aggregation query and a simple read for functional
-    %% coverage
-    QueryConfig = ts_updown_util:init_per_suite_data_write(Nodes),
+    %% prepare the SELECT queries and the data these are expected to fetch
+    QueryConfig = ts_updown_util:make_queries_and_data(),
 
     %% now stuff the config with the expected values
     FullConfig = QueryConfig ++ NodeConfig ++ ClientConfig ++ Config,
@@ -119,12 +114,19 @@ groups() ->
 
  all() ->
      [
+      create_table_1u,
+      create_table_2u,
+      create_table_3u,
+
       {group, query_group_1},
       {group, query_group_2},
       {group, query_group_3},
       {group, query_group_4},
 
       downgrade3,
+      %% at each iteration as we down- or upgrade a node, we create a
+      %% distinctively named table, from which selects will be run.
+      create_table_3d,
 
       {group, query_group_1},
       {group, query_group_2},
@@ -132,6 +134,7 @@ groups() ->
       {group, query_group_4},
 
       downgrade2,
+      create_table_2d,
 
       {group, query_group_1},
       {group, query_group_2},
@@ -139,6 +142,7 @@ groups() ->
       {group, query_group_4},
 
       downgrade1,
+      create_table_1d,
 
       {group, query_group_1},
       {group, query_group_2},
@@ -179,24 +183,20 @@ downgrade1(Config) -> ts_updown_util:do_node_transition(Config, 1, current).
 downgrade2(Config) -> ts_updown_util:do_node_transition(Config, 2, current).
 downgrade3(Config) -> ts_updown_util:do_node_transition(Config, 3, current).
 
-query_1()  -> ts_updown_util:run_init_per_suite_queries(1).
-query_2()  -> ts_updown_util:run_init_per_suite_queries(2).
-query_3()  -> ts_updown_util:run_init_per_suite_queries(3).
-query_4()  -> ts_updown_util:run_init_per_suite_queries(4).
-query_5()  -> ts_updown_util:run_init_per_suite_queries(5).
-query_6()  -> ts_updown_util:run_init_per_suite_queries(6).
-query_7()  -> ts_updown_util:run_init_per_suite_queries(7).
-query_8()  -> ts_updown_util:run_init_per_suite_queries(8).
-query_9()  -> ts_updown_util:run_init_per_suite_queries(9).
-query_10() -> ts_updown_util:run_init_per_suite_queries(10).
+create_table_1u(Config) -> ts_updown_util:create_versioned_table(Config, 1, current).
+create_table_1d(Config) -> ts_updown_util:create_versioned_table(Config, 1, previous).
+create_table_2u(Config) -> ts_updown_util:create_versioned_table(Config, 2, current).
+create_table_2d(Config) -> ts_updown_util:create_versioned_table(Config, 2, previous).
+create_table_3u(Config) -> ts_updown_util:create_versioned_table(Config, 3, current).
+create_table_3d(Config) -> ts_updown_util:create_versioned_table(Config, 3, previous).
 
-query_1(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 1).
-query_2(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 2).
-query_3(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 3).
-query_4(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 4).
-query_5(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 5).
-query_6(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 6).
-query_7(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 7).
-query_8(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 8).
-query_9(Config)  -> ts_updown_util:run_init_per_suite_queries(Config, 9).
-query_10(Config) -> ts_updown_util:run_init_per_suite_queries(Config, 10).
+query_1(Config)  -> ts_updown_util:run_queries(Config, 1).
+query_2(Config)  -> ts_updown_util:run_queries(Config, 2).
+query_3(Config)  -> ts_updown_util:run_queries(Config, 3).
+query_4(Config)  -> ts_updown_util:run_queries(Config, 4).
+query_5(Config)  -> ts_updown_util:run_queries(Config, 5).
+query_6(Config)  -> ts_updown_util:run_queries(Config, 6).
+query_7(Config)  -> ts_updown_util:run_queries(Config, 7).
+query_8(Config)  -> ts_updown_util:run_queries(Config, 8).
+query_9(Config)  -> ts_updown_util:run_queries(Config, 9).
+query_10(Config) -> ts_updown_util:run_queries(Config, 10).
