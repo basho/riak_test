@@ -17,129 +17,150 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
+%%
+%% @doc Provide a full set of CT callbacks, to be called 1:1 from the
+%%      actual r_t modules, for a comprehensive cycle of table
+%%      creation with subsequent SELECT queries on a cluster of three
+%%      nodes, downgrading and upgrading each one in this sequence:
+%%      uuu -> uud -> udd -> ddd -> ddu -> duu -> uuu.
+%%
+%%      At each iteration as we down- or upgrade a node, we create a
+%%      distinctively named table, from which selects will be run.
+%%      This is to check for DDL propagation issues between nodes of
+%%      different versions. Next, we execute SELECTs at all nodes,
+%%      thus covering both reading:
+%%
+%%     (a) from upgraded and downgraded nodes when other nodes are,
+%%         similarly, upgraded or downgraded;
+%%     (b) from both the node the initial writing was done at, as well
+%%         as from other nodes.
+
 -module(ts_updown_util).
 
 -include_lib("eunit/include/eunit.hrl").
 
 -export([
-         make_queries_and_data/0,
-         do_node_transition/3,
-         create_versioned_table/3,
-         run_queries/2
+         make_config/1,
+         maybe_shutdown_client_node/1,
+         run_scenario/1
         ]).
 
-%% Many tables will be created, with identical structure, distinctly
-%% named depending on the node version (current or previous) used at
-%% the time of creation. This is to check for DDL propagation issues.
--define(TABLE_STEM, "updown_test_table_").
-
--define(TEMPERATURE_COL_INDEX, 4).
--define(PRESSURE_COL_INDEX, 5).
--define(PRECIPITATION_COL_INDEX, 6).
 
 -define(CFG(K, C), proplists:get_value(K, C)).
 
+-define(QUERY_NUMBERS, lists:seq(1,10)).
 
-make_queries_and_data() ->
-    %% generate data and hoy it into the cluster
-    Count = 10,
-    Data = ts_util:get_valid_aggregation_data(Count),
-    Column4 = [element(?TEMPERATURE_COL_INDEX,   X) || X <- Data],
-    Column5 = [element(?PRESSURE_COL_INDEX,      X) || X <- Data],
-    Column6 = [element(?PRECIPITATION_COL_INDEX, X) || X <- Data],
+-define(TABLE_STEM, "updown_test_table_").
 
-    %% now let's create some queries with their expected results
-    Where =
-        "WHERE myfamily = 'family1' and myseries = 'seriesX'"
-        " and time >= 1 and time <= " ++ integer_to_list(Count),
+make_config(Config) ->
+    lists:foldl(
+      fun(Fun, Cfg) -> Fun(Cfg) end,
+      Config,
+      [fun make_node_config/1,
+       fun make_client_config/1]).
 
-    %% some preliminaries
-    Sum4 = lists:sum([X || X <- Column4, is_number(X)]),
-    Sum5 = lists:sum([X || X <- Column5, is_number(X)]),
-    Sum6 = lists:sum([X || X <- Column6, is_number(X)]),
-    Min4 = lists:min([X || X <- Column4, is_number(X)]),
-    Min5 = lists:min([X || X <- Column5, is_number(X)]),
-    Max4 = lists:max([X || X <- Column4, is_number(X)]),
-    Max5 = lists:max([X || X <- Column5, is_number(X)]),
+make_node_config(Config) ->
+    %% %% get the test meta data from the riak_test runner
+    %% TestMetaData = riak_test_runner:metadata(self()),
 
-    C4 = [X || X <- Column4, is_number(X)],
-    C5 = [X || X <- Column5, is_number(X)],
-    Count4 = length(C4),
-    Count5 = length(C5),
-    Avg4 = Sum4 / Count4,
-    Avg5 = Sum5 / Count5,
+    %% build the starting (old = upgraded, current) cluster
+    Nodes = rt:build_cluster(
+              lists:duplicate(3, current)),
+    Config ++
+        [
+         {nodes, lists:zip([1,2,3], Nodes)}
+        ].
 
-    StdDevFun4 = stddev_fun_builder(Avg4),
-    StdDevFun5 = stddev_fun_builder(Avg5),
-    StdDev4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / Count4),
-    StdDev5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / Count5),
-    Sample4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / (Count4-1)),
-    Sample5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / (Count5-1)),
+make_client_config(Config) ->
+    UsePreviousClient = proplists:get_value(use_previous_client, Config, false),
+    PrevClientNode = maybe_setup_slave_for_previous_client(UsePreviousClient),
+    Config ++
+        [
+         {previous_client_node, PrevClientNode}
+        ].
 
-    %% Query templates: there are ~s placeholders for table in
-    %% each. Down in query_all_via_client, the real table name is
-    %% substituted.
-    QQEE =
-        [{"SELECT COUNT(myseries) FROM ~s " ++ Where,
-          {[<<"COUNT(myseries)">>], [{Count}]}},
+maybe_setup_slave_for_previous_client(true) ->
+    %% set up a separate, slave node for the 'previous' version
+    %% client, to talk to downgraded nodes
+    _ = application:start(crypto),
+    Suffix = [crypto:rand_uniform($a, $z) || _ <- [x,x,x,i,x,x,x,i]],
+    PrevRiakcNode = list_to_atom("alsoran_"++Suffix++"@127.0.0.1"),
+    rt_client:set_up_slave_for_previous_client(PrevRiakcNode);
+maybe_setup_slave_for_previous_client(_) ->
+    node().
 
-         {"SELECT COUNT(time) FROM ~s " ++ Where,
-          {[<<"COUNT(time)">>], [{Count}]}},
+maybe_shutdown_client_node(Config) ->
+    case ?CFG(previous_client_node, Config) of
+        ThisNode when ThisNode == node() ->
+            ok;
+        SlaveNode ->
+            rt_slave:stop(SlaveNode)
+    end.
 
-         {"SELECT COUNT(pressure), count(temperature), cOuNt(precipitation) FROM ~s " ++ Where,
-          {[<<"COUNT(pressure)">>,
-            <<"COUNT(temperature)">>,
-            <<"COUNT(precipitation)">>],
-           [{count_non_nulls(Column5),
-             count_non_nulls(Column4),
-             count_non_nulls(Column6)}]}},
 
-         {"SELECT SUM(temperature) FROM ~s " ++ Where,
-          {[<<"SUM(temperature)">>], [{lists:sum([X || X <- Column4, is_number(X)])}]}},
+run_scenario(Config) ->
+    %% this is the cycle iterations and what is done when
+    ok = create_versioned_table(Config, 1, current),
+    ok = create_versioned_table(Config, 2, current),
+    ok = create_versioned_table(Config, 3, current),
+    ActiveTables0 = [{1,u}, {2,u}, {3,u}],
+    Res0 = [],
 
-         {"SELECT SUM(temperature), sum(pressure), sUM(precipitation) FROM ~s " ++ Where,
-          {[<<"SUM(temperature)">>, <<"SUM(pressure)">>, <<"SUM(precipitation)">>],
-           [{Sum4, Sum5, Sum6}]}},
+    Res1 = query_burst(Config, ActiveTables0, Res0),
 
-         {"SELECT MIN(temperature), MIN(pressure) FROM ~s " ++ Where,
-          {[<<"MIN(temperature)">>, <<"MIN(pressure)">>], [{Min4, Min5}]}},
+    ok = do_node_transition(Config, 3, previous),
+    ok = create_versioned_table(Config, 3, previous),
+    ActiveTables1 = ActiveTables0 ++ [{3,d}],
 
-         {"SELECT MAX(temperature), MAX(pressure) FROM ~s " ++ Where,
-          {[<<"MAX(temperature)">>, <<"MAX(pressure)">>], [{Max4, Max5}]}},
+    Res2 = query_burst(Config, ActiveTables1, Res1),
 
-         {"SELECT AVG(temperature), MEAN(pressure) FROM ~s " ++ Where,
-          {[<<"AVG(temperature)">>, <<"MEAN(pressure)">>],
-           [{Avg4, Avg5}]}},
+    ok = do_node_transition(Config, 2, previous),
+    ok = create_versioned_table(Config, 2, previous),
+    ActiveTables2 = ActiveTables1 ++ [{2,d}],
 
-         {"SELECT STDDEV_POP(temperature), STDDEV_POP(pressure),"
-          " STDDEV(temperature), STDDEV(pressure), "
-          " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM ~s " ++ Where,
-          {[
-            <<"STDDEV_POP(temperature)">>, <<"STDDEV_POP(pressure)">>,
-            <<"STDDEV(temperature)">>, <<"STDDEV(pressure)">>,
-            <<"STDDEV_SAMP(temperature)">>, <<"STDDEV_SAMP(pressure)">>
-           ],
-           [{StdDev4, StdDev5, Sample4, Sample5, Sample4, Sample5}]
-          }},
+    Res3 = query_burst(Config, ActiveTables2, Res2),
 
-         {"SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM ~s " ++ Where,
-          {[<<"SUM(temperature)">>, <<"MIN(pressure)">>, <<"AVG(pressure)">>],
-           [{Sum4, Min5, Avg5}]
-          }}
-        ],
+    ok = do_node_transition(Config, 1, previous),
+    ok = create_versioned_table(Config, 1, previous),
+    ActiveTables3 = ActiveTables2 ++ [{1,d}],
 
-    [
-     {data, Data},
-     {queries,
-      [{N, {Qn, {ok, En}}} || {N, {Qn, En}} <- lists:zip(lists:seq(1,10), QQEE)]}
-    ].
+    Res4 = query_burst(Config, ActiveTables3, Res3),
+
+    %% and upgrade again: set of tables is now complete
+
+    ok = do_node_transition(Config, 1, current),
+    Res5 = query_burst(Config, ActiveTables3, Res4),
+
+    ok = do_node_transition(Config, 2, current),
+    Res6 = query_burst(Config, ActiveTables3, Res5),
+
+    ok = do_node_transition(Config, 3, current),
+    Res7 = query_burst(Config, ActiveTables3, Res6),
+
+    case Res7 of
+        [] ->
+            pass;
+        FailuresDetailed ->
+            PrintMe = layout_fails_for_printing(FailuresDetailed),
+            ct:print("Failing queries/queried from/when node was/table:\n~s", [PrintMe])
+    end.
+
+layout_fails_for_printing(FF) ->
+    lists:flatten(
+      [io_lib:format("~b\t~p\t~p\t~p~p\n", [TestNo, QueryingNode, QueryingNodeVsn, TableCreatedNode, WhenNodeWas])
+       || {TestNo, QueryingNode, QueryingNodeVsn, {TableCreatedNode, WhenNodeWas}} <- FF]).
+
+query_burst(Config, ActiveTables, Res) ->
+    lists:flatten(
+      [Res, [run_queries(Config, N, ActiveTables) || N <- ?QUERY_NUMBERS]]).
 
 
 %% In order to accurately test the DDL compilation, upgrade and
-%% propagation during the test iterations, there will be many tables
+%% propagation during the test cycle, there will be many tables
 %% created and populated in the process, with distinctive names
 %% reflecting the state of the node they are created on: node id and
-%% version (d for previous, u for current), 2 x 3 identical tables in total.
+%% version (d for previous, u for current), 2 x 3 identical tables in
+%% total.
 create_versioned_table(Config, NodeNo, Vsn) ->
     Nodes = ?CFG(nodes, Config),
     Data = ?CFG(data, Config),
@@ -171,68 +192,61 @@ wait_until_active_table(Client, Table, N) ->
 do_node_transition(Config, N, Version) ->
     Nodes = ?CFG(nodes, Config),
     Node  = ?CFG(N, Nodes),
-    ToVsn = ?CFG(Version, Config),
-    ok = rt:upgrade(Node, ToVsn),
-    ok = rt:wait_for_service(Node, riak_kv),
-    pass.
+    %% ToVsn = ?CFG(Version, Config),
+    ok = rt:upgrade(Node, Version),
+    ok = rt:wait_for_service(Node, riak_kv).
 
 
-run_queries(Config, TestNo) ->
+run_queries(Config, TestNo, ActiveTables) ->
     Queries = ?CFG(queries, Config),
     {QueryFmt, Exp} = ?CFG(TestNo, Queries),
     Nodes = ?CFG(nodes, Config),
+    ct:log("query ~s", [QueryFmt]),
 
-    %% try reading data from all nodes: we will thus cover both reading
-    %%
-    %% (a) from upgraded and downgraded nodes when other nodes are,
-    %%     similarly, upgraded or downgraded;
-    %%
-    %% (b) from both the node the initial writing was done at, as well
-    %%     as from other nodes.
-    Success =
-        lists:all(
-          fun({_NodeNo, Node}) ->
-                  Got = query_all_via_client(       %% maybe select previous/current client vsn, depending on
-                          QueryFmt, Node, Config),  %% whether Node is downgraded or not
-                  assert_multi(Exp, Got, TestNo, Node)
-          end,
-          Nodes),
-    if Success ->
-            pass;
-       el/=se ->
-            ct:fail("some queries failed (see above)")
-    end.
+    lists:foldl(
+      fun({_NodeNo, Node}, Failures) ->
+              Got = query_all_via_client(    %% maybe select previous/current client vsn, depending on
+                      {TestNo, QueryFmt}, Node, Config, ActiveTables),  %% whether Node is downgraded or not
+              Failures ++ collect_fails(Exp, Got, TestNo, Node)
+      end,
+      [],
+      Nodes).
 
 
-%% !. Depending in whether the the node at which a query is issued is
+%% !. Depending in whether the node at which a query is issued is
 %%    upgraded or downgraded, we will use the current or previous
-%%    client, respectively.
-%% 2. The three nodes will be in variable state as we progress through
-%%    iterations (upgraded or downgraded): correspondingly, we will
-%%    query from a table created when this particular node was
-%%    upgraded or downgraded.
-query_all_via_client(QueryFmt, AtNode, Config) ->
+%%    client, respectively (this is optional, controlled by
+%%    use_previous_client property in Options arg of
+%%    init_per_suite/3).
+%% 2. The three nodes will eventually have two tables created on each,
+%%    as we progress through iterations ('u' created when that node is
+%%    upgraded, and then 'd', following the downgrade): we will
+%%    therefore try both, first checking if it exists.
+query_all_via_client({TestNo, QueryFmt}, AtNode, Config, ActiveTables) ->
     AtNodeVersionSlot =
         rtdev:node_version(
           rtdev:node_id(AtNode)),
+    %% ct:pal("ActiveTables ~p", [ActiveTables]),
     Queries =
-        [begin
-             Table = make_table_name(N, rtdev:node_version(N)),
-             fmt(QueryFmt, [Table])
-         end || N <- [1,2,3]],
-
+        lists:flatten(
+          [[[{fmt(QueryFmt, [make_table_name(N, current )]), {N,u}} || lists:member({N, u}, ActiveTables)],
+            [{fmt(QueryFmt, [make_table_name(N, previous)]), {N,d}} || lists:member({N, d}, ActiveTables)]]
+           || N <- [1,2,3]]),
     [begin
-         ct:pal("using ~p client with ~p to issue\n  ~p", [AtNodeVersionSlot, AtNode, Query]),
+         ct:log("using ~p client with ~p to issue query ~b against ~p", [AtNodeVersionSlot, AtNode, TestNo, TableId]),
+         ct:log("\"~s\"", [Query]),
          Client = rt:pbc(AtNode),
-         case AtNodeVersionSlot of
-             current ->
-                 riakc_ts:query(Client, Query);
-             previous ->
-                 rpc:call(
-                   client_node(AtNodeVersionSlot, Config),
-                   riakc_ts, query, [Client, Query])
-        end
-    end || Query <- Queries].
+         Res =
+             case AtNodeVersionSlot of
+                 current ->
+                     riakc_ts:query(Client, Query);
+                 previous ->
+                     rpc:call(
+                       client_node(AtNodeVersionSlot, Config),
+                       riakc_ts, query, [Client, Query])
+             end,
+         {Res, TableId}
+    end || {Query, TableId} <- Queries].
 
 client_node(current, _Config) ->
     node();
@@ -240,36 +254,28 @@ client_node(previous, Config) ->
     ?CFG(previous_client_node, Config).
 
 
-assert_multi(Exp, Got, TestNo, Node) when not is_list(Exp), not is_list(Got) ->
+collect_fails(Exp, {Got, TableId}, TestNo, QueryingNode) when not is_list(Exp), not is_list(Got) ->
+    QueryingNodeVsn = rtdev:node_version(rtdev:node_id(QueryingNode)),
     case ts_util:assert_float("query " ++ integer_to_list(TestNo), Exp, Got) of
         pass ->
-            true;
+            [];
         fail ->
             ct:log("failed query ~b issued at node ~p (~p)",
-                   [TestNo, Node, rtdev:node_version(rtdev:node_id(Node))]),
-            false
+                   [TestNo, QueryingNode, QueryingNodeVsn]),
+            [{TestNo, QueryingNode, QueryingNodeVsn, TableId}]
     end;
 
-assert_multi(Exp, Got, TestNo, Node) when is_list(Exp), is_list(Got) ->
-    lists:all(
-      fun(X) -> X end,
-      [assert_multi(ExpCase, GotCase, TestNo, Node)
+collect_fails(Exp, Got, TestNo, Node) when is_list(Exp), is_list(Got) ->
+    lists:append(
+      [collect_fails(ExpCase, GotCase, TestNo, Node)
        || {ExpCase, GotCase} <- lists:zip(Exp, Got)]);
 
-assert_multi(Exp, Got, TestNo, Node) when not is_list(Exp) ->
+collect_fails(Exp, Got, TestNo, Node) when not is_list(Exp) ->
     %% if all expected values are the same, we conveniently do the
     %% duplication here
-    assert_multi(
+    collect_fails(
       lists:duplicate(length(Got), Exp), Got, TestNo, Node).
 
-%%
-%% helper fns
-%%
-count_non_nulls(Col) ->
-    length([V || V <- Col, V =/= []]).
-
-stddev_fun_builder(Avg) ->
-    fun(X, Acc) -> Acc + (Avg-X)*(Avg-X) end.
 
 fmt(F, A) ->
     lists:flatten(io_lib:format(F, A)).
