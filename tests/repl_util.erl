@@ -49,7 +49,8 @@
          read_from_cluster/6,
          check_fullsync/3,
          validate_completed_fullsync/6,
-         validate_intercepted_fullsync/5
+         validate_intercepted_fullsync/5,
+         confirm_missing/5
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -206,6 +207,11 @@ wait_for_reads(Node, Start, End, Bucket, R) ->
     %% no errors. Therefore, we simply return 0 and do not execute another
     %% systest_read call.
     0.
+
+confirm_missing(Node, Start, End, Bucket, R) ->
+    Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
+    Expected = [{N,{error,notfound}} || N <- lists:seq(Start, End)],
+    lists:sort(Reads) == lists:sort(Expected).
 
 get_fs_coord_status_item(Node, SinkName, ItemName) ->
     Status = rpc:call(Node, riak_repl_console, status, [quiet]),
