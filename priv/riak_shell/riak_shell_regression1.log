@@ -1,0 +1,67 @@
+{{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
+{{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev1@127.0.0.1' on port 10017"}}.
+{{command, "show_nodes; "}, {result, "The connected nodes are: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']"}}.
+{{command, "show_history; "}, {result, "The history contains:
+- 1: reconnect; 
+- 2: show_connection; 
+- 3: show_nodes; 
+"}}.
+{{command, "show_nodes; "}, {result, "The connected nodes are: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']"}}.
+{{command, "CREATE TABLE GeoCheckin (myfamily varchar not null, myseries varchar not null, time  timestamp not null, weather  varchar not null, temperature double, PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time));\n"}, {result, ""}}.
+{{command, "describe GeoCheckin;\n"}, {result, "+-----------+---------+-------+-----------+---------+
+|  Column   |  Type   |Is Null|Primary Key|Local Key|
++-----------+---------+-------+-----------+---------+
+| myfamily  | varchar | false |     1     |    1    |
+| myseries  | varchar | false |     2     |    2    |
+|   time    |timestamp| false |     3     |    3    |
+|  weather  | varchar | false |           |         |
+|temperature| double  | true  |           |         |
++-----------+---------+-------+-----------+---------+
+"}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',2,'rain',24.5);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',3,'rain',23.0);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',4,'sunny',28.6);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',5,'sunny',24.7);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',6,'cloudy',32.789);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',7,'cloudy',27.9);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',8,'blizard',45.55);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',8,'fog',34.9);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',9,'fog',28);\n"}, {result, "Error (1003): Invalid data found at row index(es) 1"}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',9,'fog',28.7);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,28);\n"}, {result, "Error (1003): Invalid data found at row index(es) 1"}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,'hail',38.1);\n"}, {result, ""}}.
+{{command, "select time, weather, temperature from GeoCheckin where myfamily='family1' and myseries='seriesX' and time > 10 and time < 1000;\n"}, {result, ""}}.
+{{command, "select * from GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1420113600000 and time <= 1420119300000;\n"}, {result, "Error (1001): Too many subqueries (7)"}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1 and time <= 2;\n"}, {result, "+--------+--------+----+-------+--------------------------+
+|myfamily|myseries|time|weather|       temperature        |
++--------+--------+----+-------+--------------------------+
+|family1 |series1 | 1  | snow  |2.51999999999999992895e+01|
+|family1 |series1 | 2  | rain  |2.45000000000000000000e+01|
++--------+--------+----+-------+--------------------------+
+"}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10 and time <= 8;\n"}, {result, "Error (1001): The lower time bound is greater than the upper time bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10;\n"}, {result, "Error (1001): Where clause has no upper bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time <= 8;\n"}, {result, "Error (1001): Where clause has no lower bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 2 and time <= 7;\n"}, {result, "+--------+--------+----+-------+--------------------------+
+|myfamily|myseries|time|weather|       temperature        |
++--------+--------+----+-------+--------------------------+
+|family1 |series1 | 2  | rain  |2.45000000000000000000e+01|
+|family1 |series1 | 3  | rain  |2.30000000000000000000e+01|
+|family1 |series1 | 4  | sunny |2.86000000000000014211e+01|
+|family1 |series1 | 5  | sunny |2.46999999999999992895e+01|
+|family1 |series1 | 6  |cloudy |3.27890000000000014779e+01|
+|family1 |series1 | 7  |cloudy |2.78999999999999985789e+01|
++--------+--------+----+-------+--------------------------+
+"}}.
+{{command, "show_cookie; "}, {result, "Cookie is riak [actual riak]"}}.
+{{command, "show_config; "}, {result, "The config is [{cookie,riak},
+               {logging,off},
+               {nodes,['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1',
+                       'dev4@127.0.0.1','dev5@127.0.0.1','dev6@127.0.0.1',
+                       'dev7@127.0.0.1','dev8@127.0.0.1']}]
+"}}.
+{{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
+{{command, "connect dev2@127.0.0.1; "}, {result, "Connected to 'dev2@127.0.0.1' on port 10027"}}.
+{{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev2@127.0.0.1' on port 10027"}}.
