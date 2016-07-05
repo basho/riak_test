@@ -34,7 +34,7 @@ confirm() ->
     Qry  = ts_util:get_valid_qry_spanning_quanta(),
     Expected = {ok, {
         ts_util:get_cols(),
-        ts_util:exclusive_result_from_data(Data, 1, 10)}},
+        ts_util:exclusive_result_from_data(Data, 2, 9)}},
     Got = ts_util:ts_query(
             ts_util:cluster_and_connect(multiple), normal, DDL, Data, Qry),
     ?assertEqual(Expected, Got),
