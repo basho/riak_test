@@ -69,7 +69,7 @@ confirm() ->
 
     lager:info("fetch and verify from ~p", [N2Client]),
     Res  = bigset_client:read(?SET, [], N2Client),
-    {ok, {ctx, <<>>}, {elems, E3}} = Res,
+    {ok, {ctx, undefined}, {elems, E3}} = Res,
     ?assertMatch({_, _}, lists:keyfind(<<"7">>, 1, E3)),
     %% Remove should have been propagated by hand off
     ?assertEqual(false, lists:keyfind(<<"1">>, 1, E3)),
@@ -77,5 +77,5 @@ confirm() ->
     pass.
 
 read(Client) ->
-    {ok, {ctx, <<>>}, {elems, E1}} = bigset_client:read(?SET, [], Client),
+    {ok, {ctx, undefined}, {elems, E1}} = bigset_client:read(?SET, [], Client),
     E1.

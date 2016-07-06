@@ -29,15 +29,15 @@ confirm() ->
     ok = bigset_client:update(?SET, [<<"test1">>], N1Client),
     ok = bigset_client:update(?SET, [<<"test2">>], N2Client),
 
-    {ok, {ctx, <<>>}, {elems, E1}} = bigset_client:read(?SET, [], N1Client),
-    {ok, {ctx, <<>>}, {elems, E2}} = bigset_client:read(?SET, [], N2Client),
+    {ok, {ctx, undefined}, {elems, E1}} = bigset_client:read(?SET, [], N1Client),
+    {ok, {ctx, undefined}, {elems, E2}} = bigset_client:read(?SET, [], N2Client),
 
     ?assertEqual(E1, E2),
 
     %% remove some data
     ok = bigset_client:update(?SET, [], [hd(E1)], [], N1Client),
 
-    {ok, {ctx, <<>>}, {elems, E3}} = bigset_client:read(?SET, [], N2Client),
+    {ok, {ctx, undefined}, {elems, E3}} = bigset_client:read(?SET, [], N2Client),
 
     ?assertEqual(tl(E1), E3),
 

@@ -39,8 +39,8 @@ confirm() ->
 
     lager:info("elements added"),
 
-    {ok, {ctx, <<>>}, {elems, E1}} = bigset_client:read(?SET, [], N1Client),
-    {ok, {ctx, <<>>}, {elems, E2}} = bigset_client:read(?SET, [], N2Client),
+    {ok, {ctx, undefined}, {elems, E1}} = bigset_client:read(?SET, [], N1Client),
+    {ok, {ctx, undefined}, {elems, E2}} = bigset_client:read(?SET, [], N2Client),
 
     ?assertEqual(E1, E2),
     ?assertEqual(50, length(E1)),
@@ -107,7 +107,7 @@ make_element(I) when is_integer(I) ->
     list_to_binary(?ELEM_BASE ++ integer_to_list(I)).
 
 read(Client) ->
-    {ok, {ctx, <<>>}, {elems, E1}} = bigset_client:read(?SET, [], Client),
+    {ok, {ctx, undefined}, {elems, E1}} = bigset_client:read(?SET, [], Client),
     E1.
 
 assert_elem_present(Elem, ElemList) ->
