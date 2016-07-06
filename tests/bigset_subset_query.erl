@@ -1,9 +1,7 @@
 %%% @author Russell Brown <russelldb@basho.com>
 %%% @copyright (C) 2016, Russell Brown
 %%% @doc
-%%% Checks that subset queries across a quorum merge as expected. In
-%%% order to do that we disable handoff, update partitioned nodes,
-%%% then heal and read from a quorum to ensure merge works.
+%%% Checks that subset queries work
 %%% @end
 %%% Created :  7 June 2016 by Russell Brown <russelldb@basho.com>
 
