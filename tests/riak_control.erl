@@ -87,33 +87,23 @@ verify_upgrade_fold({FromVsn, Node}, VersionedNodes0) ->
     VersionedNodes.
 
 verify_control({Vsn, Node}, VersionedNodes) ->
-    lager:info("Verifying control on node ~p vsn ~p.", [Vsn, Node]),
+    lager:info("Verifying control on node ~p vsn ~p.", [Node, Vsn]),
 
     %% Verify node resource.
-    {struct,
-     [{<<"nodes">>, Nodes}]} = verify_resource(Node, "/admin/nodes"),
-    validate_nodes(Node, Nodes, VersionedNodes, any),
-
-    %% Verify partitions resource.
-    VersionBinary = rt:get_version(Vsn),
-    Partitions = case VersionBinary of
-        <<"riak_ee-2.", _/binary>> ->
-            {struct,
-                [{<<"partitions">>, NodePartitions},
-                 {<<"default_n_val">>, _}]} = verify_resource(Node, "/admin/partitions"),
-                NodePartitions;
-        <<"riak-2.", _/binary>> ->
-            {struct,
-                [{<<"partitions">>, NodePartitions},
-                 {<<"default_n_val">>, _}]} = verify_resource(Node, "/admin/partitions"),
-            NodePartitions;
-        _ ->
-            {struct,
-                [{<<"partitions">>, NodePartitions}]} = verify_resource(Node, "/admin/partitions"),
-            NodePartitions
-    end,
-    validate_partitions({Vsn, Node}, Partitions, VersionedNodes),
-
+    ?assertMatch(ok,
+        rt:wait_until(
+            fun() ->
+                validate_nodes(Node, VersionedNodes, any)
+            end
+        )
+    ),
+    ?assertMatch(ok,
+        rt:wait_until(
+            fun() ->
+                validate_partitions({Vsn, Node}, VersionedNodes)
+            end
+        )
+    ),
     ok.
 
 verify_control(VersionedNodes) ->
@@ -133,11 +123,13 @@ verify_alive(Nodes) ->
 %% @doc This section iterates over the JSON response of nodes, and
 %%      verifies that each node is reporting its status correctly based
 %%      on it's current Vsn.
-validate_nodes(ControlNode, ResponseNodes, VersionedNodes, Status0) ->
+validate_nodes(ControlNode, VersionedNodes, Status0) ->
+    {struct,
+        [{<<"nodes">>, ResponseNodes}]} = verify_resource(ControlNode, "/admin/nodes"),
     MixedCluster = mixed_cluster(VersionedNodes),
     lager:info("Mixed cluster: ~p.", [MixedCluster]),
 
-    lists:map(fun({struct, Node}) ->
+    Results = lists:map(fun({struct, Node}) ->
 
                 %% Parse JSON further.
                 BinaryName = proplists:get_value(<<"name">>, Node),
@@ -154,13 +146,12 @@ validate_nodes(ControlNode, ResponseNodes, VersionedNodes, Status0) ->
                 %% we've been told to test a specific status, use that.
                 case Status0 of
                     any ->
-                        ?assertEqual(true,
-                                     valid_status(MixedCluster, ControlVsn,
-                                                  NodeVsn, Status));
+                        valid_status(MixedCluster, ControlVsn, NodeVsn, Status);
                     _ ->
-                        ?assertEqual(Status0, Status)
+                        Status0 =:= Status
                 end
-        end, ResponseNodes).
+        end, ResponseNodes),
+    lists:all(fun(Result) -> Result end, Results).
 
 %% @doc Determine if we're currently running mixed mode.
 mixed_cluster(VersionedNodes) ->
@@ -185,22 +176,39 @@ wait_for_control_cycle(Node) when is_atom(Node) ->
         end).
 
 %% @doc Validate partitions response.
-validate_partitions({ControlVsn, _}, ResponsePartitions, VersionedNodes) ->
+validate_partitions({ControlVsn, ControlNode}, VersionedNodes) ->
+    %% Verify partitions resource.
     VersionBinary = rt:get_version(ControlVsn),
+    ResponsePartitions = case VersionBinary of
+                     <<"riak_ee-2.", _/binary>> ->
+                         {struct,
+                             [{<<"partitions">>, NodePartitions},
+                                 {<<"default_n_val">>, _}]} = verify_resource(ControlNode, "/admin/partitions"),
+                         NodePartitions;
+                     <<"riak-2.", _/binary>> ->
+                         {struct,
+                             [{<<"partitions">>, NodePartitions},
+                                 {<<"default_n_val">>, _}]} = verify_resource(ControlNode, "/admin/partitions"),
+                         NodePartitions;
+                     _ ->
+                         {struct,
+                             [{<<"partitions">>, NodePartitions}]} = verify_resource(ControlNode, "/admin/partitions"),
+                         NodePartitions
+                 end,
     %% The newest version of the partitions display can derive the
     %% partition state without relying on data from rpc calls -- it can
     %% use just the ring to do this.  Don't test anything specific here
     %% yet.
     case VersionBinary of
         <<"riak_ee-2.", _/binary>> ->
-            ok;
+            true;
         <<"riak-2.", _/binary>> ->
-            ok;
+            true;
         _ ->
             MixedCluster = mixed_cluster(VersionedNodes),
             lager:info("Mixed cluster: ~p.", [MixedCluster]),
 
-            lists:map(fun({struct, Partition}) ->
+            Results = lists:map(fun({struct, Partition}) ->
 
                         %% Parse JSON further.
                         BinaryName = proplists:get_value(<<"node">>, Partition),
@@ -211,20 +219,14 @@ validate_partitions({ControlVsn, _}, ResponsePartitions, VersionedNodes) ->
                         %% vsn of the node running Riak Control that we've
                         %% queried.
                         {NodeVsn, _} = lists:keyfind(Name, 2, VersionedNodes),
-
-                        %% Validate response.
-                        ?assertEqual(true,
-                                     valid_status(MixedCluster, ControlVsn,
-                                                  NodeVsn, Status))
-                end, ResponsePartitions)
+                        valid_status(MixedCluster, ControlVsn, NodeVsn, Status)
+                end, ResponsePartitions),
+            lists:all(fun(Result) -> Result end, Results)
     end.
 
 %% @doc Validate status based on Vsn.
-valid_status(false, current, current, <<"incompatible">>) ->
-    %% Fully upgraded cluster, but might have not negotiated yet.
-    true;
 valid_status(false, current, current, <<"valid">>) ->
-    %% Fully upgraded cluster, but already negotiated.
+    %% Fully upgraded cluster, already negotiated.
     true;
 valid_status(true, _, _, <<"valid">>) ->
     %% Cross-version communication in mixed cluster.
@@ -259,10 +261,7 @@ validate_capability(VersionedNodes) ->
                 Status =:= valid
         end),
 
-    %% Get the current response.
-    {struct,
-     [{<<"nodes">>, Nodes}]} = verify_resource(Node, "/admin/nodes"),
 
     %% Validate we are in the correct state, not the incompatible state,
     %% which ensure the capability has negotiated correctly.
-    validate_nodes(Node, Nodes, VersionedNodes, <<"valid">>).
+    validate_nodes(Node, VersionedNodes, <<"valid">>).
