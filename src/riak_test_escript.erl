@@ -165,8 +165,8 @@ main(Args) ->
 
     io:format("Tests to run: ~p~n", [Tests]),
     %% Two hard-coded deps...
+    add_deps("./deps"),
     add_deps(rt:get_deps()),
-    add_deps("deps"),
 
     [add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
     ENode = rt_config:get(rt_nodename, 'riak_test@127.0.0.1'),
