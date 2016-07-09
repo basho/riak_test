@@ -45,7 +45,7 @@ confirm() ->
 
 prop_ts(ClusterConn) ->
     ?FORALL(DDL,
-            ts_sql_eqc_util:gen_valid_create_table(),
+            ts_sql_eqc_util:gen_valid_create_table("1.3"),
             create_and_activate(ClusterConn, DDL)).
 
 create_and_activate(ClusterConn, #ddl_v1{table = Table} = DDL) ->
