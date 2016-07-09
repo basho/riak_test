@@ -338,7 +338,7 @@ get_valid_qry_spanning_quanta() ->
     StartTime = 1 + ?SPANNING_STEP *  1,
     EndTime   = 1 + ?SPANNING_STEP * 10,
     lists:flatten(
-      io_lib:format("select * from GeoCheckin Where time > ~b and time < ~b"
+      io_lib:format("select * from GeoCheckin Where time >= ~b and time <= ~b"
                     " and myfamily = 'family1' and myseries = 'seriesX'",
                     [StartTime, EndTime])).
 
