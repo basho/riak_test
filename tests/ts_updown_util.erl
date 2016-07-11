@@ -142,7 +142,7 @@ run_scenario(Config) ->
             pass;
         FailuresDetailed ->
             PrintMe = layout_fails_for_printing(FailuresDetailed),
-            ct:print("Failing queries/queried from/when node was/table:\n~s", [PrintMe])
+            ct:fail("Failing queries/queried from/when node was/table:\n~s", [PrintMe])
     end.
 
 layout_fails_for_printing(FF) ->
