@@ -23,6 +23,8 @@
 -module(ts_sql_eqc_util).
 
 -define(MINSTEPS, 5).
+-define(NODISTINCTTESTS, 20).
+-define(NORANDOMDATAPOINTS, 100).
 -define(STARTSTATE, ["1.3", "1.3", "1.3", "Left", "Left"]).
 -define(INTERMEDIATESTATE, ["Left", "Left", "1.4", "1.4", "1.4"]).
 
@@ -36,27 +38,61 @@
 %% eqc generators
 
 %%
-%% Create Table generators
+%% These generators generate multipart tests:
+%% * CREATE TABLE statements
+%% * Data corresponding to the table schema
+%% * INSERT INTO statements that put the data into Riak
+%% * SELECT FROM statements that define queries
+%% * the expected results of the query
 %%
+%% the generators are expected to return versioned tests
+%% annotate with the version they are designed to run against
+%%
+
+gen_tests(Vsn) ->
+    ?LET({Table, NoOfRecsPerQuanta, NoOfQuanta, TypeOfQuery, DataPoints},
+         {gen_valid_create_table(Vsn),
+          int(),
+          int(),
+          gen_query_type(),
+          gen_random_datapoints()},
+         make_data_and_query(Table, NoOfRecsPerQuanta, NoOfQuanta,
+                             TypeOfQuery, DataPoints, Vsn)).
 
 gen_valid_create_table(Vsn) ->
     ?LET(DDL, gen_valid_ddl(Vsn), DDL).
+
+gen_random_datapoints() ->
+    [
+      {boolean, vector(?NORANDOMDATAPOINTS, bool())},
+      {sint64,  vector(?NORANDOMDATAPOINTS, int())},
+      {double,  vector(?NORANDOMDATAPOINTS, real())},
+      %% {varchar, vector(?NORANDOMDATAPOINTS, utf8())}
+      {varchar, vector(?NORANDOMDATAPOINTS, gen_ascii_name(""))}
+    ].
+
+gen_query_type() ->
+    oneof([max, min, count, avg, plain]).
+
+gen_vsn() ->
+    oneof(["1.3", "1.4-downgradeable", "1.4-notdowngradeable"]).
 
 %%
 %% These generators generate ring transitions
 %%
 
 gen_transitions() ->
-    ?LET({FirstLeg, SecondLeg},
+    ?LET({FirstLeg, SecondLeg, OnePointThreeTests, OnePointFourTestsDowngradeable, OnePointFourTestsNotDowngradeable},
           {
-            vector(?MINSTEPS, gen_cluster()),
-            vector(?MINSTEPS, gen_cluster())
+           vector(?MINSTEPS, gen_cluster()),
+           vector(?MINSTEPS, gen_cluster()),
+           vector(?NODISTINCTTESTS, gen_tests("1.3")),
+           vector(?NODISTINCTTESTS, gen_tests("1.4downgradeable")),
+           vector(?NODISTINCTTESTS, gen_tests("1.4notdowngradeable"))
           },
-          interpolate_steps([?STARTSTATE] ++
-                                FirstLeg ++
-                                [?INTERMEDIATESTATE] ++
-                                SecondLeg ++
-                                [?STARTSTATE], [])).
+         make_tests(FirstLeg, SecondLeg,
+                    OnePointThreeTests, OnePointFourTestsDowngradeable,
+                    OnePointFourTestsNotDowngradeable)).
 
 gen_cluster() ->
     ?SUCHTHAT(Cluster, [
@@ -85,20 +121,22 @@ gen_ddl(Vsn) ->
            gen_quantum(),
            list(gen_field(Vsn))
          },
-         #ddl_v1{table         = TblName,
+         #ddl_v1{table         = add_string_interpolation(TblName),
                  fields        = set_positions(Keys ++ Fields),
                  partition_key = make_pk(Keys, Quantum),
                  local_key     = make_lk(Keys)}).
 
 gen_key() ->
     ?LET({Fam, Series, TS},
-         {gen_series_or_family_key_field(), 
-          gen_series_or_family_key_field(), 
+         {gen_series_or_family_key_field(),
+          gen_series_or_family_key_field(),
           gen_timeseries_key_field()},
          [Fam, Series, TS]).
 
 %% this will eventually be versioned
-gen_field(X) when X =:= "1.3" orelse X =:= "1.4" ->
+gen_field(X) when X =:= "1.3"                 orelse
+                  X =:= "1.4downgradeable"    orelse
+                  X =:= "1.4notdowngradeable" ->
     ?LET({Nm, Type, Opt},
          {gen_name("Field"), gen_field_type(), gen_optional()},
          #riak_field_v1{name     = Nm,
@@ -136,7 +174,7 @@ gen_optional() ->
 gen_quantum() ->
     ?LET({Unit, No},
          {oneof([d, h, m, s]), int()},
-         {Unit, abs(No + 1)}).
+         {Unit, abs(No) + 1}).
 
 %%
 %% generate query components
@@ -169,6 +207,141 @@ gen_ascii_num() ->
 %%
 %% utility functions
 %%
+make_data_and_query(Table, NoOfRecsPerQuanta, NoOfQuanta, _TypeOfQuery, Datapoints, Vsn) ->
+    NoOfRecsPerQuanta2 = abs(NoOfRecsPerQuanta),
+    NoOfQuanta2 = abs(NoOfQuanta),
+    CreateTable = make_table(Table),
+    Data = make_data(Table, NoOfRecsPerQuanta2, NoOfQuanta2, Datapoints),
+    {{data, ColumnData}, {column_names, ColNames}} = Data,
+    Tablename = make_table_name(Table),
+    Rows = transpose(ColumnData, []),
+    Inserts = make_insert_into(Rows, ColNames, Tablename, []),
+    [
+     {create_table, Vsn, CreateTable},
+     {data,         Vsn, Data},
+     {insert_into,  Vsn, Inserts},
+     {select_from,  Vsn, "SELECT FROM blah-blah"},
+     {results,      Vsn, [some, result, set]}
+    ].
+
+make_insert_into([], _ColNames, _Tablename, Acc) ->
+    lists:reverse(Acc);
+make_insert_into([H | T], ColNames, Tablename, Acc) ->
+    Zip = lists:zip(H, ColNames),
+    {Vals, Cols} = lists:unzip([{Val, C} || {Val, C} <- Zip, Val /= none]),
+    Vals2 = [to_string(X) || X <- Vals],
+    NewAcc = "INSERT INTO " ++ Tablename ++ 
+        " (" ++ string:join(Cols, ", ") ++ ") " ++
+        "VALUES" ++
+        " (" ++ string:join(Vals2, ", ") ++ ");",
+    make_insert_into(T, ColNames, Tablename, [NewAcc | Acc]).
+
+to_string(Int)   when is_integer(Int) -> integer_to_list(Int);
+to_string(Float) when is_float(Float) -> float_to_list(Float);
+to_string(Bool)  when Bool =:= true   orelse 
+                      Bool =:= false  -> atom_to_list(Bool);
+to_string(Bin)   when is_binary(Bin)  -> binary_to_list(Bin). 
+
+transpose([[] | _], Acc) ->
+    lists:reverse(Acc);
+transpose(Matrix, Acc) ->
+    %% collect the first element of all the columns
+    CollectFn = fun(Elem, FoldAcc) ->
+                         [hd(Elem) | FoldAcc]
+                 end,
+    Row = lists:foldr(CollectFn, [], Matrix),
+    %% now remove those elements you have collected from the matrix
+    RemoveFn = fun(X) ->
+                       tl(X)
+               end,
+    ReducedMatrix = lists:map(RemoveFn, Matrix),
+    transpose(ReducedMatrix, [Row | Acc]).
+
+make_table(Table) ->
+    riak_ql_to_string:ddl_rec_to_sql(Table).
+
+make_data(#ddl_v1{fields = Fields}, 0, _, _) ->
+    Cols = [binary_to_list(Name) || #riak_field_v1{name = Name} <- Fields],
+    {{data, []}, {column_names, Cols}};
+make_data(Table, NoOfRecsPerQuanta, NoOfQuanta, Datapoints) ->
+    make_rows_and_cols(Table, NoOfRecsPerQuanta, NoOfQuanta, Datapoints).
+
+make_rows_and_cols(Table, NoOfRecsPerQuanta, NoOfQuanta, Datapoints) ->
+    QuantaSpec = get_quanta_spec(Table),
+    Timestamps = make_timestamps(QuantaSpec, NoOfRecsPerQuanta, NoOfQuanta),
+    NoOfRows = NoOfRecsPerQuanta * NoOfQuanta,
+    make_fields(Table, NoOfRows, Timestamps, Datapoints).
+
+make_fields(#ddl_v1{fields = Fields}, NoOfRows, Timestamps, Datapoints) ->
+    Vals = make_f2(Fields, 1, NoOfRows, Timestamps, Datapoints, []),
+    Cols = [binary_to_list(Name) || #riak_field_v1{name = Name} <- Fields],
+    {{data, Vals}, {column_names, Cols}}.
+
+make_f2([], _, _, _, _, Vals) ->
+    lists:reverse(Vals);
+make_f2([#riak_field_v1{type     = Type,
+                        optional = Optional} | T],
+        N, NoOfRows, Timestamps, Datapoints, ValAcc) ->
+    Vals = make_val(NoOfRows, Type, Optional, Timestamps, Datapoints, []),
+    make_f2(T, N + 1, NoOfRows, Timestamps, Datapoints, [Vals | ValAcc]).
+
+make_val(0, _, _, _, _, Acc) ->
+    lists:reverse(Acc);
+make_val(N, timestamp, false, Timestamps, Datapoints, Acc) ->
+    NewAcc = lists:nth(N, Timestamps),
+    make_val(N - 1, timestamp, false, Timestamps, Datapoints, [NewAcc | Acc]);
+make_val(N, timestamp, true, Timestamps, Datapoints, Acc) ->
+    NewAcc = case trunc(N/2) * 2 of
+                 N -> none;
+                 _ -> lists:nth(N, Timestamps)
+             end,
+    make_val(N - 1, timestamp, true, Timestamps, Datapoints, [NewAcc | Acc]);
+make_val(N, Type, Optional, Timestamps, Datapoints, Acc) ->
+    {Type, Vals} = lists:keyfind(Type, 1, Datapoints),
+    NewN = N rem length(Vals) + 1,
+    NewAcc = case Optional of
+                 false -> lists:nth(NewN, Vals);
+                 true  -> case trunc(NewN/2) * 2 of
+                              NewN -> none;
+                              _    -> lists:nth(NewN, Vals)
+                          end
+             end,
+    make_val(N - 1, Type, Optional, Timestamps, Datapoints, [NewAcc | Acc]).
+
+make_timestamps({Quantity, Unit}, NoOfRecsPerQuanta, NoOfQuanta) ->
+    BinUnit = list_to_binary(atom_to_list(Unit)),
+    QuantaInMillis = riak_ql_quanta:unit_to_millis(Quantity, BinUnit),
+    Diff = trunc(QuantaInMillis/NoOfRecsPerQuanta),
+    make_timestamps2(0, QuantaInMillis, Diff, NoOfQuanta, []).
+
+%%
+%% because the quanta in milliseconds is not exactly divisible by the no of records
+%% per quanta - we will build each quanta at a time
+%%
+make_timestamps2(_, _, _, 0, Acc) ->
+    lists:flatten(lists:reverse(Acc));
+make_timestamps2(LowerQuantumBoundary, QuantaInMillis, Diff, N, Acc) ->
+    Upper = LowerQuantumBoundary + QuantaInMillis,
+    NewAcc = lists:seq(LowerQuantumBoundary, Upper, Diff),
+    make_timestamps2(Upper, QuantaInMillis, Diff, N - 1, [NewAcc | Acc]).
+
+get_quanta_spec(#ddl_v1{partition_key = PK}) ->
+    #key_v1{ast = AST} = PK,
+    [Spec] = [{Quantity, Unit} || #hash_fn_v1{args = [_, Quantity, Unit]} <- AST],
+    Spec.
+
+make_table_name(#ddl_v1{table = Tablename}) ->
+    binary_to_list(Tablename).
+
+make_tests(FirstLeg, SecondLeg, _OnePointThreeTests, _OnePointFourTestsDowngradeable,
+          _OnePointFourNotDowngradeable) ->
+    Transitions = interpolate_steps([?STARTSTATE] ++
+                                          FirstLeg ++
+                                          [?INTERMEDIATESTATE] ++
+                                          SecondLeg ++
+                                          [?STARTSTATE], []),
+    Transitions.
+
 interpolate_steps([Last | []], Acc) ->
     lists:reverse([Last | Acc]);
 interpolate_steps([State1, State2 | Tail], Acc) ->
@@ -222,7 +395,7 @@ set_p2([H | T], N, Acc) ->
 make_pk([Family, Series, TS], {Unit, No}) ->
     Quantum =  [#hash_fn_v1{mod  = riak_ql_quanta,
                             fn   = quantum,
-                            args = [#param_v1{name = [TS#riak_field_v1.name]}, Unit, No],
+                            args = [#param_v1{name = [TS#riak_field_v1.name]}, No, Unit],
                             type = timestamp}],
     AST = [#param_v1{name = [X#riak_field_v1.name]} || X <- [Family, Series]] ++ Quantum,
     #key_v1{ast = AST}.
@@ -244,5 +417,8 @@ make_timestamp() ->
                  integer_to_list(Secs),
                  integer_to_list(Micro)
                 ], "_").
+
+add_string_interpolation(TableBin) ->
+    list_to_binary(binary_to_list(TableBin) ++ "_~s").
 
 -endif.
