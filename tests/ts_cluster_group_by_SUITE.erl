@@ -69,7 +69,8 @@ run_query(Ctx, Query) ->
 %%% TESTS
 %%%
 
-group_by_1_test(Ctx) ->
+select_grouped_field_test(Ctx) ->
+    Table = "grouptab1",
     ?assertEqual(
         {ok, {[],[]}},
         riakc_ts:query(client_pid(Ctx),
@@ -77,14 +78,36 @@ group_by_1_test(Ctx) ->
             "a SINT64 NOT NULL, "
             "b SINT64 NOT NULL, "
             "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
+    )),
+    ok = riakc_ts:put(client_pid(Ctx), Table,
+        [{1,B,C} || B <- [1,2,3], C <- [1,2,3]]),
+    Query =
+        "SELECT c FROM " ++ Table ++ " "
+        "WHERE a = 1 AND b = 1 AND c >= 1 AND c <= 1000 "
+        "GROUP BY c",
+    {ok, {Cols, Rows}} = run_query(Ctx, Query),
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{1},{2},{  3}]},
+        {ok,{Cols, lists:sort(Rows)}}
+    ).
+
+group_by_2_test(Ctx) ->
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE grouptab2 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
             "d SINT64 NOT NULL, "
             "e SINT64 NOT NULL, "
             "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c,d))"
     )),
-    ok = riakc_ts:put(client_pid(Ctx), <<"grouptab1">>,
+    ok = riakc_ts:put(client_pid(Ctx), <<"grouptab2">>,
         [{1,1,CE,D,CE} || CE <- lists:seq(1,1000), D <- [1,2,3]]),
     Query =
-        "SELECT d, AVG(e) FROM grouptab1 "
+        "SELECT d, AVG(e) FROM grouptab2 "
         "WHERE a = 1 AND b = 1 AND c >= 1 AND c <= 1000 "
         "GROUP BY d",
     {ok, {Cols, Rows}} = run_query(Ctx, Query),
@@ -92,3 +115,10 @@ group_by_1_test(Ctx) ->
         {rt_ignore_columns, [{1,500.5},{2,500.5},{3,500.5}]},
         {ok,{Cols, lists:sort(Rows)}}
     ).
+
+
+
+
+
+
+
