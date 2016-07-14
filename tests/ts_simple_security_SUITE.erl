@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -220,7 +220,6 @@ with_security_when_user_is_given_permissions_user_can_create_table_test(Ctx) ->
             "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
     ).
 
-
 with_security_user_cannot_put_without_permissions_test(Ctx) ->
     User = user_name(),
     Password = "password",
@@ -267,6 +266,62 @@ with_security_when_user_is_given_permissions_user_can_put_data_test(Ctx) ->
     ?assertEqual(
         ok,
         riakc_ts:put(Pid, <<"table4">>, [{1,1,1}])
+    ).
+
+with_security_user_cannot_query_without_permissions_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table5 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertMatch(
+        ok,
+        riakc_ts:put(Pid, <<"table5">>, [{1,1,1}])
+    ),
+    ?assertMatch(
+        {error, <<"Permission denied", _/binary>>},
+        riakc_ts:query(Pid, "SELECT a, b, c FROM table5 WHERE a=1 AND b=1 AND c>0 and c<2")
+    ).
+
+with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.query_select", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table6 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertEqual(
+        ok,
+        riakc_ts:put(Pid, <<"table6">>, [{1,1,1}])
+    ),
+    ?assertEqual(
+        {ok, {[<<"a">>, <<"b">>, <<"c">>], [{1,1,1}]}},
+        riakc_ts:query(Pid, "SELECT a, b, c FROM table6 WHERE a=1 AND b=1 AND c>0 and c<2")
     ).
 
 
