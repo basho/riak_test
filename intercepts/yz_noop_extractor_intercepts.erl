@@ -36,3 +36,9 @@ extract_httpheader(Value, _Opts) ->
          _Version},
         _Rest} = erlang:decode_packet(http, Value, []),
     [{method, Method}, {host, list_to_binary(Host)}, {uri, list_to_binary(Uri)}].
+
+extract_non_unicode_data(Value) ->
+    extract_non_unicode_data(Value, []).
+
+extract_non_unicode_data(_Value, _Opts) ->
+    [{blob, <<9147374713>>}].

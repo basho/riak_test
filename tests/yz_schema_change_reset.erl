@@ -116,10 +116,12 @@
 -define(CFG,
         [{riak_core,
           [
-           {ring_creation_size, 16},
-           {anti_entropy_build_limit, {100, 1000}},
-           {anti_entropy_concurrency, 8}
+           {ring_creation_size, 16}
           ]},
+         {riak_kv, [
+             {anti_entropy_concurrency, 8},
+             {anti_entropy_build_limit, {100, 1000}}
+         ]},
          {yokozuna,
           [
            {anti_entropy_tick, 1000},
@@ -143,7 +145,6 @@ confirm() ->
     yokozuna_rt:write_data(Cluster, Pid, ?INDEX,
                            {?SCHEMANAME, ?TEST_SCHEMA},
                            ?BUCKET1, GenKeys),
-    yokozuna_rt:commit(Cluster, ?INDEX),
     lager:info("Create and activate map-based bucket type ~s and tie it to search_index ~s",
                [?TYPE, ?INDEX]),
     rt:create_and_activate_bucket_type(Node1, ?TYPE, [{datatype, map},
@@ -244,8 +245,8 @@ confirm() ->
 
     yokozuna_rt:verify_num_found_query(Cluster, ?INDEX, KeyCount + 5),
 
-    HP = rt:select_random(yokozuna_rt:host_entries(rt:connection_info(Cluster))),
-    yokozuna_rt:search_expect(HP, ?INDEX, <<"age">>, <<"*">>, 3),
+    ANode = rt:select_random(Cluster),
+    yokozuna_rt:search_expect(ANode, ?INDEX, <<"age">>, <<"*">>, 3),
 
     lager:info("Re-Put because AAE won't find a diff even though the types
                have changed, as it only compares based on bkey currently.

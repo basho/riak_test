@@ -63,7 +63,7 @@ confirm(TestModule, TestType, Outdir, TestMetaData, HarnessArgs)
             {fail, all_prereqs_not_present}
     end,
 
-    lager:notice("~s Test Run Complete", [TestModule]),
+    lager:notice("~s Test Run Complete ~p", [TestModule, Status]),
     {ok, Logs} = stop_lager_backend(),
     Log = unicode:characters_to_binary(Logs),
 
