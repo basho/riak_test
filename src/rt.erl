@@ -70,6 +70,7 @@
          get_ip/1,
          get_node_logs/0,
          get_replica/5,
+         get_retry_settings/0,
          get_ring/1,
          get_version/0,
          get_version/1,
@@ -664,10 +665,14 @@ is_ring_ready(Node) ->
 %%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
 wait_until(Fun) when is_function(Fun) ->
+    {Delay, Retry} = get_retry_settings(),
+    wait_until(Fun, Retry, Delay).
+
+get_retry_settings() ->
     MaxTime = rt_config:get(rt_max_wait_time),
     Delay = rt_config:get(rt_retry_delay),
     Retry = MaxTime div Delay,
-    wait_until(Fun, Retry, Delay).
+    {Delay, Retry}.
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
@@ -931,6 +936,7 @@ wait_until_capability(Node, Capability, Value, Default) ->
                           cap_equal(Value, Cap)
                   end).
 
+-spec wait_until_capability_contains(node(), atom() | {atom(), atom()}, list()) -> ok.
 wait_until_capability_contains(Node, Capability, Value) ->
     rt:wait_until(Node,
                 fun(_) ->
@@ -1234,6 +1240,63 @@ versions() ->
 %%%===================================================================
 %%% Basic Read/Write Functions
 %%%===================================================================
+
+systest_delete(Node, Size) ->
+    systest_delete(Node, Size, 2).
+
+systest_delete(Node, Size, W) ->
+    systest_delete(Node, 1, Size, <<"systest">>, W).
+
+%% @doc Delete `(End-Start)+1' objects on `Node'. Keys deleted will be
+%% `Start', `Start+1' ... `End', each key being encoded as a 32-bit binary
+%% (`<<Key:32/integer>>').
+%%
+%% The return value of this function is a list of errors
+%% encountered. If all deletes were successful, return value is an
+%% empty list. Each error has the form `{N :: integer(), Error :: term()}',
+%% where `N' is the unencoded key of the object that failed to store.
+systest_delete(Node, Start, End, Bucket, W) ->
+    rt:wait_for_service(Node, riak_kv),
+    {ok, C} = riak:client_connect(Node),
+    F = fun(N, Acc) ->
+                Key = <<N:32/integer>>,
+                try C:delete(Bucket, Key, W) of
+                    ok ->
+                        Acc;
+                    Other ->
+                        [{N, Other} | Acc]
+                catch
+                    What:Why ->
+                        [{N, {What, Why}} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
+
+systest_verify_delete(Node, Size) ->
+    systest_verify_delete(Node, Size, 2).
+
+systest_verify_delete(Node, Size, R) ->
+    systest_verify_delete(Node, 1, Size, <<"systest">>, R).
+
+%% @doc Read a series of keys on `Node' and verify that the objects
+%% do not exist. This could, for instance, be used as a followup to
+%% `systest_delete' to ensure that the objects were actually deleted.
+systest_verify_delete(Node, Start, End, Bucket, R) ->
+    rt:wait_for_service(Node, riak_kv),
+    {ok, C} = riak:client_connect(Node),
+    F = fun(N, Acc) ->
+                Key = <<N:32/integer>>,
+                try C:get(Bucket, Key, R) of
+                    {error, notfound} ->
+                        [];
+                    Other ->
+                        [{N, Other} | Acc]
+                catch
+                    What:Why ->
+                        [{N, {What, Why}} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
 
 systest_write(Node, Size) ->
     systest_write(Node, Size, 2).
@@ -1768,6 +1831,13 @@ setup_harness(Test, Args) ->
 get_node_logs() ->
     ?HARNESS:get_node_logs().
 
+%% @doc Performs a search against the log files on `Node' and returns all
+%% matching lines.
+-spec search_logs(node(), Pattern::iodata()) ->
+    [{Path::string(), LineNum::pos_integer(), MatchingLine::string()}].
+search_logs(Node, Pattern) ->
+    ?HARNESS:search_logs(Node, Pattern).
+
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
         {status, _Pid, {module, gen_server} ,_} -> ok
@@ -1895,8 +1965,11 @@ setup_log_capture(Nodes) when is_list(Nodes) ->
 setup_log_capture(Node) when not is_list(Node) ->
     setup_log_capture([Node]).
 
-
 expect_in_log(Node, Pattern) ->
+    {Delay, Retry} = get_retry_settings(),
+    expect_in_log(Node, Pattern, Retry, Delay).
+
+expect_in_log(Node, Pattern, Retry, Delay) ->
     CheckLogFun = fun() ->
             Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
             lager:info("looking for pattern ~s in logs for ~p",
@@ -1910,10 +1983,21 @@ expect_in_log(Node, Pattern) ->
                     false
             end
     end,
-    case rt:wait_until(CheckLogFun) of
+    case rt:wait_until(CheckLogFun, Retry, Delay) of
         ok ->
             true;
         _ ->
+            false
+    end.
+
+%% @doc Returns `true' if Pattern is _not_ found in the logs for `Node',
+%% `false' if it _is_ found.
+-spec expect_not_in_logs(Node::node(), Pattern::iodata()) -> boolean().
+expect_not_in_logs(Node, Pattern) ->
+    case search_logs(Node, Pattern) of
+        [] ->
+            true;
+        _Matches ->
             false
     end.
 

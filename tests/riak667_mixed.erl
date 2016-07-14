@@ -118,7 +118,7 @@ confirm() ->
     riakc_pb_socket:stop(N1C1),
     N1C2 = rt:pbc(Node1),
 
-    %% upgrade 2.0.4 to 2.0.5
+    %% upgrade 2.0.4 to current
     riakc_pb_socket:stop(N2C2),
     upgrade(Node2, current),
 
@@ -147,7 +147,7 @@ confirm() ->
 
     ok = riakc_pb_socket:update_type(N2C3, ?BUCKET, ?KEY, riakc_map:to_op(K1OU)),
     lager:notice("Updated 2.0.2 map on ~s", [CurrentVer]),
-    
+
     %% read 2.0.2 map from 2.0.2 node ?KEY Pid
     {ok, K1OR} = riakc_pb_socket:fetch_type(N1C2, ?BUCKET, ?KEY),
     lager:notice("Read 2.0.2 map from 2.0.2 node: ~p", [K1OR]),
@@ -188,6 +188,8 @@ confirm() ->
     riakc_pb_socket:stop(N1C2),
     upgrade(Node1, current),
     lager:notice("Upgraded 2.0.2 node to ~s", [CurrentVer]),
+
+    rt:wait_until_capability_contains(Node1, {riak_kv,crdt_epoch_versions}, [{riak_dt_map,2}]),
 
     %% read and write maps
     N1C3 = rt:pbc(Node1),

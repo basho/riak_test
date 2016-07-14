@@ -118,7 +118,10 @@ confirm() ->
     pass.
 
 test_supervision() ->
-    JMXPort = 41111,
+    %% Specifically invalid port number to make JMX startup fail.
+    %% NOTE: using a priveleged port doesn't work in some test environments
+    %% as tests/riak are running as root. For this test, -1 is fine.
+    JMXPort = -1,
     Config = [{riak_jmx, [{enabled, true}, {port, JMXPort}]}],
     [Node|[]] = rt:deploy_nodes(1, Config),
     timer:sleep(20000),
@@ -144,29 +147,17 @@ test_supervision() ->
     rpc:call(Node, riak_jmx, start, []),
 
     lager:info("It can fail, it can fail 10 times"),
-
-    rt:wait_until(retry_check_fun(Node)),
+    %% NOTE: 10 times comes from riak_jmx_monitor.erl's MAX_RETRY macro (10).
+    %% Error logging is 0-based, so look for Retry #9
+    {Delay, _Retry} = rt:get_retry_settings(),
+    TwoMinutes = 2*60*1000,
+    Retries = TwoMinutes div Delay,
+    ?assertEqual(true, rt:expect_in_log(Node, "JMX server monitor .* exited with code .*\. Retry #9",
+        Retries, Delay)),
+    ?assertEqual(true, rt:expect_in_log(Node, "JMX server monitor .* exited with code .*\. Reached maximum retries of 10",
+        Retries, Delay)),
     rt:stop(Node),
     ok_ok.
-
-retry_check_fun(Node) ->
-    fun() ->
-            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
-             10 =:= lists:foldl(log_fold_fun(), 0, Logs)
-    end.
-
-log_fold_fun() ->
-    fun(Log, Sum) ->
-            try case re:run(Log, "JMX server monitor .* exited with code .*\. Retry #.*", []) of
-                    {match, _} -> 1 + Sum;
-                    _ -> Sum
-                end
-            catch
-                Err:Reason ->
-                    lager:error("jmx supervision re:run failed w/ ~p: ~p", [Err, Reason]),
-                    Sum
-            end
-    end.
 
 test_application_stop() ->
     lager:info("Testing application:stop()"),
@@ -178,7 +169,7 @@ test_application_stop() ->
 
     %% Let's make sure the java process is alive!
     lager:info("checking for riak_jmx.jar running."),
-    rt:wait_until(Node, fun(_N) ->
+    ?assertEqual(ok, rt:wait_until(Node, fun(_N) ->
         try case re:run(rpc:call(Node, os, cmd, ["ps -Af"]), "riak_jmx.jar", []) of
             nomatch -> false;
             _ -> true
@@ -188,7 +179,7 @@ test_application_stop() ->
             lager:error("jmx stop re:run failed w/ ~p: ~p", [Err, Reason]),
             false
         end
-    end),
+    end)),
 
     rpc:call(Node, riak_jmx, stop, ["Stopping riak_jmx"]),
     timer:sleep(20000),

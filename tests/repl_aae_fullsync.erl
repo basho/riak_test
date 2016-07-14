@@ -371,6 +371,7 @@ difference_test() ->
                          [LeaderA, "B"]),
     lager:info("Fullsync completed in ~p seconds", [Time1/1000/1000]),
 
+    lager:info("Checking that object was replicated to cluster B"),
     %% Read key from after fullsync.
     {ok, O1} = riakc_pb_socket:get(BPBC, <<"foo">>, <<"bar">>,
                                   [{timeout, 4000}]),
@@ -388,10 +389,22 @@ difference_test() ->
                          [LeaderA, "B"]),
     lager:info("Fullsync completed in ~p seconds", [Time2/1000/1000]),
 
+    lager:info("Checking that sibling data was replicated to cluster B"),
     %% Read key from after fullsync.
     {ok, O2} = riakc_pb_socket:get(BPBC, <<"foo">>, <<"bar">>,
                                   [{timeout, 4000}]),
     ?assertEqual([<<"baz">>, <<"baz2">>], lists:sort(riakc_obj:get_values(O2))),
+
+    {ok, CurObjA} = riakc_pb_socket:get(APBC, <<"foo">>, <<"bar">>, [{timeout, 4000}]),
+    ok = riakc_pb_socket:delete_obj(APBC, CurObjA, [{timeout, 4000}]),
+
+    {Time3, _} = timer:tc(repl_util,
+                         start_and_wait_until_fullsync_complete,
+                         [LeaderA, "B"]),
+    lager:info("Fullsync completed in ~p seconds", [Time3/1000/1000]),
+
+    lager:info("Checking that deletion was replicated to cluster B"),
+    {error, notfound} = riakc_pb_socket:get(BPBC, <<"foo">>, <<"bar">>, [{timeout, 4000}]),
 
     rt:clean_cluster(Nodes),
 
