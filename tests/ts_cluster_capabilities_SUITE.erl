@@ -45,10 +45,10 @@ end_per_group(_GroupName, _Config) ->
     ok.
 
 init_per_testcase(_TestCase, Config) ->
+    rtdev:setup_harness('_', '_'),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
-    rtdev:setup_harness('_', '_'),
     ok.
 
 groups() ->
@@ -74,10 +74,15 @@ capabilities_are_mixed_test(_Ctx) ->
     ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [2,1], 2]),
     ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [1],   1]),
     ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [2,1], 2]),
-    ok = rt:join_cluster([Node_A,Node_B]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    rt:wait_until_capability(Node_A, Cap_name, 1),
+    rt:wait_until_capability(Node_B, Cap_name, 1),
+    rt:wait_until_capability(Node_C, Cap_name, 1),
     Cap_A = rpc:call(Node_A, riak_core_capability, get, [Cap_name]),
     Cap_B = rpc:call(Node_B, riak_core_capability, get, [Cap_name]),
     Cap_C = rpc:call(Node_C, riak_core_capability, get, [Cap_name]),
+    % ct:pal("ALL CAPS ~p", [rpc:call(Node_A, riak_core_capability, all, [])]),
     ct:pal("Node A: ~p, Node B: ~p, Node C ~p", [Cap_A, Cap_B, Cap_C]),
     %% default to the lowest capability supported by the cluster
     ?assertEqual(1,Cap_A),
@@ -91,10 +96,11 @@ capabilities_are_same_on_all_nodes_test(_Ctx) ->
     ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [2,1], 2]), %% if the preference is [1,2] then the cap 
     ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [2,1], 2]), %% value will be 1 for all nodes
     ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [2,1], 2]),
-    ok = rt:join_cluster([Node_A,Node_B]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     Cap_A = rpc:call(Node_A, riak_core_capability, get, [Cap_name]),
     Cap_B = rpc:call(Node_B, riak_core_capability, get, [Cap_name]),
     Cap_C = rpc:call(Node_C, riak_core_capability, get, [Cap_name]),
+    % ct:pal("ALL CAPS ~p", [rpc:call(Node_A, riak_core_capability, all, [])]),
     ct:pal("Node A: ~p, Node B: ~p, Node C ~p", [Cap_A, Cap_B, Cap_C]),
     %% all capabilities are the same, so lower version is not used
     ?assertEqual(2,Cap_A),
