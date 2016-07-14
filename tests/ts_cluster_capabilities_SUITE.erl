@@ -48,7 +48,7 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
-    rtdev:teardown(),
+    rtdev:setup_harness('_', '_'),
     ok.
 
 groups() ->
@@ -71,14 +71,14 @@ all() ->
 capabilities_are_mixed_test(_Ctx) ->
     [Node_A, Node_B, Node_C] = rt:deploy_nodes(3),
     Cap_name = {rt, cap_1},
-    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [1,2], 2]),
+    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [2,1], 2]),
     ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [1],   1]),
-    ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [1,2], 2]),
+    ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [2,1], 2]),
     ok = rt:join_cluster([Node_A,Node_B]),
     Cap_A = rpc:call(Node_A, riak_core_capability, get, [Cap_name]),
     Cap_B = rpc:call(Node_B, riak_core_capability, get, [Cap_name]),
     Cap_C = rpc:call(Node_C, riak_core_capability, get, [Cap_name]),
-    lager:info("Node A: ~p, Node B: ~p, Node C ~p", [Cap_A, Cap_B, Cap_C]),
+    ct:pal("Node A: ~p, Node B: ~p, Node C ~p", [Cap_A, Cap_B, Cap_C]),
     %% default to the lowest capability supported by the cluster
     ?assertEqual(1,Cap_A),
     ?assertEqual(1,Cap_B),
@@ -88,14 +88,14 @@ capabilities_are_mixed_test(_Ctx) ->
 capabilities_are_same_on_all_nodes_test(_Ctx) ->
     [Node_A, Node_B, Node_C] = rt:deploy_nodes(3),
     Cap_name = {rt, cap_2},
-    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [1,2], 2]),
-    ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [1,2], 2]),
-    ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [1,2], 2]),
+    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [2,1], 2]), %% if the preference is [1,2] then the cap 
+    ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [2,1], 2]), %% value will be 1 for all nodes
+    ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [2,1], 2]),
     ok = rt:join_cluster([Node_A,Node_B]),
     Cap_A = rpc:call(Node_A, riak_core_capability, get, [Cap_name]),
     Cap_B = rpc:call(Node_B, riak_core_capability, get, [Cap_name]),
     Cap_C = rpc:call(Node_C, riak_core_capability, get, [Cap_name]),
-    lager:info("Node A: ~p, Node B: ~p, Node C ~p", [Cap_A, Cap_B, Cap_C]),
+    ct:pal("Node A: ~p, Node B: ~p, Node C ~p", [Cap_A, Cap_B, Cap_C]),
     %% all capabilities are the same, so lower version is not used
     ?assertEqual(2,Cap_A),
     ?assertEqual(2,Cap_B),
