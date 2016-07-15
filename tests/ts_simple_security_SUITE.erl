@@ -152,32 +152,18 @@ user_name() ->
     User = string:to_lower(base64:encode_to_string(term_to_binary(make_ref()))),
     [C || C <- User, not lists:member(C, ?ILLEGAL)].
 
-create_user_and_perms(Ctx, Perms) ->
-    User = user_name(),
-    Password = "password",
-    {ok,_} = riak_admin(Ctx,
-        ["security", "add-user", User]),
-    {ok,_} = riak_admin(Ctx,
-        ["security", "add-source", Perms, "127.0.0.1/32", "trust"]),
-    {ok,_} = riak_admin(Ctx,
-        ["security", "grant", Perms, "on", "any", "to", User]),
-    {ok, Pid} = client_pid(Ctx, User, Password),
-    {User, Pid}.
-
-create_table(Pid, Name) ->
-    riakc_ts:query(Pid, lists:flatten(io_lib:format(
-        "CREATE TABLE ~p ("
-        "a SINT64 NOT NULL, "
-        "b SINT64 NOT NULL, "
-        "c TIMESTAMP NOT NULL, "
-        "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))", [Name]))).
-
 %%--------------------------------------------------------------------
 %% TESTS
 %%--------------------------------------------------------------------
 
 trusted_user_does_not_need_a_password_to_connect_test(Ctx) ->
-    create_user_and_perms(Ctx, "all").
+    User = user_name(),
+    NonsensePassword = "nonsense",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok, _} = client_pid(Ctx, User, NonsensePassword).
 
 password_user_cannot_connect_with_wrong_password_test(Ctx) ->
     User = "stranger",
@@ -192,29 +178,66 @@ password_user_cannot_connect_with_wrong_password_test(Ctx) ->
     ).
 
 with_security_user_cannot_create_table_without_permissions_test(Ctx) ->
-    {User, Pid} = create_user_and_perms(Ctx, "all"),
+    User = user_name(),
     UserBin = list_to_binary(User),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
     %% just assert on the error message this once, to make sure it is getting
     %% formatted correctly.
     ?assertEqual(
         {error,
          <<"Permission denied: User '", UserBin/binary, "' does not have ",
          "'riak_ts.query_create_table' on table1">>},
-        create_table(Pid, "table1")
+        riakc_ts:query(Pid,
+            "CREATE TABLE table1 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
     ).
 
 with_security_when_user_is_given_permissions_user_can_create_table_test(Ctx) ->
-    {_User, Pid} = create_user_and_perms(Ctx, "riak_ts.query_create_table"),
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok, {[],[]}},
-        create_table(Pid, "table2")
+        riakc_ts:query(Pid,
+            "CREATE TABLE table2 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
     ).
 
 with_security_user_cannot_put_without_permissions_test(Ctx) ->
-    {_User, Pid} = create_user_and_perms(Ctx, "riak_ts.query_create_table"),
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
-        create_table(Pid, "table3")
+        riakc_ts:query(Pid,
+            "CREATE TABLE table3 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
     ),
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
@@ -222,10 +245,23 @@ with_security_user_cannot_put_without_permissions_test(Ctx) ->
     ).
 
 with_security_when_user_is_given_permissions_user_can_put_data_test(Ctx) ->
-    {_User, Pid} = create_user_and_perms(Ctx, "riak_ts.query_create_table,riak_ts.put"),
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
-        create_table(Pid, "table4")
+        riakc_ts:query(Pid,
+            "CREATE TABLE table4 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
     ),
     ?assertEqual(
         ok,
@@ -233,10 +269,23 @@ with_security_when_user_is_given_permissions_user_can_put_data_test(Ctx) ->
     ).
 
 with_security_user_cannot_query_without_permissions_test(Ctx) ->
-    {_User, Pid} = create_user_and_perms(Ctx, "riak_ts.query_create_table,riak_ts.put"),
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
-        create_table(Pid, "table5")
+        riakc_ts:query(Pid,
+            "CREATE TABLE table5 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
     ),
     ?assertMatch(
         ok,
@@ -248,10 +297,23 @@ with_security_user_cannot_query_without_permissions_test(Ctx) ->
     ).
 
 with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
-    {_User, Pid} = create_user_and_perms(Ctx, "riak_ts.query_create_table,riak_ts.put,riak_ts.query_select"),
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.query_select", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
-        create_table(Pid, "table6")
+        riakc_ts:query(Pid,
+            "CREATE TABLE table6 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
     ),
     ?assertEqual(
         ok,
