@@ -25,7 +25,8 @@
 -export([
          make_config/1,
          maybe_shutdown_client_node/1,
-         run_scenarios/2
+         run_scenarios/2,
+         run_scenario/2
         ]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -81,23 +82,12 @@ maybe_shutdown_client_node(Config) ->
 
 -spec run_scenarios(config(), [#scenario{}]) -> [#failure_report{}].
 run_scenarios(Config, Scenarios) ->
-    %% all nodes are set up with the 'current' version at the outset
-    InitialNodes = ?CFG(nodes, Config),
-    InitialNodesAtVersions =
-        lists:zip(
-          InitialNodes,
-          lists:duplicate(length(InitialNodes), current)),
-
-    {_FinalNodes, Failures} =
+    Failures =
         lists:foldl(
-          fun(Scenario, {NodesAtVersions, Failures}) ->
-                  {ResultingNodesAtVersions, ThisRunFailures} =
-                      run_scenario(Config, NodesAtVersions, Scenario),
-                  {ResultingNodesAtVersions,
-                   ThisRunFailures ++ Failures}
+          fun(Scenario, FF) ->
+                  run_scenario(Config, Scenario) ++ FF
           end,
-          {InitialNodesAtVersions, []},
-          Scenarios),
+          [], Scenarios),
 
     if length(Failures) == 0 ->
             fine;
@@ -111,9 +101,9 @@ run_scenarios(Config, Scenarios) ->
     Failures.
 
 
--spec run_scenario(config(), versioned_cluster(), #scenario{})
+-spec run_scenario(config(), #scenario{})
                   -> {versioned_cluster(), [#failure_report{}]}.
-run_scenario(Config, NodesAtVersions0,
+run_scenario(Config,
              #scenario{table_node_vsn = TableNodeVsn,
                        query_node_vsn = QueryNodeVsn,
                        need_table_node_transition = NeedTableNodeTransition,
@@ -124,7 +114,12 @@ run_scenario(Config, NodesAtVersions0,
                        data = Data_,
                        table = Table_,
                        ddl = DDL_,
-                       select_vs_expected = SelectVsExpected_}) ->
+                       select_vs_expected = SelectVsExpected_} = Scenario) ->
+    ct:pal("Scenario: ~p", [Scenario]),
+
+    NodesAtVersions0 =
+        [{N, rtdev:node_version(rtdev:node_id(N))} || N <- ?CFG(nodes, Config)],
+
     %% 0. retreive scenario-invariant data from Config
     [Data, Table, DDL, SelectVsExpected] =
         [begin
@@ -175,13 +170,14 @@ run_scenario(Config, NodesAtVersions0,
 
     %% 5. after transitioning the two relevant nodes, try to bring the
     %%    other nodes to satisfy the mixed/non-mixed hint
-    NodesAtVersions6 =
+    _NodesAtVersions6 =
         ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode]),
 
     %% 6. issue the queries and collect failures
     Failures =
         lists:foldl(
-          fun({QryNo, {SelectQuery, Expected}}, FailuresAcc) ->
+          fun({QryNo, {SelectQueryFmt, Expected}}, FailuresAcc) ->
+                  SelectQuery = fmt(SelectQueryFmt, [Table]),
                   Got = query_with_client(SelectQuery, QueryNode, Config),
                   case ts_util:assert_float(
                          fmt("Query #~p", [QryNo]), Expected, Got)  of
@@ -205,7 +201,7 @@ run_scenario(Config, NodesAtVersions0,
 
     %% 9. along with any failures, pass the current cluster
     %%    composition to the next invocation of run_scenario
-    {NodesAtVersions6, Failures}.
+    Failures.
 
 
 query_with_client(Query, Node, Config) ->

@@ -17,7 +17,8 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc A module to test riak_ts basic create bucket/put/select cycle.
+%% @doc Convenience functions to generate DDLs for up-/downgrade
+%%      testing purposes.
 
 -module(ts_sql_eqc_util).
 
@@ -26,7 +27,7 @@
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("riak_ql/include/riak_ql_ddl.hrl").
+-include_lib("../riak/deps/riak_ql/include/riak_ql_ddl.hrl").
 
 %% eqc generators
 

@@ -27,6 +27,11 @@
          run_this_test/1
         ]).
 
+-ifdef(EQC).
+-include_lib("eqc/include/eqc.hrl").
+-compile(export_all).
+-endif.
+
 -include_lib("common_test/include/ct.hrl").
 -include("ts_updown_util.hrl").
 
@@ -55,24 +60,68 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     ts_updown_util:maybe_shutdown_client_node(Config).
 
+
+-ifdef(EQC).
+
 run_this_test(Config) ->
-    Scenarios = make_scenarios(),
-    ts_updown_util:run_scenarios(Config, Scenarios).
+    quickcheck(numtests(32, prop_scenario(Config))).
 
+prop_scenario(Config) ->
+    ?FORALL(Sce, gen_scenario(), [] == ts_updown_util:run_scenario(Config, Sce)).
 
+gen_scenario() ->
+    ?LET({TableNodeVsn, QueryNodeVsn,
+          NeedTableNodeTransition, NeedQueryNodeTransition,
+          NeedPreClusterMixed, NeedPostClusterMixed,
+          Table},
+         {gen_version(), gen_version(),
+          bool(), bool(), bool(), bool(),
+          gen_table()},
+         #scenario{table_node_vsn = TableNodeVsn,
+                   query_node_vsn = QueryNodeVsn,
+                   need_table_node_transition = NeedTableNodeTransition,
+                   need_query_node_transition = NeedQueryNodeTransition,
+                   need_pre_cluster_mixed = NeedPreClusterMixed,
+                   need_post_cluster_mixed = NeedPostClusterMixed,
+                   table = Table}).
+
+gen_version() ->
+    ?LET(A, oneof([current, previous]), A).
+
+gen_table() ->
+    ?LET(A, ts_sql_eqc_util:gen_name("aggregation_test_"), A).
+
+-else.
+
+run_this_test(Config) ->
+    Got = ts_updown_util:run_scenarios(Config, make_scenarios()),
+    case Got of
+        [] ->
+            pass;
+        Failures ->
+            PrintMe = ts_updown_util:layout_fails_for_printing(Failures),
+            ct:print("Failing queries:\n"
+                     "----------------\n"
+                     "~s\n", [PrintMe])
+    end.
+
+%% no EQC: produce a simple, single scenario
 make_scenarios() ->
     [#scenario{table_node_vsn = current,
                query_node_vsn = current,
                need_table_node_transition = true,
                need_query_node_transition = false,
                need_pre_cluster_mixed = false,
-               need_post_cluster_mixed = false
+               need_post_cluster_mixed = false,
+               table = <<?TABLE>>
                %% store these scenario invariants in Config:
                %% data = ?CFG(data, Config),
-               %% table = <<?TABLE>>,
                %% create_query = DDL,
                %% select_vs_expected = ?CFG(data, Config)
               }].
+
+-endif.
+
 
 make_scenario_invariants(Config) ->
     DDL = ts_util:get_ddl(aggregation, ?TABLE),
@@ -121,13 +170,13 @@ make_queries_and_data() ->
     Sample5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / (Count5-1)),
 
     QQEE =
-        [{"SELECT COUNT(myseries) FROM " ?TABLE " " ++ Where,
+        [{"SELECT COUNT(myseries) FROM ~s " ++ Where,
           {[<<"COUNT(myseries)">>], [{Count}]}},
 
-         {"SELECT COUNT(time) FROM " ?TABLE " " ++ Where,
+         {"SELECT COUNT(time) FROM ~s " ++ Where,
           {[<<"COUNT(time)">>], [{Count}]}},
 
-         {"SELECT COUNT(pressure), count(temperature), cOuNt(precipitation) FROM " ?TABLE " " ++ Where,
+         {"SELECT COUNT(pressure), count(temperature), cOuNt(precipitation) FROM ~s " ++ Where,
           {[<<"COUNT(pressure)">>,
             <<"COUNT(temperature)">>,
             <<"COUNT(precipitation)">>],
@@ -135,26 +184,26 @@ make_queries_and_data() ->
              count_non_nulls(Column4),
              count_non_nulls(Column6)}]}},
 
-         {"SELECT SUM(temperature) FROM " ?TABLE " " ++ Where,
+         {"SELECT SUM(temperature) FROM ~s " ++ Where,
           {[<<"SUM(temperature)">>], [{lists:sum([X || X <- Column4, is_number(X)])}]}},
 
-         {"SELECT SUM(temperature), sum(pressure), sUM(precipitation) FROM " ?TABLE " " ++ Where,
+         {"SELECT SUM(temperature), sum(pressure), sUM(precipitation) FROM ~s " ++ Where,
           {[<<"SUM(temperature)">>, <<"SUM(pressure)">>, <<"SUM(precipitation)">>],
            [{Sum4, Sum5, Sum6}]}},
 
-         {"SELECT MIN(temperature), MIN(pressure) FROM " ?TABLE " " ++ Where,
+         {"SELECT MIN(temperature), MIN(pressure) FROM ~s " ++ Where,
           {[<<"MIN(temperature)">>, <<"MIN(pressure)">>], [{Min4, Min5}]}},
 
-         {"SELECT MAX(temperature), MAX(pressure) FROM " ?TABLE " " ++ Where,
+         {"SELECT MAX(temperature), MAX(pressure) FROM ~s " ++ Where,
           {[<<"MAX(temperature)">>, <<"MAX(pressure)">>], [{Max4, Max5}]}},
 
-         {"SELECT AVG(temperature), MEAN(pressure) FROM " ?TABLE " " ++ Where,
+         {"SELECT AVG(temperature), MEAN(pressure) FROM ~s " ++ Where,
           {[<<"AVG(temperature)">>, <<"MEAN(pressure)">>],
            [{Avg4, Avg5}]}},
 
          {"SELECT STDDEV_POP(temperature), STDDEV_POP(pressure),"
           " STDDEV(temperature), STDDEV(pressure), "
-          " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM " ?TABLE " " ++ Where,
+          " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM ~s " ++ Where,
           {[
             <<"STDDEV_POP(temperature)">>, <<"STDDEV_POP(pressure)">>,
             <<"STDDEV(temperature)">>, <<"STDDEV(pressure)">>,
@@ -163,7 +212,7 @@ make_queries_and_data() ->
            [{StdDev4, StdDev5, Sample4, Sample5, Sample4, Sample5}]
           }},
 
-         {"SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ?TABLE " " ++ Where,
+         {"SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM ~s " ++ Where,
           {[<<"SUM(temperature)">>, <<"MIN(pressure)">>, <<"AVG(pressure)">>],
            [{Sum4, Min5, Avg5}]
           }}
@@ -178,4 +227,3 @@ count_non_nulls(Col) ->
 
 stddev_fun_builder(Avg) ->
     fun(X, Acc) -> Acc + (Avg-X)*(Avg-X) end.
-
