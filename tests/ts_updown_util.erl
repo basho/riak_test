@@ -18,39 +18,21 @@
 %%
 %% -------------------------------------------------------------------
 %%
-%% @doc Provide a full set of CT callbacks, to be called 1:1 from the
-%%      actual r_t modules, for a comprehensive cycle of table
-%%      creation with subsequent SELECT queries on a cluster of three
-%%      nodes, downgrading and upgrading each one in this sequence:
-%%      uuu -> uud -> udd -> ddd -> ddu -> duu -> uuu.
-%%
-%%      At each iteration as we down- or upgrade a node, we create a
-%%      distinctively named table, from which selects will be run.
-%%      This is to check for DDL propagation issues between nodes of
-%%      different versions. Next, we execute SELECTs at all nodes,
-%%      thus covering both reading:
-%%
-%%     (a) from upgraded and downgraded nodes when other nodes are,
-%%         similarly, upgraded or downgraded;
-%%     (b) from both the node the initial writing was done at, as well
-%%         as from other nodes.
+%% @doc Facilities to use in CT-enabled upgrade/downgrade tests.
 
 -module(ts_updown_util).
-
--include_lib("eunit/include/eunit.hrl").
 
 -export([
          make_config/1,
          maybe_shutdown_client_node/1,
-         run_scenario/1
+         run_scenarios/2
         ]).
 
+-include_lib("eunit/include/eunit.hrl").
+-include("ts_updown_util.hrl").
 
--define(CFG(K, C), proplists:get_value(K, C)).
-
--define(QUERY_NUMBERS, lists:seq(1,10)).
-
--define(TABLE_STEM, "updown_test_table_").
+-type versioned_cluster() :: [{node(), version()}].
+%% preparations
 
 make_config(Config) ->
     lists:foldl(
@@ -60,15 +42,12 @@ make_config(Config) ->
        fun make_client_config/1]).
 
 make_node_config(Config) ->
-    %% %% get the test meta data from the riak_test runner
-    %% TestMetaData = riak_test_runner:metadata(self()),
-
     %% build the starting (old = upgraded, current) cluster
     Nodes = rt:build_cluster(
               lists:duplicate(3, current)),
     Config ++
         [
-         {nodes, lists:zip([1,2,3], Nodes)}
+         {nodes, Nodes}
         ].
 
 make_client_config(Config) ->
@@ -98,83 +77,245 @@ maybe_shutdown_client_node(Config) ->
     end.
 
 
-run_scenario(Config) ->
-    %% this is the cycle iterations and what is done when
-    ok = create_versioned_table(Config, 1, current),
-    ok = create_versioned_table(Config, 2, current),
-    ok = create_versioned_table(Config, 3, current),
-    ActiveTables0 = [{1,u}, {2,u}, {3,u}],
-    Res0 = [],
+%% scenarios
 
-    Res1 = query_burst(Config, ActiveTables0, Res0),
+-spec run_scenarios(config(), [#scenario{}]) -> [#failure_report{}].
+run_scenarios(Config, Scenarios) ->
+    %% all nodes are set up with the 'current' version at the outset
+    InitialNodes = ?CFG(nodes, Config),
+    InitialNodesAtVersions =
+        lists:zip(
+          InitialNodes,
+          lists:duplicate(length(InitialNodes), current)),
 
-    ok = do_node_transition(Config, 3, previous),
-    ok = create_versioned_table(Config, 3, previous),
-    ActiveTables1 = ActiveTables0 ++ [{3,d}],
+    {_FinalNodes, Failures} =
+        lists:foldl(
+          fun(Scenario, {NodesAtVersions, Failures}) ->
+                  {ResultingNodesAtVersions, ThisRunFailures} =
+                      run_scenario(Config, NodesAtVersions, Scenario),
+                  {ResultingNodesAtVersions,
+                   ThisRunFailures ++ Failures}
+          end,
+          {InitialNodesAtVersions, []},
+          Scenarios),
 
-    Res2 = query_burst(Config, ActiveTables1, Res1),
+    if length(Failures) == 0 ->
+            fine;
+       el/=se ->
+            PrintMe = layout_fails_for_printing(Failures),
+            ct:print("Failing queries:\n"
+                     "----------------\n"
+                     "~s\n", [PrintMe])
+    end,
 
-    ok = do_node_transition(Config, 2, previous),
-    ok = create_versioned_table(Config, 2, previous),
-    ActiveTables2 = ActiveTables1 ++ [{2,d}],
+    Failures.
 
-    Res3 = query_burst(Config, ActiveTables2, Res2),
 
-    ok = do_node_transition(Config, 1, previous),
-    ok = create_versioned_table(Config, 1, previous),
-    ActiveTables3 = ActiveTables2 ++ [{1,d}],
+-spec run_scenario(config(), versioned_cluster(), #scenario{})
+                  -> {versioned_cluster(), [#failure_report{}]}.
+run_scenario(Config, NodesAtVersions0,
+             #scenario{table_node_vsn = TableNodeVsn,
+                       query_node_vsn = QueryNodeVsn,
+                       need_table_node_transition = NeedTableNodeTransition,
+                       need_query_node_transition = NeedQueryNodeTransition,
+                       need_pre_cluster_mixed = NeedPreClusterMixed,
+                       need_post_cluster_mixed = NeedPostClusterMixed,
+                       %% for these, we may have invariants in Config:
+                       data = Data_,
+                       table = Table_,
+                       ddl = DDL_,
+                       select_vs_expected = SelectVsExpected_}) ->
+    %% 0. retreive scenario-invariant data from Config
+    [Data, Table, DDL, SelectVsExpected] =
+        [begin
+             case Supplied of
+                 undefined ->
+                     ?CFG(Item, Config);
+                 Defined ->
+                     Defined
+             end
+         end || {Supplied, Item} <- [{Data_, data}, {Table_, table}, {DDL_, ddl},
+                                     {SelectVsExpected_, select_vs_expected}]],
 
-    Res4 = query_burst(Config, ActiveTables3, Res3),
+    %% 1. pick two nodes for create table and subsequent selects
+    {TableNode, NodesAtVersions1} =
+        find_or_make_node_at_vsn(NodesAtVersions0, TableNodeVsn, []),
+    {QueryNode, NodesAtVersions2} =
+        find_or_make_node_at_vsn(NodesAtVersions1, QueryNodeVsn, [TableNode]),
 
-    %% and upgrade again: set of tables is now complete
+    %% 2. try to ensure cluster is (not) mixed as hinted but keep the
+    %%    interesting nodes at their versions as set in step 1.
+    NodesAtVersions3 =
+        ensure_cluster(NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode]),
 
-    ok = do_node_transition(Config, 1, current),
-    Res5 = query_burst(Config, ActiveTables3, Res4),
+    %% 3. create table, put data (this step is always assumed to
+    %%    succeed in the context of this test suite; hence the
+    %%    matching on success return values).
+    Client1 = rt:pbc(TableNode),
+    {ok, {[],[]}} = riakc_ts:query(Client1, DDL),
+    ok = wait_until_active_table(Client1, Table, 5),
+    ok = riakc_ts:put(Client1, Table, Data),
 
-    ok = do_node_transition(Config, 2, current),
-    Res6 = query_burst(Config, ActiveTables3, Res5),
+    %% 4. possibly do a transition, on none, one of, or both create
+    %%    table node and query node
+    NodesAtVersions4 =
+        if NeedTableNodeTransition ->
+                possibly_transition_node(NodesAtVersions3, TableNode,
+                                         other_version(TableNodeVsn));
+           el/=se ->
+                NodesAtVersions3
+        end,
+    NodesAtVersions5 =
+        if NeedQueryNodeTransition ->
+                possibly_transition_node(NodesAtVersions4, QueryNode,
+                                         other_version(QueryNodeVsn));
+           el/=se ->
+                NodesAtVersions4
+        end,
 
-    ok = do_node_transition(Config, 3, current),
-    Res7 = query_burst(Config, ActiveTables3, Res6),
+    %% 5. after transitioning the two relevant nodes, try to bring the
+    %%    other nodes to satisfy the mixed/non-mixed hint
+    NodesAtVersions6 =
+        ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode]),
 
-    case Res7 of
-        [] ->
-            pass;
-        FailuresDetailed ->
-            PrintMe = layout_fails_for_printing(FailuresDetailed),
-            ct:fail("Failing queries/queried from/when node was/table:\n~s", [PrintMe])
+    %% 6. issue the queries and collect failures
+    Failures =
+        lists:foldl(
+          fun({QryNo, {SelectQuery, Expected}}, FailuresAcc) ->
+                  Got = query_with_client(SelectQuery, QueryNode, Config),
+                  case ts_util:assert_float(
+                         fmt("Query #~p", [QryNo]), Expected, Got)  of
+                      pass ->
+                          FailuresAcc;
+                      fail ->
+                          lists:append(
+                            FailuresAcc,
+                            [#failure_report{cluster = NodesAtVersions2,
+                                             table_node = TableNode,
+                                             query_node = QueryNode,
+                                             did_transition_table_node = NeedTableNodeTransition,
+                                             did_transition_query_node = NeedQueryNodeTransition,
+                                             failing_query = SelectQuery,
+                                             expected = Expected,
+                                             error = Got}])
+                  end
+          end,
+          [],
+          SelectVsExpected),
+
+    %% 9. along with any failures, pass the current cluster
+    %%    composition to the next invocation of run_scenario
+    {NodesAtVersions6, Failures}.
+
+
+query_with_client(Query, Node, Config) ->
+    Version = rtdev:node_version(rtdev:node_id(Node)),
+    Client = rt:pbc(Node),
+    case Version of
+        current ->
+            riakc_ts:query(Client, Query);
+        previous ->
+            rpc:call(
+              ?CFG(previous_client_node, Config),
+              riakc_ts, query, [Client, Query])
     end.
 
-layout_fails_for_printing(FF) ->
-    lists:flatten(
-      [io_lib:format("~b\t~p\t~p\t~p~p\n", [TestNo, QueryingNode, QueryingNodeVsn, TableCreatedNode, WhenNodeWas])
-       || {TestNo, QueryingNode, QueryingNodeVsn, {TableCreatedNode, WhenNodeWas}} <- FF]).
 
-query_burst(Config, ActiveTables, Res) ->
-    lists:flatten(
-      [Res, [run_queries(Config, N, ActiveTables) || N <- ?QUERY_NUMBERS]]).
+-spec is_cluster_mixed(versioned_cluster()) -> boolean().
+is_cluster_mixed(NodesAtVersions) ->
+    {_N0, V0} = hd(NodesAtVersions),
+    lists:all(fun({_N, V}) -> V == V0 end, NodesAtVersions).
 
 
-%% In order to accurately test the DDL compilation, upgrade and
-%% propagation during the test cycle, there will be many tables
-%% created and populated in the process, with distinctive names
-%% reflecting the state of the node they are created on: node id and
-%% version (d for previous, u for current), 2 x 3 identical tables in
-%% total.
-create_versioned_table(Config, NodeNo, Vsn) ->
-    Nodes = ?CFG(nodes, Config),
-    Data = ?CFG(data, Config),
-    Table = make_table_name(NodeNo, Vsn),
-    DDL = ts_util:get_ddl(aggregation, Table),
-    Client = rt:pbc(?CFG(NodeNo, Nodes)),
-    {ok, _} = riakc_ts:query(Client, DDL),
-    ok = wait_until_active_table(Client, Table, 5),
-    ok = riakc_ts:put(Client, Table, Data).
+-spec ensure_cluster(versioned_cluster(), boolean(), [node()])
+                    -> versioned_cluster().
+%% @doc Massage the cluster if necessary (and if possible) to pick two
+%%      nodes of specific versions, optionally ensuring the resulting
+%%      cluster is mixed or not.
+ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes) ->
+    ImmutableVersions =
+        [rtdev:node_version(rtdev:node_id(Node)) || Node <- ImmutableNodes],
+    IsInherentlyMixed =
+        (length(lists:usort(ImmutableVersions)) > 1),
+    %% possibly transition some other node to fulfil cluster
+    %% homogeneity condition
+    NodesAtVersions1 =
+        case {is_cluster_mixed(NodesAtVersions0), NeedClusterMixed} of
+            {true, true} ->
+                NodesAtVersions0;
+            {false, false} ->
+                NodesAtVersions0;
+            {false, true} ->
+                %% just flip an uninvolved node
+                {_ThirdNode, NodesAtDiffVersions} =
+                    find_or_make_node_at_vsn(
+                      NodesAtVersions0, other_version(hd(ImmutableVersions)), ImmutableNodes),
+                NodesAtDiffVersions;
 
-make_table_name(NodeNo, previous) ->
-    lists:flatten([?TABLE_STEM, integer_to_list(NodeNo), "d"]);
-make_table_name(NodeNo, current) ->
-    lists:flatten([?TABLE_STEM, integer_to_list(NodeNo), "u"]).
+            %% non-mixed/mixed hints can be honoured only when
+            %% TableNodeVsn and QueryNodeVsn are same/not the same:
+            {true, false} when not IsInherentlyMixed ->
+                %% cluster is mixed even though both relevant nodes
+                %% are at same version: align the rest
+                ensure_single_version_cluster(
+                  NodesAtVersions0, hd(ImmutableVersions), ImmutableNodes);
+            {true, false} when IsInherentlyMixed ->
+                %% cluster is mixed because both relevant nodes are
+                %% not at same version: don't honour the hint
+                ct:log("ignoring NeedClusterMixed == false hint because TableNodeVsn /= QueryNodeVsn", []),
+                NodesAtVersions0
+        end,
+    NodesAtVersions1.
+
+
+-spec find_or_make_node_at_vsn(versioned_cluster(), version(), [node()])
+                              -> {node(), versioned_cluster()}.
+find_or_make_node_at_vsn(NodesAtVersions0, ReqVersion, ImmutableNodes) ->
+    MutableNodes =
+        [{N, V} || {N, V} <- NodesAtVersions0, not lists:member(N, ImmutableNodes)],
+    case hd(MutableNodes) of
+        {Node, Vsn} when Vsn == ReqVersion ->
+            {Node, NodesAtVersions0};
+        {Node, TransitionMe} ->
+            OtherVersion = other_version(TransitionMe),
+            ok = transition_node(Node, OtherVersion),
+            {Node, lists:keyreplace(Node, 1, NodesAtVersions0, {Node, OtherVersion})}
+    end.
+
+
+-spec ensure_single_version_cluster(versioned_cluster(), version(), [node()])
+                                   -> versioned_cluster().
+ensure_single_version_cluster(NodesAtVersions, ReqVersion, ImmutableNodes) ->
+    Transitionable =
+        [N || {N, V} <- NodesAtVersions,
+              V /= ReqVersion, not lists:member(N, ImmutableNodes)],
+    rt:pmap(fun(N) -> transition_node(N, ReqVersion) end, Transitionable),
+    %% recreate NodesAtVersions
+    [{N, ReqVersion} || {N, _V} <- NodesAtVersions].
+
+
+-spec transition_node(node(), version()) -> ok.
+transition_node(Node, Version) ->
+    ok = rt:upgrade(Node, Version),
+    ok = rt:wait_for_service(Node, riak_kv).
+
+
+-spec possibly_transition_node(versioned_cluster(), node(), version())
+                              -> versioned_cluster().
+possibly_transition_node(NodesAtVersions, Node, ReqVsn) ->
+    case lists:keyfind(Node, 1, NodesAtVersions) of
+        ReqVsn ->
+            NodesAtVersions;
+        _TransitionMe ->
+            ok = transition_node(Node, ReqVsn),
+            lists:keyreplace(Node, 1, NodesAtVersions,
+                             {Node, ReqVsn})
+    end.
+
+
+other_version(current) -> previous;
+other_version(previous) -> current.
+
 
 wait_until_active_table(_Client, Table, 0) ->
     ct:fail("Table ~s took too long to activate", [Table]),
@@ -189,93 +330,27 @@ wait_until_active_table(Client, Table, N) ->
     end.
 
 
-do_node_transition(Config, N, Version) ->
-    Nodes = ?CFG(nodes, Config),
-    Node  = ?CFG(N, Nodes),
-    %% ToVsn = ?CFG(Version, Config),
-    ok = rt:upgrade(Node, Version),
-    ok = rt:wait_for_service(Node, riak_kv).
-
-
-run_queries(Config, TestNo, ActiveTables) ->
-    Queries = ?CFG(queries, Config),
-    {QueryFmt, Exp} = ?CFG(TestNo, Queries),
-    Nodes = ?CFG(nodes, Config),
-    ct:log("query ~s", [QueryFmt]),
-
-    lists:foldl(
-      fun({_NodeNo, Node}, Failures) ->
-              Got = query_all_via_client(    %% maybe select previous/current client vsn, depending on
-                      {TestNo, QueryFmt}, Node, Config, ActiveTables),  %% whether Node is downgraded or not
-              Failures ++ collect_fails(Exp, Got, TestNo, Node)
-      end,
-      [],
-      Nodes).
-
-
-%% !. Depending in whether the node at which a query is issued is
-%%    upgraded or downgraded, we will use the current or previous
-%%    client, respectively (this is optional, controlled by
-%%    use_previous_client property in Options arg of
-%%    init_per_suite/3).
-%% 2. The three nodes will eventually have two tables created on each,
-%%    as we progress through iterations ('u' created when that node is
-%%    upgraded, and then 'd', following the downgrade): we will
-%%    therefore try both, first checking if it exists.
-query_all_via_client({TestNo, QueryFmt}, AtNode, Config, ActiveTables) ->
-    AtNodeVersionSlot =
-        rtdev:node_version(
-          rtdev:node_id(AtNode)),
-    %% ct:pal("ActiveTables ~p", [ActiveTables]),
-    Queries =
-        lists:flatten(
-          [[[{fmt(QueryFmt, [make_table_name(N, current )]), {N,u}} || lists:member({N, u}, ActiveTables)],
-            [{fmt(QueryFmt, [make_table_name(N, previous)]), {N,d}} || lists:member({N, d}, ActiveTables)]]
-           || N <- [1,2,3]]),
-    [begin
-         ct:log("using ~p client with ~p to issue query ~b against ~p", [AtNodeVersionSlot, AtNode, TestNo, TableId]),
-         ct:log("\"~s\"", [Query]),
-         Client = rt:pbc(AtNode),
-         Res =
-             case AtNodeVersionSlot of
-                 current ->
-                     riakc_ts:query(Client, Query);
-                 previous ->
-                     rpc:call(
-                       client_node(AtNodeVersionSlot, Config),
-                       riakc_ts, query, [Client, Query])
-             end,
-         {Res, TableId}
-    end || {Query, TableId} <- Queries].
-
-client_node(current, _Config) ->
-    node();
-client_node(previous, Config) ->
-    ?CFG(previous_client_node, Config).
-
-
-collect_fails(Exp, {Got, TableId}, TestNo, QueryingNode) when not is_list(Exp), not is_list(Got) ->
-    QueryingNodeVsn = rtdev:node_version(rtdev:node_id(QueryingNode)),
-    case ts_util:assert_float("query " ++ integer_to_list(TestNo), Exp, Got) of
-        pass ->
-            [];
-        fail ->
-            ct:log("failed query ~b issued at node ~p (~p)",
-                   [TestNo, QueryingNode, QueryingNodeVsn]),
-            [{TestNo, QueryingNode, QueryingNodeVsn, TableId}]
-    end;
-
-collect_fails(Exp, Got, TestNo, Node) when is_list(Exp), is_list(Got) ->
-    lists:append(
-      [collect_fails(ExpCase, GotCase, TestNo, Node)
-       || {ExpCase, GotCase} <- lists:zip(Exp, Got)]);
-
-collect_fails(Exp, Got, TestNo, Node) when not is_list(Exp) ->
-    %% if all expected values are the same, we conveniently do the
-    %% duplication here
-    collect_fails(
-      lists:duplicate(length(Got), Exp), Got, TestNo, Node).
-
+layout_fails_for_printing(FF) ->
+    lists:flatten(
+      [io_lib:format(
+         "Cluster: ~p\n"
+         "TableNode: ~p, transitioned? ~p\n"
+         "QueryNode: ~p, transitioned? ~p\n"
+         "Query: ~p\n"
+         "Error: ~p\n"
+         "Expected: ~p\n\n",
+         [NodesAtVersions,
+          TableNode, DidTableNodeTransition,
+          QueryNode, DidQueryNodeTransition,
+          FailingQuery, Error, Expected])
+       || #failure_report{cluster = NodesAtVersions,
+                          table_node = TableNode,
+                          query_node = QueryNode,
+                          did_transition_table_node = DidTableNodeTransition,
+                          did_transition_query_node = DidQueryNodeTransition,
+                          failing_query = FailingQuery,
+                          expected = Expected,
+                          error = Error} <- FF]).
 
 fmt(F, A) ->
     lists:flatten(io_lib:format(F, A)).

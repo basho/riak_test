@@ -28,7 +28,9 @@
         ]).
 
 -include_lib("common_test/include/ct.hrl").
+-include("ts_updown_util.hrl").
 
+-define(TABLE, "updown_aggregation_test_table").
 -define(TEMPERATURE_COL_INDEX, 4).
 -define(PRESSURE_COL_INDEX, 5).
 -define(PRECIPITATION_COL_INDEX, 6).
@@ -48,17 +50,42 @@ init_per_suite(Config) ->
       fun(Fun, Cfg) -> Fun(Cfg) end,
       Config,
       [fun ts_updown_util:make_config/1,
-       fun make_queries_and_data/1]).
+       fun make_scenario_invariants/1]).
 
 end_per_suite(Config) ->
     ts_updown_util:maybe_shutdown_client_node(Config).
 
 run_this_test(Config) ->
-    ts_updown_util:run_scenario(Config).
+    Scenarios = make_scenarios(),
+    ts_updown_util:run_scenarios(Config, Scenarios).
 
 
-make_queries_and_data(Config) ->
-    %% generate data and hoy it into the cluster
+make_scenarios() ->
+    [#scenario{table_node_vsn = current,
+               query_node_vsn = current,
+               need_table_node_transition = true,
+               need_query_node_transition = false,
+               need_pre_cluster_mixed = false,
+               need_post_cluster_mixed = false
+               %% store these scenario invariants in Config:
+               %% data = ?CFG(data, Config),
+               %% table = <<?TABLE>>,
+               %% create_query = DDL,
+               %% select_vs_expected = ?CFG(data, Config)
+              }].
+
+make_scenario_invariants(Config) ->
+    DDL = ts_util:get_ddl(aggregation, ?TABLE),
+    {SelectVsExpected, Data} = make_queries_and_data(),
+    Config ++
+        [
+         {table, <<?TABLE>>},
+         {data, Data},
+         {ddl, DDL},
+         {select_vs_expected, SelectVsExpected}
+        ].
+
+make_queries_and_data() ->
     Count = 10,
     Data = ts_util:get_valid_aggregation_data(Count),
     Column4 = [element(?TEMPERATURE_COL_INDEX,   X) || X <- Data],
@@ -93,17 +120,14 @@ make_queries_and_data(Config) ->
     Sample4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / (Count4-1)),
     Sample5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / (Count5-1)),
 
-    %% Query templates: there are ~s placeholders for table in
-    %% each. Down in query_all_via_client, the real table name is
-    %% substituted.
     QQEE =
-        [{"SELECT COUNT(myseries) FROM ~s " ++ Where,
+        [{"SELECT COUNT(myseries) FROM " ?TABLE " " ++ Where,
           {[<<"COUNT(myseries)">>], [{Count}]}},
 
-         {"SELECT COUNT(time) FROM ~s " ++ Where,
+         {"SELECT COUNT(time) FROM " ?TABLE " " ++ Where,
           {[<<"COUNT(time)">>], [{Count}]}},
 
-         {"SELECT COUNT(pressure), count(temperature), cOuNt(precipitation) FROM ~s " ++ Where,
+         {"SELECT COUNT(pressure), count(temperature), cOuNt(precipitation) FROM " ?TABLE " " ++ Where,
           {[<<"COUNT(pressure)">>,
             <<"COUNT(temperature)">>,
             <<"COUNT(precipitation)">>],
@@ -111,26 +135,26 @@ make_queries_and_data(Config) ->
              count_non_nulls(Column4),
              count_non_nulls(Column6)}]}},
 
-         {"SELECT SUM(temperature) FROM ~s " ++ Where,
+         {"SELECT SUM(temperature) FROM " ?TABLE " " ++ Where,
           {[<<"SUM(temperature)">>], [{lists:sum([X || X <- Column4, is_number(X)])}]}},
 
-         {"SELECT SUM(temperature), sum(pressure), sUM(precipitation) FROM ~s " ++ Where,
+         {"SELECT SUM(temperature), sum(pressure), sUM(precipitation) FROM " ?TABLE " " ++ Where,
           {[<<"SUM(temperature)">>, <<"SUM(pressure)">>, <<"SUM(precipitation)">>],
            [{Sum4, Sum5, Sum6}]}},
 
-         {"SELECT MIN(temperature), MIN(pressure) FROM ~s " ++ Where,
+         {"SELECT MIN(temperature), MIN(pressure) FROM " ?TABLE " " ++ Where,
           {[<<"MIN(temperature)">>, <<"MIN(pressure)">>], [{Min4, Min5}]}},
 
-         {"SELECT MAX(temperature), MAX(pressure) FROM ~s " ++ Where,
+         {"SELECT MAX(temperature), MAX(pressure) FROM " ?TABLE " " ++ Where,
           {[<<"MAX(temperature)">>, <<"MAX(pressure)">>], [{Max4, Max5}]}},
 
-         {"SELECT AVG(temperature), MEAN(pressure) FROM ~s " ++ Where,
+         {"SELECT AVG(temperature), MEAN(pressure) FROM " ?TABLE " " ++ Where,
           {[<<"AVG(temperature)">>, <<"MEAN(pressure)">>],
            [{Avg4, Avg5}]}},
 
          {"SELECT STDDEV_POP(temperature), STDDEV_POP(pressure),"
           " STDDEV(temperature), STDDEV(pressure), "
-          " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM ~s " ++ Where,
+          " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM " ?TABLE " " ++ Where,
           {[
             <<"STDDEV_POP(temperature)">>, <<"STDDEV_POP(pressure)">>,
             <<"STDDEV(temperature)">>, <<"STDDEV(pressure)">>,
@@ -139,18 +163,14 @@ make_queries_and_data(Config) ->
            [{StdDev4, StdDev5, Sample4, Sample5, Sample4, Sample5}]
           }},
 
-         {"SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM ~s " ++ Where,
+         {"SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ?TABLE " " ++ Where,
           {[<<"SUM(temperature)">>, <<"MIN(pressure)">>, <<"AVG(pressure)">>],
            [{Sum4, Min5, Avg5}]
           }}
         ],
 
-    Config ++
-        [
-         {data, Data},
-         {queries,
-          [{N, {Qn, {ok, En}}} || {N, {Qn, En}} <- lists:zip(lists:seq(1,10), QQEE)]}
-        ].
+    {[{N, {Q, {ok, Val}}} || {N, {Q, Val}} <- lists:zip(lists:seq(1, Count), QQEE)],
+     Data}.
 
 
 count_non_nulls(Col) ->
