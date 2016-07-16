@@ -16,10 +16,10 @@
 %% specific language governing permissions and limitations
 %% under the License.
 %%
-%% Tests for range queries around the boundaries of quanta.
+%% Tests for security using the PBC interface.
 %%
 %% -------------------------------------------------------------------
--module(ts_simple_security_SUITE).
+-module(ts_simple_pb_security_SUITE).
 
 -compile(export_all).
 
@@ -327,5 +327,3 @@ with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
         {ok, _},
         riakc_ts:stream_list_keys(Pid, <<"table6">>, infinity)
     ).
-
-
