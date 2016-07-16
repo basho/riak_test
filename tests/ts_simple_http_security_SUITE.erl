@@ -21,7 +21,25 @@
 %% -------------------------------------------------------------------
 -module(ts_simple_http_security_SUITE).
 
--compile(export_all).
+-export([
+    all/0,
+    end_per_group/2,
+    end_per_suite/1,
+    end_per_testcase/2,
+    ensure_https_requires_authentication_test/1,
+    groups/0,
+    init_per_group/2,
+    init_per_suite/1,
+    init_per_testcase/2,
+    password_user_cannot_connect_with_wrong_password_test/1,
+    suite/0,
+    with_security_user_cannot_create_table_without_permissions_test/1,
+    with_security_user_cannot_put_without_permissions_test/1,
+    with_security_user_cannot_query_without_permissions_test/1,
+    with_security_when_user_is_given_permissions_user_can_create_table_test/1,
+    with_security_when_user_is_given_permissions_user_can_put_data_test/1,
+    with_security_when_user_is_given_permissions_user_can_query_data_test/1]
+).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -106,17 +124,6 @@ enable_ssl(Node) ->
     rt:wait_until_pingable(Node),
     rt:wait_for_service(Node, riak_kv),
     {{IP, Port}, {IP, HttpPort}}.
-
-%% start a HTTP server to serve the CRLs
-%%
-%% NB: we use the 'stand_alone' option to link the server to the
-%% test process, so it exits when the test process exits.
-make_certificates_http_server(CertDir) ->
-    {ok, _HTTPPid} = inets:start(httpd, [{port, 8000}, {server_name, "localhost"},
-                        {server_root, "/tmp"},
-                        {document_root, CertDir},
-                        {modules, [mod_get]}], stand_alone),
-    ok.
 
 client_conn(Ctx, Username, Password) ->
     CertDir = proplists:get_value(cert_dir, Ctx),
