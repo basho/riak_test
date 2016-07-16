@@ -299,7 +299,3 @@ with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
         {ok,"200", _Headers, Body},
         execute_query(Ctx, Select)
     ).
-
-
-
-
