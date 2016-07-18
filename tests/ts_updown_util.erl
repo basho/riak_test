@@ -89,15 +89,6 @@ run_scenarios(Config, Scenarios) ->
           end,
           [], Scenarios),
 
-    if length(Failures) == 0 ->
-            fine;
-       el/=se ->
-            PrintMe = layout_fails_for_printing(Failures),
-            ct:print("Failing queries:\n"
-                     "----------------\n"
-                     "~s\n", [PrintMe])
-    end,
-
     Failures.
 
 
@@ -210,8 +201,14 @@ run_scenario(Config,
           [],
           SelectVsExpected),
 
-    %% 9. along with any failures, pass the current cluster
-    %%    composition to the next invocation of run_scenario
+    if length(Failures) == 0 ->
+            fine;
+       el/=se ->
+            ct:pal("Failing queries in this scenario:\n"
+                   "----------------\n"
+                   "~s\n", [layout_fails_for_printing(Failures)])
+    end,
+
     Failures.
 
 
@@ -341,16 +338,16 @@ wait_until_active_table(Client, Table, N) ->
 layout_fails_for_printing(FF) ->
     lists:flatten(
       [io_lib:format(
-         "Cluster: ~p\n"
+         "  Cluster: ~p\n"
          "TableNode: ~p, transitioned? ~p\n"
          "QueryNode: ~p, transitioned? ~p\n"
-         "Query: ~p\n"
-         "Error: ~p\n"
-         "Expected: ~p\n\n",
+         "    Query: ~p\n"
+         " Expected: ~p\n"
+         "      Got: ~p\n\n",
          [NodesAtVersions,
           TableNode, DidTableNodeTransition,
           QueryNode, DidQueryNodeTransition,
-          FailingQuery, Error, Expected])
+          FailingQuery, Expected, Error])
        || #failure_report{cluster = NodesAtVersions,
                           table_node = TableNode,
                           query_node = QueryNode,
