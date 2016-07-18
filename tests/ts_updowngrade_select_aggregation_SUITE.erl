@@ -83,7 +83,8 @@ gen_scenario() ->
                    need_query_node_transition = NeedQueryNodeTransition,
                    need_pre_cluster_mixed = NeedPreClusterMixed,
                    need_post_cluster_mixed = NeedPostClusterMixed,
-                   table = Table}).
+                   table = Table,
+                   ddl = ts_util:get_ddl(aggregation, binary_to_list(Table))}).
 
 gen_version() ->
     ?LET(A, oneof([current, previous]), A).
@@ -91,7 +92,8 @@ gen_version() ->
 gen_table() ->
     ?LET(A, ts_sql_eqc_util:gen_name("aggregation_test_"), A).
 
--else.
+
+-else.  %% no EQC: produce a simple, single scenario
 
 run_this_test(Config) ->
     Got = ts_updown_util:run_scenarios(Config, make_scenarios()),
@@ -106,7 +108,6 @@ run_this_test(Config) ->
             fail
     end.
 
-%% no EQC: produce a simple, single scenario
 make_scenarios() ->
     [#scenario{table_node_vsn = current,
                query_node_vsn = current,
