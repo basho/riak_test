@@ -136,9 +136,9 @@ run_scenario(Config,
            "          need_post_cluster_mixed: ~p\n"
            "     DDL: ~p\n"
            " ~b queries\n", [TableNodeVsn, QueryNodeVsn,
-                           NeedTableNodeTransition, NeedQueryNodeTransition,
-                           NeedPreClusterMixed, NeedPostClusterMixed,
-                           DDL, length(SelectVsExpected)]),
+                             NeedTableNodeTransition, NeedQueryNodeTransition,
+                             NeedPreClusterMixed, NeedPostClusterMixed,
+                             DDL, length(SelectVsExpected)]),
 
     %% 1. pick two nodes for create table and subsequent selects
     {TableNode, NodesAtVersions1} =
@@ -158,7 +158,7 @@ run_scenario(Config,
     {ok, {[],[]}} = riakc_ts:query(Client1, DDL),
     ok = wait_until_active_table(Client1, Table, 5),
     ok = riakc_ts:put(Client1, Table, Data),
-    ct:log("Table ~p created; put ~b records", [Table, length(Data)]),
+    ct:log("Table ~p created on ~p (~b records)", [Table, TableNode, length(Data)]),
 
     %% 4. possibly do a transition, on none, one of, or both create
     %%    table node and query node
@@ -183,6 +183,8 @@ run_scenario(Config,
         ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode]),
 
     %% 6. issue the queries and collect failures
+    ct:log("Issuing queries at ~p", [QueryNode]),
+
     Failures =
         lists:foldl(
           fun({QryNo, {SelectQueryFmt, Expected}}, FailuresAcc) ->
@@ -301,6 +303,7 @@ ensure_single_version_cluster(NodesAtVersions, ReqVersion, ImmutableNodes) ->
 
 -spec transition_node(node(), version()) -> ok.
 transition_node(Node, Version) ->
+    ct:log("transitioning node ~p to version '~p'", [Node, Version]),
     ok = rt:upgrade(Node, Version),
     ok = rt:wait_for_service(Node, riak_kv).
 
