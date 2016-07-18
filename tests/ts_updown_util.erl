@@ -93,7 +93,7 @@ run_scenarios(Config, Scenarios) ->
 
 
 -spec run_scenario(config(), #scenario{})
-                  -> {versioned_cluster(), [#failure_report{}]}.
+                  -> [#failure_report{}].
 run_scenario(Config,
              #scenario{table_node_vsn = TableNodeVsn,
                        query_node_vsn = QueryNodeVsn,
