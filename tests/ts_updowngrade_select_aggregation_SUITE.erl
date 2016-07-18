@@ -63,11 +63,23 @@ end_per_suite(Config) ->
 
 -ifdef(EQC).
 
+%% it's 2 to the power of the number of binary scenario parameters in
+%% #scenario{} (6)
+-define(NUMCASES, 64).
+
 run_this_test(Config) ->
-    quickcheck(numtests(32, prop_scenario(Config))).
+    case eqc:quickcheck(
+           eqc:numtests(?NUMCASES, prop_scenario(Config))) of
+        true ->
+            pass;
+        _ ->
+            ct:fail("There were failing queries", [])
+    end.
 
 prop_scenario(Config) ->
-    ?FORALL(Sce, gen_scenario(), [] == ts_updown_util:run_scenario(Config, Sce)).
+    ?FORALL(
+       Sce, gen_scenario(),
+       [] == ts_updown_util:run_scenario(Config, Sce)).
 
 gen_scenario() ->
     ?LET({TableNodeVsn, QueryNodeVsn,
