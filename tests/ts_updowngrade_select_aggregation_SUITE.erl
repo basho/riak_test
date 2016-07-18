@@ -102,7 +102,8 @@ run_this_test(Config) ->
             PrintMe = ts_updown_util:layout_fails_for_printing(Failures),
             ct:print("Failing queries:\n"
                      "----------------\n"
-                     "~s\n", [PrintMe])
+                     "~s\n", [PrintMe]),
+            fail
     end.
 
 %% no EQC: produce a simple, single scenario
