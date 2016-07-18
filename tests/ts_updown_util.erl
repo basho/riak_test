@@ -229,7 +229,7 @@ query_with_client(Query, Node, Config) ->
 -spec is_cluster_mixed(versioned_cluster()) -> boolean().
 is_cluster_mixed(NodesAtVersions) ->
     {_N0, V0} = hd(NodesAtVersions),
-    lists:all(fun({_N, V}) -> V == V0 end, NodesAtVersions).
+    not lists:all(fun({_N, V}) -> V == V0 end, NodesAtVersions).
 
 
 -spec ensure_cluster(versioned_cluster(), boolean(), [node()])
