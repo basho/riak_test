@@ -114,9 +114,7 @@ run_scenario(Config,
                        data = Data_,
                        table = Table_,
                        ddl = DDL_,
-                       select_vs_expected = SelectVsExpected_} = Scenario) ->
-    ct:pal("Scenario: ~p", [Scenario]),
-
+                       select_vs_expected = SelectVsExpected_}) ->
     NodesAtVersions0 =
         [{N, rtdev:node_version(rtdev:node_id(N))} || N <- ?CFG(nodes, Config)],
 
@@ -131,6 +129,16 @@ run_scenario(Config,
              end
          end || {Supplied, Item} <- [{Data_, data}, {Table_, table}, {DDL_, ddl},
                                      {SelectVsExpected_, select_vs_expected}]],
+    ct:log("Scenario: table/query_node_vsn: ~p/~p\n"
+           "          need_table_node_transition: ~p\n"
+           "          need_query_node_transition: ~p\n"
+           "          need_pre_cluster_mixed: ~p\n"
+           "          need_post_cluster_mixed: ~p\n"
+           "     DDL: ~p\n"
+           " ~b queries\n", [TableNodeVsn, QueryNodeVsn,
+                           NeedTableNodeTransition, NeedQueryNodeTransition,
+                           NeedPreClusterMixed, NeedPostClusterMixed,
+                           DDL, length(SelectVsExpected)]),
 
     %% 1. pick two nodes for create table and subsequent selects
     {TableNode, NodesAtVersions1} =
@@ -150,6 +158,7 @@ run_scenario(Config,
     {ok, {[],[]}} = riakc_ts:query(Client1, DDL),
     ok = wait_until_active_table(Client1, Table, 5),
     ok = riakc_ts:put(Client1, Table, Data),
+    ct:log("Table ~p created; put ~b records", [Table, length(Data)]),
 
     %% 4. possibly do a transition, on none, one of, or both create
     %%    table node and query node

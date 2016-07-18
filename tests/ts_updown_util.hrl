@@ -29,26 +29,60 @@
 -type config() :: proplists:proplist().
 -type version() :: current | previous.
 
+%% Scenario description and requirements
 -record(scenario, {
+          %% riak version on the node where CREATE TABLE query will be issued
           table_node_vsn :: version(),
+
+          %% riak version on the node where SELECT queries will be issued
           query_node_vsn :: version(),
+
+          %% whether to up- or downgrade the interesting nodes after
+          %% table creation (before running SELECT queries)
           need_table_node_transition :: boolean(),
           need_query_node_transition :: boolean(),
+
+          %% hints to try to ensure cluster homogeneity after any node
+          %% transitions (may not be honoured depending on whether the
+          %% interesting nodes emerge in different or same version
+          %% after transitions)
           need_pre_cluster_mixed :: boolean(),
           need_post_cluster_mixed :: boolean(),
+
+          %% table name (useful to avoid name clashes since tables are
+          %% not cleaned up after each test)
           table :: binary(),
-          data :: [row()],
+
+          %% Table DDL and the data to write to it
           ddl :: binary(),
+          data :: [row()],
+
+          %% a list of {SelectQueryFmt, Expected} (`SelectQueryFmt'
+          %% must contain a single "~s" placeholder for the table name
           select_vs_expected :: [{binary(), term()}]
          }).
 
+
+%% Error report
 -record(failure_report, {
-          cluster :: [node()],
+          %% node composition, with versions at each node
+          cluster :: [{node(), version()}],
+
+          %% node where table was created
           table_node :: node(),
+
+          %% node where the failing SELECT was issued
           query_node :: node(),
+
+          %% whether the table and querying nodes were upgraded or
+          %% downgraded prior to SELECT query
           did_transition_table_node :: boolean(),
           did_transition_query_node :: boolean(),
+
+          %% the failing query proper
           failing_query :: binary(),
+
+          %% Expected and Got
           expected :: term(),
           error :: term()
          }).
