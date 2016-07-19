@@ -82,17 +82,24 @@ gen_vsn() ->
 %%
 
 gen_transitions() ->
-    ?LET({FirstLeg, SecondLeg, OnePointThreeTests, OnePointFourTestsDowngradeable, OnePointFourTestsNotDowngradeable},
+    ?LET({FirstLeg, 
+          SecondLeg
+          %% OnePointThreeTests, 
+          %% OnePointFourTestsDowngradeable, 
+          %% OnePointFourTestsNotDowngradeable
+         },
           {
            vector(?MINSTEPS, gen_cluster()),
-           vector(?MINSTEPS, gen_cluster()),
-           vector(?NODISTINCTTESTS, gen_tests("1.3")),
-           vector(?NODISTINCTTESTS, gen_tests("1.4downgradeable")),
-           vector(?NODISTINCTTESTS, gen_tests("1.4notdowngradeable"))
+           vector(?MINSTEPS, gen_cluster())
+           %% vector(?NODISTINCTTESTS, gen_tests("1.3")),
+           %% vector(?NODISTINCTTESTS, gen_tests("1.4downgradeable")),
+           %% vector(?NODISTINCTTESTS, gen_tests("1.4notdowngradeable"))
           },
-         make_tests(FirstLeg, SecondLeg,
-                    OnePointThreeTests, OnePointFourTestsDowngradeable,
-                    OnePointFourTestsNotDowngradeable)).
+         make_tests(FirstLeg, SecondLeg
+                    %% OnePointThreeTests, 
+                    %% OnePointFourTestsDowngradeable,
+                    %% OnePointFourTestsNotDowngradeable
+                   )).
 
 gen_cluster() ->
     ?SUCHTHAT(Cluster, [
@@ -333,13 +340,16 @@ get_quanta_spec(#ddl_v1{partition_key = PK}) ->
 make_table_name(#ddl_v1{table = Tablename}) ->
     binary_to_list(Tablename).
 
-make_tests(FirstLeg, SecondLeg, _OnePointThreeTests, _OnePointFourTestsDowngradeable,
-          _OnePointFourNotDowngradeable) ->
+make_tests(FirstLeg, SecondLeg
+           %% OnePointThreeTests, 
+           %% OnePointFourTestsDowngradeable,
+           %% OnePointFourNotDowngradeable
+          ) ->
     Transitions = interpolate_steps([?STARTSTATE] ++
-                                          FirstLeg ++
-                                          [?INTERMEDIATESTATE] ++
-                                          SecondLeg ++
-                                          [?STARTSTATE], []),
+                                        FirstLeg ++
+                                        [?INTERMEDIATESTATE] ++
+                                        SecondLeg ++
+                                        [?STARTSTATE], []),
     Transitions.
 
 interpolate_steps([Last | []], Acc) ->
