@@ -152,6 +152,25 @@ user_name() ->
     User = string:to_lower(base64:encode_to_string(term_to_binary(make_ref()))),
     [C || C <- User, not lists:member(C, ?ILLEGAL)].
 
+receive_keys(Pid, Acc) ->
+    receive
+        {ReqId, {keys, Keys}} ->
+            lager:info("received batch of ~b\n", [length(Keys)]),
+            receive_keys(ReqId, lists:append(Keys, Acc));
+        {ReqId, {error, Reason}} ->
+            lager:info("list_keys(~p) at ~b got an error: ~p\n", [ReqId, length(Acc), Reason]),
+            {error, Reason};
+        {ReqId, done} ->
+            lager:info("done receiving from one quantum (~p) \n", [ReqId]),
+            receive_keys(Pid, Acc);
+        Else ->
+            lager:info("What's that? ~p\n", [Else]),
+            receive_keys(Pid, Acc)
+    after 3000 ->
+        lager:info("Consider streaming done\n", []),
+        {ok, Acc}
+    end.
+
 %%--------------------------------------------------------------------
 %% TESTS
 %%--------------------------------------------------------------------
@@ -322,8 +341,351 @@ with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
     ?assertEqual(
         {ok, {[<<"a">>, <<"b">>, <<"c">>], [{1,1,1}]}},
         riakc_ts:query(Pid, "SELECT a, b, c FROM table6 WHERE a=1 AND b=1 AND c>0 and c<2")
+    ).
+
+with_security_user_cannot_insert_without_permissions_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table7 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertMatch(
+        {error, <<"Permission denied", _/binary>>},
+        riakc_ts:query(Pid, "INSERT INTO table7 (a, b, c) VALUES (1, 1 ,1)")
+    ).
+
+with_security_when_user_is_given_permissions_user_can_insert_data_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.query_insert", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table8 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertMatch(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid, "INSERT INTO table8 (a, b, c) VALUES (1, 1 ,1)")
+    ).
+
+with_security_user_cannot_list_keys_without_permissions_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table9 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertMatch(
+        ok,
+        riakc_ts:put(Pid, <<"table9">>, [{1,1,1}])
+    ),
+    ?assertMatch(
+        ok,
+        riakc_ts:put(Pid, <<"table9">>, [{2,2,2}])
+    ),
+    ?assertMatch(
+        ok,
+        riakc_ts:put(Pid, <<"table9">>, [{3,3,3}])
+    ),
+    ?assertMatch(
+        {ok, _RefId},
+        riakc_ts:stream_list_keys(Pid, <<"table9">>, infinity)
+    ),
+    ?assertMatch(
+        {error, <<"Permission denied", _/binary>>},
+        receive_keys(Pid, [])
+    ).
+
+with_security_when_user_is_given_permissions_user_can_list_keys_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.listkeys", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table10 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertMatch(
+        ok,
+        riakc_ts:put(Pid, <<"table10">>, [{1,1,1}])
+    ),
+    ?assertMatch(
+        ok,
+        riakc_ts:put(Pid, <<"table10">>, [{2000,2000,2000}])
+    ),
+    ?assertMatch(
+        ok,
+        riakc_ts:put(Pid, <<"table10">>, [{3000,3000,3000}])
+    ),
+    ?assertMatch(
+        {ok, _RefId},
+        riakc_ts:stream_list_keys(Pid, <<"table10">>, infinity)
     ),
     ?assertMatch(
         {ok, _},
-        riakc_ts:stream_list_keys(Pid, <<"table6">>, infinity)
+        receive_keys(Pid, [])
+    ).
+
+with_security_user_cannot_get_data_without_permissions_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table11 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertEqual(
+        ok,
+        riakc_ts:put(Pid, <<"table11">>, [{1,1,1}])
+    ),
+    ?assertMatch(
+        {error, <<"Permission denied", _/binary>>},
+        riakc_ts:get(Pid, <<"table11">>, [1,1,1], [])
+    ).
+
+with_security_when_user_is_given_permissions_user_can_get_data_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.get", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table12 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertEqual(
+        ok,
+        riakc_ts:put(Pid, <<"table12">>, [{1,1,1}])
+    ),
+    ?assertEqual(
+        {ok,{[<<"a">>,<<"b">>,<<"c">>],[{1,1,1}]}},
+        riakc_ts:get(Pid, <<"table12">>, [1,1,1], [])
+    ).
+
+with_security_user_cannot_delete_without_permissions_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table13 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertEqual(
+        ok,
+        riakc_ts:put(Pid, <<"table13">>, [{1,1,1}])
+    ),
+    ?assertMatch(
+        {error, <<"Permission denied", _/binary>>},
+        riakc_ts:delete(Pid, <<"table13">>, [1,1,1], [])
+    ).
+
+with_security_when_user_is_given_permissions_user_can_delete_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.delete", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table14 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertEqual(
+        ok,
+        riakc_ts:put(Pid, <<"table14">>, [{1,1,1}])
+    ),
+    ?assertMatch(
+        ok,
+        riakc_ts:delete(Pid, <<"table14">>, [1,1,1], [])
+    ).
+
+with_security_user_cannot_describe_table_without_permissions_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    %% just assert on the error message this once, to make sure it is getting
+    %% formatted correctly.
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table15 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertMatch(
+        {error, <<"Permission denied", _/binary>>},
+        riakc_ts:query(Pid, "DESCRIBE table15")
+    ).
+
+with_security_when_user_is_given_permissions_user_can_describe_table_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.query_describe", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table16 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertEqual(
+        {ok,{[<<"Column">>,<<"Type">>,<<"Is Null">>,
+            <<"Primary Key">>,<<"Local Key">>,
+            <<"Interval">>,<<"Unit">>],
+            [{<<"a">>,<<"sint64">>,false,1,1,[],[]},
+                {<<"b">>,<<"sint64">>,false,2,2,[],[]},
+                {<<"c">>,<<"timestamp">>,false,3,3,1,
+                    <<"s">>}]}},
+        riakc_ts:query(Pid, "DESCRIBE table16")
+    ).
+
+with_security_user_cannot_get_coverage_without_permissions_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table17 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertMatch(
+        {error, <<"Permission denied", _/binary>>},
+        riakc_ts:get_coverage(Pid, <<"table17">>, "SELECT a, b, c FROM table17 WHERE a=1 AND b=1 AND c>0 and c<2")
+    ).
+
+with_security_when_user_is_given_permissions_user_can_get_coverage_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.coverage", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertEqual(
+        {ok,{[],[]}},
+        riakc_ts:query(Pid,
+            "CREATE TABLE table18 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
+    ),
+    ?assertMatch(
+        {ok,[{{<<"127.0.0.1">>,_},
+            <<_/binary>>,
+            {<<"c">>,{{1,true},{2,false}}},
+            <<"table18 / c >= 1 and c < 2">>}]},
+        riakc_ts:get_coverage(Pid, <<"table18">>, "SELECT a, b, c FROM table18 WHERE a=1 AND b=1 AND c>0 and c<2")
     ).
