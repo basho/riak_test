@@ -45,6 +45,7 @@ end_per_group(_GroupName, _Config) ->
     ok.
 
 init_per_testcase(_TestCase, Config) ->
+    %% tear down the whole cluster before every test
     rtdev:setup_harness('_', '_'),
     Config.
 
@@ -57,9 +58,8 @@ groups() ->
 all() -> 
     rt:grep_test_functions(?MODULE).
 
-
 %%--------------------------------------------------------------------
-%% TESTS
+%% Basic Capability System Tests
 %%--------------------------------------------------------------------
 
 %% Start three nodes which are no clustered
@@ -71,39 +71,122 @@ all() ->
 capabilities_are_mixed_test(_Ctx) ->
     [Node_A, Node_B, Node_C] = rt:deploy_nodes(3),
     Cap_name = {rt, cap_1},
-    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [2,1], 2]),
-    ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [1],   1]),
-    ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [2,1], 2]),
+    V1 = 1,
+    V2 = 2,
+    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [V2,V1], V1, V1]),
+    ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [V1],    V1, V1]),
+    ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [V2,V1], V1, V1]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    rt:wait_until_capability(Node_A, Cap_name, 1),
-    rt:wait_until_capability(Node_B, Cap_name, 1),
-    rt:wait_until_capability(Node_C, Cap_name, 1),
-    Cap_A = rpc:call(Node_A, riak_core_capability, get, [Cap_name]),
-    Cap_B = rpc:call(Node_B, riak_core_capability, get, [Cap_name]),
-    Cap_C = rpc:call(Node_C, riak_core_capability, get, [Cap_name]),
-    % ct:pal("ALL CAPS ~p", [rpc:call(Node_A, riak_core_capability, all, [])]),
-    ct:pal("Node A: ~p, Node B: ~p, Node C ~p", [Cap_A, Cap_B, Cap_C]),
-    %% default to the lowest capability supported by the cluster
-    ?assertEqual(1,Cap_A),
-    ?assertEqual(1,Cap_B),
-    ?assertEqual(1,Cap_C),
+    rt:wait_until_capability(Node_A, Cap_name, V1),
+    rt:wait_until_capability(Node_B, Cap_name, V1),
+    rt:wait_until_capability(Node_C, Cap_name, V1),
     ok.
 
 capabilities_are_same_on_all_nodes_test(_Ctx) ->
     [Node_A, Node_B, Node_C] = rt:deploy_nodes(3),
     Cap_name = {rt, cap_2},
-    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [2,1], 2]), %% if the preference is [1,2] then the cap 
-    ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [2,1], 2]), %% value will be 1 for all nodes
-    ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [2,1], 2]),
+    V1 = 1,
+    V2 = 2,
+    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [V2,V1], V1, V1]), %% if the preference is [1,2] then the cap 
+    ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [V2,V1], V1, V1]), %% value will be 1 for all nodes
+    ok = rpc:call(Node_C, riak_core_capability, register, [Cap_name, [V2,V1], V1, V1]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-    Cap_A = rpc:call(Node_A, riak_core_capability, get, [Cap_name]),
-    Cap_B = rpc:call(Node_B, riak_core_capability, get, [Cap_name]),
-    Cap_C = rpc:call(Node_C, riak_core_capability, get, [Cap_name]),
-    % ct:pal("ALL CAPS ~p", [rpc:call(Node_A, riak_core_capability, all, [])]),
-    ct:pal("Node A: ~p, Node B: ~p, Node C ~p", [Cap_A, Cap_B, Cap_C]),
-    %% all capabilities are the same, so lower version is not used
-    ?assertEqual(2,Cap_A),
-    ?assertEqual(2,Cap_B),
-    ?assertEqual(2,Cap_C),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    rt:wait_until_capability(Node_A, Cap_name, V2),
+    rt:wait_until_capability(Node_B, Cap_name, V2),
+    rt:wait_until_capability(Node_C, Cap_name, V2),
     ok.
+
+other_nodes_do_not_have_capability_test(_Ctx) ->
+    [Node_A, Node_B, Node_C] = rt:deploy_nodes(3),
+    Cap_name = {rt, cap_3},
+    V1 = 1,
+    V2 = 2,
+    ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [V2,V1], V1, V1]), %% value will be 1 for all nodes
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    rt:wait_until_capability(Node_B, Cap_name, V1),
+    ok.
+
+capability_not_specified_on_one_node_test(_Ctx) ->
+    [Node_A, Node_B, Node_C] = rt:deploy_nodes(3),
+    Cap_name = {rt, cap_4},
+    V1 = 1,
+    V2 = 2,
+    ok = rpc:call(Node_A, riak_core_capability, register, [Cap_name, [V2,V1], V1, V1]), %% if the preference is [1,2] then the cap 
+    ok = rpc:call(Node_B, riak_core_capability, register, [Cap_name, [V2,V1], V1, V1]), %% value will be 1 for all nodes
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    rt:wait_until_capability(Node_A, Cap_name, V1),
+    rt:wait_until_capability(Node_B, Cap_name, V1),
+    ok.
+
+%%--------------------------------------------------------------------
+%% Riak TS Capability Tests
+%%--------------------------------------------------------------------
+
+join_with_one_node_upgraded_test_test(_) ->
+    V_current = "current",
+    V_1_3 = "ts_1.3.1",
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([V_1_3, V_1_3, V_1_3]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Cap_name = {riak_kv, sql_select_version},
+    rt:upgrade(Node_A, V_current),
+    rt:wait_until_capability(Node_A, Cap_name, 1),
+    ok.
+
+join_with_all_nodes_upgraded_test(_) ->
+    V_current = "current",
+    V_1_3 = "ts_1.3.1",
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([V_1_3, V_1_3, V_1_3]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Cap_name = {riak_kv, sql_select_version},
+    rt:upgrade(Node_A, V_current),
+    rt:upgrade(Node_B, V_current),
+    rt:upgrade(Node_C, V_current),
+    rt:wait_until_capability(Node_A, Cap_name, 2),
+    rt:wait_until_capability(Node_B, Cap_name, 2),
+    rt:wait_until_capability(Node_C, Cap_name, 2),
+    ok.
+
+-define(TS_VERSION_CURRENT, "current").
+-define(TS_VERSION_1_3, "current").
+
+-define(SQL_SELECT_CAP, {riak_kv, sql_select_version}).
+
+%%--------------------------------------------------------------------
+%% FAILING
+%%--------------------------------------------------------------------
+
+
+upgrade_a_node_from_1_3_test(_) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_1_3, ?TS_VERSION_1_3, ?TS_VERSION_1_3]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 1),
+    ok.
+
+downgrade_a_node_test(_) ->
+    V_current = "current",
+    V_1_3 = "ts_1.3.1",
+    [Node_A, Node_B, Node_C, Node_D] =
+        rt:deploy_nodes([V_current, V_current, V_current, V_current]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    lager:info("Downgrading dev1 to v1.3"),
+    rt:upgrade(Node_A, V_1_3),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Cap_name = {riak_kv, sql_select_version},
+    rt:join_to_existing_cluster(Node_D, Node_C),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C,Node_D]),
+    rt:wait_until_capability(Node_B, Cap_name, 1),
+    % rt:wait_until_capability(Node_C, Cap_name, 1),
+    ok.
+
