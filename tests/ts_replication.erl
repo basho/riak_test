@@ -3,6 +3,8 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+-compile({parse_transform, rt_intercept_pt}).
+
 %% Test both realtime and fullsync replication for timeseries data.
 
 -import(rt, [join/2,
@@ -104,6 +106,22 @@ replication(ANodes, BNodes, Table, NormalType) ->
     create_normal_type(ANodes, NormalType),
     create_normal_type(BNodes, NormalType),
 
+    %% Make certain we don't start throwing objects into the realtime
+    %% queue until realtime sync is enabled. Bug in 1.3, fixed in 1.4.
+    lager:info("Adding intercept to RTQ"),
+    rt_intercept:add(hd(ANodes),
+                     {riak_repl2_rtq,
+                      [{
+                         {push, 3},
+                         {[],
+                          fun(_Len, _Bin, _Meta) ->
+                                  application:set_env(riak_repl, '_test_rtq_pushed', true)
+                          end
+                         }
+                       }
+                      ]
+                     }),
+
     %% Before connecting clusters, write some initial data to Cluster A
     lager:info("Writing 100 KV values to ~p (~p)", [hd(ANodes), KVBucket]),
     ?assertEqual([], repl_util:do_write(hd(ANodes), 1, 100, KVBucket, 2)),
@@ -114,6 +132,14 @@ replication(ANodes, BNodes, Table, NormalType) ->
     lager:info("Writing 100 TS records to ~p (~p)", [hd(ANodes), Table]),
     ?assertEqual(ok, put_records(hd(ANodes), Table, 1, 100)),
     ?assertEqual(100, ts_num_records_present(hd(ANodes), 1, 100, Table)),
+
+    %% Now remove our temporary intercept
+    rt_intercept:clean(hd(ANodes), riak_repl2_rtq),
+
+    %% Check to see if anything was pushed to the realtime queue
+    lager:info("Checking to see whether anything was (wrongly) pushed to the RTQ"),
+    WasPushed = rpc:call(hd(ANodes), application, get_env, [riak_repl, '_test_rtq_pushed']),
+    ?assertEqual(undefined, WasPushed),
 
     lager:info("Testing a non-w1c bucket type (realtime)"),
     real_time_replication_test(ANodes, BNodes, LeaderA, PortB, KVBucket),
