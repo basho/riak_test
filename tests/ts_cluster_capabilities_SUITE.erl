@@ -47,6 +47,7 @@ end_per_group(_GroupName, _Config) ->
 init_per_testcase(_TestCase, Config) ->
     %% tear down the whole cluster before every test
     rtdev:setup_harness('_', '_'),
+    ct:pal("TEST CASE ~p", [_TestCase]),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
@@ -57,6 +58,11 @@ groups() ->
 
 all() -> 
     rt:grep_test_functions(?MODULE).
+
+-define(TS_VERSION_CURRENT, "current").
+-define(TS_VERSION_1_3, "ts_1.3.1").
+
+-define(SQL_SELECT_CAP, {riak_kv, sql_select_version}).
 
 %%--------------------------------------------------------------------
 %% Basic Capability System Tests
@@ -126,67 +132,40 @@ capability_not_specified_on_one_node_test(_Ctx) ->
 %% Riak TS Capability Tests
 %%--------------------------------------------------------------------
 
-join_with_one_node_upgraded_test_test(_) ->
-    V_current = "current",
-    V_1_3 = "ts_1.3.1",
+sql_select_upgrade_a_node_from_1_3_test(_) ->
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([V_1_3, V_1_3, V_1_3]),
+        rt:deploy_nodes([?TS_VERSION_1_3, ?TS_VERSION_1_3, ?TS_VERSION_1_3]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    Cap_name = {riak_kv, sql_select_version},
-    rt:upgrade(Node_A, V_current),
-    rt:wait_until_capability(Node_A, Cap_name, 1),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 1),
     ok.
 
-join_with_all_nodes_upgraded_test(_) ->
-    V_current = "current",
-    V_1_3 = "ts_1.3.1",
-    [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([V_1_3, V_1_3, V_1_3]),
-    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    Cap_name = {riak_kv, sql_select_version},
-    rt:upgrade(Node_A, V_current),
-    rt:upgrade(Node_B, V_current),
-    rt:upgrade(Node_C, V_current),
-    rt:wait_until_capability(Node_A, Cap_name, 2),
-    rt:wait_until_capability(Node_B, Cap_name, 2),
-    rt:wait_until_capability(Node_C, Cap_name, 2),
-    ok.
-
--define(TS_VERSION_CURRENT, "current").
--define(TS_VERSION_1_3, "current").
-
--define(SQL_SELECT_CAP, {riak_kv, sql_select_version}).
-
-%%--------------------------------------------------------------------
-%% FAILING
-%%--------------------------------------------------------------------
-
-
-upgrade_a_node_from_1_3_test(_) ->
+sql_select_join_with_all_nodes_upgraded_test(_) ->
     [Node_A, Node_B, Node_C] =
         rt:deploy_nodes([?TS_VERSION_1_3, ?TS_VERSION_1_3, ?TS_VERSION_1_3]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
-    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 1),
+    rt:upgrade(Node_B, ?TS_VERSION_CURRENT),
+    rt:upgrade(Node_C, ?TS_VERSION_CURRENT),
+    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 2),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 2),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 2),
     ok.
 
-downgrade_a_node_test(_) ->
-    V_current = "current",
-    V_1_3 = "ts_1.3.1",
-    [Node_A, Node_B, Node_C, Node_D] =
-        rt:deploy_nodes([V_current, V_current, V_current, V_current]),
+sql_select_downgrade_a_node_test(_) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-    lager:info("Downgrading dev1 to v1.3"),
-    rt:upgrade(Node_A, V_1_3),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    Cap_name = {riak_kv, sql_select_version},
-    rt:join_to_existing_cluster(Node_D, Node_C),
-    rt:wait_until_ring_converged([Node_A,Node_B,Node_C,Node_D]),
-    rt:wait_until_capability(Node_B, Cap_name, 1),
-    % rt:wait_until_capability(Node_C, Cap_name, 1),
+    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 2),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 2),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 2),
+    rt:upgrade(Node_A, ?TS_VERSION_1_3),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 1),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 1),
     ok.
 
