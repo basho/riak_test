@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(ts_updowngrade_select_aggregation_SUITE).
+-module(ts_cluster_updowngrade_select_aggregation_SUITE).
 
 -export([
          suite/0,
@@ -54,7 +54,7 @@ init_per_suite(Config) ->
     lists:foldl(
       fun(Fun, Cfg) -> Fun(Cfg) end,
       Config,
-      [fun ts_updown_util:make_config/1,
+      [fun ts_updown_util:setup/1,
        fun make_scenario_invariants/1]).
 
 end_per_suite(Config) ->

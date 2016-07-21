@@ -23,7 +23,7 @@
 -module(ts_updown_util).
 
 -export([
-         make_config/1,
+         setup/1,
          maybe_shutdown_client_node/1,
          run_scenarios/2,
          run_scenario/2
@@ -35,14 +35,14 @@
 -type versioned_cluster() :: [{node(), version()}].
 %% preparations
 
-make_config(Config) ->
+setup(Config) ->
     lists:foldl(
       fun(Fun, Cfg) -> Fun(Cfg) end,
       Config,
-      [fun make_node_config/1,
-       fun make_client_config/1]).
+      [fun setup_cluster/1,
+       fun setup_client/1]).
 
-make_node_config(Config) ->
+setup_cluster(Config) ->
     %% build the starting (old = upgraded, current) cluster
     Nodes = rt:build_cluster(
               lists:duplicate(3, current)),
@@ -51,7 +51,11 @@ make_node_config(Config) ->
          {nodes, Nodes}
         ].
 
-make_client_config(Config) ->
+setup_client(Config) ->
+    %% By default, we use the client in the 'current' version for all
+    %% queries.  Add `{use_previous_client, true}` to the Config arg
+    %% when calling it from your_module:init_per_suite to change that
+    %% to selectively use old code to connect to downgraded nodes.
     UsePreviousClient = proplists:get_value(use_previous_client, Config, false),
     PrevClientNode = maybe_setup_slave_for_previous_client(UsePreviousClient),
     Config ++
