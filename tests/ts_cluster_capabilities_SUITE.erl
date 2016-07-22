@@ -60,6 +60,8 @@ all() ->
     rt:grep_test_functions(?MODULE).
 
 -define(TS_VERSION_CURRENT, "current").
+
+%% git checkout riak_ts-1.3.1 && make locked-deps
 -define(TS_VERSION_1_3, "ts_1.3.1").
 
 -define(SQL_SELECT_CAP, {riak_kv, sql_select_version}).
