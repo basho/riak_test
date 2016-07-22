@@ -88,7 +88,7 @@ select_grouped_field_test(Ctx) ->
         "GROUP BY c",
     {ok, {Cols, Rows}} = run_query(Ctx, Query),
     ts_util:assert_row_sets(
-        {rt_ignore_columns, [{1},{2},{  3}]},
+        {rt_ignore_columns, [{1},{2},{3}]},
         {ok,{Cols, lists:sort(Rows)}}
     ).
 
@@ -115,6 +115,7 @@ group_by_2_test(Ctx) ->
         {rt_ignore_columns, [{1,500.5},{2,500.5},{3,500.5}]},
         {ok,{Cols, lists:sort(Rows)}}
     ).
+
 
 
 

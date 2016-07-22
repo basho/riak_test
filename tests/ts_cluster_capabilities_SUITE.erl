@@ -65,6 +65,13 @@ all() ->
 -define(SQL_SELECT_CAP, {riak_kv, sql_select_version}).
 
 %%--------------------------------------------------------------------
+%% Utils
+%%--------------------------------------------------------------------
+
+run_query(Pid, Query) when is_pid(Pid) ->
+    riakc_ts:query(Pid, Query).
+
+%%--------------------------------------------------------------------
 %% Basic Capability System Tests
 %%--------------------------------------------------------------------
 
@@ -163,9 +170,51 @@ sql_select_downgrade_a_node_test(_) ->
     rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 2),
     rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 2),
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 2),
-    rt:upgrade(Node_A, ?TS_VERSION_1_3),
+    c
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 1),
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 1),
     ok.
 
+%%--------------------------------------------------------------------
+%% Perform queries in mixed version cluster
+%%--------------------------------------------------------------------
+
+query_in_mixed_version_cluster_test(_) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_1_3, ?TS_VERSION_CURRENT]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Table = "grouptab1",
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(rt:pbc(Node_A),
+            "CREATE TABLE grouptab1 ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
+    )),
+    ok = riakc_ts:put(rt:pbc(Node_A), Table,
+        [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
+    ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
+    %%
+    %% Test that the current version can query version 1.3
+    %%
+    Query =
+        "SELECT c FROM grouptab1 "
+        "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
+    % ct:pal("COVERAGE ~p", [riakc_ts:get_coverage(rt:pbc(Node_A), <<"grouptab1">>, Query)]),
+    {ok, {Cols, Rows}} = run_query(rt:pbc(Node_A), Query),
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, ExpectedResultSet},
+        {ok,{Cols, Rows}}
+    ),
+    %%
+    %% Test that the 1.3 can query the current version
+    %%
+    {ok, {Cols, Rows}} = run_query(rt:pbc(Node_B), Query),
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, ExpectedResultSet},
+        {ok,{Cols, Rows}}
+    ).
