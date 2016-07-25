@@ -84,25 +84,18 @@ prop_scenario(Config) ->
 gen_scenario() ->
     ?LET({TableNodeVsn, QueryNodeVsn,
           NeedTableNodeTransition, NeedQueryNodeTransition,
-          NeedPreClusterMixed, NeedPostClusterMixed,
-          Table},
+          NeedPreClusterMixed, NeedPostClusterMixed},
          {gen_version(), gen_version(),
-          bool(), bool(), bool(), bool(),
-          gen_table()},
+          bool(), bool(), bool(), bool()},
          #scenario{table_node_vsn = TableNodeVsn,
                    query_node_vsn = QueryNodeVsn,
                    need_table_node_transition = NeedTableNodeTransition,
                    need_query_node_transition = NeedQueryNodeTransition,
                    need_pre_cluster_mixed = NeedPreClusterMixed,
-                   need_post_cluster_mixed = NeedPostClusterMixed,
-                   table = Table,
-                   ddl = ts_util:get_ddl(aggregation, binary_to_list(Table))}).
+                   need_post_cluster_mixed = NeedPostClusterMixed}).
 
 gen_version() ->
     ?LET(A, oneof([current, previous]), A).
-
-gen_table() ->
-    ?LET(A, ts_sql_eqc_util:gen_name("aggregation_test_"), A).
 
 
 -else.  %% no EQC: produce a simple, single scenario
@@ -138,7 +131,7 @@ make_scenarios() ->
 
 
 make_scenario_invariants(Config) ->
-    DDL = ts_util:get_ddl(aggregation, ?TABLE),
+    DDL = ts_util:get_ddl(aggregation, "~s"),
     {SelectVsExpected, Data} = make_queries_and_data(),
     Config ++
         [

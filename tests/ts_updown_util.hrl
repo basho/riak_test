@@ -49,12 +49,12 @@
           need_pre_cluster_mixed :: boolean(),
           need_post_cluster_mixed :: boolean(),
 
-          %% table name (useful to avoid name clashes since tables are
-          %% not cleaned up after each test)
-          table :: binary(),
-
-          %% Table DDL and the data to write to it
+          %% Table DDL (an io:format template containing a single
+          %% "~s", because we will be generating a unique name for
+          %% each scenario)
           ddl :: binary(),
+
+          %% Data to write to the table
           data :: [row()],
 
           %% a list of {SelectQueryFmt, Expected} (`SelectQueryFmt'

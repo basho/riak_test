@@ -107,14 +107,13 @@ run_scenario(Config,
                        need_post_cluster_mixed = NeedPostClusterMixed,
                        %% for these, we may have invariants in Config:
                        data = Data_,
-                       table = Table_,
                        ddl = DDL_,
                        select_vs_expected = SelectVsExpected_}) ->
     NodesAtVersions0 =
         [{N, rtdev:node_version(rtdev:node_id(N))} || N <- ?CFG(nodes, Config)],
 
     %% 0. retreive scenario-invariant data from Config
-    [Data, Table, DDL, SelectVsExpected] =
+    [Data, DDLFmt, SelectVsExpected] =
         [begin
              case Supplied of
                  undefined ->
@@ -122,8 +121,16 @@ run_scenario(Config,
                  Defined ->
                      Defined
              end
-         end || {Supplied, Item} <- [{Data_, data}, {Table_, table}, {DDL_, ddl},
+         end || {Supplied, Item} <- [{Data_, data}, {DDL_, ddl},
                                      {SelectVsExpected_, select_vs_expected}]],
+
+    %% 1. Generate a unique table name, produce DDL from the template
+    {_Mega, Sec, Milli} = os:timestamp(),
+    %% scenarios are not runnung in parallel; even so, for the blazing
+    %% fast machines:
+    timer:sleep(1),
+    Table = list_to_binary(fmt("updown_test_~b~b", [Sec, Milli])),
+    DDL = fmt(DDLFmt, [Table]),
     ct:log("Scenario: table/query_node_vsn: ~p/~p\n"
            "          need_table_node_transition: ~p\n"
            "          need_query_node_transition: ~p\n"
@@ -135,18 +142,18 @@ run_scenario(Config,
                              NeedPreClusterMixed, NeedPostClusterMixed,
                              DDL, length(SelectVsExpected)]),
 
-    %% 1. pick two nodes for create table and subsequent selects
+    %% 2. Pick two nodes for create table and subsequent selects
     {TableNode, NodesAtVersions1} =
         find_or_make_node_at_vsn(NodesAtVersions0, TableNodeVsn, []),
     {QueryNode, NodesAtVersions2} =
         find_or_make_node_at_vsn(NodesAtVersions1, QueryNodeVsn, [TableNode]),
 
-    %% 2. try to ensure cluster is (not) mixed as hinted but keep the
+    %% 3. Try to ensure cluster is (not) mixed as hinted but keep the
     %%    interesting nodes at their versions as set in step 1.
     NodesAtVersions3 =
         ensure_cluster(NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode]),
 
-    %% 3. create table, put data (this step is always assumed to
+    %% 4. Create table, put data (this step is always assumed to
     %%    succeed in the context of this test suite; hence the
     %%    matching on success return values).
     Client1 = rt:pbc(TableNode),
@@ -155,7 +162,7 @@ run_scenario(Config,
     ok = riakc_ts:put(Client1, Table, Data),
     ct:log("Table ~p created on ~p (~b records)", [Table, TableNode, length(Data)]),
 
-    %% 4. possibly do a transition, on none, one of, or both create
+    %% 5. possibly do a transition, on none, one of, or both create
     %%    table node and query node
     NodesAtVersions4 =
         if NeedTableNodeTransition ->
@@ -172,12 +179,12 @@ run_scenario(Config,
                 NodesAtVersions4
         end,
 
-    %% 5. after transitioning the two relevant nodes, try to bring the
+    %% 6. after transitioning the two relevant nodes, try to bring the
     %%    other nodes to satisfy the mixed/non-mixed hint
     _NodesAtVersions6 =
         ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode]),
 
-    %% 6. issue the queries and collect failures
+    %% 7. issue the queries and collect failures
     ct:log("Issuing queries at ~p", [QueryNode]),
 
     Failures =
