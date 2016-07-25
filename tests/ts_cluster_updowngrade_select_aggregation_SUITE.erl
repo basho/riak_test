@@ -19,6 +19,9 @@
 %% -------------------------------------------------------------------
 -module(ts_cluster_updowngrade_select_aggregation_SUITE).
 
+-ifdef(EQC).
+-include_lib("eqc/include/eqc.hrl").
+
 -export([
          suite/0,
          init_per_suite/1,
@@ -27,10 +30,8 @@
          run_this_test/1
         ]).
 
--ifdef(EQC).
--include_lib("eqc/include/eqc.hrl").
--compile(export_all).
--endif.
+%% EQC exports
+-export([gen_scenario/0, gen_version/0, prop_scenario/1]).
 
 -include_lib("common_test/include/ct.hrl").
 -include("ts_updown_util.hrl").
@@ -60,8 +61,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     ts_updown_util:maybe_shutdown_client_node(Config).
 
-
--ifdef(EQC).
 
 %% it's 2 to the power of the number of binary scenario parameters in
 %% #scenario{} (6)
@@ -96,38 +95,6 @@ gen_scenario() ->
 
 gen_version() ->
     ?LET(A, oneof([current, previous]), A).
-
-
--else.  %% no EQC: produce a simple, single scenario
-
-run_this_test(Config) ->
-    Got = ts_updown_util:run_scenarios(Config, make_scenarios()),
-    case Got of
-        [] ->
-            pass;
-        Failures ->
-            PrintMe = ts_updown_util:layout_fails_for_printing(Failures),
-            ct:print("Failing queries:\n"
-                     "----------------\n"
-                     "~s\n", [PrintMe]),
-            fail
-    end.
-
-make_scenarios() ->
-    [#scenario{table_node_vsn = current,
-               query_node_vsn = current,
-               need_table_node_transition = true,
-               need_query_node_transition = false,
-               need_pre_cluster_mixed = false,
-               need_post_cluster_mixed = false,
-               table = <<?TABLE>>
-               %% store these scenario invariants in Config:
-               %% data = ?CFG(data, Config),
-               %% create_query = DDL,
-               %% select_vs_expected = ?CFG(data, Config)
-              }].
-
--endif.
 
 
 make_scenario_invariants(Config) ->
@@ -234,3 +201,5 @@ count_non_nulls(Col) ->
 
 stddev_fun_builder(Avg) ->
     fun(X, Acc) -> Acc + (Avg-X)*(Avg-X) end.
+
+-endif.  %% EQC
