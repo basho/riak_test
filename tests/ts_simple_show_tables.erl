@@ -27,21 +27,30 @@
 -export([confirm/0]).
 
 confirm() ->
+    ClusterConn = {_, Conn} = ts_util:cluster_and_connect(single),
+
+    %% First test no tables
+    Got = ts_util:single_query(Conn, "SHOW TABLES"),
+    ?assertEqual(
+        {ok, {[], []}},
+        Got
+    ),
+
+    %% Now create a bunch of tables
     Tables = [{<<"Alpha">>}, {<<"Beta">>}, {<<"Gamma">>}, {<<"Delta">>}],
     Create =
         "CREATE TABLE ~s ("
         " frequency    timestamp   not null,"
         " PRIMARY KEY ((quantum(frequency, 15, 'm')),"
         " frequency))",
-    ClusterConn = {_, Conn} = ts_util:cluster_and_connect(single),
     lists:foreach(fun({T}) ->
             SQL = ts_util:flat_format(Create, [T]),
             {ok, _} = ts_util:create_and_activate_bucket_type(ClusterConn, SQL, T)
         end,
         Tables),
-    Got = ts_util:single_query(Conn, "SHOW TABLES"),
+    Got1 = ts_util:single_query(Conn, "SHOW TABLES"),
     ?assertEqual(
-        {ok, {[<<"Table">>], Tables}},
-        Got
+        {ok, {[<<"Table">>], lists:usort(Tables)}},
+        Got1
     ),
     pass.
