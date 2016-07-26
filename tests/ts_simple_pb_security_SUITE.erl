@@ -375,7 +375,7 @@ with_security_when_user_is_given_permissions_user_can_insert_data_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.query_insert", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -439,7 +439,7 @@ with_security_when_user_is_given_permissions_user_can_list_keys_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.listkeys", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.list_keys", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
