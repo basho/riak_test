@@ -18,10 +18,13 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc rt_slave is a modified version of ct_slave.erl from the
-%%      standard OTP common_test lib. The stock version was found to
-%%      have issues related to host name resolution, detailed here:
-%%      http://erlang.org/pipermail/erlang-questions/2016-February/087632.html.
+%% @doc rt_slave is a modified, slimmed down version of ct_slave.erl
+%%      from the standard OTP common_test lib. The stock version was
+%%      found to have issues related to host name resolution, detailed
+%%      here: http://erlang.org/pipermail/erlang-questions/2016-February/087632.html.
+%%
+%% This is a stop-gap solution until a patched version of ct_slave.erl
+%% appears in OTP.
 
 %% The original copyright notice of ct_slave.erl follows.
 
