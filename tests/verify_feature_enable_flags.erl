@@ -32,14 +32,25 @@
 confirm() ->
     lager:info("Deploying 1 node"),
     [Node] = rt:deploy_nodes(1, ?CFG),
-    Client = rt:pbc(Node),
 
-    write_test_data(Client),
+    HttpClient = rt:httpc(Node),
+    PbClient = rt:pbc(Node),
 
-    verify_features_disabled(Client),
+    lager:info("Writing test data via protocol buffers"),
+    write_test_data(PbClient),
 
+    lager:info("Verifying features are disabled via HTTP"),
+    verify_features_disabled_http(HttpClient),
+    lager:info("Verifying features are disabled via protocol buffers"),
+    verify_features_disabled_pb(PbClient),
+
+    lager:info("Enabling all job classes"),
     ok = rpc:call(Node, application, set_env, [riak_core, job_accept_class, ?JOB_CLASSES]),
-    verify_features_enabled(Client),
+
+    lager:info("Verifying features are enabled via HTTP"),
+    verify_features_enabled_http(HttpClient),
+    lager:info("Verifying features are enabled via protocol buffers"),
+    verify_features_enabled_pb(PbClient),
 
     pass.
 
@@ -64,23 +75,29 @@ make_objs(Bucket) ->
                    list_to_binary([N + $A])) %% Vals = ["A", "B", "C"]
      || N <- lists:seq(0, 2)].
 
-verify_features_disabled(Client) ->
-    verify_list_buckets_disabled(Client).
-    %%verify_list_keys_disabled(),
-    %%verify_secondary_index_disabled(),
-    %%verify_map_reduce_disabled().
+verify_features_disabled_http(_Client) ->
+    ok.
 
-verify_features_enabled(Client) ->
-    verify_list_buckets_enabled(Client).
-    %%verify_list_keys_enabled(),
-    %%verify_secondary_index_enabled(),
-    %%verify_map_reduce_enabled().
+verify_features_disabled_pb(Client) ->
+    verify_list_buckets_disabled_pd(Client).
+    %%verify_list_keys_disabled_pd(),
+    %%verify_secondary_index_disabled_pd(),
+    %%verify_map_reduce_disabled_pd().
 
-verify_list_buckets_disabled(Client) ->
+verify_features_enabled_http(_Client) ->
+    ok.
+
+verify_features_enabled_pb(Client) ->
+    verify_list_buckets_enabled_pb(Client).
+    %%verify_list_keys_enabled_pb(),
+    %%verify_secondary_index_enabled_pb(),
+    %%verify_map_reduce_enabled_pb().
+
+verify_list_buckets_disabled_pd(Client) ->
     Expected = {error, <<"Operation 'list_buckets' is not enabled">>},
     ?assertEqual(Expected, riakc_pb_socket:list_buckets(Client)).
 
-verify_list_buckets_enabled(Client) ->
+verify_list_buckets_enabled_pb(Client) ->
     {ok, Buckets} = riakc_pb_socket:list_buckets(Client),
     SortedBuckets = lists:sort(Buckets),
     ?assertEqual(SortedBuckets, [<<"2i_test">>, <<"basic_test">>, <<"mapred_test">>]).
