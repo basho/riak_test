@@ -525,8 +525,6 @@ get_optional(N, X) ->
     end.
 
 
--define(DELTA, 1.0e-15).
-
 assert_float(String, {ok, Thing1}, {ok, Thing2}) ->
     assert_float(String, Thing1, Thing2);
 assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
@@ -546,10 +544,12 @@ assert_float(String, Exp, Got) ->
 
 assertf2([], []) -> pass;
 assertf2([H1 | T1], [H2 | T2]) when is_float(H1), is_float(H2) ->
-    Diff = H1 - H2,
-    Av = (H1 + H2)/2,
-    if Diff/Av > ?DELTA -> fail;
-       el/=se           -> assertf2(T1, T2)
+    case {io_lib:format("~.6e", [H1]),
+          io_lib:format("~.6e", [H2])} of
+        {Same, Same} ->
+            assertf2(T1, T2);
+        _ ->
+            fail
     end;
 assertf2([H | T1], [H | T2]) ->
     assertf2(T1, T2);
