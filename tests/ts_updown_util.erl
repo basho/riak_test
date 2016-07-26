@@ -121,8 +121,8 @@ run_scenario(Config,
                  Defined ->
                      Defined
              end
-         end || {Supplied, Item} <- [{Data_, data}, {DDL_, ddl},
-                                     {SelectVsExpected_, select_vs_expected}]],
+         end || {Item, Supplied} <- [{data, Data_}, {ddl, DDL_},
+                                     {select_vs_expected, SelectVsExpected_}]],
 
     %% 1. Generate a unique table name, produce DDL from the template
     {_Mega, Sec, Milli} = os:timestamp(),
