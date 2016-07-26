@@ -29,6 +29,7 @@
 -define(CFG, [{riak_core, [{job_accept_class, []}]}]).
 -define(JOB_CLASSES, [list_buckets, list_keys, secondary_index, map_reduce]).
 -define(ALL_BUCKETS, [<<"2i_test">>, <<"basic_test">>, <<"mapred_test">>]).
+-define(BASIC_TEST_KEYS, [<<"1">>, <<"2">>, <<"3">>]).
 
 confirm() ->
     lager:info("Deploying 1 node"),
@@ -77,20 +78,22 @@ make_objs(Bucket) ->
      || N <- lists:seq(0, 2)].
 
 verify_features_disabled_http(Client) ->
-    verify_list_buckets_disabled_http(Client).
+    verify_list_buckets_disabled_http(Client),
+    verify_list_keys_disabled_http(Client).
 
 verify_features_disabled_pb(Client) ->
-    verify_list_buckets_disabled_pd(Client).
-    %%verify_list_keys_disabled_pd(),
-    %%verify_secondary_index_disabled_pd(),
+    verify_list_buckets_disabled_pd(Client),
+    verify_list_keys_disabled_pd(Client),
+    verify_secondary_index_disabled_pd(Client).
     %%verify_map_reduce_disabled_pd().
 
 verify_features_enabled_http(Client) ->
-    verify_list_buckets_enabled_http(Client).
+    verify_list_buckets_enabled_http(Client),
+    verify_list_keys_enabled_http(Client).
 
 verify_features_enabled_pb(Client) ->
-    verify_list_buckets_enabled_pb(Client).
-    %%verify_list_keys_enabled_pb(),
+    verify_list_buckets_enabled_pb(Client),
+    verify_list_keys_enabled_pb(Client).
     %%verify_secondary_index_enabled_pb(),
     %%verify_map_reduce_enabled_pb().
 
@@ -98,16 +101,40 @@ verify_list_buckets_disabled_pd(Client) ->
     Expected = {error, <<"Operation 'list_buckets' is not enabled">>},
     ?assertEqual(Expected, riakc_pb_socket:list_buckets(Client)).
 
+verify_list_keys_disabled_pd(Client) ->
+    Expected = {error, <<"Operation 'list_keys' is not enabled">>},
+    ?assertEqual(Expected, riakc_pb_socket:list_keys(Client, <<"basic_test">>)).
+
+verify_secondary_index_disabled_pd(Client) ->
+    Expected = {error, <<"Secondary index queries have been disabled in the configuration">>},
+    ?assertEqual(Expected, riakc_pb_socket:get_index(Client,
+                                                     <<"2i_test">>,
+                                                     {integer_index, "test_idx"}, 40, 50)).
+
 verify_list_buckets_enabled_pb(Client) ->
     {ok, Buckets} = riakc_pb_socket:list_buckets(Client),
     SortedBuckets = lists:sort(Buckets),
     ?assertEqual(SortedBuckets, ?ALL_BUCKETS).
 
+verify_list_keys_enabled_pb(Client) ->
+    {ok, Keys} = riakc_pb_socket:list_keys(Client, <<"basic_test">>),
+    SortedKeys = lists:sort(Keys),
+    ?assertEqual(SortedKeys, ?BASIC_TEST_KEYS).
+
 verify_list_buckets_disabled_http(Client) ->
     Result = rhc:list_buckets(Client),
+    ?assertMatch({error, {"403", _}}, Result).
+
+verify_list_keys_disabled_http(Client) ->
+    Result = rhc:list_keys(Client, <<"basic_test">>),
     ?assertMatch({error, {"403", _}}, Result).
 
 verify_list_buckets_enabled_http(Client) ->
     {ok, Buckets} = rhc:list_buckets(Client),
     SortedBuckets = lists:sort(Buckets),
     ?assertEqual(SortedBuckets, ?ALL_BUCKETS).
+
+verify_list_keys_enabled_http(Client) ->
+    {ok, Keys} = rhc:list_keys(Client, <<"basic_test">>),
+    SortedKeys = lists:sort(Keys),
+    ?assertEqual(SortedKeys, ?BASIC_TEST_KEYS).
