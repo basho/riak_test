@@ -153,14 +153,20 @@ run_scenario(Config,
     NodesAtVersions3 =
         ensure_cluster(NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode]),
 
-    %% 4. Create table, put data (this step is always assumed to
-    %%    succeed in the context of this test suite; hence the
-    %%    matching on success return values).
+    %% 4. Create table, put data. If the table fails to be created
+    %%    (and that is expected), then the module writers should
+    %%    specify {error, {1019, "~s is not an active table"}} for the
+    %%    Expected value of all queries against this table in the
+    %%    affected scenarios.
     Client1 = rt:pbc(TableNode),
-    {ok, {[],[]}} = riakc_ts:query(Client1, DDL),
-    ok = wait_until_active_table(Client1, Table, 5),
-    ok = riakc_ts:put(Client1, Table, Data),
-    ct:log("Table ~p created on ~p (~b records)", [Table, TableNode, length(Data)]),
+    case riakc_ts:query(Client1, DDL) of
+        {ok, {[],[]}} ->
+            ok = wait_until_active_table(Client1, Table, 5),
+            ok = riakc_ts:put(Client1, Table, Data),
+            ct:log("Table ~p created on ~p (~b records)", [Table, TableNode, length(Data)]);
+        {error, {ErrCode, ErrReason}} ->
+            ct:log("Failed to create table ~p: ~b (~s)", [Table, ErrCode, ErrReason])
+    end,
 
     %% 5. possibly do a transition, on none, one of, or both create
     %%    table node and query node

@@ -172,6 +172,10 @@ make_queries_and_data() ->
           }}
         ],
 
+    %% if you expect a query to fail -- and don't want to match on the
+    %% exact error string in `{error, {ErrCode, ErrMessage}}` -- use a
+    %% '_' in place of ErrMessage.
+
     {[{N, {Q, {ok, Val}}} || {N, {Q, Val}} <- lists:zip(lists:seq(1, Count), QQEE)],
      Data}.
 

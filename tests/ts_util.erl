@@ -558,6 +558,10 @@ assertf2(_, _) ->
 
 
 assert(_,      X,   X)   -> pass;
+%% as a special case, if you don't know the exact words to expect in
+%% the error message, use a '_' to match any string
+assert(_, {error, {ErrCode, _ErrMsg}}, {error, {ErrCode, '_'}}) ->
+    pass;
 assert(String, Exp, Got) ->
     lager:info("*****************", []),
     lager:info("Test ~p failed", [String]),
