@@ -28,6 +28,7 @@
 %% and verify all the flags over the course of the test
 -define(CFG, [{riak_core, [{job_accept_class, []}]}]).
 -define(JOB_CLASSES, [list_buckets, list_keys, secondary_index, map_reduce]).
+-define(ALL_BUCKETS, [<<"2i_test">>, <<"basic_test">>, <<"mapred_test">>]).
 
 confirm() ->
     lager:info("Deploying 1 node"),
@@ -75,8 +76,8 @@ make_objs(Bucket) ->
                    list_to_binary([N + $A])) %% Vals = ["A", "B", "C"]
      || N <- lists:seq(0, 2)].
 
-verify_features_disabled_http(_Client) ->
-    ok.
+verify_features_disabled_http(Client) ->
+    verify_list_buckets_disabled_http(Client).
 
 verify_features_disabled_pb(Client) ->
     verify_list_buckets_disabled_pd(Client).
@@ -84,8 +85,8 @@ verify_features_disabled_pb(Client) ->
     %%verify_secondary_index_disabled_pd(),
     %%verify_map_reduce_disabled_pd().
 
-verify_features_enabled_http(_Client) ->
-    ok.
+verify_features_enabled_http(Client) ->
+    verify_list_buckets_enabled_http(Client).
 
 verify_features_enabled_pb(Client) ->
     verify_list_buckets_enabled_pb(Client).
@@ -100,4 +101,13 @@ verify_list_buckets_disabled_pd(Client) ->
 verify_list_buckets_enabled_pb(Client) ->
     {ok, Buckets} = riakc_pb_socket:list_buckets(Client),
     SortedBuckets = lists:sort(Buckets),
-    ?assertEqual(SortedBuckets, [<<"2i_test">>, <<"basic_test">>, <<"mapred_test">>]).
+    ?assertEqual(SortedBuckets, ?ALL_BUCKETS).
+
+verify_list_buckets_disabled_http(Client) ->
+    Result = rhc:list_buckets(Client),
+    ?assertMatch({error, {"403", _}}, Result).
+
+verify_list_buckets_enabled_http(Client) ->
+    {ok, Buckets} = rhc:list_buckets(Client),
+    SortedBuckets = lists:sort(Buckets),
+    ?assertEqual(SortedBuckets, ?ALL_BUCKETS).
