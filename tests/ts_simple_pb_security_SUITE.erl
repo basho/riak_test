@@ -171,6 +171,19 @@ receive_keys(Pid, Acc) ->
         {ok, Acc}
     end.
 
+%% If a test creates a table, add it to the ever-growing laundry list
+%% of tables so those tests which need to know about all tables will
+%% have the complete list
+add_table_to_list(Config, Table) ->
+    {_Saver, ConfigList} = ?config(saved_config, Config),
+    {save_config, [{Table}|ConfigList]}.
+
+%% Just like add_table_to_list/2, but required to pass the the config
+%% state to the next test, even if there is no change
+add_no_table_to_list(Config) ->
+    {_Saver, ConfigList} = ?config(saved_config, Config),
+    {save_config, ConfigList}.
+
 %%--------------------------------------------------------------------
 %% TESTS
 %%--------------------------------------------------------------------
@@ -182,7 +195,8 @@ trusted_user_does_not_need_a_password_to_connect_test(Ctx) ->
         ["security", "add-user", User]),
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
-    {ok, _} = client_pid(Ctx, User, NonsensePassword).
+    {ok, _} = client_pid(Ctx, User, NonsensePassword),
+    {save_config,[]}.
 
 password_user_cannot_connect_with_wrong_password_test(Ctx) ->
     User = "stranger",
@@ -194,7 +208,8 @@ password_user_cannot_connect_with_wrong_password_test(Ctx) ->
     ?assertEqual(
         {error,{tcp,<<"Authentication failed">>}},
         client_pid(Ctx, User, Password)
-    ).
+    ),
+    add_no_table_to_list(Ctx).
 
 with_security_user_cannot_create_table_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -217,7 +232,8 @@ with_security_user_cannot_create_table_without_permissions_test(Ctx) ->
             "b SINT64 NOT NULL, "
             "c TIMESTAMP NOT NULL, "
             "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
-    ).
+    ),
+    add_no_table_to_list(Ctx).
 
 with_security_when_user_is_given_permissions_user_can_create_table_test(Ctx) ->
     User = user_name(),
@@ -237,7 +253,8 @@ with_security_when_user_is_given_permissions_user_can_create_table_test(Ctx) ->
             "b SINT64 NOT NULL, "
             "c TIMESTAMP NOT NULL, "
             "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table2">>).
 
 with_security_user_cannot_put_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -261,7 +278,8 @@ with_security_user_cannot_put_without_permissions_test(Ctx) ->
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
         riakc_ts:put(Pid, <<"table3">>, [{1,1,1}])
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table3">>).
 
 with_security_when_user_is_given_permissions_user_can_put_data_test(Ctx) ->
     User = user_name(),
@@ -285,7 +303,8 @@ with_security_when_user_is_given_permissions_user_can_put_data_test(Ctx) ->
     ?assertEqual(
         ok,
         riakc_ts:put(Pid, <<"table4">>, [{1,1,1}])
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table4">>).
 
 with_security_user_cannot_query_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -313,7 +332,8 @@ with_security_user_cannot_query_without_permissions_test(Ctx) ->
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
         riakc_ts:query(Pid, "SELECT a, b, c FROM table5 WHERE a=1 AND b=1 AND c>0 and c<2")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table5">>).
 
 with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
     User = user_name(),
@@ -341,7 +361,8 @@ with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
     ?assertEqual(
         {ok, {[<<"a">>, <<"b">>, <<"c">>], [{1,1,1}]}},
         riakc_ts:query(Pid, "SELECT a, b, c FROM table6 WHERE a=1 AND b=1 AND c>0 and c<2")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table6">>).
 
 with_security_user_cannot_insert_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -365,7 +386,8 @@ with_security_user_cannot_insert_without_permissions_test(Ctx) ->
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
         riakc_ts:query(Pid, "INSERT INTO table7 (a, b, c) VALUES (1, 1 ,1)")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table7">>).
 
 with_security_when_user_is_given_permissions_user_can_insert_data_test(Ctx) ->
     User = user_name(),
@@ -389,7 +411,8 @@ with_security_when_user_is_given_permissions_user_can_insert_data_test(Ctx) ->
     ?assertMatch(
         {ok,{[],[]}},
         riakc_ts:query(Pid, "INSERT INTO table8 (a, b, c) VALUES (1, 1 ,1)")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table8">>).
 
 with_security_user_cannot_list_keys_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -429,7 +452,8 @@ with_security_user_cannot_list_keys_without_permissions_test(Ctx) ->
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
         receive_keys(Pid, [])
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table9">>).
 
 with_security_when_user_is_given_permissions_user_can_list_keys_test(Ctx) ->
     User = user_name(),
@@ -469,7 +493,8 @@ with_security_when_user_is_given_permissions_user_can_list_keys_test(Ctx) ->
     ?assertMatch(
         {ok, _},
         receive_keys(Pid, [])
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table10">>).
 
 with_security_user_cannot_get_data_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -497,7 +522,8 @@ with_security_user_cannot_get_data_without_permissions_test(Ctx) ->
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
         riakc_ts:get(Pid, <<"table11">>, [1,1,1], [])
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table11">>).
 
 with_security_when_user_is_given_permissions_user_can_get_data_test(Ctx) ->
     User = user_name(),
@@ -525,7 +551,8 @@ with_security_when_user_is_given_permissions_user_can_get_data_test(Ctx) ->
     ?assertEqual(
         {ok,{[<<"a">>,<<"b">>,<<"c">>],[{1,1,1}]}},
         riakc_ts:get(Pid, <<"table12">>, [1,1,1], [])
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table12">>).
 
 with_security_user_cannot_delete_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -553,7 +580,8 @@ with_security_user_cannot_delete_without_permissions_test(Ctx) ->
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
         riakc_ts:delete(Pid, <<"table13">>, [1,1,1], [])
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table13">>).
 
 with_security_when_user_is_given_permissions_user_can_delete_test(Ctx) ->
     User = user_name(),
@@ -581,7 +609,8 @@ with_security_when_user_is_given_permissions_user_can_delete_test(Ctx) ->
     ?assertMatch(
         ok,
         riakc_ts:delete(Pid, <<"table14">>, [1,1,1], [])
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table14">>).
 
 with_security_user_cannot_describe_table_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -607,7 +636,8 @@ with_security_user_cannot_describe_table_without_permissions_test(Ctx) ->
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
         riakc_ts:query(Pid, "DESCRIBE table15")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table15">>).
 
 with_security_when_user_is_given_permissions_user_can_describe_table_test(Ctx) ->
     User = user_name(),
@@ -637,7 +667,8 @@ with_security_when_user_is_given_permissions_user_can_describe_table_test(Ctx) -
                 {<<"c">>,<<"timestamp">>,false,3,3,1,
                     <<"s">>}]}},
         riakc_ts:query(Pid, "DESCRIBE table16")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table16">>).
 
 with_security_user_cannot_get_coverage_without_permissions_test(Ctx) ->
     User = user_name(),
@@ -661,7 +692,8 @@ with_security_user_cannot_get_coverage_without_permissions_test(Ctx) ->
     ?assertMatch(
         {error, <<"Permission denied", _/binary>>},
         riakc_ts:get_coverage(Pid, <<"table17">>, "SELECT a, b, c FROM table17 WHERE a=1 AND b=1 AND c>0 and c<2")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table17">>).
 
 with_security_when_user_is_given_permissions_user_can_get_coverage_test(Ctx) ->
     User = user_name(),
@@ -688,4 +720,43 @@ with_security_when_user_is_given_permissions_user_can_get_coverage_test(Ctx) ->
             {<<"c">>,{{1,true},{2,false}}},
             <<"table18 / c >= 1 and c < 2">>}]},
         riakc_ts:get_coverage(Pid, <<"table18">>, "SELECT a, b, c FROM table18 WHERE a=1 AND b=1 AND c>0 and c<2")
-    ).
+    ),
+    add_table_to_list(Ctx, <<"table18">>).
+
+with_security_user_cannot_show_tables_without_permissions_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "all", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    ?assertMatch(
+        {error, <<"Permission denied", _/binary>>},
+        riakc_ts:query(Pid, "SHOW TABLES")
+    ),
+    add_no_table_to_list(Ctx).
+
+with_security_when_user_is_given_permissions_user_can_show_tables_test(Ctx) ->
+    User = user_name(),
+    Password = "password",
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-user", User]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
+    {ok,_} = riak_admin(Ctx,
+        ["security", "grant", "riak_ts.query_describe", "on", "any", "to", User]),
+    {ok, Pid} = client_pid(Ctx, User, Password),
+    {ok, {Columns, Rows}} = riakc_ts:query(Pid, "SHOW TABLES"),
+    {_Saver, TableList} = ?config(saved_config, Ctx),
+    ?assertEqual(
+        [<<"Table">>],
+        Columns
+    ),
+    ?assertEqual(
+        lists:sort(Rows),
+        lists:sort(TableList)
+    ),
+    add_no_table_to_list(Ctx).
