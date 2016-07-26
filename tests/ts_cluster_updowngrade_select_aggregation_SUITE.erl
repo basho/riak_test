@@ -19,9 +19,6 @@
 %% -------------------------------------------------------------------
 -module(ts_cluster_updowngrade_select_aggregation_SUITE).
 
--ifdef(EQC).
--include_lib("eqc/include/eqc.hrl").
-
 -export([
          suite/0,
          init_per_suite/1,
@@ -30,13 +27,9 @@
          run_this_test/1
         ]).
 
-%% EQC exports
--export([gen_scenario/0, gen_version/0, prop_scenario/1]).
-
 -include_lib("common_test/include/ct.hrl").
 -include("ts_updown_util.hrl").
 
--define(TABLE, "updown_aggregation_test_table").
 -define(TEMPERATURE_COL_INDEX, 4).
 -define(PRESSURE_COL_INDEX, 5).
 -define(PRECIPITATION_COL_INDEX, 6).
@@ -62,39 +55,27 @@ end_per_suite(Config) ->
     ts_updown_util:maybe_shutdown_client_node(Config).
 
 
-%% it's 2 to the power of the number of binary scenario parameters in
-%% #scenario{} (6)
--define(NUMCASES, 64).
-
 run_this_test(Config) ->
-    case eqc:quickcheck(
-           eqc:numtests(?NUMCASES, prop_scenario(Config))) of
-        true ->
+    case ts_updown_util:run_scenarios(Config, make_scenarios()) of
+        [] ->
             pass;
         _ ->
             ct:fail("There were failing queries", [])
     end.
 
-prop_scenario(Config) ->
-    ?FORALL(
-       Sce, gen_scenario(),
-       [] == ts_updown_util:run_scenario(Config, Sce)).
-
-gen_scenario() ->
-    ?LET({TableNodeVsn, QueryNodeVsn,
-          NeedTableNodeTransition, NeedQueryNodeTransition,
-          NeedPreClusterMixed, NeedPostClusterMixed},
-         {gen_version(), gen_version(),
-          bool(), bool(), bool(), bool()},
-         #scenario{table_node_vsn = TableNodeVsn,
-                   query_node_vsn = QueryNodeVsn,
-                   need_table_node_transition = NeedTableNodeTransition,
-                   need_query_node_transition = NeedQueryNodeTransition,
-                   need_pre_cluster_mixed = NeedPreClusterMixed,
-                   need_post_cluster_mixed = NeedPostClusterMixed}).
-
-gen_version() ->
-    ?LET(A, oneof([current, previous]), A).
+make_scenarios() ->
+    [#scenario{table_node_vsn             = TableNodeVsn,
+               query_node_vsn             = QueryNodeVsn,
+               need_table_node_transition = NeedTableNodeTransition,
+               need_query_node_transition = NeedQueryNodeTransition,
+               need_pre_cluster_mixed     = NeedPreClusterMixed,
+               need_post_cluster_mixed    = NeedPostClusterMixed}
+     || TableNodeVsn            <- [current, previous],
+        QueryNodeVsn            <- [current, previous],
+        NeedTableNodeTransition <- [true, false],
+        NeedQueryNodeTransition <- [true, false],
+        NeedPreClusterMixed     <- [true, false],
+        NeedPostClusterMixed    <- [true, false]].
 
 
 make_scenario_invariants(Config) ->
@@ -102,7 +83,6 @@ make_scenario_invariants(Config) ->
     {SelectVsExpected, Data} = make_queries_and_data(),
     Config ++
         [
-         {table, <<?TABLE>>},
          {data, Data},
          {ddl, DDL},
          {select_vs_expected, SelectVsExpected}
@@ -201,5 +181,3 @@ count_non_nulls(Col) ->
 
 stddev_fun_builder(Avg) ->
     fun(X, Acc) -> Acc + (Avg-X)*(Avg-X) end.
-
--endif.  %% EQC
