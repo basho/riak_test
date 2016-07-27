@@ -81,10 +81,10 @@ verify_features_disabled_http(Client) ->
     verify_mapred_disabled_http(Client).
 
 verify_features_disabled_pb(Client) ->
-    verify_list_buckets_disabled_pd(Client),
-    verify_list_keys_disabled_pd(Client),
-    verify_secondary_index_disabled_pd(Client).
-    %%verify_map_reduce_disabled_pd().
+    verify_list_buckets_disabled_pb(Client),
+    verify_list_keys_disabled_pb(Client),
+    verify_secondary_index_disabled_pb(Client),
+    verify_mapred_disabled_pb(Client).
 
 verify_features_enabled_http(Client) ->
     verify_list_buckets_enabled_http(Client),
@@ -98,18 +98,22 @@ verify_features_enabled_pb(Client) ->
     verify_secondary_index_enabled_pb(Client).
     %%verify_map_reduce_enabled_pb().
 
-verify_list_buckets_disabled_pd(Client) ->
+verify_list_buckets_disabled_pb(Client) ->
     Expected = {error, <<"Operation 'list_buckets' is not enabled">>},
     ?assertEqual(Expected, riakc_pb_socket:list_buckets(Client)).
 
-verify_list_keys_disabled_pd(Client) ->
+verify_list_keys_disabled_pb(Client) ->
     Expected = {error, <<"Operation 'list_keys' is not enabled">>},
     ?assertEqual(Expected, riakc_pb_socket:list_keys(Client, <<"basic_test">>)).
 
-verify_secondary_index_disabled_pd(Client) ->
+verify_secondary_index_disabled_pb(Client) ->
     Expected = {error, <<"Secondary index queries have been disabled in the configuration">>},
     ?assertEqual(Expected, riakc_pb_socket:get_index(Client, <<"2i_test">>,
                                                      {integer_index, "test_idx"}, 42)).
+
+verify_mapred_disabled_pb(Client) ->
+    Expected = {error, <<"Operation 'map_reduce' is not enabled">>},
+    ?assertEqual(Expected, riakc_pb_socket:mapred(Client, <<"basic_test">>, [])).
 
 verify_list_buckets_enabled_pb(Client) ->
     {ok, Buckets} = riakc_pb_socket:list_buckets(Client),
