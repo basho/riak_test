@@ -28,7 +28,7 @@
 %% and verify all the flags over the course of the test
 -define(CFG, [{riak_core, [{job_accept_class, []}]}]).
 -define(JOB_CLASSES, [list_buckets, list_keys, secondary_index, map_reduce]).
--define(ALL_BUCKETS, [<<"2i_test">>, <<"basic_test">>, <<"mapred_test">>]).
+-define(ALL_BUCKETS, [<<"2i_test">>, <<"basic_test">>]).
 -define(BASIC_TEST_KEYS, [<<"1">>, <<"2">>, <<"3">>]).
 
 confirm() ->
@@ -66,11 +66,7 @@ write_test_data(Client) ->
     O2WithIdx = riakc_obj:update_metadata(O2, MD2),
     SecIdxObjs = [O1, O2WithIdx, O3],
 
-    MapRed1 = riakc_obj:new(<<"mapred_test">>, <<"mine">>, term_to_binary(["eggs", "bacon"])),
-    MapRed2 = riakc_obj:new(<<"mapred_test">>, <<"yours">>, term_to_binary(["bread", "bacon"])),
-    MapRedObjs = [MapRed1, MapRed2],
-
-    [ok = riakc_pb_socket:put(Client, O) || O <- BasicObjs ++ SecIdxObjs ++ MapRedObjs].
+    [ok = riakc_pb_socket:put(Client, O) || O <- BasicObjs ++ SecIdxObjs].
 
 make_objs(Bucket) ->
     [riakc_obj:new(Bucket,
@@ -81,7 +77,8 @@ make_objs(Bucket) ->
 verify_features_disabled_http(Client) ->
     verify_list_buckets_disabled_http(Client),
     verify_list_keys_disabled_http(Client),
-    verify_secondary_index_disabled_http(Client).
+    verify_secondary_index_disabled_http(Client),
+    verify_mapred_disabled_http(Client).
 
 verify_features_disabled_pb(Client) ->
     verify_list_buckets_disabled_pd(Client),
@@ -92,7 +89,8 @@ verify_features_disabled_pb(Client) ->
 verify_features_enabled_http(Client) ->
     verify_list_buckets_enabled_http(Client),
     verify_list_keys_enabled_http(Client),
-    verify_secondary_index_enabled_http(Client).
+    verify_secondary_index_enabled_http(Client),
+    verify_mapred_enabled_http(Client).
 
 verify_features_enabled_pb(Client) ->
     verify_list_buckets_enabled_pb(Client),
@@ -139,6 +137,10 @@ verify_secondary_index_disabled_http(Client) ->
     Result = rhc:get_index(Client, <<"2i_test">>, {integer_index, "test_idx"}, 42),
     ?assertMatch({error, {"403", _}}, Result).
 
+verify_mapred_disabled_http(Client) ->
+    Result = rhc:mapred(Client, <<"basic_test">>, []),
+    ?assertMatch({error, {"403", _}}, Result).
+
 verify_list_buckets_enabled_http(Client) ->
     {ok, Buckets} = rhc:list_buckets(Client),
     SortedBuckets = lists:sort(Buckets),
@@ -152,3 +154,9 @@ verify_list_keys_enabled_http(Client) ->
 verify_secondary_index_enabled_http(Client) ->
     Result = rhc:get_index(Client, <<"2i_test">>, {integer_index, "test_idx"}, 42),
     ?assertMatch({ok, {index_results_v1, [<<"2">>], _, _}}, Result).
+
+verify_mapred_enabled_http(Client) ->
+    {ok, [{_, Results}]} = rhc:mapred(Client, <<"basic_test">>, []),
+    SortedResults = lists:sort(Results),
+    Expected = [[<<"basic_test">>, integer_to_binary(K)] || K <- lists:seq(1, 3)],
+    ?assertEqual(Expected, SortedResults).
