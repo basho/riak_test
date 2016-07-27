@@ -95,8 +95,8 @@ verify_features_enabled_http(Client) ->
 verify_features_enabled_pb(Client) ->
     verify_list_buckets_enabled_pb(Client),
     verify_list_keys_enabled_pb(Client),
-    verify_secondary_index_enabled_pb(Client).
-    %%verify_map_reduce_enabled_pb().
+    verify_secondary_index_enabled_pb(Client),
+    verify_mapred_enabled_pb(Client).
 
 verify_list_buckets_disabled_pb(Client) ->
     Expected = {error, <<"Operation 'list_buckets' is not enabled">>},
@@ -128,6 +128,12 @@ verify_list_keys_enabled_pb(Client) ->
 verify_secondary_index_enabled_pb(Client) ->
     Result = riakc_pb_socket:get_index_eq(Client, <<"2i_test">>, {integer_index, "test_idx"}, 42),
     ?assertMatch({ok, {index_results_v1, [<<"2">>], _, _}}, Result).
+
+verify_mapred_enabled_pb(Client) ->
+    {ok, [{_, Results}]} = riakc_pb_socket:mapred(Client, <<"basic_test">>, []),
+    SortedResults = lists:sort(Results),
+    Expected = [{<<"basic_test">>, integer_to_binary(K)} || K <- lists:seq(1, 3)],
+    ?assertEqual(Expected, SortedResults).
 
 verify_list_buckets_disabled_http(Client) ->
     Result = rhc:list_buckets(Client),
