@@ -21,6 +21,7 @@
 -module(verify_feature_enable_flags).
 
 -behavior(riak_test).
+-compile(export_all).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -42,18 +43,26 @@ confirm() ->
     lager:info("Writing test data via protocol buffers"),
     write_test_data(PbClient),
 
-    lager:info("Verifying features are disabled via HTTP"),
-    verify_features_disabled_http(HttpClient),
-    lager:info("Verifying features are disabled via protocol buffers"),
-    verify_features_disabled_pb(PbClient),
+    run_tests(HttpClient, [verify_list_buckets_disabled_http,
+                           verify_list_keys_disabled_http,
+                           verify_secondary_index_disabled_http,
+                           verify_mapred_disabled_http]),
+    run_tests(PbClient, [verify_list_buckets_disabled_pb,
+                         verify_list_keys_disabled_pb,
+                         verify_secondary_index_disabled_pb,
+                         verify_mapred_disabled_pb]),
 
     lager:info("Enabling all job classes"),
     ok = rpc:call(Node, application, set_env, [riak_core, job_accept_class, ?JOB_CLASSES]),
 
-    lager:info("Verifying features are enabled via HTTP"),
-    verify_features_enabled_http(HttpClient),
-    lager:info("Verifying features are enabled via protocol buffers"),
-    verify_features_enabled_pb(PbClient),
+    run_tests(HttpClient, [verify_list_buckets_enabled_http,
+                           verify_list_keys_enabled_http,
+                           verify_secondary_index_enabled_http,
+                           verify_mapred_enabled_http]),
+    run_tests(PbClient, [verify_list_buckets_enabled_pb,
+                         verify_list_keys_enabled_pb,
+                         verify_secondary_index_enabled_pb,
+                         verify_mapred_enabled_pb]),
 
     pass.
 
@@ -74,29 +83,12 @@ make_objs(Bucket) ->
                    list_to_binary([N + $A])) %% Vals = ["A", "B", "C"]
      || N <- lists:seq(0, 2)].
 
-verify_features_disabled_http(Client) ->
-    verify_list_buckets_disabled_http(Client),
-    verify_list_keys_disabled_http(Client),
-    verify_secondary_index_disabled_http(Client),
-    verify_mapred_disabled_http(Client).
+run_tests(Client, TestList) ->
+    lists:foreach(fun(Test) -> run_test(Client, Test) end, TestList).
 
-verify_features_disabled_pb(Client) ->
-    verify_list_buckets_disabled_pb(Client),
-    verify_list_keys_disabled_pb(Client),
-    verify_secondary_index_disabled_pb(Client),
-    verify_mapred_disabled_pb(Client).
-
-verify_features_enabled_http(Client) ->
-    verify_list_buckets_enabled_http(Client),
-    verify_list_keys_enabled_http(Client),
-    verify_secondary_index_enabled_http(Client),
-    verify_mapred_enabled_http(Client).
-
-verify_features_enabled_pb(Client) ->
-    verify_list_buckets_enabled_pb(Client),
-    verify_list_keys_enabled_pb(Client),
-    verify_secondary_index_enabled_pb(Client),
-    verify_mapred_enabled_pb(Client).
+run_test(Client, Test) ->
+    lager:info("Running test ~p", [Test]),
+    ?MODULE:Test(Client).
 
 verify_list_buckets_disabled_pb(Client) ->
     Expected = {error, <<"Operation 'list_buckets' is not enabled">>},
