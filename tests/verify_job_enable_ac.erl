@@ -18,7 +18,8 @@
 %%
 %% -------------------------------------------------------------------
 
--module(verify_feature_enable_flags).
+%% Verify functionality of async job enable/disable flags in advanced.config.
+-module(verify_job_enable_ac).
 
 -behavior(riak_test).
 -compile(export_all).
