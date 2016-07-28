@@ -103,5 +103,5 @@ wait_and_validate(RingNodes, UpNodes) ->
     [rt:wait_until_owners_according_to(Node, RingNodes) || Node <- UpNodes],
     [rt:wait_for_service(Node, riak_kv) || Node <- UpNodes],
     lager:info("Verify that you got much data... (this is how we do it)"),
-    ?assertEqual([], rt:systest_read(hd(UpNodes), 0, 1000, <<"verify_build_cluster">>, 2)),
+    ?assertEqual([], rt:systest_read(hd(UpNodes), 0, 1000, <<"verify_build_cluster">>, 3)),
     done.

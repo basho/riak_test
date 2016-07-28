@@ -49,15 +49,16 @@ create_table_test(Pid) ->
     State = riak_shell_test_util:shell_init(),
     lager:info("~n~nStart running the command set-------------------------", []),
     CreateTable = lists:flatten(io_lib:format("~s;", [ts_util:get_ddl(small)])),
-    Describe = io_lib:format("+-----------+---------+-------+-----------+---------+~n"
-    "|  Column   |  Type   |Is Null|Primary Key|Local Key|~n"
-    "+-----------+---------+-------+-----------+---------+~n"
-    "| myfamily  | varchar | false |     1     |    1    |~n"
-    "| myseries  | varchar | false |     2     |    2    |~n"
-    "|   time    |timestamp| false |     3     |    3    |~n"
-    "|  weather  | varchar | false |           |         |~n"
-    "|temperature| double  | true  |           |         |~n"
-    "+-----------+---------+-------+-----------+---------+", []),
+    Describe = io_lib:format(
+        "+-----------+---------+-------+-----------+---------+--------+----+~n"
+        "|  Column   |  Type   |Is Null|Primary Key|Local Key|Interval|Unit|~n"
+        "+-----------+---------+-------+-----------+---------+--------+----+~n"
+        "| myfamily  | varchar | false |     1     |    1    |        |    |~n"
+        "| myseries  | varchar | false |     2     |    2    |        |    |~n"
+        "|   time    |timestamp| false |     3     |    3    |   15   | m  |~n"
+        "|  weather  | varchar | false |           |         |        |    |~n"
+        "|temperature| double  | true  |           |         |        |    |~n"
+        "+-----------+---------+-------+-----------+---------+--------+----+", []),
     Cmds = [
             %% 'connection prompt on' means you need to do unicode printing and stuff
             {run,

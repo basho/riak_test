@@ -34,6 +34,7 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
+    application:start(ibrowse),
     [Node|_] = Cluster = ts_util:build_cluster(single),
     rt:wait_for_service(Node, riak_kv),
     [{cluster, Cluster} | Config].

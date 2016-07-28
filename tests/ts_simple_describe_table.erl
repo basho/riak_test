@@ -17,25 +17,30 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc A module to test riak_ts basic create bucket/put/select cycle,
-%%      spanning time quanta.
 
--module(ts_cluster_select_pass_2).
+-module(ts_simple_describe_table).
 
 -behavior(riak_test).
 
--include_lib("eunit/include/eunit.hrl").
-
 -export([confirm/0]).
 
+-include_lib("eunit/include/eunit.hrl").
+
+%% Test basic table description
+
 confirm() ->
-    DDL  = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data_spanning_quanta(),
-    Qry  = ts_util:get_valid_qry_spanning_quanta(),
-    Expected = {ok, {
-        ts_util:get_cols(),
-        ts_util:exclusive_result_from_data(Data, 1, 10)}},
-    Got = ts_util:ts_query(
-            ts_util:cluster_and_connect(multiple), normal, DDL, Data, Qry),
+    DDL = ts_util:get_ddl(),
+    Bucket = ts_util:get_default_bucket(),
+    Qry = "DESCRIBE " ++ Bucket,
+    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
+    ts_util:create_and_activate_bucket_type(ClusterConn, DDL),
+    Got = ts_util:single_query(Conn, Qry),
+    Expected =
+        {ok, {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>, <<"Interval">>, <<"Unit">>],
+        [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1, [], []},
+        {<<"myseries">>,   <<"varchar">>,   false,  2,  2, [], []},
+        {<<"time">>,       <<"timestamp">>, false,  3,  3, 15, <<"m">>},
+        {<<"weather">>,    <<"varchar">>,   false, [], [], [], []},
+        {<<"temperature">>,<<"double">>,    true,  [], [], [], []}]}},
     ?assertEqual(Expected, Got),
     pass.

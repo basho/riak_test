@@ -70,6 +70,7 @@
          get_ip/1,
          get_node_logs/0,
          get_replica/5,
+         get_retry_settings/0,
          get_ring/1,
          get_version/0,
          get_version/1,
@@ -99,6 +100,7 @@
          pbc_read_check/4,
          pbc_read_check/5,
          pbc_set_bucket_prop/3,
+         pbc_set_bucket_type/3,
          pbc_write/4,
          pbc_put_dir/3,
          pbc_put_file/4,
@@ -145,6 +147,7 @@
          upgrade/2,
          upgrade/3,
          versions/0,
+         wait_for_any_webmachine_route/2,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -664,14 +667,18 @@ is_ring_ready(Node) ->
 %%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
 wait_until(Fun) when is_function(Fun) ->
+    {Delay, Retry} = get_retry_settings(),
+    wait_until(Fun, Retry, Delay).
+
+get_retry_settings() ->
     MaxTime = rt_config:get(rt_max_wait_time),
     Delay = rt_config:get(rt_retry_delay),
     Retry = MaxTime div Delay,
-    wait_until(Fun, Retry, Delay).
+    {Delay, Retry}.
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
--spec wait_until([node()], fun((node()) -> boolean())) -> ok.
+-spec wait_until(node(), fun(() -> boolean())) -> ok | {fail, Result :: term()}.
 wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
     wait_until(fun() -> Fun(Node) end);
 
@@ -931,6 +938,7 @@ wait_until_capability(Node, Capability, Value, Default) ->
                           cap_equal(Value, Cap)
                   end).
 
+-spec wait_until_capability_contains(node(), atom() | {atom(), atom()}, list()) -> ok.
 wait_until_capability_contains(Node, Capability, Value) ->
     rt:wait_until(Node,
                 fun(_) ->
@@ -1235,6 +1243,63 @@ versions() ->
 %%% Basic Read/Write Functions
 %%%===================================================================
 
+systest_delete(Node, Size) ->
+    systest_delete(Node, Size, 2).
+
+systest_delete(Node, Size, W) ->
+    systest_delete(Node, 1, Size, <<"systest">>, W).
+
+%% @doc Delete `(End-Start)+1' objects on `Node'. Keys deleted will be
+%% `Start', `Start+1' ... `End', each key being encoded as a 32-bit binary
+%% (`<<Key:32/integer>>').
+%%
+%% The return value of this function is a list of errors
+%% encountered. If all deletes were successful, return value is an
+%% empty list. Each error has the form `{N :: integer(), Error :: term()}',
+%% where `N' is the unencoded key of the object that failed to store.
+systest_delete(Node, Start, End, Bucket, W) ->
+    rt:wait_for_service(Node, riak_kv),
+    {ok, C} = riak:client_connect(Node),
+    F = fun(N, Acc) ->
+                Key = <<N:32/integer>>,
+                try C:delete(Bucket, Key, W) of
+                    ok ->
+                        Acc;
+                    Other ->
+                        [{N, Other} | Acc]
+                catch
+                    What:Why ->
+                        [{N, {What, Why}} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
+
+systest_verify_delete(Node, Size) ->
+    systest_verify_delete(Node, Size, 2).
+
+systest_verify_delete(Node, Size, R) ->
+    systest_verify_delete(Node, 1, Size, <<"systest">>, R).
+
+%% @doc Read a series of keys on `Node' and verify that the objects
+%% do not exist. This could, for instance, be used as a followup to
+%% `systest_delete' to ensure that the objects were actually deleted.
+systest_verify_delete(Node, Start, End, Bucket, R) ->
+    rt:wait_for_service(Node, riak_kv),
+    {ok, C} = riak:client_connect(Node),
+    F = fun(N, Acc) ->
+                Key = <<N:32/integer>>,
+                try C:get(Bucket, Key, R) of
+                    {error, notfound} ->
+                        [];
+                    Other ->
+                        [{N, Other} | Acc]
+                catch
+                    What:Why ->
+                        [{N, {What, Why}} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
+
 systest_write(Node, Size) ->
     systest_write(Node, Size, 2).
 
@@ -1494,6 +1559,11 @@ pbc_write(Pid, Bucket, Key, Value, CT) ->
 -spec pbc_set_bucket_prop(pid(), binary(), [proplists:property()]) -> atom().
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
+
+%% @doc sets a bucket type property/properties via the erlang protobuf client
+-spec pbc_set_bucket_type(pid(), binary(), [proplists:property()]) -> atom().
+pbc_set_bucket_type(Pid, Bucket, PropList) ->
+    riakc_pb_socket:set_bucket_type(Pid, Bucket, PropList).
 
 %% @doc Puts the contents of the given file into the given bucket using the
 %% filename as a key and assuming a plain text content type.
@@ -1777,6 +1847,13 @@ setup_harness(Test, Args) ->
 get_node_logs() ->
     ?HARNESS:get_node_logs().
 
+%% @doc Performs a search against the log files on `Node' and returns all
+%% matching lines.
+-spec search_logs(node(), Pattern::iodata()) ->
+    [{Path::string(), LineNum::pos_integer(), MatchingLine::string()}].
+search_logs(Node, Pattern) ->
+    ?HARNESS:search_logs(Node, Pattern).
+
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
         {status, _Pid, {module, gen_server} ,_} -> ok
@@ -1904,8 +1981,11 @@ setup_log_capture(Nodes) when is_list(Nodes) ->
 setup_log_capture(Node) when not is_list(Node) ->
     setup_log_capture([Node]).
 
-
 expect_in_log(Node, Pattern) ->
+    {Delay, Retry} = get_retry_settings(),
+    expect_in_log(Node, Pattern, Retry, Delay).
+
+expect_in_log(Node, Pattern, Retry, Delay) ->
     CheckLogFun = fun() ->
             Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
             lager:info("looking for pattern ~s in logs for ~p",
@@ -1919,10 +1999,21 @@ expect_in_log(Node, Pattern) ->
                     false
             end
     end,
-    case rt:wait_until(CheckLogFun) of
+    case rt:wait_until(CheckLogFun, Retry, Delay) of
         ok ->
             true;
         _ ->
+            false
+    end.
+
+%% @doc Returns `true' if Pattern is _not_ found in the logs for `Node',
+%% `false' if it _is_ found.
+-spec expect_not_in_logs(Node::node(), Pattern::iodata()) -> boolean().
+expect_not_in_logs(Node, Pattern) ->
+    case search_logs(Node, Pattern) of
+        [] ->
+            true;
+        _Matches ->
             false
     end.
 
@@ -1948,30 +2039,31 @@ wait_for_control(_Vsn, Node) when is_atom(Node) ->
                 end
         end),
 
-    lager:info("Waiting for routes to be added to supervisor..."),
-
     %% Wait for routes to be added by supervisor.
-    rt:wait_until(Node, fun(N) ->
-                case rpc:call(N,
-                              webmachine_router,
-                              get_routes,
-                              []) of
-                    {badrpc, Error} ->
-                        lager:info("Error was ~p.", [Error]),
-                        false;
-                    Routes ->
-                        case is_control_gui_route_loaded(Routes) of
-                            false ->
-                                false;
-                            _ ->
-                                true
-                        end
-                end
-        end).
+    wait_for_any_webmachine_route(Node, [admin_gui, riak_control_wm_gui]).
 
-%% @doc Is the riak_control GUI route loaded?
-is_control_gui_route_loaded(Routes) ->
-    lists:keymember(admin_gui, 2, Routes) orelse lists:keymember(riak_control_wm_gui, 2, Routes).
+wait_for_any_webmachine_route(Node, Routes) ->
+    lager:info("Waiting for routes ~p to be added to webmachine.", [Routes]),
+    rt:wait_until(Node, fun(N) ->
+        case rpc:call(N, webmachine_router, get_routes, []) of
+            {badrpc, Error} ->
+                lager:info("Error was ~p.", [Error]),
+                false;
+            RegisteredRoutes ->
+                case is_any_route_loaded(Routes, RegisteredRoutes) of
+                    false ->
+                        false;
+                    _ ->
+                        true
+                end
+        end
+    end).
+
+is_any_route_loaded(SearchRoutes, RegisteredRoutes) ->
+    lists:any(fun(Route) -> is_route_loaded(Route, RegisteredRoutes) end, SearchRoutes).
+
+is_route_loaded(Route, Routes) ->
+    lists:keymember(Route, 2, Routes).
 
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
