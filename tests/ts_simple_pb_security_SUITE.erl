@@ -225,7 +225,7 @@ with_security_user_cannot_create_table_without_permissions_test(Ctx) ->
     ?assertEqual(
         {error,
          <<"Permission denied: User '", UserBin/binary, "' does not have ",
-         "'riak_ts.query_create_table' on table1">>},
+         "'riak_ts.create_table' on table1">>},
         riakc_ts:query(Pid,
             "CREATE TABLE table1 ("
             "a SINT64 NOT NULL, "
@@ -243,7 +243,7 @@ with_security_when_user_is_given_permissions_user_can_create_table_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok, {[],[]}},
@@ -264,7 +264,7 @@ with_security_user_cannot_put_without_permissions_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -289,7 +289,7 @@ with_security_when_user_is_given_permissions_user_can_put_data_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -314,7 +314,7 @@ with_security_user_cannot_query_without_permissions_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -343,7 +343,7 @@ with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.query_select", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put,riak_ts.query_select", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -372,7 +372,7 @@ with_security_user_cannot_insert_without_permissions_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -397,7 +397,7 @@ with_security_when_user_is_given_permissions_user_can_insert_data_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -422,7 +422,7 @@ with_security_user_cannot_list_keys_without_permissions_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -463,7 +463,7 @@ with_security_when_user_is_given_permissions_user_can_list_keys_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.list_keys", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put,riak_ts.list_keys", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -504,7 +504,7 @@ with_security_user_cannot_get_data_without_permissions_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -533,7 +533,7 @@ with_security_when_user_is_given_permissions_user_can_get_data_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.get", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put,riak_ts.get", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -562,7 +562,7 @@ with_security_user_cannot_delete_without_permissions_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -591,7 +591,7 @@ with_security_when_user_is_given_permissions_user_can_delete_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.put,riak_ts.delete", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.put,riak_ts.delete", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -620,7 +620,7 @@ with_security_user_cannot_describe_table_without_permissions_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     %% just assert on the error message this once, to make sure it is getting
     %% formatted correctly.
@@ -647,7 +647,7 @@ with_security_when_user_is_given_permissions_user_can_describe_table_test(Ctx) -
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.query_describe", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.describe_table", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok, {[],[]}},
@@ -678,7 +678,7 @@ with_security_user_cannot_get_coverage_without_permissions_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -703,7 +703,7 @@ with_security_when_user_is_given_permissions_user_can_get_coverage_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_create_table,riak_ts.coverage", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.create_table,riak_ts.coverage", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     ?assertEqual(
         {ok,{[],[]}},
@@ -747,7 +747,7 @@ with_security_when_user_is_given_permissions_user_can_show_tables_test(Ctx) ->
     {ok,_} = riak_admin(Ctx,
         ["security", "add-source", "all", "127.0.0.1/32", "trust"]),
     {ok,_} = riak_admin(Ctx,
-        ["security", "grant", "riak_ts.query_show_tables", "on", "any", "to", User]),
+        ["security", "grant", "riak_ts.show_tables", "on", "any", "to", User]),
     {ok, Pid} = client_pid(Ctx, User, Password),
     {ok, {Columns, Rows}} = riakc_ts:query(Pid, "SHOW TABLES"),
     {_Saver, TableList} = ?config(saved_config, Ctx),
