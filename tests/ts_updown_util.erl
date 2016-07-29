@@ -397,8 +397,7 @@ run_select(#select{qry = Q, expected = Exp}, QryNo, Tablename, QueryNode, Config
     Got = query_with_client(SelectQuery, QueryNode, Config),
     case ts_util:assert_float(fmt("Query #~p", [QryNo]), Exp, Got) of
         pass -> pass;
-        fail -> gg:format("failing SelectQuery is ~p~n- Got is ~p~n- Exp is ~p~n", [SelectQuery, Got, Exp]),
-#fail{message  = SelectQuery,
+        fail -> #fail{message  = SelectQuery,
                       expected = Exp,
                       got      = Got}
     end.
