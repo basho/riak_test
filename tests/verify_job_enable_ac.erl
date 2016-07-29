@@ -25,13 +25,19 @@
 -compile(export_all).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+-include("job_enable_common.hrl").
 
 %% Start with all job classes disabled - we'll slowly enable
 %% and verify all the flags over the course of the test
--define(CFG, [{riak_core, [{job_accept_class, []}]}]).
--define(JOB_CLASSES, [list_buckets, list_keys, secondary_index, map_reduce]).
+-define(CFG, [{riak_core, [{?ADVANCED_CONFIG_KEY, []}]}]).
 -define(ALL_BUCKETS, [<<"2i_test">>, <<"basic_test">>]).
 -define(BASIC_TEST_KEYS, [<<"1">>, <<"2">>, <<"3">>]).
+-define(JOB_CLASSES, [
+    ?TOKEN_LIST_BUCKETS,
+    ?TOKEN_LIST_KEYS,
+    ?TOKEN_MAP_REDUCE,
+    ?TOKEN_SEC_INDEX
+]).
 
 confirm() ->
     lager:info("Deploying 1 node"),
@@ -54,7 +60,8 @@ confirm() ->
                          verify_mapred_disabled_pb]),
 
     lager:info("Enabling all job classes"),
-    ok = rpc:call(Node, application, set_env, [riak_core, job_accept_class, ?JOB_CLASSES]),
+    ok = rpc:call(Node, application, set_env,
+        [riak_core, ?ADVANCED_CONFIG_KEY, ?JOB_CLASSES]),
 
     run_tests(HttpClient, [verify_list_buckets_enabled_http,
                            verify_list_keys_enabled_http,
@@ -92,20 +99,20 @@ run_test(Client, Test) ->
     ?MODULE:Test(Client).
 
 verify_list_buckets_disabled_pb(Client) ->
-    Expected = {error, <<"Operation 'list_buckets' is not enabled">>},
+    Expected = {error, ?ERRMSG_LIST_BUCKETS_DISABLED},
     ?assertEqual(Expected, riakc_pb_socket:list_buckets(Client)).
 
 verify_list_keys_disabled_pb(Client) ->
-    Expected = {error, <<"Operation 'list_keys' is not enabled">>},
+    Expected = {error, ?ERRMSG_LIST_KEYS_DISABLED},
     ?assertEqual(Expected, riakc_pb_socket:list_keys(Client, <<"basic_test">>)).
 
 verify_secondary_index_disabled_pb(Client) ->
-    Expected = {error, <<"Secondary index queries have been disabled in the configuration">>},
+    Expected = {error, ?ERRMSG_SEC_INDEX_DISABLED},
     ?assertEqual(Expected, riakc_pb_socket:get_index(Client, <<"2i_test">>,
                                                      {integer_index, "test_idx"}, 42)).
 
 verify_mapred_disabled_pb(Client) ->
-    Expected = {error, <<"Operation 'map_reduce' is not enabled">>},
+    Expected = {error, ?ERRMSG_MAP_REDUCE_DISABLED},
     ?assertEqual(Expected, riakc_pb_socket:mapred(Client, <<"basic_test">>, [])).
 
 verify_list_buckets_enabled_pb(Client) ->
