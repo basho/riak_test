@@ -33,8 +33,12 @@
     ?TOKEN_LIST_BUCKETS,
     ?TOKEN_LIST_KEYS,
     ?TOKEN_MAP_REDUCE,
-    ?TOKEN_SEC_INDEX
-%   ?TOKEN_YZ_SEARCH
+    ?TOKEN_SEC_INDEX,
+    ?TOKEN_YZ_SEARCH
+]).
+-define(COMMON_CONFIG,  [
+    {"storage_backend", "leveldb"}, % required by ?TOKEN_SEC_INDEX above
+    {"search",          "on"}       % required by ?TOKEN_YZ_SEARCH above
 ]).
 
 %% ===================================================================
@@ -44,13 +48,18 @@
 confirm() ->
     Configs = [
         {current, {cuttlefish,
-            [{"storage_backend", "leveldb"}] ++ config(?TEST_OPS, Bool, [])}}
+            ?COMMON_CONFIG ++ config(?TEST_OPS, Bool, [])}}
         % make it a 4 node cluster so things get scattered around
         % everything's enabled on the trailing nodes
         || Bool <- ?TEST_ORDER ++ [true, true]],
 
     lager:info("Deploying ~b nodes ...", [erlang:length(Configs)]),
-    Nodes = rt:deploy_nodes(Configs),
+    [Node | _] = Nodes = rt:deploy_nodes(Configs),
+
+    % create the YZ search index
+    {_, Mod, Conn} = Client = job_enable_common:open_client(pbc, Node),
+    ?assertEqual(ok, Mod:create_search_index(Conn, job_enable_common:index_yz())),
+    job_enable_common:close_client(Client),
 
     job_enable_common:setup_cluster(Nodes),
 

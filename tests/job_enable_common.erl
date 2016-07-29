@@ -300,9 +300,9 @@ test_operation(Node, ?TOKEN_SEC_INDEX, Enabled, ClientType) ->
 
 %% This requires that YZ be running and that
 %%  riakc_pb_socket:create_search_index(Connection, index_yz())
-%% or equivalent has been successfully called before invoking this test.
-%% This module's load/data/1 function DOES NOT do this for you.
-test_operation(Node, ?TOKEN_YZ_SEARCH, Enabled, ClientType) ->
+%% (or equivalent) has been successfully called before invoking this test.
+%% This module's load_data/1 function DOES NOT do this for you by default.
+test_operation(Node, ?TOKEN_YZ_SEARCH, Enabled, pbc = ClientType) ->
     Index   = index_yz(),
     Bucket  = populated_bucket(),
     Num     = random:uniform(num_keys()),
@@ -315,12 +315,29 @@ test_operation(Node, ?TOKEN_YZ_SEARCH, Enabled, ClientType) ->
         true ->
             ?assertMatch({ok, #search_results{}}, Result);
         false ->
-            case ClientType of
-                pbc ->
-                    ?assertEqual({error, ?ERRMSG_YZ_SEARCH_DISABLED}, Result);
-                http ->
-                    ?assertMatch({error, {"403", _}}, Result)
-            end
+            ?assertEqual({error, ?ERRMSG_YZ_SEARCH_DISABLED}, Result)
+    end;
+test_operation(Node, ?TOKEN_YZ_SEARCH, Enabled, http) ->
+    % The rhs module's search functions don't do anything remotely like their
+    % PB equivalents, so this specific test has to depart from the pattern
+    % entirely.
+    Bucket = populated_bucket(),
+    Num = random:uniform(num_keys()),
+    Key = bin_key(Num),
+    % more reliable than calling rt:get_https_conn_info directly
+    RHC = rt:httpc(Node),
+    URL = lists:flatten([
+            "http://", rhc:ip(RHC), ":", erlang:integer_to_list(rhc:port(RHC)),
+            "/search/query/", erlang:binary_to_list(index_yz()),
+            "?wt=json&q=_yz_rb:", erlang:binary_to_list(Bucket),
+            "%20AND%20_yz_rk:", erlang:binary_to_list(Key) ]),
+    Result = ibrowse:send_req(URL, [], get),
+
+    case Enabled of
+        true ->
+            ?assertMatch({ok, "200", _, _}, Result);
+        false ->
+            ?assertMatch({ok, "403", _, _}, Result)
     end.
 
 %% ===================================================================
