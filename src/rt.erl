@@ -1824,7 +1824,7 @@ log_to_nodes(Nodes0, LFmt, LArgs) ->
            end,
     [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 
-%% @private utility function
+%% @doc Parallel map
 pmap(F, L) ->
     Parent = self(),
     lists:foldl(
