@@ -172,7 +172,7 @@ sql_select_downgrade_a_node_test(_) ->
     rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 2),
     rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 2),
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 2),
-    c
+    rt:upgrade(Node_A, ?TS_VERSION_1_3),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 1),
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 1),
