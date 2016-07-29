@@ -119,7 +119,7 @@ run_scenario(Config,
            "          need_table_node_transition: ~p\n"
            "          need_query_node_transition: ~p\n"
            "          need_pre_cluster_mixed: ~p\n"
-           "          need_post_cluster_mixed: ~p\n", 
+           "          need_post_cluster_mixed: ~p\n",
            [TableNodeVsn, QueryNodeVsn,
             NeedTableNodeTransition, NeedQueryNodeTransition,
             NeedPreClusterMixed, NeedPostClusterMixed]),
@@ -197,11 +197,11 @@ query_with_client(Query, Node, Config) ->
     case Version of
         current ->
             riakc_ts:query(Client, Query);
-                              previous ->
-                             rpc:call(
-                               ?CFG(previous_client_node, Config),
-                               riakc_ts, query, [Client, Query])
-     end.
+        previous ->
+            rpc:call(
+              ?CFG(previous_client_node, Config),
+              riakc_ts, query, [Client, Query])
+    end.
 
 
 -spec is_cluster_mixed(versioned_cluster()) -> boolean().
@@ -341,8 +341,8 @@ fmt(F, A) ->
 
 make_tables(#test_set{create = #create{should_skip = true}}, _TableNode) ->
     pass;
-make_tables(#test_set{timestamp = Timestamp, 
-                      create    = #create{ddl      = DDLFmt, 
+make_tables(#test_set{timestamp = Timestamp,
+                      create    = #create{ddl      = DDLFmt,
                                           expected = Exp}}, TableNode) ->
     %% fast machines:
     timer:sleep(1),
@@ -364,13 +364,13 @@ make_tables(#test_set{timestamp = Timestamp,
 insert_data(#test_set{insert = #insert{should_skip = true}}, _TableNode) ->
     pass;
 insert_data(#test_set{timestamp = Timestamp,
-                      insert    = #insert{data     = Data, 
+                      insert    = #insert{data     = Data,
                                           expected = Exp}}, TableNode) ->
     Client1 = rt:pbc(TableNode),
     Table = get_table_name(Timestamp),
     case riakc_ts:put(Client1, Table, Data) of
         Exp ->
-            ct:log("Table ~p on ~p had ~b records successfully inserted)", 
+            ct:log("Table ~p on ~p had ~b records successfully inserted)",
                    [Table, TableNode, length(Data)]),
             pass;
         Error ->
@@ -380,15 +380,15 @@ insert_data(#test_set{timestamp = Timestamp,
                   got      = Error}
     end.
 
-run_selects(#test_set{timestamp = Timestamp, 
+run_selects(#test_set{timestamp = Timestamp,
                       selects   = Selects}, QueryNode, Config) ->
     QryNos = lists:seq(1, length(Selects)),
     Zip = lists:zip(Selects, QryNos),
     lists:flatten([run_select(S, QN, Timestamp, QueryNode, Config) || {S, QN} <- Zip]).
 
-run_select(#select{should_skip = true}, _QryNo, _Timestamp, _QueryNode, _Config) -> 
+run_select(#select{should_skip = true}, _QryNo, _Timestamp, _QueryNode, _Config) ->
     pass;
-run_select(#select{qry = Q, expected = Exp}, QryNo, Timestamp, QueryNode, Config) -> 
+run_select(#select{qry = Q, expected = Exp}, QryNo, Timestamp, QueryNode, Config) ->
     Table = get_table_name(Timestamp),
     SelectQuery = fmt(Q, [Table]),
     Got = query_with_client(SelectQuery, QueryNode, Config),
@@ -402,7 +402,7 @@ run_select(#select{qry = Q, expected = Exp}, QryNo, Timestamp, QueryNode, Config
 add_timestamps(TestSets) ->
     [X#test_set{timestamp = make_timestamp()} || X <- TestSets].
 
-make_timestamp() -> 
+make_timestamp() ->
     {_Mega, Sec, Milli} = os:timestamp(),
     fmt("~b~b", [Sec, Milli]).
 
