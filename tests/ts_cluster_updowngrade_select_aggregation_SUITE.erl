@@ -46,7 +46,8 @@ make_scenario_invariants(Config) ->
     Create = #create{ddl = DDL,   expected = {ok, {[], []}}},
     Insert = #insert{data = Data, expected = ok},
     Selects = [#select{qry = Q,   expected = E} || {Q, E} <- SelectVsExpected],
-    DefaultTestSets = [#test_set{create  = Create,
+    DefaultTestSets = [#test_set{testname = "basic_select_aggregation",
+                                 create  = Create,
                                  insert  = Insert,
                                  selects = Selects}],
     Config ++ [{default_tests, DefaultTestSets}].

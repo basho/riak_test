@@ -51,6 +51,7 @@
          }).
 
 -record(test_set, {
+          testname     :: string(),
           create       :: #create{},
           insert       :: #insert{},
           selects = [] :: [#select{}],
