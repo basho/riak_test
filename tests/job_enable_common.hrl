@@ -31,14 +31,14 @@
 -define(TOKEN_YZ_SEARCH,        'riak_search').
 
 -define(ERRMSG_LIST_BUCKETS_DISABLED,
-    <<"Operation 'list_buckets' is not enabled">>).
+        <<"Operation 'list_buckets' is not enabled">>).
 -define(ERRMSG_LIST_KEYS_DISABLED,
-    <<"Operation 'list_keys' is not enabled">>).
+        <<"Operation 'list_keys' is not enabled">>).
 -define(ERRMSG_MAP_REDUCE_DISABLED,
-    <<"Operation 'map_reduce' is not enabled">>).
+        <<"Operation 'map_reduce' is not enabled">>).
 -define(ERRMSG_SEC_INDEX_DISABLED,
-    <<"Secondary index queries have been disabled in the configuration">>).
+        <<"Operation 'secondary_index' is not enabled">>).
 -define(ERRMSG_YZ_SEARCH_DISABLED,
-    <<"Operation 'riak_search' is not enabled">>).
+        <<"Operation 'riak_search' is not enabled">>).
 
 -endif. % job_enable_common_included
