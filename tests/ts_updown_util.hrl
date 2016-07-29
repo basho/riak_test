@@ -24,10 +24,38 @@
 -define(CFG(K, C), proplists:get_value(K, C)).
 
 -type cell() :: integer() | float() | binary() | boolean().
--type row() :: [cell()].
+-type row()  :: [cell()].
 
--type config() :: proplists:proplist().
+-type config()  :: proplists:proplist().
 -type version() :: current | previous.
+
+-record(create, {
+          should_skip = false :: boolean(),
+          ddl      :: binary,
+          expected :: term()
+         }).
+
+-record(insert, {
+          should_skip = false :: boolean(),
+          %% A list of data to write to the table
+          data     :: [row()],
+          expected :: term()
+         }).
+
+-record(select, {
+          should_skip = false :: boolean(),
+          %% the select query is an io_lib:format containing a single "~s" placeholder 
+          %% for the table name
+          qry      :: binary(),
+          expected :: term()
+         }).
+
+-record(test_set, {
+          create       :: #create{},
+          insert       :: #insert{},
+          selects = [] :: [#select{}],
+          timestamp    :: string()
+         }).
 
 %% Scenario description and requirements
 -record(scenario, {
@@ -48,20 +76,19 @@
           %% after transitions)
           need_pre_cluster_mixed :: boolean(),
           need_post_cluster_mixed :: boolean(),
+          
+          tests = [] :: [#test_set{}]
 
-          %% Table DDL (an io:format template containing a single
-          %% "~s", because we will be generating a unique name for
-          %% each scenario)
-          ddl :: binary(),
-
-          %% Data to write to the table
-          data :: [row()],
-
-          %% a list of {SelectQueryFmt, Expected} (`SelectQueryFmt'
-          %% must contain a single "~s" placeholder for the table name
-          select_vs_expected :: [{binary(), term()}]
          }).
 
+
+%% fail record
+-record(fail, {
+          message  :: binary(),
+          expected :: term(),
+          got      :: term()
+         }).
+                     
 
 %% Error report
 -record(failure_report, {
@@ -79,8 +106,8 @@
           did_transition_table_node :: boolean(),
           did_transition_query_node :: boolean(),
 
-          %% the failing query proper
-          failing_query :: binary(),
+          %% the failing test proper
+          failing_test :: binary(),
 
           %% Expected and Got
           expected :: term(),

@@ -19,49 +19,11 @@
 %% -------------------------------------------------------------------
 -module(ts_cluster_updowngrade_select_aggregation_SUITE).
 
--export([
-         suite/0,
-         init_per_suite/1,
-         end_per_suite/1,
-         all/0,
-         run_this_test/1
-        ]).
-
--include_lib("common_test/include/ct.hrl").
--include("ts_updown_util.hrl").
+-include("ts_updowngrade_test.part").
 
 -define(TEMPERATURE_COL_INDEX, 4).
 -define(PRESSURE_COL_INDEX, 5).
 -define(PRECIPITATION_COL_INDEX, 6).
-
-%% Callbacks
-
-suite() ->
-    [{timetrap, {seconds, 9000}}].
-
-all() ->
-    [
-     run_this_test
-    ].
-
-init_per_suite(Config) ->
-    lists:foldl(
-      fun(Fun, Cfg) -> Fun(Cfg) end,
-      Config,
-      [fun ts_updown_util:setup/1,
-       fun make_scenario_invariants/1]).
-
-end_per_suite(Config) ->
-    ts_updown_util:maybe_shutdown_client_node(Config).
-
-
-run_this_test(Config) ->
-    case ts_updown_util:run_scenarios(Config, make_scenarios()) of
-        [] ->
-            pass;
-        _ ->
-            ct:fail("There were failing queries", [])
-    end.
 
 make_scenarios() ->
     [#scenario{table_node_vsn             = TableNodeVsn,
@@ -81,12 +43,13 @@ make_scenarios() ->
 make_scenario_invariants(Config) ->
     DDL = ts_util:get_ddl(aggregation, "~s"),
     {SelectVsExpected, Data} = make_queries_and_data(),
-    Config ++
-        [
-         {data, Data},
-         {ddl, DDL},
-         {select_vs_expected, SelectVsExpected}
-        ].
+    Create = #create{ddl = DDL,   expected = {ok, {[], []}}},
+    Insert = #insert{data = Data, expected = ok},
+    Selects = [#select{qry = Q,   expected = E} || {Q, E} <- SelectVsExpected],
+    DefaultTestSets = [#test_set{create  = Create,
+                                 insert  = Insert,
+                                 selects = Selects}],
+    Config ++ [{default_tests, DefaultTestSets}].
 
 make_queries_and_data() ->
     Count = 10,
@@ -176,8 +139,8 @@ make_queries_and_data() ->
     %% exact error string in `{error, {ErrCode, ErrMessage}}` -- use a
     %% '_' in place of ErrMessage.
 
-    {[{N, {Q, {ok, Val}}} || {N, {Q, Val}} <- lists:zip(lists:seq(1, Count), QQEE)],
-     Data}.
+    ExpVGot = [{Q, {ok, Val}} || {Q, Val} <-  QQEE],
+    {ExpVGot, Data}.
 
 
 count_non_nulls(Col) ->
