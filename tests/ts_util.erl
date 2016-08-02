@@ -140,7 +140,7 @@ ts_insert(Conn, Table, Columns, Data) ->
     TermFn = fun insert_term_format/2,
     ColClause = string:strip(lists:foldl(ColFn, [], Columns), right, $,),
     ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
-    SQL = flat_format("INSERT INTO ~s (~s) VALUES (~s)",
+    SQL = flat_format("INSERT INTO ~s (~s) VALUES (~ts)",
                       [Table, ColClause, ValClause]),
     lager:info("~ts", [SQL]),
     Got = riakc_ts:query(Conn, SQL),
@@ -150,7 +150,7 @@ ts_insert(Conn, Table, Columns, Data) ->
 ts_insert_no_columns(Conn, Table, Data) ->
     TermFn = fun insert_term_format/2,
     ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
-    SQL = flat_format("INSERT INTO ~s VALUES (~s)",
+    SQL = flat_format("INSERT INTO ~s VALUES (~ts)",
         [Table, ValClause]),
     lager:info("~ts", [SQL]),
     Got = riakc_ts:query(Conn, SQL),
@@ -505,7 +505,8 @@ get_integer() ->
 get_s(0, Acc) ->
     Acc;
 get_s(N, Acc) when is_integer(N) andalso N > 0 ->
-    get_s(N - 1, [random:uniform(255) | Acc]).
+    %% make it plain ASCII
+    get_s(N - 1, [crypto:rand_uniform($a, $z) | Acc]).
 
 get_timestamp() ->
     random:uniform(?MAXTIMESTAMP).
