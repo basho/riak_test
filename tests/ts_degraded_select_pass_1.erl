@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -29,18 +29,37 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
-    Qry = ts_util:get_valid_qry(),
-    Expected = {
-        ts_util:get_cols(),
-        ts_util:exclusive_result_from_data(Data, 2, 9)},
-    {[_Node|Rest], Conn} = ClusterConn = ts_util:cluster_and_connect(multiple),
-    Got = ts_util:ts_query(ClusterConn, normal, DDL, Data, Qry),
-    ?assertEqual(Expected, Got),
+    OrigCluster = rt:deploy_nodes(3),
+    OrigClients = [rt:pbc(Node) || Node <- OrigCluster],
+    OrigCCNN = lists:zip(OrigCluster, OrigClients),
+    ok = rt:join_cluster(OrigCluster),
 
-    % Stop Node 2 after bucket type has been activated
-    rt:stop(hd(Rest)),
-    Got1 = ts_util:single_query(Conn, Qry),
-    ?assertEqual(Expected, Got1),
+    DDL = ts_util:get_ddl(),
+    ?assertEqual({ok, {[], []}}, riakc_ts:query(hd(OrigClients), DDL)),
+
+    Table = ts_util:get_default_bucket(),
+    Data = ts_util:get_valid_select_data(),
+    ?assertEqual(ok, riakc_ts:put(hd(OrigClients), Table, Data)),
+
+    Qry = ts_util:get_valid_qry(0, 11),
+
+    ok = check_data(OrigCCNN, Qry, Data),
+
+    {NodeOut, _} = lists:nth(2, OrigCCNN),
+    ok = rt:leave(NodeOut),
+    DegradedCluster = OrigCluster -- [NodeOut],
+    DegradedCCNN = lists:keydelete(NodeOut, 1, OrigCCNN),
+    ok = rt:wait_until_no_pending_changes(DegradedCluster),
+    ok = check_data(DegradedCCNN, Qry, Data),
+
     pass.
+
+check_data(CCNN, Qry, Expected) ->
+    lists:foreach(
+      fun({Node, Client}) ->
+              {ok, {_Cols, GotRows0}} = riakc_ts:query(Client, Qry),
+              GotRows = lists:sort(GotRows0),
+              io:format("Got ~b records at ~p\n", [length(GotRows), Node]),
+              ?assertEqual(Expected, GotRows)
+      end,
+      CCNN).

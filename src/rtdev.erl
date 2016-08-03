@@ -79,6 +79,9 @@ run_riak(N, Path, Cmd) ->
             R
     end.
 
+riak_data(N) when is_integer(N) ->
+    lists:flatten(io_lib:format("~s/dev/dev~b/data", [relpath(current), N])).
+
 run_riak_repl(N, Path, Cmd) ->
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
     os:cmd(riakreplcmd(Path, N, Cmd)).
@@ -764,6 +767,46 @@ get_node_logs() ->
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+
+%% @doc Performs a search against the log files on `Node' and returns all
+%% matching lines.
+-spec search_logs(node(), Pattern::iodata()) ->
+    [{Path::string(), LineNum::pos_integer(), Match::string()}].
+search_logs(Node, Pattern) ->
+    Root = filename:absname(proplists:get_value(root, ?PATH)),
+    Wildcard = Root ++ "/*/dev/" ++ node_name(Node) ++ "/log/*",
+    LogFiles = filelib:wildcard(Wildcard),
+    AllMatches = rt:pmap(fun(File) ->
+                                 search_file(File, Pattern)
+                         end,
+                         LogFiles),
+    lists:flatten(AllMatches).
+
+search_file(File, Pattern) ->
+    {ok, Device} = file:open(File, [read]),
+    Matches = search_file(Device, File, Pattern, 1, []),
+    lists:reverse(Matches).
+
+search_file(Device, File, Pattern, LineNum, Accum) ->
+    case io:get_line(Device, "") of
+        eof ->
+            file:close(Device),
+            Accum;
+        Line ->
+            NewAccum = case re:run(Line, Pattern) of
+                           {match, _Captured} ->
+                               Match = {File, LineNum, Line},
+                               [Match|Accum];
+                           nomatch ->
+                               Accum
+                       end,
+            search_file(Device, File, Pattern, LineNum + 1, NewAccum)
+    end.
+
+
+-spec node_name(node()) -> string().
+node_name(Node) ->
+    lists:takewhile(fun(C) -> C /= $@ end, atom_to_list(Node)).
 
 -ifdef(TEST).
 

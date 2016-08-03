@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(ts_riak_shell_basic_sql).
+-module(ts_cluster_riak_shell_basic_sql).
 
 -behavior(riak_test).
 
@@ -49,15 +49,16 @@ create_table_test(Pid) ->
     State = riak_shell_test_util:shell_init(),
     lager:info("~n~nStart running the command set-------------------------", []),
     CreateTable = lists:flatten(io_lib:format("~s;", [ts_util:get_ddl(small)])),
-    Describe = io_lib:format("+-----------+---------+-------+-----------+---------+~n"
-    "|  Column   |  Type   |Is Null|Primary Key|Local Key|~n"
-    "+-----------+---------+-------+-----------+---------+~n"
-    "| myfamily  | varchar | false |     1     |    1    |~n"
-    "| myseries  | varchar | false |     2     |    2    |~n"
-    "|   time    |timestamp| false |     3     |    3    |~n"
-    "|  weather  | varchar | false |           |         |~n"
-    "|temperature| double  | true  |           |         |~n"
-    "+-----------+---------+-------+-----------+---------+", []),
+    Describe = io_lib:format(
+        "+-----------+---------+-------+-----------+---------+--------+----+~n"
+        "|  Column   |  Type   |Is Null|Primary Key|Local Key|Interval|Unit|~n"
+        "+-----------+---------+-------+-----------+---------+--------+----+~n"
+        "| myfamily  | varchar | false |     1     |    1    |        |    |~n"
+        "| myseries  | varchar | false |     2     |    2    |        |    |~n"
+        "|   time    |timestamp| false |     3     |    3    |   15   | m  |~n"
+        "|  weather  | varchar | false |           |         |        |    |~n"
+        "|temperature| double  | true  |           |         |        |    |~n"
+        "+-----------+---------+-------+-----------+---------+--------+----+", []),
     Cmds = [
             %% 'connection prompt on' means you need to do unicode printing and stuff
             {run,
@@ -73,7 +74,7 @@ create_table_test(Pid) ->
             {{match, Describe},
              "DESCRIBE GeoCheckin;"}
            ],
-    Result = riak_shell_test_util:run_commands(Cmds, "Start", State,
+    Result = riak_shell_test_util:run_commands(Cmds, State,
                                                ?DONT_INCREMENT_PROMPT),
     lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),
@@ -101,7 +102,7 @@ query_table_test(Pid, Conn) ->
         {{match, Expected},
             Select}
     ],
-    Result = riak_shell_test_util:run_commands(Cmds, "Start", State,
+    Result = riak_shell_test_util:run_commands(Cmds, State,
         ?DONT_INCREMENT_PROMPT),
     lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),
@@ -112,7 +113,7 @@ query(Conn, SQL) ->
     case riakc_ts:query(Conn, SQL) of
         {error, {ErrNo, Binary}} ->
             io_lib:format("Error (~p): ~s", [ErrNo, Binary]);
-        {Header, Rows} ->
+        {ok, {Header, Rows}} ->
             Hdr = [binary_to_list(X) || X <- Header],
             Rs = [begin
                       Row = tuple_to_list(RowTuple),

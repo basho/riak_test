@@ -49,10 +49,10 @@ run_test(Pid) ->
              "show_connection;"},
             {run, 
              "reconnect;"},
-            {{match, "riak_shell is connected to: 'dev1@127.0.0.1' on port 10017"}, 
+            {{match, "riak-shell is connected to: 'dev1@127.0.0.1' on port 10017"},
              "show_connection;"}
            ],
-    Result = riak_shell_test_util:run_commands(Cmds, "Start", State,
+    Result = riak_shell_test_util:run_commands(Cmds, State,
                                                ?DONT_INCREMENT_PROMPT),
     lager:info("Result is ~p~n", [Result]),
     lager:info("~n~n------------------------------------------------------", []),

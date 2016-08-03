@@ -28,7 +28,7 @@
 
 %% Test handling of division by zero in a query select clause.
 confirm() ->
-    DDL = ts_util:get_ddl(aggregration),
+    DDL = ts_util:get_ddl(aggregation),
     Data = ts_util:get_valid_aggregation_data_not_null(10),
     TestType = normal,
     {Cluster, ClientConn} = ts_util:cluster_and_connect(single),
@@ -87,4 +87,4 @@ where() ->
     "AND time >= 1 AND time <= 10 ".
 
 error_divide_by_zero() ->
-    {error,{1001,<<"divide_by_zero">>}}.
+    {error,{1001,<<"Divide by zero">>}}.

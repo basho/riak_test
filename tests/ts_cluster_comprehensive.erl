@@ -56,7 +56,7 @@ run_tests(PvalP1, PvalP2) ->
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3,
                   ?PKEY_P1, ?PKEY_P2, ?PKEY_P3]),
-    ts_util:create_and_activate_bucket_type(Cluster, lists:flatten(TableDef), ?BUCKET),
+    ?assertEqual({ok, {[], []}}, riakc_ts:query(rt:pbc(hd(Cluster)), TableDef)),
 
     %% Make sure data is written to each node
     lists:foreach(fun(Node) -> confirm_all_from_node(Node, Data, PvalP1, PvalP2) end, Cluster),
@@ -68,8 +68,7 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     C = rt:pbc(Node),
 
     %% 1. put some data
-    ok = confirm_put(C, doctor_data(Data)),
-    ok = confirm_overwrite(C, Data),
+    ok = confirm_put(C, Data),
 
     %% 2. get a single key
     ok = confirm_get(C, lists:nth(12, Data)),
@@ -96,17 +95,14 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_get(C, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
-    %% Switch to native mode and repeat a few tests
-    riakc_pb_socket:use_native_encoding(C, true),
+    %% Switch to protocol buffer mode and repeat a few tests
 
     %% 5 (redux). select
-    ok = confirm_select(C, PvalP1, PvalP2),
+    ok = confirm_select(C, PvalP1, PvalP2, [{use_ttb, false}]),
 
     %% 6 (redux). single-key get some data
-    ok = confirm_get(C, lists:nth(12, Data)),
-    ok = confirm_nx_get(C),
-
-    riakc_pb_socket:use_native_encoding(C, false),
+    ok = confirm_get(C, lists:nth(12, Data), [{use_ttb, false}]),
+    ok = confirm_nx_get(C, [{use_ttb, false}]),
 
     ok = confirm_delete_all(C, RemainingKeys),
     {ok, []} = confirm_list_keys(C, 0).
@@ -116,15 +112,12 @@ make_data(PvalP1, PvalP2) ->
     lists:reverse(
       lists:foldl(
         fun(T, Q) ->
-                [[PvalP1,
+                [{PvalP1,
                   PvalP2,
                   ?TIMEBASE + ?LIFESPAN - T + 1,
-                  math:sin(float(T) / 100 * math:pi())] | Q]
+                  math:sin(float(T) / 100 * math:pi())} | Q]
         end,
         [], lists:seq(?LIFESPAN, 1, -1))).
-
-doctor_data(Data) ->
-    [[A, B, C, D + 0.42] || [A, B, C, D] <- Data].
 
 confirm_put(C, Data) ->
     ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, Data),
@@ -138,13 +131,7 @@ confirm_put(C, Data) ->
     ?assertEqual(ok, Res),
     ok.
 
-confirm_overwrite(C, Data) ->
-    Res = riakc_ts:put(C, ?BUCKET, Data),
-    io:format("Overwrote ~b records: ~p\n", [length(Data), Res]),
-    ?assertEqual(ok, Res),
-    ok.
-
-confirm_delete(C, [Pooter1, Pooter2, Timepoint | _] = Record) ->
+confirm_delete(C, {Pooter1, Pooter2, Timepoint, _} = Record) ->
     ResFail = riakc_ts:delete(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Nothing deleted from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
@@ -174,6 +161,8 @@ confirm_nx_delete(C) ->
     ok.
 
 confirm_select(C, PvalP1, PvalP2) ->
+    confirm_select(C, PvalP1, PvalP2, []).
+confirm_select(C, PvalP1, PvalP2, Options) ->
     Query =
         lists:flatten(
           io_lib:format(
@@ -186,27 +175,31 @@ confirm_select(C, PvalP1, PvalP2) ->
             ?PKEY_P2, PvalP2,
             ?PKEY_P3, ?TIMEBASE + 10, ?PKEY_P3, ?TIMEBASE + 20])),
     io:format("Running query: ~p\n", [Query]),
-    {_Columns, Rows} = riakc_ts:query(C, Query),
+    {ok, {_Columns, Rows}} = riakc_ts:query(C, Query, Options),
     io:format("Got ~b rows back\n~p\n", [length(Rows), Rows]),
     ?assertEqual(10 - 1 - 1, length(Rows)),
-    {_Columns, Rows} = riakc_ts:query(C, Query),
+    {ok, {_Columns, Rows}} = riakc_ts:query(C, Query, Options),
     io:format("Got ~b rows back again\n", [length(Rows)]),
     ?assertEqual(10 - 1 - 1, length(Rows)),
     ok.
 
-confirm_get(C, Record = [Pooter1, Pooter2, Timepoint | _]) ->
+confirm_get(C, Record) ->
+    confirm_get(C, Record, []).
+confirm_get(C, Record = {Pooter1, Pooter2, Timepoint, _}, Options) ->
     ResFail = riakc_ts:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Got nothing from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     Key = [Pooter1, Pooter2, Timepoint],
-    Res = riakc_ts:get(C, ?BUCKET, Key, []),
+    Res = riakc_ts:get(C, ?BUCKET, Key, Options),
     io:format("Get a single record: ~p\n", [Res]),
     ?assertMatch({ok, {_, [Record]}}, Res),
     ok.
 
 confirm_nx_get(C) ->
-    Res = riakc_ts:get(C, ?BUCKET, ?BADKEY, []),
+    confirm_nx_get(C, []).
+confirm_nx_get(C, Options) ->
+    Res = riakc_ts:get(C, ?BUCKET, ?BADKEY, Options),
     io:format("Not got a nonexistent single record: ~p\n", [Res]),
     ?assertMatch({ok, {[], []}}, Res),
     ok.

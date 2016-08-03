@@ -55,7 +55,7 @@ confirm() ->
 make_data(0, _, _, Acc) ->
     Acc;
 make_data(N, F, S, Acc) when is_integer(N) andalso N > 0 ->
-    NewAcc = [
+    NewAcc = {
           F,
           S,
           1 + N * ?SPANNING_STEP,
@@ -64,5 +64,5 @@ make_data(N, F, S, Acc) when is_integer(N) andalso N > 0 ->
           [],
           [],
           []
-         ],
+         },
     make_data(N - 1, F, S, [NewAcc | Acc]).

@@ -37,9 +37,7 @@ confirm() ->
     Expected =
         {error,
          {1001,
-          <<"invalid_query: \n",
-            "incompatible_type: field myseries with type varchar cannot be compared to type float in where clause.">>}},
+          <<".*incompatible_type: field myseries with type varchar cannot be compared to type float in where clause.">>}},
     Got = ts_util:ts_query(
             ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
-    ?assertEqual(Expected, Got),
-    pass.
+    ts_util:assert_error_regex("Incompatible types", Expected, Got).

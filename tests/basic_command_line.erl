@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2012-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -23,6 +23,8 @@
 -behavior(riak_test).
 -compile(export_all).
 -export([confirm/0]).
+
+-define(PING_FAILURE_OUTPUT, "Node did not respond to ping!").
 
 confirm() ->
 
@@ -118,7 +120,7 @@ ping_down_test(Node) ->
 attach_down_test(Node) ->
     lager:info("Testing riak attach while down"),
     {ok, AttachOut} = rt:riak(Node, ["attach"]),
-    ?assert(rt:str(AttachOut, "Node is not running!")),
+    ?assert(rt:str(AttachOut, ?PING_FAILURE_OUTPUT)),
     ok.
 
 attach_direct_up_test(Node) ->
@@ -133,7 +135,7 @@ attach_direct_up_test(Node) ->
 attach_direct_down_test(Node) ->
     lager:info("Testing riak attach-direct while down"),
     {ok, AttachOut} = rt:riak(Node, ["attach-direct"]),
-    ?assert(rt:str(AttachOut, "Node is not running!")),
+    ?assert(rt:str(AttachOut, ?PING_FAILURE_OUTPUT)),
     ok.
 
 status_up_test(Node) ->
@@ -151,7 +153,7 @@ status_down_test(Node) ->
     lager:info("Test riak-admin status while down"),
     {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     ?assertEqual(1, ExitCode),
-    ?assert(rt:str(StatusOut, "Node is not running!")),
+    ?assert(rt:str(StatusOut, ?PING_FAILURE_OUTPUT)),
     ok.
 
 getpid_up_test(Node) ->
@@ -164,5 +166,7 @@ getpid_up_test(Node) ->
 getpid_down_test(Node) ->
     lager:info("Test riak getpid fails on ~s", [Node]),
     {ok, PidOut} = rt:riak(Node, ["getpid"]),
+    %% note that the error message is slightly different to the
+    %% other commands
     ?assert(rt:str(PidOut, "Node is not running!")),
     ok.

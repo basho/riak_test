@@ -52,12 +52,9 @@ run_query(ClusterConn, NVal, NPuts, Q, NSpans) ->
 
     {ok, _} = ts_util:create_and_activate_bucket_type(ClusterConn, DDL, Bucket, NVal),
     ok = riakc_ts:put(Conn, Bucket, Data),
-    {_, Got} = ts_util:single_query(Conn, Query),
+    {ok, {_, Got}} = ts_util:single_query(Conn, Query),
 
-    %% should get the data back
-    Got2 = [tuple_to_list(X) || X <- Got],
-
-    ?assertEqual(Data, Got2),
+    ?assertEqual(Data, Got),
 
     true.
 
@@ -86,9 +83,9 @@ make_data(NPuts, Q, NSpans) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, NPuts),
-    [[Family, Series, trunc((X/NPuts) * Multi),
+    [{Family, Series, trunc((X/NPuts) * Multi),
       ts_util:get_varchar(),
-      ts_util:get_float()]
+      ts_util:get_float()}
      || X <- Times].
 
 get_multi({No, y})  -> 365*24*60*60*1000 * No;

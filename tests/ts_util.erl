@@ -27,6 +27,7 @@
     assert/3,
     assert_error_regex/3,
     assert_float/3,
+    assert_row_sets/2,
     build_cluster/1,
     cluster_and_connect/1,
     create_and_activate_bucket_type/2,
@@ -37,10 +38,11 @@
     create_bucket_type/4,
     create_table/4,
     exclusive_result_from_data/3,
+    flat_format/2,
     get_bool/1,
     get_cols/0, get_cols/1,
     get_data/1,
-    get_ddl/0, get_ddl/1,
+    get_ddl/0, get_ddl/1, get_ddl/2,
     get_default_bucket/0,
     get_float/0,
     get_integer/0,
@@ -56,7 +58,8 @@
     get_valid_aggregation_data_not_null/1,
     get_valid_big_data/1,
     get_valid_obj/0,
-    get_valid_qry/0, get_valid_qry/2,
+    get_valid_qry/0, get_valid_qry/1,
+    get_valid_qry/2, get_valid_qry/3,
     get_valid_qry_spanning_quanta/0,
     get_valid_select_data/0, get_valid_select_data/1,
     get_valid_select_data_spanning_quanta/0,
@@ -65,8 +68,11 @@
     remove_last/1,
     results/1,
     single_query/2,
+    single_query/3,
     ts_get/6,
     ts_get/7,
+    ts_insert/4,
+    ts_insert_no_columns/3,
     ts_put/4,
     ts_put/5,
     ts_query/5,
@@ -114,8 +120,40 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
     single_query(Conn, Qry).
 
 single_query(Conn, Qry) ->
+    single_query(Conn, Qry, []).
+
+single_query(Conn, Qry, Opts) ->
     lager:info("3 - Now run the query ~ts", [Qry]),
-    Got = riakc_ts:query(Conn, Qry),
+    Got = riakc_ts:query(Conn, Qry, Opts),
+    lager:info("Result is ~p", [Got]),
+    Got.
+
+insert_term_format(Data, Acc) when is_binary(Data) ->
+    Acc ++ flat_format("'~s',", [Data]);
+insert_term_format(Data, Acc) ->
+    Acc ++ flat_format("~p,", [Data]).
+
+ts_insert(Conn, Table, Columns, Data) ->
+    ColFn = fun(Col, Acc) ->
+        Acc ++ flat_format("~s,", [Col])
+        end,
+    TermFn = fun insert_term_format/2,
+    ColClause = string:strip(lists:foldl(ColFn, [], Columns), right, $,),
+    ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
+    SQL = flat_format("INSERT INTO ~s (~s) VALUES (~s)",
+                      [Table, ColClause, ValClause]),
+    lager:info("~ts", [SQL]),
+    Got = riakc_ts:query(Conn, SQL),
+    lager:info("Result is ~p", [Got]),
+    Got.
+
+ts_insert_no_columns(Conn, Table, Data) ->
+    TermFn = fun insert_term_format/2,
+    ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
+    SQL = flat_format("INSERT INTO ~s VALUES (~s)",
+        [Table, ValClause]),
+    lager:info("~ts", [SQL]),
+    Got = riakc_ts:query(Conn, SQL),
     lager:info("Result is ~p", [Got]),
     Got.
 
@@ -231,10 +269,16 @@ get_default_bucket() ->
     "GeoCheckin".
 
 get_valid_qry() ->
-    "select * from GeoCheckin Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX'".
+    get_valid_qry(get_default_bucket()).
+
+get_valid_qry(Table) ->
+    "select * from " ++ Table ++ " Where time > 1 and time < 10 and myfamily = 'family1' and myseries ='seriesX'".
 
 get_valid_qry(Lower, Upper) ->
-    lists:flatten(io_lib:format("select * from GeoCheckin Where time > ~B and time < ~B and myfamily = 'family1' and myseries ='seriesX'", [Lower, Upper])).
+    get_valid_qry(Lower, Upper, get_default_bucket()).
+
+get_valid_qry(Lower, Upper, Table) ->
+    lists:flatten(io_lib:format("select * from " ++ Table ++ " Where time > ~B and time < ~B and myfamily = 'family1' and myseries ='seriesX'", [Lower, Upper])).
 
 get_invalid_qry(borked_syntax) ->
     "selectah * from GeoCheckin Where time > 1 and time < 10";
@@ -254,7 +298,7 @@ get_valid_select_data(SeqFun) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = SeqFun(),
-    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+    [{Family, Series, X, get_varchar(), get_float()} || X <- Times].
 
 
 -define(SPANNING_STEP_BIG, (1000)).
@@ -263,7 +307,7 @@ get_valid_big_data(N) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, N),
-    [[
+    [{
         Family,
         Series,
         1 + N * ?SPANNING_STEP_BIG,
@@ -272,25 +316,25 @@ get_valid_big_data(N) ->
         get_bool(X),
         N + 100000,
         get_optional(X, X)
-    ] || X <- Times].
+    } || X <- Times].
 
 get_valid_aggregation_data(N) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, N),
-    [[Family, Series, X,
+    [{Family, Series, X,
       get_optional(X, get_float()),
       get_optional(X+1, get_float()),
-      get_optional(X*3, get_float())] || X <- Times].
+      get_optional(X*3, get_float())} || X <- Times].
 
 get_valid_aggregation_data_not_null(N) ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1, N),
-    [[Family, Series, X,
+    [{Family, Series, X,
       get_float(),
       get_float(),
-      get_float()] || X <- Times].
+      get_float()} || X <- Times].
 
 -define(SPANNING_STEP, (1000*60*5)).
 
@@ -298,7 +342,7 @@ get_valid_qry_spanning_quanta() ->
     StartTime = 1 + ?SPANNING_STEP *  1,
     EndTime   = 1 + ?SPANNING_STEP * 10,
     lists:flatten(
-      io_lib:format("select * from GeoCheckin Where time > ~b and time < ~b"
+      io_lib:format("select * from GeoCheckin Where time >= ~b and time <= ~b"
                     " and myfamily = 'family1' and myseries = 'seriesX'",
                     [StartTime, EndTime])).
 
@@ -306,7 +350,7 @@ get_valid_select_data_spanning_quanta() ->
     Family = <<"family1">>,
     Series = <<"seriesX">>,
     Times = lists:seq(1 + ?SPANNING_STEP, 1 + ?SPANNING_STEP * 10, ?SPANNING_STEP),  %% five-minute intervals, to span 15-min buckets
-    [[Family, Series, X, get_varchar(), get_float()] || X <- Times].
+    [{Family, Series, X, get_varchar(), get_float()} || X <- Times].
 
 get_cols() ->
     get_cols(small).
@@ -325,12 +369,13 @@ get_cols(api) ->
      <<"myfloat">>,
      <<"mybool">>].
 
+
 exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
                                                      is_integer(Finish)  andalso
                                                      Start  > 0          andalso
                                                      Finish > 0          andalso
                                                      Finish > Start ->
-    [list_to_tuple(X) || X <- lists:sublist(Data, Start, Finish - Start + 1)].
+    lists:sublist(Data, Start, Finish - Start + 1).
 
 remove_last(Data) ->
     lists:reverse(tl(lists:reverse(Data))).
@@ -338,8 +383,19 @@ remove_last(Data) ->
 %% a valid DDL - the one used in the documents
 get_ddl() ->
     get_ddl(small).
+
 get_ddl(small) ->
-    "CREATE TABLE GeoCheckin ("
+    get_ddl(small, get_default_bucket());
+get_ddl(big) ->
+    get_ddl(big, get_default_bucket());
+get_ddl(api) ->
+    get_ddl(api, get_default_bucket());
+get_ddl(aggregation) ->
+    get_ddl(aggregation, "WeatherData").
+
+
+get_ddl(small, Table) ->
+    "CREATE TABLE " ++ Table ++ " ("
     " myfamily    varchar   not null,"
     " myseries    varchar   not null,"
     " time        timestamp not null,"
@@ -350,8 +406,8 @@ get_ddl(small) ->
 
 %% another valid DDL - one with all the good stuff like
 %% different types and optional blah-blah
-get_ddl(big) ->
-    "CREATE TABLE GeoCheckin ("
+get_ddl(big, Table) ->
+    "CREATE TABLE " ++ Table ++ " ("
     " myfamily    varchar     not null,"
     " myseries    varchar     not null,"
     " time        timestamp   not null,"
@@ -367,8 +423,8 @@ get_ddl(big) ->
 %% in a corresponding ts_A_create_*_fail module, have been moved to
 %% those respective modules
 
-get_ddl(api) ->
-    "CREATE TABLE GeoCheckin ("
+get_ddl(api, Table) ->
+    "CREATE TABLE " ++ Table ++ " ("
     " myfamily    varchar     not null,"
     " myseries    varchar     not null,"
     " time        timestamp   not null,"
@@ -379,9 +435,9 @@ get_ddl(api) ->
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
     " myfamily, myseries, time))";
 
-%% DDL for testing aggregration behavior
-get_ddl(aggregration) ->
-    "CREATE TABLE WeatherData ("
+%% DDL for testing aggregation behavior
+get_ddl(aggregation, Table) ->
+    "CREATE TABLE " ++ Table ++ " ("
     " myfamily      varchar   not null,"
     " myseries      varchar   not null,"
     " time          timestamp not null,"
@@ -391,12 +447,11 @@ get_ddl(aggregration) ->
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 10, 'm')), "
     " myfamily, myseries, time))".
 
-
 get_data(api) ->
-    [[<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true]] ++
-    [[<<"family1">>, <<"seriesX">>, 200, 2, <<"test2">>, 2.0, false]] ++
-    [[<<"family1">>, <<"seriesX">>, 300, 3, <<"test3">>, 3.0, true]] ++
-    [[<<"family1">>, <<"seriesX">>, 400, 4, <<"test4">>, 4.0, false]].
+    [{<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true}] ++
+    [{<<"family1">>, <<"seriesX">>, 200, 2, <<"test2">>, 2.0, false}] ++
+    [{<<"family1">>, <<"seriesX">>, 300, 3, <<"test3">>, 3.0, true}] ++
+    [{<<"family1">>, <<"seriesX">>, 400, 4, <<"test4">>, 4.0, false}].
 
 get_map(api) ->
     [{<<"myfamily">>, 1},
@@ -409,32 +464,32 @@ get_map(api) ->
 
 
 get_valid_obj() ->
-    [get_varchar(),
+    {get_varchar(),
      get_varchar(),
      get_timestamp(),
      get_varchar(),
-     get_float()].
+     get_float()}.
 
 get_invalid_obj() ->
-    [get_varchar(),
+    {get_varchar(),
      get_integer(),   % this is the duff field
      get_timestamp(),
      get_varchar(),
-     get_float()].
+     get_float()}.
 
 get_short_obj() ->
-    [get_varchar(),
+    {get_varchar(),
         get_varchar(),
         get_timestamp(),
-        get_varchar()].
+        get_varchar()}.
 
 get_long_obj() ->
-    [get_varchar(),
+    {get_varchar(),
         get_varchar(),
         get_timestamp(),
         get_varchar(),
         get_float(),
-        get_float()].
+        get_float()}.
 
 get_varchar() ->
     Len = random:uniform(?MAXVARCHARLEN),
@@ -470,30 +525,45 @@ get_optional(N, X) ->
     end.
 
 
--define(DELTA, 1.0e-10).
+-define(DELTA, 1.0e-15).
 
+assert_float(String, {ok, Thing1}, {ok, Thing2}) ->
+    assert_float(String, Thing1, Thing2);
 assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
     case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
-        fail -> lager:info("*****************", []),
+        fail ->
+            lager:info("*****************", []),
             lager:info("Test ~p failed", [String]),
             lager:info("Exp ~p", [Exp]),
             lager:info("Got ~p", [Got]),
             lager:info("*****************", []),
             fail;
-        pass -> pass
+        pass ->
+            pass
     end;
-assert_float(String, Exp, Got) -> assert(String, Exp, Got).
+assert_float(String, Exp, Got) ->
+    assert(String, Exp, Got).
 
 assertf2([], []) -> pass;
-assertf2([H1 | T1], [H2 | T2]) ->
+assertf2([H1 | T1], [H2 | T2]) when is_float(H1), is_float(H2) ->
     Diff = H1 - H2,
-    Av = (H1 + H2)/2,
+    Av = abs(H1 + H2)/2,
     if Diff/Av > ?DELTA -> fail;
-        el/=se           -> assertf2(T1, T2)
-    end.
+       el/=se           -> assertf2(T1, T2)
+    end;
+assertf2([H | T1], [H | T2]) ->
+    assertf2(T1, T2);
+assertf2(_, _) ->
+    fail.
+
 
 assert(_,      X,   X)   -> pass;
-assert(String, Exp, Got) -> lager:info("*****************", []),
+%% as a special case, if you don't know the exact words to expect in
+%% the error message, use a '_' to match any string
+assert(_, {error, {ErrCode, _ErrMsg}}, {error, {ErrCode, '_'}}) ->
+    pass;
+assert(String, Exp, Got) ->
+    lager:info("*****************", []),
     lager:info("Test ~p failed", [String]),
     lager:info("Exp ~p", [Exp]),
     lager:info("Got ~p", [Got]),
@@ -512,6 +582,50 @@ assert_error_regex_result(nomatch, String, Expected, Got) ->
 assert_error_regex_result(_, _String, _Expected, _Got) ->
     pass.
 
+%% If `ColExpected' is the atom `rt_ignore_columns' then do not assert columns.
+assert_row_sets(_, {error,_} = Error) ->
+    ct:fail(Error);
+assert_row_sets({rt_ignore_columns, Expected}, {_, {_, Actual}}) ->
+    ct_verify_rows(Expected, Actual);
+assert_row_sets({_, {ColExpected, Expected}}, {_, {ColsActual, Actual}}) ->
+    ?assertEqual(ColExpected, ColsActual),
+    ct_verify_rows(Expected, Actual).
+
+ct_verify_rows(Expected, Actual) ->
+    case tdiff:diff(Expected, Actual) of
+        [{eq,_}] ->
+            pass;
+        [] ->
+            pass;
+        Diff ->
+            ct:pal("ROW DIFF~n" ++ format_diff(0, Diff)),
+            ct:fail(row_set_mismatch)
+    end.
+
+%%
+format_diff(EqCount,[]) ->
+    format_diff_eq_count(EqCount);
+format_diff(EqCount,[{eq,Rows}|Tail]) ->
+    format_diff(EqCount+length(Rows), Tail);
+format_diff(EqCount,[{Type, Row}|Tail]) ->
+    Fmt = io_lib:format("~s~s ~p~n",
+        [format_diff_eq_count(EqCount), format_diff_type(Type), Row]),
+    [Fmt | format_diff(0, Tail)].
+
+%%
+format_diff_type(del) -> "-";
+format_diff_type(ins) -> "+".
+
+%%
+format_diff_eq_count(0) ->
+    "";
+format_diff_eq_count(Count) ->
+    [lists:duplicate(Count, $.), $\n].
+
+
 results(Results) ->
     Expected = lists:duplicate(length(Results), pass),
     ?assertEqual(Expected, Results).
+
+flat_format(Format, Args) ->
+    lists:flatten(io_lib:format(Format, Args)).
