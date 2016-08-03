@@ -392,10 +392,13 @@ run_selects(#test_set{testname  = Testname,
 
 run_select(#select{should_skip = true}, _QryNo, _Tablename, _QueryNode, _Config) -> 
     pass;
-run_select(#select{qry = Q, expected = Exp}, QryNo, Tablename, QueryNode, Config) -> 
+run_select(#select{qry        = Q, 
+                   expected   = Exp, 
+                   assert_mod = Mod, 
+                   assert_fun = Fun}, QryNo, Tablename, QueryNode, Config) -> 
     SelectQuery = fmt(Q, [Tablename]),
     Got = query_with_client(SelectQuery, QueryNode, Config),
-    case ts_util:assert_float(fmt("Query #~p", [QryNo]), Exp, Got) of
+    case Mod:Fun(fmt("Query #~p", [QryNo]), Exp, Got) of
         pass -> pass;
         fail -> #fail{message  = SelectQuery,
                       expected = Exp,

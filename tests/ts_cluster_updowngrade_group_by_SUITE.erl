@@ -19,6 +19,11 @@
 %% -------------------------------------------------------------------
 -module(ts_cluster_updowngrade_group_by_SUITE).
 
+-export([
+         sorted_assert/3,
+         plain_assert/3
+        ]).
+
 -include("ts_updowngrade_test.part").
 
 %% yes this 1.3 error is bonkers and a proper chocolate teapot but that's the error
@@ -51,9 +56,7 @@ make_scenario_invariants(Config) ->
 %% this scenario the query node starts at 1.4 and remains there
 %% the cluster is either mixed or all 1.4
 add_tests(#scenario{query_node_vsn             = current,
-                    need_query_node_transition = false,
-                    need_pre_cluster_mixed     = false,
-                    need_post_cluster_mixed    = false} = Scen) ->
+                    need_query_node_transition = false} = Scen) ->
     Tests = [
              make_select_grouped_field_test(select_passes),
              make_group_by_2_test(select_passes)
@@ -63,9 +66,7 @@ add_tests(#scenario{query_node_vsn             = current,
 %% the select happens - the intial cluster is mixed and the final can be
 %% mixed or all 1.4
 add_tests(#scenario{query_node_vsn             = previous,
-                    need_query_node_transition = true,
-                    need_pre_cluster_mixed     = false,
-                    need_post_cluster_mixed    = false} = Scen) ->
+                    need_query_node_transition = true} = Scen) ->
     Tests = [
              make_select_grouped_field_test(select_passes),
              make_group_by_2_test(select_passes)
@@ -91,15 +92,19 @@ make_select_grouped_field_test(DoesSelectPass) ->
     Insert = #insert{data = [{1,B,C} || B <- [1,2,3], C <- [1,2,3]],
                      expected = ok},
 
-    SelExp = case DoesSelectPass of
-                 select_passes -> [{1},{2},{3}];
-                 select_fails  -> ?SELECTERROR
-
+    {SelExp, AssertFn} 
+        = case DoesSelectPass of
+              select_passes -> 
+                  {{ok, {[<<"c">>], [{2},{1},{3}]}}, sorted_assert};
+              select_fails  -> 
+                  {?SELECTERROR, plain_assert}
              end,
     Select = #select{qry = "SELECT c FROM ~s "
                      "WHERE a = 1 AND b = 1 AND c >= 1 AND c <= 1000 "
                      "GROUP BY c",
-                     expected = SelExp},
+                     expected   = SelExp,
+                     assert_mod = ?MODULE,
+                     assert_fun = AssertFn},
     
     #test_set{testname = "grouped_field_test",
               create  = Create,
@@ -114,23 +119,49 @@ make_group_by_2_test(DoesSelectPass) ->
                      "d SINT64 NOT NULL, "
                      "e SINT64 NOT NULL, "
                      "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c,d))",
-                     expected = {ok, {[], []}}},
+                     expected   = {ok, {[], []}}},
 
     Insert = #insert{data     = [{1,1,CE,D,CE} || CE <- lists:seq(1,1000), 
                                                   D <- [1,2,3]],
                      expected = ok},
 
-    SelExp = case DoesSelectPass of
-                 select_passes -> [{1,500.5},{2,500.5},{3,500.5}];
-                 select_fails  -> ?SELECTERROR
-             end,
+    {SelExp, AssertFn}
+        = case DoesSelectPass of
+              select_passes -> {{ok, {[<<"d">>, <<"AVG(e)">>], 
+                                      [{2,500.5}, {3,500.5}, {1,500.5}]}},
+                                sorted_assert};
+              select_fails  -> {?SELECTERROR, plain_assert}
+          end,
     Select = #select{qry = "SELECT d, AVG(e) FROM ~s "
                      "WHERE a = 1 AND b = 1 AND c >= 1 AND c <= 1000 "
                      "GROUP BY d",
-                     expected = SelExp},
+                     expected = SelExp,
+                     assert_mod = ?MODULE,
+                     assert_fun = AssertFn},
     
     #test_set{testname = "group_by_2",
               create  = Create,
               insert  = Insert,
               selects = [Select]}.
  
+sorted_assert(String, {ok, {ECols, Exp}}, {ok, {GCols, Got}}) ->
+    Exp2 = lists:sort(Exp),
+    Got2 = lists:sort(Got),
+    ts_util:assert_float(String, {ECols, Exp2}, {GCols, Got2});
+sorted_assert(String, Exp, Got) ->
+    ok = log_error(String ++ " banjo", Exp, Got),
+    fail.
+
+plain_assert(_String, Exp, Exp) ->
+    pass;
+plain_assert(String, Exp, Got) ->
+    ok = log_error(String ++ "rando", Exp, Got),
+    fail.
+
+log_error(String, Exp, Got) ->
+    lager:info("*****************", []),
+    lager:info("Test ~p failed", [String]),
+    lager:info("Exp ~p", [Exp]),
+    lager:info("Got ~p", [Got]),
+    lager:info("*****************", []),
+    ok.
