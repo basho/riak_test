@@ -8,15 +8,21 @@
 "}}.
 {{command, "show_nodes; "}, {result, "The connected nodes are: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']"}}.
 {{command, "CREATE TABLE GeoCheckin (myfamily varchar not null, myseries varchar not null, time  timestamp not null, weather  varchar not null, temperature double, PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time));\n"}, {result, ""}}.
-{{command, "describe GeoCheckin;\n"}, {result, "+-----------+---------+-------+-----------+---------+
-|  Column   |  Type   |Is Null|Primary Key|Local Key|
-+-----------+---------+-------+-----------+---------+
-| myfamily  | varchar | false |     1     |    1    |
-| myseries  | varchar | false |     2     |    2    |
-|   time    |timestamp| false |     3     |    3    |
-|  weather  | varchar | false |           |         |
-|temperature| double  | true  |           |         |
-+-----------+---------+-------+-----------+---------+
+{{command, "describe GeoCheckin;\n"}, {result, "+-----------+---------+-------+-----------+---------+--------+----+
+|  Column   |  Type   |Is Null|Primary Key|Local Key|Interval|Unit|
++-----------+---------+-------+-----------+---------+--------+----+
+| myfamily  | varchar | false |     1     |    1    |        |    |
+| myseries  | varchar | false |     2     |    2    |        |    |
+|   time    |timestamp| false |     3     |    3    |   15   | m  |
+|  weather  | varchar | false |           |         |        |    |
+|temperature| double  | true  |           |         |        |    |
++-----------+---------+-------+-----------+---------+--------+----+
+"}}.
+{{command, "SHOW TABLES;\n"}, {result, "+----------+
+|  Table   |
++----------+
+|GeoCheckin|
++----------+
 "}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, ""}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',2,'rain',24.5);\n"}, {result, ""}}.

@@ -119,7 +119,7 @@ run_scenario(Config,
            "          need_table_node_transition: ~p\n"
            "          need_query_node_transition: ~p\n"
            "          need_pre_cluster_mixed: ~p\n"
-           "          need_post_cluster_mixed: ~p\n", 
+           "          need_post_cluster_mixed: ~p\n",
            [TableNodeVsn, QueryNodeVsn,
             NeedTableNodeTransition, NeedQueryNodeTransition,
             NeedPreClusterMixed, NeedPostClusterMixed]),
@@ -197,11 +197,11 @@ query_with_client(Query, Node, Config) ->
     case Version of
         current ->
             riakc_ts:query(Client, Query);
-                              previous ->
-                             rpc:call(
-                               ?CFG(previous_client_node, Config),
-                               riakc_ts, query, [Client, Query])
-     end.
+        previous ->
+            rpc:call(
+              ?CFG(previous_client_node, Config),
+              riakc_ts, query, [Client, Query])
+    end.
 
 
 -spec is_cluster_mixed(versioned_cluster()) -> boolean().
@@ -372,7 +372,7 @@ insert_data(#test_set{testname  = Testname,
     Table = get_table_name(Testname, Timestamp),
     case riakc_ts:put(Client1, Table, Data) of
         Exp ->
-            ct:log("Table ~p on ~p had ~b records successfully inserted)", 
+            ct:log("Table ~p on ~p had ~b records successfully inserted)",
                    [Table, TableNode, length(Data)]),
             pass;
         Error ->
@@ -408,7 +408,7 @@ run_select(#select{qry        = Q,
 add_timestamps(TestSets) ->
     [X#test_set{timestamp = make_timestamp()} || X <- TestSets].
 
-make_timestamp() -> 
+make_timestamp() ->
     {_Mega, Sec, Milli} = os:timestamp(),
     fmt("~b~b", [Sec, Milli]).
 
