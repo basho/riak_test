@@ -99,20 +99,20 @@ run_test(Client, Test) ->
     ?MODULE:Test(Client).
 
 verify_list_buckets_disabled_pb(Client) ->
-    Expected = {error, ?ERRMSG_LIST_BUCKETS_DISABLED},
+    Expected = {error, ?ERRMSG_BIN(?TOKEN_LIST_BUCKETS)},
     ?assertEqual(Expected, riakc_pb_socket:list_buckets(Client)).
 
 verify_list_keys_disabled_pb(Client) ->
-    Expected = {error, ?ERRMSG_LIST_KEYS_DISABLED},
+    Expected = {error, ?ERRMSG_BIN(?TOKEN_LIST_KEYS)},
     ?assertEqual(Expected, riakc_pb_socket:list_keys(Client, <<"basic_test">>)).
 
 verify_secondary_index_disabled_pb(Client) ->
-    Expected = {error, ?ERRMSG_SEC_INDEX_DISABLED},
+    Expected = {error, ?ERRMSG_BIN(?TOKEN_SEC_INDEX)},
     ?assertEqual(Expected, riakc_pb_socket:get_index(Client, <<"2i_test">>,
                                                      {integer_index, "test_idx"}, 42)).
 
 verify_mapred_disabled_pb(Client) ->
-    Expected = {error, ?ERRMSG_MAP_REDUCE_DISABLED},
+    Expected = {error, ?ERRMSG_BIN(?TOKEN_MAP_REDUCE)},
     ?assertEqual(Expected, riakc_pb_socket:mapred(Client, <<"basic_test">>, [])).
 
 verify_list_buckets_enabled_pb(Client) ->

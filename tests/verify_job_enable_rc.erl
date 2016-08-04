@@ -31,10 +31,14 @@
 -define(TEST_ORDER, [true, false]).
 -define(TEST_OPS,   [
     ?TOKEN_LIST_BUCKETS,
+    ?TOKEN_LIST_BUCKETS_S,
     ?TOKEN_LIST_KEYS,
-    ?TOKEN_MAP_REDUCE,
+    ?TOKEN_LIST_KEYS_S,
     ?TOKEN_SEC_INDEX,
+    ?TOKEN_SEC_INDEX_S,
+    ?TOKEN_MAP_REDUCE,
     ?TOKEN_YZ_SEARCH
+%   ?TOKEN_OLD_SEARCH
 ]).
 -define(COMMON_CONFIG,  [
     {"storage_backend", "leveldb"}, % required by ?TOKEN_SEC_INDEX above
@@ -54,14 +58,11 @@ confirm() ->
         || Bool <- ?TEST_ORDER ++ [true, true]],
 
     lager:info("Deploying ~b nodes ...", [erlang:length(Configs)]),
-    [Node | _] = Nodes = rt:deploy_nodes(Configs),
-
-    % create the YZ search index
-    {_, Mod, Conn} = Client = job_enable_common:open_client(pbc, Node),
-    ?assertEqual(ok, Mod:create_search_index(Conn, job_enable_common:index_yz())),
-    job_enable_common:close_client(Client),
+    Nodes = rt:deploy_nodes(Configs),
 
     job_enable_common:setup_cluster(Nodes),
+
+    job_enable_common:setup_yokozuna(Nodes),
 
     [run_test(Operation, ?TEST_ORDER, Nodes) || Operation <- ?TEST_OPS],
 
@@ -71,13 +72,13 @@ confirm() ->
 %% Internal
 %% ===================================================================
 
-config([Operation | Operations], Bool, Result) ->
-    Key = lists:flatten(io_lib:format(?CUTTLEFISH_PREFIX ".~s", [Operation])),
+config([{Mod, Op} | Operations], Bool, Result) ->
+    Key = lists:flatten(io_lib:format(?CUTTLEFISH_PREFIX ".~s.~s", [Mod, Op])),
     Val = case Bool of
         true ->
-            "on";
+            "enabled";
         false ->
-            "off"
+            "disabled"
     end,
     config(Operations, Bool, [{Key, Val} | Result]);
 config([], _, Result) ->
@@ -86,7 +87,7 @@ config([], _, Result) ->
 run_test(Operation, [Switch | Switches], [Node | Nodes]) ->
     Enabled = job_enable_common:enabled_string(Switch),
     [begin
-        lager:info("Tesing ~s ~s ~s on ~p", [Operation, Type, Enabled, Node]),
+        lager:info("Tesing ~p ~s ~s on ~p", [Operation, Type, Enabled, Node]),
         job_enable_common:test_operation(Node, Operation, Switch, Type)
     end || Type <- [pbc, http] ],
     run_test(Operation, Switches, Nodes);
