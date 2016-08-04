@@ -315,6 +315,7 @@ get_valid_big_data(N) ->
         N + 0.1,
         get_bool(X),
         N + 100000,
+        get_varchar(),
         get_optional(X, X)
     } || X <- Times].
 
@@ -415,6 +416,7 @@ get_ddl(big, Table) ->
     " myfloat     double      not null,"
     " mybool      boolean     not null,"
     " mytimestamp timestamp   not null,"
+    " myvarchar   varchar     not null,"
     " myoptional  sint64,"
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
     " myfamily, myseries, time))";
