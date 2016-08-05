@@ -144,6 +144,7 @@
          update_app_config/2,
          upgrade/2,
          upgrade/3,
+         upgrade/4,
          versions/0,
          wait_for_any_webmachine_route/2,
          wait_for_cluster_service/2,
@@ -395,12 +396,25 @@ stop_and_wait(Node) ->
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
 upgrade(Node, NewVersion) ->
-    ?HARNESS:upgrade(Node, NewVersion).
+    upgrade(Node, NewVersion, fun no_op/1).
+
+%% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
+%% Upgrade Callback will be called after the node is stopped but before
+%% the upgraded node is started.
+upgrade(Node, NewVersion, UpgradeCallback) when is_function(UpgradeCallback) ->
+    ?HARNESS:upgrade(Node, NewVersion, UpgradeCallback);
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
 %% the config based on entries in `Config'.
 upgrade(Node, NewVersion, Config) ->
-    ?HARNESS:upgrade(Node, NewVersion, Config).
+    upgrade(Node, NewVersion, Config, fun no_op/1).
+
+%% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
+%% the config based on entries in `Config'.
+%% Upgrade Callback will be called after the node is stopped but before
+%% the upgraded node is started.
+upgrade(Node, NewVersion, Config, UpgradeCallback) ->
+    ?HARNESS:upgrade(Node, NewVersion, Config, UpgradeCallback).
 
 %% @doc Upgrade a Riak node to a specific version using the alternate
 %%      leave/upgrade/rejoin approach
@@ -2175,6 +2189,10 @@ assert_supported(Capabilities, Capability, Value) ->
                           proplists:get_value('$supported', Capabilities))),
     ok.
 
+
+-spec no_op(term()) -> ok.
+no_op(_Params) ->
+    ok.
 
 -ifdef(TEST).
 
