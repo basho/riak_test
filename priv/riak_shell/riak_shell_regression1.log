@@ -37,6 +37,7 @@
 |  8  |myfamily = 'family1', myseries = 'ser|   false    |myfamily = 'family1', myseries = 'ser|   false   |weather = |
 +-----+-------------------------------------+------------+-------------------------------------+-----------+----------+
 "}}.
+{{command, "EXPLAIN SELECT * FROM GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, ""}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',2,'rain',24.5);\n"}, {result, ""}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',3,'rain',23.0);\n"}, {result, ""}}.
