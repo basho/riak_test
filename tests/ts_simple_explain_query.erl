@@ -34,7 +34,7 @@ confirm() ->
     ts_util:create_and_activate_bucket_type(ClusterConn, DDL, "MyTable"),
     Qry = "EXPLAIN SELECT myint, myfloat, myoptional FROM MyTable WHERE "
         "myfamily='wingo' AND myseries='dingo' AND time > 0 AND time < 2000000 "
-        "AND (mybool=true OR myvarchar='banana')",
+        "AND ((mybool=true AND myvarchar='banana') OR (myoptional=7))",
 
     Got = ts_util:single_query(Conn, Qry),
     Expected =
@@ -47,18 +47,18 @@ confirm() ->
                 false,
                 "myfamily = 'wingo', myseries = 'dingo', time = 900000",
                 false,
-                "mybool = true OR myvarchar = 'banana'"},
-            {2,
+                "((myoptional = 7) OR ((mybool = true) AND (myvarchar = 'banana')))"},
+             {2,
                 "myfamily = 'wingo', myseries = 'dingo', time = 900000",
                 false,
                 "myfamily = 'wingo', myseries = 'dingo', time = 1800000",
                 false,
-                "mybool = true OR myvarchar = 'banana'"},
-            {3,
+                "((myoptional = 7) OR ((mybool = true) AND (myvarchar = 'banana')))"},
+             {3,
                 "myfamily = 'wingo', myseries = 'dingo', time = 1800000",
                 false,
                 "myfamily = 'wingo', myseries = 'dingo', time = 2000000",
                 false,
-                "mybool = true OR myvarchar = 'banana'"}]}},
+                "((myoptional = 7) OR ((mybool = true) AND (myvarchar = 'banana')))"}]}},
     ?assertEqual(Expected, Got),
     pass.
