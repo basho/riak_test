@@ -24,6 +24,20 @@
 |GeoCheckin|
 +----------+
 "}}.
+{{command, "EXPLAIN SELECT * FROM GeoCheckin WHERE myfamily = 'family1' AND myseries = 'series1' AND time >= 2 AND time <= 7000000 AND weather='fair';"}, {result, "+-----+------------------------------------+------------+-------------------------------------+-----------+-----------+
+|Subqu|        Range Scan Start Key        |Is Start Inc|         Range Scan End Key          |Is End Incl|  Filter   |
++-----+------------------------------------+------------+-------------------------------------+-----------+-----------+
+|  1  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
+|  2  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
+|  3  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
+|  4  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
+|  5  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
+|  6  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
+|  7  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
+|  8  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
++-----+------------------------------------+------------+-------------------------------------+-----------+-----------+
+"}}.
+{{command, "EXPLAIN SELECT * FROM GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, ""}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',2,'rain',24.5);\n"}, {result, ""}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',3,'rain',23.0);\n"}, {result, ""}}.
