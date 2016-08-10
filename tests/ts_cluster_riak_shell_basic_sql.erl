@@ -129,6 +129,11 @@ query(Conn, SQL) ->
 
 to_list(A) when is_atom(A)    -> atom_to_list(A);
 to_list(B) when is_binary(B)  -> binary_to_list(B);
-to_list(I) when is_integer(I) -> integer_to_list(I);
+%% Timestamps when pulled via the Erlang client are integers, but are
+%% rendered as strings via riak-shell.
+%%
+%% We can cheat here: the only integer in the DDL is a timestamp, so
+%% any integer we see we can convert to ISO 8601.
+to_list(I) when is_integer(I) -> jam_iso8601:to_string(jam:from_epoch(I, 3));
 to_list(F) when is_float(F)   -> float_to_list(F);
 to_list(L) when is_list(L)    -> L.
