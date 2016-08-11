@@ -26,6 +26,8 @@
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
 -define(PATH, (rt_config:get(rtdev_path))).
+-define(DEBUG_LOG_FILE(N),
+        "dev" ++ integer_to_list(N) ++ "@127.0.0.1-riak-debug.tar.gz").
 
 get_deps() ->
     lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
@@ -51,6 +53,17 @@ riak_admin_cmd(Path, N, Args) ->
     ArgStr = string:join(Quoted, " "),
     ExecName = rt_config:get(exec_name, "riak"),
     io_lib:format("~s/dev/dev~b/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
+
+riak_debug_cmd(Path, N, Args) ->
+    Quoted =
+        lists:map(fun(Arg) when is_list(Arg) ->
+                          lists:flatten([$", Arg, $"]);
+                     (_) ->
+                          erlang:error(badarg)
+                  end, Args),
+    ArgStr = string:join(Quoted, " "),
+    ExecName = rt_config:get(exec_name, "riak"),
+    io_lib:format("~s/dev/dev~b/bin/~s-debug ~s", [Path, N, ExecName, ArgStr]).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
@@ -764,6 +777,26 @@ get_node_logs() ->
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+
+get_node_debug_logs() ->
+    NodeMap = rt_config:get(rt_nodes),
+    rt:pmap(fun(Node) ->
+                    get_node_debug_logs(Node)
+            end,
+            NodeMap).
+
+get_node_debug_logs({_Node, NodeNum}) ->
+    Path = relpath(node_version(NodeNum)),
+    Args = ["--logs"],
+    Cmd = riak_debug_cmd(Path, NodeNum, Args),
+    file:delete(?DEBUG_LOG_FILE(NodeNum)),
+    {ExitCode, Result} = wait_for_cmd(spawn_cmd(Cmd)),
+    case ExitCode of
+        0 ->
+            ?DEBUG_LOG_FILE(NodeNum);
+        _ ->
+            exit({ExitCode, Result})
+    end.
 
 %% @doc Performs a search against the log files on `Node' and returns all
 %% matching lines.

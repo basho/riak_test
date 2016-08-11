@@ -1825,6 +1825,9 @@ setup_harness(Test, Args) ->
 get_node_logs() ->
     ?HARNESS:get_node_logs().
 
+get_node_debug_logs() ->
+    ?HARNESS:get_node_debug_logs().
+
 %% @doc Performs a search against the log files on `Node' and returns all
 %% matching lines.
 -spec search_logs(node(), Pattern::iodata()) ->
