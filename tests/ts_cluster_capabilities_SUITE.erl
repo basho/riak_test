@@ -148,7 +148,7 @@ sql_select_upgrade_a_node_from_1_3_test(_) ->
     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    ok = rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 1),
+    ok = rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v1),
     ok.
 
 sql_select_join_with_all_nodes_upgraded_test(_) ->
@@ -159,23 +159,28 @@ sql_select_join_with_all_nodes_upgraded_test(_) ->
     rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
     rt:upgrade(Node_B, ?TS_VERSION_CURRENT),
     rt:upgrade(Node_C, ?TS_VERSION_CURRENT),
-    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 2),
-    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 2),
-    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 2),
+    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v2),
     ok.
 
 sql_select_downgrade_a_node_test(_) ->
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
+        rt:deploy_nodes([?TS_VERSION_1_3, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, 2),
-    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 2),
-    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 2),
+    % rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v1),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v1),
+    rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
+    rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v2),
     rt:upgrade(Node_A, ?TS_VERSION_1_3),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, 1),
-    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, 1),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v1),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v1),
     ok.
 
 %%--------------------------------------------------------------------
