@@ -34,18 +34,13 @@ confirm() ->
     TooLittleData = [list_to_tuple(lists:reverse(tl(lists:reverse(tuple_to_list(Row))))) || Row <- Data],
     WrongColumns = TooMuchData ++ TooLittleData,
     Columns = ts_util:get_cols(),
-    Expected =
-        {ok,
-         "GeoCheckin has been activated\n"
-         "\n"
-         "WARNING: Nodes in this cluster can no longer be\n"
-         "downgraded to a version of Riak prior to 2.0\n"},
-    {Cluster, Conn} = ts_util:cluster_and_connect(single),
-    Got = ts_util:create_and_activate_bucket_type(Cluster, DDL),
-    ?assertEqual(Expected, Got),
+
+    {_Cluster, Conn} = ts_util:cluster_and_connect(single),
+    ?assertEqual({ok, {[], []}}, riakc_ts:query(Conn, DDL)),
+
     Fn = fun(Datum, Acc) ->
-            [ts_util:ts_insert(Conn, Table, Columns, Datum) | Acc]
-        end,
+                 [ts_util:ts_insert(Conn, Table, Columns, Datum) | Acc]
+         end,
     Got2 = lists:reverse(lists:foldl(Fn, [], WrongColumns)),
     ?assertEqual(
         lists:duplicate(length(TooMuchData),

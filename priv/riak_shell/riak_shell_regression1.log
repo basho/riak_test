@@ -24,18 +24,20 @@
 |GeoCheckin|
 +----------+
 "}}.
-{{command, "EXPLAIN SELECT * FROM GeoCheckin WHERE myfamily = 'family1' AND myseries = 'series1' AND time >= 2 AND time <= 7000000 AND weather='fair';"}, {result, "+-----+------------------------------------+------------+-------------------------------------+-----------+-----------+
-|Subqu|        Range Scan Start Key        |Is Start Inc|         Range Scan End Key          |Is End Incl|  Filter   |
-+-----+------------------------------------+------------+-------------------------------------+-----------+-----------+
-|  1  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
-|  2  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
-|  3  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
-|  4  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
-|  5  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
-|  6  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
-|  7  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
-|  8  |myfamily = 'family1', myseries = 'se|   false    |myfamily = 'family1', myseries = 'ser|   false   |(weather = |
-+-----+------------------------------------+------------+-------------------------------------+-----------+-----------+
+{{command, "EXPLAIN SELECT * FROM GeoCheckin WHERE myfamily = 'family1' AND myseries = 'series1' AND time >= 2 AND time <= 7000000 AND weather='fair';"},
+ {result,
+"+--------+----------------------------------------------------------+-------------------+----------------------------------------------------------+-----------------+------------------+
+|Subquery|                   Range Scan Start Key                   |Is Start Inclusive?|                    Range Scan End Key                    |Is End Inclusive?|      Filter      |
++--------+----------------------------------------------------------+-------------------+----------------------------------------------------------+-----------------+------------------+
+|   1    |   myfamily = 'family1', myseries = 'series1', time = 2   |       false       |myfamily = 'family1', myseries = 'series1', time = 900000 |      false      |(weather = 'fair')|
+|   2    |myfamily = 'family1', myseries = 'series1', time = 900000 |       false       |myfamily = 'family1', myseries = 'series1', time = 1800000|      false      |(weather = 'fair')|
+|   3    |myfamily = 'family1', myseries = 'series1', time = 1800000|       false       |myfamily = 'family1', myseries = 'series1', time = 2700000|      false      |(weather = 'fair')|
+|   4    |myfamily = 'family1', myseries = 'series1', time = 2700000|       false       |myfamily = 'family1', myseries = 'series1', time = 3600000|      false      |(weather = 'fair')|
+|   5    |myfamily = 'family1', myseries = 'series1', time = 3600000|       false       |myfamily = 'family1', myseries = 'series1', time = 4500000|      false      |(weather = 'fair')|
+|   6    |myfamily = 'family1', myseries = 'series1', time = 4500000|       false       |myfamily = 'family1', myseries = 'series1', time = 5400000|      false      |(weather = 'fair')|
+|   7    |myfamily = 'family1', myseries = 'series1', time = 5400000|       false       |myfamily = 'family1', myseries = 'series1', time = 6300000|      false      |(weather = 'fair')|
+|   8    |myfamily = 'family1', myseries = 'series1', time = 6300000|       false       |myfamily = 'family1', myseries = 'series1', time = 7000000|      false      |(weather = 'fair')|
++--------+----------------------------------------------------------+-------------------+----------------------------------------------------------+-----------------+------------------+
 "}}.
 {{command, "EXPLAIN SELECT * FROM GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, ""}}.
@@ -54,27 +56,31 @@
 {{command, "select time, weather, temperature from GeoCheckin where myfamily='family1' and myseries='seriesX' and time > 10 and time < 1000;\n"}, {result, ""}}.
 {{command, "select * from GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1420113600000 and time <= 1420119300000;\n"}, {result, "Error (1001): Too many subqueries (7)"}}.
-{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1 and time <= 2;\n"}, {result, "+--------+--------+----+-------+--------------------------+
-|myfamily|myseries|time|weather|       temperature        |
-+--------+--------+----+-------+--------------------------+
-|family1 |series1 | 1  | snow  |2.51999999999999992895e+01|
-|family1 |series1 | 2  | rain  |2.45000000000000000000e+01|
-+--------+--------+----+-------+--------------------------+
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1 and time <= 2;\n"},
+ {result,
+"+--------+--------+------------------------+-------+--------------------------+
+|myfamily|myseries|          time          |weather|       temperature        |
++--------+--------+------------------------+-------+--------------------------+
+|family1 |series1 |1970-01-01T00:00:00.001Z| snow  |2.51999999999999992895e+01|
+|family1 |series1 |1970-01-01T00:00:00.002Z| rain  |2.45000000000000000000e+01|
++--------+--------+------------------------+-------+--------------------------+
 "}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10 and time <= 8;\n"}, {result, "Error (1001): The lower time bound is greater than the upper time bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10;\n"}, {result, "Error (1001): Where clause has no upper bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time <= 8;\n"}, {result, "Error (1001): Where clause has no lower bound."}}.
-{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 2 and time <= 7;\n"}, {result, "+--------+--------+----+-------+--------------------------+
-|myfamily|myseries|time|weather|       temperature        |
-+--------+--------+----+-------+--------------------------+
-|family1 |series1 | 2  | rain  |2.45000000000000000000e+01|
-|family1 |series1 | 3  | rain  |2.30000000000000000000e+01|
-|family1 |series1 | 4  | sunny |2.86000000000000014211e+01|
-|family1 |series1 | 5  | sunny |2.46999999999999992895e+01|
-|family1 |series1 | 6  |cloudy |3.27890000000000014779e+01|
-|family1 |series1 | 7  |cloudy |2.78999999999999985789e+01|
-+--------+--------+----+-------+--------------------------+
-"}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 2 and time <= 7;\n"}, {result,
+"+--------+--------+------------------------+-------+--------------------------+
+|myfamily|myseries|          time          |weather|       temperature        |
++--------+--------+------------------------+-------+--------------------------+
+|family1 |series1 |1970-01-01T00:00:00.002Z| rain  |2.45000000000000000000e+01|
+|family1 |series1 |1970-01-01T00:00:00.003Z| rain  |2.30000000000000000000e+01|
+|family1 |series1 |1970-01-01T00:00:00.004Z| sunny |2.86000000000000014211e+01|
+|family1 |series1 |1970-01-01T00:00:00.005Z| sunny |2.46999999999999992895e+01|
+|family1 |series1 |1970-01-01T00:00:00.006Z|cloudy |3.27890000000000014779e+01|
+|family1 |series1 |1970-01-01T00:00:00.007Z|cloudy |2.78999999999999985789e+01|
++--------+--------+------------------------+-------+--------------------------+
+"
+}}.
 {{command, "show_cookie; "}, {result, "Cookie is riak [actual riak]"}}.
 {{command, "show_config; "}, {result, "The config is [{cookie,riak},
                {logging,off},
