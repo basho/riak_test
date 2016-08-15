@@ -27,6 +27,7 @@
     bin_val/1,
     close_client/1,
     enabled_string/1,
+    get_enabled/2,
     index_2i/0,
     index_name/1,
     index_yz/0,
@@ -35,6 +36,7 @@
     num_keys/0, num_keys/1,
     open_client/2,
     populated_bucket/0,
+    set_enabled/3,
     setup_cluster/1,
     setup_yokozuna/1,
     test_buckets/0,
@@ -201,6 +203,21 @@ test_vals() ->
         Val ->
             Val
     end.
+
+get_enabled(Nodes, Class) when erlang:is_list(Nodes) ->
+    [get_enabled(Node, Class) || Node <- Nodes];
+get_enabled(Node, {App, Op}) ->
+    rpc:call(Node, riak_core_util, job_class_enabled, [App, Op]).
+
+set_enabled([], _, _) ->
+    ok;
+set_enabled([Node | Nodes], Class, Enabled) ->
+    ?assertEqual(ok, set_enabled(Node, Class, Enabled)),
+    set_enabled(Nodes, Class, Enabled);
+set_enabled(Node, {App, Op}, true) ->
+    rpc:call(Node, riak_core_util, enable_job_class, [App, Op]);
+set_enabled(Node, {App, Op}, false) ->
+    rpc:call(Node, riak_core_util, disable_job_class, [App, Op]).
 
 open_client(http = Type, Node) ->
     % HTTP connections are constant records, so re-use them

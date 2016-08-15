@@ -34,15 +34,12 @@
     ?TOKEN_LIST_BUCKETS_S,
     ?TOKEN_LIST_KEYS,
     ?TOKEN_LIST_KEYS_S,
+    ?TOKEN_MAP_REDUCE,
+%   ?TOKEN_MAP_REDUCE_JS,
     ?TOKEN_SEC_INDEX,
     ?TOKEN_SEC_INDEX_S,
-    ?TOKEN_MAP_REDUCE,
+%   ?TOKEN_OLD_SEARCH,
     ?TOKEN_YZ_SEARCH
-%   ?TOKEN_OLD_SEARCH
-]).
--define(COMMON_CONFIG,  [
-    {"storage_backend", "leveldb"}, % required by ?TOKEN_SEC_INDEX above
-    {"search",          "on"}       % required by ?TOKEN_YZ_SEARCH above
 ]).
 
 %% ===================================================================

@@ -32,12 +32,8 @@
 -define(CFG, [{riak_core, [{?ADVANCED_CONFIG_KEY, []}]}]).
 -define(ALL_BUCKETS, [<<"2i_test">>, <<"basic_test">>]).
 -define(BASIC_TEST_KEYS, [<<"1">>, <<"2">>, <<"3">>]).
--define(JOB_CLASSES, [
-    ?TOKEN_LIST_BUCKETS,
-    ?TOKEN_LIST_KEYS,
-    ?TOKEN_MAP_REDUCE,
-    ?TOKEN_SEC_INDEX
-]).
+-define(JOB_CLASSES,
+    [Class || {Class, Enabled} <- ?JOB_CLASS_DEFAULTS, Enabled]).
 
 confirm() ->
     lager:info("Deploying 1 node"),
@@ -99,11 +95,11 @@ run_test(Client, Test) ->
     ?MODULE:Test(Client).
 
 verify_list_buckets_disabled_pb(Client) ->
-    Expected = {error, ?ERRMSG_BIN(?TOKEN_LIST_BUCKETS)},
+    Expected = {error, ?ERRMSG_BIN(?TOKEN_LIST_BUCKETS_S)},
     ?assertEqual(Expected, riakc_pb_socket:list_buckets(Client)).
 
 verify_list_keys_disabled_pb(Client) ->
-    Expected = {error, ?ERRMSG_BIN(?TOKEN_LIST_KEYS)},
+    Expected = {error, ?ERRMSG_BIN(?TOKEN_LIST_KEYS_S)},
     ?assertEqual(Expected, riakc_pb_socket:list_keys(Client, <<"basic_test">>)).
 
 verify_secondary_index_disabled_pb(Client) ->
