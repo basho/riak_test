@@ -8,34 +8,25 @@
 "}}.
 {{command, "show_nodes; "}, {result, "The connected nodes are: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']"}}.
 {{command, "CREATE TABLE GeoCheckin (myfamily varchar not null, myseries varchar not null, time  timestamp not null, weather  varchar not null, temperature double, PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time));\n"}, {result, ""}}.
-{{command, "describe GeoCheckin;\n"}, {result, "+-----------+---------+-------+-----------+---------+--------+----+
-|  Column   |  Type   |Is Null|Primary Key|Local Key|Interval|Unit|
-+-----------+---------+-------+-----------+---------+--------+----+
-| myfamily  | varchar | false |     1     |    1    |        |    |
-| myseries  | varchar | false |     2     |    2    |        |    |
-|   time    |timestamp| false |     3     |    3    |   15   | m  |
-|  weather  | varchar | false |           |         |        |    |
-|temperature| double  | true  |           |         |        |    |
-+-----------+---------+-------+-----------+---------+--------+----+
+{{command, "describe GeoCheckin;\n"}, {result, "Column,Type,Is Null,Primary Key,Local Key,Interval,Unit
+myfamily,varchar,false,1,1,,
+myseries,varchar,false,2,2,,
+time,timestamp,false,3,3,15,m
+weather,varchar,false,,,,
+temperature,double,true,,,,
 "}}.
-{{command, "SHOW TABLES;\n"}, {result, "+----------+
-|  Table   |
-+----------+
-|GeoCheckin|
-+----------+
+{{command, "SHOW TABLES;\n"}, {result, "Table
+GeoCheckin
 "}}.
-{{command, "EXPLAIN SELECT * FROM GeoCheckin WHERE myfamily = 'family1' AND myseries = 'series1' AND time >= 2 AND time <= 7000000 AND weather='fair';"}, {result, "+--------+-------------------------------------------------------+----------------------------------------------------------+-------------------+----------------------------------------------------------+-----------------+------------------+
-|Subquery|                     Coverage Plan                     |                   Range Scan Start Key                   |Is Start Inclusive?|                    Range Scan End Key                    |Is End Inclusive?|      Filter      |
-+--------+-------------------------------------------------------+----------------------------------------------------------+-------------------+----------------------------------------------------------+-----------------+------------------+
-|   1    |dev1@127.0.0.1/12, dev2@127.0.0.1/10, dev3@127.0.0.1/11|   myfamily = 'family1', myseries = 'series1', time = 2   |       false       |myfamily = 'family1', myseries = 'series1', time = 900000 |      false      |(weather = 'fair')|
-|   2    |dev1@127.0.0.1/40, dev3@127.0.0.1/38, dev3@127.0.0.1/39|myfamily = 'family1', myseries = 'series1', time = 900000 |       false       |myfamily = 'family1', myseries = 'series1', time = 1800000|      false      |(weather = 'fair')|
-|   3    |dev1@127.0.0.1/36, dev2@127.0.0.1/37, dev3@127.0.0.1/38|myfamily = 'family1', myseries = 'series1', time = 1800000|       false       |myfamily = 'family1', myseries = 'series1', time = 2700000|      false      |(weather = 'fair')|
-|   4    |dev1@127.0.0.1/24, dev3@127.0.0.1/22, dev3@127.0.0.1/23|myfamily = 'family1', myseries = 'series1', time = 2700000|       false       |myfamily = 'family1', myseries = 'series1', time = 3600000|      false      |(weather = 'fair')|
-|   5    |dev2@127.0.0.1/17, dev2@127.0.0.1/18, dev3@127.0.0.1/19|myfamily = 'family1', myseries = 'series1', time = 3600000|       false       |myfamily = 'family1', myseries = 'series1', time = 4500000|      false      |(weather = 'fair')|
-|   6    |dev1@127.0.0.1/59, dev1@127.0.0.1/60, dev2@127.0.0.1/61|myfamily = 'family1', myseries = 'series1', time = 4500000|       false       |myfamily = 'family1', myseries = 'series1', time = 5400000|      false      |(weather = 'fair')|
-|   7    |dev1@127.0.0.1/12, dev2@127.0.0.1/13, dev3@127.0.0.1/11|myfamily = 'family1', myseries = 'series1', time = 5400000|       false       |myfamily = 'family1', myseries = 'series1', time = 6300000|      false      |(weather = 'fair')|
-|   8    |dev1@127.0.0.1/55, dev2@127.0.0.1/53, dev3@127.0.0.1/54|myfamily = 'family1', myseries = 'series1', time = 6300000|       false       |myfamily = 'family1', myseries = 'series1', time = 7000000|      false      |(weather = 'fair')|
-+--------+-------------------------------------------------------+----------------------------------------------------------+-------------------+----------------------------------------------------------+-----------------+------------------+
+{{command, "EXPLAIN SELECT * FROM GeoCheckin WHERE myfamily = 'family1' AND myseries = 'series1' AND time >= 2 AND time <= 7000000 AND weather='fair';"}, {result, "Subquery,Coverage Plan,Range Scan Start Key,Is Start Inclusive?,Range Scan End Key,Is End Inclusive?,Filter
+1,\"dev1@127.0.0.1/12, dev2@127.0.0.1/10, dev3@127.0.0.1/11\",\"myfamily = 'family1', myseries = 'series1', time = 2\",false,\"myfamily = 'family1', myseries = 'series1', time = 900000\",false,(weather = 'fair')
+2,\"dev1@127.0.0.1/40, dev3@127.0.0.1/38, dev3@127.0.0.1/39\",\"myfamily = 'family1', myseries = 'series1', time = 900000\",false,\"myfamily = 'family1', myseries = 'series1', time = 1800000\",false,(weather = 'fair')
+3,\"dev1@127.0.0.1/36, dev2@127.0.0.1/37, dev3@127.0.0.1/38\",\"myfamily = 'family1', myseries = 'series1', time = 1800000\",false,\"myfamily = 'family1', myseries = 'series1', time = 2700000\",false,(weather = 'fair')
+4,\"dev1@127.0.0.1/24, dev3@127.0.0.1/22, dev3@127.0.0.1/23\",\"myfamily = 'family1', myseries = 'series1', time = 2700000\",false,\"myfamily = 'family1', myseries = 'series1', time = 3600000\",false,(weather = 'fair')
+5,\"dev2@127.0.0.1/17, dev2@127.0.0.1/18, dev3@127.0.0.1/19\",\"myfamily = 'family1', myseries = 'series1', time = 3600000\",false,\"myfamily = 'family1', myseries = 'series1', time = 4500000\",false,(weather = 'fair')
+6,\"dev1@127.0.0.1/59, dev1@127.0.0.1/60, dev2@127.0.0.1/61\",\"myfamily = 'family1', myseries = 'series1', time = 4500000\",false,\"myfamily = 'family1', myseries = 'series1', time = 5400000\",false,(weather = 'fair')
+7,\"dev1@127.0.0.1/12, dev2@127.0.0.1/13, dev3@127.0.0.1/11\",\"myfamily = 'family1', myseries = 'series1', time = 5400000\",false,\"myfamily = 'family1', myseries = 'series1', time = 6300000\",false,(weather = 'fair')
+8,\"dev1@127.0.0.1/55, dev2@127.0.0.1/53, dev3@127.0.0.1/54\",\"myfamily = 'family1', myseries = 'series1', time = 6300000\",false,\"myfamily = 'family1', myseries = 'series1', time = 7000000\",false,(weather = 'fair')
 "}}.
 {{command, "EXPLAIN SELECT * FROM GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, ""}}.
@@ -56,29 +47,22 @@
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1420113600000 and time <= 1420119300000;\n"}, {result, "Error (1001): Too many subqueries (7)"}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1 and time <= 2;\n"},
  {result,
-"+--------+--------+------------------------+-------+--------------------------+
-|myfamily|myseries|          time          |weather|       temperature        |
-+--------+--------+------------------------+-------+--------------------------+
-|family1 |series1 |1970-01-01T00:00:00.001Z| snow  |2.51999999999999992895e+01|
-|family1 |series1 |1970-01-01T00:00:00.002Z| rain  |2.45000000000000000000e+01|
-+--------+--------+------------------------+-------+--------------------------+
+"myfamily,myseries,time,weather,temperature
+family1,series1,1970-01-01T00:00:00.001Z,snow,2.51999999999999992895e+01
+family1,series1,1970-01-01T00:00:00.002Z,rain,2.45000000000000000000e+01
 "}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10 and time <= 8;\n"}, {result, "Error (1001): The lower time bound is greater than the upper time bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10;\n"}, {result, "Error (1001): Where clause has no upper bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time <= 8;\n"}, {result, "Error (1001): Where clause has no lower bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 2 and time <= 7;\n"}, {result,
-"+--------+--------+------------------------+-------+--------------------------+
-|myfamily|myseries|          time          |weather|       temperature        |
-+--------+--------+------------------------+-------+--------------------------+
-|family1 |series1 |1970-01-01T00:00:00.002Z| rain  |2.45000000000000000000e+01|
-|family1 |series1 |1970-01-01T00:00:00.003Z| rain  |2.30000000000000000000e+01|
-|family1 |series1 |1970-01-01T00:00:00.004Z| sunny |2.86000000000000014211e+01|
-|family1 |series1 |1970-01-01T00:00:00.005Z| sunny |2.46999999999999992895e+01|
-|family1 |series1 |1970-01-01T00:00:00.006Z|cloudy |3.27890000000000014779e+01|
-|family1 |series1 |1970-01-01T00:00:00.007Z|cloudy |2.78999999999999985789e+01|
-+--------+--------+------------------------+-------+--------------------------+
-"
-}}.
+"myfamily,myseries,time,weather,temperature
+family1,series1,1970-01-01T00:00:00.002Z,rain,2.45000000000000000000e+01
+family1,series1,1970-01-01T00:00:00.003Z,rain,2.30000000000000000000e+01
+family1,series1,1970-01-01T00:00:00.004Z,sunny,2.86000000000000014211e+01
+family1,series1,1970-01-01T00:00:00.005Z,sunny,2.46999999999999992895e+01
+family1,series1,1970-01-01T00:00:00.006Z,cloudy,3.27890000000000014779e+01
+family1,series1,1970-01-01T00:00:00.007Z,cloudy,2.78999999999999985789e+01
+"}}.
 {{command, "show_cookie; "}, {result, "Cookie is riak [actual riak]"}}.
 {{command, "show_config; "}, {result, "The config is [{cookie,riak},
                {logging,off},
@@ -89,3 +73,10 @@
 {{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
 {{command, "connect dev2@127.0.0.1; "}, {result, "Connected to 'dev2@127.0.0.1' on port 10027"}}.
 {{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev2@127.0.0.1' on port 10027"}}.
+{{command, "CREATE TABLE GeoCheckin2 ( region VARCHAR NOT NULL, state VARCHAR NOT NULL, time TIMESTAMP NOT NULL, weather VARCHAR NOT NULL, temperature DOUBLE, PRIMARY KEY ( (region, state, QUANTUM(time, 15, 'm')),region, state, time));\n"}, {result, ""}}.
+{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523183, 'raining', 11.2);\n"}, {result, ""}}.
+{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523189, 'snowing', 19.2);\n"}, {result, ""}}.
+{{command, "SELECT 555, 1.1, 1e1, 1.123e-2 from GeoCheckin2 WHERE time > 1452252523182 AND time < 1452252543182 AND region = 'South Atlantic' AND state = 'South Carolina';\n"}, {result, "555,1.1,10.0,0.01123
+555,1.10000000000000008882e+00,1.00000000000000000000e+01,1.12300000000000003986e-02
+555,1.10000000000000008882e+00,1.00000000000000000000e+01,1.12300000000000003986e-02
+"}}.
