@@ -90,12 +90,12 @@ run_commands([{{match, Expected}, Cmd} | T], State, ShouldIncrement) ->
     {_Error, Response, NewState, NewShdIncr} = run_cmd(Cmd, State, ShouldIncrement),
     %% when you start getting off-by-1 weirdness you will WANT to uncomment this
     %% Trim off the newlines to aid in string comparison
-    ExpectedTrimmed = re:replace(Expected, "\n", "", [global,{return,list}]),
-    ResultTrimmed = re:replace(lists:flatten(Response), "\n", "", [global,{return,list}]),
+    ExpectedTrimmed = cleanup_output(Expected),
+    ResultTrimmed = cleanup_output(Response),
     case ResultTrimmed of
         ExpectedTrimmed -> lager:info("Successful match of ~p from ~p", [Expected, Cmd]),
                            run_commands(T, NewState, NewShdIncr);
-        Got             -> print_error("Ran ~p:", Cmd, Expected, Got),
+        _               -> print_error("Ran ~p:", Cmd, Expected, Response),
                            fail
     end;
 run_commands([{run, Cmd} | T], State, ShouldIncrement) ->
@@ -103,6 +103,9 @@ run_commands([{run, Cmd} | T], State, ShouldIncrement) ->
     {_Error, Result, NewState, NewShdIncr} = run_cmd(Cmd, State, ShouldIncrement),
     lists:map(fun(X) -> lager:info("~s~n", [X]) end, re:split(Result, "\n", [trim])),
     run_commands(T, NewState, NewShdIncr).
+
+cleanup_output(In) ->
+    re:replace(lists:flatten(In), "[\r\n]", "", [global,{return,list}]).
 
 run_cmd(Cmd, State, ShouldIncrement) ->
     %% the riak-shell works by spawning a process that has captured
