@@ -280,8 +280,32 @@ ensure_single_version_cluster(NodesAtVersions, ReqVersion, ImmutableNodes) ->
 -spec transition_node(node(), version()) -> ok.
 transition_node(Node, Version) ->
     ct:log("transitioning node ~p to version '~p'", [Node, Version]),
-    ok = rt:upgrade(Node, Version),
+    case Version of
+        previous ->
+            ok = rt:upgrade(Node, Version, fun convert_riak_conf_to_1_3/1);
+        current ->
+            ok = rt:upgrade(Node, Version)
+    end,
     ok = rt:wait_for_service(Node, riak_kv).
+
+%%
+convert_riak_conf_to_1_3(RiakConfPath) ->
+    {ok, Content1} = file:read_file(RiakConfPath),
+    Content2 = binary:replace(
+        Content1,
+        <<"riak_kv.query.timeseries.max_quanta_span">>,
+        <<"timeseries_query_max_quanta_span">>, [global]),
+    Content3 = binary:replace(
+        Content2,
+        <<"riak_kv.query.timeseries.max_concurrent_queries">>,
+        <<"riak_kv.query.concurrent_queries">>, [global]),
+    Content4 = convert_timeout_config_to_1_3(Content3),
+    ok = file:write_file(RiakConfPath, Content4).
+
+%%
+convert_timeout_config_to_1_3(Content) ->
+    Re =  "(riak_kv.query.timeseries.timeout)\s*=\s*([0-9]*)([smh])",
+    re:replace(Content, Re, "timeseries_query_timeout_ms = 10000").
 
 
 -spec possibly_transition_node(versioned_cluster(), node(), version())
