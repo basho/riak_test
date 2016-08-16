@@ -786,17 +786,26 @@ get_node_debug_logs() ->
             NodeMap).
 
 get_node_debug_logs({_Node, NodeNum}) ->
+    DebugLogFile = ?DEBUG_LOG_FILE(NodeNum),
+    delete_existing_debug_log_file(DebugLogFile),
     Path = relpath(node_version(NodeNum)),
     Args = ["--logs"],
     Cmd = riak_debug_cmd(Path, NodeNum, Args),
-    file:delete(?DEBUG_LOG_FILE(NodeNum)),
     {ExitCode, Result} = wait_for_cmd(spawn_cmd(Cmd)),
     case ExitCode of
         0 ->
-            ?DEBUG_LOG_FILE(NodeNum);
+            DebugLogFile;
         _ ->
             exit({ExitCode, Result})
     end.
+
+%% If the debug log file exists from a previous test run it will cause the
+%% `riak_debug_cmd' to fail. Therefore, delete the `DebugLogFile' if it exists.
+%% Note that by ignoring the return value of `file:delete/1' this function
+%% works whether or not the `DebugLogFile' actually exists at the time it is
+%% called.
+delete_existing_debug_log_file(DebugLogFile) ->
+    file:delete(DebugLogFile).
 
 %% @doc Performs a search against the log files on `Node' and returns all
 %% matching lines.
