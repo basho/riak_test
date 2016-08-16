@@ -73,3 +73,10 @@ family1,series1,1970-01-01T00:00:00.007Z,cloudy,2.78999999999999985789e+01
 {{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
 {{command, "connect dev2@127.0.0.1; "}, {result, "Connected to 'dev2@127.0.0.1' on port 10027"}}.
 {{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev2@127.0.0.1' on port 10027"}}.
+{{command, "CREATE TABLE GeoCheckin2 ( region VARCHAR NOT NULL, state VARCHAR NOT NULL, time TIMESTAMP NOT NULL, weather VARCHAR NOT NULL, temperature DOUBLE, PRIMARY KEY ( (region, state, QUANTUM(time, 15, 'm')),region, state, time));\n"}, {result, ""}}.
+{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523183, 'raining', 11.2);\n"}, {result, ""}}.
+{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523189, 'snowing', 19.2);\n"}, {result, ""}}.
+{{command, "SELECT 555, 1.1, 1e1, 1.123e-2 from GeoCheckin2 WHERE time > 1452252523182 AND time < 1452252543182 AND region = 'South Atlantic' AND state = 'South Carolina';\n"}, {result, "555,1.1,10.0,0.01123
+555,1.10000000000000008882e+00,1.00000000000000000000e+01,1.12300000000000003986e-02
+555,1.10000000000000008882e+00,1.00000000000000000000e+01,1.12300000000000003986e-02
+"}}.
