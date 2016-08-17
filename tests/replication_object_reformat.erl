@@ -82,7 +82,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
 
                           lager:info("Downgrading node ~p to previous.",
                                      [BFirst]),
-                          rt:upgrade(BFirst, previous),
+                          rt:upgrade(BFirst, previous, fun ts_updown_util:convert_riak_conf_to_1_3/1),
 
                           lager:info("Waiting for riak_kv to start on node ~p.",
                                      [BFirst]),
@@ -149,7 +149,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
 
             lager:info("Downgrading node ~p to previous.",
                        [BFirst]),
-            rt:upgrade(BFirst, previous),
+            rt:upgrade(BFirst, previous, fun ts_updown_util:convert_riak_conf_to_1_3/1),
 
             lager:info("Waiting for riak_kv to start on node ~p.",
                        [BFirst]),

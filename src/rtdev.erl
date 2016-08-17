@@ -155,6 +155,10 @@ upgrade(Node, NewVersion, Config) ->
     rt_config:set(rt_versions, VersionMap),
     case Config of
         same -> ok;
+        _ when is_function(Config) ->
+            RiakConfPath =
+                io_lib:format("~s/dev/dev~b/etc/riak.conf", [NewPath, N]),
+            Config(RiakConfPath);
         _ -> update_app_config(Node, Config)
     end,
     start(Node),
