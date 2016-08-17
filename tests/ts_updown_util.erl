@@ -23,6 +23,7 @@
 -module(ts_updown_util).
 
 -export([
+         convert_riak_conf_to_1_3/1,
          setup/1,
          maybe_shutdown_client_node/1,
          run_scenarios/2,
