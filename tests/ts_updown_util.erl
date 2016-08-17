@@ -288,7 +288,8 @@ transition_node(Node, Version) ->
     end,
     ok = rt:wait_for_service(Node, riak_kv).
 
-%%
+%% riak.conf created under 1.4 cannot be read by 1.3 because the properties
+%% have been renamed so they need to be replaced with the 1.3 versions.
 convert_riak_conf_to_1_3(RiakConfPath) ->
     {ok, Content1} = file:read_file(RiakConfPath),
     Content2 = binary:replace(
@@ -302,7 +303,8 @@ convert_riak_conf_to_1_3(RiakConfPath) ->
     Content4 = convert_timeout_config_to_1_3(Content3),
     ok = file:write_file(RiakConfPath, Content4).
 
-%%
+%% The timeout property needs some special care because 1.3 uses 10000 for
+%% milliseconds and 1.4 uses 10s for a number and unit.
 convert_timeout_config_to_1_3(Content) ->
     Re =  "(riak_kv.query.timeseries.timeout)\s*=\s*([0-9]*)([smh])",
     re:replace(Content, Re, "timeseries_query_timeout_ms = 10000").
