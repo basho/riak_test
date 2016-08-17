@@ -46,11 +46,14 @@
           should_skip = false :: boolean(),
           %% the select query is an io_lib:format containing a single "~s" placeholder 
           %% for the table name
-          qry      :: binary(),
-          expected :: term()
+          qry        :: binary(),
+          expected   :: term(),
+          assert_mod :: atom(),
+          assert_fun :: atom()
          }).
 
 -record(test_set, {
+          testname     :: string(),
           create       :: #create{},
           insert       :: #insert{},
           selects = [] :: [#select{}],

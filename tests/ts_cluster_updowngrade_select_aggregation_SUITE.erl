@@ -45,10 +45,14 @@ make_scenario_invariants(Config) ->
     {SelectVsExpected, Data} = make_queries_and_data(),
     Create = #create{ddl = DDL,   expected = {ok, {[], []}}},
     Insert = #insert{data = Data, expected = ok},
-    Selects = [#select{qry = Q,   expected = E} || {Q, E} <- SelectVsExpected],
-    DefaultTestSets = [#test_set{create  = Create,
-                                 insert  = Insert,
-                                 selects = Selects}],
+    Selects = [#select{qry        = Q,   
+                       expected   = E,
+                       assert_mod = ts_util,
+                       assert_fun = assert_float} || {Q, E} <- SelectVsExpected],
+    DefaultTestSets = [#test_set{testname   = "basic_select_aggregation",
+                                 create     = Create,
+                                 insert     = Insert,
+                                 selects    = Selects}],
     Config ++ [{default_tests, DefaultTestSets}].
 
 make_queries_and_data() ->

@@ -368,12 +368,13 @@ fmt(F, A) ->
 
 make_tables(#test_set{create = #create{should_skip = true}}, _TableNode) ->
     pass;
-make_tables(#test_set{timestamp = Timestamp,
-                      create    = #create{ddl      = DDLFmt,
+make_tables(#test_set{testname  = Testname,
+                      timestamp = Timestamp, 
+                      create    = #create{ddl      = DDLFmt, 
                                           expected = Exp}}, TableNode) ->
     %% fast machines:
     timer:sleep(1),
-    Table = get_table_name(Timestamp),
+    Table = get_table_name(Testname, Timestamp),
     DDL = fmt(DDLFmt, [Table]),
     Client1 = rt:pbc(TableNode),
     case riakc_ts:'query'(Client1, DDL) of
@@ -381,8 +382,8 @@ make_tables(#test_set{timestamp = Timestamp,
             ok = wait_until_active_table(Client1, Table, 5),
             ct:log("Table ~p created on ~p", [Table, TableNode]),
             pass;
-        Error ->
-            ct:log("Failed to create table ~p: (~s)", [Table, Error]),
+        {error, {_No, Error}} ->
+            ct:log("Failed to create table ~p: (~s) with ~s", [Table, Error, DDL]),
             #fail{message  = make_msg("Creation of ~s failed", [Table]),
                   expected = Exp,
                   got      = Error}
@@ -390,11 +391,12 @@ make_tables(#test_set{timestamp = Timestamp,
 
 insert_data(#test_set{insert = #insert{should_skip = true}}, _TableNode) ->
     pass;
-insert_data(#test_set{timestamp = Timestamp,
-                      insert    = #insert{data     = Data,
+insert_data(#test_set{testname  = Testname,
+                      timestamp = Timestamp,
+                      insert    = #insert{data     = Data, 
                                           expected = Exp}}, TableNode) ->
     Client1 = rt:pbc(TableNode),
-    Table = get_table_name(Timestamp),
+    Table = get_table_name(Testname, Timestamp),
     case riakc_ts:put(Client1, Table, Data) of
         Exp ->
             ct:log("Table ~p on ~p had ~b records successfully inserted)",
@@ -407,19 +409,23 @@ insert_data(#test_set{timestamp = Timestamp,
                   got      = Error}
     end.
 
-run_selects(#test_set{timestamp = Timestamp,
+run_selects(#test_set{testname  = Testname,
+                      timestamp = Timestamp, 
                       selects   = Selects}, QueryNode, Config) ->
     QryNos = lists:seq(1, length(Selects)),
     Zip = lists:zip(Selects, QryNos),
-    lists:flatten([run_select(S, QN, Timestamp, QueryNode, Config) || {S, QN} <- Zip]).
+    Tablename = get_table_name(Testname, Timestamp),
+    lists:flatten([run_select(S, QN, Tablename, QueryNode, Config) || {S, QN} <- Zip]).
 
-run_select(#select{should_skip = true}, _QryNo, _Timestamp, _QueryNode, _Config) ->
+run_select(#select{should_skip = true}, _QryNo, _Tablename, _QueryNode, _Config) -> 
     pass;
-run_select(#select{qry = Q, expected = Exp}, QryNo, Timestamp, QueryNode, Config) ->
-    Table = get_table_name(Timestamp),
-    SelectQuery = fmt(Q, [Table]),
+run_select(#select{qry        = Q, 
+                   expected   = Exp, 
+                   assert_mod = Mod, 
+                   assert_fun = Fun}, QryNo, Tablename, QueryNode, Config) -> 
+    SelectQuery = fmt(Q, [Tablename]),
     Got = query_with_client(SelectQuery, QueryNode, Config),
-    case ts_util:assert_float(fmt("Query #~p", [QryNo]), Exp, Got) of
+    case Mod:Fun(fmt("Query #~p", [QryNo]), Exp, Got) of
         pass -> pass;
         fail -> #fail{message  = SelectQuery,
                       expected = Exp,
@@ -433,8 +439,9 @@ make_timestamp() ->
     {_Mega, Sec, Milli} = os:timestamp(),
     fmt("~b~b", [Sec, Milli]).
 
-get_table_name(Timestamp) when is_list(Timestamp) ->
-    "updown_test_" ++ Timestamp.
+get_table_name(Testname, Timestamp) when is_list(Testname) andalso
+                                         is_list(Timestamp) ->
+    Testname ++ Timestamp.
 
 make_msg(Format, Payload) ->
     list_to_binary(fmt(Format, Payload)).
