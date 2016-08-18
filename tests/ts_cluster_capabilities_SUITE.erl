@@ -29,11 +29,20 @@
 %% COMMON TEST CALLBACK FUNCTIONS
 %%--------------------------------------------------------------------
 
+-define(TS_VERSION_CURRENT, "current").
+
+%% git checkout riak_ts-1.3.1 && make locked-deps
+-define(TS_VERSION_1_3, riak_ts_1_3_1).
+
+-define(SQL_SELECT_CAP, {riak_kv, sql_select_version}).
+
 suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    Config.
+    Versions = rt:find_version_by_name(["riak_ts-1.3.1", "riak_ts_ee-1.3.1"]),
+    Vsn131 = maybe_missing_1_3_1(Versions),
+    [{?TS_VERSION_1_3, Vsn131} | Config].
 
 end_per_suite(_Config) ->
     ok.
@@ -58,13 +67,6 @@ groups() ->
 
 all() -> 
     rt:grep_test_functions(?MODULE).
-
--define(TS_VERSION_CURRENT, "current").
-
-%% git checkout riak_ts-1.3.1 && make locked-deps
--define(TS_VERSION_1_3, "ts_1.3.1").
-
--define(SQL_SELECT_CAP, {riak_kv, sql_select_version}).
 
 %%--------------------------------------------------------------------
 %% Utils
@@ -141,9 +143,10 @@ capability_not_specified_on_one_node_test(_Ctx) ->
 %% Riak TS Capability Tests
 %%--------------------------------------------------------------------
 
-sql_select_upgrade_a_node_from_1_3_test(_) ->
+sql_select_upgrade_a_node_from_1_3_test(Config) ->
+    Vsn131 = ?config(?TS_VERSION_1_3, Config),
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([?TS_VERSION_1_3, ?TS_VERSION_1_3, ?TS_VERSION_1_3]),
+        rt:deploy_nodes([Vsn131, Vsn131, Vsn131]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
@@ -151,9 +154,10 @@ sql_select_upgrade_a_node_from_1_3_test(_) ->
     ok = rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v1),
     ok.
 
-sql_select_join_with_all_nodes_upgraded_test(_) ->
+sql_select_join_with_all_nodes_upgraded_test(Config) ->
+    Vsn131 = ?config(?TS_VERSION_1_3, Config),
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([?TS_VERSION_1_3, ?TS_VERSION_1_3, ?TS_VERSION_1_3]),
+        rt:deploy_nodes([Vsn131, Vsn131, Vsn131]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
@@ -164,9 +168,10 @@ sql_select_join_with_all_nodes_upgraded_test(_) ->
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v2),
     ok.
 
-sql_select_downgrade_a_node_test(_) ->
+sql_select_downgrade_a_node_test(Config) ->
+    Vsn131 = ?config(?TS_VERSION_1_3, Config),
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([?TS_VERSION_1_3, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
+        rt:deploy_nodes([Vsn131, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     % rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
@@ -177,7 +182,7 @@ sql_select_downgrade_a_node_test(_) ->
     rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
     rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v2),
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v2),
-    rt:upgrade(Node_A, ?TS_VERSION_1_3),
+    rt:upgrade(Node_A, Vsn131),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v1),
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v1),
@@ -187,9 +192,10 @@ sql_select_downgrade_a_node_test(_) ->
 %% Perform queries in mixed version cluster
 %%--------------------------------------------------------------------
 
-query_in_mixed_version_cluster_test(_) ->
+query_in_mixed_version_cluster_test(Config) ->
+    Vsn131 = ?config(?TS_VERSION_1_3, Config),
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_1_3, ?TS_VERSION_CURRENT]),
+        rt:deploy_nodes([?TS_VERSION_CURRENT, Vsn131, ?TS_VERSION_CURRENT]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     Table = "grouptab1",
@@ -225,3 +231,10 @@ query_in_mixed_version_cluster_test(_) ->
         {rt_ignore_columns, ExpectedResultSet},
         {ok,{Cols, Rows}}
     ).
+
+%% If 1.3.1 is not found, use a meaningful atom to prompt the error message
+%% rtdev:check_version/1
+maybe_missing_1_3_1([]) ->
+    missing_version_ts_1_3_1;
+maybe_missing_1_3_1([Vsn]) ->
+    Vsn.
