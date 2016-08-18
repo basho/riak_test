@@ -760,13 +760,18 @@ find_version_by_name(Names) when is_list(Names) ->
 find_version_by_name(Versions, Name) ->
     Match = lists:filter(
         fun(Vsn) ->
-            NodeName = binary_to_list(rt:get_version(Vsn)),
+            NodeName = node_name_as_string(rt:get_version(Vsn)),
             case string:str(NodeName, Name) of
                 0 -> false;
                 _ -> true
             end
         end, Versions),
     Match.
+
+node_name_as_string(unknown) ->
+    "";
+node_name_as_string(BinName) when is_binary(BinName) ->
+    binary_to_list(BinName).
 
 teardown() ->
     rt_cover:maybe_stop_on_nodes(),
