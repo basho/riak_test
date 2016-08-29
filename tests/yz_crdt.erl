@@ -137,9 +137,23 @@ validate_search_results(Pid) ->
         false
     end,
 
+
+
+    lager:info("Test setting the register of a map twice to different values."
+               "\nThe # of results should still be 1"),
     test_repeat_sets(Pid, Nodes, ?BUCKET, ?INDEX, ?KEY),
+
+    lager:info("FYI: delete_mode is on keep here to make sure YZ handles"
+               " deletes correctly throughout."),
+
+    lager:info("Test varying deletes operations"),
     test_delete(Pid, Nodes, ?BUCKET, ?INDEX, ?KEY),
+
+    lager:info("Test to make sure yz AAE handles deletes/removes correctly"),
     test_delete_aae(Pid, Nodes, ?BUCKET, ?INDEX),
+
+    lager:info("Test to make sure siblings don't exist after partition"
+              " occurrs and we heal the cluster"),
     test_siblings(Pid, Nodes, ?BUCKET, ?INDEX),
 
     pass.
@@ -176,9 +190,17 @@ test_repeat_sets(Pid, Cluster, Bucket, Index, Key) ->
     lager:info("Search update_register:*: ~p~n", [Results]),
     ?assertEqual(1, length(Results)).
 
+%% @doc Tests varying deletes of within a CRDT map and checks for correct counts
+%%      - Remove registers, remove and add elements within a set
+%%      - Delete the map (associated w/ a key)
+%%      - Recreate objects in the map and delete the map again
 test_delete(Pid, Cluster, Bucket, Index, Key) ->
     {ok, M1} = riakc_pb_socket:fetch_type(Pid, Bucket, Key),
+
+    lager:info("Remove register from map"),
     M2 = riakc_map:erase({<<"name">>, register}, M1),
+
+    lager:info("Delete element from set (in map) & Add element to set (in map)"),
     M3 = riakc_map:update(
            {<<"interests">>, set},
            fun(S) ->
@@ -200,6 +222,7 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     lager:info("Search deleted/erased name_register:*: ~p~n", [Results1]),
     ?assertEqual(0, length(Results1)),
 
+    lager:info("Add another element to set (in map)"),
     M4 = riakc_map:update(
            {<<"interests">>, set},
            fun(S) ->
@@ -223,7 +246,8 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     lager:info("Delete key for map"),
     ?assertEqual(ok, riakc_pb_socket:delete(Pid, Bucket, Key)),
     yokozuna_rt:commit(Cluster, Index),
-    ?assertEqual({error, {notfound, map}}, riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
+    ?assertEqual({error, {notfound, map}},
+                 riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
 
     {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
                                                Pid, Index,
@@ -231,8 +255,9 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     lager:info("Search deleted map *:*: ~p~n", [Results3]),
     ?assertEqual(0, length(Results3)),
 
-    lager:info("Recreate object and check counts"),
+    lager:info("Recreate object and check counts..."),
 
+    lager:info("Set a new register for map"),
     M5 = riakc_map:update(
             {<<"name">>, register},
             fun(R) ->
@@ -261,7 +286,8 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     ?assertEqual(ok, riakc_pb_socket:delete(Pid, Bucket, Key)),
     yokozuna_rt:commit(Cluster, Index),
 
-    ?assertEqual({error, {notfound, map}}, riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
+    ?assertEqual({error, {notfound, map}},
+                 riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
 
     {ok, {search_results, Results5, _, _}} = riakc_pb_socket:search(
                                                Pid, Index,
@@ -269,6 +295,10 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     lager:info("Search ~p deleted map *:*: ~p~n", [Key, Results5]),
     ?assertEqual(0, length(Results5)).
 
+%% @doc Tests key/map delete and AAE
+%%      - Use intercept to trap yz_kv:delete_operation to skip over
+%%      - Makes sure that yz AAE handles tombstone on expire/exchange
+%%      - Recreate objects and check
 test_delete_aae(Pid, Cluster, Bucket, Index) ->
     Key1 = <<"ohyokozuna">>,
     M1 = riakc_map:update(
@@ -294,6 +324,8 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
            Key2,
            riakc_map:to_op(M2)),
 
+    lager:info("Add and load handle_delete_operation intercept"),
+
     [make_intercepts_tab(ANode) || ANode <- Cluster],
 
     [rt_intercept:add(ANode, {yz_kv, [{{delete_operation, 5},
@@ -305,13 +337,15 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
 
     lager:info("Delete key ~p for map", [Key2]),
     ?assertEqual(ok, riakc_pb_socket:delete(Pid, Bucket, Key2)),
-    ?assertEqual({error, {notfound, map}}, riakc_pb_socket:fetch_type(Pid, Bucket, Key2)),
+    ?assertEqual({error, {notfound, map}},
+                 riakc_pb_socket:fetch_type(Pid, Bucket, Key2)),
     yokozuna_rt:commit(Cluster, Index),
 
     {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
                                                Pid, Index,
                                                <<"*:*">>),
-    lager:info("Search all results, expect extra b/c tombstone ... *:*: ~p~n",
+    lager:info("Search all results, expect extra b/c tombstone"
+               " and we've modified the delete op... *:*: ~p~n",
                [length(Results1)]),
     ?assertEqual(2, length(Results1)),
 
@@ -324,8 +358,8 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
     {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
                                                Pid, Index,
                                                <<"*:*">>),
-    lager:info("Search all results, expect removed tombstone b/c aae ... *:*: ~p~n",
-               [length(Results2)]),
+    lager:info("Search all results, expect removed tombstone b/c AAE"
+               " should clean it up ... *:*: ~p~n", [length(Results2)]),
     ?assertEqual(1, length(Results2)),
 
     lager:info("Recreate object and check counts"),
@@ -333,8 +367,8 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
     M3 = riakc_map:update(
            {<<"name">>, register},
            fun(R) ->
-                   riakc_register:set(<<"hello again, is it me you're looking for">>,
-                                      R)
+                   riakc_register:set(<<"hello again, is it me you're"
+                                        "looking for">>, R)
            end, riakc_map:new()),
 
     ok = riakc_pb_socket:update_type(
@@ -355,6 +389,11 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
     lager:info("Search recreated map *:*: ~p~n", [Results3]),
     ?assertEqual(2, length(Results3)).
 
+%% @doc Tests sibling handling/merge when there's a partition
+%%      - Write/remove from separate partitions
+%%      - Verify counts and that CRDTs have no siblings, vtags,
+%%        after healing partitions. The CRDT map merges so the search
+%%        results be consistent.
 test_siblings(Pid, Cluster, Bucket, Index) ->
     Key1 = <<"Movies">>,
     Key2 = <<"Games">>,
@@ -416,8 +455,8 @@ test_siblings(Pid, Cluster, Bucket, Index) ->
         lager:info("Delete key from Partition 2: Key ~p", [Key2]),
         ok = riakc_pb_socket:delete(Pid2, Bucket, Key2),
 
-        lager:info("Writing to Partition 2 Set 2: after delete: Key ~p | Char ~p",
-                   [Key2, <<"Crash">>]),
+        lager:info("Writing to Partition 2 Set 2: after delete: Key ~p | Char"
+                   " ~p", [Key2, <<"Crash">>]),
         M4 = riakc_map:update(
                {Set2, set},
                fun(S) ->
