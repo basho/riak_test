@@ -243,6 +243,7 @@ brutal_kill_remove_index_dirs(Nodes, IndexName, Services) ->
 -spec remove_index_dirs([node()], index_name(), [atom()]) -> ok.
 remove_index_dirs(Nodes, IndexName, Services) ->
     IndexDirs = get_index_dirs(IndexName, Nodes),
+    [rt:stop(ANode) || ANode <- Nodes],
     remove_index_dirs2(Nodes, IndexDirs, Services),
     ok.
 
