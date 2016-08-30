@@ -340,8 +340,67 @@ deploy_nodes(Versions, Services) ->
     Nodes.
 
 deploy_nodes(NumNodes, InitialConfig, Services) when is_integer(NumNodes) ->
-    NodeConfig = [{current, InitialConfig} || _ <- lists:seq(1,NumNodes)],
+    InitialConfig1 = merge_in_rapid_cluster_convergence_config(InitialConfig),
+    NodeConfig = [{current, InitialConfig1} || _ <- lists:seq(1,NumNodes)],
     deploy_nodes(NodeConfig, Services).
+
+%% @doc merge in rapid cluster convergence settings, for each key not specified
+%% in the range of keys that reduce cluster convergence time, which include
+%% the following:
+%%   vnode_parallel_start - set to ring_size
+%%   forced_ownership_handoff - set to ring_size
+%%   handoff_concurrency - set to ring_size
+merge_in_rapid_cluster_convergence_config(default) ->
+    %% NOTE: how `default` is considered a valid Config does not make sense,
+    %% but it is used, ie w/i bucket_props_roundtrip .
+    rapid_cluster_convergence_config(64);
+merge_in_rapid_cluster_convergence_config(Config) ->
+    %% NOTE: for the purpose of making the cluster converge more rapidly,
+    %% reading RingSize from Config is not necessary here, just set to
+    %% default ring size.
+    RingSize = 64,
+    merge_in_rapid_cluster_convergence_config(Config, RingSize).
+merge_in_rapid_cluster_convergence_config(Config, RingSize) ->
+    RConfig = rapid_cluster_convergence_config(RingSize),
+    CConfig = Config ++ RConfig,
+    [ merge_config_section(Key, RConfig, Config) ||
+        Key <- proplists:get_keys(CConfig) ].
+
+remove_default_sections(Config) ->
+    remove_default_sections(Config).
+remove_default_sections(default, Acc) ->
+    Acc;
+remove_default_sections([], Acc) ->
+    Acc;
+remove_default_sections([{default, Section}|T], Acc) ->
+    remove_default_sections(T, Acc ++ Section);
+remove_default_sections([Section|T], Acc) ->
+    remove_default_sections(T, Acc ++ Section).
+
+%% @doc merge preferring the right-hand-side config section proplist
+merge_config_section(Key, Config, RConfig) ->
+    PL = proplists:get_value(Key, Config, []),
+    PLR = proplists:get_value(Key, RConfig, []),
+    PLC = PL ++ PLR,
+    PLM = [ merge_config_section_entry(SKey, PLR, PL) ||
+        SKey <- proplists:get_keys(PLC) ],
+    { Key, PLM }.
+
+merge_config_section_entry(SKey, PLR, PL) ->
+    Val = case proplists:get_value(SKey, PL) of
+        undefined -> proplists:get_value(SKey, PLR);
+        V -> V
+    end,
+    { SKey, Val }.
+
+rapid_cluster_convergence_config() ->
+    rapid_cluster_convergence_config(64).
+rapid_cluster_convergence_config(RingSize) when is_integer(RingSize) ->
+    [{riak_core, [{vnode_parallel_start, RingSize},
+                 {forced_ownership_handoff, RingSize},
+                 {handoff_concurrency, RingSize}]}];
+rapid_cluster_convergence_config(_RingSize) ->
+    rapid_cluster_convergence_config(64).
 
 version_to_config(Config) when is_tuple(Config)-> Config;
 version_to_config(Version) -> {Version, default}.
