@@ -26,6 +26,7 @@
          check_exists/2,
          clear_trees/1,
          commit/2,
+         drain_solrqs/1,
          expire_trees/1,
          gen_keys/1,
          host_entries/1,
@@ -452,6 +453,13 @@ commit(Nodes, Index) ->
     lager:info("Commit search writes to ~s at softcommit (default) ~p",
                [Index, ?SOFTCOMMIT]),
     rpc:multicall(Nodes, yz_solr, commit, [Index]),
+    ok.
+
+-spec drain_solrqs(node() | cluster()) -> ok.
+drain_solrqs(Cluster) when is_list(Cluster) ->
+    [drain_solrqs(Node) || Node <- Cluster];
+drain_solrqs(Node) ->
+    rpc:call(Node, yz_solrq_drain_mgr, drain, []),
     ok.
 
 -spec override_schema(pid(), [node()], index_name(), schema_name(), string()) ->
