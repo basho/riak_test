@@ -762,6 +762,7 @@ wait_for_service(Node, Services) when is_list(Services) ->
                     {badrpc, Error} ->
                         {badrpc, Error};
                     CurrServices when is_list(CurrServices) ->
+                        lager:info("Waiting for services ~p: current services: ~p", [Services, CurrServices]),
                         lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
                     Res ->
                         Res
@@ -1830,6 +1831,9 @@ setup_harness(Test, Args) ->
 %%   nodes.
 get_node_logs() ->
     ?HARNESS:get_node_logs().
+
+get_node_debug_logs() ->
+    ?HARNESS:get_node_debug_logs().
 
 %% @doc Performs a search against the log files on `Node' and returns all
 %% matching lines.
