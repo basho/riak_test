@@ -417,16 +417,14 @@ check_error_stats(Cluster, PreviousFailCount, PreviousErrorThresholdCount) ->
         [PreviousFailCount, FailCount,
          PreviousErrorThresholdCount, ErrorThresholdCount]
     ),
-    %% TODO Cf. TODO in yz_solrq_helper, where we are double-counting
-    %% bad requests in the index fail stats
-    PreviousFailCount + 2 * 1 * ?NVAL == FailCount
+    PreviousFailCount + ?NVAL == FailCount
         andalso PreviousErrorThresholdCount == ErrorThresholdCount.
 
 
 get_error_stats(Cluster) ->
     AllStats = [rpc:call(Node, yz_stat, get_stats, []) || Node <- Cluster],
     {
-        lists:sum([get_count([index, fail], count, Stats) || Stats <- AllStats]),
+        lists:sum([get_count([index, bad_entry], count, Stats) || Stats <- AllStats]),
         lists:sum([get_count([search_index_error_threshold_failure_count], value, Stats) || Stats <- AllStats])
     }.
 
