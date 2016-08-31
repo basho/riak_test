@@ -177,15 +177,9 @@ queue_filler(Node, Pipe, Inputs, Count) ->
     receive
         {stop, Owner} -> Owner ! {done, Count}
     after 0 ->
-            {{value, I}, Q} = queue:out(Inputs),
-            case rpc:call(Node, riak_pipe, queue_work, [Pipe, I], 40000) of
-                ok ->
-                    lager:info("Received response from queue_work"),
-                    queue_filler(Node, Pipe, queue:in(I, Q), Count+1);
-                _ ->
-                    lager:info("Timed out waiting for response from queue_work"),
-                    queue_filler(Node, Pipe, queue:in(I, Q), Count+1)
-            end
+        {{value, I}, Q} = queue:out(Inputs),
+        ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, I]),
+        queue_filler(Node, Pipe, queue:in(I, Q), Count+1)
     end.
 
 %% @doc tell all fillers to stop and collect and sum their send counts
