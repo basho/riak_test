@@ -401,7 +401,7 @@ test_bad_extraction(Cluster) ->
     %% Verify the stats.  There should be one more index failure,
     %% but there should be more more "melts" (error threshold failures)
     %%
-    yz_rt:wait_until(
+    yokozuna_rt:wait_until(
         Cluster,
         fun(_Node) ->
             check_error_stats(Cluster, PreviousFailCount, PreviousErrorThresholdCount)

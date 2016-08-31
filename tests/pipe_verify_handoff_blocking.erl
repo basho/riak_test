@@ -43,17 +43,6 @@
 %% archive), but we don't want them to process so many inputs that
 %% they consume their blocking queues before handing off.
 
-%% Please Note: Under rare circumstances, this test may fail with a 
-%% "{badmatch,{error,[{vnode_down,noproc}]}}' error. This is not a 
-%% failure of this test but rather a side effect of a race condition 
-%% in riak_core_vnode_proxy. It manifests due to the fact that the
-%% test is attempting to send a command to a vnode that is in fact 
-%% down, however monitor only works by issuing a command and getting
-%% a PID. In some instances, get_vnode_pid fails because vnode shutdown
-%% is queued up in the mailbox before monitor node. Unfortunately, the
-%% fix would require a fundamental shift in the architecture of
-%% riak_core, which at the time of this writing is not feasible for
-%% this rare failure case.
 -module(pipe_verify_handoff_blocking).
 
 -export([
@@ -80,9 +69,12 @@ confirm() ->
     Inputs = lists:seq(1, 20),
 
     lager:info("Start ~b nodes", [?NODE_COUNT]),
-    NodeDefs = lists:duplicate(?NODE_COUNT, {current, default}),
+    Config = [{riak_core, [{ring_creation_size, 8},
+        {vnode_management_timer, 1000},
+        {handoff_concurrency, 100},
+        {vnode_inactivity_timeout, 1000}]}],
     Services = [riak_pipe],
-    [Primary,Secondary] = Nodes = rt:deploy_nodes(NodeDefs, Services),
+    [Primary,Secondary] = Nodes = rt:deploy_nodes(?NODE_COUNT, Config, Services),
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], rt:owners_according_to(Node)) || Node <- Nodes],
 
@@ -114,15 +106,20 @@ confirm() ->
 
     lager:info("Unpause workers"),
     Runner ! go,
+    set_up_vnode_crashing_intercept(Primary),
 
     ok = rt:wait_until_transfers_complete(Nodes),
 
+    lager:info("Check input count"),
     FillerInputCount = stop_fillers(Fillers),
 
     %% if we make it this far, then no filler ever saw the vnode_down
     %% error message; otherwise badmatches in queue_filler/4 will have
-    %% halted the test
-
+    %% halted the test. Note that we should not see this test fail
+    %% with `{error,[{vnode_down,noproc}]}}` errors, as the `noproc` case
+    %% should be handled similarly to the `normal` exit case in
+    %% `riak_pipe_vnode:queue_work_wait`
+    lager:info("Check pipe status"),
     _Status2 = pipe_status(Primary, Pipe),
 
     lager:info("Send eoi and collect results"),
@@ -139,7 +136,13 @@ confirm() ->
     lager:info("~s: PASS", [atom_to_list(?MODULE)]),
     pass.
 
-%%% queue filling
+set_up_vnode_crashing_intercept(Primary) ->
+    lager:info("Add intercept to kill vnode before calling the wait function"),
+    rt_intercept:add(Primary, {riak_core_vnode_master,
+        [{{get_vnode_pid, 3},
+            return_dead_process_pid_from_get_vnode_pid}]}).
+
+%% queue filling
 
 %% @doc fill pipe vnode queues by repeatedly sending each input in the
 %% input list until the queue reports timeout.
@@ -174,9 +177,9 @@ queue_filler(Node, Pipe, Inputs, Count) ->
     receive
         {stop, Owner} -> Owner ! {done, Count}
     after 0 ->
-            {{value, I}, Q} = queue:out(Inputs),
-            ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, I]),
-            queue_filler(Node, Pipe, queue:in(I, Q), Count+1)
+        {{value, I}, Q} = queue:out(Inputs),
+        ok = rpc:call(Node, riak_pipe, queue_work, [Pipe, I]),
+        queue_filler(Node, Pipe, queue:in(I, Q), Count+1)
     end.
 
 %% @doc tell all fillers to stop and collect and sum their send counts
