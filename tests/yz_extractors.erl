@@ -361,6 +361,9 @@ test_extractor_with_aae_expire(Cluster, Index, Bucket, Packet) ->
     riakc_pb_socket:stop(APid).
 
 test_bad_extraction(Cluster) ->
+    %% Previous test enabled AAE, which makes the number of repairs here not consistent
+    %% Turn off AAE again just to make the test deterministic.
+    rpc:multicall(Cluster, riak_kv_entropy_manager, disable, []),
     %%
     %% register the no-op extractor on all the nodes with a content type
     %%
