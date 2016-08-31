@@ -137,10 +137,10 @@ relpath(root, Path) ->
 relpath(_, _) ->
     throw("Version requested but only one path provided").
 
-upgrade(Node, NewVersion) ->
-    upgrade(Node, NewVersion, same).
+upgrade(Node, NewVersion, UpgradeCallback) when is_function(UpgradeCallback) ->
+    upgrade(Node, NewVersion, same, UpgradeCallback).
 
-upgrade(Node, NewVersion, Config) ->
+upgrade(Node, NewVersion, Config, UpgradeCallback) ->
     N = node_id(Node),
     Version = node_version(N),
     lager:info("Upgrading ~p : ~p -> ~p", [Node, Version, NewVersion]),
@@ -167,6 +167,13 @@ upgrade(Node, NewVersion, Config) ->
         same -> ok;
         _ -> update_app_config(Node, Config)
     end,
+    Params = [
+        {old_data_dir, io_lib:format("~s/dev/dev~b/data", [OldPath, N])},
+        {new_data_dir, io_lib:format("~s/dev/dev~b/data", [NewPath, N])},
+        {old_version, Version},
+        {new_version, NewVersion}
+    ],
+    ok = UpgradeCallback(Params),
     start(Node),
     rt:wait_until_pingable(Node),
     ok.
