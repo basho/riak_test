@@ -35,10 +35,10 @@
     ?TOKEN_LIST_KEYS,
     ?TOKEN_LIST_KEYS_S,
     ?TOKEN_MAP_REDUCE,
-%   ?TOKEN_MAP_REDUCE_JS,
+    ?TOKEN_MAP_REDUCE_JS,
     ?TOKEN_SEC_INDEX,
     ?TOKEN_SEC_INDEX_S,
-%   ?TOKEN_OLD_SEARCH,
+    ?TOKEN_OLD_SEARCH,
     ?TOKEN_YZ_SEARCH
 ]).
 
@@ -69,24 +69,16 @@ confirm() ->
 %% Internal
 %% ===================================================================
 
-config([{Mod, Op} | Operations], Bool, Result) ->
-    Key = lists:flatten(io_lib:format(?CUTTLEFISH_PREFIX ".~s.~s", [Mod, Op])),
-    Val = case Bool of
-        true ->
-            "enabled";
-        false ->
-            "disabled"
-    end,
-    config(Operations, Bool, [{Key, Val} | Result]);
+config([{App, Op} | Operations], Enabled, Result) ->
+    Key = lists:flatten(?CUTTLEFISH_KEY(App, Op)),
+    Val = job_enable_common:enabled_string(Enabled),
+    config(Operations, Enabled, [{Key, Val} | Result]);
 config([], _, Result) ->
     Result.
 
-run_test(Operation, [Switch | Switches], [Node | Nodes]) ->
-    Enabled = job_enable_common:enabled_string(Switch),
-    [begin
-        lager:info("Tesing ~p ~s ~s on ~p", [Operation, Type, Enabled, Node]),
-        job_enable_common:test_operation(Node, Operation, Switch, Type)
-    end || Type <- [pbc, http] ],
+run_test(Operation, [Enabled | Switches], [Node | Nodes]) ->
+    [job_enable_common:test_operation(Node, Operation, Enabled, ClientType)
+        || ClientType <- [pbc, http] ],
     run_test(Operation, Switches, Nodes);
 run_test(_, [], _) ->
     ok.

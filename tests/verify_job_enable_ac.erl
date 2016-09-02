@@ -29,7 +29,7 @@
 
 %% Start with all job classes disabled - we'll slowly enable
 %% and verify all the flags over the course of the test
--define(CFG, [{riak_core, [{?ADVANCED_CONFIG_KEY, []}]}]).
+-define(CFG, [{riak_core, [{?APP_CONFIG_KEY, []}]}]).
 -define(ALL_BUCKETS, [<<"2i_test">>, <<"basic_test">>]).
 -define(BASIC_TEST_KEYS, [<<"1">>, <<"2">>, <<"3">>]).
 -define(JOB_CLASSES,
@@ -57,7 +57,7 @@ confirm() ->
 
     lager:info("Enabling all job classes"),
     ok = rpc:call(Node, application, set_env,
-        [riak_core, ?ADVANCED_CONFIG_KEY, ?JOB_CLASSES]),
+        [riak_core, ?APP_CONFIG_KEY, ?JOB_CLASSES]),
 
     run_tests(HttpClient, [verify_list_buckets_enabled_http,
                            verify_list_keys_enabled_http,

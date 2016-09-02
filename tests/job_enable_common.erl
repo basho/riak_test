@@ -41,6 +41,7 @@
     setup_yokozuna/1,
     test_buckets/0,
     test_keys/0,
+    test_label/3,
     test_nums/0,
     test_operation/4,
     test_vals/0,
@@ -63,6 +64,9 @@ enabled_string(true) ->
     "enabled";
 enabled_string(false) ->
     "disabled".
+
+test_label(Class, Enabled, ClientType) ->
+    io_lib:format("~s ~p ~s", [ClientType, Class, enabled_string(Enabled)]).
 
 bin_bucket(Num) ->
     erlang:list_to_binary(["Bucket_", erlang:integer_to_list(Num)]).
@@ -260,8 +264,16 @@ load_data(Node) ->
     load_data(PBConn, populated_bucket(), test_buckets()),
     riakc_pb_socket:stop(PBConn).
 
+test_operation(Node, Class, Enabled, ClientType) ->
+    lager:info("Testing ~s on ~p",
+        [test_label(Class, Enabled, ClientType), Node]),
+    test_request(Node, Class, Enabled, ClientType).
+
+%% ===================================================================
+%% Internal Operation Tests
+%% ===================================================================
 %%
-%% Notes on test_operation/4 implementation:
+%% Notes on test_request/4 implementation:
 %%
 %% The 'rhc' and 'riakc_pb_socket' hide a lot of implementation details,
 %% including the command they actually issue, so we rely on the error message
@@ -287,9 +299,15 @@ load_data(Node) ->
 
 % riakc_pb_socket always lists buckets with streams, so skip the non-stream
 % test unless/until we want to implement it directly.
-test_operation(_, ?TOKEN_LIST_BUCKETS, _, pbc) ->
+test_request(Node, ?TOKEN_LIST_BUCKETS = Class, Enabled, pbc = ClientType) ->
+    {_, Mod, _} = Client = open_client(ClientType, Node),
+    lager:warning(
+        "non-streaming list-buckets is not implemented in the ~p client,"
+        " skipping the ~s test.",
+        [Mod, test_label(Class, Enabled, ClientType)]),
+    close_client(Client),
     ok;
-test_operation(Node, ?TOKEN_LIST_BUCKETS = Class, Enabled, http = Scheme) ->
+test_request(Node, ?TOKEN_LIST_BUCKETS = Class, Enabled, http = Scheme) ->
     URL = make_url(Node, Scheme, "/buckets?buckets=true"),
     Result = ibrowse:send_req(URL, [], get, [], [{response_format, binary}]),
     ?assertMatch({ok, _, _, _}, Result),
@@ -304,13 +322,13 @@ test_operation(Node, ?TOKEN_LIST_BUCKETS = Class, Enabled, http = Scheme) ->
             ?assertEqual({"403", ?ERRMSG_BIN(Class)}, {Code, Body})
     end;
 
-test_operation(Node, ?TOKEN_LIST_BUCKETS_S = Class, false, http = Scheme) ->
+test_request(Node, ?TOKEN_LIST_BUCKETS_S = Class, false, http = Scheme) ->
     URL = make_url(Node, Scheme, "/buckets?buckets=stream"),
     Result = ibrowse:send_req(URL, [], get),
     ?assertMatch({ok, _, _, _}, Result),
     {_, Code, _, Body} = Result,
     ?assertEqual({"403", ?ERRMSG_TXT(Class)}, {Code, Body});
-test_operation(Node, ?TOKEN_LIST_BUCKETS_S = Class, Enabled, ClientType) ->
+test_request(Node, ?TOKEN_LIST_BUCKETS_S = Class, Enabled, ClientType) ->
     {_, Mod, Conn} = Client = open_client(ClientType, Node),
     % 'rhc' and 'riakc_pb_socket' list_buckets always use stream_list_buckets
     Result = Mod:list_buckets(Conn),
@@ -325,9 +343,12 @@ test_operation(Node, ?TOKEN_LIST_BUCKETS_S = Class, Enabled, ClientType) ->
     end;
 
 % protobuf list-keys only does streams, so skip the non-stream test
-test_operation(_, ?TOKEN_LIST_KEYS, _, pbc) ->
+test_request(_, ?TOKEN_LIST_KEYS = Class, Enabled, pbc = ClientType) ->
+    lager:info(
+        "non-streaming list-keys over protobufs is not implemented in Riak,"
+        " skipping the ~s test.", [test_label(Class, Enabled, ClientType)]),
     ok;
-test_operation(Node, ?TOKEN_LIST_KEYS = Class, Enabled, http = Scheme) ->
+test_request(Node, ?TOKEN_LIST_KEYS = Class, Enabled, http = Scheme) ->
     URL = make_url(Node, Scheme, ["/buckets/",
         erlang:binary_to_list(populated_bucket()), "/keys?keys=true"]),
     Result = ibrowse:send_req(URL, [], get, [], [{response_format, binary}]),
@@ -343,14 +364,14 @@ test_operation(Node, ?TOKEN_LIST_KEYS = Class, Enabled, http = Scheme) ->
             ?assertEqual({"403", ?ERRMSG_BIN(Class)}, {Code, Body})
     end;
 
-test_operation(Node, ?TOKEN_LIST_KEYS_S = Class, false, http = Scheme) ->
+test_request(Node, ?TOKEN_LIST_KEYS_S = Class, false, http = Scheme) ->
     URL = make_url(Node, Scheme, ["/buckets/",
         erlang:binary_to_list(populated_bucket()), "/keys?keys=stream"]),
     Result = ibrowse:send_req(URL, [], get),
     ?assertMatch({ok, _, _, _}, Result),
     {_, Code, _, Body} = Result,
     ?assertEqual({"403", ?ERRMSG_TXT(Class)}, {Code, Body});
-test_operation(Node, ?TOKEN_LIST_KEYS_S = Class, Enabled, ClientType) ->
+test_request(Node, ?TOKEN_LIST_KEYS_S = Class, Enabled, ClientType) ->
     {_, Mod, Conn} = Client = open_client(ClientType, Node),
     % 'rhc' and 'riakc_pb_socket' list_keys always use stream_list_keys
     Result = Mod:list_keys(Conn, populated_bucket()),
@@ -364,7 +385,12 @@ test_operation(Node, ?TOKEN_LIST_KEYS_S = Class, Enabled, ClientType) ->
             ?assertEqual({error, ?ERRMSG_BIN(Class)}, Result)
     end;
 
-test_operation(Node, ?TOKEN_MAP_REDUCE = Class, Enabled, ClientType) ->
+% Map Reduce tests need a lot of love once Riak code discriminates between term
+% and javascript MR requests.
+% TODO: Change to discrete implementations so http error body is validated.
+% TODO: Try both forms with the other enabled/disabled to check crossover.
+
+test_request(Node, ?TOKEN_MAP_REDUCE = Class, Enabled, ClientType) ->
     Bucket = populated_bucket(),
     {_, Mod, Conn} = Client = open_client(ClientType, Node),
     Result = Mod:mapred(Conn, Bucket, []),
@@ -389,10 +415,16 @@ test_operation(Node, ?TOKEN_MAP_REDUCE = Class, Enabled, ClientType) ->
             end
     end;
 
-test_operation(Node, ?TOKEN_SEC_INDEX = Class, Enabled, pbc = ClientType) ->
+test_request(_Node, ?TOKEN_MAP_REDUCE_JS = Class, Enabled, ClientType) ->
+    lager:info(
+        "map-reduce javascript discrimination is not implemented in Riak,"
+        " skipping the ~s test.", [test_label(Class, Enabled, ClientType)]),
+    ok;
+
+test_request(Node, ?TOKEN_SEC_INDEX = Class, Enabled, pbc = ClientType) ->
     Bucket = populated_bucket(),
     Index = index_2i(),
-    Num = random:uniform(num_keys()),
+    Num = rt:random_uniform(num_keys()),
     {_, Mod, Conn} = Client = open_client(ClientType, Node),
     Result = Mod:get_index_eq(Conn, Bucket, Index, Num, [{stream, false}]),
     close_client(Client),
@@ -403,8 +435,8 @@ test_operation(Node, ?TOKEN_SEC_INDEX = Class, Enabled, pbc = ClientType) ->
         false ->
             ?assertEqual({error, ?ERRMSG_BIN(Class)}, Result)
     end;
-test_operation(Node, ?TOKEN_SEC_INDEX = Class, Enabled, http = Scheme) ->
-    Num = random:uniform(num_keys()),
+test_request(Node, ?TOKEN_SEC_INDEX = Class, Enabled, http = Scheme) ->
+    Num = rt:random_uniform(num_keys()),
     URL = make_url(Node, Scheme, [
         "/buckets/", erlang:binary_to_list(populated_bucket()),
         "/index/", index_name(index_2i()), "/", erlang:integer_to_list(Num) ]),
@@ -422,8 +454,8 @@ test_operation(Node, ?TOKEN_SEC_INDEX = Class, Enabled, http = Scheme) ->
             ?assertEqual({"403", ?ERRMSG_BIN(Class)}, {Code, Body})
     end;
 
-test_operation(Node, ?TOKEN_SEC_INDEX_S = Class, Enabled, pbc = ClientType) ->
-    Lo = random:uniform(num_keys() - 3),
+test_request(Node, ?TOKEN_SEC_INDEX_S = Class, Enabled, pbc = ClientType) ->
+    Lo = rt:random_uniform(num_keys() - 3),
     Hi = (Lo + 3),
     {_, Mod, Conn} = Client = open_client(ClientType, Node),
     {ok, ReqId} = Mod:get_index_range(
@@ -438,8 +470,8 @@ test_operation(Node, ?TOKEN_SEC_INDEX_S = Class, Enabled, pbc = ClientType) ->
         false ->
             ?assertEqual({error, ?ERRMSG_BIN(Class)}, Result)
     end;
-test_operation(Node, ?TOKEN_SEC_INDEX_S = Class, false, http = Scheme) ->
-    Num = random:uniform(num_keys()),
+test_request(Node, ?TOKEN_SEC_INDEX_S = Class, false, http = Scheme) ->
+    Num = rt:random_uniform(num_keys()),
     URL = make_url(Node, Scheme, [
         "/buckets/", erlang:binary_to_list(populated_bucket()),
         "/index/", index_name(index_2i()), "/", erlang:integer_to_list(Num),
@@ -448,10 +480,10 @@ test_operation(Node, ?TOKEN_SEC_INDEX_S = Class, false, http = Scheme) ->
     ?assertMatch({ok, _, _, _}, Result),
     {_, Code, _, Body} = Result,
     ?assertEqual({"403", ?ERRMSG_BIN(Class)}, {Code, Body});
-test_operation(Node, ?TOKEN_SEC_INDEX_S, true, http = ClientType) ->
+test_request(Node, ?TOKEN_SEC_INDEX_S, true, http = ClientType) ->
     Bucket = populated_bucket(),
     Index = index_2i(),
-    Num = random:uniform(num_keys()),
+    Num = rt:random_uniform(num_keys()),
     Key = bin_key(Num),
     {_, Mod, Conn} = Client = open_client(ClientType, Node),
     Result = Mod:get_index(Conn, Bucket, Index, Num),
@@ -462,10 +494,10 @@ test_operation(Node, ?TOKEN_SEC_INDEX_S, true, http = ClientType) ->
 %%  riakc_pb_socket:create_search_index(Connection, index_yz())
 %% (or equivalent) has been successfully called before invoking this test.
 %% This module's load_data/1 function DOES NOT do this for you by default.
-test_operation(Node, ?TOKEN_YZ_SEARCH = Class, Enabled, pbc = ClientType) ->
+test_request(Node, ?TOKEN_YZ_SEARCH = Class, Enabled, pbc = ClientType) ->
     Index   = index_yz(),
     Bucket  = populated_bucket(),
-    Num     = random:uniform(num_keys()),
+    Num     = rt:random_uniform(num_keys()),
     Key     = bin_key(Num),
     Query   = <<"_yz_rb:", Bucket/binary, " AND _yz_rk:", Key/binary>>,
     {_, Mod, Conn} = Client = open_client(ClientType, Node),
@@ -477,30 +509,32 @@ test_operation(Node, ?TOKEN_YZ_SEARCH = Class, Enabled, pbc = ClientType) ->
         false ->
             ?assertEqual({error, ?ERRMSG_BIN(Class)}, Result)
     end;
-test_operation(Node, ?TOKEN_YZ_SEARCH = Class, Enabled, http) ->
-    % The rhs module's search functions don't do anything remotely like their
-    % PB equivalents, so this specific test has to depart from the pattern
-    % entirely.
+test_request(Node, ?TOKEN_YZ_SEARCH = Class, Enabled, http) ->
     Bucket = populated_bucket(),
-    Num = random:uniform(num_keys()),
+    Num = rt:random_uniform(num_keys()),
     Key = bin_key(Num),
     URL = make_url(Node, [
             "/search/query/", erlang:binary_to_list(index_yz()),
             "?wt=json&q=_yz_rb:", erlang:binary_to_list(Bucket),
             "%20AND%20_yz_rk:", erlang:binary_to_list(Key) ]),
     Result = ibrowse:send_req(URL, [], get),
-
+    ?assertMatch({ok, _, _, _}, Result),
+    {_, Code, _, Body} = Result,
     case Enabled of
         true ->
-            ?assertMatch({ok, "200", _, _}, Result);
+            ?assertEqual("200", Code);
         false ->
-            ?assertMatch({ok, "403", _, _}, Result),
-            {_, _, _, Body} = Result,
-            ?assertEqual(Body, ?ERRMSG_TXT(Class))
-    end.
+            ?assertEqual({"403", ?ERRMSG_TXT(Class)}, {Code, Body})
+    end;
+
+test_request(_Node, ?TOKEN_OLD_SEARCH = Class, Enabled, ClientType) ->
+    lager:warning(
+        "riak_search job switch test not implemented,"
+        " skipping the ~s test.", [test_label(Class, Enabled, ClientType)]),
+    ok.
 
 %% ===================================================================
-%% Internal
+%% Internal Support
 %% ===================================================================
 
 bin_buckets(0, Result) ->
@@ -569,4 +603,3 @@ receive_2i_stream(ReqId, Result) ->
         {ReqId, {index_stream_result_v1, Vals, _}} when erlang:is_list(Vals) ->
             receive_2i_stream(ReqId, Vals ++ Result)
     end.
-

@@ -21,8 +21,10 @@
 -ifndef(job_enable_common_included).
 -define(job_enable_common_included, true).
 
--define(ADVANCED_CONFIG_KEY,    'job_accept_class').
+-define(APP_CONFIG_KEY,         'job_accept_class').
 -define(CUTTLEFISH_PREFIX,      "cluster.job").
+-define(CUTTLEFISH_KEY(App, Op),
+    io_lib:format(?CUTTLEFISH_PREFIX ".~s.~s", [App, Op])).
 
 -define(TOKEN_LIST_BUCKETS,     {riak_kv, list_buckets}).
 -define(TOKEN_LIST_BUCKETS_S,   {riak_kv, stream_list_buckets}).
