@@ -8,7 +8,7 @@
 -define(HARNESS, (rt_config:get(rt_harness))).
 -define(INDEX, <<"maps">>).
 -define(TYPE, <<"maps">>).
--define(KEY, "Chris Meiklejohn").
+-define(KEY, "Joe Smilf").
 -define(BUCKET, {?TYPE, <<"testbucket">>}).
 -define(GET(K,L), proplists:get_value(K, L)).
 -define(N, 3).
@@ -49,41 +49,55 @@ confirm() ->
                                         {n_val, ?N},
                                         {search_index, ?INDEX}]),
 
-    %% Write some sample data.
-
-    Map1 = riakc_map:update(
-            {<<"name">>, register},
-            fun(R) ->
-                    riakc_register:set(list_to_binary(?KEY), R)
-            end, riakc_map:new()),
-    Map2 = riakc_map:update(
-             {<<"interests">>, set},
-             fun(S) ->
-                     riakc_set:add_element(<<"thing">>, S) end,
-             Map1),
-    ok = riakc_pb_socket:update_type(
-           Pid,
-           ?BUCKET,
-           ?KEY,
-           riakc_map:to_op(Map2)),
-
-    yokozuna_rt:drain_solrqs(Nodes),
-    yokozuna_rt:commit(Nodes, ?INDEX),
     %% Perform simple queries, check for register, set fields.
+    create_initial_data(Pid, Nodes),
     ok = rt:wait_until(
            fun() ->
-               validate_search_results(Pid, Nodes)
+               validate_search_results(Pid)
            end),
-    %% Stop PB connection.
-    riakc_pb_socket:stop(Pid),
 
+    validate_deletes(Pid, Nodes),
+
+
+    riakc_pb_socket:stop(Pid),
     pass.
 
-validate_search_results(Pid, Nodes) ->
+create_initial_data(Pid, Nodes) ->
+    %% Write some sample data.
+    KeyBin = list_to_binary(?KEY),
+    Map0 = case riakc_pb_socket:fetch_type(Pid, ?BUCKET, ?KEY, [{deleted_vclock, true}]) of
+               {ok, Map} ->
+                   Map;
+                _ ->
+                    riakc_map:new()
+            end,
+
+    Map1 = riakc_map:update(
+        {<<"name">>, register},
+        fun(R) ->
+            riakc_register:set(KeyBin = list_to_binary(?KEY), R)
+        end, Map0),
+    Map2 = riakc_map:update(
+        {<<"interests">>, set},
+        fun(S) ->
+            riakc_set:add_element(<<"thing">>, S) end,
+        Map1),
+    ok = riakc_pb_socket:update_type(
+        Pid,
+        ?BUCKET,
+        ?KEY,
+        riakc_map:to_op(Map2)),
+
+    yokozuna_rt:drain_solrqs(Nodes),
+    yokozuna_rt:commit(Nodes, ?INDEX).
+
+
+validate_search_results(Pid) ->
     try
+
         {ok, {search_results, Results1a, _, _}} = riakc_pb_socket:search(
-            Pid, ?INDEX, <<"name_register:Chris*">>),
-        lager:info("Search name_register:Chris*: ~p~n", [Results1a]),
+            Pid, ?INDEX, <<"name_register:Joe*">>),
+        lager:info("Search name_register:Joe*: ~p~n", [Results1a]),
         ?assertEqual(length(Results1a), 1),
         ?assertEqual(?GET(<<"name_register">>, ?GET(?INDEX, Results1a)),
                      list_to_binary(?KEY)),
@@ -110,7 +124,7 @@ validate_search_results(Pid, Nodes) ->
 
         %% Redo queries and check if results are equal
         {ok, {search_results, Results1b, _, _}} = riakc_pb_socket:search(
-            Pid, ?INDEX, <<"name_register:Chris*">>),
+            Pid, ?INDEX, <<"name_register:Joe*">>),
         ?assertEqual(number_of_fields(Results1a, ?INDEX),
                  number_of_fields(Results1b, ?INDEX)),
 
@@ -123,12 +137,23 @@ validate_search_results(Pid, Nodes) ->
             Pid, ?INDEX, <<"_yz_rb:testbucket">>),
         ?assertEqual(number_of_fields(Results3a, ?INDEX),
                      number_of_fields(Results3b, ?INDEX)),
+        true
+    catch Err:Reason ->
+        log_error(Err, Reason),
+        false
+    end.
+
+validate_deletes(Pid, Nodes) ->
+    try
+
+        riakc_pb_socket:delete(Pid, ?BUCKET, ?KEY, [{pw, all}]),
+        create_initial_data(Pid, Nodes),
         lager:info("Test setting the register of a map twice to different values."
-               "\nThe # of results should still be 1"),
+                   "\nThe # of results should still be 1"),
         test_repeat_sets(Pid, Nodes, ?BUCKET, ?INDEX, ?KEY),
 
         lager:info("FYI: delete_mode is on keep here to make sure YZ handles"
-               " deletes correctly throughout."),
+                   " deletes correctly throughout."),
 
         lager:info("Test varying deletes operations"),
         test_delete(Pid, Nodes, ?BUCKET, ?INDEX, ?KEY),
@@ -137,14 +162,18 @@ validate_search_results(Pid, Nodes) ->
         test_delete_aae(Pid, Nodes, ?BUCKET, ?INDEX),
 
         lager:info("Test to make sure siblings don't exist after partition"
-              " occurrs and we heal the cluster"),
+                   " occurrs and we heal the cluster"),
         test_siblings(Pid, Nodes, ?BUCKET, ?INDEX),
-
         true
-    catch Err:Reason ->
-        lager:info("Waiting for CRDT search results to converge. Error was ~p.", [{Err, Reason}]),
-        false
+    catch
+        Err:Reason ->
+            log_error(Err, Reason),
+            false
     end.
+
+log_error(Err, Reason) ->
+    lager:info("Waiting for CRDT Delete results to converge. Error was ~p.", [{Err, Reason}]),
+    false.
 
 test_repeat_sets(Pid, Cluster, Bucket, Index, Key) ->
     {ok, M1} = riakc_pb_socket:fetch_type(Pid, Bucket, Key),
@@ -169,14 +198,16 @@ test_repeat_sets(Pid, Cluster, Bucket, Index, Key) ->
            Key,
            riakc_map:to_op(M3)),
 
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
+    ok = rt:wait_until(fun() ->
+        {ok, {search_results, Results, _, _}} = riakc_pb_socket:search(
+            Pid, Index,
+            <<"update_register:*">>),
 
-    {ok, {search_results, Results, _, _}} = riakc_pb_socket:search(
-                                              Pid, Index,
-                                              <<"update_register:*">>),
-
-    lager:info("Search update_register:*: ~p~n", [Results]),
-    ?assertEqual(1, length(Results)).
+        lager:info("Search update_register:*: ~p~n", [Results]),
+        ?assertEqual(1, length(Results))
+                       end).
 
 %% @doc Tests varying deletes of within a CRDT map and checks for correct counts
 %%      - Remove registers, remove and add elements within a set
@@ -202,13 +233,15 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
            Key,
            riakc_map:to_op(M3)),
 
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
-
-    {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
-                                              Pid, Index,
-                                              <<"name_register:*">>),
-    lager:info("Search deleted/erased name_register:*: ~p~n", [Results1]),
-    ?assertEqual(0, length(Results1)),
+    rt:wait_until(fun() ->
+        {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
+                                                  Pid, Index,
+                                                  <<"name_register:*">>),
+        lager:info("Search deleted/erased name_register:*: ~p~n", [Results1]),
+        ?assertEqual(0, length(Results1))
+        end),
 
     lager:info("Add another element to set (in map)"),
     M4 = riakc_map:update(
@@ -223,25 +256,31 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
            Key,
            riakc_map:to_op(M4)),
 
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
 
-    {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"interests_set:thing*">>),
-    lager:info("Search deleted interests_set:thing*: ~p~n", [Results2]),
-    ?assertEqual(0, length(Results2)),
+    rt:wait_until(fun() ->
+        {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
+                                                   Pid, Index,
+                                                   <<"interests_set:thing*">>),
+        lager:info("Search deleted interests_set:thing*: ~p~n", [Results2]),
+        ?assertEqual(0, length(Results2))
+        end),
 
     lager:info("Delete key for map"),
     ?assertEqual(ok, riakc_pb_socket:delete(Pid, Bucket, Key)),
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
-    ?assertEqual({error, {notfound, map}},
-                 riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
+        rt:wait_until(fun() ->
+        ?assertEqual({error, {notfound, map}},
+                     riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
 
-    {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"*:*">>),
-    lager:info("Search deleted map *:*: ~p~n", [Results3]),
-    ?assertEqual(0, length(Results3)),
+        {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
+                                                   Pid, Index,
+                                                   <<"*:*">>),
+        lager:info("Search deleted map *:*: ~p~n", [Results3]),
+        ?assertEqual(0, length(Results3))
+        end),
 
     lager:info("Recreate object and check counts..."),
 
@@ -258,30 +297,36 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
            Key,
            riakc_map:to_op(M5)),
 
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
 
-    {ok, M6} = riakc_pb_socket:fetch_type(Pid, Bucket, Key),
-    Keys = riakc_map:fetch_keys(M6),
-    ?assertEqual(1, length(Keys)),
-    ?assert(riakc_map:is_key({<<"name">>, register}, M6)),
-    {ok, {search_results, Results4, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"*:*">>),
-    lager:info("Search recreated map *:*: ~p~n", [Results4]),
-    ?assertEqual(1, length(Results4)),
+    rt:wait_until(fun() ->
+        {ok, M6} = riakc_pb_socket:fetch_type(Pid, Bucket, Key),
+        Keys = riakc_map:fetch_keys(M6),
+        ?assertEqual(1, length(Keys)),
+        ?assert(riakc_map:is_key({<<"name">>, register}, M6)),
+        {ok, {search_results, Results4, _, _}} = riakc_pb_socket:search(
+                                                   Pid, Index,
+                                                   <<"*:*">>),
+        lager:info("Search recreated map *:*: ~p~n", [Results4]),
+        ?assertEqual(1, length(Results4))
+        end),
 
     lager:info("Delete key for map again"),
     ?assertEqual(ok, riakc_pb_socket:delete(Pid, Bucket, Key)),
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
 
-    ?assertEqual({error, {notfound, map}},
-                 riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
+    rt:wait_until(fun() ->
+        ?assertEqual({error, {notfound, map}},
+                     riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
 
-    {ok, {search_results, Results5, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"*:*">>),
-    lager:info("Search ~p deleted map *:*: ~p~n", [Key, Results5]),
-    ?assertEqual(0, length(Results5)).
+        {ok, {search_results, Results5, _, _}} = riakc_pb_socket:search(
+                                                   Pid, Index,
+                                                   <<"*:*">>),
+        lager:info("Search ~p deleted map *:*: ~p~n", [Key, Results5]),
+        ?assertEqual(0, length(Results5))
+        end).
 
 %% @doc Tests key/map delete and AAE
 %%      - Use intercept to trap yz_kv:delete_operation to skip over
@@ -327,28 +372,33 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
     ?assertEqual(ok, riakc_pb_socket:delete(Pid, Bucket, Key2)),
     ?assertEqual({error, {notfound, map}},
                  riakc_pb_socket:fetch_type(Pid, Bucket, Key2)),
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
 
-    {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"*:*">>),
-    lager:info("Search all results, expect extra b/c tombstone"
-               " and we've modified the delete op... *:*: ~p~n",
-               [length(Results1)]),
-    ?assertEqual(2, length(Results1)),
+    rt:wait_until(fun() ->
+        {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
+                                                   Pid, Index,
+                                                   <<"*:*">>),
+        lager:info("Search all results, expect extra b/c tombstone"
+                   " and we've modified the delete op... *:*: ~p~n",
+                   [length(Results1)]),
+        ?assertEqual(2, length(Results1))
+        end),
 
     lager:info("Expire and re-check"),
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:wait_for_full_exchange_round(Cluster, erlang:now()),
 
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
 
-    {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"*:*">>),
-    lager:info("Search all results, expect removed tombstone b/c AAE"
-               " should clean it up ... *:*: ~p~n", [length(Results2)]),
-    ?assertEqual(1, length(Results2)),
+    rt:wait_until(fun() ->
+        {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
+                                                   Pid, Index,
+                                                   <<"*:*">>),
+        lager:info("Search all results, expect removed tombstone b/c AAE"
+                   " should clean it up ... *:*: ~p~n", [length(Results2)]),
+        ?assertEqual(1, length(Results2)),
 
     lager:info("Recreate object and check counts"),
 
@@ -365,17 +415,19 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
            Key2,
            riakc_map:to_op(M3)),
 
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
-
-    {ok, M4} = riakc_pb_socket:fetch_type(Pid, Bucket, Key2),
-    Keys = riakc_map:fetch_keys(M4),
-    ?assertEqual(1, length(Keys)),
-    ?assert(riakc_map:is_key({<<"name">>, register}, M4)),
-    {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"*:*">>),
-    lager:info("Search recreated map *:*: ~p~n", [Results3]),
-    ?assertEqual(2, length(Results3)).
+    rt:wait_until(fun() ->
+        {ok, M4} = riakc_pb_socket:fetch_type(Pid, Bucket, Key2),
+        Keys = riakc_map:fetch_keys(M4),
+        ?assertEqual(1, length(Keys)),
+        ?assert(riakc_map:is_key({<<"name">>, register}, M4)),
+        {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
+                                                   Pid, Index,
+                                                   <<"*:*">>),
+        lager:info("Search recreated map *:*: ~p~n", [Results3]),
+        ?assertEqual(2, length(Results3)),
+        end).
 
 %% @doc Tests sibling handling/merge when there's a partition
 %%      - Write/remove from separate partitions
@@ -487,38 +539,45 @@ test_siblings(Pid, Cluster, Bucket, Index) ->
     end,
 
     rt:wait_until_transfers_complete(Cluster),
+    yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, ?INDEX),
 
     %% Verify Counts
     lager:info("Verify counts and operations after heal + transfers + commits"),
 
-    {ok, MF1} = riakc_pb_socket:fetch_type(Pid, Bucket, Key1),
-    Keys = riakc_map:fetch_keys(MF1),
-    ?assertEqual(1, length(Keys)),
-    ?assert(riakc_map:is_key({<<"directors">>, set}, MF1)),
-    {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"directors_set:*">>),
-    lager:info("Search movies map directors_set:*: ~p~n", [Results1]),
-    ?assertEqual(3, length(proplists:lookup_all(<<"directors_set">>,
-                                                ?GET(?INDEX, Results1)))),
+    rt:wait_until(fun() ->
+        try
+            {ok, MF1} = riakc_pb_socket:fetch_type(Pid, Bucket, Key1),
+            Keys = riakc_map:fetch_keys(MF1),
+            ?assertEqual(1, length(Keys)),
+            ?assert(riakc_map:is_key({<<"directors">>, set}, MF1)),
+            {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"directors_set:*">>),
+            lager:info("Search movies map directors_set:*: ~p~n", [Results1]),
+            ?assertEqual(3, length(proplists:lookup_all(<<"directors_set">>,
+                                                        ?GET(?INDEX, Results1)))),
 
-    {ok, MF2} = riakc_pb_socket:fetch_type(Pid, Bucket, Key2),
-    Keys2 = riakc_map:fetch_keys(MF2),
-    ?assertEqual(1, length(Keys2)),
-    ?assert(riakc_map:is_key({<<"characters">>, set}, MF2)),
-    {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"characters_set:*">>),
-    lager:info("Search games map characters_set:*: ~p~n", [Results2]),
-    ?assertEqual(2, length(proplists:lookup_all(<<"characters_set">>,
-                                                ?GET(?INDEX, Results2)))),
+            {ok, MF2} = riakc_pb_socket:fetch_type(Pid, Bucket, Key2),
+            Keys2 = riakc_map:fetch_keys(MF2),
+            ?assertEqual(1, length(Keys2)),
+            ?assert(riakc_map:is_key({<<"characters">>, set}, MF2)),
+            {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"characters_set:*">>),
+            lager:info("Search games map characters_set:*: ~p~n", [Results2]),
+            ?assertEqual(2, length(proplists:lookup_all(<<"characters_set">>,
+                                                        ?GET(?INDEX, Results2)))),
 
-    {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
-                                               Pid, Index,
-                                               <<"_yz_vtag:*">>),
-    lager:info("Search vtags in search *:*: ~p~n", [Results3]),
-    ?assertEqual(0, length(Results3)).
+            {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"_yz_vtag:*">>),
+            lager:info("Search vtags in search *:*: ~p~n", [Results3]),
+            ?assertEqual(0, length(Results3)),
+            true
+        catch Err:Reason ->
+
+        end).
 
 
 %% @private
