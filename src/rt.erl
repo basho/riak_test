@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013-2014 Basho Technologies, Inc.
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -64,6 +64,7 @@
          deploy_clusters/1,
          down/2,
          enable_search_hook/2,
+         ensure_random_seeded/0,
          expect_in_log/2,
          get_call_count/2,
          get_deps/0,
@@ -108,6 +109,8 @@
          product/1,
          priv_dir/0,
          random_sublist/2,
+         random_uniform/0,
+         random_uniform/1,
          remove/2,
          riak/2,
          riak_repl/2,
@@ -2069,23 +2072,48 @@ wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
 -spec select_random([any()]) -> any().
 select_random(List) ->
     Length = length(List),
-    Idx = random:uniform(Length),
+    Idx = random_uniform(Length),
     lists:nth(Idx, List).
 
 %% @doc Returns a random element from a given list.
 -spec random_sublist([any()], integer()) -> [any()].
 random_sublist(List, N) ->
-    % Properly seeding the process.
-    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-    random:seed({A, B, C}),
     % Assign a random value for each element in the list.
-    List1 = [{random:uniform(), E} || E <- List],
+    List1 = [{random_uniform(), E} || E <- List],
     % Sort by the random number.
     List2 = lists:sort(List1),
     % Take the first N elements.
     List3 = lists:sublist(List2, N),
     % Remove the random numbers.
     [ E || {_,E} <- List3].
+
+-spec random_uniform() -> float().
+%% @doc Like random:uniform/0, but always seeded with quality entropy.
+random_uniform() ->
+    ok = ensure_random_seeded(),
+    random:uniform().
+
+-spec random_uniform(Range :: pos_integer()) -> pos_integer().
+%% @doc Like random:uniform/1, but always seeded with quality entropy.
+random_uniform(Range) ->
+    ok = ensure_random_seeded(),
+    random:uniform(Range).
+
+-spec ensure_random_seeded() -> ok.
+%% @doc Ensures that the random module's PRNG is seeded with the good stuff.
+ensure_random_seeded() ->
+    Key = {?MODULE, random_seeded},
+    case erlang:get(Key) of
+        true ->
+            ok;
+        _ ->
+            % crypto:rand_bytes/1 is deprecated in OTP-19
+            <<A:32/integer, B:32/integer, C:32/integer>>
+                = crypto:strong_rand_bytes(12),
+            random:seed(A, B, C),
+            erlang:put(Key, true),
+            ok
+    end.
 
 %% @doc Recusively delete files in a directory.
 -spec del_dir(string()) -> strings().
