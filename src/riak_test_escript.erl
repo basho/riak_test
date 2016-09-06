@@ -328,10 +328,13 @@ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
     [{coverdata, CoverageFile} | SingleTestResult].
 
 maybe_post_debug_logs(Base) ->
+    lager:info("FDUSHIN-DEBUG-TEST> riak_test_escript:maybe_post_debug_logs(~p)", [Base]),
     case rt_config:get(giddyup_post_debug_logs, true) of
         true ->
+            NodeDebugLogs = rt:get_node_debug_logs(),
+            lager:info("FDUSHIN-DEBUG-TEST> NodeDebugLogs: ~p", [NodeDebugLogs]),
             [giddyup:post_artifact(Base, File)
-             || File <- rt:get_node_debug_logs()];
+             || File <- NodeDebugLogs];
         _ ->
             false
     end.
