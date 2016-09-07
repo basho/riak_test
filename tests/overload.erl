@@ -263,7 +263,7 @@ run_test(Nodes, BKV) ->
     timer:sleep(5000),
     rt:load_modules_on_nodes([?MODULE], Nodes),
     overload_proxy:start_link(),
-    rt_intercept:add(Node1, {riak_kv_get_fsm, [{{start_link, 4}, count_start_link_4}]}),
+    rt_intercept:add(Node1, {riak_kv_get_fsm, [{{start, 4}, count_start_4}]}),
 
     Victim = get_victim(Node1, BKV),
     lager:info("Suspending vnode ~p/~p",
