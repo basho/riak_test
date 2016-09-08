@@ -28,6 +28,7 @@
 
 -define(MAP_TYPE, <<"maps">>).
 -define(SET_TYPE, <<"sets">>).
+-define(SET_CAP, riak_dt_orswot).
 -define(BUCKET_M, {?MAP_TYPE, <<"testbucket">>}).
 -define(BUCKET_S, {?SET_TYPE, <<"testbucket">>}).
 -define(KEY, <<"flipit&reverseit">>).
@@ -41,13 +42,8 @@
         ]).
 
 confirm() ->
-    %% If you want the previous version, uncomment these going forward:
-    %% TestMetaData = riak_test_runner:metadata(),
-    %% OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
-
-    %% Using a specific version to make sure we compare against the change
-    %% specified in https://github.com/basho/riak_dt/pull/117.
-    OldVsn = "2.0.5",
+    TestMetaData = riak_test_runner:metadata(),
+    OldVsn = proplists:get_value(upgrade_version, TestMetaData, lts),
 
     NumNodes = 4,
     Vsns = [{OldVsn, ?CONFIG} || _ <- lists:seq(1, NumNodes)],
@@ -86,7 +82,7 @@ confirm() ->
     rt:wait_until_transfers_complete(Nodes),
 
     lager:info("Compare/Assert fetched values merge/remain as supposed to"
-               ++ ", including binary information"),
+               ", including binary information"),
 
     FetchSet0 = fetch(Pid1, ?BUCKET_S, ?KEY),
     FetchMap0 = fetch(Pid1, ?BUCKET_M, ?KEY),
@@ -115,7 +111,7 @@ confirm() ->
     ?assertEqual(FetchSet2, FetchSet3),
 
     %% Downgrade All Nodes and Compare
-    downgrade(Nodes, previous),
+    downgrade(Nodes, lts),
 
     %% Create PB connection.
     Pid3 = rt:pbc(rt:select_random(Nodes)),
@@ -150,12 +146,16 @@ fetch(Client, Bucket, Key) ->
 upgrade(Nodes, NewVsn) ->
     lager:info("Upgrading to ~s version on Nodes ~p", [NewVsn, Nodes]),
     [rt:upgrade(ANode, NewVsn) || ANode <- Nodes],
-    [rt:wait_for_service(ANode, riak_kv) || ANode <- Nodes].
+    [rt:wait_for_service(ANode, riak_kv) || ANode <- Nodes],
+    [rt:wait_until_capability_contains(ANode, {riak_kv, crdt}, [?SET_CAP])
+     || ANode <- Nodes].
 
 downgrade(Nodes, OldVsn) ->
     lager:info("Downgrading to ~s version on Nodes ~p", [OldVsn, Nodes]),
     [rt:upgrade(ANode, OldVsn) || ANode <- Nodes],
-    [rt:wait_for_service(ANode, riak_kv) || ANode <- Nodes].
+    [rt:wait_for_service(ANode, riak_kv) || ANode <- Nodes],
+    [rt:wait_until_capability_contains(ANode, {riak_kv, crdt}, [?SET_CAP])
+     || ANode <- Nodes].
 
 make_and_check(Pid, SetItems) ->
     Set0 = verify_dt_context:make_set(SetItems),
