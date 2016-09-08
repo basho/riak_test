@@ -53,32 +53,32 @@ confirm() ->
     %% Create PB connection.
     {P1, P2} = lists:split(1, Nodes),
 
-    Pid1 = rt:pbc(hd(P1)),
-    Pid2 = rt:pbc(hd(P2)),
-
-    rt:create_and_activate_bucket_type(Node1,
-                                       ?SET_TYPE,
-                                       [{datatype, set}]),
-    rt:create_and_activate_bucket_type(Node1,
-                                       ?MAP_TYPE,
-                                       [{datatype, map}]),
+    rt:create_activate_and_wait_for_bucket_type(Nodes,
+                                                ?SET_TYPE,
+                                                [{datatype, set}]),
+    rt:create_activate_and_wait_for_bucket_type(Nodes,
+                                                ?MAP_TYPE,
+                                                [{datatype, map}]),
 
     %% Partition the Cluster into 2 Sides
     Partition = rt:partition(P1, P2),
 
-    try
-        lager:info("Writing to Partition 1 Key ~p ", [?KEY]),
-        make_and_check(Pid1, [a, b]),
+    Pid1 = rt:pbc(hd(P1)),
+    Pid2 = rt:pbc(hd(P2)),
 
-        %% Upgrade Nodes 3 - 4 only
-        upgrade(Nodes34, current),
+    riakc_pb_socket:set_options(Pid1, [queue_if_disconnected, auto_reconnect]),
+    riakc_pb_socket:set_options(Pid2, [queue_if_disconnected, auto_reconnect]),
 
-        lager:info("Writing to Partition 2 Key W/ Different Set ~p ", [?KEY]),
-        make_and_check(Pid2, [c, d, e])
-    after
-         rt:heal(Partition)
-    end,
+    lager:info("Writing to Partition 1 Key ~p ", [?KEY]),
+    make_and_check(Pid1, [a, b]),
 
+    %% Upgrade Nodes 3 - 4 only
+    upgrade(Nodes34, current),
+
+    lager:info("Writing to Partition 2 Key W/ Different Set ~p ", [?KEY]),
+    make_and_check(Pid2, [c, d, e]),
+
+    rt:heal(Partition),
     rt:wait_until_transfers_complete(Nodes),
 
     lager:info("Compare/Assert fetched values merge/remain as supposed to"
@@ -175,6 +175,7 @@ make_and_check(Pid, SetItems) ->
 
     verify_dt_converge:check_value(Pid, riakc_pb_socket,
                                    ?BUCKET_M, ?KEY, riakc_map,
-                                   [{{<<"set1">>, set}, [<<"mtv">>, <<"raps">>]},
+                                   [{{<<"set1">>, set}, [<<"mtv">>,
+                                                         <<"raps">>]},
                                     {{<<"set2">>, set}, [<<"x">>, <<"y">>,
                                                          <<"z">>]}]).
