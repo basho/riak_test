@@ -27,6 +27,10 @@
           [{enabled, true}]
          }]).
 
+-define(LOG_ERROR(Err, Reason),
+    BT = erlang:get_stacktrace(),
+    lager:info(" ~p:~p: Waiting for CRDT results to converge. Error was ~p.~n~p", [?MODULE, ?LINE, {Err, Reason}, BT])).
+
 confirm() ->
     rt:set_advanced_conf(all, ?CONF),
 
@@ -56,7 +60,7 @@ confirm() ->
                validate_search_results(Pid)
            end),
 
-    validate_deletes(Pid, Nodes),
+    true = validate_deletes(Pid, Nodes),
 
 
     riakc_pb_socket:stop(Pid),
@@ -139,15 +143,13 @@ validate_search_results(Pid) ->
                      number_of_fields(Results3b, ?INDEX)),
         true
     catch Err:Reason ->
-        log_error(Err, Reason),
+        ?LOG_ERROR(Err, Reason),
         false
     end.
 
 validate_deletes(Pid, Nodes) ->
     try
 
-        riakc_pb_socket:delete(Pid, ?BUCKET, ?KEY, [{pw, all}]),
-        create_initial_data(Pid, Nodes),
         lager:info("Test setting the register of a map twice to different values."
                    "\nThe # of results should still be 1"),
         test_repeat_sets(Pid, Nodes, ?BUCKET, ?INDEX, ?KEY),
@@ -167,47 +169,50 @@ validate_deletes(Pid, Nodes) ->
         true
     catch
         Err:Reason ->
-            log_error(Err, Reason),
+            ?LOG_ERROR(Err, Reason),
             false
     end.
 
-log_error(Err, Reason) ->
-    lager:info("Waiting for CRDT Delete results to converge. Error was ~p.", [{Err, Reason}]),
-    false.
-
 test_repeat_sets(Pid, Cluster, Bucket, Index, Key) ->
-    {ok, M1} = riakc_pb_socket:fetch_type(Pid, Bucket, Key),
-    M2 = riakc_map:update(
-           {<<"update">>, register},
-           fun(R) ->
-                   riakc_register:set(<<"foo">>, R)
-           end, M1),
-    ok = riakc_pb_socket:update_type(
-           Pid,
-           Bucket,
-           Key,
-           riakc_map:to_op(M2)),
-    M3 = riakc_map:update(
-           {<<"update">>, register},
-           fun(R) ->
-                   riakc_register:set(<<"bar">>, R)
-           end, M1),
-    ok = riakc_pb_socket:update_type(
-           Pid,
-           Bucket,
-           Key,
-           riakc_map:to_op(M3)),
-
-    yokozuna_rt:drain_solrqs(Cluster),
-    yokozuna_rt:commit(Cluster, Index),
     ok = rt:wait_until(fun() ->
-        {ok, {search_results, Results, _, _}} = riakc_pb_socket:search(
-            Pid, Index,
-            <<"update_register:*">>),
+        try
+            {ok, M1} = riakc_pb_socket:fetch_type(Pid, Bucket, Key),
+            M2 = riakc_map:update(
+                   {<<"update">>, register},
+                   fun(R) ->
+                           riakc_register:set(<<"foo">>, R)
+                   end, M1),
+            ok = riakc_pb_socket:update_type(
+                   Pid,
+                   Bucket,
+                   Key,
+                   riakc_map:to_op(M2)),
+            M3 = riakc_map:update(
+                   {<<"update">>, register},
+                   fun(R) ->
+                           riakc_register:set(<<"bar">>, R)
+                   end, M1),
+            ok = riakc_pb_socket:update_type(
+                   Pid,
+                   Bucket,
+                   Key,
+                   riakc_map:to_op(M3)),
 
-        lager:info("Search update_register:*: ~p~n", [Results]),
-        ?assertEqual(1, length(Results))
-                       end).
+            yokozuna_rt:drain_solrqs(Cluster),
+            yokozuna_rt:commit(Cluster, Index),
+
+            {ok, {search_results, Results, _, _}} = riakc_pb_socket:search(
+                Pid, Index,
+                <<"update_register:*">>),
+
+            lager:info("Search update_register:*: ~p~n", [Results]),
+            ?assertEqual(1, length(Results)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end).
 
 %% @doc Tests varying deletes of within a CRDT map and checks for correct counts
 %%      - Remove registers, remove and add elements within a set
@@ -236,12 +241,18 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
     rt:wait_until(fun() ->
-        {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
-                                                  Pid, Index,
-                                                  <<"name_register:*">>),
-        lager:info("Search deleted/erased name_register:*: ~p~n", [Results1]),
-        ?assertEqual(0, length(Results1))
-        end),
+        try
+            {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
+                                                      Pid, Index,
+                                                      <<"name_register:*">>),
+            lager:info("Search deleted/erased name_register:*: ~p~n", [Results1]),
+            ?assertEqual(0, length(Results1)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end),
 
     lager:info("Add another element to set (in map)"),
     M4 = riakc_map:update(
@@ -260,27 +271,39 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     yokozuna_rt:commit(Cluster, Index),
 
     rt:wait_until(fun() ->
-        {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
-                                                   Pid, Index,
-                                                   <<"interests_set:thing*">>),
-        lager:info("Search deleted interests_set:thing*: ~p~n", [Results2]),
-        ?assertEqual(0, length(Results2))
-        end),
+        try
+            {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"interests_set:thing*">>),
+            lager:info("Search deleted interests_set:thing*: ~p~n", [Results2]),
+            ?assertEqual(0, length(Results2)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end),
 
     lager:info("Delete key for map"),
     ?assertEqual(ok, riakc_pb_socket:delete(Pid, Bucket, Key)),
     yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
-        rt:wait_until(fun() ->
-        ?assertEqual({error, {notfound, map}},
-                     riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
+    rt:wait_until(fun() ->
+        try
+            ?assertEqual({error, {notfound, map}},
+                         riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
 
-        {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
-                                                   Pid, Index,
-                                                   <<"*:*">>),
-        lager:info("Search deleted map *:*: ~p~n", [Results3]),
-        ?assertEqual(0, length(Results3))
-        end),
+            {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"*:*">>),
+            lager:info("Search deleted map *:*: ~p~n", [Results3]),
+            ?assertEqual(0, length(Results3)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end),
 
     lager:info("Recreate object and check counts..."),
 
@@ -301,16 +324,22 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     yokozuna_rt:commit(Cluster, Index),
 
     rt:wait_until(fun() ->
-        {ok, M6} = riakc_pb_socket:fetch_type(Pid, Bucket, Key),
-        Keys = riakc_map:fetch_keys(M6),
-        ?assertEqual(1, length(Keys)),
-        ?assert(riakc_map:is_key({<<"name">>, register}, M6)),
-        {ok, {search_results, Results4, _, _}} = riakc_pb_socket:search(
-                                                   Pid, Index,
-                                                   <<"*:*">>),
-        lager:info("Search recreated map *:*: ~p~n", [Results4]),
-        ?assertEqual(1, length(Results4))
-        end),
+        try
+            {ok, M6} = riakc_pb_socket:fetch_type(Pid, Bucket, Key),
+            Keys = riakc_map:fetch_keys(M6),
+            ?assertEqual(1, length(Keys)),
+            ?assert(riakc_map:is_key({<<"name">>, register}, M6)),
+            {ok, {search_results, Results4, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"*:*">>),
+            lager:info("Search recreated map *:*: ~p~n", [Results4]),
+            ?assertEqual(1, length(Results4)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end),
 
     lager:info("Delete key for map again"),
     ?assertEqual(ok, riakc_pb_socket:delete(Pid, Bucket, Key)),
@@ -318,15 +347,21 @@ test_delete(Pid, Cluster, Bucket, Index, Key) ->
     yokozuna_rt:commit(Cluster, Index),
 
     rt:wait_until(fun() ->
-        ?assertEqual({error, {notfound, map}},
-                     riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
+        try
+            ?assertEqual({error, {notfound, map}},
+                         riakc_pb_socket:fetch_type(Pid, Bucket, Key)),
 
-        {ok, {search_results, Results5, _, _}} = riakc_pb_socket:search(
-                                                   Pid, Index,
-                                                   <<"*:*">>),
-        lager:info("Search ~p deleted map *:*: ~p~n", [Key, Results5]),
-        ?assertEqual(0, length(Results5))
-        end).
+            {ok, {search_results, Results5, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"*:*">>),
+            lager:info("Search ~p deleted map *:*: ~p~n", [Key, Results5]),
+            ?assertEqual(0, length(Results5)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end).
 
 %% @doc Tests key/map delete and AAE
 %%      - Use intercept to trap yz_kv:delete_operation to skip over
@@ -376,14 +411,20 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
     yokozuna_rt:commit(Cluster, Index),
 
     rt:wait_until(fun() ->
-        {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
-                                                   Pid, Index,
-                                                   <<"*:*">>),
-        lager:info("Search all results, expect extra b/c tombstone"
-                   " and we've modified the delete op... *:*: ~p~n",
-                   [length(Results1)]),
-        ?assertEqual(2, length(Results1))
-        end),
+        try
+            {ok, {search_results, Results1, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"*:*">>),
+            lager:info("Search all results, expect extra b/c tombstone"
+                       " and we've modified the delete op... *:*: ~p~n",
+                       [length(Results1)]),
+            ?assertEqual(2, length(Results1)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end),
 
     lager:info("Expire and re-check"),
     yokozuna_rt:expire_trees(Cluster),
@@ -393,12 +434,19 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
     yokozuna_rt:commit(Cluster, Index),
 
     rt:wait_until(fun() ->
-        {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
-                                                   Pid, Index,
-                                                   <<"*:*">>),
-        lager:info("Search all results, expect removed tombstone b/c AAE"
-                   " should clean it up ... *:*: ~p~n", [length(Results2)]),
-        ?assertEqual(1, length(Results2)),
+        try
+            {ok, {search_results, Results2, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"*:*">>),
+            lager:info("Search all results, expect removed tombstone b/c AAE"
+                       " should clean it up ... *:*: ~p~n", [length(Results2)]),
+            ?assertEqual(1, length(Results2)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            fale
+        end
+    end),
 
     lager:info("Recreate object and check counts"),
 
@@ -418,16 +466,22 @@ test_delete_aae(Pid, Cluster, Bucket, Index) ->
     yokozuna_rt:drain_solrqs(Cluster),
     yokozuna_rt:commit(Cluster, Index),
     rt:wait_until(fun() ->
-        {ok, M4} = riakc_pb_socket:fetch_type(Pid, Bucket, Key2),
-        Keys = riakc_map:fetch_keys(M4),
-        ?assertEqual(1, length(Keys)),
-        ?assert(riakc_map:is_key({<<"name">>, register}, M4)),
-        {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
-                                                   Pid, Index,
-                                                   <<"*:*">>),
-        lager:info("Search recreated map *:*: ~p~n", [Results3]),
-        ?assertEqual(2, length(Results3)),
-        end).
+        try
+            {ok, M4} = riakc_pb_socket:fetch_type(Pid, Bucket, Key2),
+            Keys = riakc_map:fetch_keys(M4),
+            ?assertEqual(1, length(Keys)),
+            ?assert(riakc_map:is_key({<<"name">>, register}, M4)),
+            {ok, {search_results, Results3, _, _}} = riakc_pb_socket:search(
+                                                       Pid, Index,
+                                                       <<"*:*">>),
+            lager:info("Search recreated map *:*: ~p~n", [Results3]),
+            ?assertEqual(2, length(Results3)),
+            true
+        catch Err:Reason ->
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end).
 
 %% @doc Tests sibling handling/merge when there's a partition
 %%      - Write/remove from separate partitions
@@ -576,8 +630,10 @@ test_siblings(Pid, Cluster, Bucket, Index) ->
             ?assertEqual(0, length(Results3)),
             true
         catch Err:Reason ->
-
-        end).
+            ?LOG_ERROR(Err, Reason),
+            false
+        end
+    end).
 
 
 %% @private
