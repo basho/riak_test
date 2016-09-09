@@ -48,7 +48,7 @@
     {?TOKEN_MAP_REDUCE_JS,  true},
     {?TOKEN_SEC_INDEX,      true},
     {?TOKEN_SEC_INDEX_S,    true},
-    {?TOKEN_OLD_SEARCH,     false},
+    {?TOKEN_OLD_SEARCH,     true},
     {?TOKEN_YZ_SEARCH,      true}
 ]).
 
