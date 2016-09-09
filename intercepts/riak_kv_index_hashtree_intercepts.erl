@@ -32,11 +32,17 @@ delayed_compare(_IndexN, _Remote, _AccFun, _TreePid) ->
 
 %% @doc When attempting to get the lock on a hashtree, return the
 %%      not_built atom which means the tree has not been computed yet.
-not_built(_TreePid, _Type) ->
+not_built(_TreePid, _Type, _Version) ->
     not_built.
 
 %% @doc When attempting to get the lock on a hashtree, return the
 %%      already_locked atom which means the tree is locked by another
 %%      process.
-already_locked(_TreePid, _Type) ->
+already_locked(_TreePid, _Type, _Version) ->
     already_locked.
+
+%% @doc When attempting to get the lock on a hashtree, return the
+%%      bad_version atom which means the local tree does not match
+%%      the requested version
+bad_version(_TreePid, _Type, _Version) ->
+    bad_version.
