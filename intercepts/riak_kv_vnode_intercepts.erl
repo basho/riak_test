@@ -1,6 +1,38 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2015 Basho Technologies, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%%-------------------------------------------------------------------
+
 -module(riak_kv_vnode_intercepts).
 -compile(export_all).
 -include("intercept.hrl").
+
+%% shamelessly copied from riak_kv_vnode.hrl
+-record(riak_kv_w1c_put_req_v1, {
+    bkey :: {binary(),binary()},
+    encoded_val :: binary(),
+    type :: primary | fallback
+    % start_time :: non_neg_integer(), Jon to add?
+}).
+-record(riak_kv_w1c_put_reply_v1, {
+    reply :: ok | {error, term()},
+    type :: primary | fallback
+}).
 
 -define(M, riak_kv_vnode_orig).
 
@@ -29,6 +61,29 @@ slow_handle_coverage(Req, Filter, Sender, State) ->
     error_logger:info_msg("coverage sleeping ~p", [Rand]),
     timer:sleep(Rand),
     ?M:handle_coverage_orig(Req, Filter, Sender, State).
+
+%% @doc Count how many times we call handle_handoff_command
+count_handoff_w1c_puts(#riak_kv_w1c_put_req_v1{}=Req, Sender, State) ->
+    Val = ?M:handle_handoff_command_orig(Req, Sender, State),
+    ets:update_counter(intercepts_tab, w1c_put_counter, 1),
+    Val;
+count_handoff_w1c_puts(Req, Sender, State) ->
+    ?M:handle_handoff_command_orig(Req, Sender, State).
+
+%% @doc Count how many times we handle syncchronous and asynchronous replies
+%% in handle_command when using w1c buckets
+count_w1c_handle_command(#riak_kv_w1c_put_req_v1{}=Req, Sender, State) ->
+    case ?M:handle_command_orig(Req, Sender, State) of
+        {noreply, NewState} ->
+            ets:update_counter(intercepts_tab, w1c_async_replies, 1),
+            {noreply, NewState};
+        {reply, #riak_kv_w1c_put_reply_v1{reply=ok, type=Type}, NewState} ->
+            ets:update_counter(intercepts_tab, w1c_sync_replies, 1),
+            {reply, #riak_kv_w1c_put_reply_v1{reply=ok, type=Type}, NewState};
+        Any -> Any
+    end;
+count_w1c_handle_command(Req, Sender, State) ->
+    ?M:handle_command_orig(Req, Sender, State).
 
 %% @doc Simulate dropped gets/network partitions byresponding with
 %%      noreply during get requests.
@@ -104,3 +159,9 @@ corrupting_handle_handoff_data(BinObj0, State) ->
 
 corrupt_binary(O) ->
     crypto:rand_bytes(byte_size(O)).
+
+put_as_readrepair(Preflist, BKey, Obj, ReqId, StartTime, Options) ->
+    ?M:put_orig(Preflist, BKey, Obj, ReqId, StartTime, [rr | Options]).
+
+coord_put_as_readrepair(Preflist, BKey, Obj, ReqId, StartTime, Options) ->
+    ?M:coord_put_orig(Preflist, BKey, Obj, ReqId, StartTime, [rr | Options]).

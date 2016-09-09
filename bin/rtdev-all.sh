@@ -4,7 +4,7 @@ ORIGDIR=`pwd`
 pushd `dirname $0` > /dev/null
 SCRIPT_DIR=`pwd`
 popd > /dev/null
-: ${CURRENT_OTP:=$HOME/erlang-R16B02}
+: ${CURRENT_OTP:="$HOME/erlang-R16B02"}
 : ${RT_CURRENT_TAG:=""}
 
 

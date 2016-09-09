@@ -43,6 +43,7 @@
 % I would hope this would come from the testing framework some day
 % to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 8).
+-define(AAE_THROTTLE_LIMITS, [{-1, 0}, {100, 10}]).
 -define(CFG,
         [{riak_kv,
           [
@@ -51,7 +52,8 @@
            {anti_entropy_build_limit, {100, 1000}},
            {anti_entropy_concurrency, 100},
            {anti_entropy_expire, 24 * 60 * 60 * 1000}, % Not for now!
-           {anti_entropy_tick, 500}
+           {anti_entropy_tick, 500},
+           {aae_throttle_limits, ?AAE_THROTTLE_LIMITS}
           ]},
          {riak_core,
           [
@@ -65,8 +67,24 @@
 
 confirm() ->
     Nodes = rt:build_cluster(?NUM_NODES, ?CFG),
+    verify_throttle_config(Nodes),
     verify_aae(Nodes),
     pass.
+
+verify_throttle_config(Nodes) ->
+    lists:foreach(
+      fun(Node) ->
+              ?assert(rpc:call(Node,
+                               riak_kv_entropy_manager,
+                               is_aae_throttle_enabled,
+                               [])),
+              ?assertMatch(?AAE_THROTTLE_LIMITS,
+                           rpc:call(Node,
+                                    riak_kv_entropy_manager,
+                                    get_aae_throttle_limits,
+                                    []))
+      end,
+      Nodes).
 
 verify_aae(Nodes) ->
     Node1 = hd(Nodes),
