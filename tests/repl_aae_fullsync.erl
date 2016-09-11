@@ -29,7 +29,6 @@
              %% Specify fast building of AAE trees
              {anti_entropy, {on, []}},
              {anti_entropy_build_limit, {100, 1000}},
-             {object_hash_version, 0},
              {anti_entropy_concurrency, 100}
             ]
         },
