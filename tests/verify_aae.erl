@@ -60,7 +60,7 @@
            {ring_creation_size, ?DEFAULT_RING_SIZE}
           ]}]
        ).
--define(NUM_NODES, 3).
+-define(NUM_NODES, 1).
 -define(NUM_KEYS, 1000).
 -define(BUCKET, <<"test_bucket">>).
 -define(N_VAL, 3).
