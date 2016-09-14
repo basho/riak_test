@@ -1214,7 +1214,7 @@ product(Node) ->
     end.
 
 try_nodes_ready(Nodes) ->
-    try_nodes_ready(Nodes, 3, 500).
+    try_nodes_ready(Nodes, 10, 500).
 
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
