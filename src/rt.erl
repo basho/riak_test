@@ -55,6 +55,7 @@
          cmd/2,
          connection_info/1,
          console/2,
+         copy_conf/3,
          count_calls/2,
          create_and_activate_bucket_type/3,
          del_dir/1,
@@ -1695,6 +1696,10 @@ attach_direct(Node, Expected) ->
 %% @see rt:attach/2
 console(Node, Expected) ->
     ?HARNESS:console(Node, Expected).
+
+%% @doc Copies config files from one set of nodes to another
+copy_conf(NumNodes, FromVersion, ToVersion) ->
+    ?HARNESS:copy_conf(NumNodes, FromVersion, ToVersion).
 
 %%%===================================================================
 %%% Search

@@ -178,6 +178,21 @@ upgrade(Node, NewVersion, Config, UpgradeCallback) ->
     rt:wait_until_pingable(Node),
     ok.
 
+-spec copy_conf(integer(), atom() | string(), atom() | string()) -> ok.
+copy_conf(NumNodes, FromVersion, ToVersion) ->
+    lager:info("Copying config from ~p to ~p", [FromVersion, ToVersion]),
+
+    FromPath = relpath(FromVersion),
+    ToPath = relpath(ToVersion),
+
+    [copy_node_conf(N, FromPath, ToPath) || N <- lists:seq(1, NumNodes)].
+
+copy_node_conf(NodeNum, FromPath, ToPath) ->
+    Command = io_lib:format("cp -p -P -R \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
+                            [FromPath, NodeNum, ToPath, NodeNum]),
+    os:cmd(Command),
+    ok.
+
 -spec set_conf(atom() | string(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
     lager:info("rtdev:set_conf(all, ~p)", [NameValuePairs]),

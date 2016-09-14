@@ -282,6 +282,9 @@ upgrade(Node, NewVersion, Config, _UpgradeCallback) ->
     rt:wait_until_pingable(Node),
     ok.
 
+copy_conf(_, _, _) ->
+    throw({error, not_implemented}).
+
 run_riak(Node, Cmd) ->
     Exec = riakcmd(Node, Cmd),
     lager:info("Running: ~s :: ~s", [get_host(Node), Exec]),
