@@ -449,41 +449,51 @@ staged_join(Node, PNode) ->
     ?assertEqual(ok, join_with_retry(Fun)),
     ok.
 
-plan_and_commit(Node) ->
+plan_and_commit(Nodes) ->
+    plan_and_commit(Nodes, 10).
+
+plan_and_commit(_Nodes, 0) ->
+    {error, could_not_plan_and_commit};
+plan_and_commit([Node | _Rest] =Nodes, RetryCount) ->
     timer:sleep(500),
     lager:info("planning cluster join"),
     case rpc:call(Node, riak_core_claimant, plan, []) of
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
             timer:sleep(100),
-            plan_and_commit(Node);
+            plan_and_commit(Nodes, RetryCount-1);
         {ok, [], []} ->
             %% Changes were somehow overwritten before we got there
             %% retry the join, which has to be done by the caller
             lager:info("Ring overwrite seems to have occurred. Plan Overwritten."),
-            {error, plan_overwritten};
+            join_cluster(Nodes, RetryCount-1);
         {ok, _, _} ->
             lager:info("plan: done"),
-            do_commit(Node)
+            do_commit(Nodes, RetryCount)
     end.
 
-do_commit(Node) ->
+do_commit(Nodes) ->
+    do_commit(Nodes, 1).
+
+do_commit(_Nodes, 0) ->
+    {error, could_not_plan_and_commit};
+do_commit([Node | _Rest] = Nodes, RetryCount) ->
     lager:info("planning cluster commit"),
     case rpc:call(Node, riak_core_claimant, commit, []) of
         {error, plan_changed} ->
             lager:info("commit: plan changed"),
             timer:sleep(100),
             maybe_wait_for_changes(Node),
-            plan_and_commit(Node);
+            plan_and_commit(Nodes, RetryCount-1);
         {error, ring_not_ready} ->
             lager:info("commit: ring not ready"),
             timer:sleep(100),
             maybe_wait_for_changes(Node),
-            do_commit(Node);
+            do_commit(Nodes, RetryCount-1);
         {error, nothing_planned} ->
             %% Somehow the plan was overwritten
             %% The consumer needs to start over with joins
-            {error, plan_overwritten};
+            join_cluster(Nodes, RetryCount-1);
         ok ->
             ok
     end.
@@ -1161,6 +1171,11 @@ build_cluster(NumNodes, Versions, InitialConfig) ->
     Nodes.
 
 join_cluster(Nodes) ->
+    join_cluster(Nodes, 10).
+
+join_cluster(_Nodes, 0) ->
+    {error, could_not_plan_and_commit};
+join_cluster(Nodes, RetryCount) ->
     %% Ensure each node owns 100% of it's own ring
     [?assertEqual([Node], owners_according_to(Node)) || Node <- Nodes],
 
@@ -1174,11 +1189,7 @@ join_cluster(Nodes) ->
             %% ok do a staged join and then commit it, this eliminates the
             %% large amount of redundant handoff done in a sequential join
             [staged_join(Node, Node1) || Node <- OtherNodes],
-            case plan_and_commit(Node1) of
-                {error, plan_overwritten} ->
-                    join_cluster(Nodes);
-                ok -> ok
-            end,
+            plan_and_commit(Nodes, RetryCount),
             try_nodes_ready(Nodes, 3, 500)
     end,
 
