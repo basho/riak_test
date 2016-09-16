@@ -88,11 +88,11 @@ verify_throttle_config(Nodes) ->
 
 verify_aae(Nodes) ->
     Node1 = hd(Nodes),
-    
+
     % Verify that AAE eventually upgrades to version 0(or already has)
-    wait_until_hashtree_upgrade(Nodes),
+    wait_until_hashtree_upgrade(Nodes), 
     
-    % First, recovery without tree rebuilds
+    % Recovery without tree rebuilds
 
     % Test recovery from to few replicas written
     KV1 = test_data(1, 1000),
