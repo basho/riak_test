@@ -88,6 +88,10 @@ verify_throttle_config(Nodes) ->
 
 verify_aae(Nodes) ->
     Node1 = hd(Nodes),
+    
+    % Verify that AAE eventually upgrades to version 0(or already has)
+    wait_until_hashtree_upgrade(Nodes),
+    
     % First, recovery without tree rebuilds
 
     % Test recovery from to few replicas written
@@ -125,9 +129,6 @@ verify_aae(Nodes) ->
 
     % Make sure AAE repairs die down.
     wait_until_no_aae_repairs(Nodes),
-
-    % Verify that AAE eventually upgrades to version 0(or already has)
-    wait_until_hashtree_upgrade(Nodes),
 
     lager:info("Finished verifying AAE magic"),
     ok.
