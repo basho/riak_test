@@ -1215,9 +1215,9 @@ product(Node) ->
        true -> unknown
     end.
 
-try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
+try_nodes_ready(Nodes, 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
-    plan_and_commit(Node1);
+    plan_and_commit(Nodes);
 try_nodes_ready(Nodes, N, SleepMs) ->
     ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
     case ReadyNodes of
