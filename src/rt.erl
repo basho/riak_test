@@ -473,10 +473,10 @@ plan_and_commit([Node | _Rest] =Nodes, RetryCount) ->
     end.
 
 do_commit(Nodes) ->
-    do_commit(Nodes, 1).
+    do_commit(Nodes, 10).
 
 do_commit(_Nodes, 0) ->
-    {error, could_not_plan_and_commit};
+    {error, could_not_do_commit};
 do_commit([Node | _Rest] = Nodes, RetryCount) ->
     lager:info("planning cluster commit"),
     case rpc:call(Node, riak_core_claimant, commit, []) of
@@ -493,6 +493,7 @@ do_commit([Node | _Rest] = Nodes, RetryCount) ->
         {error, nothing_planned} ->
             %% Somehow the plan was overwritten
             %% The consumer needs to start over with joins
+            lager:info("Plan existed when we called plan, but now is gone. Retrying join..."),
             join_cluster(Nodes, RetryCount-1);
         ok ->
             ok
@@ -1189,7 +1190,7 @@ join_cluster(Nodes, RetryCount) ->
             %% ok do a staged join and then commit it, this eliminates the
             %% large amount of redundant handoff done in a sequential join
             [staged_join(Node, Node1) || Node <- OtherNodes],
-            plan_and_commit(Nodes, RetryCount),
+            ?assertEqual(ok, plan_and_commit(Nodes, RetryCount)),
             try_nodes_ready(Nodes, 3, 500)
     end,
 
