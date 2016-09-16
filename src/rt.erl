@@ -457,6 +457,11 @@ plan_and_commit(Node) ->
             lager:info("plan: ring not ready"),
             timer:sleep(100),
             plan_and_commit(Node);
+        {ok, [], []} ->
+            %% Changes were somehow overwritten before we got there
+            %% retry the join, which has to be done by the caller
+            lager:info("Ring overwrite seems to have occurred. Plan Overwritten."),
+            {error, plan_overwritten};
         {ok, _, _} ->
             lager:info("plan: done"),
             do_commit(Node)
@@ -476,9 +481,9 @@ do_commit(Node) ->
             maybe_wait_for_changes(Node),
             do_commit(Node);
         {error, nothing_planned} ->
-            %% Assume plan actually committed somehow
-            lager:info("commit: nothing planned"),
-            ok;
+            %% Somehow the plan was overwritten
+            %% The consumer needs to start over with joins
+            {error, plan_overwritten};
         ok ->
             ok
     end.
@@ -1169,7 +1174,11 @@ join_cluster(Nodes) ->
             %% ok do a staged join and then commit it, this eliminates the
             %% large amount of redundant handoff done in a sequential join
             [staged_join(Node, Node1) || Node <- OtherNodes],
-            plan_and_commit(Node1),
+            case plan_and_commit(Node1) of
+                {error, plan_overwritten} ->
+                    join_cluster(Nodes);
+                ok -> ok
+            end,
             try_nodes_ready(Nodes, 3, 500)
     end,
 
