@@ -494,8 +494,9 @@ do_commit(Node, AllNodes) ->
             maybe_wait_for_changes(Node),
             do_commit(Node, AllNodes);
         {error, nothing_planned} ->
-            lager:info("commit: nothing planned...why???"),
-            {error, nothing_planned};
+            %% Assume plan actually committed somehow
+            lager:info("commit: nothing planned"),
+            ok;
         ok ->
             try_nodes_ready(AllNodes)
     end.
