@@ -32,14 +32,18 @@
 -define(BUCKET_M, {?MAP_TYPE, <<"testbucket">>}).
 -define(BUCKET_S, {?SET_TYPE, <<"testbucket">>}).
 -define(KEY, <<"flipit&reverseit">>).
--define(CONFIG,
-        [
-         {riak_core,
-          [{ring_creation_size, 8},
-           {anti_entropy_build_limit, {100, 1000}},
-           {anti_entropy_concurrency, 8}]
-         }
-        ]).
+-define(CONFIG, [
+    {riak_core, [
+        {ring_creation_size, 8},
+        %% shorten cluster convergence
+        {vnode_parallel_start, 8},
+        {forced_ownership_handoff, 8},
+        {handoff_concurrency, 8},
+        %% increase AAE activity
+        {anti_entropy_build_limit, {100, 1000}},
+        {anti_entropy_concurrency, 8}
+    ]}
+]).
 
 confirm() ->
     TestMetaData = riak_test_runner:metadata(),
@@ -49,6 +53,7 @@ confirm() ->
     Vsns = [{OldVsn, ?CONFIG} || _ <- lists:seq(1, NumNodes)],
 
     Nodes = [Node1,Node2|Nodes34] = rt:build_cluster(Vsns),
+    rt:wait_until_transfers_complete(Nodes),
 
     %% Create PB connection.
     {P1, P2} = lists:split(1, Nodes),

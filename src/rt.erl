@@ -763,6 +763,7 @@ wait_until_transfers_complete([Node0|_]) ->
     lager:info("Wait until transfers complete ~p", [Node0]),
     F = fun(Node) ->
                 {DownNodes, Transfers} = rpc:call(Node, riak_core_status, transfers, []),
+                lager:info("DownNodes: ~p Transfers: ~p", [DownNodes, Transfers]),
                 DownNodes =:= [] andalso Transfers =:= []
         end,
     ?assertEqual(ok, wait_until(Node0, F)),
