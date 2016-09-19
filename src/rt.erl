@@ -1189,6 +1189,8 @@ join_cluster(Nodes) ->
             ?assertEqual(ok, wait_until(fun() -> ok == plan_and_commit(Node1, Nodes) end))
     end,
 
+    ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
+
     %% Ensure each node owns a portion of the ring
     wait_until_nodes_agree_about_ownership(Nodes),
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
