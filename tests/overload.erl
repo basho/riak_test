@@ -86,7 +86,6 @@ confirm() ->
     ok = create_bucket_type(Nodes, ?NORMAL_TYPE, [{n_val, 3}]),
     ok = create_bucket_type(Nodes, ?CONSISTENT_TYPE, [{consistent, true}, {n_val, 5}]),
     ok = create_bucket_type(Nodes, ?WRITE_ONCE_TYPE, [{write_once, true}, {n_val, 1}]),
-    rt:wait_until(ring_manager_check_fun(Node1)),
 
     write_once(Node1, ?NORMAL_BKV),
     write_once(Node1, ?CONSISTENT_BKV),
