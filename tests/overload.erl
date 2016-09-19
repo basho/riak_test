@@ -81,15 +81,13 @@ default_config(#config{
         {riak_api, [{pb_backlog, 1024}]}].
 
 confirm() ->
-    Nodes = setup(),
+    [Node1 | _] = Nodes = setup(),
 
     ok = create_bucket_type(Nodes, ?NORMAL_TYPE, [{n_val, 3}]),
     ok = create_bucket_type(Nodes, ?CONSISTENT_TYPE, [{consistent, true}, {n_val, 5}]),
     ok = create_bucket_type(Nodes, ?WRITE_ONCE_TYPE, [{write_once, true}, {n_val, 1}]),
-    rt:wait_until(ring_manager_check_fun(hd(Nodes))),
+    rt:wait_until(ring_manager_check_fun(Node1)),
 
-
-    Node1 = hd(Nodes),
     write_once(Node1, ?NORMAL_BKV),
     write_once(Node1, ?CONSISTENT_BKV),
     write_once(Node1, ?WRITE_ONCE_BKV),
