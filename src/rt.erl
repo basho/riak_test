@@ -467,38 +467,38 @@ staged_join(Node, PNode) ->
     ?assertEqual(ok, join_with_retry(Fun)),
     ok.
 
-plan_and_commit(Node, AllNodes) ->
+plan_and_commit(Node) ->
     timer:sleep(500),
     lager:info("planning cluster join"),
     case rpc:call(Node, riak_core_claimant, plan, []) of
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
             timer:sleep(100),
-            plan_and_commit(Node, AllNodes);
+            plan_and_commit(Node);
         {ok, _, _} ->
             lager:info("plan: done"),
-            do_commit(Node, AllNodes)
+            do_commit(Node)
     end.
 
-do_commit(Node, AllNodes) ->
+do_commit(Node) ->
     lager:info("planning cluster commit"),
     case rpc:call(Node, riak_core_claimant, commit, []) of
         {error, plan_changed} ->
             lager:info("commit: plan changed"),
             timer:sleep(100),
             maybe_wait_for_changes(Node),
-            plan_and_commit(Node, AllNodes);
+            plan_and_commit(Node);
         {error, ring_not_ready} ->
             lager:info("commit: ring not ready"),
             timer:sleep(100),
             maybe_wait_for_changes(Node),
-            do_commit(Node, AllNodes);
+            do_commit(Node);
         {error, nothing_planned} ->
             %% Assume plan actually committed somehow
             lager:info("commit: nothing planned"),
             ok;
         ok ->
-            try_nodes_ready(AllNodes)
+            ok
     end.
 
 maybe_wait_for_changes(Node) ->
@@ -1187,7 +1187,8 @@ join_cluster(Nodes) ->
             %% ok do a staged join and then commit it, this eliminates the
             %% large amount of redundant handoff done in a sequential join
             [staged_join(Node, Node1) || Node <- OtherNodes],
-            ?assertEqual(ok, wait_until(fun() -> ok == plan_and_commit(Node1, Nodes) end))
+            plan_and_commit(Node1),
+            try_nodes_ready(Nodes)
     end,
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
@@ -1215,9 +1216,9 @@ product(Node) ->
 try_nodes_ready(Nodes) ->
     try_nodes_ready(Nodes, 10, 500).
 
-try_nodes_ready(_Nodes, 0, _SleepMs) ->
-    lager:info("Nodes not ready after plan/commit, retrying"),
-    not_ready;
+try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
+    lager:info("Nodes not ready after initial plan/commit, retrying"),
+    plan_and_commit(Node1);
 try_nodes_ready(Nodes, N, SleepMs) ->
     ReadyNodes = [Node || Node <- Nodes, is_ready(Node) =:= true],
     case ReadyNodes of
