@@ -114,7 +114,7 @@ setup() ->
 test_no_overload_protection(_Nodes, ?CONSISTENT_BKV) ->
     ok;
 test_no_overload_protection(Nodes, BKV) ->
-    lager:info("Setting default configuration for no overload protestion test."),
+    lager:info("Setting default configuration for no overload protection test."),
     rt:pmap(fun(Node) ->
         rt:update_app_config(Node, default_config())
     end, Nodes),
