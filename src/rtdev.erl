@@ -816,8 +816,8 @@ get_node_debug_logs({_Node, NodeNum}) ->
     {ExitCode, Result} = wait_for_cmd(spawn_cmd(Cmd)),
     case ExitCode of
         0 ->
-            {ok, Port} = file:open(DebugLogFile, [read, binary]),
-            {DebugLogFile, Port};
+            {ok, Binary} = file:read_file(DebugLogFile),
+            {DebugLogFile, Binary};
         _ ->
             exit({ExitCode, Result})
     end.
