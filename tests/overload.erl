@@ -30,13 +30,13 @@
 -define(LIST_KEYS_RETRIES, 1000).
 -define(GET_RETRIES, 1000).
 -define(BUCKET, <<"test">>).
--define(KEY, <<"hotkey">>).
+-define(VALUE, <<"overload_test_value">>).
 -define(NORMAL_TYPE, <<"normal_type">>).
 -define(CONSISTENT_TYPE, <<"consistent_type">>).
 -define(WRITE_ONCE_TYPE, <<"write_once_type">>).
--define(NORMAL_BKV, {{?NORMAL_TYPE, ?BUCKET}, ?KEY, <<"test">>}).
--define(CONSISTENT_BKV, {{?CONSISTENT_TYPE, ?BUCKET}, ?KEY, <<"test">>}).
--define(WRITE_ONCE_BKV, {{?WRITE_ONCE_TYPE, ?BUCKET}, ?KEY, <<"test">>}).
+-define(NORMAL_BUCKET, {?NORMAL_TYPE, ?BUCKET}).
+-define(CONSISTENT_BUCKET, {?CONSISTENT_TYPE, ?BUCKET}).
+-define(WRITE_ONCE_BUCKET, {?WRITE_ONCE_TYPE, ?BUCKET}).
 
 %% This record contains the default values for config settings if they were not set
 %% in the advanced.config file - because setting something to `undefined` is not the same
@@ -87,9 +87,16 @@ confirm() ->
     ok = create_bucket_type(Nodes, ?CONSISTENT_TYPE, [{consistent, true}, {n_val, 5}]),
     ok = create_bucket_type(Nodes, ?WRITE_ONCE_TYPE, [{write_once, true}, {n_val, 1}]),
 
-    write_once(Node1, ?NORMAL_BKV),
-    write_once(Node1, ?CONSISTENT_BKV),
-    write_once(Node1, ?WRITE_ONCE_BKV),
+    Key = generate_key(),
+    lager:info("Generated overload test key ~p", [Key]),
+
+    NormalBKV = {?NORMAL_BUCKET, Key, ?VALUE},
+    ConsistentBKV = {?CONSISTENT_BUCKET, Key, ?VALUE},
+    WriteOnceBKV = {?WRITE_ONCE_BUCKET, Key, ?VALUE},
+
+    write_once(Node1, NormalBKV),
+    write_once(Node1, ConsistentBKV),
+    write_once(Node1, WriteOnceBKV),
 
     Tests = [test_no_overload_protection,
              test_vnode_protection,
@@ -99,19 +106,27 @@ confirm() ->
          lager:info("Starting Test ~p for ~p~n", [Test, BKV]),
          ok = erlang:apply(?MODULE, Test, [Nodes, BKV])
      end || Test <- Tests,
-            BKV <- [?NORMAL_BKV,
-                    ?CONSISTENT_BKV,
-                    ?WRITE_ONCE_BKV]],
+            BKV <- [NormalBKV,
+                    ConsistentBKV,
+                    WriteOnceBKV]],
 
     %% Test cover queries doesn't depend on bucket/keyvalue, just run it once
     test_cover_queries_overload(Nodes),
     pass.
 
+generate_key() ->
+    random:seed(erlang:now()),
+    N = random:uniform(500),
+
+    Part1 = <<"overload_test_key_">>,
+    Part2 = integer_to_binary(N),
+
+    <<Part1/binary, Part2/binary>>.
 
 setup() ->
     ensemble_util:build_cluster(5, default_config(), 5).
 
-test_no_overload_protection(_Nodes, ?CONSISTENT_BKV) ->
+test_no_overload_protection(_Nodes, {?CONSISTENT_BUCKET, _, _}) ->
     ok;
 test_no_overload_protection(Nodes, BKV) ->
     lager:info("Setting default configuration for no overload protection test."),
@@ -125,7 +140,7 @@ test_no_overload_protection(Nodes, BKV) ->
                                    "QueueFun", "Queue Size"),
     verify_test_results(run_test(Nodes, BKV), BKV, ProcFun, QueueFun).
 
-verify_test_results({_NumProcs, QueueLen}, ?CONSISTENT_BKV, _ProcFun, QueueFun) ->
+verify_test_results({_NumProcs, QueueLen}, {?CONSISTENT_BUCKET, _, _}, _ProcFun, QueueFun) ->
     ?assert(QueueFun(QueueLen));
 verify_test_results({NumProcs, QueueLen}, _BKV, ProcFun, QueueFun) ->
     ?assert(ProcFun(NumProcs)),
@@ -168,11 +183,11 @@ test_vnode_protection(Nodes, BKV) ->
 
 
 %% Don't check consistent gets, as they don't use the FSM
-test_fsm_protection(_, ?CONSISTENT_BKV) ->
+test_fsm_protection(_, {?CONSISTENT_BUCKET, _, _}) ->
     ok;
 
 %% Don't check on fast path either.
-test_fsm_protection(_, ?WRITE_ONCE_BKV) ->
+test_fsm_protection(_, {?WRITE_ONCE_BUCKET, _, _}) ->
     ok;
 
 test_fsm_protection(Nodes, BKV) ->
@@ -363,7 +378,7 @@ read_until_success(Node) ->
     read_until_success(C, 0).
 
 read_until_success(C, Count) ->
-    case C:get(?BUCKET, ?KEY) of
+    case C:get(<<"dummy">>, <<"dummy">>) of
         {error, mailbox_overload} ->
             read_until_success(C, Count+1);
         _ ->
