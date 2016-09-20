@@ -136,8 +136,8 @@ test_no_overload_protection(Nodes, BKV) ->
     lager:info("Testing with no overload protection"),
     ProcFun = build_predicate_eq(test_no_overload_protection, ?NUM_REQUESTS,
                                   "ProcFun", "Procs"),
-    QueueFun = build_predicate_gte(test_no_overload_protection, ?NUM_REQUESTS,
-                                   "QueueFun", "Queue Size"),
+    QueueFun = build_predicate_eq(test_no_overload_protection, ?NUM_REQUESTS,
+                                  "QueueFun", "Queue Size"),
     verify_test_results(run_test(Nodes, BKV), BKV, ProcFun, QueueFun).
 
 verify_test_results({_NumProcs, QueueLen}, {?CONSISTENT_BUCKET, _, _}, _ProcFun, QueueFun) ->
