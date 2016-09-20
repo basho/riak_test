@@ -548,12 +548,6 @@ run_count(Node) ->
     lager:info("fsm count:~p", [get_num_running_gen_fsm(Node)]),
     run_count(Node).
 
-run_queue_len({Idx, Node}) ->
-    timer:sleep(500),
-    Len = vnode_queue_len(Node, Idx),
-    lager:info("queue len on ~p is:~p", [Node, Len]),
-    run_queue_len({Idx, Node}).
-
 get_num_running_gen_fsm(Node) ->
     Procs = rpc:call(Node, erlang, processes, []),
     ProcInfo = [ rpc:call(Node, erlang, process_info, [P]) || P <- Procs, P /= undefined ],
