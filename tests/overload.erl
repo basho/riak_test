@@ -291,10 +291,10 @@ run_test(Nodes, BKV) ->
     overload_proxy:stop(),
     {NumProcs2 - NumProcs1, QueueLen}.
 
-get_victim(ExcludeNode, {Bucket, Key, _}) ->
+get_victim(Node, {Bucket, Key, _}) ->
     Hash = riak_core_util:chash_std_keyfun({Bucket, Key}),
-    PL = lists:sublist(riak_core_ring:preflist(Hash, rt:get_ring(ExcludeNode)), 5),
-    hd([IdxNode || {_, Node}=IdxNode <- PL, Node /= ExcludeNode]).
+    PL = riak_core_ring:preflist(Hash, rt:get_ring(Node)),
+    hd(PL).
 
 ring_manager_check_fun(Node) ->
     fun() ->
