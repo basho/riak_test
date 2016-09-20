@@ -279,13 +279,13 @@ run_test(Nodes, BKV) ->
     NumProcs2 = overload_proxy:get_count(),
     lager:info("Final process count on ~p: ~b", [Node1, NumProcs2]),
 
-    QueueLen = vnode_queue_len(Victim),
+    QueueLen = vnode_gets_in_queue(Victim),
     lager:info("Final vnode queue length for ~p: ~b",
                [Victim, QueueLen]),
 
     resume_vnode(Suspended),
     rt:wait_until(fun() ->
-                          vnode_queue_len(Victim) =:= 0
+                          vnode_gets_in_queue(Victim) =:= 0
                   end),
     kill_pids(Reads),
     overload_proxy:stop(),
@@ -529,11 +529,11 @@ resume_vnode(Pid) ->
 process_count(Node) ->
     rpc:call(Node, erlang, system_info, [process_count]).
 
-vnode_queue_len({Idx, Node}) ->
-    vnode_queue_len(Node, Idx).
+vnode_gets_in_queue({Idx, Node}) ->
+    vnode_gets_in_queue(Node, Idx).
 
-vnode_queue_len(Node, Idx) ->
-    rpc:call(Node, ?MODULE, remote_vnode_queue, [Idx]).
+vnode_gets_in_queue(Node, Idx) ->
+    rpc:call(Node, ?MODULE, remote_vnode_gets_in_queue, [Idx]).
 
 dropped_stat(Node) ->
     Stats = rpc:call(Node, riak_core_stat, get_stats, []),
@@ -556,13 +556,27 @@ get_num_running_gen_fsm(Node) ->
     FsmList = [ proplists:lookup(riak_kv_get_fsm, Call) || Call <- InitCalls ],
     length(proplists:lookup_all(riak_kv_get_fsm, FsmList)).
 
-remote_vnode_queue(Idx) ->
+remote_vnode_gets_in_queue(Idx) ->
     {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Idx, riak_kv_vnode),
     {messages, AllMessages} = process_info(Pid, messages),
-    NonPings = lists:filter(fun({'$vnode_proxy_ping', _, _, _}) -> false; (_) -> true end, AllMessages),
-    Len = length(NonPings),
-    lager:info("Non-Ping Messages (~p): ~n~p~n", [Len, NonPings]),
-    Len.
+
+    GetMessages = lists:foldl(fun(E, A) ->
+                                      case is_get_req(E) of
+                                          true -> A + 1;
+                                          false -> A
+                                      end
+                              end, 0, AllMessages),
+
+    lager:info("Get requests (~p): ~p", [Idx, GetMessages]),
+    GetMessages.
+
+%% This is not the greatest thing ever, since we're coupling this test pretty
+%% tightly to the internal representation of get requests in riak_kv...can't
+%% really figure out a better way to do this, though.
+is_get_req({'$gen_event', {riak_vnode_req_v1, _, _, Req}}) ->
+    element(1, Req) =:= riak_kv_get_req_v1;
+is_get_req(_) ->
+    false.
 
 %% In tests that do not expect work to be shed, we want to confirm that
 %% at least ?NUM_REQUESTS (queue entries) are handled.
