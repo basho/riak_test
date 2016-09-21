@@ -65,6 +65,7 @@
          down/2,
          enable_search_hook/2,
          expect_in_log/2,
+         find_version_by_name/1,
          get_call_count/2,
          get_deps/0,
          get_ip/1,
@@ -1783,6 +1784,11 @@ get_version(Vsn) ->
 get_version() ->
     ?HARNESS:get_version().
 
+%% @doc Finds a list of all test nodes with a matching name.
+-spec find_version_by_name([binary()]) -> [atom()].
+find_version_by_name(Names) ->
+    ?HARNESS:find_version_by_name(Names).
+
 %% @doc Return all functions in the module as atoms that end with 'test'.
 -spec grep_test_functions(module()) -> [atom()].
 grep_test_functions(Module) when is_atom(Module) ->
@@ -1824,7 +1830,7 @@ log_to_nodes(Nodes0, LFmt, LArgs) ->
            end,
     [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 
-%% @private utility function
+%% @doc Parallel map
 pmap(F, L) ->
     Parent = self(),
     lists:foldl(

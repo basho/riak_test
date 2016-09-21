@@ -49,16 +49,13 @@ create_table_test(Pid) ->
     State = riak_shell_test_util:shell_init(),
     lager:info("~n~nStart running the command set-------------------------", []),
     CreateTable = lists:flatten(io_lib:format("~s;", [ts_util:get_ddl(small)])),
-    Describe = io_lib:format(
-        "+-----------+---------+-------+-----------+---------+--------+----+~n"
-        "|  Column   |  Type   |Is Null|Primary Key|Local Key|Interval|Unit|~n"
-        "+-----------+---------+-------+-----------+---------+--------+----+~n"
-        "| myfamily  | varchar | false |     1     |    1    |        |    |~n"
-        "| myseries  | varchar | false |     2     |    2    |        |    |~n"
-        "|   time    |timestamp| false |     3     |    3    |   15   | m  |~n"
-        "|  weather  | varchar | false |           |         |        |    |~n"
-        "|temperature| double  | true  |           |         |        |    |~n"
-        "+-----------+---------+-------+-----------+---------+--------+----+", []),
+    Describe =
+        "Column,Type,Is Null,Primary Key,Local Key,Interval,Unit\n"
+        "myfamily,varchar,false,1,1,,\n"
+        "myseries,varchar,false,2,2,,\n"
+        "time,timestamp,false,3,3,15,m\n"
+        "weather,varchar,false,,,,\n"
+        "temperature,double,true,,,,\n",
     Cmds = [
             %% 'connection prompt on' means you need to do unicode printing and stuff
             {run,
@@ -85,9 +82,9 @@ query_table_test(Pid, Conn) ->
     Data = ts_util:get_valid_select_data(),
     ok = riakc_ts:put(Conn, ts_util:get_default_bucket(), Data),
     SQL = "select time, weather, temperature from GeoCheckin where myfamily='family1' and myseries='seriesX' and time > 0 and time < 1000",
-    Expected = query(Conn, SQL),
     Select = lists:flatten(io_lib:format("~s;", [SQL])),
     State = riak_shell_test_util:shell_init(),
+    Expected = lists:flatten(query(Conn, SQL)),
     lager:info("~n~nStart running the command set-------------------------", []),
     Cmds = [
         %% 'connection prompt on' means you need to do unicode printing and stuff
@@ -109,26 +106,33 @@ query_table_test(Pid, Conn) ->
     Pid ! Result.
 
 %% Stolen from the innards of riak_shell
+format_table({"", _}) ->
+    "";
+format_table({[[]], _}) ->
+    "";
+format_table({String, _}) ->
+    re:replace(lists:flatten(String), "\r", "", [global,{return,list}]).
+
 query(Conn, SQL) ->
-    case riakc_ts:query(Conn, SQL) of
+    case riakc_ts:query(Conn, SQL, [], undefined, [{datatypes, true}]) of
         {error, {ErrNo, Binary}} ->
             io_lib:format("Error (~p): ~s", [ErrNo, Binary]);
         {ok, {Header, Rows}} ->
-            Hdr = [binary_to_list(X) || X <- Header],
             Rs = [begin
-                      Row = tuple_to_list(RowTuple),
-                      [to_list(X) || X <- Row]
+                      Row = lists:zip(tuple_to_list(RowTuple), Header),
+                      [{to_list(Name), to_list(X)} || {X, {Name, _Type}} <- Row]
                   end || RowTuple <- Rows],
-            case {Hdr, Rs} of
-                {[], []} ->
-                    "";
-                _ ->
-                    clique_table:autosize_create_table(Hdr, Rs)
-            end
+            Status = clique_status:table(Rs),
+            format_table(clique_writer:write([Status], "csv"))
     end.
 
 to_list(A) when is_atom(A)    -> atom_to_list(A);
 to_list(B) when is_binary(B)  -> binary_to_list(B);
-to_list(I) when is_integer(I) -> integer_to_list(I);
+%% Timestamps when pulled via the Erlang client are integers, but are
+%% rendered as strings via riak-shell.
+%%
+%% We can cheat here: the only integer in the DDL is a timestamp, so
+%% any integer we see we can convert to ISO 8601.
+to_list(I) when is_integer(I) -> jam_iso8601:to_string(jam:from_epoch(I, 3));
 to_list(F) when is_float(F)   -> float_to_list(F);
 to_list(L) when is_list(L)    -> L.

@@ -69,6 +69,7 @@
     remove_last/1,
     results/1,
     single_query/2,
+    single_query/3,
     ts_get/6,
     ts_get/7,
     ts_insert/4,
@@ -125,8 +126,11 @@ ts_query({Cluster, Conn}, TestType, DDL, Data, Qry, Bucket) ->
     single_query(Conn, Qry).
 
 single_query(Conn, Qry) ->
+    single_query(Conn, Qry, []).
+
+single_query(Conn, Qry, Opts) ->
     lager:info("3 - Now run the query ~ts", [Qry]),
-    Got = riakc_ts:query(Conn, Qry),
+    Got = riakc_ts:query(Conn, Qry, Opts),
     lager:info("Result is ~p", [Got]),
     Got.
 
@@ -142,7 +146,7 @@ ts_insert(Conn, Table, Columns, Data) ->
     TermFn = fun insert_term_format/2,
     ColClause = string:strip(lists:foldl(ColFn, [], Columns), right, $,),
     ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
-    SQL = flat_format("INSERT INTO ~s (~s) VALUES (~s)",
+    SQL = flat_format("INSERT INTO ~s (~s) VALUES (~ts)",
                       [Table, ColClause, ValClause]),
     lager:info("~ts", [SQL]),
     Got = riakc_ts:query(Conn, SQL),
@@ -152,7 +156,7 @@ ts_insert(Conn, Table, Columns, Data) ->
 ts_insert_no_columns(Conn, Table, Data) ->
     TermFn = fun insert_term_format/2,
     ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
-    SQL = flat_format("INSERT INTO ~s VALUES (~s)",
+    SQL = flat_format("INSERT INTO ~s VALUES (~ts)",
         [Table, ValClause]),
     lager:info("~ts", [SQL]),
     Got = riakc_ts:query(Conn, SQL),
@@ -317,6 +321,7 @@ get_valid_big_data(N) ->
         N + 0.1,
         get_bool(X),
         N + 100000,
+        get_varchar(),
         get_optional(X, X)
     } || X <- Times].
 
@@ -417,6 +422,7 @@ get_ddl(big, Table) ->
     " myfloat     double      not null,"
     " mybool      boolean     not null,"
     " mytimestamp timestamp   not null,"
+    " myvarchar   varchar     not null,"
     " myoptional  sint64,"
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
     " myfamily, myseries, time))";
@@ -448,7 +454,6 @@ get_ddl(aggregation, Table) ->
     " precipitation double,"
     " PRIMARY KEY ((myfamily, myseries, quantum(time, 10, 'm')), "
     " myfamily, myseries, time))".
-
 
 get_data(api) ->
     [{<<"family1">>, <<"seriesX">>, 100, 1, <<"test1">>, 1.0, true}] ++
@@ -508,7 +513,8 @@ get_integer() ->
 get_s(0, Acc) ->
     Acc;
 get_s(N, Acc) when is_integer(N) andalso N > 0 ->
-    get_s(N - 1, [random:uniform(255) | Acc]).
+    %% make it plain ASCII
+    get_s(N - 1, [crypto:rand_uniform($a, $z) | Acc]).
 
 get_timestamp() ->
     random:uniform(?MAXTIMESTAMP).
@@ -530,17 +536,60 @@ get_optional(N, X) ->
 
 -define(DELTA, 1.0e-15).
 
-assert_float(String, {_, {Cols, [ValsA]}} = Exp, {_, {Cols, [ValsB]}} = Got) ->
+assert_float(String, {ok, Thing1}, {ok, Thing2}) ->
+    assert_float(String, Thing1, Thing2);
+assert_float(String, {Cols, [ValsA]} = Exp, {Cols, [ValsB]} = Got) ->
     case assertf2(tuple_to_list(ValsA), tuple_to_list(ValsB)) of
-        fail -> lager:info("*****************", []),
+        fail ->
+            lager:info("*****************", []),
             lager:info("Test ~p failed", [String]),
             lager:info("Exp ~p", [Exp]),
             lager:info("Got ~p", [Got]),
             lager:info("*****************", []),
             fail;
-        pass -> pass
+        pass ->
+            pass
     end;
-assert_float(String, Exp, Got) -> assert(String, Exp, Got).
+assert_float(String, Exp, Got) ->
+    assert(String, Exp, Got).
+
+assertf2([], []) -> pass;
+assertf2([H1 | T1], [H2 | T2]) when is_float(H1), is_float(H2) ->
+    Diff = H1 - H2,
+    Av = abs(H1 + H2)/2,
+    if Diff/Av > ?DELTA -> fail;
+       el/=se           -> assertf2(T1, T2)
+    end;
+assertf2([H | T1], [H | T2]) ->
+    assertf2(T1, T2);
+assertf2(_, _) ->
+    fail.
+
+
+assert(_,      X,   X)   -> pass;
+%% as a special case, if you don't know the exact words to expect in
+%% the error message, use a '_' to match any string
+assert(_, {error, {ErrCode, _ErrMsg}}, {error, {ErrCode, '_'}}) ->
+    pass;
+assert(String, Exp, Got) ->
+    lager:info("*****************", []),
+    lager:info("Test ~p failed", [String]),
+    lager:info("Exp ~p", [Exp]),
+    lager:info("Got ~p", [Got]),
+    lager:info("*****************", []),
+    fail.
+
+%% Match an error code and use a regex to match the error string
+assert_error_regex(String, {error, {Code, Regex}}, {error, {Code, Msg}}) ->
+    {ok, RE} = re:compile(Regex),
+    Match = re:run(Msg, RE),
+    assert_error_regex_result(Match, String, Regex, Msg);
+assert_error_regex(String, Got, Expected) ->
+    assert_error_regex_result(nomatch, String, Got, Expected).
+assert_error_regex_result(nomatch, String, Expected, Got) ->
+    assert(String, Expected, Got);
+assert_error_regex_result(_, _String, _Expected, _Got) ->
+    pass.
 
 %% If `ColExpected' is the atom `rt_ignore_columns' then do not assert columns.
 assert_row_sets(_, {error,_} = Error) ->
