@@ -128,7 +128,14 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
                          [Partition, VNodeName]),
     ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
     
-    rt:wait_until(Node, fun(N) -> not(rpc:call(N, erlang, is_process_alive, [Pid])) end),
+    %% We used to wait for the old pid to die here, but there is a delay between
+    %% the vnode process dying and a new one being registered with the vnode
+    %% manager. If we don't wait for the manager to return a new vnode pid, it's
+    %% possible for the test to fail with a gen_server:call timeout.
+    rt:wait_until(fun() -> {ok, Pid} =/=
+                           rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
+                                    [Partition, VNodeName])
+                  end),
 
     lager:info("Verify data is missing"),
     ?assertEqual(0, count_data(Service, {Partition, Node})),
