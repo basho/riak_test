@@ -63,7 +63,7 @@ riak_debug_cmd(Path, N, Args) ->
                   end, Args),
     ArgStr = string:join(Quoted, " "),
     ExecName = rt_config:get(exec_name, "riak"),
-    io_lib:format("~s/dev/dev~b/bin/~s-debug ~s", [Path, N, ExecName, ArgStr]).
+    lists:flatten(io_lib:format("~s/dev/dev~b/bin/~s-debug ~s", [Path, N, ExecName, ArgStr])).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
@@ -802,10 +802,15 @@ get_node_logs() ->
 
 get_node_debug_logs() ->
     NodeMap = rt_config:get(rt_nodes),
-    rt:pmap(fun(Node) ->
-                    get_node_debug_logs(Node)
+    Logs = rt:pmap(fun(Node) ->
+                get_node_debug_logs(Node)
             end,
-            NodeMap).
+            NodeMap),
+    %% Remove any missing logs from the list
+    lists:filter(
+        fun(skip) -> false;
+           (_)    -> true
+        end, Logs).
 
 get_node_debug_logs({_Node, NodeNum}) ->
     DebugLogFile = ?DEBUG_LOG_FILE(NodeNum),
@@ -814,12 +819,13 @@ get_node_debug_logs({_Node, NodeNum}) ->
     Args = ["--logs"],
     Cmd = riak_debug_cmd(Path, NodeNum, Args),
     {ExitCode, Result} = wait_for_cmd(spawn_cmd(Cmd)),
-    case ExitCode of
-        0 ->
+    lager:info("~p ExitCode ~p, Result = ~p", [Cmd, ExitCode, Result]),
+    case filelib:is_file(DebugLogFile) of
+        true ->
             {ok, Binary} = file:read_file(DebugLogFile),
             {DebugLogFile, Binary};
         _ ->
-            exit({ExitCode, Result})
+            skip
     end.
 
 %% If the debug log file exists from a previous test run it will cause the
