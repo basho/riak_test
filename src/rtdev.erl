@@ -802,17 +802,10 @@ get_node_logs() ->
 
 get_node_debug_logs() ->
     NodeMap = rt_config:get(rt_nodes),
-    Logs = rt:pmap(fun(Node) ->
-                get_node_debug_logs(Node)
-            end,
-            NodeMap),
-    %% Remove any missing logs from the list
-    lists:filter(
-        fun(skip) -> false;
-           (_)    -> true
-        end, Logs).
+    lists:foldl(fun get_node_debug_logs/2,
+                [], NodeMap).
 
-get_node_debug_logs({_Node, NodeNum}) ->
+get_node_debug_logs({_Node, NodeNum}, Acc) ->
     DebugLogFile = ?DEBUG_LOG_FILE(NodeNum),
     delete_existing_debug_log_file(DebugLogFile),
     Path = relpath(node_version(NodeNum)),
@@ -823,9 +816,9 @@ get_node_debug_logs({_Node, NodeNum}) ->
     case filelib:is_file(DebugLogFile) of
         true ->
             {ok, Binary} = file:read_file(DebugLogFile),
-            {DebugLogFile, Binary};
+            Acc ++ [{DebugLogFile, Binary}];
         _ ->
-            skip
+            Acc
     end.
 
 %% If the debug log file exists from a previous test run it will cause the
