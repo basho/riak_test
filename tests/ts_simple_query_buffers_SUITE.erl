@@ -146,22 +146,23 @@ query_orderby_no_updates(Cfg) ->
     ExtraData = proplists:get_value(extra_data, Cfg),
     ok = create_table(C, ?TABLE2),
     ok = insert_data(C, ?TABLE2, Data),
-    check_sorted(C, ?TABLE2, Data, [{order_by, [{"d", undefined, undefined}]}]),
+    check_sorted(C, ?TABLE2, Data, [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]),
     %% (a query buffer has been created)
     %% add a record
     ct:print("Adding extra data to see if query buffers do NOT pick it up", []),
     ok = insert_data(C, ?TABLE2, ExtraData),
 
     %% .. and check that the results don't include it
-    check_sorted(C, ?TABLE2, Data, [{order_by, [{"d", undefined, undefined}]}]),
+    check_sorted(C, ?TABLE2, Data,
+                 [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]),
 
     %% a query with ONLY should have a query buffer of its own
-    check_sorted(C, ?TABLE2, Data ++ ExtraData, [{order_by, [{"d", undefined, undefined}]},
-                                                 {limit, 9999},
-                                                 {only, true}]),
+    check_sorted(C, ?TABLE2, Data ++ ExtraData,
+                 [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, false}]),
 
     %% .. and check again, that the results still don't include the added record
-    check_sorted(C, ?TABLE2, Data, [{order_by, [{"d", undefined, undefined}]}]).
+    check_sorted(C, ?TABLE2, Data,
+                 [{order_by, [{"d", undefined, undefined}]}, [{allow_qbuf_reuse, true}]]).
 
 
 query_orderby_expiring(Cfg) ->
@@ -178,14 +179,14 @@ query_orderby_expiring(Cfg) ->
                            [SQL_s])]),
     {ok, SQL} =
         rpc:call(Node, riak_kv_ts_util, build_sql_record,
-                 [select, SQL_q, undefined]),
+                 [select, SQL_q, []]),
 
     {ok, QBufRef} = rpc:call(Node, riak_kv_qry_buffers, make_qref, [SQL]),
     {ok, Expiry} = rpc:call(Node, riak_kv_qry_buffers, get_qbuf_expiry, [QBufRef]),
     ct:print("Sleeping for ~b msec until qbuf expires", [Expiry + 1100]),
     timer:sleep(Expiry + 1100),
     %% .. and check that the results does include it
-    check_sorted(C, ?TABLE2, Data ++ ExtraData, [{order_by, [{"d", undefined, undefined}]}]).
+    check_sorted(C, ?TABLE2, Data ++ ExtraData, [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]).
 
 
 %% Common supporting functions
@@ -233,15 +234,14 @@ base_query(Table) ->
          ?TIMEBASE, ?TIMEBASE + ?LIFESPAN_EXTRA]).
 
 full_query(Table, OptionalClauses) ->
-    [OrderBy, Limit, Offset, Only] =
+    [OrderBy, Limit, Offset] =
         [proplists:get_value(Item, OptionalClauses) ||
-            Item <- [order_by, limit, offset, only]],
-    fmt("~s~s~s~s~s",
+            Item <- [order_by, limit, offset]],
+    fmt("~s~s~s~s",
         [base_query(Table),
          [fmt(" order by ~s", [make_orderby_list(OrderBy)]) || OrderBy /= undefined],
          [fmt(" limit ~b", [Limit])                         || Limit   /= undefined],
-         [fmt(" offset ~b", [Offset])                       || Offset  /= undefined],
-         [fmt(" only", [])                                  || Only    == true]]).
+         [fmt(" offset ~b", [Offset])                       || Offset  /= undefined]]).
 
 make_orderby_list(EE) ->
     string:join(lists:map(fun make_orderby_with_qualifiers/1, EE), ", ").
@@ -255,9 +255,11 @@ make_orderby_with_qualifiers(F) ->
 
 
 check_sorted(C, Table, OrigData, Clauses) ->
+    check_sorted(C, Table, OrigData, Clauses, [{allow_qbuf_reuse, true}]).
+check_sorted(C, Table, OrigData, Clauses, Options) ->
     Query = full_query(Table, Clauses),
     {ok, {_Cols, Returned}} =
-        riakc_ts:query(C, Query, []),
+        riakc_ts:query(C, Query, [], undefined, Options),
     OrderBy = proplists:get_value(order_by, Clauses),
     Limit   = proplists:get_value(limit, Clauses),
     Offset  = proplists:get_value(offset, Clauses),
