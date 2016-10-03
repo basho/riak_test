@@ -42,8 +42,8 @@
 -define(TABLE, "t1").
 -define(TABLE2, "t2").  %% used to check for expiry; not to interfere with t1
 -define(TIMEBASE, (5*1000*1000)).
--define(LIFESPAN, 100).
--define(LIFESPAN_EXTRA, 110).
+-define(LIFESPAN, 500).
+-define(LIFESPAN_EXTRA, 510).
 -define(WHERE_FILTER_A, <<"A00001">>).
 -define(WHERE_FILTER_B, <<"B">>).
 -define(ORDBY_COLS, ["a", "b", "c", "d", "e", undefined]).
@@ -210,7 +210,7 @@ create table " ++ Table ++ "
 data_generator(I) ->
     {list_to_binary(fmt("A~5..0b", [I rem 2])),
      <<"B">>,
-     ?TIMEBASE + I + 1,
+     ?TIMEBASE + (I + 1) * 1000,
      list_to_binary(fmt("k~5..0b", [round(100 * math:sin(float(I) / 10 * math:pi()))])),
      if I rem 5 == 0 -> []; el/=se -> I end  %% sprinkle some NULLs
     }.
@@ -231,7 +231,7 @@ base_query(Table) ->
         [Table,
          binary_to_list(?WHERE_FILTER_A),
          binary_to_list(?WHERE_FILTER_B),
-         ?TIMEBASE, ?TIMEBASE + ?LIFESPAN_EXTRA]).
+         ?TIMEBASE, ?TIMEBASE + ?LIFESPAN_EXTRA * 1000]).
 
 full_query(Table, OptionalClauses) ->
     [OrderBy, Limit, Offset] =
