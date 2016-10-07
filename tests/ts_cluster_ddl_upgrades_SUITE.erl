@@ -66,13 +66,13 @@ end_per_testcase(_TestCase, _Config) ->
 groups() ->
     [
      {use_ttb_true, [sequence], rt:grep_test_functions(?MODULE)}
-     % , {use_ttb_false, [sequence], rt:grep_test_functions(?MODULE)}
+     ,{use_ttb_false, [sequence], rt:grep_test_functions(?MODULE)}
     ].
 
 all() -> 
     [
      {group, use_ttb_true}
-     % ,{group, use_ttb_false}
+     ,{group, use_ttb_false}
     ].
 
 %%--------------------------------------------------------------------
@@ -87,179 +87,179 @@ run_query(Pid, Query, Config) when is_pid(Pid) ->
 %% TESTS
 %%--------------------------------------------------------------------
 
-% all_nodes_upgrades_to_1_5_test(_Config) ->
-%     [Node_A, Node_B, Node_C] =
-%         rt:deploy_nodes([?TS_VERSION_1_4, ?TS_VERSION_1_4, ?TS_VERSION_1_4]),
-%     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
-%         ok = rt:upgrade(Node_B, ?TS_VERSION_CURRENT),
-%     ok = rt:upgrade(Node_C, ?TS_VERSION_CURRENT),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_capability(Node_A, ?DDL_REC_CAP, v2),
-%     ok.
+all_nodes_upgrades_to_1_5_test(_Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_1_4, ?TS_VERSION_1_4, ?TS_VERSION_1_4]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
+        ok = rt:upgrade(Node_B, ?TS_VERSION_CURRENT),
+    ok = rt:upgrade(Node_C, ?TS_VERSION_CURRENT),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_capability(Node_A, ?DDL_REC_CAP, v2),
+    ok.
 
-% upgrade_a_node_to_1_5_test(_Config) ->
-%     [Node_A, Node_B, Node_C] =
-%         rt:deploy_nodes([?TS_VERSION_1_4, ?TS_VERSION_1_4, ?TS_VERSION_1_4]),
-%     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_capability(Node_A, ?DDL_REC_CAP, v1),
-%     ok.
+upgrade_a_node_to_1_5_test(_Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_1_4, ?TS_VERSION_1_4, ?TS_VERSION_1_4]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_capability(Node_A, ?DDL_REC_CAP, v1),
+    ok.
 
-% create_table_then_upgrade_a_node_to_1_5_test(Config) ->
-%     [Node_A, Node_B, Node_C] =
-%         rt:deploy_nodes([?TS_VERSION_1_4, ?TS_VERSION_1_4, ?TS_VERSION_1_4]),
-%     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ?assertEqual(
-%         {ok, {[],[]}},
-%         riakc_ts:query(rt:pbc(Node_A),
-%             "CREATE TABLE mytab ("
-%             "a SINT64 NOT NULL, "
-%             "b SINT64 NOT NULL, "
-%             "c TIMESTAMP NOT NULL, "
-%             "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
-%     )),
-%     ok = riakc_ts:put(rt:pbc(Node_A), "mytab",
-%         [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
-%     ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
-%     ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     Query =
-%         "SELECT c FROM mytab "
-%         "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
-%     ts_util:assert_row_sets(
-%         {rt_ignore_columns, ExpectedResultSet},
-%         run_query(rt:pbc(Node_A), Query, Config)
-%     ),
-%     ok.
+create_table_then_upgrade_a_node_to_1_5_test(Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_1_4, ?TS_VERSION_1_4, ?TS_VERSION_1_4]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(rt:pbc(Node_A),
+            "CREATE TABLE mytab ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
+    )),
+    ok = riakc_ts:put(rt:pbc(Node_A), "mytab",
+        [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
+    ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
+    ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Query =
+        "SELECT c FROM mytab "
+        "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, ExpectedResultSet},
+        run_query(rt:pbc(Node_A), Query, Config)
+    ),
+    ok.
 
-% create_table_then_upgrade_a_node_to_1_5_then_back_to_1_4_test(Config) ->
-%     [Node_A, Node_B, Node_C] =
-%         rt:deploy_nodes([?TS_VERSION_1_4, ?TS_VERSION_1_4, ?TS_VERSION_1_4]),
-%     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ?assertEqual(
-%         {ok, {[],[]}},
-%         riakc_ts:query(rt:pbc(Node_A),
-%             "CREATE TABLE mytab ("
-%             "a SINT64 NOT NULL, "
-%             "b SINT64 NOT NULL, "
-%             "c TIMESTAMP NOT NULL, "
-%             "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
-%     )),
-%     ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     %% put in 1.5, read in 1.4
-%     ok = riakc_ts:put(rt:pbc(Node_A), "mytab",
-%         [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
-%     ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
-%     ok = rt:upgrade(Node_A, ?TS_VERSION_1_4),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     Query =
-%         "SELECT c FROM mytab "
-%         "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
-%     ts_util:assert_row_sets(
-%         {rt_ignore_columns, ExpectedResultSet},
-%         run_query(rt:pbc(Node_A), Query, Config)
-%     ),
-%     ok.
+create_table_then_upgrade_a_node_to_1_5_then_back_to_1_4_test(Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_1_4, ?TS_VERSION_1_4, ?TS_VERSION_1_4]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(rt:pbc(Node_A),
+            "CREATE TABLE mytab ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
+    )),
+    ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    %% put in 1.5, read in 1.4
+    ok = riakc_ts:put(rt:pbc(Node_A), "mytab",
+        [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
+    ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
+    ok = rt:upgrade(Node_A, ?TS_VERSION_1_4),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Query =
+        "SELECT c FROM mytab "
+        "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, ExpectedResultSet},
+        run_query(rt:pbc(Node_A), Query, Config)
+    ),
+    ok.
 
-% create_table_in_1_5_then_downgrade_to_1_4_test(Config) ->
-%     [Node_A, Node_B, Node_C] =
-%         rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
-%     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ?assertEqual(
-%         {ok, {[],[]}},
-%         riakc_ts:query(rt:pbc(Node_A),
-%             "CREATE TABLE mytab ("
-%             "a SINT64 NOT NULL, "
-%             "b SINT64 NOT NULL, "
-%             "c TIMESTAMP NOT NULL, "
-%             "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
-%     )),
-%     ok = riakc_ts:put(rt:pbc(Node_A), "mytab",
-%         [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
-%     ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
-%     ok = rt:upgrade(Node_A, ?TS_VERSION_1_4),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     Query =
-%         "SELECT c FROM mytab "
-%         "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
-%     ts_util:assert_row_sets(
-%         {rt_ignore_columns, ExpectedResultSet},
-%         run_query(rt:pbc(Node_A), Query, Config)
-%     ),
-%     ok.
+create_table_in_1_5_then_downgrade_to_1_4_test(Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(rt:pbc(Node_A),
+            "CREATE TABLE mytab ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
+    )),
+    ok = riakc_ts:put(rt:pbc(Node_A), "mytab",
+        [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
+    ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
+    ok = rt:upgrade(Node_A, ?TS_VERSION_1_4),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Query =
+        "SELECT c FROM mytab "
+        "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, ExpectedResultSet},
+        run_query(rt:pbc(Node_A), Query, Config)
+    ),
+    ok.
 
-% create_1_5_table_then_downgrade_test(Config) ->
-%     [Node_A, Node_B, Node_C] =
-%         rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
-%     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ?assertEqual(
-%         {ok, {[],[]}},
-%         riakc_ts:query(rt:pbc(Node_A),
-%             "CREATE TABLE mytab ("
-%             "a SINT64 NOT NULL, "
-%             "b SINT64 NOT NULL, "
-%             "c TIMESTAMP NOT NULL, "
-%             "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c DESC))"
-%     )),
-%     ok = rt:upgrade(Node_A, ?TS_VERSION_1_4),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     Query =
-%         "SELECT c FROM mytab WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000;",
-%     ?assertMatch(
-%         {error, _},
-%         run_query(rt:pbc(Node_B), Query, Config)
-%     ),
-%     ok.
+create_1_5_table_then_downgrade_test(Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(rt:pbc(Node_A),
+            "CREATE TABLE mytab ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c DESC))"
+    )),
+    ok = rt:upgrade(Node_A, ?TS_VERSION_1_4),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Query =
+        "SELECT c FROM mytab WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000;",
+    ?assertMatch(
+        {error, _},
+        run_query(rt:pbc(Node_B), Query, Config)
+    ),
+    ok.
 
-% all_nodes_must_support_table_features_test(_Config) ->
-%     [Node_A, Node_B, Node_C] =
-%         rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_1_4, ?TS_VERSION_CURRENT]),
-%     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ?assertMatch(
-%         {error, _},
-%         riakc_ts:query(rt:pbc(Node_A),
-%             "CREATE TABLE mytab ("
-%             "a SINT64 NOT NULL, "
-%             "b SINT64 NOT NULL, "
-%             "c TIMESTAMP NOT NULL, "
-%             "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c DESC))"
-%     )).
+all_nodes_must_support_table_features_test(_Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_1_4, ?TS_VERSION_CURRENT]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ?assertMatch(
+        {error, _},
+        riakc_ts:query(rt:pbc(Node_A),
+            "CREATE TABLE mytab ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c DESC))"
+    )).
 
-% create_table_on_current_node_in_mixed_version_cluster_test(Config) ->
-%     [Node_A, Node_B, Node_C] =
-%         rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_1_4, ?TS_VERSION_CURRENT]),
-%     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
-%     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-%     ?assertEqual(
-%         {ok, {[],[]}},
-%         riakc_ts:query(rt:pbc(Node_A),
-%             "CREATE TABLE mytab ("
-%             "a SINT64 NOT NULL, "
-%             "b SINT64 NOT NULL, "
-%             "c TIMESTAMP NOT NULL, "
-%             "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
-%     )),
-%     ok = riakc_ts:put(rt:pbc(Node_B), "mytab",
-%         [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
-%     ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
-%     Query =
-%         "SELECT c FROM mytab "
-%         "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
-%     ts_util:assert_row_sets(
-%         {rt_ignore_columns, ExpectedResultSet},
-%         run_query(rt:pbc(Node_B), Query, Config)
-%     ),
-%     ok.
+create_table_on_current_node_in_mixed_version_cluster_test(Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_1_4, ?TS_VERSION_CURRENT]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    ?assertEqual(
+        {ok, {[],[]}},
+        riakc_ts:query(rt:pbc(Node_A),
+            "CREATE TABLE mytab ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))"
+    )),
+    ok = riakc_ts:put(rt:pbc(Node_B), "mytab",
+        [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
+    ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
+    Query =
+        "SELECT c FROM mytab "
+        "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, ExpectedResultSet},
+        run_query(rt:pbc(Node_B), Query, Config)
+    ),
+    ok.
 
 create_table_on_previous_node_in_mixed_version_cluster_test(Config) ->
     [Node_A, Node_B, Node_C] =
