@@ -81,8 +81,8 @@ table_name() ->
 %% TESTS
 %%--------------------------------------------------------------------
 
-%% basic descending keys test with the desc key on the last timestamp column in
-%% the key.
+% basic descending keys test with the desc key on the last timestamp column in
+% the key.
 select_def_basic_test(Config) ->
     [Node|_] = proplists:get_value(cluster, Config),
     Pid = rt:pbc(Node),
@@ -118,5 +118,27 @@ create_data_def_multi_quanta_test(Config) ->
         "SELECT * FROM "++Table++" WHERE a = 1 AND b = 1 AND c >= 3000 AND c <= 5000",
     ts_util:assert_row_sets(
         {rt_ignore_columns, [{1,1,N} || N <- lists:seq(5000,3000,-200)]},
+        run_query(Pid, Query, Config)
+    ).
+
+%% descend on a varchar placed after the timestamp in the local key, this means
+%% that within every timestamp there will be 10 rows in reversed order.
+descending_keys_on_varchar_test(Config) ->
+    [Node|_] = proplists:get_value(cluster, Config),
+    Pid = rt:pbc(Node),
+    Table = table_name(),
+    Table_def =
+        "CREATE TABLE "++Table++"("
+        "a SINT64 NOT NULL, "
+        "b SINT64 NOT NULL, "
+        "c TIMESTAMP NOT NULL, "
+        "d VARCHAR NOT NULL, "
+        "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b, c, d DESC))",
+    {ok, _} = run_query(Pid, Table_def, Config),
+    ok = riakc_ts:put(Pid, Table, [{1,1,N,<<B>>} || N <- lists:seq(1,100), B <- lists:seq(1,10)]),
+    Query =
+        "SELECT * FROM "++Table++" WHERE a = 1 AND b = 1 AND c >= 35 AND c <= 45",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, [{1,1,N,<<B>>} || N <- lists:seq(35,45), B <- lists:seq(10,1,-1)]},
         run_query(Pid, Query, Config)
     ).
