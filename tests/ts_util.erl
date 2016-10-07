@@ -631,34 +631,6 @@ format_diff_eq_count(0) ->
 format_diff_eq_count(Count) ->
     [lists:duplicate(Count, $.), $\n].
 
-assertf2([], []) -> pass;
-assertf2([H1 | T1], [H2 | T2]) ->
-    Diff = H1 - H2,
-    Av = (H1 + H2)/2,
-    if Diff/Av > ?DELTA -> fail;
-        el/=se          -> assertf2(T1, T2)
-    end.
-
-assert(_,      X,   X)   -> pass;
-assert(String, Exp, Got) -> lager:info("*****************", []),
-    lager:info("Test ~p failed", [String]),
-    lager:info("Exp ~p", [Exp]),
-    lager:info("Got ~p", [Got]),
-    lager:info("*****************", []),
-    fail.
-
-%% Match an error code and use a regex to match the error string
-assert_error_regex(String, {error, {Code, Regex}}, {error, {Code, Msg}}) ->
-    {ok, RE} = re:compile(Regex),
-    Match = re:run(Msg, RE),
-    assert_error_regex_result(Match, String, Regex, Msg);
-assert_error_regex(String, Got, Expected) ->
-    assert_error_regex_result(nomatch, String, Got, Expected).
-assert_error_regex_result(nomatch, String, Expected, Got) ->
-    assert(String, Expected, Got);
-assert_error_regex_result(_, _String, _Expected, _Got) ->
-    pass.
-
 results(Results) ->
     Expected = lists:duplicate(length(Results), pass),
     ?assertEqual(Expected, Results).
