@@ -28,7 +28,7 @@ table_def_1() ->
     "a SINT64 NOT NULL, "
     "b SINT64 NOT NULL, "
     "c TIMESTAMP NOT NULL, "
-    "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b DESC,c ))".
+    "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b, c DESC))".
 
 create_data_def_1(Pid, Cluster) ->
     {ok, _} = (
