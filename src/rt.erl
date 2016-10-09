@@ -27,6 +27,9 @@
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-define(SERVICES,rt_config:get(rt_services, [riak_kv])).
+-define(CONSOLE, rt_config:get(rt_console, riak_kv_console)).
+
 -compile(export_all).
 -export([
          admin/2,
@@ -322,7 +325,7 @@ get_https_conn_info(Node) ->
 %%      nodes deployed.
 %% @todo Re-add -spec after adding multi-version support
 deploy_nodes(Versions) when is_list(Versions) ->
-    deploy_nodes(Versions, [riak_kv]);
+    deploy_nodes(Versions, ?SERVICES);
 deploy_nodes(NumNodes) when is_integer(NumNodes) ->
     deploy_nodes([ current || _ <- lists:seq(1, NumNodes)]).
 
@@ -330,7 +333,7 @@ deploy_nodes(NumNodes) when is_integer(NumNodes) ->
 %%      `InitialConfig', returning a list of the nodes deployed.
 -spec deploy_nodes(NumNodes :: integer(), any()) -> [node()].
 deploy_nodes(NumNodes, InitialConfig) when is_integer(NumNodes) ->
-    deploy_nodes(NumNodes, InitialConfig, [riak_kv]);
+    deploy_nodes(NumNodes, InitialConfig, ?SERVICES);
 deploy_nodes(Versions, Services) ->
     NodeConfig = [ version_to_config(Version) || Version <- Versions ],
     Nodes = ?HARNESS:deploy_nodes(NodeConfig),
@@ -509,11 +512,11 @@ leave(Node) ->
 %% @doc Have `Node' remove `OtherNode' from the cluster
 remove(Node, OtherNode) ->
     ?assertEqual(ok,
-                 rpc:call(Node, riak_kv_console, remove, [[atom_to_list(OtherNode)]])).
+                 rpc:call(Node, ?CONSOLE, remove, [[atom_to_list(OtherNode)]])).
 
 %% @doc Have `Node' mark `OtherNode' as down
 down(Node, OtherNode) ->
-    rpc:call(Node, riak_kv_console, down, [[atom_to_list(OtherNode)]]).
+    rpc:call(Node, ?CONSOLE, down, [[atom_to_list(OtherNode)]]).
 
 %% @doc partition the `P1' from `P2' nodes
 %%      note: the nodes remained connected to riak_test@local,
@@ -708,7 +711,7 @@ wait_until_status_ready(Node) ->
     lager:info("Wait until status ready in ~p", [Node]),
     ?assertEqual(ok, wait_until(Node,
                                 fun(_) ->
-                                        case rpc:call(Node, riak_kv_console, status, [[]]) of
+                                        case rpc:call(Node, ?CONSOLE, status, [[]]) of
                                             ok ->
                                                 true;
                                             Res ->
@@ -883,7 +886,7 @@ wait_until_partitioned(P1, P2) ->
       end || Node <- P2 ].
 
 is_partitioned(Node, Peers) ->
-    AvailableNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
+    AvailableNodes = rpc:call(Node, riak_core_node_watcher, nodes, ?SERVICES),
     lists:all(fun(Peer) -> not lists:member(Peer, AvailableNodes) end, Peers).
 
 % when you just can't wait
