@@ -190,13 +190,15 @@ query_orderby_expiring(Cfg) ->
 
 
 %% Common supporting functions
+%% ---------------------------
 
+%% Generate and insert data
 
 %% have columns named following this sequence: "a", "b", "c" ..., for
 %% a shortcut relying on this to easily determine column number (see
 %% col_no/1 below)
 create_table(Client, Table) ->
-    DDL = "\
+    DDL = "
 create table " ++ Table ++ "
 (a varchar not null,
  b varchar not null,
@@ -226,6 +228,9 @@ insert_data(C, Table, Data) ->
     ok = riakc_ts:put(C, Table, Data),
     ok.
 
+
+%% Form queries
+
 base_query(Table) ->
     fmt("select * from ~s where a = '~s' and b = '~s' and c >= ~b and c <= ~b",
         [Table,
@@ -254,6 +259,8 @@ make_orderby_with_qualifiers(F) ->
     make_orderby_with_qualifiers({F, undefined, undefined}).
 
 
+%% Prepare original data for comparison, and compare Expected with Got
+
 check_sorted(C, Table, OrigData, Clauses) ->
     check_sorted(C, Table, OrigData, Clauses, [{allow_qbuf_reuse, true}]).
 check_sorted(C, Table, OrigData, Clauses, Options) ->
@@ -266,7 +273,7 @@ check_sorted(C, Table, OrigData, Clauses, Options) ->
     %% emulate the SELECT on original data,
     %% including sorting according to ORDER BY
     %% uncomment these log entries to inspect the data visually (else
-    %% it's just blows the log into tens of megs):
+    %% it's just going to blow up the log into tens of megs):
     %% ct:log("Query: \"~s\"", [Query]),
     %% ct:log("Fetched ~p", [Returned]),
     PreSelected = sort_by(
@@ -276,8 +283,11 @@ check_sorted(C, Table, OrigData, Clauses, Options) ->
     %% .. and including the LIMIT/OFFSET positions
     PreLimited =
         lists:sublist(PreSelected, safe_offset(Offset) + 1, safe_limit(Limit)),
-    %% and finally, for comparison, truncate records to only fields by
-    %% which sorting was done
+    %% and finally, for comparison, truncate each record to only
+    %% contain fields by which sorting was done (i.e., if ORDER BY is
+    %% [a, b, d], and if multiple records are selected with the same
+    %% [a, b, d] fields but different [c, e], then these records may
+    %% not come out in predictable order).
     case truncate(Returned, OrderBy) ==
         truncate(PreLimited, OrderBy) of
         true ->
@@ -328,7 +338,7 @@ sort_by(Data, OrderBy) ->
                             F1 = element(C, R1),
                             F2 = element(C, R2),
                             if F1 == F2 ->
-                                    undefined;  %% let fields of lower precedence to decide
+                                    undefined;  %% let fields of lower precedence decide
                                F1 == [] andalso F2 /= [] ->
                                     Nul == "nulls first";
                                F1 /= [] andalso F2 == [] ->
