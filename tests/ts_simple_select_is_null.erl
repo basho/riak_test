@@ -80,7 +80,7 @@ query_base(Family, Series, N) ->
     "SELECT * FROM GeoCheckin WHERE"
     " myfamily='" ++ binary_to_list(Family) ++ "'"
     " AND myseries='" ++ binary_to_list(Series) ++ "'"
-    " AND time >= 1000 AND time <= " ++ integer_to_list(N * 1000).
+    " AND time >= 1000 AND time <= " ++ integer_to_list(N * 1000 + ?SPANNING_STEP).
 
 query_all(ClusterConn, DDL, Data, Family, Series, N) ->
     Qry = query_base(Family, Series, N),
@@ -94,7 +94,14 @@ query_is_null(ClusterConn, DDL, Data, Family, Series, N, Field) ->
           " AND " ++ Field ++ " IS NULL",
     {ok, {_Fields, Rows}} = ts_util:ts_query(ClusterConn, ?TEST_TYPE, DDL, Data, Qry),
     RowsN = length(Rows),
-    ?assertNotEqual(0, RowsN),
+    %% the number of NULL rows can be determined by any non-key field being NULL
+    RowsNull = lists:foldr(fun (El, Acc) ->
+                case element(4, El) of
+                    [] -> Acc + 1;
+                    _ -> Acc
+                end
+        end, 0, Data),
+    ?assertEqual(RowsNull, RowsN),
     RowsN.
 
 query_is_not_null(ClusterConn, DDL, Data, Family, Series, N, Field) ->
@@ -102,7 +109,14 @@ query_is_not_null(ClusterConn, DDL, Data, Family, Series, N, Field) ->
           " AND " ++ Field ++ " IS NOT NULL",
     {ok, {_Fields, Rows}} = ts_util:ts_query(ClusterConn, ?TEST_TYPE, DDL, Data, Qry),
     RowsN = length(Rows),
-    ?assertNotEqual(0, RowsN),
+    %% the number of NULL rows can be determined by any non-key field being NULL
+    RowsNotNull = lists:foldr(fun (El, Acc) ->
+                case element(4, El) of
+                    [] -> Acc;
+                    _ -> Acc + 1
+                end
+        end, 0, Data),
+    ?assertEqual(RowsNotNull, RowsN),
     RowsN.
 
 %% insert every even row as null
@@ -113,7 +127,7 @@ make_data(N, F, S, Acc) when is_integer(N) andalso N rem 2 =:= 1 ->
           F,
           S,
           1 + N * ?SPANNING_STEP,
-          list_to_binary("test" ++ integer_to_list(N)),
+          <<"">>, %%<< using empty string to stress the difference between NULL and <<"">>
           N,
           N * 1.0,
           N rem 6 =:= 0,
