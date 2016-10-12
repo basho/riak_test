@@ -22,6 +22,14 @@
 
 -export([confirm/0]).
 
+-define(CFG,
+        [
+         {yokozuna,
+          [
+           {enabled, true}
+          ]}
+        ]).
+
 %% This test passes params to the riak-admin shell script on to intercepts
 %% that either return ?PASS or ?FAIL (which print out "pass" or "fail" to
 %% the console). If an unexpected input is received in Erlang, ?FAIL is
@@ -63,6 +71,18 @@ bucket_tests(Node) ->
     check_admin_cmd(Node, "bucket-type update foo {\"props\":{[]}}"),
     check_admin_cmd(Node, "bucket-type list").
 
+%% riak-admin search
+search_tests(Node) ->
+    PrivDir = rt:priv_dir(),
+    check_admin_cmd(Node, "search aae-status"),
+    check_admin_cmd(Node, "search switch_to_new_search"),
+    NewSchema = filename:join([PrivDir, "solr_schemas/test_schema.xml"]),
+    Cmd = io_lib:format("search schema create foobar ~s", [NewSchema]),
+    check_admin_cmd(Node, Cmd),
+    check_admin_cmd(Node, "search schema show foobar"),
+    %%check_admin_cmd(Node, "search schema foobar add field barfoo store=true"),
+    check_admin_cmd(Node, "search schema foobar add dynamicfield foobaz"),
+    check_admin_cmd(Node, "search schema foobar remove barfoo").
 
 %% riak-admin security
 security_tests(Node) ->
@@ -154,7 +174,7 @@ riak_admin_tests(Node) ->
 confirm() ->
     %% Deploy a node to test against
     lager:info("Deploy node to test riak command line"),
-    [Node] = rt:deploy_nodes(1),
+    [Node] = rt:deploy_nodes(1, ?CFG),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
     rt_intercept:add(Node,
                      {riak_core_console,
@@ -222,12 +242,23 @@ confirm() ->
                         {{reload,1}, verify_console_reload}
                       ]}),
 
-    rt_intercept:wait_until_loaded(Node),
+    rt_intercept:add(Node,
+                     {yz_console,
+                      [
+                       {{aae_status,1}, verify_console_aae_status},
+                       {{switch_to_new_search,1}, verify_console_switch_to_new_search},
+                       {{create_schema,1}, verify_console_create_schema},
+                       {{show_schema,1}, verify_console_show_schema},
+                       {{add_to_schema,1}, verify_console_add_to_schema},
+                       {{remove_from_schema,1}, verify_console_remove_from_schema}
+                      ]}),
 
+    rt_intercept:wait_until_loaded(Node),
     riak_admin_tests(Node),
     cluster_tests(Node),
     bucket_tests(Node),
     security_tests(Node),
+    search_tests(Node),
     pass.
 
 check_admin_cmd(Node, Cmd) ->
