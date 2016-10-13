@@ -52,7 +52,7 @@ confirm() ->
         " myfamily, myseries, time))",
     Family = <<"family1">>,
     Series = <<"seriesX">>,
-    N = 10,
+    N = 11,
     Data = make_data(N, Family, Series, []),
     ClusterConn = ts_util:cluster_and_connect(single),
     Got = ts_util:ts_put(ClusterConn, ?TEST_TYPE, DDL, Data),
