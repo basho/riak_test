@@ -81,9 +81,9 @@ kerl()
 
     echo " - Building Erlang $RELEASE (this could take a while)"
     # Use the Basho-patched version of Erlang 
-    if [ "$RELEASE" == "R15B01" ]; then
+    if [ ! -z $(echo "$RELEASE" | grep "R15B01") ]; then
         BUILD_CMD="./kerl build git git://github.com/basho/otp.git $R15_TAG $BUILDNAME"
-    elif [ "$RELEASE" == "R16B02" ]; then
+    elif [ ! -z $(echo "$RELEASE" | grep "R16B02") ]; then
         BUILD_CMD="./kerl build git git://github.com/basho/otp.git $R16_TAG $BUILDNAME"
     else
         BUILD_CMD="./kerl build $RELEASE $BUILDNAME"
@@ -162,7 +162,7 @@ build()
              C_INCLUDE_PATH=$ERLROOT/usr/include \
              LD_LIBRARY_PATH=$ERLROOT/usr/lib"
 
-        echo " - Building devrel in $SRCDIR (this could take a while)"
+        echo " - Building devrel in $SRCDIR with $ERLROOT (this could take a while)"
         cd $SRCDIR
 
         if $LOCKED_DEPS
