@@ -66,7 +66,7 @@ io_request({put_chars, Chars}) ->
 io_request({put_chars, M, F, As}) ->
     try apply(M, F, As) of
     Chars ->
-        log_chars(Chars), 
+        log_chars(Chars),
         ok
     catch
     C:T -> {error, {C,T,erlang:get_stacktrace()}}

@@ -89,9 +89,10 @@ verify_realtime(Val) ->
 
 verify_realtime_cascades(Val) ->
     case Val of
-        [] -> ?PASS; %% display current cascades info, no additional
+        ["show"] -> ?PASS; %% display current cascades info, no additional
                                %% params
-        ["always"] -> ?PASS;
+        ["enable"] -> ?PASS;
+        ["disable"] -> ?PASS;
         _ -> ?FAIL
     end.
 
