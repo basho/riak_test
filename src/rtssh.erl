@@ -671,7 +671,7 @@ relpath(Vsn) ->
     relpath(Vsn, Path).
 
 relpath(Vsn, Paths=[{_,_}|_]) ->
-    orddict:fetch(Vsn, orddict:from_list(Paths));
+    rt_util:find_atom_or_string_dict(Vsn, orddict:from_list(Paths));
 relpath(current, Path) ->
     Path;
 relpath(root, Path) ->
@@ -693,7 +693,8 @@ node_id(_Node) ->
     1.
 
 node_version(Node) ->
-    orddict:fetch(Node, rt_config:get(rt_versions)).
+    VersionMap = rt_config:get(rt_versions),
+    rt_util:find_atom_or_string_dict(Node, VersionMap).
 
 %%%===================================================================
 %%% Local command spawning
