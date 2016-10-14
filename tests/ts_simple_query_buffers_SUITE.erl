@@ -36,23 +36,16 @@
 
 -module(ts_simple_query_buffers_SUITE).
 
--include_lib("common_test/include/ct.hrl").
--include_lib("eunit/include/eunit.hrl").
-
--define(TABLE, "t1").
--define(TABLE2, "t2").  %% used to check for expiry; not to interfere with t1
--define(TIMEBASE, (5*1000*1000)).
--define(LIFESPAN, 500).
--define(LIFESPAN_EXTRA, 510).
--define(WHERE_FILTER_A, <<"A00001">>).
--define(WHERE_FILTER_B, <<"B">>).
--define(ORDBY_COLS, ["a", "b", "c", "d", "e", undefined]).
-
-
 -export([suite/0, init_per_suite/1, groups/0, all/0]).
 -export([query_orderby_comprehensive/1,
          query_orderby_no_updates/1,
          query_orderby_expiring/1]).
+
+-include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
+-include("ts_qbuf_util.hrl").
+
+-define(TABLE2, "t2").  %% used to check for expiry; not to interfere with t1
 
 suite() ->
     [{timetrap, {minutes, 5}}].
@@ -60,8 +53,8 @@ suite() ->
 init_per_suite(Config) ->
     Cluster = ts_util:build_cluster(single),
     [{cluster, Cluster},
-     {data, make_data()},
-     {extra_data, make_extra_data()}
+     {data, ts_qbuf_util:make_data()},
+     {extra_data, ts_qbuf_util:make_extra_data()}
      | Config].
 
 groups() ->
@@ -81,8 +74,8 @@ all() ->
 query_orderby_comprehensive(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
     Data = proplists:get_value(data, Cfg),
-    ok = create_table(C, ?TABLE),
-    ok = insert_data(C, ?TABLE,  Data),
+    ok = ts_qbuf_util:create_table(C, ?TABLE),
+    ok = ts_qbuf_util:insert_data(C, ?TABLE,  Data),
     ct:print("Testing all possible combinations of up to 5 elements in ORDER BY (can take some 2 min) ...", []),
     OrderByBattery1 =
         [[F1, F2, F3, F4, F5] ||
@@ -144,13 +137,13 @@ query_orderby_no_updates(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
     Data = proplists:get_value(data, Cfg),
     ExtraData = proplists:get_value(extra_data, Cfg),
-    ok = create_table(C, ?TABLE2),
-    ok = insert_data(C, ?TABLE2, Data),
+    ok = ts_qbuf_util:create_table(C, ?TABLE2),
+    ok = ts_qbuf_util:insert_data(C, ?TABLE2, Data),
     check_sorted(C, ?TABLE2, Data, [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]),
     %% (a query buffer has been created)
     %% add a record
     ct:print("Adding extra data to see if query buffers do NOT pick it up", []),
-    ok = insert_data(C, ?TABLE2, ExtraData),
+    ok = ts_qbuf_util:insert_data(C, ?TABLE2, ExtraData),
 
     %% .. and check that the results don't include it
     check_sorted(C, ?TABLE2, Data,
@@ -172,7 +165,7 @@ query_orderby_expiring(Cfg) ->
     ExtraData = proplists:get_value(extra_data, Cfg),
 
     %% (extra data have been added in query_orderby_no_updates)
-    SQL_s = full_query(?TABLE2, [{order_by, [{"d", undefined, undefined}]}]),
+    SQL_s = ts_qbuf_util:full_query(?TABLE2, [{order_by, [{"d", undefined, undefined}]}]),
     {select, SQL_q} =
         rpc:call(Node, riak_ql_parser, ql_parse,
                  [rpc:call(Node, riak_ql_lexer, get_tokens,
@@ -189,82 +182,16 @@ query_orderby_expiring(Cfg) ->
     check_sorted(C, ?TABLE2, Data ++ ExtraData, [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]).
 
 
-%% Common supporting functions
+
+%% Supporting functions
 %% ---------------------------
-
-%% Generate and insert data
-
-%% have columns named following this sequence: "a", "b", "c" ..., for
-%% a shortcut relying on this to easily determine column number (see
-%% col_no/1 below)
-create_table(Client, Table) ->
-    DDL = "
-create table " ++ Table ++ "
-(a varchar not null,
- b varchar not null,
- c timestamp not null,
- d varchar,
- e sint64,
- primary key ((a, b, quantum(c, 10, s)), a, b, c))",
-    {ok, {[], []}} = riakc_ts:query(Client, DDL),
-    ok.
-
-data_generator(I) ->
-    {list_to_binary(fmt("A~5..0b", [I rem 2])),
-     <<"B">>,
-     ?TIMEBASE + (I + 1) * 1000,
-     list_to_binary(fmt("k~5..0b", [round(100 * math:sin(float(I) / 10 * math:pi()))])),
-     if I rem 5 == 0 -> []; el/=se -> I end  %% sprinkle some NULLs
-    }.
-
-make_data() ->
-    lists:map(
-      fun data_generator/1, lists:seq(0, ?LIFESPAN)).
-make_extra_data() ->
-    lists:map(
-      fun data_generator/1, lists:seq(?LIFESPAN, ?LIFESPAN_EXTRA)).
-
-insert_data(C, Table, Data) ->
-    ok = riakc_ts:put(C, Table, Data),
-    ok.
-
-
-%% Form queries
-
-base_query(Table) ->
-    fmt("select * from ~s where a = '~s' and b = '~s' and c >= ~b and c <= ~b",
-        [Table,
-         binary_to_list(?WHERE_FILTER_A),
-         binary_to_list(?WHERE_FILTER_B),
-         ?TIMEBASE, ?TIMEBASE + ?LIFESPAN_EXTRA * 1000]).
-
-full_query(Table, OptionalClauses) ->
-    [OrderBy, Limit, Offset] =
-        [proplists:get_value(Item, OptionalClauses) ||
-            Item <- [order_by, limit, offset]],
-    fmt("~s~s~s~s",
-        [base_query(Table),
-         [fmt(" order by ~s", [make_orderby_list(OrderBy)]) || OrderBy /= undefined],
-         [fmt(" limit ~b", [Limit])                         || Limit   /= undefined],
-         [fmt(" offset ~b", [Offset])                       || Offset  /= undefined]]).
-
-make_orderby_list(EE) ->
-    string:join(lists:map(fun make_orderby_with_qualifiers/1, EE), ", ").
-
-make_orderby_with_qualifiers({F, Dir, Nulls}) ->
-    fmt("~s~s~s", [F, [" "++Dir || Dir /= undefined], [" "++Nulls || Nulls /= undefined]]);
-make_orderby_with_qualifiers({F, Dir}) ->
-    make_orderby_with_qualifiers({F, Dir, undefined});
-make_orderby_with_qualifiers(F) ->
-    make_orderby_with_qualifiers({F, undefined, undefined}).
-
 
 %% Prepare original data for comparison, and compare Expected with Got
 
 check_sorted(C, Table, OrigData, Clauses) ->
     check_sorted(C, Table, OrigData, Clauses, [{allow_qbuf_reuse, true}]).
 check_sorted(C, Table, OrigData, Clauses, Options) ->
-    Query = full_query(Table, Clauses),
+    Query = ts_qbuf_util:full_query(Table, Clauses),
     {ok, {_Cols, Returned}} =
         riakc_ts:query(C, Query, [], undefined, Options),
     OrderBy = proplists:get_value(order_by, Clauses),
@@ -385,6 +312,3 @@ col_no({[A|_], _}) ->
     A - $a + 1;
 col_no({[A|_], _, _}) ->
     A - $a + 1.
-
-fmt(F, A) ->
-    lists:flatten(io_lib:format(F, A)).
