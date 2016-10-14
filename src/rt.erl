@@ -455,7 +455,7 @@ staged_join(Node, PNode) ->
 
 plan_and_commit(Node) ->
     timer:sleep(500),
-    lager:info("planning and commiting cluster join"),
+    lager:info("planning cluster join"),
     case rpc:call(Node, riak_core_claimant, plan, []) of
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
@@ -467,6 +467,7 @@ plan_and_commit(Node) ->
     end.
 
 do_commit(Node) ->
+    lager:info("planning cluster commit"),
     case rpc:call(Node, riak_core_claimant, commit, []) of
         {error, plan_changed} ->
             lager:info("commit: plan changed"),
@@ -478,8 +479,9 @@ do_commit(Node) ->
             timer:sleep(100),
             maybe_wait_for_changes(Node),
             do_commit(Node);
-        {error,nothing_planned} ->
+        {error, nothing_planned} ->
             %% Assume plan actually committed somehow
+            lager:info("commit: nothing planned"),
             ok;
         ok ->
             ok
@@ -668,7 +670,7 @@ wait_until(Fun) when is_function(Fun) ->
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
--spec wait_until([node()], fun((node()) -> boolean())) -> ok.
+-spec wait_until(node(), fun(() -> boolean())) -> ok | {fail, Result :: term()}.
 wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
     wait_until(fun() -> Fun(Node) end);
 

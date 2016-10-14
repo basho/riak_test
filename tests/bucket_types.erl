@@ -285,6 +285,7 @@ confirm() ->
         true ->
             Obj01 = riakc_obj:new(<<"test">>, <<"JRD">>, <<"John Robert Doe, 25">>),
             Obj02 = riakc_obj:new({Type, <<"test">>}, <<"JRD">>, <<"Jane Rachel Doe, 21">>),
+            Obj03 = riakc_obj:new({Type, <<"test">>}, <<"JRD2">>, <<"Jane2 Rachel2 Doe2, 22">>),
 
             Obj1 = riakc_obj:update_metadata(Obj01,
                                              riakc_obj:set_secondary_index(
@@ -302,8 +303,16 @@ confirm() ->
                                                         [<<"Jane">>, <<"Rachel">>
                                                          ,<<"Doe">>]}])),
 
-            riakc_pb_socket:put(PB, Obj1),
-            riakc_pb_socket:put(PB, Obj2),
+            Obj3 = riakc_obj:update_metadata(Obj03,
+                                             riakc_obj:set_secondary_index(
+                                               riakc_obj:get_update_metadata(Obj03),
+                                               [{{integer_index, "age"},
+                                                 [22]},{{binary_index, "name"},
+                                                        [<<"Jane2">>, <<"Rachel2">>
+                                                         ,<<"Doe2">>]}])),
+            ok = riakc_pb_socket:put(PB, Obj1),
+            ok = riakc_pb_socket:put(PB, Obj2),
+            ok = riakc_pb_socket:put(PB, Obj3),
 
             ?assertMatch({ok, {index_results_v1, [<<"JRD">>], _, _}}, riakc_pb_socket:get_index(PB, <<"test">>,
                                                                                                 {binary_index,
@@ -322,7 +331,14 @@ confirm() ->
                                                                                                  "name"},
                                                                                                 <<"Jane">>)),
 
-            %% wild stab at the undocumented cs_bucket_fold
+            ?assertMatch({ok, {index_results_v1, [<<"JRD2">>], _, _}}, riakc_pb_socket:get_index(PB,
+                                                                                                {Type,
+                                                                                                 <<"test">>},
+                                                                                                {binary_index,
+                                                                                                 "name"},
+                                                                                                <<"Jane2">>)),
+            
+	    %% wild stab at the undocumented cs_bucket_fold
             {ok, ReqID} = riakc_pb_socket:cs_bucket_fold(PB, <<"test">>, []),
             accumulate(ReqID),
 
