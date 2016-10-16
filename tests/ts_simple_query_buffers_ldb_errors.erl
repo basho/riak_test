@@ -45,8 +45,13 @@ confirm() ->
     CmdOut = "" = os:cmd(Cmd),
     io:format("~s: '~s'", [Cmd, CmdOut]),
 
-    ok = ts_qbuf_util:ack_query_error(Config, Query, 1023),
+    Res = ts_qbuf_util:ack_query_error(Config, Query, 1023),
 
+    %% reverse the w perm so that r_t harness can proceed with clean-up
+    Cmd2 = fmt("chmod +w '~s'", [QBufDir]),
+    "" = os:cmd(Cmd2),
+
+    ?assertEqual(Res, ok),
     pass.
 
 fmt(F, A) ->
