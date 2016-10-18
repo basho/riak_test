@@ -330,7 +330,7 @@ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
                                                   zlib:gzip(element(2,file:read_file(CoverageFile)))}) || CoverageFile /= cover_disabled ],
                     ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
                     [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ],
-                    archive_ct_logs_to_giddyup(Base)
+                    archive_ct_logs_to_giddyup(Base),
                     [giddyup:post_artifact(Base, File)
                      || File <- rt:get_node_logs()],
                     maybe_post_debug_logs(Base),
