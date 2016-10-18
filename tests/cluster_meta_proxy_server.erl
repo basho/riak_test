@@ -31,12 +31,20 @@
 	 terminate/2, code_change/3]).
 
 -record(state, {history :: [any()],
-                last_msg_ts :: non_neg_integer()}).
+                last_msg_ts :: non_neg_integer(),
+                msg_q :: ets:tab(),
+                send_count :: non_neg_integer()}).
 
 -define(SERVER, ?MODULE).
+-define(msg_q_ets, msq_q_ets).
+-define(send_mode_ets, send_mode_ets).
 
 start_link() ->
   gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+
+init([]) ->
+  maybe_init_ets(?msg_q_ets, [bag, named_table]),
+  {ok, #state{history = [], send_count = 0}}.
 
 history() ->
     gen_server:call({global, ?SERVER}, history, infinity).
@@ -44,8 +52,8 @@ history() ->
 is_empty(ThresholdSecs) ->
     gen_server:call({global, ?SERVER}, {is_empty, ThresholdSecs}, infinity).
 
-init([]) ->
-  {ok, #state{history = []}}.
+burst_send() ->
+    gen_server:call({global, ?SERVER}, burst_send, infinity).
 
 handle_call({is_empty, ThresholdSecs}, _From, State=#state{last_msg_ts=LastMsgTs}) ->
     Now = moment(),
@@ -57,16 +65,17 @@ handle_call({is_empty, ThresholdSecs}, _From, State=#state{last_msg_ts=LastMsgTs
             end,
     {reply, Reply, State};
 handle_call(history, _From, State=#state{history=History}) ->
-    {reply, lists:reverse(History), State}.
+    {reply, lists:reverse(History), State};
+handle_call(burst_send, _From, State) ->
+    randomized_send(?msg_q_ets),
+    ets:delete_all_objects(?msg_q_ets),
+    {reply, ok, State}.
 
 handle_cast({From, Server, To, Msg}, State) ->
-%  {Keep, State1} = keep_msg(node_name(From), node_name(To), State),
     State1 = add_to_history({From, To, Msg}, State),
-    gen_server:cast({Server, To}, Msg),
-%     true -> event_logger:event({dropped, node_name(From), node_name(To), Msg}) end,
-    {noreply, State1};
-handle_cast(_Msg, State) ->
-  {noreply, State}.
+    State2 = State1#state{ send_count = State1#state.send_count + 1 },
+    ets:insert(?msg_q_ets, {State2#state.send_count, Server, To, Msg}),
+    {noreply, State2}.
 
 %%--------------------------------------------------------------------
 %% Function: handle_info(Info, State) -> {noreply, State} |
@@ -104,20 +113,20 @@ add_to_history(Entry, State=#state{history=History}) ->
 moment() ->
     calendar:datetime_to_gregorian_seconds(calendar:universal_time()).
 
+maybe_init_ets(Tab, Type) ->
+  case ets:info(Tab) of
+      undefined -> 
+          Tab = ets:new(Tab, Type);
+      _ ->
+          ok
+  end.
 
-%% keep_msg(From, To, State) ->
-%%   Key = {From, To},
-%%   Cfg = State#state.config,
-%%   {Keep, Cfg1} =
-%%     case proplists:get_value(Key, Cfg, []) of
-%%       []             -> {true,  Cfg};
-%%       [{keep, N}|Xs] -> {true,  store(Key, [{keep, N - 1} || N > 1] ++ Xs, Cfg)};
-%%       [{drop, N}|Xs] -> {false, store(Key, [{drop, N - 1} || N > 1] ++ Xs, Cfg)}
-%%     end,
-%%   {Keep, State#state{ config = Cfg1 }}.
-
-%% store(Key, [], Cfg) -> lists:keydelete(Key, 1, Cfg);
-%% store(Key, Xs, Cfg) -> lists:keystore(Key, 1, Cfg, {Key, Xs}).
-
-%% node_name(Node) ->
-%%   list_to_atom(hd(string:tokens(atom_to_list(Node),"@"))).
+randomized_send(Tab) ->
+    MsgList = ets:tab2list(Tab),
+    [send(T) || {_,T} <- lists:sort([{random:uniform(), N} || N <- MsgList])].
+    
+send({MsgId, Server, To, Msg}) ->        
+    lager:info("Running gen_server:cast with id (count):~p Server:~p, To:~p, Msg:~p", 
+               [MsgId, Server, To, Msg]),
+    gen_server:cast({Server, To}, Msg).
+    
