@@ -23,9 +23,9 @@
 -include("intercept.hrl").
 -define(M, riak_kv_get_fsm_orig).
 
-count_start_link_4(From, Bucket, Key, GetOptions) ->
-    ?I_INFO("sending startlink/4 through proxy"),
-    case ?M:start_link_orig(From, Bucket, Key, GetOptions) of
+count_start_4(From, Bucket, Key, GetOptions) ->
+    ?I_INFO("sending start/4 through proxy"),
+    case ?M:start_orig(From, Bucket, Key, GetOptions) of
         {error, overload} ->
             ?I_INFO("riak_kv_get_fsm not started due to overload.");
         {ok, _} ->

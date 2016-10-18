@@ -552,7 +552,7 @@ validate_intercepted_fullsync(InterceptTarget,
     %% not_built to defer fullsync process.
     validate_intercepted_fullsync(InterceptTarget,
                                   {riak_kv_index_hashtree,
-                                   [{{get_lock, 2}, not_built}]},
+                                   [{{get_lock, 4}, not_built}]},
                                   ReplicationLeader,
                                   ReplicationCluster,
                                   NumIndicies),
@@ -561,7 +561,16 @@ validate_intercepted_fullsync(InterceptTarget,
     %% already_locked to defer fullsync process.
     validate_intercepted_fullsync(InterceptTarget,
                                   {riak_kv_index_hashtree,
-                                   [{{get_lock, 2}, already_locked}]},
+                                   [{{get_lock, 4}, already_locked}]},
+                                  ReplicationLeader,
+                                  ReplicationCluster,
+                                  NumIndicies),
+
+    %% Before enabling fullsync, ensure trees on one source node return
+    %% bad_version to defer fullsync process.
+    validate_intercepted_fullsync(InterceptTarget,
+                                  {riak_kv_index_hashtree,
+                                   [{{get_lock, 4}, bad_version}]},
                                   ReplicationLeader,
                                   ReplicationCluster,
                                   NumIndicies),
