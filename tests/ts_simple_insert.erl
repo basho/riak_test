@@ -30,15 +30,12 @@ confirm() ->
     DDL = ts_util:get_ddl(),
     Table = ts_util:get_default_bucket(),
     Columns = ts_util:get_cols(),
-    Expected =
-        {ok,
-         "GeoCheckin has been activated\n"
-         "\n"
-         "WARNING: Nodes in this cluster can no longer be\n"
-         "downgraded to a version of Riak prior to 2.0\n"},
     {Cluster, Conn} = ts_util:cluster_and_connect(single),
     Got = ts_util:create_and_activate_bucket_type(Cluster, DDL),
-    ?assertEqual(Expected, Got),
+    ExpectedActivationMessage = Table ++ " has been activated\n",
+    ?assertEqual(ok, element(1, Got)),
+    ?assertEqual(ExpectedActivationMessage,
+        lists:sublist(element(2, Got), 1, length(ExpectedActivationMessage))),
 
     Data1 = ts_util:get_valid_select_data(),
     Insert1Fn = fun(Datum, Acc) ->
@@ -65,10 +62,27 @@ confirm() ->
     Expected4 = {ok, {Columns, ts_util:exclusive_result_from_data(Data3, 1, 10)}},
     Result4 = ts_util:assert("Insert Without Columns (results)", Expected4, Got4),
 
+    %% inserting columns out of order and partial, excluding temperature
+    Columns5 = [<<"myfamily">>, <<"time">>, <<"weather">>, <<"myseries">>],
+    Data5 = [ {
+            <<"family1">>, %%<< myfamily
+            I, %%<< time
+            <<"nully">>, %%<< weather
+            <<"seriesX">> %%<< myseries
+            } || I <- lists:seq(21, 30) ],
+
+    Insert5Fn = fun(Datum, Acc) ->
+                    [ts_util:ts_insert(Conn, Table, Columns5, Datum) | Acc]
+            end,
+    Got5 = lists:reverse(lists:foldl(Insert5Fn, [], Data5)),
+    Expected5 = [ {ok,{[],[]}} || _I <- lists:seq(21, 30) ],
+    Result5 = ts_util:assert("Insert with NULL (results)", Expected5, Got5),
+
     ts_util:results([
         Result1,
         Result2,
         Result3,
-        Result4
+        Result4,
+        Result5
     ]),
     pass.
