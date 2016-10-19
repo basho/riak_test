@@ -36,32 +36,50 @@
 
 -module(ts_simple_query_buffers_SUITE).
 
--export([suite/0, init_per_suite/1, groups/0, all/0]).
+-export([suite/0, init_per_suite/1, groups/0, all/0,
+         init_per_testcase/2, end_per_testcase/2]).
 -export([query_orderby_comprehensive/1,
          query_orderby_no_updates/1,
-         query_orderby_expiring/1]).
+         query_orderby_expiring/1,
+         query_orderby_max_quanta_error/1,
+         query_orderby_max_data_size/1,
+         query_orderby_ldb_io_error/1]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("ts_qbuf_util.hrl").
 
 -define(TABLE2, "t2").  %% used to check for expiry; not to interfere with t1
+-define(RIDICULOUSLY_SMALL_MAX_QUERY_DATA_SIZE, 100).
+-define(RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA, 3).
+
 
 suite() ->
     [{timetrap, {minutes, 5}}].
 
-init_per_suite(Config) ->
+init_per_suite(Cfg) ->
     Cluster = ts_util:build_cluster(single),
+    C = rt:pbc(hd(Cluster)),
+    Data = ts_qbuf_util:make_data(),
+    ExtraData = ts_qbuf_util:make_extra_data(),
+    ok = ts_qbuf_util:create_table(C, ?TABLE),
+    ok = ts_qbuf_util:create_table(C, ?TABLE2),
+    ok = ts_qbuf_util:insert_data(C, ?TABLE,  Data),
+    ok = ts_qbuf_util:insert_data(C, ?TABLE2, Data),
     [{cluster, Cluster},
-     {data, ts_qbuf_util:make_data()},
-     {extra_data, ts_qbuf_util:make_extra_data()}
-     | Config].
+     {data, Data},
+     {extra_data, ExtraData}
+     | Cfg].
 
 groups() ->
     [].
 
 all() ->
     [
+     %% 3. check how error conditions are reported
+     query_orderby_max_quanta_error,
+     query_orderby_max_data_size,
+     query_orderby_ldb_io_error,
      %% 2. check LIMIT and ORDER BY, not involving follow-up queries
      query_orderby_comprehensive,
      %% 1. check that query buffers persist and do not pick up updates to
@@ -70,12 +88,13 @@ all() ->
      query_orderby_expiring
     ].
 
+%%
+%% 1. checking happy-path operations
+%% ---------------------------------
 
 query_orderby_comprehensive(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
     Data = proplists:get_value(data, Cfg),
-    ok = ts_qbuf_util:create_table(C, ?TABLE),
-    ok = ts_qbuf_util:insert_data(C, ?TABLE,  Data),
     ct:print("Testing all possible combinations of up to 5 elements in ORDER BY (can take some 2 min) ...", []),
     OrderByBattery1 =
         [[F1, F2, F3, F4, F5] ||
@@ -137,8 +156,6 @@ query_orderby_no_updates(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
     Data = proplists:get_value(data, Cfg),
     ExtraData = proplists:get_value(extra_data, Cfg),
-    ok = ts_qbuf_util:create_table(C, ?TABLE2),
-    ok = ts_qbuf_util:insert_data(C, ?TABLE2, Data),
     check_sorted(C, ?TABLE2, Data, [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]),
     %% (a query buffer has been created)
     %% add a record
@@ -181,6 +198,67 @@ query_orderby_expiring(Cfg) ->
     %% .. and check that the results does include it
     check_sorted(C, ?TABLE2, Data ++ ExtraData, [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]).
 
+
+%%
+%% 2. checking error conditions reporting
+%% --------------------------------------
+
+init_per_testcase(query_orderby_max_quanta_error, Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    ok = rpc:call(Node, application, set_env, [riak_kv, max_query_quanta, ?RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA]),
+    Cfg;
+
+init_per_testcase(query_orderby_max_data_size, Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    ok = rpc:call(Node, riak_kv_qry_buffers, set_max_query_data_size, [?RIDICULOUSLY_SMALL_MAX_QUERY_DATA_SIZE]),
+    Cfg;
+
+init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    QBufDir = filename:join([rtdev:node_path(Node), "data/leveldb/query_buffers"]),
+    Cmd = fmt("chmod -w '~s'", [QBufDir]),
+    CmdOut = "" = os:cmd(Cmd),
+    ct:log("~s: '~s'", [Cmd, CmdOut]),
+    Cfg;
+init_per_testcase(_, Cfg) ->
+    Cfg.
+
+
+
+end_per_testcase(query_orderby_max_quanta_error, Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    ok = rpc:call(Node, application, set_env, [riak_kv, max_query_quanta, 1000]),
+    ok;
+
+end_per_testcase(query_orderby_max_data_size, Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    ok = rpc:call(Node, riak_kv_qry_buffers, set_max_query_data_size, [5*1000*1000]),
+    ok;
+
+end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    QBufDir = filename:join([rtdev:node_path(Node), "data/leveldb/query_buffers"]),
+    Cmd = fmt("chmod +w '~s'", [QBufDir]),
+    CmdOut = "" = os:cmd(Cmd),
+    ct:log("~s: '~s'", [Cmd, CmdOut]),
+    ok;
+end_per_testcase(_, Cfg) ->
+    Cfg.
+
+
+query_orderby_max_quanta_error(Cfg) ->
+    Query = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
+    ok = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QUANTA_LIMIT).
+
+query_orderby_max_data_size(Cfg) ->
+    Query1 = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
+    ok = ts_qbuf_util:ack_query_error(Cfg, Query1, ?E_SELECT_RESULT_TOO_BIG),
+    Query2 = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}, {limit, 99999}]),
+    ok = ts_qbuf_util:ack_query_error(Cfg, Query2, ?E_SELECT_RESULT_TOO_BIG).
+
+query_orderby_ldb_io_error(Cfg) ->
+    Query = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
+    ok = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QBUF_CREATE_ERROR).
 
 
 %% Supporting functions
@@ -312,3 +390,6 @@ col_no({[A|_], _}) ->
     A - $a + 1;
 col_no({[A|_], _, _}) ->
     A - $a + 1.
+
+fmt(F, A) ->
+    lists:flatten(io_lib:format(F, A)).

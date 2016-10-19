@@ -113,7 +113,7 @@ ack_query_error(Cfg, Query, ErrCode) ->
     Res = riakc_ts:query(C, Query, [], undefined, []),
     case Res of
         {error, {ErrCode, ErrMsg}} ->
-            io:format("reported  error ~s", [ErrMsg]),
+            io:format("reported error ~s", [ErrMsg]),
             ok;
         {error, OtherReason} ->
             io:format("error not correctly reported: got ~p instead", [OtherReason]),
