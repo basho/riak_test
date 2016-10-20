@@ -33,6 +33,12 @@ suite() ->
 
 init_per_suite(Config) ->
     [_Node|_] = Cluster = ts_util:build_cluster(multiple),
+    proc_lib:spawn(
+        fun() ->
+            register(random_num_proc, self()),
+            random:seed(),
+            random_num_proc()
+        end),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -73,9 +79,21 @@ run_query(Pid, Query, Config) when is_pid(Pid) ->
     UseTTB = proplists:get_value(use_ttb, Config),
     riakc_ts:query(Pid, Query, [{use_ttb, UseTTB}]).
 
+random_num_proc() ->
+    receive
+        {get_random_number, Pid} ->
+            {_, Reds} = erlang:process_info(self(), reductions),
+            Pid ! {return_random_number, random:uniform(Reds * 1000)},
+            random_num_proc()
+    end.
+
 table_name() ->
-    {_, Reds} = erlang:process_info(self(), reductions),
-    "table_" ++ integer_to_list(random:uniform(Reds * 1000)).
+    random_num_proc ! {get_random_number, self()},
+    receive
+        {return_random_number, Num} ->
+            ok
+    end,
+    "table_" ++ integer_to_list(Num).
 
 %%--------------------------------------------------------------------
 %% TESTS

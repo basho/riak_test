@@ -287,4 +287,37 @@ create_table_on_previous_node_in_mixed_version_cluster_test(Config) ->
     ),
     ok.
 
-
+create_table_then_modify_it_before_activation(Config) ->
+    [Node_A, Node_B, Node_C] =
+        rt:deploy_nodes([?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
+    ok = rt:join_cluster([Node_A,Node_B,Node_C]),
+    ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
+    Table_def_1 =
+            "CREATE TABLE mytab ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "d TIMESTAMP NOT NULL, "
+            "e TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,c,d,quantum(e,1,s)), a,b,c,d,e))",
+    Table_def_2 =
+            "CREATE TABLE mytab ("
+            "a SINT64 NOT NULL, "
+            "b SINT64 NOT NULL, "
+            "c TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c))",
+    Fmt = "{\\\"props\\\": {\\\"table_def_1\\\": \\\"~s\\\"}}",
+    {ok,_} = rt:admin(Node_A, ["bucket-type", "create", "mytab", lists:flatten(io_lib:format(Fmt, [Table_def_1]))]),
+    {ok,_} = rt:admin(Node_A, ["bucket-type", "create", "mytab", lists:flatten(io_lib:format(Fmt, [Table_def_2]))]),
+    {ok,_} = rt:admin(Node_A, ["bucket-type", "activate", "mytab"]),
+    ok = riakc_ts:put(rt:pbc(Node_A), "mytab",
+        [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
+    ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
+    Query =
+        "SELECT c FROM mytab "
+        "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
+    ts_util:assert_row_sets(
+        {rt_ignore_columns, ExpectedResultSet},
+        run_query(rt:pbc(Node_A), Query, Config)
+    ),
+    ok.
