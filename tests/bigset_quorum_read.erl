@@ -43,6 +43,7 @@ confirm() ->
     {ok, {ctx, undefined}, {elems, E2}} = bigset_client:read(?SET, [], N2Client),
 
     ?assertEqual(E1, E2),
+    assertContainsAll(Elements, E1),
     ?assertEqual(50, length(E1)),
 
     lager:info("Partitioning"),
@@ -115,3 +116,16 @@ assert_elem_present(Elem, ElemList) ->
 
 assert_elem_absent(Elem, ElemList) ->
     ?assertEqual(false,  lists:keyfind(Elem, 1, ElemList)).
+
+assertContainsAll(Expected, Results) ->
+    {Elements, _Ctxs} = lists:unzip(Results),
+    case lists:sort(Expected) == lists:sort(Elements) of
+        true ->
+            ?assert(true);
+        false ->
+            display_difference(Expected, Elements)
+    end.
+
+display_difference(Expected, Elements) ->
+    lager:info("in Expected, not in elements ~p", [lists:subtract(Expected, Elements)]),
+    lager:info("in Elements, not in expected ~p", [lists:subtract(Elements, Expected)]).
