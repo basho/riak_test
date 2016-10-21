@@ -304,7 +304,12 @@ config(RingSize, NVal) ->
 config(RingSize, NVal, Backend) ->
     [
         {riak_core, [
-            {default_bucket_props, [{n_val, NVal}]},
+            {default_bucket_props,
+                [
+                    {n_val, NVal},
+                    {allow_mult, true},
+                    {dvv_enabled, true}
+                ]},
             {vnode_management_timer, 1000},
             {ring_creation_size, RingSize}]
         },

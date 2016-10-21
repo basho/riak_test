@@ -16,7 +16,12 @@
         {riak_core,
             [
              {ring_creation_size, 8},
-             {default_bucket_props, [{n_val, 1}]}
+             {default_bucket_props,
+                 [
+                     {n_val, 1},
+                     {allow_mult, true},
+                     {dvv_enabled, true}
+                 ]}
             ]
         },
         {riak_kv,
@@ -46,6 +51,8 @@ confirm() ->
     pass.
 
 simple_test() ->
+    lager:info("Starting simple_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
@@ -118,6 +125,8 @@ simple_test() ->
     pass.
 
 dual_test() ->
+    lager:info("Starting dual_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(infinity), [riak_kv, riak_repl]),
 
@@ -218,6 +227,8 @@ dual_test() ->
     pass.
 
 bidirectional_test() ->
+    lager:info("Starting bidirectional_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
@@ -301,6 +312,8 @@ bidirectional_test() ->
     pass.
 
 difference_test() ->
+    lager:info("Starting difference_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
@@ -393,6 +406,8 @@ difference_test() ->
     pass.
 
 deadlock_test() ->
+    lager:info("Starting deadlock_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
