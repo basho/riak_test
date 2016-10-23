@@ -92,7 +92,7 @@ confirm() ->
     wait_until_coord_has_dirty(LeaderA),
 
     lager:info("Starting fullsync"),
-    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
+    repl_util:start_and_wait_until_fullsync_complete(LeaderA, "B"),
     lager:info("Wait for all nodes to show up clean"),
     wait_until_all_nodes_clean(LeaderA),
 
@@ -115,7 +115,7 @@ confirm() ->
     wait_until_coord_has_dirty(DirtyB),
 
     lager:info("Starting fullsync"),
-    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
+    repl_util:start_and_wait_until_fullsync_complete(LeaderA, "B"),
     lager:info("Wait for all nodes to show up clean"),
     wait_until_all_nodes_clean(LeaderA),
 
@@ -141,7 +141,7 @@ confirm() ->
                 ResultC = rpc:call(DirtyD, riak_repl_stats, rt_source_errors, []),
                 lager:info("Result = ~p", [ResultC])
            end),
-    repl_util:start_and_wait_until_fullsync_complete(LeaderA),
+    repl_util:start_and_wait_until_fullsync_complete(LeaderA, "B"),
 
     lager:info("Checking to see if C is still clean"),
     wait_until_node_clean(DirtyC),
