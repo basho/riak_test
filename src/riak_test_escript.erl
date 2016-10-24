@@ -325,12 +325,6 @@ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
                 {ok, Base} ->
                     %% Now push up the artifacts, starting with the test log
                     giddyup:post_artifact(Base, {"riak_test.log", L}),
-                    [ giddyup:post_artifact(Base, File) || File <- rt:get_node_logs() ],
-                    [giddyup:post_artifact(Base, {filename:basename(CoverageFile) ++ ".gz",
-                                                  zlib:gzip(element(2,file:read_file(CoverageFile)))}) || CoverageFile /= cover_disabled ],
-                    ResultPlusGiddyUp = TestResult ++ [{giddyup_url, list_to_binary(Base)}],
-                    [ rt:post_result(ResultPlusGiddyUp, WebHook) || WebHook <- get_webhooks() ],
-                    archive_ct_logs_to_giddyup(Base),
                     [giddyup:post_artifact(Base, File)
                      || File <- rt:get_node_logs()],
                     maybe_post_debug_logs(Base),
@@ -342,7 +336,8 @@ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
                     ResultPlusGiddyUp = TestResult ++
                                         [{giddyup_url, list_to_binary(Base)}],
                     [rt:post_result(ResultPlusGiddyUp, WebHook) ||
-                     WebHook <- get_webhooks()]
+                     WebHook <- get_webhooks()],
+                    archive_ct_logs_to_giddyup(Base)
             end
     end,
     rt_cover:stop(),
