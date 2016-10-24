@@ -31,7 +31,7 @@
 -define(LOWER, "2016-08-02 10:15:00").
 -define(UPPER, "2016-08-02 10:45:00").
 
--define(TESTS, [
+-define(PASS_TESTS, [
                 %% Test format, illustrated:
 
                 %% We expect 9 seconds between 10:19:50 and 10:20:00,
@@ -69,15 +69,17 @@
                 },
 
                 {0,
-                 {">", "2016-08-02 10:19"},
-                 {"<", "2016-08-02 10:20"}
-                },
-
-                {0,
                  {">", "2016-08-02 10:19.99"},
                  {"<", "2016-08-02 10:20"}
                 }
                ]).
+
+-define(FAIL_TESTS, [
+                {0,
+                  {">", "2016-08-02 10:19"},
+                  {"<", "2016-08-02 10:20"}
+                }
+              ]).
 
 
 
@@ -107,5 +109,17 @@ confirm() ->
               {ok, {_Cols, Data}} = ts_util:single_query(Conn, Qry),
 
               ?assertEqual(Tally, length(Data))
-      end, ?TESTS),
+      end, ?PASS_TESTS),
+
+    lists:foreach(
+      fun({_Tally, {Op1, String1}, {Op2, String2}}) ->
+              Qry = lists:flatten(
+                      io_lib:format(QryFmt, [Op1, String1,
+                                             Op2, String2])),
+
+              RetMsg = ts_util:single_query(Conn, Qry),
+              %% Assert that RetMsg returns a tuple with error in first place {error, {}}
+              ?assertMatch({error, {_ErrCode, _ErrMsg}}, RetMsg)
+      end, ?FAIL_TESTS),
+
     pass.
