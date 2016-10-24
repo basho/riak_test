@@ -75,7 +75,7 @@
                ]).
 
 -define(FAIL_TESTS, [
-                {0,
+                {
                   {">", "2016-08-02 10:19"},
                   {"<", "2016-08-02 10:20"}
                 }
@@ -112,7 +112,7 @@ confirm() ->
       end, ?PASS_TESTS),
 
     lists:foreach(
-      fun({_Tally, {Op1, String1}, {Op2, String2}}) ->
+      fun({{Op1, String1}, {Op2, String2}}) ->
               Qry = lists:flatten(
                       io_lib:format(QryFmt, [Op1, String1,
                                              Op2, String2])),
