@@ -76,6 +76,7 @@
 
 -define(FAIL_TESTS, [
                 {
+                  {1001,<<"The upper and lower boundaries are equal or adjacent. No results are possible.">>},
                   {">", "2016-08-02 10:19"},
                   {"<", "2016-08-02 10:20"}
                 }
@@ -112,14 +113,14 @@ confirm() ->
       end, ?PASS_TESTS),
 
     lists:foreach(
-      fun({{Op1, String1}, {Op2, String2}}) ->
+      fun({{ErrCode, ErrMsg}, {Op1, String1}, {Op2, String2}}) ->
               Qry = lists:flatten(
                       io_lib:format(QryFmt, [Op1, String1,
                                              Op2, String2])),
 
               RetMsg = ts_util:single_query(Conn, Qry),
-              %% Assert that RetMsg returns a tuple with error in first place {error, {}}
-              ?assertMatch({error, {_ErrCode, _ErrMsg}}, RetMsg)
+              ExpectMsg = {error, {ErrCode, ErrMsg}},
+              ?assertMatch(ExpectMsg, RetMsg)
       end, ?FAIL_TESTS),
 
     pass.
