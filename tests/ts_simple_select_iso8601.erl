@@ -73,10 +73,10 @@
                  {"<", "2016-08-02 10:20"}
                 }
                ]).
-
+%% expected error code is the first entry
 -define(FAIL_TESTS, [
                 {
-                  {1001,<<"The upper and lower boundaries are equal or adjacent. No results are possible.">>},
+                  1001,
                   {">", "2016-08-02 10:19"},
                   {"<", "2016-08-02 10:20"}
                 }
@@ -113,14 +113,13 @@ confirm() ->
       end, ?PASS_TESTS),
 
     lists:foreach(
-      fun({{ErrCode, ErrMsg}, {Op1, String1}, {Op2, String2}}) ->
+      fun({ErrCode, {Op1, String1}, {Op2, String2}}) ->
               Qry = lists:flatten(
                       io_lib:format(QryFmt, [Op1, String1,
                                              Op2, String2])),
 
               RetMsg = ts_util:single_query(Conn, Qry),
-              ExpectMsg = {error, {ErrCode, ErrMsg}},
-              ?assertMatch(ExpectMsg, RetMsg)
+              ?assertMatch({error, {ErrCode, _}}, RetMsg)
       end, ?FAIL_TESTS),
 
     pass.
