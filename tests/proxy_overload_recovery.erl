@@ -467,7 +467,6 @@ add_eqc_apps(Nodes) ->
      end || App <- Apps, Node <- Nodes],
     ok.
 
-
 wait_for_vnode_change(VPid0, Index) ->
     {ok, VPid1} = riak_core_vnode_manager:get_vnode_pid(Index, riak_kv_vnode),
     case VPid1 of

@@ -258,10 +258,12 @@ stop(Node) ->
     run_riak(Node, "stop"),
     ok.
 
-upgrade(Node, NewVersion) ->
-    upgrade(Node, NewVersion, same).
+upgrade(Node, NewVersion, UpgradeCallback) when is_function(UpgradeCallback) ->
+    upgrade(Node, NewVersion, same, UpgradeCallback).
 
-upgrade(Node, NewVersion, Config) ->
+%% upgrade callback unsupported for this driver until there is a need.
+%% c.f., rtdev:upgrade/4
+upgrade(Node, NewVersion, Config, _UpgradeCallback) ->
     Version = node_version(Node),
     lager:info("Upgrading ~p : ~p -> ~p", [Node, Version, NewVersion]),
     stop(Node),
@@ -287,6 +289,9 @@ upgrade(Node, NewVersion, Config) ->
     start(Node),
     rt:wait_until_pingable(Node),
     ok.
+
+copy_conf(_, _, _) ->
+    throw({error, not_implemented}).
 
 run_riak(Node, Cmd) ->
     Exec = riakcmd(Node, Cmd),

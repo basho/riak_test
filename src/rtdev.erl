@@ -26,6 +26,8 @@
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).
 -define(DEV(N), list_to_atom(?DEVS(N))).
 -define(PATH, (rt_config:get(rtdev_path))).
+-define(DEBUG_LOG_FILE(N),
+        "dev" ++ integer_to_list(N) ++ "@127.0.0.1-riak-debug.tar.gz").
 
 get_deps() ->
     lists:flatten(io_lib:format("~s/dev/dev1/lib", [relpath(current)])).
@@ -51,6 +53,17 @@ riak_admin_cmd(Path, N, Args) ->
     ArgStr = string:join(Quoted, " "),
     ExecName = rt_config:get(exec_name, "riak"),
     io_lib:format("~s/dev/dev~b/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
+
+riak_debug_cmd(Path, N, Args) ->
+    Quoted =
+        lists:map(fun(Arg) when is_list(Arg) ->
+                          lists:flatten([$", Arg, $"]);
+                     (_) ->
+                          erlang:error(badarg)
+                  end, Args),
+    ArgStr = string:join(Quoted, " "),
+    ExecName = rt_config:get(exec_name, "riak"),
+    lists:flatten(io_lib:format("~s/dev/dev~b/bin/~s-debug ~s", [Path, N, ExecName, ArgStr])).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
@@ -124,10 +137,10 @@ relpath(root, Path) ->
 relpath(_, _) ->
     throw("Version requested but only one path provided").
 
-upgrade(Node, NewVersion) ->
-    upgrade(Node, NewVersion, same).
+upgrade(Node, NewVersion, UpgradeCallback) when is_function(UpgradeCallback) ->
+    upgrade(Node, NewVersion, same, UpgradeCallback).
 
-upgrade(Node, NewVersion, Config) ->
+upgrade(Node, NewVersion, Config, UpgradeCallback) ->
     N = node_id(Node),
     Version = node_version(N),
     lager:info("Upgrading ~p : ~p -> ~p", [Node, Version, NewVersion]),
@@ -154,8 +167,30 @@ upgrade(Node, NewVersion, Config) ->
         same -> ok;
         _ -> update_app_config(Node, Config)
     end,
+    Params = [
+        {old_data_dir, io_lib:format("~s/dev/dev~b/data", [OldPath, N])},
+        {new_data_dir, io_lib:format("~s/dev/dev~b/data", [NewPath, N])},
+        {old_version, Version},
+        {new_version, NewVersion}
+    ],
+    ok = UpgradeCallback(Params),
     start(Node),
     rt:wait_until_pingable(Node),
+    ok.
+
+-spec copy_conf(integer(), atom() | string(), atom() | string()) -> ok.
+copy_conf(NumNodes, FromVersion, ToVersion) ->
+    lager:info("Copying config from ~p to ~p", [FromVersion, ToVersion]),
+
+    FromPath = relpath(FromVersion),
+    ToPath = relpath(ToVersion),
+
+    [copy_node_conf(N, FromPath, ToPath) || N <- lists:seq(1, NumNodes)].
+
+copy_node_conf(NodeNum, FromPath, ToPath) ->
+    Command = io_lib:format("cp -p -P -R \"~s/dev/dev~b/etc\" \"~s/dev/dev~b\"",
+                            [FromPath, NodeNum, ToPath, NodeNum]),
+    os:cmd(Command),
     ok.
 
 -spec set_conf(atom() | string(), [{string(), string()}]) -> ok.
@@ -764,6 +799,75 @@ get_node_logs() ->
           {ok, Port} = file:open(Filename, [read, binary]),
           {lists:nthtail(RootLen, Filename), Port}
       end || Filename <- filelib:wildcard(Root ++ "/*/dev/dev*/log/*") ].
+
+get_node_debug_logs() ->
+    NodeMap = rt_config:get(rt_nodes),
+    lists:foldl(fun get_node_debug_logs/2,
+                [], NodeMap).
+
+get_node_debug_logs({_Node, NodeNum}, Acc) ->
+    DebugLogFile = ?DEBUG_LOG_FILE(NodeNum),
+    delete_existing_debug_log_file(DebugLogFile),
+    Path = relpath(node_version(NodeNum)),
+    Args = ["--logs"],
+    Cmd = riak_debug_cmd(Path, NodeNum, Args),
+    {ExitCode, Result} = wait_for_cmd(spawn_cmd(Cmd)),
+    lager:info("~p ExitCode ~p, Result = ~p", [Cmd, ExitCode, Result]),
+    case filelib:is_file(DebugLogFile) of
+        true ->
+            {ok, Binary} = file:read_file(DebugLogFile),
+            Acc ++ [{DebugLogFile, Binary}];
+        _ ->
+            Acc
+    end.
+
+%% If the debug log file exists from a previous test run it will cause the
+%% `riak_debug_cmd' to fail. Therefore, delete the `DebugLogFile' if it exists.
+%% Note that by ignoring the return value of `file:delete/1' this function
+%% works whether or not the `DebugLogFile' actually exists at the time it is
+%% called.
+delete_existing_debug_log_file(DebugLogFile) ->
+    file:delete(DebugLogFile).
+
+%% @doc Performs a search against the log files on `Node' and returns all
+%% matching lines.
+-spec search_logs(node(), Pattern::iodata()) ->
+    [{Path::string(), LineNum::pos_integer(), Match::string()}].
+search_logs(Node, Pattern) ->
+    Root = filename:absname(proplists:get_value(root, ?PATH)),
+    Wildcard = Root ++ "/*/dev/" ++ node_name(Node) ++ "/log/*",
+    LogFiles = filelib:wildcard(Wildcard),
+    AllMatches = rt:pmap(fun(File) ->
+                                 search_file(File, Pattern)
+                         end,
+                         LogFiles),
+    lists:flatten(AllMatches).
+
+search_file(File, Pattern) ->
+    {ok, Device} = file:open(File, [read]),
+    Matches = search_file(Device, File, Pattern, 1, []),
+    lists:reverse(Matches).
+
+search_file(Device, File, Pattern, LineNum, Accum) ->
+    case io:get_line(Device, "") of
+        eof ->
+            file:close(Device),
+            Accum;
+        Line ->
+            NewAccum = case re:run(Line, Pattern) of
+                           {match, _Captured} ->
+                               Match = {File, LineNum, Line},
+                               [Match|Accum];
+                           nomatch ->
+                               Accum
+                       end,
+            search_file(Device, File, Pattern, LineNum + 1, NewAccum)
+    end.
+
+
+-spec node_name(node()) -> string().
+node_name(Node) ->
+    lists:takewhile(fun(C) -> C /= $@ end, atom_to_list(Node)).
 
 -ifdef(TEST).
 

@@ -22,16 +22,19 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("yokozuna_rt.hrl").
 
--export([check_exists/2,
+-export([brutal_kill_remove_index_dirs/3,
+         check_exists/2,
          clear_trees/1,
          commit/2,
+         drain_solrqs/1,
          expire_trees/1,
          gen_keys/1,
          host_entries/1,
+         create_indexed_bucket_type/3,
+         create_indexed_bucket_type/4,
          override_schema/5,
-         remove_index_dirs/2,
+         remove_index_dirs/3,
          rolling_upgrade/2,
-         rolling_upgrade/3,
          search/4,
          search/5,
          search_expect/5,
@@ -44,13 +47,24 @@
          wait_for_index/2,
          wait_for_schema/2,
          wait_for_schema/3,
+         wait_until/2,
          write_data/5,
-         write_data/6]).
+         write_data/6,
+         http/4,
+         http/5,
+         http/6]).
 
 -type host() :: string().
 -type portnum() :: integer().
 -type count() :: non_neg_integer().
 -type json_string() :: atom | string() | binary().
+-type search_type() :: solr | yokozuna.
+-type method() :: get | post | head | options | put | delete | trace |
+        mkcol | propfind | proppatch | lock | unlock | move | copy.
+-type response() :: {ok, string(), [{string(), string()}], string()|binary()} |
+        {error, term()}.
+-type cluster() :: [node()].
+
 
 -define(FMT(S, Args), lists:flatten(io_lib:format(S, Args))).
 -define(SOFTCOMMIT, 1000).
@@ -74,7 +88,7 @@ write_data(Cluster, Pid, Index, Bucket, Keys) ->
     riakc_pb_socket:set_options(Pid, [queue_if_disconnected]),
 
     create_and_set_index(Cluster, Pid, Bucket, Index),
-    timer:sleep(1000),
+    yokozuna_rt:commit(Cluster, Index),
 
     %% Write keys
     lager:info("Writing ~p keys", [length(Keys)]),
@@ -90,7 +104,7 @@ write_data(Cluster, Pid, Index, {SchemaName, SchemaData},
     riakc_pb_socket:create_search_schema(Pid, SchemaName, SchemaData),
 
     create_and_set_index(Cluster, Pid, Bucket, Index, SchemaName),
-    timer:sleep(1000),
+    yokozuna_rt:commit(Cluster, Index),
 
     %% Write keys
     lager:info("Writing ~p keys", [length(Keys)]),
@@ -100,30 +114,16 @@ write_data(Cluster, Pid, Index, {SchemaName, SchemaData},
 %% @doc Peform a rolling upgrade of the `Cluster' to a different `Version' based
 %%      on current | previous | legacy.
 -spec rolling_upgrade([node()], current | previous | legacy) -> ok.
-rolling_upgrade(Cluster, Vsn) ->
-    rolling_upgrade(Cluster, Vsn, []).
-
--spec rolling_upgrade([node()], current | previous | legacy, proplists:proplist()) -> ok.
-rolling_upgrade(Cluster, Vsn, YZCfgChanges) ->
+rolling_upgrade(Cluster, Version) ->
+    rolling_upgrade(Cluster, Version, same, [riak_kv, yokozuna]).
+-spec rolling_upgrade([node()], current | previous | legacy, [term()] | same, [atom()]) -> ok.
+rolling_upgrade(Cluster, Version, UpgradeConfig, WaitForServices) when is_list(Cluster) ->
     lager:info("Perform rolling upgrade on cluster ~p", [Cluster]),
-    SolrPorts = lists:seq(11000, 11000 + length(Cluster) - 1),
-    Cluster2 = lists:zip(SolrPorts, Cluster),
-    [begin
-         Cfg = [{riak_kv, [{anti_entropy, {on, [debug]}},
-                           {anti_entropy_concurrency, 8},
-                           {anti_entropy_build_limit, {100, 1000}}
-                          ]},
-                {yokozuna, [{anti_entropy, {on, [debug]}},
-                            {anti_entropy_concurrency, 8},
-                            {anti_entropy_build_limit, {100, 1000}},
-                            {anti_entropy_tick, 1000},
-                            {enabled, true},
-                            {solr_port, SolrPort}]}],
-         MergeC = config_merge(Cfg, YZCfgChanges),
-         rt:upgrade(Node, Vsn, MergeC),
-         rt:wait_for_service(Node, riak_kv),
-         rt:wait_for_service(Node, yokozuna)
-     end || {SolrPort, Node} <- Cluster2],
+    [rolling_upgrade(Node, Version, UpgradeConfig, WaitForServices) || Node <- Cluster],
+    ok;
+rolling_upgrade(Node, Version, UpgradeConfig, WaitForServices) ->
+    rt:upgrade(Node, Version, UpgradeConfig),
+    [rt:wait_for_service(Node, Service) || Service <- WaitForServices],
     ok.
 
 %% @doc Use AAE status to verify that exchange has occurred for all
@@ -144,7 +144,7 @@ wait_for_all_trees(Cluster) ->
                 NotBuilt = [X || {_,undefined}=X <- Info],
                 NotBuilt == []
         end,
-    rt:wait_until(Cluster, F),
+    wait_until(Cluster, F),
     ok.
 
 %% @doc Wait for a full exchange round since `Timestamp'.  This means
@@ -167,7 +167,7 @@ wait_for_full_exchange_round(Cluster, Timestamp) ->
                 lager:info("Still waiting for AAE of ~p ~p", [Node, WaitingFor2]),
                 [] == WaitingFor2
         end,
-    rt:wait_until(Cluster, AllExchanged),
+    wait_until(Cluster, AllExchanged),
     ok.
 
 %% @doc Wait for index creation. This is to handle *legacy* versions of yokozuna
@@ -178,9 +178,9 @@ wait_for_index(Cluster, Index) ->
         fun(Node) ->
                 lager:info("Waiting for index ~s to be avaiable on node ~p",
                            [Index, Node]),
-                rpc:call(Node, yz_solr, ping, [Index])
+                rpc:call(Node, yz_index, exists, [Index])
         end,
-    [?assertEqual(ok, rt:wait_until(Node, IsIndexUp)) || Node <- Cluster],
+    wait_until(Cluster, IsIndexUp),
     ok.
 
 %% @see wait_for_schema/3
@@ -212,7 +212,7 @@ wait_for_schema(Cluster, Name, Content) ->
                         false
                 end
         end,
-    rt:wait_until(Cluster,  F),
+    wait_until(Cluster,  F),
     ok.
 
 %% @doc Expire YZ trees
@@ -234,23 +234,40 @@ clear_trees(Cluster) ->
          || Node <- Cluster],
     ok.
 
+brutal_kill_remove_index_dirs(Nodes, IndexName, Services) ->
+    IndexDirs = get_index_dirs(IndexName, Nodes),
+    rt:brutal_kill(hd(Nodes)),
+    [rt:stop(ANode) || ANode <- tl(Nodes)],
+    remove_index_dirs2(Nodes, IndexDirs, Services),
+    ok.
 
 %% @doc Remove index directories, removing the index.
--spec remove_index_dirs([node()], index_name()) -> ok.
-remove_index_dirs(Nodes, IndexName) ->
-    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
-                    Node <- Nodes],
-    lager:info("Remove index dirs: ~p, on nodes: ~p~n",
-               [IndexDirs, Nodes]),
+-spec remove_index_dirs([node()], index_name(), [atom()]) -> ok.
+remove_index_dirs(Nodes, IndexName, Services) ->
+    IndexDirs = get_index_dirs(IndexName, Nodes),
     [rt:stop(ANode) || ANode <- Nodes],
-    [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
-    [rt:start(ANode) || ANode <- Nodes],
+    remove_index_dirs2(Nodes, IndexDirs, Services),
     ok.
+
+remove_index_dirs2(Nodes, IndexDirs, Services) ->
+    lager:info("Remove index dirs: ~p, on nodes: ~p~n",
+        [IndexDirs, Nodes]),
+    [rt:del_dir(binary_to_list(IndexDir)) || IndexDir <- IndexDirs],
+    [start_and_wait(ANode, Services) || ANode <- Nodes].
+
+get_index_dirs(IndexName, Nodes) ->
+    IndexDirs = [rpc:call(Node, yz_index, index_dir, [IndexName]) ||
+        Node <- Nodes],
+    IndexDirs.
+
+start_and_wait(Node, WaitForServices) ->
+    rt:start(Node),
+    [rt:wait_for_service(Node, Service) || Service <- WaitForServices].
 
 %% @doc Check if index/core exists in metadata, disk via yz_index:exists.
 -spec check_exists([node()], index_name()) -> ok.
 check_exists(Nodes, IndexName) ->
-    rt:wait_until(Nodes,
+    wait_until(Nodes,
                   fun(N) ->
                           rpc:call(N, yz_index, exists, [IndexName])
                   end).
@@ -264,25 +281,62 @@ verify_num_found_query(Cluster, Index, ExpectedCount) ->
                            [ExpectedCount, NumFound]),
                 ExpectedCount =:= NumFound
         end,
-    rt:wait_until(Cluster, F),
+    wait_until(Cluster, F),
     ok.
 
-search_expect(HP, Index, Name, Term, Expect) ->
-    search_expect(yokozuna, HP, Index, Name, Term, Expect).
+%% @doc Brought over from yz_rt in the yokozuna repo - FORNOW.
+-spec search_expect(node()|[node()], index_name(), string(), string(),
+                    non_neg_integer()) -> ok.
+search_expect(NodeOrNodes, Index, Name, Term, Expect) ->
+    search_expect(NodeOrNodes, yokozuna, Index, Name, Term, Expect).
 
-search_expect(Type, HP, Index, Name, Term, Expect) ->
-    {ok, "200", _, R} = search(Type, HP, Index, Name, Term),
-    verify_count_http(Expect, R).
-
-search_expect(solr, {Host, Port}, Index, Name0, Term0, Shards, Expect)
-  when is_list(Shards), length(Shards) > 0 ->
+-spec search_expect(node()|[node()], search_type(), index_name(),
+                    string(), string(), [string()], non_neg_integer()) -> ok.
+search_expect(Nodes, solr, Index, Name0, Term0, Shards, Expect)
+  when is_list(Shards), length(Shards) > 0, is_list(Nodes) ->
     Name = quote_unicode(Name0),
     Term = quote_unicode(Term0),
+    Node = rt:select_random(Nodes),
+    {Host, Port} = solr_hp(Node, Nodes),
     URL = internal_solr_url(Host, Port, Index, Name, Term, Shards),
-    lager:info("Run search ~s", [URL]),
+    lager:info("Run solr search ~s", [URL]),
     Opts = [{response_format, binary}],
-    {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts),
-    verify_count_http(Expect, R).
+    F = fun(_) ->
+                {ok, "200", _, R} = ibrowse:send_req(URL, [], get, [], Opts,
+                                                     ?IBROWSE_TIMEOUT),
+                verify_count_http(Expect, R)
+        end,
+    wait_until(Nodes, F);
+search_expect(Node, solr=Type, Index, Name, Term, Shards, Expect)
+  when is_list(Shards), length(Shards) > 0 ->
+    search_expect([Node], Type, Index, Name, Term, Shards, Expect).
+
+-spec search_expect(node()|[node()], search_type(), index_name(),
+                    string(), string(), non_neg_integer()) -> ok.
+search_expect(Nodes, solr=Type, Index, Name, Term, Expect) when is_list(Nodes) ->
+    Node = rt:select_random(Nodes),
+    HP = solr_hp(Node, Nodes),
+
+    %% F could actually be returned in a shared fun, but w/ so much arity,
+    %% just using it twice makes sense.
+    F = fun(_) ->
+                {ok, "200", _, R} = search(Type, HP, Index, Name, Term),
+                verify_count_http(Expect, R)
+        end,
+
+    wait_until(Nodes, F);
+search_expect(Nodes, yokozuna=Type, Index, Name, Term, Expect)
+  when is_list(Nodes) ->
+    HP = hd(host_entries(rt:connection_info(Nodes))),
+
+    F = fun(_) ->
+                {ok, "200", _, R} = search(Type, HP, Index, Name, Term),
+                verify_count_http(Expect, R)
+        end,
+
+    wait_until(Nodes, F);
+search_expect(Node, Type, Index, Name, Term, Expect) ->
+    search_expect([Node], Type, Index, Name, Term, Expect).
 
 assert_search(Pid, Cluster, Index, Search, SearchExpect, Params) ->
     F = fun(_) ->
@@ -300,7 +354,7 @@ assert_search(Pid, Cluster, Index, Search, SearchExpect, Params) ->
                         false
                 end
         end,
-    rt:wait_until(Cluster, F).
+    wait_until(Cluster, F).
 
 search(HP, Index, Name, Term) ->
     search(yokozuna, HP, Index, Name, Term).
@@ -320,7 +374,7 @@ search(Type, {Host, Port}, Index, Name0, Term0) ->
     URL = ?FMT(FmtStr, [Host, Port, Index, Name, Term]),
     lager:info("Run search ~s", [URL]),
     Opts = [{response_format, binary}],
-    ibrowse:send_req(URL, [], get, [], Opts).
+    ibrowse:send_req(URL, [], get, [], Opts, ?IBROWSE_TIMEOUT).
 
 %%%===================================================================
 %%% Private
@@ -330,7 +384,7 @@ search(Type, {Host, Port}, Index, Name0, Term0) ->
 verify_count_http(Expected, Resp) ->
     Count = get_count_http(Resp),
     lager:info("Expected: ~p, Actual: ~p", [Expected, Count]),
-    ?assertEqual(Expected, Count).
+    Expected =:= Count.
 
 -spec get_count_http(json_string()) -> count().
 get_count_http(Resp) ->
@@ -351,28 +405,14 @@ riak_pb({_Node, ConnInfo}) ->
 riak_pb(ConnInfo) ->
     proplists:get_value(pb, ConnInfo).
 
--spec config_merge(proplists:proplist(), proplists:proplist()) ->
-                          orddict:orddict() | proplists:proplist().
-config_merge(DefaultCfg, NewCfg) when NewCfg /= [] ->
-    orddict:update(yokozuna,
-                   fun(V) ->
-                           orddict:merge(fun(_, _X, Y) -> Y end,
-                                         orddict:from_list(V),
-                                         orddict:from_list(
-                                           orddict:fetch(
-                                             yokozuna, NewCfg)))
-                   end,
-                   DefaultCfg);
-config_merge(DefaultCfg, _NewCfg) ->
-    DefaultCfg.
-
 -spec create_and_set_index([node()], pid(), bucket(), index_name()) -> ok.
 create_and_set_index(Cluster, Pid, Bucket, Index) ->
     %% Create a search index and associate with a bucket
     lager:info("Create a search index ~s and associate it with bucket ~s",
                [Index, Bucket]),
-    ok = riakc_pb_socket:create_search_index(Pid, Index),
-    %% For possible legacy upgrade reasons, wrap create index in a wait
+    _ = riakc_pb_socket:create_search_index(Pid, Index),
+    %% For possible legacy upgrade reasons or general check around the cluster,
+    %% wrap create index in a wait
     wait_for_index(Cluster, Index),
     set_index(Pid, hd(Cluster), Bucket, Index).
 -spec create_and_set_index([node()], pid(), bucket(), index_name(),
@@ -381,8 +421,9 @@ create_and_set_index(Cluster, Pid, Bucket, Index, Schema) ->
     %% Create a search index and associate with a bucket
     lager:info("Create a search index ~s with a custom schema named ~s and " ++
                "associate it with bucket ~p", [Index, Schema, Bucket]),
-    ok = riakc_pb_socket:create_search_index(Pid, Index, Schema, []),
-    %% For possible legacy upgrade reasons, wrap create index in a wait
+    _ = riakc_pb_socket:create_search_index(Pid, Index, Schema, []),
+    %% For possible legacy upgrade reasons or general check around the cluster,
+    %% wrap create index in a wait
     wait_for_index(Cluster, Index),
     set_index(Pid, hd(Cluster), Bucket, Index).
 
@@ -415,6 +456,13 @@ commit(Nodes, Index) ->
     rpc:multicall(Nodes, yz_solr, commit, [Index]),
     ok.
 
+-spec drain_solrqs(node() | cluster()) -> ok.
+drain_solrqs(Cluster) when is_list(Cluster) ->
+    [drain_solrqs(Node) || Node <- Cluster];
+drain_solrqs(Node) ->
+    rpc:call(Node, yz_solrq_drain_mgr, drain, []),
+    ok.
+
 -spec override_schema(pid(), [node()], index_name(), schema_name(), string()) ->
                              {ok, [node()]}.
 override_schema(Pid, Cluster, Index, Schema, RawUpdate) ->
@@ -423,3 +471,93 @@ override_schema(Pid, Cluster, Index, Schema, RawUpdate) ->
     yokozuna_rt:wait_for_schema(Cluster, Schema, RawUpdate),
     [Node|_] = Cluster,
     {ok, _} = rpc:call(Node, yz_index, reload, [Index]).
+
+%% @doc Wrapper around `rt:wait_until' to verify `F' against multiple
+%%      nodes.  The function `F' is passed one of the `Nodes' as
+%%      argument and must return a `boolean()' delcaring whether the
+%%      success condition has been met or not.
+-spec wait_until([node()], fun((node()) -> boolean())) -> ok.
+wait_until(Nodes, F) ->
+    [?assertEqual(ok, rt:wait_until(Node, F)) || Node <- Nodes],
+    ok.
+
+-spec solr_hp(node(), [node()]) -> {host(), portnum()}.
+solr_hp(Node, Cluster) ->
+    CI = connection_info(Cluster),
+    solr_http(proplists:get_value(Node, CI)).
+
+-spec connection_info(list()) -> orddict:orddict().
+connection_info(Cluster) ->
+    CI = orddict:from_list(rt:connection_info(Cluster)),
+    SolrInfo = orddict:from_list([{Node, [{solr_http, get_yz_conn_info(Node)}]}
+                                  || Node <- Cluster]),
+    orddict:merge(fun(_,V1,V2) -> V1 ++ V2 end, CI, SolrInfo).
+
+-spec solr_http({node(), orddict:orddict()}) -> {host(), portnum()}.
+solr_http({_Node, ConnInfo}) ->
+    solr_http(ConnInfo);
+solr_http(ConnInfo) ->
+    proplists:get_value(solr_http, ConnInfo).
+
+-spec get_yz_conn_info(node()) -> {string(), string()}.
+get_yz_conn_info(Node) ->
+    {ok, SolrPort} = rpc:call(Node, application, get_env, [yokozuna, solr_port]),
+    %% Currently Yokozuna hardcodes listener to all interfaces
+    {"127.0.0.1", SolrPort}.
+
+-spec http(method(), string(), list(), binary()|[]) -> response().
+http(Method, URL, Headers, Body) ->
+    Opts = [],
+    ibrowse:send_req(URL, Headers, Method, Body, Opts, ?IBROWSE_TIMEOUT).
+
+-spec http(method(), string(), list(), binary()|[], list()|timeout())
+        -> response().
+http(Method, URL, Headers, Body, Opts) when is_list(Opts)  ->
+    ibrowse:send_req(URL, Headers, Method, Body, Opts, ?IBROWSE_TIMEOUT);
+http(Method, URL, Headers, Body, Timeout) when is_integer(Timeout) ->
+    Opts = [],
+    ibrowse:send_req(URL, Headers, Method, Body, Opts, Timeout).
+
+-spec http(method(), string(), list(), binary()|[], list(), timeout())
+        -> response().
+http(Method, URL, Headers, Body, Opts, Timeout) when
+    is_list(Opts) andalso is_integer(Timeout) ->
+    ibrowse:send_req(URL, Headers, Method, Body, Opts, Timeout).
+
+-spec create_indexed_bucket_type(cluster(), binary(), index_name()) -> ok.
+create_indexed_bucket_type(Cluster, BucketType, IndexName) ->
+    ok = create_index(Cluster, IndexName),
+    ok = create_bucket_type(Cluster, BucketType, [{search_index, IndexName}]).
+
+-spec create_indexed_bucket_type(cluster(), binary(), index_name(),
+    schema_name()) -> ok.
+create_indexed_bucket_type(Cluster, BucketType, IndexName, SchemaName) ->
+    ok = create_index(Cluster, IndexName, SchemaName),
+    ok = create_bucket_type(Cluster, BucketType, [{search_index, IndexName}]).
+
+-spec create_index(cluster(), index_name()) -> ok.
+create_index(Cluster, Index) ->
+    Node = select_random(Cluster),
+    lager:info("Creating index ~s [~p]", [Index, Node]),
+    rpc:call(Node, yz_index, create, [Index]),
+    ok = wait_for_index(Cluster, Index).
+
+-spec create_index(cluster(), index_name(), schema_name()) -> ok.
+create_index(Cluster, Index, SchemaName) ->
+    Node = select_random(Cluster),
+    lager:info("Creating index ~s with schema ~s [~p]",
+        [Index, SchemaName, Node]),
+    rpc:call(Node, yz_index, create, [Index, SchemaName]),
+    ok = wait_for_index(Cluster, Index).
+
+select_random(List) ->
+    Length = length(List),
+    Idx = random:uniform(Length),
+    lists:nth(Idx, List).
+
+-spec create_bucket_type(cluster(), binary(), [term()]) -> ok.
+create_bucket_type(Cluster, BucketType, Props) ->
+    Node = select_random(Cluster),
+    rt:create_and_activate_bucket_type(Node, BucketType, Props),
+    rt:wait_until_bucket_type_status(BucketType, active, Node),
+    rt:wait_until_bucket_type_visible(Cluster, BucketType).

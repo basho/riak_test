@@ -34,6 +34,9 @@
 -define(BUCKET1, {?TYPE1, <<"test_bkt1">>}).
 -define(INDEX2, <<"test_idx2">>).
 -define(BUCKET2, {?TYPE2, <<"test_bkt2">>}).
+-define(TYPE3, <<"type3">>).
+-define(BUCKET3, {?TYPE3, <<"test_bkt3">>}).
+-define(INDEX3, <<"test_idx3">>).
 -define(SCHEMANAME, <<"test">>).
 -define(TEST_SCHEMA,
 <<"<schema name=\"test\" version=\"1.5\">
@@ -53,6 +56,7 @@
    <field name=\"text\" type=\"text_general\" indexed=\"true\" stored=\"false\" multiValued=\"true\"/>
    <field name=\"age\" type=\"int\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
    <field name=\"host\" type=\"string\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+   <field name=\"blob\" type=\"binary\" indexed=\"false\" stored=\"true\" multiValued=\"false\"/>
 </fields>
 <uniqueKey>_yz_id</uniqueKey>
 <types>
@@ -60,6 +64,7 @@
 
     <fieldType name=\"_yz_str\" class=\"solr.StrField\" sortMissingLast=\"true\" />
     <fieldType name=\"string\" class=\"solr.StrField\" sortMissingLast=\"true\" />
+    <fieldtype name=\"binary\" class=\"solr.BinaryField\"/>
     <fieldType name=\"int\" class=\"solr.TrieIntField\" precisionStep=\"0\" positionIncrementGap=\"0\" />
     <fieldType name=\"text_general\" class=\"solr.TextField\" positionIncrementGap=\"100\">
       <analyzer type=\"index\">
@@ -94,6 +99,7 @@
    <field name=\"text\" type=\"text_general\" indexed=\"true\" stored=\"false\" multiValued=\"true\"/>
    <field name=\"age\" type=\"int\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
    <field name=\"host\" type=\"string\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
+   <field name=\"blob\" type=\"binary\" indexed=\"false\" stored=\"true\" multiValued=\"false\"/>
    <field name=\"method\" type=\"string\" indexed=\"true\" stored=\"true\" multiValued=\"false\"/>
 </fields>
 <uniqueKey>_yz_id</uniqueKey>
@@ -102,6 +108,7 @@
 
     <fieldType name=\"_yz_str\" class=\"solr.StrField\" sortMissingLast=\"true\" />
     <fieldType name=\"string\" class=\"solr.StrField\" sortMissingLast=\"true\" />
+    <fieldtype name=\"binary\" class=\"solr.BinaryField\"/>
     <fieldType name=\"int\" class=\"solr.TrieIntField\" precisionStep=\"0\" positionIncrementGap=\"0\" />
     <fieldType name=\"text_general\" class=\"solr.TextField\" positionIncrementGap=\"100\">
       <analyzer type=\"index\">
@@ -138,6 +145,7 @@
                      ]).
 -define(EXTRACTMAPEXPECT, lists:sort(?DEFAULT_MAP ++ [?NEW_EXTRACTOR])).
 -define(SEQMAX, 20).
+-define(NVAL, 3).
 -define(CFG,
         [
          {riak_kv,
@@ -145,7 +153,9 @@
            %% allow AAE to build trees and exchange rapidly
            {anti_entropy_build_limit, {100, 1000}},
            {anti_entropy_concurrency, 8},
-           {anti_entropy_tick, 1000}
+           {anti_entropy_tick, 1000},
+           %% but start with AAE turned off so as not to interfere with earlier parts of the test
+           {anti_entropy, {off, []}}
           ]},
          {yokozuna,
           [
@@ -172,7 +182,6 @@ confirm() ->
 
     yokozuna_rt:write_data(Cluster, OldPid, ?INDEX1,
                            {?SCHEMANAME, ?TEST_SCHEMA}, ?BUCKET1, GenKeys),
-    yokozuna_rt:commit(Cluster, ?INDEX1),
 
     ok = rt:stop_tracing(),
 
@@ -252,8 +261,7 @@ confirm() ->
     Packet =  <<"GET http://www.google.com HTTP/1.1\n">>,
     test_extractor_works(Cluster, Packet),
     test_extractor_with_aae_expire(Cluster, ?INDEX2, ?BUCKET2, Packet),
-
-    rt:clean_cluster(Cluster),
+    test_bad_extraction(Cluster),
 
     pass.
 
@@ -312,39 +320,122 @@ test_extractor_with_aae_expire(Cluster, Index, Bucket, Packet) ->
                      mochiweb_util:quote_plus(Key)),
 
     CT = ?EXTRACTOR_CT,
-    {ok, "204", _, _} = ibrowse:send_req(
-                          URL, [{"Content-Type", CT}], put, Packet),
+    {ok, "204", _, _} = yokozuna_rt:http(
+        put, URL, [{"Content-Type", CT}], Packet),
 
     yokozuna_rt:commit(Cluster, Index),
 
-    yokozuna_rt:search_expect({Host, Port}, Index, <<"host">>,
+    ANode = rt:select_random(Cluster),
+    yokozuna_rt:search_expect(ANode, Index, <<"host">>,
                               <<"www*">>, 1),
+
+    rpc:multicall(Cluster, riak_kv_entropy_manager, enable, []),
 
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:wait_for_full_exchange_round(Cluster, erlang:now()),
 
-    yokozuna_rt:search_expect({Host, Port}, Index, <<"host">>,
+    yokozuna_rt:search_expect(ANode, Index, <<"host">>,
                               <<"www*">>, 1),
 
     APid = rt:pbc(rt:select_random(Cluster)),
     yokozuna_rt:override_schema(APid, Cluster, Index, ?SCHEMANAME,
                                 ?TEST_SCHEMA_UPGRADE),
 
-    {ok, "200", RHeaders, _} = ibrowse:send_req(URL, [{"Content-Type", CT}], get,
+    {ok, "200", RHeaders, _} = yokozuna_rt:http(get, URL, [{"Content-Type", CT}],
                                                 [], []),
     VC = proplists:get_value("X-Riak-Vclock", RHeaders),
 
-    {ok, "204", _, _} = ibrowse:send_req(
-                          URL, [{"Content-Type", CT}, {"X-Riak-Vclock", VC}],
-                          put, Packet),
+    {ok, "204", _, _} = yokozuna_rt:http(
+                          put, URL, [{"Content-Type", CT}, {"X-Riak-Vclock", VC}],
+                          Packet),
     yokozuna_rt:commit(Cluster, Index),
 
-    yokozuna_rt:search_expect({Host, Port}, Index, <<"method">>,
+    yokozuna_rt:search_expect(ANode, Index, <<"method">>,
                               <<"GET">>, 1),
 
     yokozuna_rt:expire_trees(Cluster),
     yokozuna_rt:wait_for_full_exchange_round(Cluster, erlang:now()),
 
-    yokozuna_rt:search_expect({Host, Port}, Index, <<"method">>,
+    yokozuna_rt:search_expect(ANode, Index, <<"method">>,
                               <<"GET">>, 1),
     riakc_pb_socket:stop(APid).
+
+test_bad_extraction(Cluster) ->
+    %% Previous test enabled AAE, which makes the number of repairs here not consistent
+    %% Turn off AAE again just to make the test deterministic.
+    rpc:multicall(Cluster, riak_kv_entropy_manager, disable, []),
+    %%
+    %% register the no-op extractor on all the nodes with a content type
+    %%
+    [register_extractor(ANode, "application/bad-extractor", yz_noop_extractor) ||
+        ANode <- Cluster],
+    %%
+    %% Set up the intercepts so that they extract non-unicode data
+    %%
+    [rt_intercept:add(ANode, {yz_noop_extractor,
+        [{{extract, 1}, extract_non_unicode_data}]}) ||
+        ANode <- Cluster],
+    [rt_intercept:wait_until_loaded(ANode) || ANode <- Cluster],
+    %%
+    %% create and wire up the bucket to the Solr index/core
+    %%
+    yokozuna_rt:create_indexed_bucket_type(Cluster, ?TYPE3, ?INDEX3, ?SCHEMANAME),
+    %%
+    %% Grab the stats before
+    %%
+    {PreviousFailCount, PreviousErrorThresholdCount} = get_error_stats(Cluster),
+    %%
+    %% Put some  data into Riak.  This should cause the intercepted no-op
+    %% extractor to generate an object to be written into Solr that contains
+    %% non-unicode data.
+    {Host, Port} = rt:select_random(
+        yokozuna_rt:host_entries(rt:connection_info(Cluster))),
+    Key = <<"test_bad_extraction">>,
+    URL = bucket_url({Host, Port}, ?BUCKET3, Key),
+    Headers = [{"Content-Type", "application/bad-extractor"}],
+    Data =  <<"blahblahblahblah">>,
+    {ok, "204", _, _} = yokozuna_rt:http(put, URL, Headers, Data),
+    %%
+    %% The put should pass, but because it's "bad data", there should
+    %% be no data in Riak.
+    %%
+    yokozuna_rt:verify_num_found_query(Cluster, ?INDEX3, 0),
+    %%
+    %% Verify the stats.  There should be one more index failure,
+    %% but there should be more more "melts" (error threshold failures)
+    %%
+    yokozuna_rt:wait_until(
+        Cluster,
+        fun(_Node) ->
+            check_error_stats(Cluster, PreviousFailCount, PreviousErrorThresholdCount)
+        end
+    ),
+    ok.
+
+check_error_stats(Cluster, PreviousFailCount, PreviousErrorThresholdCount) ->
+    {FailCount, ErrorThresholdCount} = get_error_stats(Cluster),
+    lager:info(
+        "PreviousFailCount: ~p FailCount: ~p;"
+        " PreviousErrorThresholdCount: ~p; ErrorThresholdCount: ~p",
+        [PreviousFailCount, FailCount,
+         PreviousErrorThresholdCount, ErrorThresholdCount]
+    ),
+    PreviousFailCount + ?NVAL == FailCount
+        andalso PreviousErrorThresholdCount == ErrorThresholdCount.
+
+
+get_error_stats(Cluster) ->
+    AllStats = [rpc:call(Node, yz_stat, get_stats, []) || Node <- Cluster],
+    {
+        lists:sum([get_count([index, bad_entry], count, Stats) || Stats <- AllStats]),
+        lists:sum([get_count([search_index_error_threshold_failure_count], value, Stats) || Stats <- AllStats])
+    }.
+
+get_count(StatName, Type, Stats) ->
+    proplists:get_value(
+        Type,
+        proplists:get_value(
+            yz_stat:stat_name(StatName),
+            Stats
+        )
+    ).

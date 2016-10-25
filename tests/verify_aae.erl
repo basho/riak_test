@@ -43,6 +43,7 @@
 % I would hope this would come from the testing framework some day
 % to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 8).
+-define(AAE_THROTTLE_LIMITS, [{-1, 0}, {100, 10}]).
 -define(CFG,
         [{riak_kv,
           [
@@ -52,26 +53,47 @@
            {anti_entropy_build_limit, {100, 1000}},
            {anti_entropy_concurrency, 5},
            {anti_entropy_expire, 24 * 60 * 60 * 1000}, % Not for now!
-           {anti_entropy_tick, 500}
+           {anti_entropy_tick, 500},
+           {aae_throttle_limits, ?AAE_THROTTLE_LIMITS}
           ]},
          {riak_core,
           [
            {ring_creation_size, ?DEFAULT_RING_SIZE}
           ]}]
        ).
--define(NUM_NODES, 1).
+-define(NUM_NODES, 3).
 -define(NUM_KEYS, 1000).
 -define(BUCKET, <<"test_bucket">>).
 -define(N_VAL, 3).
 
 confirm() ->
     Nodes = rt:build_cluster(?NUM_NODES, ?CFG),
+    verify_throttle_config(Nodes),
     verify_aae(Nodes),
     pass.
 
+verify_throttle_config(Nodes) ->
+    lists:foreach(
+      fun(Node) ->
+              ?assert(rpc:call(Node,
+                               riak_kv_entropy_manager,
+                               is_aae_throttle_enabled,
+                               [])),
+              ?assertMatch(?AAE_THROTTLE_LIMITS,
+                           rpc:call(Node,
+                                    riak_kv_entropy_manager,
+                                    get_aae_throttle_limits,
+                                    []))
+      end,
+      Nodes).
+
 verify_aae(Nodes) ->
     Node1 = hd(Nodes),
-    % First, recovery without tree rebuilds
+
+    % Verify that AAE eventually upgrades to version 0(or already has)
+    wait_until_hashtree_upgrade(Nodes), 
+    
+    % Recovery without tree rebuilds
 
     % Test recovery from to few replicas written
     KV1 = test_data(1, 1000),
@@ -84,7 +106,7 @@ verify_aae(Nodes) ->
     lager:info("Run similar tests now with tree rebuilds enabled"),
     start_tree_rebuilds(Nodes),
 
-    % Test recovery from to few replicas written
+    % Test recovery from too few replicas written
     KV3 = test_data(1001, 2000),
     test_less_than_n_writes(Node1, KV3),
 
@@ -303,3 +325,26 @@ max_aae_repairs(Node) when is_atom(Node) ->
     LastCounts = [Last || {_, _, _, {Last, _, _, _}} <- Info],
     MaxCount = lists:max(LastCounts),
     MaxCount.
+
+wait_until_hashtree_upgrade(Nodes) ->
+    lager:info("Verifying AAE hashtrees eventually all upgrade to version 0"),
+    rt:wait_until(fun() -> all_hashtrees_upgraded(Nodes) end).
+
+all_hashtrees_upgraded(Nodes) when is_list(Nodes) ->
+    [Check|_] = lists:usort([all_hashtrees_upgraded(Node) || Node <- Nodes]),
+    Check;
+
+all_hashtrees_upgraded(Node) when is_atom(Node) ->
+    case rpc:call(Node, riak_kv_entropy_manager, get_version, []) of
+        0 ->
+            Trees = rpc:call(Node, riak_kv_entropy_manager, get_trees_version, []),
+            case [Idx || {Idx, undefined} <- Trees] of
+                [] ->
+                    true;
+                _ ->
+                    false
+            end;
+        _ ->
+            false
+     end.
+    

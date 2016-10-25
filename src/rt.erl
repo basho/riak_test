@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013-2014 Basho Technologies, Inc.
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -55,6 +55,7 @@
          cmd/2,
          connection_info/1,
          console/2,
+         copy_conf/3,
          count_calls/2,
          create_and_activate_bucket_type/3,
          del_dir/1,
@@ -64,12 +65,14 @@
          deploy_clusters/1,
          down/2,
          enable_search_hook/2,
+         ensure_random_seeded/0,
          expect_in_log/2,
          get_call_count/2,
          get_deps/0,
          get_ip/1,
          get_node_logs/0,
          get_replica/5,
+         get_retry_settings/0,
          get_ring/1,
          get_version/0,
          get_version/1,
@@ -107,6 +110,8 @@
          product/1,
          priv_dir/0,
          random_sublist/2,
+         random_uniform/0,
+         random_uniform/1,
          remove/2,
          riak/2,
          riak_repl/2,
@@ -142,7 +147,9 @@
          update_app_config/2,
          upgrade/2,
          upgrade/3,
+         upgrade/4,
          versions/0,
+         wait_for_any_webmachine_route/2,
          wait_for_cluster_service/2,
          wait_for_cmd/1,
          wait_for_service/2,
@@ -387,12 +394,25 @@ stop_and_wait(Node) ->
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
 upgrade(Node, NewVersion) ->
-    ?HARNESS:upgrade(Node, NewVersion).
+    upgrade(Node, NewVersion, fun no_op/1).
+
+%% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
+%% Upgrade Callback will be called after the node is stopped but before
+%% the upgraded node is started.
+upgrade(Node, NewVersion, UpgradeCallback) when is_function(UpgradeCallback) ->
+    ?HARNESS:upgrade(Node, NewVersion, UpgradeCallback);
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
 %% the config based on entries in `Config'.
 upgrade(Node, NewVersion, Config) ->
-    ?HARNESS:upgrade(Node, NewVersion, Config).
+    upgrade(Node, NewVersion, Config, fun no_op/1).
+
+%% @doc Upgrade a Riak `Node' to the specified `NewVersion' and update
+%% the config based on entries in `Config'.
+%% Upgrade Callback will be called after the node is stopped but before
+%% the upgraded node is started.
+upgrade(Node, NewVersion, Config, UpgradeCallback) ->
+    ?HARNESS:upgrade(Node, NewVersion, Config, UpgradeCallback).
 
 %% @doc Upgrade a Riak node to a specific version using the alternate
 %%      leave/upgrade/rejoin approach
@@ -657,14 +677,18 @@ is_ring_ready(Node) ->
 %%      provided `rt_max_wait_time' and `rt_retry_delay' parameters in
 %%      specified `riak_test' config file.
 wait_until(Fun) when is_function(Fun) ->
+    {Delay, Retry} = get_retry_settings(),
+    wait_until(Fun, Retry, Delay).
+
+get_retry_settings() ->
     MaxTime = rt_config:get(rt_max_wait_time),
     Delay = rt_config:get(rt_retry_delay),
     Retry = MaxTime div Delay,
-    wait_until(Fun, Retry, Delay).
+    {Delay, Retry}.
 
 %% @doc Convenience wrapper for wait_until for the myriad functions that
 %% take a node as single argument.
--spec wait_until([node()], fun((node()) -> boolean())) -> ok.
+-spec wait_until(node(), fun(() -> boolean())) -> ok | {fail, Result :: term()}.
 wait_until(Node, Fun) when is_atom(Node), is_function(Fun) ->
     wait_until(fun() -> Fun(Node) end);
 
@@ -739,6 +763,7 @@ wait_until_transfers_complete([Node0|_]) ->
     lager:info("Wait until transfers complete ~p", [Node0]),
     F = fun(Node) ->
                 {DownNodes, Transfers} = rpc:call(Node, riak_core_status, transfers, []),
+                lager:info("DownNodes: ~p Transfers: ~p", [DownNodes, Transfers]),
                 DownNodes =:= [] andalso Transfers =:= []
         end,
     ?assertEqual(ok, wait_until(Node0, F)),
@@ -750,6 +775,7 @@ wait_for_service(Node, Services) when is_list(Services) ->
                     {badrpc, Error} ->
                         {badrpc, Error};
                     CurrServices when is_list(CurrServices) ->
+                        lager:info("Waiting for services ~p: current services: ~p", [Services, CurrServices]),
                         lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
                     Res ->
                         Res
@@ -924,6 +950,7 @@ wait_until_capability(Node, Capability, Value, Default) ->
                           cap_equal(Value, Cap)
                   end).
 
+-spec wait_until_capability_contains(node(), atom() | {atom(), atom()}, list()) -> ok.
 wait_until_capability_contains(Node, Capability, Value) ->
     rt:wait_until(Node,
                 fun(_) ->
@@ -1162,7 +1189,7 @@ join_cluster(Nodes) ->
             %% large amount of redundant handoff done in a sequential join
             [staged_join(Node, Node1) || Node <- OtherNodes],
             plan_and_commit(Node1),
-            try_nodes_ready(Nodes, 3, 500)
+            try_nodes_ready(Nodes)
     end,
 
     ?assertEqual(ok, wait_until_nodes_ready(Nodes)),
@@ -1186,6 +1213,9 @@ product(Node) ->
        HasRiak -> riak;
        true -> unknown
     end.
+
+try_nodes_ready(Nodes) ->
+    try_nodes_ready(Nodes, 10, 500).
 
 try_nodes_ready([Node1 | _Nodes], 0, _SleepMs) ->
     lager:info("Nodes not ready after initial plan/commit, retrying"),
@@ -1227,6 +1257,63 @@ versions() ->
 %%%===================================================================
 %%% Basic Read/Write Functions
 %%%===================================================================
+
+systest_delete(Node, Size) ->
+    systest_delete(Node, Size, 2).
+
+systest_delete(Node, Size, W) ->
+    systest_delete(Node, 1, Size, <<"systest">>, W).
+
+%% @doc Delete `(End-Start)+1' objects on `Node'. Keys deleted will be
+%% `Start', `Start+1' ... `End', each key being encoded as a 32-bit binary
+%% (`<<Key:32/integer>>').
+%%
+%% The return value of this function is a list of errors
+%% encountered. If all deletes were successful, return value is an
+%% empty list. Each error has the form `{N :: integer(), Error :: term()}',
+%% where `N' is the unencoded key of the object that failed to store.
+systest_delete(Node, Start, End, Bucket, W) ->
+    rt:wait_for_service(Node, riak_kv),
+    {ok, C} = riak:client_connect(Node),
+    F = fun(N, Acc) ->
+                Key = <<N:32/integer>>,
+                try C:delete(Bucket, Key, W) of
+                    ok ->
+                        Acc;
+                    Other ->
+                        [{N, Other} | Acc]
+                catch
+                    What:Why ->
+                        [{N, {What, Why}} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
+
+systest_verify_delete(Node, Size) ->
+    systest_verify_delete(Node, Size, 2).
+
+systest_verify_delete(Node, Size, R) ->
+    systest_verify_delete(Node, 1, Size, <<"systest">>, R).
+
+%% @doc Read a series of keys on `Node' and verify that the objects
+%% do not exist. This could, for instance, be used as a followup to
+%% `systest_delete' to ensure that the objects were actually deleted.
+systest_verify_delete(Node, Start, End, Bucket, R) ->
+    rt:wait_for_service(Node, riak_kv),
+    {ok, C} = riak:client_connect(Node),
+    F = fun(N, Acc) ->
+                Key = <<N:32/integer>>,
+                try C:get(Bucket, Key, R) of
+                    {error, notfound} ->
+                        [];
+                    Other ->
+                        [{N, Other} | Acc]
+                catch
+                    What:Why ->
+                        [{N, {What, Why}} | Acc]
+                end
+        end,
+    lists:foldl(F, [], lists:seq(Start, End)).
 
 systest_write(Node, Size) ->
     systest_write(Node, Size, 2).
@@ -1614,6 +1701,10 @@ attach_direct(Node, Expected) ->
 console(Node, Expected) ->
     ?HARNESS:console(Node, Expected).
 
+%% @doc Copies config files from one set of nodes to another
+copy_conf(NumNodes, FromVersion, ToVersion) ->
+    ?HARNESS:copy_conf(NumNodes, FromVersion, ToVersion).
+
 %%%===================================================================
 %%% Search
 %%%===================================================================
@@ -1761,6 +1852,16 @@ setup_harness(Test, Args) ->
 get_node_logs() ->
     ?HARNESS:get_node_logs().
 
+get_node_debug_logs() ->
+    ?HARNESS:get_node_debug_logs().
+
+%% @doc Performs a search against the log files on `Node' and returns all
+%% matching lines.
+-spec search_logs(node(), Pattern::iodata()) ->
+    [{Path::string(), LineNum::pos_integer(), MatchingLine::string()}].
+search_logs(Node, Pattern) ->
+    ?HARNESS:search_logs(Node, Pattern).
+
 check_ibrowse() ->
     try sys:get_status(ibrowse) of
         {status, _Pid, {module, gen_server} ,_} -> ok
@@ -1888,8 +1989,11 @@ setup_log_capture(Nodes) when is_list(Nodes) ->
 setup_log_capture(Node) when not is_list(Node) ->
     setup_log_capture([Node]).
 
-
 expect_in_log(Node, Pattern) ->
+    {Delay, Retry} = get_retry_settings(),
+    expect_in_log(Node, Pattern, Retry, Delay).
+
+expect_in_log(Node, Pattern, Retry, Delay) ->
     CheckLogFun = fun() ->
             Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
             lager:info("looking for pattern ~s in logs for ~p",
@@ -1903,10 +2007,21 @@ expect_in_log(Node, Pattern) ->
                     false
             end
     end,
-    case rt:wait_until(CheckLogFun) of
+    case rt:wait_until(CheckLogFun, Retry, Delay) of
         ok ->
             true;
         _ ->
+            false
+    end.
+
+%% @doc Returns `true' if Pattern is _not_ found in the logs for `Node',
+%% `false' if it _is_ found.
+-spec expect_not_in_logs(Node::node(), Pattern::iodata()) -> boolean().
+expect_not_in_logs(Node, Pattern) ->
+    case search_logs(Node, Pattern) of
+        [] ->
+            true;
+        _Matches ->
             false
     end.
 
@@ -1932,30 +2047,31 @@ wait_for_control(_Vsn, Node) when is_atom(Node) ->
                 end
         end),
 
-    lager:info("Waiting for routes to be added to supervisor..."),
-
     %% Wait for routes to be added by supervisor.
-    rt:wait_until(Node, fun(N) ->
-                case rpc:call(N,
-                              webmachine_router,
-                              get_routes,
-                              []) of
-                    {badrpc, Error} ->
-                        lager:info("Error was ~p.", [Error]),
-                        false;
-                    Routes ->
-                        case is_control_gui_route_loaded(Routes) of
-                            false ->
-                                false;
-                            _ ->
-                                true
-                        end
-                end
-        end).
+    wait_for_any_webmachine_route(Node, [admin_gui, riak_control_wm_gui]).
 
-%% @doc Is the riak_control GUI route loaded?
-is_control_gui_route_loaded(Routes) ->
-    lists:keymember(admin_gui, 2, Routes) orelse lists:keymember(riak_control_wm_gui, 2, Routes).
+wait_for_any_webmachine_route(Node, Routes) ->
+    lager:info("Waiting for routes ~p to be added to webmachine.", [Routes]),
+    rt:wait_until(Node, fun(N) ->
+        case rpc:call(N, webmachine_router, get_routes, []) of
+            {badrpc, Error} ->
+                lager:info("Error was ~p.", [Error]),
+                false;
+            RegisteredRoutes ->
+                case is_any_route_loaded(Routes, RegisteredRoutes) of
+                    false ->
+                        false;
+                    _ ->
+                        true
+                end
+        end
+    end).
+
+is_any_route_loaded(SearchRoutes, RegisteredRoutes) ->
+    lists:any(fun(Route) -> is_route_loaded(Route, RegisteredRoutes) end, SearchRoutes).
+
+is_route_loaded(Route, Routes) ->
+    lists:keymember(Route, 2, Routes).
 
 %% @doc Wait for Riak Control to start on a series of nodes.
 wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
@@ -1965,23 +2081,48 @@ wait_for_control(VersionedNodes) when is_list(VersionedNodes) ->
 -spec select_random([any()]) -> any().
 select_random(List) ->
     Length = length(List),
-    Idx = random:uniform(Length),
+    Idx = random_uniform(Length),
     lists:nth(Idx, List).
 
 %% @doc Returns a random element from a given list.
 -spec random_sublist([any()], integer()) -> [any()].
 random_sublist(List, N) ->
-    % Properly seeding the process.
-    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-    random:seed({A, B, C}),
     % Assign a random value for each element in the list.
-    List1 = [{random:uniform(), E} || E <- List],
+    List1 = [{random_uniform(), E} || E <- List],
     % Sort by the random number.
     List2 = lists:sort(List1),
     % Take the first N elements.
     List3 = lists:sublist(List2, N),
     % Remove the random numbers.
     [ E || {_,E} <- List3].
+
+-spec random_uniform() -> float().
+%% @doc Like random:uniform/0, but always seeded with quality entropy.
+random_uniform() ->
+    ok = ensure_random_seeded(),
+    random:uniform().
+
+-spec random_uniform(Range :: pos_integer()) -> pos_integer().
+%% @doc Like random:uniform/1, but always seeded with quality entropy.
+random_uniform(Range) ->
+    ok = ensure_random_seeded(),
+    random:uniform(Range).
+
+-spec ensure_random_seeded() -> ok.
+%% @doc Ensures that the random module's PRNG is seeded with the good stuff.
+ensure_random_seeded() ->
+    Key = {?MODULE, random_seeded},
+    case erlang:get(Key) of
+        true ->
+            ok;
+        _ ->
+            % crypto:rand_bytes/1 is deprecated in OTP-19
+            <<A:32/integer, B:32/integer, C:32/integer>>
+                = crypto:strong_rand_bytes(12),
+            random:seed(A, B, C),
+            erlang:put(Key, true),
+            ok
+    end.
 
 %% @doc Recusively delete files in a directory.
 -spec del_dir(string()) -> strings().
@@ -2055,6 +2196,11 @@ stop_tracing() ->
     dbg:stop_clear(),
     ok.
 
+get_primary_preflist(Node, Bucket, Key, NVal) ->
+    DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key}]),
+    PL = rpc:call(Node, riak_core_apl, get_primary_apl, [DocIdx, NVal, riak_kv]),
+    {ok, PL}.
+
 %% @doc Trace fun calls and store their count state into an ETS table.
 -spec trace_count({trace, pid(), call|return_from,
                    {atom(), atom(), non_neg_integer()}}, {node(), [node()]}) ->
@@ -2083,6 +2229,10 @@ assert_supported(Capabilities, Capability, Value) ->
                           proplists:get_value('$supported', Capabilities))),
     ok.
 
+
+-spec no_op(term()) -> ok.
+no_op(_Params) ->
+    ok.
 
 -ifdef(TEST).
 
