@@ -51,21 +51,23 @@ confirm(TestModule, Outdir, TestMetaData, HarnessArgs) ->
                     end,
     Backend = rt:set_backend(proplists:get_value(backend, TestMetaData), BackendExtras),
     {Mod, Fun} = function_name(TestModule),
-    {Status, Reason} = case check_prereqs(Mod) of
-        true ->
-            lager:notice("Running Test ~s", [TestModule]),
-            execute(TestModule, {Mod, Fun}, TestMetaData);
-        not_present ->
-            {fail, test_does_not_exist};
-        _ ->
-            {fail, all_prereqs_not_present}
-    end,
+    {USec, {Status, Reason}} =
+        case check_prereqs(Mod) of
+            true ->
+                lager:notice("Running Test ~s", [TestModule]),
+                timer:tc(fun() -> execute(TestModule, {Mod, Fun}, TestMetaData) end);
+            not_present ->
+                {'N/A', {fail, test_does_not_exist}};
+            _ ->
+                {'N/A', {fail, all_prereqs_not_present}}
+        end,
 
     lager:notice("~s Test Run Complete", [TestModule]),
     {ok, Logs} = stop_lager_backend(),
     Log = unicode:characters_to_binary(Logs),
 
-    RetList = [{test, TestModule}, {status, Status}, {log, Log}, {backend, Backend} | proplists:delete(backend, TestMetaData)],
+    RetList = [{test, TestModule}, {status, Status}, {log, Log}, {backend, Backend}, {duration, USec}
+               | proplists:delete(backend, TestMetaData)],
     case Status of
         fail -> RetList ++ [{reason, iolist_to_binary(io_lib:format("~p", [Reason]))}];
         _ -> RetList
