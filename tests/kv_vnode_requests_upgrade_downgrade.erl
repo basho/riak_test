@@ -36,6 +36,9 @@ confirm() ->
     rt:systest_write(Node, ?NUM_KEYS, ?BUCKET),
 
     Before = count_keys(Clients, ?BUCKET),
+    ExpectedCounts = lists:duplicate(?CLUSTER_SIZE, ?NUM_KEYS),
+    ?assertEqual(Before, ExpectedCounts),
+
     perform_upgrade(Cluster, current, 3),
 
     After = count_keys(Clients, ?BUCKET),
