@@ -114,7 +114,6 @@ verify_resource(Node0, Resource) ->
     Node = rt:http_url(Node0),
     Output = os:cmd(io_lib:format("curl -s -S ~s~p", [Node, Resource])),
     lager:info("Verifying node ~p resource ~p.", [Node, Resource]),
-    lager:info("~p~n", [mochijson2:decode(Output)]),
     mochijson2:decode(Output).
 
 %% @doc Verify that riak_kv is still running on all nodes.
