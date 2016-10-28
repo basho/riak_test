@@ -50,8 +50,10 @@ confirm() ->
         end,
         Tables),
     Got1 = ts_ops:query(Cluster, "SHOW TABLES"),
+    ExpectedRows = [{TableName, <<"Active">>} ||
+        {TableName} <- lists:sort(Tables) ],
     ?assertEqual(
-        {ok, {[<<"Table">>], lists:usort(Tables)}},
+        {ok, {[<<"Table">>, <<"Status">>], ExpectedRows}},
         Got1
     ),
     pass.

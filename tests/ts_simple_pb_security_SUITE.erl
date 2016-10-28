@@ -752,11 +752,11 @@ with_security_when_user_is_given_permissions_user_can_show_tables_test(Ctx) ->
     {ok, {Columns, Rows}} = riakc_ts:query(Pid, "SHOW TABLES"),
     {_Saver, TableList} = ?config(saved_config, Ctx),
     ?assertEqual(
-        [<<"Table">>],
+        [<<"Table">>, <<"Status">>],
         Columns
     ),
-    ?assertEqual(
-        lists:sort(Rows),
-        lists:sort(TableList)
-    ),
+    ActualRows = lists:sort(Rows),
+    ExpectedRows = [{TableName, <<"Active">>} ||
+        {TableName} <- lists:sort(TableList) ],
+    ?assertEqual(ExpectedRows, ActualRows),
     add_no_table_to_list(Ctx).
