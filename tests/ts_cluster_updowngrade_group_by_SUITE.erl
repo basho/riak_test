@@ -96,11 +96,11 @@ make_select_grouped_field_test(DoesSelectPass) ->
     Insert = #insert{data = [{1,B,C} || B <- [1,2,3], C <- [1,2,3]],
                      expected = ok},
 
-    {SelExp, AssertFn} 
+    {SelExp, AssertFn}
         = case DoesSelectPass of
-              select_passes -> 
+              select_passes ->
                   {{ok, {[<<"c">>], [{2},{1},{3}]}}, sorted_assert};
-              select_fails  -> 
+              select_fails  ->
                   {?SELECTERROR, plain_assert}
              end,
     Select = #select{qry = "SELECT c FROM ~s "
@@ -109,7 +109,7 @@ make_select_grouped_field_test(DoesSelectPass) ->
                      expected   = SelExp,
                      assert_mod = ?MODULE,
                      assert_fun = AssertFn},
-    
+
     #test_set{testname = "grouped_field_test",
               create  = Create,
               insert  = Insert,
@@ -125,13 +125,13 @@ make_group_by_2_test(DoesSelectPass) ->
                      "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c,d))",
                      expected   = {ok, {[], []}}},
 
-    Insert = #insert{data     = [{1,1,CE,D,CE} || CE <- lists:seq(1,1000), 
+    Insert = #insert{data     = [{1,1,CE,D,CE} || CE <- lists:seq(1,1000),
                                                   D <- [1,2,3]],
                      expected = ok},
 
     {SelExp, AssertFn}
         = case DoesSelectPass of
-              select_passes -> {{ok, {[<<"d">>, <<"AVG(e)">>], 
+              select_passes -> {{ok, {[<<"d">>, <<"AVG(e)">>],
                                       [{2,500.5}, {3,500.5}, {1,500.5}]}},
                                 sorted_assert};
               select_fails  -> {?SELECTERROR, plain_assert}
@@ -142,12 +142,12 @@ make_group_by_2_test(DoesSelectPass) ->
                      expected = SelExp,
                      assert_mod = ?MODULE,
                      assert_fun = AssertFn},
-    
+
     #test_set{testname = "group_by_2",
               create  = Create,
               insert  = Insert,
               selects = [Select]}.
- 
+
 sorted_assert(String, {ok, {ECols, Exp}}, {ok, {GCols, Got}}) ->
     Exp2 = lists:sort(Exp),
     Got2 = lists:sort(Got),
