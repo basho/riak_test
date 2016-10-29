@@ -43,7 +43,8 @@ init_per_suite(Config) ->
     lists:foldl(
       fun(Fun, Cfg) -> Fun(Cfg) end,
       Config,
-      [fun ts_updown_util:setup/1,
+      [fun make_initial_config/1,
+       fun ts_updown_util:setup/1,
        fun make_scenario_invariants/1]).
 
 end_per_suite(Config) ->

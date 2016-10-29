@@ -25,6 +25,9 @@
 -define(PRESSURE_COL_INDEX, 5).
 -define(PRECIPITATION_COL_INDEX, 6).
 
+make_initial_config(Config) ->
+    [{use_previous_client, true} | Config].
+
 make_scenarios() ->
     [#scenario{table_node_vsn             = TableNodeVsn,
                query_node_vsn             = QueryNodeVsn,

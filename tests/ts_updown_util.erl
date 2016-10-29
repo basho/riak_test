@@ -70,6 +70,7 @@ maybe_setup_slave_for_previous_client(true) ->
     _ = application:start(crypto),
     Suffix = [crypto:rand_uniform($a, $z) || _ <- [x,x,x,i,x,x,x,i]],
     PrevRiakcNode = list_to_atom("alsoran_"++Suffix++"@127.0.0.1"),
+    ct:pal("Setting up ~p for old client", [PrevRiakcNode]),
     rt_client:set_up_slave_for_previous_client(PrevRiakcNode);
 maybe_setup_slave_for_previous_client(_) ->
     node().
@@ -112,6 +113,7 @@ run_scenario(Config,
     NodesAtVersions0 =
         [{N, rtdev:node_version(rtdev:node_id(N))} || N <- ?CFG(nodes, Config)],
     ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
+    PrevClientNode = ?CFG(previous_client_node, Config),
     %% 1. retrieve scenario-invariant data from Config
     TestsToRun = case Tests of
                      [] -> add_timestamps(?CFG(default_tests, Config));
@@ -140,10 +142,12 @@ run_scenario(Config,
           NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode], ConvConfFuns),
 
     %% 4. For each table in the test set create table and collect results.
-    CreateResults = [make_tables(X, TableNode) || X <- TestsToRun],
+    CreateResults = [make_tables(X, TableNode, PrevClientNode)
+                     || X <- TestsToRun],
 
     %% 5. For each table in the test insert the data and collect the results
-    InsertResults = [insert_data(X, TableNode) || X <- TestsToRun],
+    InsertResults = [insert_data(X, TableNode)
+                     || X <- TestsToRun],
 
     %% 6. possibly do a transition, on none, one of, or both create
     %%    table node and query node
@@ -170,7 +174,7 @@ run_scenario(Config,
     %% 8. issue the queries and collect results
     ct:log("Issuing queries at ~p", [QueryNode]),
 
-    SelectResults = [run_selects(X, QueryNode, Config) || X <- TestsToRun],
+    SelectResults = [run_selects(X, QueryNode, PrevClientNode) || X <- TestsToRun],
 
     Results = lists:flatten(CreateResults ++ InsertResults ++ SelectResults),
 
@@ -195,15 +199,16 @@ run_scenario(Config,
     Failures.
 
 
-query_with_client(Query, Node, Config) ->
+query_with_client(Query, Node, PrevClientNode) ->
     Version = rtdev:node_version(rtdev:node_id(Node)),
+    ct:log("using ~p client to contact node ~p", [Version, Node]),
     Client = rt:pbc(Node),
     case Version of
         current ->
             riakc_ts:query(Client, Query);
         previous ->
             rpc:call(
-              ?CFG(previous_client_node, Config),
+              PrevClientNode,
               riakc_ts, query, [Client, Query])
     end.
 
@@ -316,16 +321,16 @@ other_version(current) -> previous;
 other_version(previous) -> current.
 
 
-wait_until_active_table(_Client, Table, 0) ->
+wait_until_active_table(_TargetNode, _PrevClientNode, Table, 0) ->
     ct:fail("Table ~s took too long to activate", [Table]),
     not_ok;
-wait_until_active_table(Client, Table, N) ->
-    case riakc_ts:query(Client, "DESCRIBE "++Table) of
+wait_until_active_table(TargetNode, PrevClientNode, Table, N) ->
+    case query_with_client("DESCRIBE "++Table, TargetNode, PrevClientNode) of
         {ok, _} ->
             ok;
         _ ->
             timer:sleep(1000),
-            wait_until_active_table(Client, Table, N-1)
+            wait_until_active_table(TargetNode, PrevClientNode, Table, N-1)
     end.
 
 
@@ -351,20 +356,19 @@ layout_fails_for_printing(FF) ->
                           expected = Expected,
                           error = Error} <- FF]).
 
-make_tables(#test_set{create = #create{should_skip = true}}, _TableNode) ->
+make_tables(#test_set{create = #create{should_skip = true}}, _TableNode, _PrevClientNode) ->
     pass;
 make_tables(#test_set{testname  = Testname,
-                      timestamp = Timestamp, 
-                      create    = #create{ddl      = DDLFmt, 
-                                          expected = Exp}}, TableNode) ->
+                      timestamp = Timestamp,
+                      create    = #create{ddl      = DDLFmt,
+                                          expected = Exp}}, TableNode, PrevClientNode) ->
     %% fast machines:
     timer:sleep(1),
     Table = get_table_name(Testname, Timestamp),
     DDL = fmt(DDLFmt, [Table]),
-    Client1 = rt:pbc(TableNode),
-    case riakc_ts:'query'(Client1, DDL) of
+    case query_with_client(DDL, TableNode, PrevClientNode) of
         Exp ->
-            ok = wait_until_active_table(Client1, Table, 5),
+            ok = wait_until_active_table(TableNode, PrevClientNode, Table, 5),
             ct:log("Table ~p created on ~p", [Table, TableNode]),
             pass;
         {error, {_No, Error}} ->
@@ -378,7 +382,7 @@ insert_data(#test_set{insert = #insert{should_skip = true}}, _TableNode) ->
     pass;
 insert_data(#test_set{testname  = Testname,
                       timestamp = Timestamp,
-                      insert    = #insert{data     = Data, 
+                      insert    = #insert{data     = Data,
                                           expected = Exp}}, TableNode) ->
     Client1 = rt:pbc(TableNode),
     Table = get_table_name(Testname, Timestamp),
@@ -388,28 +392,28 @@ insert_data(#test_set{testname  = Testname,
                    [Table, TableNode, length(Data)]),
             pass;
         Error ->
-            ct:log("Failed to insert data into ~p (~s)", [Table, Error]),
+            ct:log("Failed to insert data into ~p (~p)", [Table, Error]),
             #fail{message  = make_msg("Insert of data into ~s failed", [Table]),
                   expected = Exp,
                   got      = Error}
     end.
 
 run_selects(#test_set{testname  = Testname,
-                      timestamp = Timestamp, 
-                      selects   = Selects}, QueryNode, Config) ->
+                      timestamp = Timestamp,
+                      selects   = Selects}, QueryNode, PrevClientNode) ->
     QryNos = lists:seq(1, length(Selects)),
     Zip = lists:zip(Selects, QryNos),
     Tablename = get_table_name(Testname, Timestamp),
-    lists:flatten([run_select(S, QN, Tablename, QueryNode, Config) || {S, QN} <- Zip]).
+    lists:flatten([run_select(S, QN, Tablename, QueryNode, PrevClientNode) || {S, QN} <- Zip]).
 
-run_select(#select{should_skip = true}, _QryNo, _Tablename, _QueryNode, _Config) -> 
+run_select(#select{should_skip = true}, _QryNo, _Tablename, _QueryNode, _PrevClientNode) ->
     pass;
-run_select(#select{qry        = Q, 
-                   expected   = Exp, 
-                   assert_mod = Mod, 
-                   assert_fun = Fun}, QryNo, Tablename, QueryNode, Config) -> 
+run_select(#select{qry        = Q,
+                   expected   = Exp,
+                   assert_mod = Mod,
+                   assert_fun = Fun}, QryNo, Tablename, QueryNode, PrevClientNode) ->
     SelectQuery = fmt(Q, [Tablename]),
-    Got = query_with_client(SelectQuery, QueryNode, Config),
+    Got = query_with_client(SelectQuery, QueryNode, PrevClientNode),
     case Mod:Fun(fmt("Query #~p", [QryNo]), Exp, Got) of
         pass -> pass;
         fail -> #fail{message  = SelectQuery,

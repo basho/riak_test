@@ -29,6 +29,9 @@
 %% yes this 1.3 error is bonkers and a proper chocolate teapot but that's the error
 -define(SELECTERROR, {error, {1020, <<"Used group as a measure of time in 1000group. Only s, m, h and d are allowed.">>}}).
 
+make_initial_config(Config) ->
+    [{use_previous_client, true} | Config].
+
 make_scenarios() ->
     BaseScenarios = [#scenario{table_node_vsn             = TableNodeVsn,
                                query_node_vsn             = QueryNodeVsn,
