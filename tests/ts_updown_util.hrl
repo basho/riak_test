@@ -44,7 +44,7 @@
 
 -record(select, {
           should_skip = false :: boolean(),
-          %% the select query is an io_lib:format containing a single "~s" placeholder 
+          %% the select query is an io_lib:format containing a single "~s" placeholder
           %% for the table name
           qry        :: binary(),
           expected   :: term(),
@@ -79,9 +79,13 @@
           %% after transitions)
           need_pre_cluster_mixed :: boolean(),
           need_post_cluster_mixed :: boolean(),
-          
-          tests = [] :: [#test_set{}]
 
+          tests = [] :: [#test_set{}],
+
+          %% in case riak.conf generated for one version needs tweaked
+          %% to be understood by the other, use these functions
+          convert_config_to_previous = fun(_) -> ok end :: function(),
+          convert_config_to_current  = fun(_) -> ok end :: function()
          }).
 
 
@@ -91,7 +95,7 @@
           expected :: term(),
           got      :: term()
          }).
-                     
+
 
 %% Error report
 -record(failure_report, {

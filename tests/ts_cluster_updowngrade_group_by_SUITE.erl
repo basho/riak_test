@@ -35,7 +35,8 @@ make_scenarios() ->
                                need_table_node_transition = NeedTableNodeTransition,
                                need_query_node_transition = NeedQueryNodeTransition,
                                need_pre_cluster_mixed     = NeedPreClusterMixed,
-                               need_post_cluster_mixed    = NeedPostClusterMixed}
+                               need_post_cluster_mixed    = NeedPostClusterMixed,
+                               convert_config_to_previous = fun ts_updown_util:convert_riak_conf_to_previous/1}
                      || TableNodeVsn            <- [current, previous],
                         QueryNodeVsn            <- [current, previous],
                         NeedTableNodeTransition <- [true, false],

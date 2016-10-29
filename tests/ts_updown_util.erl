@@ -23,9 +23,9 @@
 -module(ts_updown_util).
 
 -export([
-         convert_riak_conf_to_1_3/1,
-         setup/1,
+         convert_riak_conf_to_previous/1,
          maybe_shutdown_client_node/1,
+         setup/1,
          run_scenarios/2,
          run_scenario/2
         ]).
@@ -105,11 +105,13 @@ run_scenario(Config,
                        need_query_node_transition = NeedQueryNodeTransition,
                        need_pre_cluster_mixed = NeedPreClusterMixed,
                        need_post_cluster_mixed = NeedPostClusterMixed,
+                       convert_config_to_previous = ConvertConfigToPreviousFun,
+                       convert_config_to_current  = ConvertConfigToCurrentFun,
                        %% for these, we may have invariants in Config:
                        tests = Tests}) ->
     NodesAtVersions0 =
         [{N, rtdev:node_version(rtdev:node_id(N))} || N <- ?CFG(nodes, Config)],
-
+    ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
     %% 1. retrieve scenario-invariant data from Config
     TestsToRun = case Tests of
                      [] -> add_timestamps(?CFG(default_tests, Config));
@@ -127,14 +129,15 @@ run_scenario(Config,
 
     %% 2. Pick two nodes for create table and subsequent selects
     {TableNode, NodesAtVersions1} =
-        find_or_make_node_at_vsn(NodesAtVersions0, TableNodeVsn, []),
+        find_or_make_node_at_vsn(NodesAtVersions0, TableNodeVsn, [], ConvConfFuns),
     {QueryNode, NodesAtVersions2} =
-        find_or_make_node_at_vsn(NodesAtVersions1, QueryNodeVsn, [TableNode]),
+        find_or_make_node_at_vsn(NodesAtVersions1, QueryNodeVsn, [TableNode], ConvConfFuns),
 
     %% 3. Try to ensure cluster is (not) mixed as hinted but keep the
     %%    interesting nodes at their versions as set in step 1.
     NodesAtVersions3 =
-        ensure_cluster(NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode]),
+        ensure_cluster(
+          NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode], ConvConfFuns),
 
     %% 4. For each table in the test set create table and collect results.
     CreateResults = [make_tables(X, TableNode) || X <- TestsToRun],
@@ -146,15 +149,15 @@ run_scenario(Config,
     %%    table node and query node
     NodesAtVersions4 =
         if NeedTableNodeTransition ->
-                possibly_transition_node(NodesAtVersions3, TableNode,
-                                         other_version(TableNodeVsn));
+                possibly_transition_node(
+                  NodesAtVersions3, TableNode, other_version(TableNodeVsn), ConvConfFuns);
            el/=se ->
                 NodesAtVersions3
         end,
     NodesAtVersions5 =
         if NeedQueryNodeTransition ->
-                possibly_transition_node(NodesAtVersions4, QueryNode,
-                                         other_version(QueryNodeVsn));
+                possibly_transition_node(
+                  NodesAtVersions4, QueryNode, other_version(QueryNodeVsn), ConvConfFuns);
            el/=se ->
                 NodesAtVersions4
         end,
@@ -162,7 +165,7 @@ run_scenario(Config,
     %% 7. after transitioning the two relevant nodes, try to bring the
     %%    other nodes to satisfy the mixed/non-mixed hint
     _NodesAtVersions6 =
-        ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode]),
+        ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode], ConvConfFuns),
 
     %% 8. issue the queries and collect results
     ct:log("Issuing queries at ~p", [QueryNode]),
@@ -211,12 +214,12 @@ is_cluster_mixed(NodesAtVersions) ->
     not lists:all(fun({_N, V}) -> V == V0 end, NodesAtVersions).
 
 
--spec ensure_cluster(versioned_cluster(), boolean(), [node()])
-                    -> versioned_cluster().
+-spec ensure_cluster(versioned_cluster(), boolean(), [node()], {function(), function()}) ->
+                            versioned_cluster().
 %% @doc Massage the cluster if necessary (and if possible) to pick two
 %%      nodes of specific versions, optionally ensuring the resulting
 %%      cluster is mixed or not.
-ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes) ->
+ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes, ConvConfFuns) ->
     ImmutableVersions =
         [rtdev:node_version(rtdev:node_id(Node)) || Node <- ImmutableNodes],
     IsInherentlyMixed =
@@ -233,7 +236,8 @@ ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes) ->
                 %% just flip an uninvolved node
                 {_ThirdNode, NodesAtDiffVersions} =
                     find_or_make_node_at_vsn(
-                      NodesAtVersions0, other_version(hd(ImmutableVersions)), ImmutableNodes),
+                      NodesAtVersions0, other_version(hd(ImmutableVersions)),
+                      ImmutableNodes, ConvConfFuns),
                 NodesAtDiffVersions;
 
             %% non-mixed/mixed hints can be honoured only when
@@ -242,7 +246,7 @@ ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes) ->
                 %% cluster is mixed even though both relevant nodes
                 %% are at same version: align the rest
                 ensure_single_version_cluster(
-                  NodesAtVersions0, hd(ImmutableVersions), ImmutableNodes);
+                  NodesAtVersions0, hd(ImmutableVersions), ImmutableNodes, ConvConfFuns);
             {true, false} when IsInherentlyMixed ->
                 %% cluster is mixed because both relevant nodes are
                 %% not at same version: don't honour the hint
@@ -252,9 +256,10 @@ ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes) ->
     NodesAtVersions1.
 
 
--spec find_or_make_node_at_vsn(versioned_cluster(), version(), [node()])
-                              -> {node(), versioned_cluster()}.
-find_or_make_node_at_vsn(NodesAtVersions0, ReqVersion, ImmutableNodes) ->
+-spec find_or_make_node_at_vsn(versioned_cluster(), version(),
+                               [node()], {function(), function()}) ->
+                                      {node(), versioned_cluster()}.
+find_or_make_node_at_vsn(NodesAtVersions0, ReqVersion, ImmutableNodes, ConvConfFuns) ->
     MutableNodes =
         [{N, V} || {N, V} <- NodesAtVersions0, not lists:member(N, ImmutableNodes)],
     case hd(MutableNodes) of
@@ -262,63 +267,46 @@ find_or_make_node_at_vsn(NodesAtVersions0, ReqVersion, ImmutableNodes) ->
             {Node, NodesAtVersions0};
         {Node, TransitionMe} ->
             OtherVersion = other_version(TransitionMe),
-            ok = transition_node(Node, OtherVersion),
+            ok = transition_node(Node, OtherVersion, ConvConfFuns),
             {Node, lists:keyreplace(Node, 1, NodesAtVersions0, {Node, OtherVersion})}
     end.
 
 
--spec ensure_single_version_cluster(versioned_cluster(), version(), [node()])
-                                   -> versioned_cluster().
-ensure_single_version_cluster(NodesAtVersions, ReqVersion, ImmutableNodes) ->
+-spec ensure_single_version_cluster(versioned_cluster(), version(),
+                                    [node()], {function(), function()}) ->
+                                           versioned_cluster().
+ensure_single_version_cluster(NodesAtVersions, ReqVersion, ImmutableNodes, ConvConfFuns) ->
     Transitionable =
         [N || {N, V} <- NodesAtVersions,
               V /= ReqVersion, not lists:member(N, ImmutableNodes)],
-    rt:pmap(fun(N) -> transition_node(N, ReqVersion) end, Transitionable),
+    rt:pmap(fun(N) -> transition_node(N, ReqVersion, ConvConfFuns) end,
+            Transitionable),
     %% recreate NodesAtVersions
     [{N, ReqVersion} || {N, _V} <- NodesAtVersions].
 
 
--spec transition_node(node(), version()) -> ok.
-transition_node(Node, Version) ->
+-spec transition_node(node(), version(), {function(), function()}) -> ok.
+transition_node(Node, Version,
+                {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun}) ->
     ct:log("transitioning node ~p to version '~p'", [Node, Version]),
     case Version of
         previous ->
-            ok = rt:upgrade(Node, Version, fun convert_riak_conf_to_1_3/1);
+            ok = rt:upgrade(Node, Version, ConvertConfigToPreviousFun);
         current ->
-            ok = rt:upgrade(Node, Version)
+            ok = rt:upgrade(Node, Version, ConvertConfigToCurrentFun)
     end,
     ok = rt:wait_for_service(Node, riak_kv).
 
-%% riak.conf created under 1.4 cannot be read by 1.3 because the properties
-%% have been renamed so they need to be replaced with the 1.3 versions.
-convert_riak_conf_to_1_3(RiakConfPath) ->
-    {ok, Content1} = file:read_file(RiakConfPath),
-    Content2 = binary:replace(
-        Content1,
-        <<"riak_kv.query.timeseries.max_quanta_span">>,
-        <<"timeseries_query_max_quanta_span">>, [global]),
-    Content3 = binary:replace(
-        Content2,
-        <<"riak_kv.query.timeseries.max_concurrent_queries">>,
-        <<"riak_kv.query.concurrent_queries">>, [global]),
-    Content4 = convert_timeout_config_to_1_3(Content3),
-    ok = file:write_file(RiakConfPath, Content4).
 
-%% The timeout property needs some special care because 1.3 uses 10000 for
-%% milliseconds and 1.4 uses 10s for a number and unit.
-convert_timeout_config_to_1_3(Content) ->
-    Re =  "(riak_kv.query.timeseries.timeout)\s*=\s*([0-9]*)([smh])",
-    re:replace(Content, Re, "timeseries_query_timeout_ms = 10000").
-
-
--spec possibly_transition_node(versioned_cluster(), node(), version())
-                              -> versioned_cluster().
-possibly_transition_node(NodesAtVersions, Node, ReqVsn) ->
+-spec possibly_transition_node(versioned_cluster(), node(), version(),
+                               {function(), function()}) ->
+                                      versioned_cluster().
+possibly_transition_node(NodesAtVersions, Node, ReqVsn, ConvConfFuns) ->
     case lists:keyfind(Node, 1, NodesAtVersions) of
         ReqVsn ->
             NodesAtVersions;
         _TransitionMe ->
-            ok = transition_node(Node, ReqVsn),
+            ok = transition_node(Node, ReqVsn, ConvConfFuns),
             lists:keyreplace(Node, 1, NodesAtVersions,
                              {Node, ReqVsn})
     end.
@@ -362,9 +350,6 @@ layout_fails_for_printing(FF) ->
                           failing_test = FailingTest,
                           expected = Expected,
                           error = Error} <- FF]).
-
-fmt(F, A) ->
-    lists:flatten(io_lib:format(F, A)).
 
 make_tables(#test_set{create = #create{should_skip = true}}, _TableNode) ->
     pass;
@@ -445,3 +430,54 @@ get_table_name(Testname, Timestamp) when is_list(Testname) andalso
 
 make_msg(Format, Payload) ->
     list_to_binary(fmt(Format, Payload)).
+
+%% riak.conf created under 1.5 cannot be read by 1.4 because of new keys:
+%%   riak_kv.query.timeseries.max_returned_data_size,
+%%   riak_kv.query.timeseries.qbuf_soft_watermark,
+%%   riak_kv.query.timeseries.qbuf_hard_watermark,
+%%   riak_kv.query.timeseries.qbuf_expire_ms,
+%%   riak_kv.query.timeseries.qbuf_incomplete_release_ms
+%% let's comment them out?
+convert_riak_conf_to_previous(RiakConfPath) ->
+    {ok, Content0} = file:read_file(RiakConfPath),
+    Content9 =
+        re:replace(
+          Content0,
+          <<"(^riak_kv.query.timeseries.max_returned_data_size"
+            %% this key exists in 1.4, but has a cap of 256, whereas
+            %% 1.5 has no upper limit
+            "|^riak_kv.query.timeseries.max_quanta_span"
+            "|^riak_kv.query.timeseries.qbuf_soft_watermark"
+            "|^riak_kv.query.timeseries.qbuf_hard_watermark"
+            "|^riak_kv.query.timeseries.qbuf_expire_ms"
+            "|^riak_kv.query.timeseries.qbuf_incomplete_release_ms)">>,
+          <<"#\\1">>, [global, multiline, {return, binary}]),
+    ok = file:write_file(RiakConfPath, Content9).
+
+%% Keep the old convert_riak_conf_to_previous functions around, for
+%% reference and occasional test rerun
+
+%% %% riak.conf created under 1.4 cannot be read by 1.3 because the properties
+%% %% have been renamed so they need to be replaced with the 1.3 versions.
+%% convert_riak_conf_to_1_3(RiakConfPath) ->
+%%     {ok, Content1} = file:read_file(RiakConfPath),
+%%     Content2 = binary:replace(
+%%         Content1,
+%%         <<"riak_kv.query.timeseries.max_quanta_span">>,
+%%         <<"timeseries_query_max_quanta_span">>, [global]),
+%%     Content3 = binary:replace(
+%%         Content2,
+%%         <<"riak_kv.query.timeseries.max_concurrent_queries">>,
+%%         <<"riak_kv.query.concurrent_queries">>, [global]),
+%%     Content4 = convert_timeout_config_to_1_3(Content3),
+%%     ok = file:write_file(RiakConfPath, Content4).
+%%
+%% %% The timeout property needs some special care because 1.3 uses 10000 for
+%% %% milliseconds and 1.4 uses 10s for a number and unit.
+%% convert_timeout_config_to_1_3(Content) ->
+%%     Re =  "(riak_kv.query.timeseries.timeout)\s*=\s*([0-9]*)([smh])",
+%%     re:replace(Content, Re, "timeseries_query_timeout_ms = 10000").
+
+fmt(F, A) ->
+    lists:flatten(io_lib:format(F, A)).
+
