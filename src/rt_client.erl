@@ -34,10 +34,23 @@ client_vsn() ->
 set_up_slave_for_previous_client(SlaveNode) ->
     {ok, SlaveNode} = rt_slave:start(SlaveNode, "-setcookie riak"),
     PrevRiakcPath =
-        hd(filelib:wildcard(
-             filename:join(
-               [rtdev:relpath(previous),
-                "dev/dev1/lib/riakc-*/ebin"]))),
+        %% first try the case of devrel (may have different
+        %% versions of riak-erlang-client installed)
+        case riakc_ebin_path("riakc-*") of
+            [] ->
+                %% the user did a stagedevrel, so retry with the
+                %% symlink name instead
+                hd(riakc_ebin_path("riakc"));
+            VersionedRiakcDirs ->
+                hd(VersionedRiakcDirs)
+        end,
     true = rpc:call(
              SlaveNode, code, replace_path, ["riakc", PrevRiakcPath]),
     SlaveNode.
+
+riakc_ebin_path(WildcardElem) ->
+    lists:sort(
+      filelib:wildcard(
+        filename:join(
+          [rtdev:relpath(previous),
+           "dev/dev1/lib/"++WildcardElem++"/ebin"]))).
