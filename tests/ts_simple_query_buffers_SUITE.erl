@@ -42,7 +42,7 @@
          query_orderby_no_updates/1,
          query_orderby_expiring/1,
          query_orderby_max_quanta_error/1,
-         query_orderby_max_data_size/1,
+         query_orderby_max_data_size_error/1,
          query_orderby_ldb_io_error/1]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -78,7 +78,7 @@ all() ->
     [
      %% 3. check how error conditions are reported
      query_orderby_max_quanta_error,
-     query_orderby_max_data_size,
+     query_orderby_max_data_size_error,
      query_orderby_ldb_io_error,
      %% 2. check LIMIT and ORDER BY, not involving follow-up queries
      query_orderby_comprehensive,
@@ -208,14 +208,14 @@ init_per_testcase(query_orderby_max_quanta_error, Cfg) ->
     ok = rpc:call(Node, application, set_env, [riak_kv, max_query_quanta, ?RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA]),
     Cfg;
 
-init_per_testcase(query_orderby_max_data_size, Cfg) ->
+init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
     ok = rpc:call(Node, riak_kv_qry_buffers, set_max_query_data_size, [?RIDICULOUSLY_SMALL_MAX_QUERY_DATA_SIZE]),
     Cfg;
 
 init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = filename:join([rtdev:node_path(Node), "data/leveldb/query_buffers"]),
+    QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
     Cmd = fmt("chmod -w '~s'", [QBufDir]),
     CmdOut = "" = os:cmd(Cmd),
     ct:log("~s: '~s'", [Cmd, CmdOut]),
@@ -230,14 +230,14 @@ end_per_testcase(query_orderby_max_quanta_error, Cfg) ->
     ok = rpc:call(Node, application, set_env, [riak_kv, max_query_quanta, 1000]),
     ok;
 
-end_per_testcase(query_orderby_max_data_size, Cfg) ->
+end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
     ok = rpc:call(Node, riak_kv_qry_buffers, set_max_query_data_size, [5*1000*1000]),
     ok;
 
 end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = filename:join([rtdev:node_path(Node), "data/leveldb/query_buffers"]),
+    QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
     Cmd = fmt("chmod +w '~s'", [QBufDir]),
     CmdOut = "" = os:cmd(Cmd),
     ct:log("~s: '~s'", [Cmd, CmdOut]),
@@ -250,7 +250,7 @@ query_orderby_max_quanta_error(Cfg) ->
     Query = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
     ok = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QUANTA_LIMIT).
 
-query_orderby_max_data_size(Cfg) ->
+query_orderby_max_data_size_error(Cfg) ->
     Query1 = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
     ok = ts_qbuf_util:ack_query_error(Cfg, Query1, ?E_SELECT_RESULT_TOO_BIG),
     Query2 = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}, {limit, 99999}]),
