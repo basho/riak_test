@@ -120,7 +120,7 @@ run_scenario(Config,
                      Ts -> add_timestamps(Ts)
                  end,
 
-    ct:log("Scenario: table/query_node_vsn: ~p/~p\n"
+    ct:log("Scenario: initial table/query_node_vsn: ~p/~p\n"
            "          need_table_node_transition: ~p\n"
            "          need_query_node_transition: ~p\n"
            "          need_pre_cluster_mixed: ~p\n"
@@ -178,7 +178,7 @@ run_scenario(Config,
 
     Results = lists:flatten(CreateResults ++ InsertResults ++ SelectResults),
 
-    Failures = [#failure_report{cluster = NodesAtVersions2,
+    Failures = [#failure_report{cluster = NodesAtVersions3,
                                 table_node = TableNode,
                                 query_node = QueryNode,
                                 did_transition_table_node = NeedTableNodeTransition,
