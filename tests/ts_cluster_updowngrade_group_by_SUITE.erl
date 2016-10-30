@@ -46,7 +46,7 @@ make_scenarios() ->
                         NeedQueryNodeTransition <- [true, false],
                         NeedPreClusterMixed     <- [true, false],
                         NeedPostClusterMixed    <- [true, false]],
-    lists:flatten([add_tests(X) || X <- BaseScenarios]).
+    [add_tests(X) || X <- BaseScenarios].
 
 %% This test will not use config invariants
 %% see ts_cluster_updowngrade_select_aggregation_SUITE.erl for an example
@@ -54,34 +54,12 @@ make_scenarios() ->
 make_scenario_invariants(Config) ->
     Config.
 
-%% GROUP BY will always work if
-%% the query node is 1.4
-%% the query node is queried *AFTER* a transition
-%% this scenario the query node starts at 1.4 and remains there
-%% the cluster is either mixed or all 1.4
-add_tests(#scenario{query_node_vsn             = current,
-                    need_query_node_transition = false} = Scen) ->
-    Tests = [
-             make_select_grouped_field_test(select_passes),
-             make_group_by_2_test(select_passes)
-            ],
-    Scen#scenario{tests = Tests};
-%% in this scenario the query node starts at 1.3 and transitions to 1.4 before
-%% the select happens - the intial cluster is mixed and the final can be
-%% mixed or all 1.4
-add_tests(#scenario{query_node_vsn             = previous,
-                    need_query_node_transition = true} = Scen) ->
-    Tests = [
-             make_select_grouped_field_test(select_passes),
-             make_group_by_2_test(select_passes)
-            ],
-    Scen#scenario{tests = Tests};
-%% all other scenarios (all 1.3 or mixed with a 1.3 query node) GROUP BY
-%% wont work
+%% GROUP BY will always work for up/downgrades between 1.4 and 1.5 and
+%% newer versions
 add_tests(Scen) ->
     Tests = [
-             make_select_grouped_field_test(select_fails),
-             make_group_by_2_test(select_fails)
+             make_select_grouped_field_test(select_passes),
+             make_group_by_2_test(select_passes)
             ],
     Scen#scenario{tests = Tests}.
 
