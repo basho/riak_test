@@ -201,12 +201,17 @@ run_scenario(Config,
 
 query_with_client(Query, Node, PrevClientNode) ->
     Version = rtdev:node_version(rtdev:node_id(Node)),
-    ct:log("using ~p client to contact node ~p", [Version, Node]),
-    Client = rt:pbc(Node),
     case Version of
         current ->
+            Client = rt:pbc(Node),
             riakc_ts:query(Client, Query);
         previous ->
+            ConnInfo = proplists:get_value(Node, rt:connection_info([Node])),
+            {IP, Port} = proplists:get_value(pb, ConnInfo),
+            {ok, Client} =
+                rpc:call(
+                  PrevClientNode,
+                  riakc_pb_socket, start_link, [IP, Port, [{auto_reconnect, true}]]),
             rpc:call(
               PrevClientNode,
               riakc_ts, query, [Client, Query])
@@ -484,4 +489,3 @@ convert_riak_conf_to_previous(RiakConfPath) ->
 
 fmt(F, A) ->
     lists:flatten(io_lib:format(F, A)).
-
