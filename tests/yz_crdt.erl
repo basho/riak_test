@@ -56,7 +56,7 @@ confirm() ->
                        end),
 
     lager:info("Test setting the register of a map twice to different values."
-               "\nThe # of results should still be 1"),
+               "  (The # of results should still be 1)"),
     test_repeat_sets(Pid, Nodes, ?BUCKET, ?INDEX, ?KEY),
     ok = rt:wait_until(fun() -> validate_test_repeat_set(Pid, ?INDEX)
                        end),
@@ -256,8 +256,8 @@ test_and_validate_delete_aae(Pid, Cluster, Bucket, Index) ->
 
     [make_intercepts_tab(ANode) || ANode <- Cluster],
 
-    [rt_intercept:add(ANode, {yz_kv, [{{delete_operation, 5},
-                                       handle_delete_operation}]})
+    [rt_intercept:add(ANode, {yz_solrq_helper, [{{get_ops_for_crdt_deletes, 3},
+                                        handle_get_ops_for_crdt_deletes}]})
      || ANode <- Cluster],
     [true = rpc:call(ANode, ets, insert, [intercepts_tab, {del_put, 0}]) ||
         ANode <- Cluster],
@@ -551,10 +551,14 @@ search_and_validate_found(Pid, Index, Search, ExpectedCount) ->
                        ?assertEqual(ExpectedCount, F),
                        true
                    catch Err:Reason ->
-                           lager:info("Waiting for CRDT search results to"
-                                      " converge. Error was ~p.",
-                                      [{Err, Reason}]),
-                           false
+                       lager:info(
+                           "Waiting for CRDT search results to converge."
+                           "  Index: ~p"
+                           "  Search: ~p"
+                           "  Error: ~p",
+                           [Index, Search, {Err, Reason}]
+                       ),
+                       false
                    end
            end).
 
