@@ -4,6 +4,13 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+
+    OldDelay = rt_config:get(rt_retry_delay, 1000),
+    lager:info("OldDelay is ~p", [OldDelay]),
+    rt_config:set(rt_retry_delay, 5000),
+    NewDelay = rt_config:get(rt_retry_delay),
+    lager:info("NewDelay is ~p", [NewDelay]),
+
     TestMetaData = riak_test_runner:metadata(),
     FromVersion = proplists:get_value(upgrade_version, TestMetaData, previous),
 
@@ -93,4 +100,6 @@ confirm() ->
                                rt:log_to_nodes(Nodes, "Replication with upgraded node: ~p", [Node]),
                                replication:replication(ANodes, BNodes, true)
                        end, NodeUpgrades),
+    lager:info("Resetting Delay to is ~p", [OldDelay]),
+    rt_config:set(rt_retry_delay, OldDelay),
     pass.
