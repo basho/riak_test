@@ -100,7 +100,8 @@
 %% Error report
 -record(failure_report, {
           %% node composition, with versions at each node
-          cluster :: [{node(), version()}],
+          cluster_before_create :: [{node(), version()}],
+          cluster_before_select :: [{node(), version()}],
 
           %% node where table was created
           table_node :: node(),

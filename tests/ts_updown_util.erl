@@ -168,7 +168,7 @@ run_scenario(Config,
 
     %% 7. after transitioning the two relevant nodes, try to bring the
     %%    other nodes to satisfy the mixed/non-mixed hint
-    _NodesAtVersions6 =
+    NodesAtVersions6 =
         ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode], ConvConfFuns),
 
     %% 8. issue the queries and collect results
@@ -178,7 +178,8 @@ run_scenario(Config,
 
     Results = lists:flatten(CreateResults ++ InsertResults ++ SelectResults),
 
-    Failures = [#failure_report{cluster = NodesAtVersions3,
+    Failures = [#failure_report{cluster_before_create = NodesAtVersions2,
+                                cluster_before_select = NodesAtVersions6,
                                 table_node = TableNode,
                                 query_node = QueryNode,
                                 did_transition_table_node = NeedTableNodeTransition,
@@ -342,17 +343,20 @@ wait_until_active_table(TargetNode, PrevClientNode, Table, N) ->
 layout_fails_for_printing(FF) ->
     lists:flatten(
       [io_lib:format(
-         "  Cluster: ~p\n"
+         "  Cluster before CREATE: ~p\n"
+         "  Cluster before SELECT: ~p\n"
          "TableNode: ~p, transitioned? ~p\n"
          "QueryNode: ~p, transitioned? ~p\n"
          "     Test: ~p\n"
          " Expected: ~p\n"
          "      Got: ~p\n\n",
-         [NodesAtVersions,
+         [NodesAtVersions0,
+          NodesAtVersions1,
           TableNode, DidTableNodeTransition,
           QueryNode, DidQueryNodeTransition,
           FailingTest, Expected, Error])
-       || #failure_report{cluster = NodesAtVersions,
+       || #failure_report{cluster_before_create = NodesAtVersions0,
+                          cluster_before_select = NodesAtVersions1,
                           table_node = TableNode,
                           query_node = QueryNode,
                           did_transition_table_node = DidTableNodeTransition,
