@@ -27,12 +27,15 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    TestType = normal,
-    DDL = ts_util:get_ddl(big),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(big),
     N = 10,
-    Data = ts_util:get_valid_big_data(N),
-    Got = ts_util:ts_put(
-            ts_util:cluster_and_connect(single), TestType, DDL, Data),
+    Data = ts_data:get_valid_big_data(N),
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    Got = ts_ops:put(Cluster, Table, Data),
     ?assertEqual(ok, Got),
     pass.
 

@@ -42,7 +42,7 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    Cluster = ts_util:build_cluster(single),
+    Cluster = ts_setup:start_cluster(1),
     [C1 | _] = [rt:pbc(Node) || Node <- Cluster],
     ok = create_tables(C1),
     Data = make_data(),

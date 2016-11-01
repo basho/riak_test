@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -28,16 +28,18 @@
 
 %% Test handling of division by zero in a query select clause.
 confirm() ->
-    DDL = ts_util:get_ddl(aggregation),
-    Data = ts_util:get_valid_aggregation_data_not_null(10),
-    TestType = normal,
-    {Cluster, ClientConn} = ts_util:cluster_and_connect(single),
-    ts_util:create_table(TestType, Cluster, DDL, table()),
-    ok = riakc_ts:put(ClientConn, table(), Data),
+    Table = table(),
+    DDL = ts_data:get_ddl(aggregation),
+    Data = ts_data:get_valid_aggregation_data_not_null(10),
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, Data),
 
     TsQueryFn =
         fun(Query_x) ->
-            ts_util:single_query(ClientConn, Query_x)
+            ts_ops:query(Cluster, Query_x)
         end,
     arithmetic_int_div_int_zero_test(TsQueryFn),
     arithmetic_float_div_int_zero_test(TsQueryFn),

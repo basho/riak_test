@@ -178,7 +178,7 @@ exclusive_result_from_data(Data, Start, Finish) when is_integer(Start)   andalso
     lists:sublist(Data, Start, Finish - Start + 1).
 
 remove_last(Data) ->
-    lists:reverse(tl(lists:reverse(Data))).
+    lists:sublist(Data, length(Data)-1).
 
 %% a valid DDL - the one used in the documents
 get_ddl() ->

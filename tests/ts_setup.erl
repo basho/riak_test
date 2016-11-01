@@ -62,15 +62,14 @@ stop_a_node(Nodes) ->
 stop_a_node(Which, Nodes) ->
     ok = rt:stop(lists:nth(Which, Nodes)).
 
--spec create_bucket_type(list(node()), string(), string()) -> ok.
+-spec create_bucket_type(list(node()), string(), string())  -> {ok, term()} | term().
 create_bucket_type(Nodes, DDL, Table) ->
     create_bucket_type(Nodes, DDL, Table, 3).
 
--spec create_bucket_type(list(node()), string(), string(), pos_integer()) -> ok.
+-spec create_bucket_type(list(node()), string(), string(), pos_integer()) -> {ok, term()} | term().
 create_bucket_type([Node|_Rest], DDL, Table, NVal) when is_integer(NVal) ->
     Props = io_lib:format("{\\\"props\\\": {\\\"n_val\\\": ~s, \\\"table_def\\\": \\\"~s\\\"}}", [integer_to_list(NVal), DDL]),
-    {ok, _} = rt:admin(Node, ["bucket-type", "create", table_to_list(Table), lists:flatten(Props)]),
-    ok.
+    rt:admin(Node, ["bucket-type", "create", table_to_list(Table), lists:flatten(Props)]).
 
 
 %% Attempt to activate the bucket type 4 times

@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -27,14 +27,16 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
     Expected =
         {ok,
          "GeoCheckin created\n"
          "\n"
          "WARNING: After activating GeoCheckin, nodes in this cluster\n"
          "can no longer be downgraded to a version of Riak prior to 2.0\n"},
-    Got = ts_util:create_bucket_type(
-            ts_util:build_cluster(single), DDL),
+
+    Cluster = ts_setup:start_cluster(1),
+    Got = ts_setup:create_bucket_type(Cluster, DDL, Table),
     ?assertEqual(Expected, Got),
     pass.

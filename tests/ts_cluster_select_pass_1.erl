@@ -27,14 +27,19 @@
 -export([confirm/0]).
 
 confirm() ->
-    TestType = normal,
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
-    Qry = ts_util:get_valid_qry(),
+
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(),
+    Qry = ts_data:get_valid_qry(),
     Expected = {ok, {
-        ts_util:get_cols(),
-        ts_util:exclusive_result_from_data(Data, 2, 9)}},
-    Got = ts_util:ts_query(
-            ts_util:cluster_and_connect(multiple), TestType, DDL, Data, Qry),
+        ts_data:get_cols(),
+        ts_data:exclusive_result_from_data(Data, 2, 9)}},
+
+    Cluster = ts_setup:start_cluster(3),
+    Table = ts_data:get_default_bucket(),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ok = ts_ops:put(Cluster, Table, Data),
+    Got = ts_ops:query(Cluster, Qry),
     ?assertEqual(Expected, Got),
     pass.

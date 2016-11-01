@@ -27,12 +27,15 @@
 -export([confirm/0]).
 
 confirm() ->
-    TestType = normal,
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(),
     Qry =
         "selectah * from GeoCheckin "
         "Where time > 1 and time < 10",
-    Got = ts_util:ts_query(
-                     ts_util:cluster_and_connect(single), TestType, DDL, Data, Qry),
-    ts_util:assert_error_regex("Unexpected Token", {error, {1020, <<".*Unexpected token.*">>}}, Got).
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, Data),
+    Got = ts_ops:query(Cluster, Qry),
+    ts_data:assert_error_regex("Unexpected Token", {error, {1020, <<".*Unexpected token.*">>}}, Got).

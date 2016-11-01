@@ -31,13 +31,14 @@
 %% we cant run the test in this process as it receives various messages
 %% and the running test interprets then as being messages to the shell
 confirm() ->
-    {Nodes, _Conn} = ts_util:cluster_and_connect(multiple),
+    Nodes = ts_setup:start_cluster(3),
+    _Conn = ts_setup:conn(Nodes),
     lager:info("Built a cluster of ~p~n", [Nodes]),
     Self = self(),
     _Pid = spawn_link(fun() -> load_log_file(Self) end),
     Got1 = riak_shell_test_util:loop(),
-    Result = ts_util:assert("Regression Log", pass, Got1),
-    ts_util:results([
+    Result = ts_data:assert("Regression Log", pass, Got1),
+    ts_data:results([
         Result
     ]),
     pass.
@@ -47,7 +48,7 @@ load_log_file(Pid) ->
     lager:info("~n~nLoad the log -------------------------", []),
     Cmds = [
             {{match, "No Regression Errors."},
-              ts_util:flat_format("regression_log \"~s\";", [?LOG_FILE])}
+              ts_data:flat_format("regression_log \"~s\";", [?LOG_FILE])}
            ],
     Result = riak_shell_test_util:run_commands(Cmds, State,
                                                ?DONT_INCREMENT_PROMPT),

@@ -30,16 +30,17 @@
 %% we cant run the test in this process as it receives various messages
 %% and the running test interprets then as being messages to the shell
 confirm() ->
-    {Nodes, Conn} = ts_util:cluster_and_connect(multiple),
+    Nodes = ts_setup:start_cluster(3),
+    Conn = ts_setup:conn(Nodes),
     lager:info("Built a cluster of ~p~n", [Nodes]),
     Self = self(),
     _Pid = spawn_link(fun() -> create_table_test(Self) end),
     Got1 = riak_shell_test_util:loop(),
-    Result1 = ts_util:assert("Create Table", pass, Got1),
+    Result1 = ts_data:assert("Create Table", pass, Got1),
     _Pid2 = spawn_link(fun() -> query_table_test(Self, Conn) end),
     Got2 = riak_shell_test_util:loop(),
-    Result2 = ts_util:assert("Query Table", pass, Got2),
-    ts_util:results([
+    Result2 = ts_data:assert("Query Table", pass, Got2),
+    ts_data:results([
         Result1,
         Result2
     ]),
@@ -48,7 +49,7 @@ confirm() ->
 create_table_test(Pid) ->
     State = riak_shell_test_util:shell_init(),
     lager:info("~n~nStart running the command set-------------------------", []),
-    CreateTable = lists:flatten(io_lib:format("~s;", [ts_util:get_ddl(small)])),
+    CreateTable = lists:flatten(io_lib:format("~s;", [ts_data:get_ddl(small)])),
     Describe =
         "Column,Type,Is Null,Primary Key,Local Key,Interval,Unit\n"
         "myfamily,varchar,false,1,1,,\n"
@@ -79,8 +80,8 @@ create_table_test(Pid) ->
 
 query_table_test(Pid, Conn) ->
     %% Throw some tests data out there
-    Data = ts_util:get_valid_select_data(),
-    ok = riakc_ts:put(Conn, ts_util:get_default_bucket(), Data),
+    Data = ts_data:get_valid_select_data(),
+    ok = riakc_ts:put(Conn, ts_data:get_default_bucket(), Data),
     SQL = "select time, weather, temperature from GeoCheckin where myfamily='family1' and myseries='seriesX' and time > 0 and time < 1000",
     Select = lists:flatten(io_lib:format("~s;", [SQL])),
     State = riak_shell_test_util:shell_init(),

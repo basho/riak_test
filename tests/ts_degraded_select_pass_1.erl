@@ -34,14 +34,14 @@ confirm() ->
     OrigCCNN = lists:zip(OrigCluster, OrigClients),
     ok = rt:join_cluster(OrigCluster),
 
-    DDL = ts_util:get_ddl(),
+    DDL = ts_data:get_ddl(),
     ?assertEqual({ok, {[], []}}, riakc_ts:query(hd(OrigClients), DDL)),
 
-    Table = ts_util:get_default_bucket(),
-    Data = ts_util:get_valid_select_data(),
+    Table = ts_data:get_default_bucket(),
+    Data = ts_data:get_valid_select_data(),
     ?assertEqual(ok, riakc_ts:put(hd(OrigClients), Table, Data)),
 
-    Qry = ts_util:get_valid_qry(0, 11),
+    Qry = ts_data:get_valid_qry(0, 11),
 
     ok = check_data(OrigCCNN, Qry, Data),
 

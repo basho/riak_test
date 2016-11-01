@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -27,7 +27,6 @@
 
 %%
 confirm() ->
-    TestType = normal,
     TableDef =
         "CREATE TABLE GeoCheckin ("
         " myfamily    double    not null,"
@@ -40,10 +39,16 @@ confirm() ->
         "WHERE time >= 1 AND time <= 10 "
         "AND myseries = 'series' "
         "AND myfamily = 13.777744543543500002342342342342342340000000017777445435435000023423423423423423400000000177774454354350000234234234234234234000000001",
-    ?assertEqual(
-        {ok, {[<<"myfamily">>, <<"myseries">>, <<"time">>], input_data()}},
-        ts_util:ts_query(
-            ts_util:cluster_and_connect(single), TestType, TableDef, input_data(), Query)),
+    Table = ts_data:get_default_bucket(),
+    Data = input_data(),
+    Expected = {ok, {[<<"myfamily">>, <<"myseries">>, <<"time">>], input_data()}},
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, TableDef, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, Data),
+    Got = ts_ops:query(Cluster, Query),
+    ?assertEqual(Expected, Got),
     pass.
 
 %%

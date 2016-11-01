@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -32,30 +32,36 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    ValidObj = ts_util:get_valid_obj(),
-    InvalidObj = ts_util:get_invalid_obj(),
-    ShortObj = ts_util:get_short_obj(),
-    LongObj = ts_util:get_long_obj(),
-    Bucket = ts_util:get_default_bucket(),
-    {_Cluster, Conn} = ClusterConn = ts_util:cluster_and_connect(single),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+
+    Cluster = ts_setup:start_cluster(1),
+    Conn = ts_setup:conn(Cluster),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    
+    ValidObj = ts_data:get_valid_obj(),
+    InvalidObj = ts_data:get_invalid_obj(),
+    ShortObj = ts_data:get_short_obj(),
+    LongObj = ts_data:get_long_obj(),
+
     Expected1 = {error, {1003, <<"Invalid data found at row index(es) 1">>}},
     Expected2 = {error, {1003, <<"Invalid data found at row index(es) 2">>}},
-    Got = ts_util:ts_put(ClusterConn, normal, DDL, [InvalidObj]),
+    Got = riakc_ts:put(Conn, Table, [InvalidObj]),
     ?assertEqual(Expected1, Got),
 
-    Got2 = riakc_ts:put(Conn, Bucket, [ShortObj]),
+    Got2 = riakc_ts:put(Conn, Table, [ShortObj]),
     ?assertEqual(Expected1, Got2),
 
-    Got3 = riakc_ts:put(Conn, Bucket, [LongObj]),
+    Got3 = riakc_ts:put(Conn, Table, [LongObj]),
     ?assertEqual(Expected1, Got3),
 
-    Got4 = riakc_ts:put(Conn, Bucket, [ValidObj, InvalidObj]),
+    Got4 = riakc_ts:put(Conn, Table, [ValidObj, InvalidObj]),
     ?assertEqual(Expected2, Got4),
 
-    Got5 = riakc_ts:put(Conn, Bucket, [ValidObj, ShortObj]),
+    Got5 = riakc_ts:put(Conn, Table, [ValidObj, ShortObj]),
     ?assertEqual(Expected2, Got5),
 
-    Got6 = riakc_ts:put(Conn, Bucket, [ValidObj, LongObj]),
+    Got6 = riakc_ts:put(Conn, Table, [ValidObj, LongObj]),
     ?assertEqual(Expected2, Got6),
     pass.

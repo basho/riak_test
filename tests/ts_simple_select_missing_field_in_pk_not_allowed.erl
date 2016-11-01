@@ -30,16 +30,21 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
-    % query with missing myfamily field
-    Query =
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(),
+    Qry =
         "select * from GeoCheckin "
         "where time > 1 and time < 10",
     Expected =
         {error,
-         {1001,
-          <<"The 'myfamily' parameter is part the primary key but not specified in the where clause.">>}},
-    Got = ts_util:ts_query(
-            ts_util:cluster_and_connect(single), normal, DDL, Data, Query),
-    ts_util:assert_error_regex("Missing key", Expected, Got).
+            {1001,
+                <<"The 'myfamily' parameter is part the primary key but not specified in the where clause.">>}},
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, Data),
+    Got = ts_ops:query(Cluster, Qry),
+    ?assertEqual(Expected, Got),
+    pass.

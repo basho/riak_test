@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -29,18 +29,21 @@
 %% Test basic table description
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Bucket = ts_util:get_default_bucket(),
-    Qry = "DESCRIBE " ++ Bucket,
-    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
-    ts_util:create_and_activate_bucket_type(ClusterConn, DDL),
-    Got = ts_util:single_query(Conn, Qry),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Qry = "DESCRIBE " ++ Table,
     Expected =
         {ok, {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>, <<"Interval">>, <<"Unit">>],
-        [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1, [], []},
-        {<<"myseries">>,   <<"varchar">>,   false,  2,  2, [], []},
-        {<<"time">>,       <<"timestamp">>, false,  3,  3, 15, <<"m">>},
-        {<<"weather">>,    <<"varchar">>,   false, [], [], [], []},
-        {<<"temperature">>,<<"double">>,    true,  [], [], [], []}]}},
+            [{<<"myfamily">>,  <<"varchar">>,   false,  1,  1, [], []},
+                {<<"myseries">>,   <<"varchar">>,   false,  2,  2, [], []},
+                {<<"time">>,       <<"timestamp">>, false,  3,  3, 15, <<"m">>},
+                {<<"weather">>,    <<"varchar">>,   false, [], [], [], []},
+                {<<"temperature">>,<<"double">>,    true,  [], [], [], []}]}},
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    Got = ts_ops:query(Cluster, Qry),
+
     ?assertEqual(Expected, Got),
     pass.

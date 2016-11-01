@@ -34,7 +34,7 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    [_Node|_] = Cluster = ts_util:build_cluster(multiple),
+    [_Node|_] = Cluster = ts_setup:start_cluster(3),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -87,7 +87,7 @@ select_grouped_field_test(Ctx) ->
         "WHERE a = 1 AND b = 1 AND c >= 1 AND c <= 1000 "
         "GROUP BY c",
     {ok, {Cols, Rows}} = run_query(Ctx, Query),
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{1},{2},{3}]},
         {ok,{Cols, lists:sort(Rows)}}
     ).
@@ -111,7 +111,7 @@ group_by_2_test(Ctx) ->
         "WHERE a = 1 AND b = 1 AND c >= 1 AND c <= 1000 "
         "GROUP BY d",
     {ok, {Cols, Rows}} = run_query(Ctx, Query),
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{1,500.5},{2,500.5},{3,500.5}]},
         {ok,{Cols, lists:sort(Rows)}}
     ).

@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -30,8 +30,9 @@
 %% primary key.
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(),
     % weather is not part of the primary key, it is
     % randomly generated data so this should return
     % zero results
@@ -42,7 +43,11 @@ confirm() ->
         "AND myseries = 'seriesX' "
         "AND weather = 'summer rain'",
     Expected = {ok, {[], []}},
-    Got = ts_util:ts_query(
-            ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, Data),
+    Got = ts_ops:query(Cluster, Qry),
     ?assertEqual(Expected, Got),
     pass.

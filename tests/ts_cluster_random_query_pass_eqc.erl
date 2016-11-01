@@ -27,7 +27,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    ClusterConn = ts_util:cluster_and_connect(multiple),
+    Cluster = ts_setup:start_cluster(3),
+    Conn = ts_setup:conn(Cluster),
+    ClusterConn = {Cluster, Conn},
     ?assert(eqc:quickcheck(eqc:numtests(500, ?MODULE:prop_ts(ClusterConn)))),
     pass.
 
@@ -45,15 +47,15 @@ run_query(ClusterConn, NVal, NPuts, Q, NSpans) ->
     lager:debug("DDL is ~p~n", [DDL]),
 
     Data = make_data(NPuts, Q, NSpans),
-
     Query = make_query(Bucket, Q, NSpans),
 
-    {_Cluster, Conn} = ClusterConn,
+    {Cluster, Conn} = ClusterConn,
 
-    {ok, _} = ts_util:create_and_activate_bucket_type(ClusterConn, DDL, Bucket, NVal),
+    Table = ts_data:get_default_bucket(),
+    {ok, _} = ts_setup:create_bucket_type(Cluster, DDL, Table, NVal),
+    ok = ts_setup:activate_bucket_type(Cluster, Table),
     ok = riakc_ts:put(Conn, Bucket, Data),
-    {ok, {_, Got}} = ts_util:single_query(Conn, Query),
-
+    {ok, {_, Got}} = ts_ops:query(Cluster, Query),
     ?assertEqual(Data, Got),
 
     true.
@@ -84,8 +86,8 @@ make_data(NPuts, Q, NSpans) ->
     Series = <<"seriesX">>,
     Times = lists:seq(1, NPuts),
     [{Family, Series, trunc((X/NPuts) * Multi),
-      ts_util:get_varchar(),
-      ts_util:get_float()}
+      ts_data:get_varchar(),
+      ts_data:get_float()}
      || X <- Times].
 
 get_multi({No, y})  -> 365*24*60*60*1000 * No;

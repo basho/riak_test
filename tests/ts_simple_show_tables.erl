@@ -27,10 +27,10 @@
 -export([confirm/0]).
 
 confirm() ->
-    ClusterConn = {_, Conn} = ts_util:cluster_and_connect(single),
+    Cluster = ts_setup:start_cluster(1),
 
     %% First test no tables
-    Got = ts_util:single_query(Conn, "SHOW TABLES"),
+    Got = ts_ops:query(Cluster, "SHOW TABLES"),
     ?assertEqual(
         {ok, {[], []}},
         Got
@@ -43,12 +43,13 @@ confirm() ->
         " frequency    timestamp   not null,"
         " PRIMARY KEY ((quantum(frequency, 15, 'm')),"
         " frequency))",
-    lists:foreach(fun({T}) ->
-            SQL = ts_util:flat_format(Create, [T]),
-            {ok, _} = ts_util:create_and_activate_bucket_type(ClusterConn, SQL, T)
+    lists:foreach(fun({Table}) ->
+            SQL = ts_data:flat_format(Create, [Table]),
+            {ok, _} = ts_setup:create_bucket_type(Cluster, SQL, Table),
+            ok = ts_setup:activate_bucket_type(Cluster, Table)
         end,
         Tables),
-    Got1 = ts_util:single_query(Conn, "SHOW TABLES"),
+    Got1 = ts_ops:query(Cluster, "SHOW TABLES"),
     ?assertEqual(
         {ok, {[<<"Table">>], lists:usort(Tables)}},
         Got1

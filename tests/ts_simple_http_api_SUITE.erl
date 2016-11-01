@@ -35,7 +35,7 @@ suite() ->
 
 init_per_suite(Config) ->
     application:start(ibrowse),
-    [Node|_] = Cluster = ts_util:build_cluster(single),
+    [Node|_] = Cluster = ts_setup:start_cluster(1),
     rt:wait_for_service(Node, [riak_kv, riak_pipe, riak_repl]),
     [{cluster, Cluster} | Config].
 

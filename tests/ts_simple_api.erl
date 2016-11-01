@@ -31,17 +31,23 @@
 %---------------------------------------------------------------------
 
 confirm() ->
-    DDL  = ts_util:get_ddl(api),
-    Data = ts_util:get_data(api),
-    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
-    ?assertEqual(ok, ts_util:ts_put(ClusterConn, normal, DDL, Data)),
+    DDL  = ts_data:get_ddl(api),
+    Data = ts_data:get_data(api),
 
-    confirm_GtOps(Conn),
-    confirm_GtEqOps(Conn),
-    confirm_LtOps(Conn),
-    confirm_LtEqOps(Conn),
-    confirm_EqOps(Conn),
-    confirm_NeqOps(Conn),
+    Cluster = ts_setup:start_cluster(1),
+
+    Table = ts_data:get_default_bucket(),
+    {ok,_} = ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ok = ts_setup:activate_bucket_type(Cluster, Table),
+
+    ?assertEqual(ok, ts_ops:put(Cluster, Table, Data)),
+
+    confirm_GtOps(Cluster),
+    confirm_GtEqOps(Cluster),
+    confirm_LtOps(Cluster),
+    confirm_LtEqOps(Cluster),
+    confirm_EqOps(Cluster),
+    confirm_NeqOps(Cluster),
     pass.
 
 %------------------------------------------------------------
@@ -111,7 +117,7 @@ confirm_NeqOps(C) ->
 %------------------------------------------------------------
 
 confirm_pass(C, Qry, Expected) ->
-    Got = ts_util:single_query(C, Qry),
+    Got = ts_ops:query(C, Qry),
     {ok, {_Cols, Records}} = Got,
     N = length(Records),
     ?assertEqual(Expected, Got),
@@ -122,7 +128,7 @@ confirm_pass(C, Qry, Expected) ->
 %------------------------------------------------------------
 
 confirm_error(C, Qry, _Expected) ->
-    Got = ts_util:single_query(C, Qry),
+    Got = ts_ops:query(C, Qry),
     {Status, _Reason} = Got,
     ?assertEqual(Status, error).
 
@@ -144,7 +150,7 @@ buildList(Acc, Next) ->
 %------------------------------------------------------------
 
 indexOf(Type, FieldNames) ->
-    Fields = ts_util:get_map(Type),
+    Fields = ts_data:get_map(Type),
     lists:foldl(fun(Name, Acc) ->
         {_Name, Index} = lists:keyfind(Name, 1, Fields),
         buildList(Acc, Index)
@@ -185,7 +191,7 @@ expected(Type, Data, Fields, CompVals, CompFn) ->
         [] ->
             {ok, {[],[]}};
         _ ->
-            {ok, {ts_util:get_cols(Type), Records}}
+            {ok, {ts_data:get_cols(Type), Records}}
     end.
 
 %------------------------------------------------------------
@@ -232,7 +238,7 @@ confirm_Error(C, {NameAtom, TypeAtom, OpAtom, Val}) ->
 %------------------------------------------------------------
 
 confirm_Template(C, {NameAtom, TypeAtom, OpAtom, Val}, Result) ->
-    Data = ts_util:get_data(api),
+    Data = ts_data:get_data(api),
     Qry = getQry({NameAtom, TypeAtom, OpAtom, Val}),
     Fields   = [<<"time">>, <<"myfamily">>, <<"myseries">>] ++ [list_to_binary(atom_to_list(NameAtom))],
     case TypeAtom of

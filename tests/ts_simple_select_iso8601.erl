@@ -83,43 +83,42 @@
               ]).
 
 
-
 confirm() ->
-    DDL = ts_util:get_ddl(),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
     Start = jam:to_epoch(jam:compile(jam_iso8601:parse(?LOWER)), 3),
     End = jam:to_epoch(jam:compile(jam_iso8601:parse(?UPPER)), 3),
-    AllData = ts_util:get_valid_select_data(fun() -> lists:seq(Start, End, 1000) end),
-
-    {Cluster, Conn} = ts_util:cluster_and_connect(single),
-    Bucket = ts_util:get_default_bucket(),
-    ts_util:create_table(normal, Cluster, DDL, Bucket),
-    riakc_ts:put(Conn, Bucket, AllData),
-
+    AllData = ts_data:get_valid_select_data(fun() -> lists:seq(Start, End, 1000) end),
     QryFmt =
         "SELECT * FROM GeoCheckin "
         "WHERE time ~s '~s' and time ~s '~s' "
         "AND myfamily = 'family1' "
         "AND myseries ='seriesX' ",
 
-    lists:foreach(
-      fun({Tally, {Op1, String1}, {Op2, String2}}) ->
-              Qry = lists:flatten(
-                      io_lib:format(QryFmt, [Op1, String1,
-                                             Op2, String2])),
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, AllData),
 
-              {ok, {_Cols, Data}} = ts_util:single_query(Conn, Qry),
+    DDL = ts_data:get_ddl(),
+
+    lists:foreach(
+        fun({Tally, {Op1, String1}, {Op2, String2}}) ->
+              Qry = ts_data:flat_format(QryFmt, [Op1, String1,
+                                        Op2, String2]),
+
+              {ok, {_Cols, Data}} = ts_ops:query(Cluster, Qry),
 
               ?assertEqual(Tally, length(Data))
-      end, ?PASS_TESTS),
+        end, ?PASS_TESTS),
 
     lists:foreach(
-      fun({ErrCode, {Op1, String1}, {Op2, String2}}) ->
-              Qry = lists:flatten(
-                      io_lib:format(QryFmt, [Op1, String1,
-                                             Op2, String2])),
+        fun({ErrCode, {Op1, String1}, {Op2, String2}}) ->
+              Qry = ts_data:flat_format(QryFmt, [Op1, String1,
+                                        Op2, String2]),
 
-              RetMsg = ts_util:single_query(Conn, Qry),
+              RetMsg = ts_ops:query(Cluster, Qry),
               ?assertMatch({error, {ErrCode, _}}, RetMsg)
-      end, ?FAIL_TESTS),
+        end, ?FAIL_TESTS),
 
     pass.
