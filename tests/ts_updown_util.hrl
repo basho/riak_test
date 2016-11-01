@@ -29,6 +29,8 @@
 -type config()  :: proplists:proplist().
 -type version() :: current | previous.
 
+-type cap_with_ver() :: {{atom(), atom()}, term()}.
+
 -record(create, {
           should_skip = false :: boolean(),
           ddl      :: binary,
@@ -85,7 +87,14 @@
           %% in case riak.conf generated for one version needs tweaked
           %% to be understood by the other, use these functions
           convert_config_to_previous = fun(_) -> ok end :: function(),
-          convert_config_to_current  = fun(_) -> ok end :: function()
+          convert_config_to_current  = fun(_) -> ok end :: function(),
+
+          %% list of capability-version pairs, to wait until
+          %% propagation thereof, before issuing a query
+          %% - when the cluster is fully upgraded:
+          ensure_full_caps = [] :: [cap_with_ver()],
+          %% - when the cluster is mixed or fully downgraded:
+          ensure_degraded_caps = [] :: [cap_with_ver()]
          }).
 
 

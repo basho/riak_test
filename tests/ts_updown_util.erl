@@ -104,16 +104,20 @@ run_scenario(Config,
                        query_node_vsn = QueryNodeVsn,
                        need_table_node_transition = NeedTableNodeTransition,
                        need_query_node_transition = NeedQueryNodeTransition,
-                       need_pre_cluster_mixed = NeedPreClusterMixed,
+                       need_pre_cluster_mixed  = NeedPreClusterMixed,
                        need_post_cluster_mixed = NeedPostClusterMixed,
                        convert_config_to_previous = ConvertConfigToPreviousFun,
                        convert_config_to_current  = ConvertConfigToCurrentFun,
+                       ensure_full_caps     = EnsureFullCaps,
+                       ensure_degraded_caps = EnsureDegradedCaps,
                        %% for these, we may have invariants in Config:
                        tests = Tests}) ->
     NodesAtVersions0 =
         [{N, rtdev:node_version(rtdev:node_id(N))} || N <- ?CFG(nodes, Config)],
-    ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
     PrevClientNode = ?CFG(previous_client_node, Config),
+    ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
+    CapsReqs = {EnsureFullCaps, EnsureDegradedCaps},
+
     %% 1. retrieve scenario-invariant data from Config
     TestsToRun = case Tests of
                      [] -> add_timestamps(?CFG(default_tests, Config));
@@ -139,13 +143,14 @@ run_scenario(Config,
     %%    interesting nodes at their versions as set in step 1.
     NodesAtVersions3 =
         ensure_cluster(
-          NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode], ConvConfFuns),
+          NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode],
+          ConvConfFuns, CapsReqs),
 
-    %% 4. For each table in the test set create table and collect results.
+    %% 4. For each table in the test, issue CREATE TABLE queries
     CreateResults = [make_tables(X, TableNode, PrevClientNode)
                      || X <- TestsToRun],
 
-    %% 5. For each table in the test insert the data and collect the results
+    %% 5. For each table in the test, issue INSERT queries
     InsertResults = [insert_data(X, TableNode)
                      || X <- TestsToRun],
 
@@ -169,7 +174,8 @@ run_scenario(Config,
     %% 7. after transitioning the two relevant nodes, try to bring the
     %%    other nodes to satisfy the mixed/non-mixed hint
     NodesAtVersions6 =
-        ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode], ConvConfFuns),
+        ensure_cluster(NodesAtVersions5, NeedPostClusterMixed, [TableNode, QueryNode],
+                       ConvConfFuns, CapsReqs),
 
     %% 8. issue the queries and collect results
     ct:log("Issuing queries at ~p", [QueryNode]),
@@ -200,37 +206,20 @@ run_scenario(Config,
     Failures.
 
 
-query_with_client(Query, Node, PrevClientNode) ->
-    Version = rtdev:node_version(rtdev:node_id(Node)),
-    case Version of
-        current ->
-            Client = rt:pbc(Node),
-            riakc_ts:query(Client, Query);
-        previous ->
-            ConnInfo = proplists:get_value(Node, rt:connection_info([Node])),
-            {IP, Port} = proplists:get_value(pb, ConnInfo),
-            {ok, Client} =
-                rpc:call(
-                  PrevClientNode,
-                  riakc_pb_socket, start_link, [IP, Port, [{auto_reconnect, true}]]),
-            rpc:call(
-              PrevClientNode,
-              riakc_ts, query, [Client, Query])
-    end.
-
-
 -spec is_cluster_mixed(versioned_cluster()) -> boolean().
 is_cluster_mixed(NodesAtVersions) ->
     {_N0, V0} = hd(NodesAtVersions),
     not lists:all(fun({_N, V}) -> V == V0 end, NodesAtVersions).
 
 
--spec ensure_cluster(versioned_cluster(), boolean(), [node()], {function(), function()}) ->
+-spec ensure_cluster(versioned_cluster(), boolean(), [node()],
+                     {function(), function()}, {[cap_with_ver()], [cap_with_ver()]}) ->
                             versioned_cluster().
 %% @doc Massage the cluster if necessary (and if possible) to pick two
 %%      nodes of specific versions, optionally ensuring the resulting
 %%      cluster is mixed or not.
-ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes, ConvConfFuns) ->
+ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes,
+               ConvConfFuns, {FullCaps, DegradedCaps}) ->
     ImmutableVersions =
         [rtdev:node_version(rtdev:node_id(Node)) || Node <- ImmutableNodes],
     IsInherentlyMixed =
@@ -264,6 +253,23 @@ ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes, ConvConfFuns)
                 ct:log("ignoring NeedClusterMixed == false hint because TableNodeVsn /= QueryNodeVsn", []),
                 NodesAtVersions0
         end,
+
+    {SomeNode, _Ver} = hd(NodesAtVersions1),
+    CapsToCheck =
+        case ((current == rtdev:node_version(rtdev:node_id(SomeNode)))
+              and not is_cluster_mixed(NodesAtVersions1)) of
+            true ->
+                FullCaps;
+            false ->
+                DegradedCaps
+        end,
+    ct:log("will require capabilities: ~p", [CapsToCheck]),
+    lists:foreach(
+      fun({Node, {Cap, Ver}}) ->
+              ok = rt:wait_until_capability(Node, Cap, Ver)
+      end,
+      [{Node, CapVer} || {Node, _} <- NodesAtVersions1, CapVer <- CapsToCheck]),
+
     NodesAtVersions1.
 
 
@@ -429,6 +435,26 @@ run_select(#select{qry        = Q,
                       expected = Exp,
                       got      = Got}
     end.
+
+query_with_client(Query, Node, PrevClientNode) ->
+    Version = rtdev:node_version(rtdev:node_id(Node)),
+    case Version of
+        current ->
+            Client = rt:pbc(Node),
+            riakc_ts:query(Client, Query);
+        previous ->
+            ConnInfo = proplists:get_value(Node, rt:connection_info([Node])),
+            {IP, Port} = proplists:get_value(pb, ConnInfo),
+            ct:log("using ~p client to contact node ~p at ~p:~p", [Version, Node, IP, Port]),
+            {ok, Client} =
+                rpc:call(
+                  PrevClientNode,
+                  riakc_pb_socket, start_link, [IP, Port, [{auto_reconnect, true}]]),
+            rpc:call(
+              PrevClientNode,
+              riakc_ts, query, [Client, Query])
+    end.
+
 
 add_timestamps(TestSets) ->
     [X#test_set{timestamp = make_timestamp()} || X <- TestSets].
