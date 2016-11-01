@@ -37,6 +37,7 @@
     create_bucket_type/3,
     create_bucket_type/4,
     create_table/4,
+    ct_verify_rows/2,
     exclusive_result_from_data/3,
     flat_format/2,
     get_bool/1,
@@ -142,9 +143,9 @@ ts_insert(Conn, Table, Columns, Data) ->
     ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
     SQL = flat_format("INSERT INTO ~s (~s) VALUES (~ts)",
                       [Table, ColClause, ValClause]),
-    lager:info("~ts", [SQL]),
+    % lager:info("~ts", [SQL]),
     Got = riakc_ts:query(Conn, SQL),
-    lager:info("Result is ~p", [Got]),
+    % lager:info("Result is ~p", [Got]),
     Got.
 
 ts_insert_no_columns(Conn, Table, Data) ->
@@ -152,9 +153,9 @@ ts_insert_no_columns(Conn, Table, Data) ->
     ValClause = string:strip(lists:foldl(TermFn, [], tuple_to_list(Data)), right, $,),
     SQL = flat_format("INSERT INTO ~s VALUES (~ts)",
         [Table, ValClause]),
-    lager:info("~ts", [SQL]),
+    % lager:info("~ts", [SQL]),
     Got = riakc_ts:query(Conn, SQL),
-    lager:info("Result is ~p", [Got]),
+    % lager:info("Result is ~p", [Got]),
     Got.
 
 %%
