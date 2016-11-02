@@ -170,7 +170,7 @@ sql_select_join_with_all_nodes_upgraded_test(Config) ->
 
 %% This test passed for 1.4.0, expecting v1 where commented, but fails for 1.5.0 due to code change. We set it to expect
 %% v2 until future changes are made. After 1.5.0 if this test will fail if new code is introduced to handle capability
-%% communication.
+%% communication. https://bashoeng.atlassian.net/browse/RTS-1415
 sql_select_downgrade_a_node_test(Config) ->
     Vsn131 = ?config(?TS_VERSION_1_3, Config),
     [Node_A, Node_B, Node_C] =
