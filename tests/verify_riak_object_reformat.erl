@@ -31,6 +31,7 @@
 -define(N, 3).
 
 confirm() ->
+    rt_config:set(rt_retry_delay, 10000),
     rt:update_app_config(all, [{riak_kv, [{object_format, v1}]}]),
     TestMetaData = riak_test_runner:metadata(),
     DowngradeVsn = proplists:get_value(upgrade_version, TestMetaData, previous),

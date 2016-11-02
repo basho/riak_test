@@ -36,6 +36,8 @@
         ]).
 
 confirm() ->
+    rt_config:set(rt_retry_delay, 10000),
+
     lager:info("Verifying v0 source to v1 sink, realtime enabled."),
     verify_replication(v0, v1, 1, ?NUM_KEYS, true),
     lager:info("Verifying v0 source to v1 sink, realtime disabled."),

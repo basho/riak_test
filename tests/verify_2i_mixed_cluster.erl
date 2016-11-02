@@ -27,6 +27,8 @@
 -define(BUCKET, <<"2ibucket">>).
 
 confirm() ->
+    rt_config:set(rt_retry_delay, 10000),
+
     TestMetaData = riak_test_runner:metadata(),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
     Nodes =

@@ -50,6 +50,7 @@
 -define(FOLD_CAPABILITY, {riak_core,fold_req_version}).
 
 confirm() ->
+    rt_config:set(rt_retry_delay, 10000),
     %% this `upgrade_version' lookup was copied from loaded_upgrade
     UpgradeVsn = proplists:get_value(upgrade_version,
                                      riak_test_runner:metadata(),

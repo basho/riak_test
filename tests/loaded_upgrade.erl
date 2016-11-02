@@ -28,6 +28,7 @@
 -define(TIME_BETWEEN_UPGRADES, 120). %% Seconds!
 
 confirm() ->
+    rt_config:set(rt_retry_delay, 10000),
 
     case whereis(loaded_upgrade) of
         undefined -> meh;
