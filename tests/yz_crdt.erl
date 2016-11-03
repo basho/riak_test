@@ -256,8 +256,8 @@ test_and_validate_delete_aae(Pid, Cluster, Bucket, Index) ->
 
     [make_intercepts_tab(ANode) || ANode <- Cluster],
 
-    [rt_intercept:add(ANode, {yz_solrq_helper, [{{get_ops_for_crdt_deletes, 3},
-                                        handle_get_ops_for_crdt_deletes}]})
+    [rt_intercept:add(ANode, {yz_solrq_helper, [{{get_ops_for_no_sibling_deletes, 3},
+                                        handle_get_ops_for_no_sibling_deletes}]})
      || ANode <- Cluster],
     [true = rpc:call(ANode, ets, insert, [intercepts_tab, {del_put, 0}]) ||
         ANode <- Cluster],
