@@ -32,7 +32,7 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    Cluster = ts_util:build_cluster(multiple),
+    Cluster = ts_util:build_cluster(single),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -56,23 +56,40 @@ groups() ->
 all() ->
     rt:grep_test_functions(?MODULE).
 
-client_pid(Ctx) ->
-    [Node|_] = proplists:get_value(cluster, Ctx),
+%%--------------------------------------------------------------------
+%% UTILS
+%%--------------------------------------------------------------------
+
+client_pid(Config) ->
+    [Node|_] = proplists:get_value(cluster, Config),
     rt:pbc(Node).
 
-run_query(Ctx, Query) ->
-    riakc_ts:query(client_pid(Ctx), Query).
+run_query(Config, Query) ->
+    riakc_ts:query(client_pid(Config), Query).
 
-%% The columns for describe should not be different depending
-%% on the query 
-static_columns() ->
-    [<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>, <<"Order">>].
+%% get the cells for one column for all rows as a list of values, this makes it
+%% easy to assert data in a column so when another column is added, the tests
+%% are not broken. Add new tests for new columns!
+assert_column_values(ColName, Expected, {Cols, Rows}) when is_binary(ColName),
+                                                           is_list(Expected) ->
+    Index = (catch lists:foldl(
+        fun(E, Acc) when E == ColName ->
+            throw(Acc);
+           (_, Acc) ->
+            Acc + 1
+        end, 1, Cols)),
+    % ct:pal("INDEX ~p COLS ~p~nROWS ~p", [Index, Cols, Rows]),
+    Actual = [element(Index,R) || R <- Rows],
+    ?assertEqual(
+        Expected,
+        Actual
+    ).
 
-%%%
-%%% Test basic table description
-%%%
+%%--------------------------------------------------------------------
+%% TESTS
+%%--------------------------------------------------------------------
 
-basic_table_test(Ctx) ->
+describe_column_name_test(Config) ->
     Table_def =
         "CREATE TABLE GeoCheckin ("
         "myfamily VARCHAR NOT NULL,"
@@ -83,19 +100,47 @@ basic_table_test(Ctx) ->
         "PRIMARY KEY ("
             "(myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time)"
         ")",
-    {ok,_} = run_query(Ctx, Table_def),
-    ?assertEqual(
-        {ok, {
-            static_columns(),
-            [{<<"myfamily">>,   <<"varchar">>,   false,  1,  1, <<"ASC">>},
-             {<<"myseries">>,   <<"varchar">>,   false,  2,  2, <<"ASC">>},
-             {<<"time">>,       <<"timestamp">>, false,  3,  3, <<"ASC">>},
-             {<<"weather">>,    <<"varchar">>,   false, [], [], []},
-             {<<"temperature">>,<<"double">>,    true,  [], [], []}]}},
-        run_query(Ctx, "DESCRIBE GeoCheckin")
+    {ok,_} = run_query(Config, Table_def),
+    {ok, Result} = run_query(Config, "DESCRIBE GeoCheckin"),
+    assert_column_values(
+        <<"Column">>,
+        [<<"myfamily">>, <<"myseries">>, <<"time">>, <<"weather">>, <<"temperature">>],
+        Result
     ).
 
-desc_table_test(Ctx) ->
+describe_column_type_test(Config) ->
+    {ok, Result} = run_query(Config, "DESCRIBE GeoCheckin"),
+    assert_column_values(
+        <<"Type">>,
+        [<<"varchar">>, <<"varchar">>, <<"timestamp">>, <<"varchar">>, <<"double">>],
+        Result
+    ).
+
+describe_is_null_test(Config) ->
+    {ok, Result} = run_query(Config, "DESCRIBE GeoCheckin"),
+    assert_column_values(
+        <<"Type">>,
+        [<<"varchar">>, <<"varchar">>, <<"timestamp">>, <<"varchar">>, <<"double">>],
+        Result
+    ).
+
+describe_partition_key_test(Config) ->
+    {ok, Result} = run_query(Config, "DESCRIBE GeoCheckin"),
+    assert_column_values(
+        <<"Partition Key">>,
+        [1, 2, 3, [], []],
+        Result
+    ).
+
+describe_local_key_test(Config) ->
+    {ok, Result} = run_query(Config, "DESCRIBE GeoCheckin"),
+    assert_column_values(
+        <<"Local Key">>,
+        [1, 2, 3, [], []],
+        Result
+    ).
+
+describe_sort_order_test(Config) ->
     Table_def =
         "CREATE TABLE desc_ts ("
         "a VARCHAR NOT NULL,"
@@ -106,14 +151,10 @@ desc_table_test(Ctx) ->
         "PRIMARY KEY ("
             "(a, b, quantum(c, 15, 'm')), a, b, c DESC)"
         ")",
-    {ok,_} = run_query(Ctx, Table_def),
-    ?assertEqual(
-        {ok, {
-            static_columns(),
-            [{<<"a">>, <<"varchar">>,   false,  1,  1, <<"ASC">>},
-             {<<"b">>, <<"varchar">>,   false,  2,  2, <<"ASC">>},
-             {<<"c">>, <<"timestamp">>, false,  3,  3, <<"DESC">>},
-             {<<"d">>, <<"varchar">>,   false, [], [], []},
-             {<<"e">>, <<"double">>,    true,  [], [], []}]}},
-        run_query(Ctx, "DESCRIBE desc_ts")
+    {ok,_} = run_query(Config, Table_def),
+    {ok, Result} = run_query(Config, "DESCRIBE desc_ts"),
+    assert_column_values(
+        <<"Sort Order">>,
+        [[], [], <<"DESC">>, [], []],
+        Result
     ).
