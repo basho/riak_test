@@ -22,6 +22,7 @@
 
 -module(verify_search).
 -include_lib("eunit/include/eunit.hrl").
+-include("tests/job_enable_common.hrl").
 
 -export([confirm/0]).
 %% To run in the possibly remote node
@@ -33,6 +34,8 @@ confirm() ->
     Config = [{riak_search, [{enabled, true}]}],
     [Node0 | _RestNodes] = Nodes = rt:build_cluster(3, Config),
     rt:wait_until_ring_converged(Nodes),
+
+    job_enable_common:set_enabled(Nodes, ?TOKEN_OLD_SEARCH, true),
 
     Path = rt_config:get(rt_scratch_dir),
     lager:info("Creating scratch dir if necessary at ~s", [Path]),

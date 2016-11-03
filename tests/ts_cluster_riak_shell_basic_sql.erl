@@ -134,5 +134,5 @@ to_list(B) when is_binary(B)  -> binary_to_list(B);
 %% We can cheat here: the only integer in the DDL is a timestamp, so
 %% any integer we see we can convert to ISO 8601.
 to_list(I) when is_integer(I) -> jam_iso8601:to_string(jam:from_epoch(I, 3));
-to_list(F) when is_float(F)   -> float_to_list(F);
+to_list(F) when is_float(F)   -> mochinum:digits(F);
 to_list(L) when is_list(L)    -> L.

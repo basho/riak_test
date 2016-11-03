@@ -48,20 +48,20 @@ GeoCheckin
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1 and time <= 2;\n"},
  {result,
 "myfamily,myseries,time,weather,temperature
-family1,series1,1970-01-01T00:00:00.001Z,snow,2.51999999999999992895e+01
-family1,series1,1970-01-01T00:00:00.002Z,rain,2.45000000000000000000e+01
+family1,series1,1970-01-01T00:00:00.001Z,snow,25.2
+family1,series1,1970-01-01T00:00:00.002Z,rain,24.5
 "}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10 and time <= 8;\n"}, {result, "Error (1001): The lower time bound is greater than the upper time bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10;\n"}, {result, "Error (1001): Where clause has no upper bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time <= 8;\n"}, {result, "Error (1001): Where clause has no lower bound."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 2 and time <= 7;\n"}, {result,
 "myfamily,myseries,time,weather,temperature
-family1,series1,1970-01-01T00:00:00.002Z,rain,2.45000000000000000000e+01
-family1,series1,1970-01-01T00:00:00.003Z,rain,2.30000000000000000000e+01
-family1,series1,1970-01-01T00:00:00.004Z,sunny,2.86000000000000014211e+01
-family1,series1,1970-01-01T00:00:00.005Z,sunny,2.46999999999999992895e+01
-family1,series1,1970-01-01T00:00:00.006Z,cloudy,3.27890000000000014779e+01
-family1,series1,1970-01-01T00:00:00.007Z,cloudy,2.78999999999999985789e+01
+family1,series1,1970-01-01T00:00:00.002Z,rain,24.5
+family1,series1,1970-01-01T00:00:00.003Z,rain,23.0
+family1,series1,1970-01-01T00:00:00.004Z,sunny,28.6
+family1,series1,1970-01-01T00:00:00.005Z,sunny,24.7
+family1,series1,1970-01-01T00:00:00.006Z,cloudy,32.789
+family1,series1,1970-01-01T00:00:00.007Z,cloudy,27.9
 "}}.
 {{command, "show_cookie; "}, {result, "Cookie is riak [actual riak]"}}.
 {{command, "show_config; "}, {result, "The config is [{cookie,riak},
@@ -77,6 +77,6 @@ family1,series1,1970-01-01T00:00:00.007Z,cloudy,2.78999999999999985789e+01
 {{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523183, 'raining', 11.2);\n"}, {result, ""}}.
 {{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523189, 'snowing', 19.2);\n"}, {result, ""}}.
 {{command, "SELECT 555, 1.1, 1e1, 1.123e-2 from GeoCheckin2 WHERE time > 1452252523182 AND time < 1452252543182 AND region = 'South Atlantic' AND state = 'South Carolina';\n"}, {result, "555,1.1,10.0,0.01123
-555,1.10000000000000008882e+00,1.00000000000000000000e+01,1.12300000000000003986e-02
-555,1.10000000000000008882e+00,1.00000000000000000000e+01,1.12300000000000003986e-02
+555,1.1,10.0,0.01123
+555,1.1,10.0,0.01123
 "}}.
