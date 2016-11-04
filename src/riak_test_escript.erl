@@ -215,6 +215,7 @@ parse_command_line_tests(ParsedArgs) ->
         lists:foldl(fun extract_test_names/2,
                     {[], []},
                     proplists:get_all_values(tests, ParsedArgs)),
+
     [code:add_patha(CodePath) || CodePath <- CodePaths,
                                  CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
@@ -236,8 +237,10 @@ parse_command_line_tests(ParsedArgs) ->
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
-    {[filename:dirname(Test) | CodePaths],
-     [filename:rootname(filename:basename(Test)) | TestNames]}.
+    CommaSepTests = string:tokens(Test, [$,]),
+    CodePathList = [filename:dirname(TestName) || TestName <- CommaSepTests],
+    TestNameList = [filename:rootname(filename:basename(TestName)) || TestName <- CommaSepTests],
+    {CodePathList++CodePaths, TestNameList++TestNames}.
 
 which_tests_to_run(undefined, CommandLineTests) ->
     {Tests, NonTests} =
