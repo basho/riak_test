@@ -31,7 +31,7 @@
 -define(LOWER, "2016-08-02 10:15:00").
 -define(UPPER, "2016-08-02 10:45:00").
 
--define(TESTS, [
+-define(PASS_TESTS, [
                 %% Test format, illustrated:
 
                 %% We expect 9 seconds between 10:19:50 and 10:20:00,
@@ -69,15 +69,18 @@
                 },
 
                 {0,
-                 {">", "2016-08-02 10:19"},
-                 {"<", "2016-08-02 10:20"}
-                },
-
-                {0,
                  {">", "2016-08-02 10:19.99"},
                  {"<", "2016-08-02 10:20"}
                 }
                ]).
+%% expected error code is the first entry
+-define(FAIL_TESTS, [
+                {
+                  1001,
+                  {">", "2016-08-02 10:19"},
+                  {"<", "2016-08-02 10:20"}
+                }
+              ]).
 
 
 
@@ -107,5 +110,16 @@ confirm() ->
               {ok, {_Cols, Data}} = ts_util:single_query(Conn, Qry),
 
               ?assertEqual(Tally, length(Data))
-      end, ?TESTS),
+      end, ?PASS_TESTS),
+
+    lists:foreach(
+      fun({ErrCode, {Op1, String1}, {Op2, String2}}) ->
+              Qry = lists:flatten(
+                      io_lib:format(QryFmt, [Op1, String1,
+                                             Op2, String2])),
+
+              RetMsg = ts_util:single_query(Conn, Qry),
+              ?assertMatch({error, {ErrCode, _}}, RetMsg)
+      end, ?FAIL_TESTS),
+
     pass.

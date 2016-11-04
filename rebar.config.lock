@@ -1,0 +1,68 @@
+%% THIS FILE IS GENERATED. DO NOT EDIT IT MANUALLY %%
+
+{require_otp_vsn,"R13B04|R14|R15|R16"}.
+{cover_enabled,true}.
+{edoc_opts,[{preprocess,true}]}.
+{erl_opts,[{src_dirs,[src,intercepts,perf]},
+           warnings_as_errors,
+           {parse_transform,lager_transform}]}.
+{erl_first_files,["src/rt_intercept_pt.erl"]}.
+{eunit_opts,[verbose]}.
+{deps,[{goldrush,".*",
+                 {git,"https://github.com/basho/goldrush.git",
+                      "8f1b715d36b650ec1e1f5612c00e28af6ab0de82"}},
+       {lager,".*",
+              {git,"https://github.com/basho/lager",
+                   "81eaef0ce98fdbf64ab95665e3bc2ec4b24c7dac"}},
+       {getopt,".*",
+               {git,"https://github.com/basho/getopt.git",
+                    "388dc95caa7fb97ec7db8cfc39246a36aba61bd8"}},
+       {meck,".*",
+             {git,"https://github.com/basho/meck.git",
+                  "dde759050eff19a1a80fd854d7375174b191665d"}},
+       {mapred_verify,".*",
+                      {git,"https://github.com/basho/mapred_verify",
+                           "51b79c5b05eb04640e13131f06ef96561b96ba8e"}},
+       {protobuffs,".*",
+                   {git,"https://github.com/basho/erlang_protobuffs.git",
+                        "0dde9d3b37b7bec3a4dfb0e87684dd7039e169ab"}},
+       {hamcrest,".*",
+                 {git,"https://github.com/basho/hamcrest-erlang.git",
+                      "98bc7aa19ea081478c816824aa05fc5a48acae66"}},
+       {riak_pb,".*",
+                {git,"https://github.com/basho/riak_pb",
+                     "f5af9ffe04eb27689d483509de26574bdf70343f"}},
+       {riakc,".*",
+              {git,"https://github.com/basho/riak-erlang-client",
+                   "a5ff1cb07f54245e2d0296ac7bc49ffaf4104440"}},
+       {ibrowse,".*",
+                {git,"git://github.com/cmullaparthi/ibrowse.git",
+                     "e8ae353c16d4f0897abb9f80025b52925b974dd1"}},
+       {mochiweb,".*",
+                 {git,"git://github.com/basho/mochiweb.git",
+                      "ade2a9b29a11034eb550c1d79b4f991bf5ca05ba"}},
+       {webmachine,".*",
+                   {git,"git://github.com/basho/webmachine",
+                        "7677c240f4a7ed020f4bab48278224966bb42311"}},
+       {riakhttpc,".*",
+                  {git,"https://github.com/basho/riak-erlang-http-client",
+                       "88fb7526b908528369e6009f92327fa3a402821c"}},
+       {kvc,".*",
+            {git,"https://github.com/basho/kvc.git",
+                 "5565fe51857747662410cc3c06362ebcf48a2f04"}},
+       {druuid,".*",
+               {git,"https://github.com/basho/druuid.git",
+                    "b3c5c2a52bb3f510d168b32e64f6fbc6a3c6a0e6"}},
+       {tdiff,".*",
+              {git,"https://github.com/basho/tdiff",
+                   "bbb54ce20df388f2c7d01e8df30ef471ca98d0fb"}},
+       {rebar_lock_deps_plugin,".*",
+                               {git,"https://github.com/basho/rebar_lock_deps_plugin.git",
+                                    "8816f45ff38cd04d5c7741bd39166af58116dd44"}}]}.
+{escript_incl_apps,[goldrush,lager,getopt,riakhttpc,riakc,ibrowse,mochiweb,
+                    kvc,tdiff]}.
+{escript_emu_args,"%%! -escript main riak_test_escript +K true +P 10000 -env ERL_MAX_PORTS 10000\n"}.
+{plugin_dir,"src"}.
+{plugins,[rebar_riak_test_plugin,rebar_lock_deps_plugin]}.
+{riak_test,[{test_paths,["tests","perf"]},{test_output,"ebin"}]}.
+

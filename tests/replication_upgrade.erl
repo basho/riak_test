@@ -4,6 +4,13 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+
+    OrigDelay = rt_config:get(rt_retry_delay, 1000),
+    lager:info("Original rt_retry_delay is ~p", [OrigDelay]),
+    rt_config:set(rt_retry_delay, OrigDelay*5),
+    NewDelay = rt_config:get(rt_retry_delay),
+    lager:info("New rt_retry_delay is ~p", [NewDelay]),
+
     TestMetaData = riak_test_runner:metadata(),
     FromVersion = proplists:get_value(upgrade_version, TestMetaData, previous),
 
@@ -66,7 +73,7 @@ confirm() ->
     ok = lists:foreach(fun(Node) ->
                                lager:info("Upgrade node: ~p", [Node]),
                                rt:log_to_nodes(Nodes, "Upgrade node: ~p", [Node]),
-                               rtdev:upgrade(Node, current),
+                               rt:upgrade(Node, current),
                                rt:wait_until_pingable(Node),
                                rt:wait_for_service(Node, [riak_kv, riak_pipe, riak_repl]),
                                [rt:wait_until_ring_converged(N) || N <- [ANodes, BNodes]],
@@ -93,4 +100,6 @@ confirm() ->
                                rt:log_to_nodes(Nodes, "Replication with upgraded node: ~p", [Node]),
                                replication:replication(ANodes, BNodes, true)
                        end, NodeUpgrades),
+    lager:info("Resetting rt_retry_delay to ~p", [OrigDelay]),
+    rt_config:set(rt_retry_delay, OrigDelay),
     pass.
