@@ -21,281 +21,176 @@
 %% -------------------------------------------------------------------
 -module(ts_simple_http_security_SUITE).
 
+-export([suite/0, init_per_suite/1, groups/0, all/0]).
 -export([
-    all/0,
-    end_per_group/2,
-    end_per_suite/1,
-    end_per_testcase/2,
-    ensure_https_requires_authentication_test/1,
-    groups/0,
-    init_per_group/2,
-    init_per_suite/1,
-    init_per_testcase/2,
-    password_user_cannot_connect_with_wrong_password_test/1,
-    suite/0,
-    with_security_user_cannot_create_table_without_permissions_test/1,
-    with_security_user_cannot_put_without_permissions_test/1,
-    with_security_user_cannot_query_without_permissions_test/1,
-    with_security_when_user_is_given_permissions_user_can_create_table_test/1,
-    with_security_when_user_is_given_permissions_user_can_put_data_test/1,
-    with_security_when_user_is_given_permissions_user_can_query_data_test/1]
-).
+         put_test/1,
+         query_create_table_test/1,
+         query_select_test/1
+        ]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-%%--------------------------------------------------------------------
-%% COMMON TEST CALLBACK FUNCTIONS
-%%--------------------------------------------------------------------
+-define(USER, "uesr").
+-define(PASSWORD, "passowrd").
+-define(TABLE1, "t1").
+-define(TABLE2, "t2").
 
 suite() ->
-    [{timetrap,{minutes,10}}].
-
-init_per_suite(Config) ->    application:start(crypto),
-    application:start(asn1),
-    application:start(public_key),
-    application:start(ssl),
-    application:start(ibrowse),
-    io:format("turning on tracing"),
-    ibrowse:trace_on(),
-
-    CertDir = rt_config:get(rt_scratch_dir) ++ "/http_certs",
-
-    %% make a bunch of crypto keys
-    make_certs:rootCA(CertDir, "rootCA"),
-    make_certs:endusers(CertDir, "rootCA", ["site3.basho.com", "site4.basho.com"]),
-
-    lager:info("Deploy a node"),
-    ClusterConf = [
-        {riak_core, [
-            {default_bucket_props, [{allow_mult, true}, {dvv_enabled, true}]},
-            {ssl, [
-                {certfile,   filename:join([CertDir, "site3.basho.com/cert.pem"])},
-                {keyfile,    filename:join([CertDir, "site3.basho.com/key.pem"])},
-                {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
-            ]}
-        ]},
-        {riak_search, [ {enabled, false}]}
-    ],
-    [Node|_] = Nodes = rt:build_cluster(1, ClusterConf),
-    {HttpIpPort, HttpsIpPort} = enable_ssl(Node),
-
-    %% build the test context
-    Ctx = [
-        {cluster, Nodes},
-        {http, HttpIpPort},
-        {https, HttpsIpPort},
-        {cert_dir, CertDir} | Config],
-
-    %% enable riak security
-    {ok,_} = riak_admin(Ctx, ["security", "enable"]),
-
-    Ctx.
-
-end_per_suite(_Config) ->
-    ok.
-
-init_per_group(_GroupName, Config) ->
-    Config.
-
-end_per_group(_GroupName, _Config) ->
-    ok.
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
-
-end_per_testcase(_TestCase, _Config) ->
-    ok.
+    [{timetrap, {minutes,10}}].
 
 groups() ->
     [].
 
-all() -> 
-    rt:grep_test_functions(?MODULE).
+all() ->
+    [
+     query_create_table_test,
+     put_test,
+     query_select_test
+    ].
 
-%%--------------------------------------------------------------------
-%% UTIL FUNCTIONS
-%%--------------------------------------------------------------------
+init_per_suite(Config) ->
+    application:start(crypto),
+    application:start(asn1),
+    application:start(public_key),
+    application:start(ssl),
+    application:start(ibrowse),
+    ibrowse:trace_on(),
 
-enable_ssl(Node) ->
-    [{http, {IP, Port}}|_] = rt:connection_info(Node),
-    HttpPort = Port+1000,
-    rt:update_app_config(Node, [{riak_api, [{https, [{IP, HttpPort}]}]}]),
+    CertDir = rt_config:get(rt_scratch_dir) ++ "/http_certs",
+    make_certs:rootCA(CertDir, "rootCA"),
+    make_certs:endusers(CertDir, "rootCA", ["site3.basho.com", "site4.basho.com"]),
+
+    ClusterConf =
+        [{riak_core,
+          [{ssl,
+            [{certfile,   filename:join([CertDir, "site3.basho.com/cert.pem"])},
+             {keyfile,    filename:join([CertDir, "site3.basho.com/key.pem"])},
+             {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}]}
+          ]}],
+
+    [Node] = rt:build_cluster(1, ClusterConf),
+
+    ok = security_command(Node, security_enable, []),
+
+    [{http, {Ip, Port}}|_] = rt:connection_info(Node),
+    rt:update_app_config(Node, [{riak_api, [{https, [{Ip, Port+1000}]}]}]),
     rt:wait_until_pingable(Node),
     rt:wait_for_service(Node, riak_kv),
-    {{IP, Port}, {IP, HttpPort}}.
+    {ok, [{Ip, SslPort}]} =
+        rpc:call(Node, application, get_env, [riak_api, https]),
 
-client_conn(Ctx, Username, Password) ->
-    CertDir = proplists:get_value(cert_dir, Ctx),
-    {IP, Port} = proplists:get_value(https, Ctx),
-    rhc:create(IP, Port, "riak", [{is_ssl, true},
-        {credentials, Username, Password},
-        {ssl_options, [
-            {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
-            {verify, verify_peer},
-            {reuse_sessions, false}
-        ]}
-    ]).
-    
-riak_admin(Ctx, Args) ->
+    ok = security_command(Node, add_user, [?USER, "password=" ++ ?PASSWORD]),
+    ok = security_command(Node, add_source, [?USER, "127.0.0.1/32", "trust"]),
+
+    Client =
+        rhc_ts:create(Ip, SslPort,
+                      [{is_ssl, true},
+                       {credentials, ?USER, ?PASSWORD},
+                       {ssl_options, [
+                                      {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
+                                      {verify, verify_peer},
+                                      {reuse_sessions, false}
+                                     ]}
+                      ]),
+
+    [{cluster, [Node]},
+     {client, Client} | Config].
+
+
+%% Tests
+%%--------------------------------------------------------------------
+
+query_create_table_test(Ctx) ->
+    Client = proplists:get_value(client, Ctx),
+    Query1 = make_create_table_query(?TABLE1),
+    Query2 = make_create_table_query(?TABLE2),
+
+    ct:log("no permissions:\n~s", [Query1]),
+    ?assertMatch({error, {401, _}}, rhc_ts:query(Client, Query1)),
+
+    ct:log("with permissions:\n~s", [Query1]),
+    ok = security_command(Ctx, grant, ["riak_ts.create_table", "on", ?TABLE1, "to", ?USER]),
+    ?assertMatch({ok, _}, rhc_ts:query(Client, Query1)),
+
+    ct:log("permissions revoked:\n~s", [Query1]),
+    ok = security_command(Ctx, revoke, ["riak_ts.create_table", "on", ?TABLE1, "from", ?USER]),
+    ?assertMatch({error, {401, _}}, rhc_ts:query(Client, Query1)),
+    ct:log("another table:\n~s", [Query2]),
+    ?assertMatch({error, {401, _}}, rhc_ts:query(Client, Query2)),
+
+    %% with permissions again, still an error because the table already exists
+    ok = security_command(Ctx, grant, ["riak_ts.create_table", "on", "any", "to", ?USER]),
+    ct:log("with permissions, attempt to create existing table:\n~s", [Query1]),
+    ?assertMatch({error, {409, _}}, rhc_ts:query(Client, Query1)).
+
+
+put_test(Ctx) ->
+    %% preconditions:
+    %% * user has a riak_ts.create_table permission, nothing else;
+    %% * table t1 exists, is empty.
+    Client = proplists:get_value(client, Ctx),
+
+    Data = make_data_ann([<<"a">>, <<"b">>, <<"c">>, <<"d">>], make_data()),
+
+    ct:log("no permissions:\n~s", ["(put)"]),
+    ?assertMatch({error, {401, _}}, rhc_ts:put(Client, ?TABLE1, Data)),
+
+    ok = security_command(Ctx, grant, ["riak_ts.put", "on", ?TABLE1, "to", ?USER]),
+    ct:log("permissions revoked:\n~s", ["(put)"]),
+    ?assertMatch(ok, rhc_ts:put(Client, ?TABLE1, Data)),
+
+    ok = security_command(Ctx, revoke, ["riak_ts.put", "on", ?TABLE1, "from", ?USER]),
+    ct:log("permissions granted:\n~s", ["(put)"]),
+    ?assertMatch({error, {401, _}}, rhc_ts:put(Client, ?TABLE1, Data)).
+
+
+query_select_test(Ctx) ->
+    %% preconditions:
+    %% * user only has permissions riak_ts.create_table, riak_ts.put;
+    %% * table t1 exists, contains data.
+    Client = proplists:get_value(client, Ctx),
+
+    Query = make_select_query(?TABLE1),
+    ct:log("no permissions:\n~s", [Query]),
+    ?assertMatch({error, {401, _}}, rhc_ts:query(Client, Query)),
+
+    ok = security_command(Ctx, grant, ["riak_ts.query_select", "on", ?TABLE1, "to", ?USER]),
+    ct:log("with permissions:\n~s", [Query]),
+    Res = rhc_ts:query(Client, Query),
+    {ok, {_Columns, Rows}} = Res,
+    ct:log("rows:\n~p", [Rows]),
+    ok.
+
+%% local functions
+%% -------------------------------
+
+security_command(Ctx, Cmd, Args) when is_list(Ctx) ->
     [Node|_] = proplists:get_value(cluster, Ctx),
-    {ok,_Out} = Result = rt:admin(Node, Args),
-    ct:pal("riak-admin ~s~n~s", [string:join(Args, " "), _Out]),
-    Result.
+    security_command(Node, Cmd, Args);
+security_command(Node, Cmd, Args) when is_atom(Node) ->
+    ok = rpc:call(Node, riak_core_console, Cmd, [Args]).
 
-create_trusted_user(Ctx, Perms) ->
-    User = user_name(),
-    Password = "password",
-    {ok,_} = riak_admin(Ctx,
-        ["security", "add-user", User]),
-    {ok,_} = riak_admin(Ctx,
-        ["security", "add-source", Perms, "127.0.0.1/32", "trust"]),
-    client_conn(Ctx, User, Password).
+make_data() ->
+    [{list_to_binary(fmt("A~5..0b", [I rem 2])),
+      <<"B">>,
+      I + 1,
+      if I rem 5 == 0 -> []; el/=se -> I end}  %% sprinkle some NULLs
+     || I <- lists:seq(1, 300)].
+make_data_ann(Columns, Data) ->
+    [lists:zip(Columns, tuple_to_list(Row)) || Row <- Data].
 
-create_table_sql(Name) ->
-    lists:flatten(io_lib:format(
-        "create table ~p ("
-        " a varchar not null,"
-        " b varchar not null,"
-        " c timestamp not null,"
-        " d sint64,"
-        " primary key ((a, b, quantum(c, 1, m)), a, b, c))", [Name])).
+make_create_table_query(Table) ->
+    fmt("CREATE TABLE ~s ("
+        " a VARCHAR NOT NULL,"
+        " b VARCHAR NOT NULL,"
+        " c TIMESTAMP NOT NULL,"
+        " d SINT64,"
+        " PRIMARY KEY ((a, b, quantum(c, 1, m)), a, b, c))", [Table]).
 
-%% From riak_core_security.erl
-%% Avoid whitespace, control characters, comma, semi-colon,
-%% non-standard Windows-only characters, other misc
--define(ILLEGAL, lists:seq(0, 44) ++ lists:seq(58, 63) ++
-            lists:seq(127, 191)).
+make_select_query(Table) ->
+    fmt("SELECT * FROM ~s WHERE a = 'A00002' AND b='B' AND c >= 1 AND c < 100", [Table]).
 
-user_name() ->
-    User = string:to_lower(base64:encode_to_string(term_to_binary(make_ref()))),
-    [C || C <- User, not lists:member(C, ?ILLEGAL)].
 
-execute_query(Ctx, Query) ->
-    {IP, Port} = proplists:get_value(https, Ctx),
-    URL = lists:flatten(io_lib:format("http://~s:~B/ts/v1/query",
-                        [IP, Port])),
-    ibrowse:send_req(URL, [], post, Query).
-
-row(A, B, C, D) ->
-    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~B}",
-        [A, B, C, D]).
-
-post_data(Ctx, Table, Body) ->
-    {IP, Port} = proplists:get_value(https, Ctx),
-    URL = lists:flatten(
-        io_lib:format("http://~s:~B/ts/v1/tables/~s/keys", [IP, Port, Table])),
-    ibrowse:send_req(URL, [{"Content-Type", "application/json"}], post, lists:flatten(Body)).
-
-%%--------------------------------------------------------------------
-%% TESTS
-%%--------------------------------------------------------------------
-
-ensure_https_requires_authentication_test(Ctx) ->
-    {IP, Port} = proplists:get_value(https, Ctx),
-    lager:info("Checking SSL demands authentication"),
-    Conn = rhc:create(IP, Port, "riak", [{is_ssl, true}]),
-    ?assertMatch(
-        {error, {ok, "401", _, _}},
-        rhc:ping(Conn)
-    ).
-
-password_user_cannot_connect_with_wrong_password_test(Ctx) ->
-    User = "stranger",
-    Password = "drongo",
-    {ok,_} = riak_admin(Ctx,
-        ["security", "add-user", User, "password=donk"]),
-    {ok,_} = riak_admin(Ctx,
-        ["security", "add-source", "all", "127.0.0.1/32", "password"]),
-    Conn = client_conn(Ctx, User, Password),
-    ?assertMatch(
-        {error, {ok, "401", _, _}},
-        rhc:ping(Conn)
-    ).
-
-with_security_user_cannot_create_table_without_permissions_test(Ctx) ->
-    create_trusted_user(Ctx, "all"),
-    Query = create_table_sql("table1"),
-    %% just assert on the error message this once, to make sure it is getting
-    %% formatted correctly.
-    ?assertMatch(
-        {ok, "400", _Headers, _Body},
-        execute_query(Ctx, Query)
-    ).
-
-with_security_when_user_is_given_permissions_user_can_create_table_test(Ctx) ->
-    create_trusted_user(Ctx, "riak_ts.query_create_table"),
-    Query = create_table_sql("table2"),
-    %% just assert on the error message this once, to make sure it is getting
-    %% formatted correctly.
-    ?assertMatch(
-        {ok, "400", _Headers, _Body},
-        execute_query(Ctx, Query)
-    ).
-
-with_security_user_cannot_put_without_permissions_test(Ctx) ->
-    create_trusted_user(Ctx, "riak_ts.query_create_table"),
-    Query = create_table_sql("table3"),
-    ?assertMatch(
-        {ok, "400", _Headers, _Body},
-        execute_query(Ctx, Query)
-    ),
-    RowStr = row("q1", "w1", 11, 110),
-    ?assertMatch(
-        {ok, "200", _Headers, "{\"success\":true}"},
-        post_data(Ctx, "table3", RowStr)
-    ).
-
-with_security_when_user_is_given_permissions_user_can_put_data_test(Ctx) ->
-    create_trusted_user(Ctx, "riak_ts.query_create_table,riak_ts.put"),
-    Query = create_table_sql("table4"),
-    ?assertMatch(
-        {ok, "400", _Headers, _Body},
-        execute_query(Ctx, Query)
-    ),
-    RowStr = row("q1", "w1", 11, 110),
-    ?assertMatch(
-        {ok, "200", _Headers, "{\"success\":true}"},
-        post_data(Ctx, "table4", RowStr)
-    ).
-
-with_security_user_cannot_query_without_permissions_test(Ctx) ->
-    create_trusted_user(Ctx, "riak_ts.query_create_table,riak_ts.put"),
-    Query = create_table_sql("table4"),
-    ?assertMatch(
-        {ok, "400", _Headers, _Body},
-        execute_query(Ctx, Query)
-    ),
-    RowStrs = string:join([row("q1", "w2", 20, 150), row("q1", "w1", 20, 119)],
-        ", "),
-    ?assertMatch(
-        {ok, "200", _Headers, "{\"success\":true}"},
-        post_data(Ctx, "table4", RowStrs)
-    ),
-    Select = "SELECT * FROM table4 WHERE a='q1' AND b='w1' AND c>1 AND c<99",
-    ?assertMatch(
-        {ok, "400", _Headers, _Body},
-        execute_query(Ctx, Select)
-    ).
-
-with_security_when_user_is_given_permissions_user_can_query_data_test(Ctx) ->
-    create_trusted_user(Ctx, "riak_ts.query_create_table,riak_ts.put,riak_ts.query_select"),
-    Query = create_table_sql("table4"),
-    ?assertMatch(
-        {ok, "400", _Headers, _Body},
-        execute_query(Ctx, Query)
-    ),
-    RowStrs = string:join([row("q1", "w2", 20, 150), row("q1", "w1", 20, 119)],
-        ", "),
-    ?assertMatch(
-        {ok, "200", _Headers, "{\"success\":true}"},
-        post_data(Ctx, "table4", RowStrs)
-    ),
-    Select = "SELECT * FROM table4 WHERE a='q1' AND b='w1' AND c>1 AND c<99",
-    Body = "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
-        "\"rows\":[[\"q1\",\"w1\",11,110],"
-        "[\"q1\",\"w1\",20,119]]}",
-    ?assertMatch(
-        {ok,"200", _Headers, Body},
-        execute_query(Ctx, Select)
-    ).
+fmt(F, A) ->
+    lists:flatten(io_lib:format(F, A)).
