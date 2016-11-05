@@ -227,7 +227,7 @@ query_in_mixed_version_cluster_test(Config) ->
         "WHERE a = 1 AND b = 1 AND c >= 1000 AND c <= 5000 ",
     % ct:pal("COVERAGE ~p", [riakc_ts:get_coverage(rt:pbc(Node_A), <<"grouptab1">>, Query)]),
     {ok, {Cols, Rows}} = run_query(rt:pbc(Node_A), Query),
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, ExpectedResultSet},
         {ok,{Cols, Rows}}
     ),
@@ -235,7 +235,7 @@ query_in_mixed_version_cluster_test(Config) ->
     %% Test that the 1.3 can query the current version
     %%
     {ok, {Cols, Rows}} = run_query(rt:pbc(Node_B), Query),
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, ExpectedResultSet},
         {ok,{Cols, Rows}}
     ).

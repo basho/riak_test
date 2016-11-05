@@ -27,19 +27,19 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Table = ts_util:get_default_bucket(),
-    Data = ts_util:get_valid_select_data(),
-    TooMuchData = [list_to_tuple([<<"rubbish">> | tuple_to_list(Row)]) || Row <- Data],
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(),
+    TooMuchData = [list_to_tuple(tuple_to_list(Row) ++ [<<"rubbish">>]) || Row <- Data],
     TooLittleData = [list_to_tuple(lists:reverse(tl(lists:reverse(tuple_to_list(Row))))) || Row <- Data],
     WrongColumns = TooMuchData ++ TooLittleData,
-    Columns = ts_util:get_cols(),
+    Columns = ts_data:get_cols(),
 
-    {_Cluster, Conn} = ts_util:cluster_and_connect(single),
-    ?assertEqual({ok, {[], []}}, riakc_ts:query(Conn, DDL)),
+    Cluster = ts_setup:start_cluster(1),
+    ?assertEqual({ok, {[], []}}, ts_ops:query(Cluster, DDL)),
 
     Fn = fun(Datum, Acc) ->
-                 [ts_util:ts_insert(Conn, Table, Columns, Datum) | Acc]
+                 [ts_ops:insert(Cluster, Table, Columns, Datum) | Acc]
          end,
     Got2 = lists:reverse(lists:foldl(Fn, [], WrongColumns)),
     ?assertEqual(

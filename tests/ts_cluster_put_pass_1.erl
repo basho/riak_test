@@ -27,12 +27,15 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    TestType = normal,
-    DDL = ts_util:get_ddl(),
-    Obj = [ts_util:get_valid_obj()],
+
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Obj = [ts_data:get_valid_obj()],
+    Cluster = ts_setup:start_cluster(3),
+    {ok, _} = ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ok = ts_setup:activate_bucket_type(Cluster, Table),
     Expected = ok,
-    Got = ts_util:ts_put(
-            ts_util:cluster_and_connect(multiple), TestType, DDL, Obj),
+    Got = ts_ops:put(Cluster, Table, Obj),
     ?assertEqual(Expected, Got),
     pass.
 

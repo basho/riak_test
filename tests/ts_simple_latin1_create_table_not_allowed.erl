@@ -34,9 +34,9 @@ confirm() ->
         "series VARCHAR   NOT NULL, "
         "time   TIMESTAMP NOT NULL, "
         "PRIMARY KEY ((family, series, quantum(time, 15, 's')), family, series, time))",
-    [Node | _] = ts_util:build_cluster(single),
-    {[Node|_] = Cluster,_} = ts_util:cluster_and_connect(single),
-    {ok, Out} = ts_util:create_bucket_type(Cluster, TableDef, "mytãble"),
+
+    Cluster = ts_setup:start_cluster(1),
+    {ok, Out} = ts_setup:create_bucket_type(Cluster, TableDef, "mytãble"),
     case binary:match(list_to_binary(Out), <<"invalid json">>) of
         nomatch ->
             {error, "Expecting this to fail, check implications for riak_ql"};

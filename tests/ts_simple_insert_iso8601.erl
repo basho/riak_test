@@ -39,24 +39,24 @@
                ]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Table = ts_util:get_default_bucket(),
-    {Cluster, Conn} = ts_util:cluster_and_connect(single),
-    ts_util:create_and_activate_bucket_type(Cluster, DDL),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
 
     QryFmt = "select * from GeoCheckin Where time >= ~B and time <= ~B and myfamily = 'family1' and myseries ='seriesX'",
 
     lists:foreach(
       fun({String, Epoch}) ->
-              Qry = lists:flatten(
-                      io_lib:format(QryFmt, [Epoch-10, Epoch+10])),
+              Qry = ts_data:flat_format(QryFmt, [Epoch-10, Epoch+10]),
 
-              {ok, {[], []}} = ts_util:single_query(Conn, Qry),
+              {ok, {[], []}} = ts_ops:query(Cluster, Qry),
 
-              ts_util:ts_insert_no_columns(Conn, Table,
-                                           {<<"family1">>, <<"seriesX">>,
-                                             unicode:characters_to_binary(String), <<"cloudy">>, 5.5}),
-              {ok, {_Cols, OneRow}} = ts_util:single_query(Conn, Qry),
+              ts_ops:insert_no_columns(Cluster, Table,
+                                       {<<"family1">>, <<"seriesX">>,
+                                       unicode:characters_to_binary(String), <<"cloudy">>, 5.5}),
+              {ok, {_Cols, OneRow}} = ts_ops:query(Cluster, Qry),
               ?assertEqual(1, length(OneRow))
 
       end, ?TESTS),

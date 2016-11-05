@@ -30,17 +30,22 @@
 %%% FIXME failing because of RTS-388
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(),
     Qry =
         "SELECT * FROM GeoCheckin "
         "WHERE time > 1 and time < 10 "
         "AND myfamily = 'fa2mily1' "
         "AND myseries ='seriesX' "
         "AND weather = myseries",
-    {error, {1001, Got}} = ts_util:ts_query(
-                     ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
-    ?assertNotEqual(0, string:str(
-                         binary_to_list(Got),
-                         "Comparing or otherwise operating on two fields is not supported")),
-    pass.
+    Expected =
+        {error, {1001, "Comparing or otherwise operating on two fields is not supported"}},
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, Data),
+    Got = ts_ops:query(Cluster, Qry),
+    ts_data:assert_error_regex("No upper bound", Expected, Got).
+

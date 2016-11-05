@@ -29,14 +29,17 @@
 %% Test basic table description
 
 confirm() ->
-    DDL = ts_util:get_ddl(big, "MyTable"),
-    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
-    ts_util:create_and_activate_bucket_type(ClusterConn, DDL, "MyTable"),
+    Table = "MyTable",
+    DDL = ts_data:get_ddl(big, Table),
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+
     Qry = "EXPLAIN SELECT myint, myfloat, myoptional FROM MyTable WHERE "
         "myfamily='wingo' AND myseries='dingo' AND time > 0 AND time < 2000000 "
         "AND ((mybool=true AND myvarchar='banana') OR (myoptional=7))",
 
-    Got = ts_util:single_query(Conn, Qry),
+    Got = ts_ops:query(Cluster, Qry),
     Expected =
         {ok,{[<<"Subquery">>,
             <<"Coverage Plan">>,
@@ -45,21 +48,21 @@ confirm() ->
             <<"Range Scan End Key">>,
             <<"Is End Inclusive?">>,<<"Filter">>],
             [{1,
-                <<"dev1@127.0.0.1/49">>,
+                <<"dev1@127.0.0.1/49, dev1@127.0.0.1/50, dev1@127.0.0.1/51">>,
                 <<"myfamily = 'wingo', myseries = 'dingo', time = 1">>,
                 false,
                 <<"myfamily = 'wingo', myseries = 'dingo', time = 900000">>,
                 false,
                 <<"((myoptional = 7) OR ((mybool = true) AND (myvarchar = 'banana')))">>},
              {2,
-                <<"dev1@127.0.0.1/11">>,
+                <<"dev1@127.0.0.1/11, dev1@127.0.0.1/12, dev1@127.0.0.1/13">>,
                 <<"myfamily = 'wingo', myseries = 'dingo', time = 900000">>,
                 false,
                 <<"myfamily = 'wingo', myseries = 'dingo', time = 1800000">>,
                 false,
                 <<"((myoptional = 7) OR ((mybool = true) AND (myvarchar = 'banana')))">>},
              {3,
-                <<"dev1@127.0.0.1/59">>,
+                <<"dev1@127.0.0.1/59, dev1@127.0.0.1/60, dev1@127.0.0.1/61">>,
                 <<"myfamily = 'wingo', myseries = 'dingo', time = 1800000">>,
                 false,
                 <<"myfamily = 'wingo', myseries = 'dingo', time = 2000000">>,
@@ -68,6 +71,6 @@ confirm() ->
     ?assertEqual(Expected, Got),
 
     %% Now try NOT using TTB
-    Got2 = riakc_ts:query(Conn, Qry, [], undefined, [{use_ttb, false}]),
+    Got2 = ts_ops:query(Cluster, Qry, [{use_ttb, false}]),
     ?assertEqual(Expected, Got2),
     pass.

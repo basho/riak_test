@@ -29,13 +29,17 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL  = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data_spanning_quanta(),
-    Qry  = ts_util:get_valid_qry_spanning_quanta(),
+    DDL  = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data_spanning_quanta(),
+    Qry  = ts_data:get_valid_qry_spanning_quanta(),
     Expected = {ok, {
-        ts_util:get_cols(),
-        ts_util:exclusive_result_from_data(Data, 1, 10)}},
-    Got = ts_util:ts_query(
-            ts_util:cluster_and_connect(multiple), normal, DDL, Data, Qry),
+        ts_data:get_cols(),
+        ts_data:exclusive_result_from_data(Data, 1, 10)}},
+    Cluster = ts_setup:start_cluster(3),
+    Table = ts_data:get_default_bucket(),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ok = ts_ops:put(Cluster, Table, Data),
+    Got = ts_ops:query(Cluster, Qry),
     ?assertEqual(Expected, Got),
     pass.

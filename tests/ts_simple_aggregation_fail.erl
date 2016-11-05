@@ -27,54 +27,56 @@
 % Ensure aggregation functions only work on desired data types
 
 confirm() ->
-    DDL = ts_util:get_ddl(big),
+    DDL = ts_data:get_ddl(big),
     Count = 10,
-    Data = ts_util:get_valid_big_data(Count),
-    TestType = normal,
-    Bucket = "GeoCheckin",
-
+    Data = ts_data:get_valid_big_data(Count),
+    Bucket = ts_data:get_default_bucket(),
     Qry = "SELECT SUM(mybool) FROM " ++ Bucket,
-    ClusterConn = {_Cluster, Conn} = ts_util:cluster_and_connect(single),
-    Got1 = ts_util:ts_query(ClusterConn, TestType, DDL, Data, Qry, Bucket),
+    Cluster = ts_setup:start_cluster(1),
+    {ok,_} = ts_setup:create_bucket_type(Cluster, DDL, Bucket),
+    ok = ts_setup:activate_bucket_type(Cluster, Bucket),
+    ok = ts_ops:put(Cluster, Bucket, Data),
+
+    Got1 = ts_ops:query(Cluster, Qry),
     Expected1 = {error, {1001, <<".*Function 'SUM' called with arguments of the wrong type [[]boolean[]].*">>}},
-    Result1 = ts_util:assert_error_regex("SUM - boolean", Expected1, Got1),
+    Result1 = ts_data:assert_error_regex("SUM - boolean", Expected1, Got1),
 
     Qry2 = "SELECT AVG(myfamily) FROM " ++ Bucket,
-    Got2 = ts_util:single_query(Conn, Qry2),
+    Got2 = ts_ops:query(Cluster, Qry2),
     Expected2 = {error, {1001, <<".*Function 'AVG' called with arguments of the wrong type [[]varchar[]].*">>}},
-    Result2 = ts_util:assert_error_regex("AVG - varchar", Expected2, Got2),
+    Result2 = ts_data:assert_error_regex("AVG - varchar", Expected2, Got2),
 
     Qry3 = "SELECT MIN(myseries) FROM " ++ Bucket,
-    Got3 = ts_util:single_query(Conn, Qry3),
+    Got3 = ts_ops:query(Cluster, Qry3),
     Expected3 = {error, {1001, <<".*Function 'MIN' called with arguments of the wrong type [[]varchar[]].*">>}},
-    Result3 = ts_util:assert_error_regex("MIN - varchar", Expected3, Got3),
+    Result3 = ts_data:assert_error_regex("MIN - varchar", Expected3, Got3),
 
     Qry4 = "SELECT MAX(myseries) FROM " ++ Bucket,
-    Got4 = ts_util:single_query(Conn, Qry4),
+    Got4 = ts_ops:query(Cluster, Qry4),
     Expected4 = {error, {1001, <<".*Function 'MAX' called with arguments of the wrong type [[]varchar[]].*">>}},
-    Result4 = ts_util:assert_error_regex("MIN - varchar", Expected4, Got4),
+    Result4 = ts_data:assert_error_regex("MIN - varchar", Expected4, Got4),
 
     Qry5 = "SELECT STDDEV(mybool) FROM " ++ Bucket,
-    Got5 = ts_util:single_query(Conn, Qry5),
+    Got5 = ts_ops:query(Cluster, Qry5),
     Expected5 = {error, {1001, <<".*Function 'STDDEV_SAMP' called with arguments of the wrong type [[]boolean[]].*">>}},
-    Result5 = ts_util:assert_error_regex("STDDEV - boolean", Expected5, Got5),
+    Result5 = ts_data:assert_error_regex("STDDEV - boolean", Expected5, Got5),
 
     Qry6 = "SELECT STDDEV_SAMP(mybool) FROM " ++ Bucket,
-    Got6 = ts_util:single_query(Conn, Qry6),
+    Got6 = ts_ops:query(Cluster, Qry6),
     Expected6 = {error, {1001, <<".*Function 'STDDEV_SAMP' called with arguments of the wrong type [[]boolean[]].*">>}},
-    Result6 = ts_util:assert_error_regex("STDDEV_SAMP - boolean", Expected6, Got6),
+    Result6 = ts_data:assert_error_regex("STDDEV_SAMP - boolean", Expected6, Got6),
 
     Qry7 = "SELECT STDDEV_POP(time) FROM " ++ Bucket,
-    Got7 = ts_util:single_query(Conn, Qry7),
+    Got7 = ts_ops:query(Cluster, Qry7),
     Expected7 = {error, {1001, <<".*Function 'STDDEV_POP' called with arguments of the wrong type [[]timestamp[]].*">>}},
-    Result7 = ts_util:assert_error_regex("STDDEV_POP - timestamp", Expected7, Got7),
+    Result7 = ts_data:assert_error_regex("STDDEV_POP - timestamp", Expected7, Got7),
 
     Qry8 = "SELECT Mean(mybool) FROM " ++ Bucket,
-    Got8 = ts_util:single_query(Conn, Qry8),
+    Got8 = ts_ops:query(Cluster, Qry8),
     Expected8 = {error, {1001, <<".*Function 'AVG' called with arguments of the wrong type [[]boolean[]].*">>}},
-    Result8 = ts_util:assert_error_regex("MEAN - boolean", Expected8, Got8),
+    Result8 = ts_data:assert_error_regex("MEAN - boolean", Expected8, Got8),
 
-    ts_util:results([
+    ts_data:results([
              Result1,
              Result2,
              Result3,

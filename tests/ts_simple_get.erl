@@ -29,13 +29,18 @@
 %% Test gets which return no data, i.e., not found.
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(),
     DataRow = hd(Data),
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, Data),
     Key = lists:sublist(tuple_to_list(DataRow), 3),
-    Expected = {ts_util:get_cols(),[DataRow]},
-    {ok, Got} = ts_util:ts_get(
-                  ts_util:cluster_and_connect(single),
-                  normal, DDL, Data, Key, []),
+    Expected = {ts_data:get_cols(),[DataRow]},
+    {ok, Got} = ts_ops:get(Cluster, Table, Key),
     ?assertEqual(Expected, Got),
     pass.
+

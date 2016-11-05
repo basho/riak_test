@@ -31,22 +31,18 @@
 %%
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    ClusterConn = ts_util:cluster_and_connect(single),
-
-    Expected1 =
-        {ok,
-         "GeoCheckin has been activated\n"
-         "\n"
-         "WARNING: Nodes in this cluster can no longer be\n"
-         "downgraded to a version of Riak prior to 2.0\n"},
-    Got1 = ts_util:create_and_activate_bucket_type(ClusterConn, DDL),
+    DDL = ts_data:get_ddl(),
+    Cluster = ts_setup:start_cluster(1),
+    Expected1 = ok,
+    Table = ts_data:get_default_bucket(),
+    {ok,_} = ts_setup:create_bucket_type(Cluster, DDL, Table),
+    Got1 = ts_setup:activate_bucket_type(Cluster, Table),
     ?assertEqual(Expected1, Got1),
 
     Expected2 =
         {ok,
          "Error creating bucket type GeoCheckin:\n"
          "already_active\n"},
-    Got2 = ts_util:create_bucket_type(ClusterConn, DDL),
+    Got2 = ts_setup:create_bucket_type(Cluster, DDL, Table),
     ?assertEqual(Expected2, Got2),
     pass.

@@ -36,6 +36,8 @@ confirm() ->
         " temperature double,"
         " PRIMARY KEY ((myfamily, myfamily, quantum(time, 15, 'm')),"
         " myfamily, myfamily, time))",
-    {ok, Got} = ts_util:create_bucket_type(ts_util:build_cluster(single), DDL),
+    Table = ts_data:get_default_bucket(),
+    Cluster = ts_setup:start_cluster(1),
+    {ok, Got} = ts_setup:create_bucket_type(Cluster, DDL, Table),
     ?assertNotEqual(0, string:str(Got, "Primary key has duplicate fields")),
     pass.

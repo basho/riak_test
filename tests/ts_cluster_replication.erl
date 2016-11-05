@@ -62,10 +62,14 @@ confirm() ->
     [ANodes, BNodes] = rt:build_clusters([{ClusterASize, Conf}, {NumNodes - ClusterASize, Conf}]),
 
     %% TS-ize the clusters
-    DDL = ts_util:get_ddl(),
-    Table = ts_util:get_default_bucket(),
-    ts_util:create_table(normal, ANodes, DDL, Table),
-    ts_util:create_table(normal, BNodes, DDL, Table),
+    DDL = ts_data:get_ddl(),
+    Table = ts_data:get_default_bucket(),
+
+    ts_setup:create_bucket_type(ANodes, DDL, Table),
+    ts_setup:activate_bucket_type(ANodes, Table),
+
+    ts_setup:create_bucket_type(BNodes, DDL, Table),
+    ts_setup:activate_bucket_type(BNodes, Table),
 
     replication(ANodes, BNodes, list_to_binary(Table), <<"hey look ma no w1c">>),
     test_ddl_comparison(ANodes, BNodes),
@@ -74,10 +78,15 @@ confirm() ->
 test_ddl_comparison(ANodes, BNodes) ->
     lager:info("Testing TS realtime fails with incompatible DDLs"),
     Table = "house_of_horrors",
-    SmallDDL = ts_util:get_ddl(small, Table),
-    BigDDL = ts_util:get_ddl(big, Table),
-    ts_util:create_table(normal, ANodes, SmallDDL, Table),
-    ts_util:create_table(normal, BNodes, BigDDL, Table),
+    SmallDDL = ts_data:get_ddl(small, Table),
+    BigDDL = ts_data:get_ddl(big, Table),
+
+    ts_setup:create_bucket_type(ANodes, SmallDDL, Table),
+    ts_setup:activate_bucket_type(ANodes, Table),
+
+    ts_setup:create_bucket_type(BNodes, BigDDL, Table),
+    ts_setup:activate_bucket_type(BNodes, Table),
+
     LeaderA = get_leader(hd(ANodes)),
     PortB = get_mgr_port(hd(BNodes)),
     prop_failure_replication_test(ANodes, BNodes, LeaderA, PortB, Table).
@@ -93,7 +102,7 @@ ts_num_records_present(Node, Lower, Upper, Table) when is_binary(Table) ->
     ts_num_records_present(Node, Lower, Upper, unicode:characters_to_list(Table));
 ts_num_records_present(Node, Lower, Upper, Table) ->
     %% Queries use strictly greater/less than
-    Qry = ts_util:get_valid_qry(Lower-1, Upper+1, Table),
+    Qry = ts_data:get_valid_qry(Lower-1, Upper+1, Table),
     {ok, {_Hdrs, Results}} = riakc_ts:query(rt:pbc(Node), Qry),
     length(Results).
 
@@ -103,7 +112,7 @@ kv_num_objects_present(Node, Lower, Upper, Bucket) ->
     PotentialQty - length(FailedMatches).
 
 delete_record(Node, Table, Time) ->
-    [RecordAsTuple] = ts_util:get_valid_select_data(fun() -> lists:seq(Time, Time) end),
+    [RecordAsTuple] = ts_data:get_valid_select_data(fun() -> lists:seq(Time, Time) end),
     RecordAsList = tuple_to_list(RecordAsTuple),
     KeyAsList = lists:sublist(RecordAsList, 3),
     lager:info("Deleting ~p from ~ts~n", [KeyAsList, Table]),
@@ -111,7 +120,7 @@ delete_record(Node, Table, Time) ->
 
 put_records(Node, Table, Lower, Upper) ->
     riakc_ts:put(rt:pbc(Node), Table,
-                 ts_util:get_valid_select_data(
+                 ts_data:get_valid_select_data(
                    fun() -> lists:seq(Lower, Upper) end)).
 
 replication(ANodes, BNodes, Table, NormalType) ->

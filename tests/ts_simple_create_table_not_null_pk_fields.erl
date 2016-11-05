@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -27,6 +27,7 @@
 -export([confirm/0]).
 
 confirm() ->
+    Table = ts_data:get_default_bucket(),
     DDL =
         "CREATE TABLE GeoCheckin ("
         " myfamily    varchar   not null,"
@@ -36,6 +37,7 @@ confirm() ->
         " temperature double,"
         " PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')),"
         " myfamily, myseries, time))",
-    {ok, Got} = ts_util:create_bucket_type(ts_util:build_cluster(single), DDL),
+    Cluster = ts_setup:start_cluster(1),
+    {ok, Got} = ts_setup:create_bucket_type(Cluster, DDL, Table),
     ?assertNotEqual(0, string:str(Got, "Primary key has 'null' fields")),
     pass.

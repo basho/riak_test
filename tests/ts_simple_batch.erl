@@ -36,25 +36,27 @@
 -define(UPPER_QRY,  900050).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Qry = ts_util:get_valid_qry(?LOWER_QRY, ?UPPER_QRY),
-    Data = ts_util:get_valid_select_data(fun() -> lists:seq(?LOWER_DATA,?UPPER_DATA) end),
+    DDL = ts_data:get_ddl(),
+    Qry = ts_data:get_valid_qry(?LOWER_QRY, ?UPPER_QRY),
+    Data = ts_data:get_valid_select_data(fun() -> lists:seq(?LOWER_DATA,?UPPER_DATA) end),
     Expected =
-        {ts_util:get_cols(small),
-         ts_util:exclusive_result_from_data(Data, ?LOWER_QRY-?LOWER_DATA+2, (?LOWER_QRY-?LOWER_DATA)+(?UPPER_QRY-?LOWER_QRY))},
-    {[Node], Pid} = ts_util:cluster_and_connect(single),
+        {ts_data:get_cols(small),
+         ts_data:exclusive_result_from_data(Data, ?LOWER_QRY-?LOWER_DATA+2, (?LOWER_QRY-?LOWER_DATA)+(?UPPER_QRY-?LOWER_QRY))},
+
+    [Node] = ts_setup:start_cluster(1),
+    Pid = ts_setup:conn([Node]),
 
 
     rt_intercept:add(Node, {riak_kv_eleveldb_backend,
                             [{{batch_put, 4}, batch_put}]}),
 
-    %% Buried in the bowels of the code path behind ts_util:ts_put/4
+    %% Buried in the bowels of the code path behind ts_ops:ts_put/4
     %% is a calculation that n_val is the same as the cluster size. I
     %% want a single node cluster for this test, but n_val of 4, so
     %% I'll duplicate the path here
-    Bucket = ts_util:get_default_bucket(),
-    {ok, _} = ts_util:create_bucket_type([Node], DDL, Bucket, 4),
-    ts_util:activate_bucket_type([Node], Bucket),
+    Bucket = ts_data:get_default_bucket(),
+    {ok,_} = ts_setup:create_bucket_type([Node], DDL, Bucket, 4),
+    ok = ts_setup:activate_bucket_type([Node], Bucket),
 
     riakc_ts:put(Pid, Bucket, Data),
 

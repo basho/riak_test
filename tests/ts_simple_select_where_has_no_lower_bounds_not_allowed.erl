@@ -27,18 +27,16 @@
 -export([confirm/0]).
 
 confirm() ->
-    TestType = normal,
-    DDL = ts_util:get_ddl(),
-    Data = [],
+    DDL = ts_data:get_ddl(),
     Qry = "select * from GeoCheckin "
           "where time < 10 "
           "and myfamily = 'family1' "
           "and myseries ='seriesX' ",
     Expected =
-        {error,
-         {1001,
-          <<"Where clause has no lower bound.">>}},
-    Got = ts_util:ts_query(
-            ts_util:cluster_and_connect(single), TestType, DDL, Data, Qry),
-    ts_util:assert_error_regex("No lower bound", Expected, Got).
-
+        {error, {1001, <<"Where clause has no lower bound.">>}},
+    Cluster = ts_setup:start_cluster(1),
+    Table = ts_data:get_default_bucket(),
+    {ok, _} = ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ok = ts_setup:activate_bucket_type(Cluster, Table),
+    Got = ts_ops:query(Cluster, Qry),
+    ts_data:assert_error_regex("No lower bound", Expected, Got).

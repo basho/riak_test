@@ -27,14 +27,10 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Expected =
-        {ok,
-         "GeoCheckin created\n"
-         "\n"
-         "WARNING: After activating GeoCheckin, nodes in this cluster\n"
-         "can no longer be downgraded to a version of Riak prior to 2.0\n"},
-    Got = ts_util:create_bucket_type(
-            ts_util:build_cluster(multiple), DDL),
+    DDL = ts_data:get_ddl(),
+    Expected = ok,
+    Cluster = ts_setup:start_cluster(3),
+    Table = ts_data:get_default_bucket(),
+    {Got, _} = ts_setup:create_bucket_type(Cluster, DDL, Table),
     ?assertEqual(Expected, Got),
     pass.

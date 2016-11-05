@@ -32,11 +32,12 @@ confirm() ->
     QuantumMS = 15 * 60 * 1000,
     UpperBoundExcl = QuantaTally * QuantumMS,
     TimesGeneration = fun() -> lists:seq(1, UpperBoundExcl-1, 3124) end,
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(TimesGeneration),
-    Nodes = ts_util:build_cluster(multiple),
-    Table = ts_util:get_default_bucket(),
-    ts_util:create_table(normal, Nodes, DDL, Table),
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(TimesGeneration),
+    Nodes = ts_setup:start_cluster(3),
+    Table = ts_data:get_default_bucket(),
+    {ok, _} = ts_setup:create_bucket_type(Nodes, DDL, Table),
+    ok = ts_setup:activate_bucket_type(Nodes, Table),
     ok = riakc_ts:put(rt:pbc(hd(Nodes)), Table, Data),
     %% First test on a small range well within the size of a normal query
     SmallData = lists:filter(fun({_, _, Time, _, _}) ->
@@ -50,7 +51,7 @@ confirm() ->
 
 test_replacement_quanta(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
     AdminPid = rt:pbc(lists:nth(3, Nodes)),
-    Qry = ts_util:get_valid_qry(-1, NumQuanta * QuantumMS),
+    Qry = ts_data:get_valid_qry(-1, NumQuanta * QuantumMS),
     {ok, CoverageEntries} = riakc_ts:get_coverage(AdminPid, Table, Qry),
     ?assertEqual(NumQuanta, length(CoverageEntries)),
 
@@ -101,7 +102,7 @@ test_replacement_quanta(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
 test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
     AdminPid = rt:pbc(lists:nth(3, Nodes)),
     OtherPid = rt:pbc(lists:nth(2, Nodes)),
-    Qry = ts_util:get_valid_qry(-1, NumQuanta * QuantumMS),
+    Qry = ts_data:get_valid_qry(-1, NumQuanta * QuantumMS),
     {ok, CoverageEntries} = riakc_ts:get_coverage(AdminPid, Table, Qry),
     ?assertEqual(NumQuanta, length(CoverageEntries)),
 
@@ -167,7 +168,7 @@ check_data_against_range(Data, {_FieldName, {{Lower, LowerIncl}, {Upper, UpperIn
                                   end,
                                   Data)).
 
-%% Cheap and easy. ts_util gives us 3 nodes, we know the ports.
+%% Cheap and easy. ts_setup gives us 3 nodes, we know the ports.
 alternate_port(10017) ->
     10027;
 alternate_port(10027) ->

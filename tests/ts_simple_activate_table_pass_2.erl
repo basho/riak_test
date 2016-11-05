@@ -27,7 +27,7 @@
 -export([confirm/0]).
 
 confirm() ->
-    Cluster = ts_util:build_cluster(single),
+    Cluster = ts_setup:start_cluster(1),
     % individual assert matches to show line numbers in failures
     ?assertMatch(
         {error_creating_bucket_type, _},
@@ -111,7 +111,7 @@ confirm() ->
 
 %%
 create_and_activate_bucket_type(Cluster, {TableName, DDL}) ->
-    {ok, Out} = ts_util:create_bucket_type(Cluster, DDL, TableName, 3),
+    {ok, Out} = ts_setup:create_bucket_type(Cluster, DDL, TableName, 3),
     case iolist_to_binary(Out) of
         <<"Error", _/binary>> ->
             {error_creating_bucket_type, Out};
@@ -119,7 +119,7 @@ create_and_activate_bucket_type(Cluster, {TableName, DDL}) ->
             {error_creating_bucket_type, Out};
         _ ->
             Retries = 0,
-            ts_util:activate_bucket_type(Cluster, TableName, Retries)
+            ts_setup:activate_bucket_type(Cluster, TableName, Retries)
     end.
 
 %%

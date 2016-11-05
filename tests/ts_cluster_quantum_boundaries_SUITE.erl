@@ -34,7 +34,7 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    [Node|_] = Cluster = ts_util:build_cluster(multiple),
+    [Node|_] = Cluster = ts_setup:start_cluster(3),
     create_data_def_1(rt:pbc(Node)),
     [{cluster, Cluster} | Config].
 
@@ -90,7 +90,7 @@ start_key_query_greater_than_1999_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 1999 AND c <= 3800",
     Results =
          [{1,1,N} || N <- lists:seq(2000,3800)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -100,7 +100,7 @@ start_key_query_greater_than_2000_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2000 AND c <= 3800",
     Results =
          [{1,1,N} || N <- lists:seq(2001,3800)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -110,7 +110,7 @@ start_key_query_greater_than_2001_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2001 AND c <= 3800",
     Results =
          [{1,1,N} || N <- lists:seq(2002,3800)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -120,7 +120,7 @@ start_key_query_greater_or_equal_to_1999_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 1999 AND c <= 3800",
     Results =
          [{1,1,N} || N <- lists:seq(1999,3800)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -130,7 +130,7 @@ start_key_query_greater_or_equal_to_2000_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2000 AND c <= 3800",
     Results =
          [{1,1,N} || N <- lists:seq(2000,3800)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -140,7 +140,7 @@ start_key_query_greater_or_equal_to_2001_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2001 AND c <= 3800",
     Results =
          [{1,1,N} || N <- lists:seq(2002,3800)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -154,7 +154,7 @@ end_key_query_less_than_3999_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2500 AND c < 3999",
     Results =
          [{1,1,N} || N <- lists:seq(2500,3998)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -164,7 +164,7 @@ end_key_query_less_than_4000_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2500 AND c < 4000",
     Results =
          [{1,1,N} || N <- lists:seq(2500,3999)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -174,7 +174,7 @@ end_key_query_less_than_4001_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2500 AND c < 4001",
     Results =
          [{1,1,N} || N <- lists:seq(2500,4000)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -184,7 +184,7 @@ end_key_query_less_than_or_equal_to_3999_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 3999",
     Results =
          [{1,1,N} || N <- lists:seq(2500,3999)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -194,7 +194,7 @@ end_key_query_less_than_or_equal_to_4000_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4000",
     Results =
          [{1,1,N} || N <- lists:seq(2500,4000)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -204,7 +204,7 @@ end_key_query_less_than_or_equal_to_4001_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4001",
     Results =
          [{1,1,N} || N <- lists:seq(2500,4001)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -214,7 +214,7 @@ start_key_query_greater_than_500_one_quantum_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 700",
     Results =
          [{1,1,N} || N <- lists:seq(501,699)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -224,7 +224,7 @@ start_key_query_greater_or_equal_to_500_one_quantum_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 500 AND c < 700",
     Results =
          [{1,1,N} || N <- lists:seq(500,699)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -234,7 +234,7 @@ start_key_query_greater_than_500_two_quantum_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 1500",
     Results =
          [{1,1,N} || N <- lists:seq(501,1499)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -246,7 +246,7 @@ start_key_query_greater_than_500_two_quantum_test(Ctx) ->
 one_key_before_quantum_start_key_greater_than_or_equal_to_2999_test(Ctx) ->
     Query =
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 2999 AND c < 3000",
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{1,1,2999}]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -254,7 +254,7 @@ one_key_before_quantum_start_key_greater_than_or_equal_to_2999_test(Ctx) ->
 one_key_before_quantum_start_key_greater_than_2998_test(Ctx) ->
     Query =
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2998 AND c < 3000",
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{1,1,2999}]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -262,7 +262,7 @@ one_key_before_quantum_start_key_greater_than_2998_test(Ctx) ->
 one_key_after_quantum_end_key_less_than_3001_test(Ctx) ->
     Query =
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2999 AND c < 3001",
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{1,1,3000}]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).
@@ -270,7 +270,7 @@ one_key_after_quantum_end_key_less_than_3001_test(Ctx) ->
 one_key_after_quantum_less_than_or_equal_to_3000_test(Ctx) ->
     Query =
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 2999 AND c <= 3000",
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{1,1,3000}]},
         riakc_ts:query(client_pid(Ctx), Query)
     ).

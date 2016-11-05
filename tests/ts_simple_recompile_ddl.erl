@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2106 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -29,12 +29,12 @@
 -define(DETS_TABLE, riak_kv_compile_tab_v2).
 
 confirm() ->
-    {Cluster, _Conn} = ts_util:cluster_and_connect(single),
-    Node = hd(Cluster),
+    [Node | _Rest] = Cluster = ts_setup:start_cluster(1),
     lists:foreach(
         fun(Table) ->
             DDL = create_table_sql(Table),
-            ts_util:create_and_activate_bucket_type(Cluster, DDL, Table)
+            ts_setup:create_bucket_type(Cluster, DDL, Table),
+            ts_setup:activate_bucket_type(Cluster, Table)
         end, test_tables()),
     rt:stop(Node),
     simulate_old_dets_entries(),

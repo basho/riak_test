@@ -27,8 +27,9 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Data = ts_util:get_valid_select_data(),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Data = ts_data:get_valid_select_data(),
     Qry =
         "SELECT * FROM GeoCheckin "
         "WHERE time > 1 AND time < 10 "
@@ -36,8 +37,12 @@ confirm() ->
         "AND myseries = 1.0", % error, should be a varchar
     Expected =
         {error,
-         {1001,
-          <<".*incompatible_type: field myseries with type varchar cannot be compared to type float in where clause.">>}},
-    Got = ts_util:ts_query(
-            ts_util:cluster_and_connect(single), normal, DDL, Data, Qry),
-    ts_util:assert_error_regex("Incompatible types", Expected, Got).
+            {1001,
+                <<".*incompatible_type: field myseries with type varchar cannot be compared to type float in where clause.">>}},
+
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    ts_ops:put(Cluster, Table, Data),
+    Got = ts_ops:query(Cluster, Qry),
+    ts_data:assert_error_regex("Incompatible types", Expected, Got).

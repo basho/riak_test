@@ -31,10 +31,12 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Obj = [ts_util:get_invalid_obj()],
-    Got = ts_util:ts_put(
-            ts_util:cluster_and_connect(single), no_ddl, DDL, Obj),
+    Table = ts_data:get_default_bucket(),
+    Obj = [ts_data:get_invalid_obj()],
+
+    Cluster = ts_setup:start_cluster(1),
+
+    Got = ts_ops:put(Cluster, Table, Obj),
     ?assertMatch({error, _}, Got),
     pass.
 

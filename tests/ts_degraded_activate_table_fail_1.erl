@@ -29,9 +29,13 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
+    DDL = ts_data:get_ddl(),
     Expected = {ok, "GeoCheckin has been created but cannot be activated yet\n"},
-    Got = ts_util:create_and_activate_bucket_type(
-            ts_util:build_cluster(one_down), DDL),
+
+    [_Node|Rest]= Cluster = ts_setup:start_cluster(3),
+    ok = rt:stop(hd(tl(Rest))),
+    Table = ts_data:get_default_bucket(),
+    {ok,_} = ts_setup:create_bucket_type(Cluster, DDL, Table),
+    Got = ts_setup:activate_bucket_type(Cluster, Table),
     ?assertEqual(Expected, Got),
     pass.

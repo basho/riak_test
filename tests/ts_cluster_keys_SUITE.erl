@@ -34,7 +34,7 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    [Node|_] = Cluster = ts_util:build_cluster(multiple),
+    [Node|_] = Cluster = ts_setup:start_cluster(3),
     Pid = rt:pbc(Node),
     % create tables and populate them with data
     create_data_def_1(Pid),
@@ -81,7 +81,7 @@ run_query(Ctx, Query) ->
 %%%
 
 create_data_def_1(Pid) ->
-    ts_util:assert_row_sets({ok, {[],[]}},riakc_ts:query(Pid, table_def_1())),
+    ts_data:assert_row_sets({ok, {[],[]}},riakc_ts:query(Pid, table_def_1())),
     ok = riakc_ts:put(Pid, <<"table1">>, [{1,1,N,1} || N <- lists:seq(1,6000)]).
 
 column_names_def_1() ->
@@ -100,7 +100,7 @@ select_exclusive_def_1_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 0 AND c < 11",
     Results =
          [{1,1,N,1} || N <- lists:seq(1,10)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         run_query(Ctx, Query)
     ).
@@ -110,7 +110,7 @@ select_exclusive_def_1_2_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 44 AND c < 54",
     Results =
          [{1,1,N,1} || N <- lists:seq(45,53)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         run_query(Ctx, Query)
     ).
@@ -120,7 +120,7 @@ select_exclusive_def_1_across_quanta_1_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 1500",
     Results =
          [{1,1,N,1} || N <- lists:seq(501,1499)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         run_query(Ctx, Query)
     ).
@@ -131,7 +131,7 @@ select_exclusive_def_1_across_quanta_2_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c > 500 AND c < 4500",
     Results =
          [{1,1,N,1} || N <- lists:seq(501,4499)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         run_query(Ctx, Query)
     ).
@@ -141,7 +141,7 @@ select_inclusive_def_1_test(Ctx) ->
         "SELECT * FROM table1 WHERE a = 1 AND b = 1 AND c >= 11 AND c <= 20",
     Results =
          [{1,1,N,1} || N <- lists:seq(11,20)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         run_query(Ctx, Query)
     ).
@@ -178,7 +178,7 @@ where_clause_must_cover_the_partition_key_missing_c_test(Ctx) ->
 %%%
 
 create_data_def_2(Pid) ->
-    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_2())),
+    ts_data:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_2())),
     ok = riakc_ts:put(Pid, <<"table2">>, [{N,1,1,1} || N <- lists:seq(1,200)]).
 
 table_def_2() ->
@@ -194,7 +194,7 @@ select_exclusive_def_2_test(Ctx) ->
         "SELECT * FROM table2 WHERE a > 0 AND a < 11",
     Results =
          [{N,1,1,1} || N <- lists:seq(1,10)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         run_query(Ctx, Query)
     ).
@@ -204,7 +204,7 @@ select_inclusive_def_2_test(Ctx) ->
         "SELECT * FROM table2 WHERE a >= 11 AND a <= 20",
     Results =
          [{N,1,1,1} || N <- lists:seq(11,20)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_1(), Results}},
         run_query(Ctx, Query)
     ).
@@ -214,7 +214,7 @@ select_inclusive_def_2_test(Ctx) ->
 %%%
 
 create_data_def_3(Pid) ->
-    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_3())),
+    ts_data:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_3())),
     ok = riakc_ts:put(Pid, <<"table3">>, [{1,N} || N <- lists:seq(1,200)]).
 
 column_names_def_3() ->
@@ -231,7 +231,7 @@ select_exclusive_def_3_test(Ctx) ->
         "SELECT * FROM table3 WHERE b > 0 AND b < 11 AND a = 1",
     Results =
          [{1,N} || N <- lists:seq(1,10)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_3(), Results}},
         run_query(Ctx, Query)
     ).
@@ -241,7 +241,7 @@ select_inclusive_def_3_test(Ctx) ->
         "SELECT * FROM table3 WHERE b >= 11 AND b <= 20 AND a = 1",
     Results =
          [{1,N} || N <- lists:seq(11,20)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_3(), Results}},
         run_query(Ctx, Query)
     ).
@@ -252,7 +252,7 @@ select_inclusive_def_3_test(Ctx) ->
 %%%
 
 create_data_def_4(Pid) ->
-    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_4())),
+    ts_data:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_4())),
     ok = riakc_ts:put(Pid, <<"table4">>, [{1,1,N} || N <- lists:seq(1,200)]).
 
 column_names_def_4() ->
@@ -270,7 +270,7 @@ select_exclusive_def_4_test(Ctx) ->
         "SELECT * FROM table4 WHERE a = 1 AND b = 1 AND c > 0 AND c < 11",
     Results =
          [{1,1,N} || N <- lists:seq(1,10)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_4(), Results}},
         run_query(Ctx, Query)
     ).
@@ -280,7 +280,7 @@ select_inclusive_def_4_test(Ctx) ->
         "SELECT * FROM table4 WHERE a = 1 AND b = 1 AND c >= 11 AND c <= 20",
     Results =
          [{1,1,N} || N <- lists:seq(11,20)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_4(), Results}},
         run_query(Ctx, Query)
     ).
@@ -300,13 +300,13 @@ table_def_5() ->
     "PRIMARY KEY ((a,b,c),a,b,c))".
 
 create_data_def_5(Pid) ->
-    ts_util:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_5())),
+    ts_data:assert_row_sets({ok, {[],[]}}, riakc_ts:query(Pid, table_def_5())),
     ok = riakc_ts:put(Pid, <<"table5">>, [{1,1,N} || N <- lists:seq(1,200)]).
 
 select_def_5_test(Ctx) ->
     Query =
         "SELECT * FROM table5 WHERE a = 1 AND b = 1 AND c = 20",
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {column_names_def_5(), [{1,1,20}]}},
         run_query(Ctx, Query)
     ).
@@ -316,7 +316,7 @@ select_def_5_test(Ctx) ->
 %%%
 
 create_data_def_8(Pid) ->
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {ok, {[],[]}},
         riakc_ts:query(Pid,
             "CREATE TABLE table8 ("
@@ -332,7 +332,7 @@ d_equal_than_filter_test(Ctx) ->
     Query =
         "SELECT * FROM table8 "
         "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d = 3000",
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{1,1,3000,3000}]},
         run_query(Ctx, Query)
     ).
@@ -343,7 +343,7 @@ d_greater_than_filter_test(Ctx) ->
         "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d > 3000",
     Results =
          [{1,1,N,N} || N <- lists:seq(3001,4500)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, Results},
         run_query(Ctx, Query)
     ).
@@ -354,7 +354,7 @@ d_greater_or_equal_to_filter_test(Ctx) ->
         "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d >= 3000",
     Results =
          [{1,1,N,N} || N <- lists:seq(3000,4500)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, Results},
         run_query(Ctx, Query)
     ).
@@ -365,7 +365,7 @@ d_not_filter_test(Ctx) ->
         "WHERE a = 1 AND b = 1 AND c >= 2500 AND c <= 4500 AND d != 3000",
     Results =
          [{1,1,N,N} || N <- lists:seq(2500,4500), N /= 3000],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, Results},
         run_query(Ctx, Query)
     ).
@@ -456,7 +456,7 @@ double_pk_double_boolean_lk_test(Ctx) ->
     Query =
         "SELECT * FROM double_pk_double_boolean_lk_test "
         "WHERE a = 0.5 AND b = true",
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{0.5,true}]},
         run_query(Ctx, Query)
     ).
@@ -476,7 +476,7 @@ boolean_pk_boolean_double_lk_test(Ctx) ->
     Query =
         "SELECT * FROM boolean_pk_boolean_double_lk_test "
         "WHERE a = false AND b = 0.5",
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, [{false,0.5}]},
         run_query(Ctx, Query)
     ).
@@ -532,7 +532,7 @@ all_types_1_test(Ctx) ->
             I <- ts_booleans()
            ,J <- Doubles
         ],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, Results},
         run_query(Ctx, Query)
     ).
@@ -552,7 +552,7 @@ all_types_or_filter_test(Ctx) ->
             J <- Doubles,
             I == true orelse J == 0.2
         ],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, Results},
         run_query(Ctx, Query)
     ).
@@ -591,7 +591,7 @@ all_booleans_test(Ctx) ->
     Results =
         [{true,true,true,Bd,Be,Bf,Bg} || Bd <- ts_booleans(), Be <- ts_booleans(),
                                          Bf <- ts_booleans(), Bg <- ts_booleans()],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
     ).
@@ -603,7 +603,7 @@ all_booleans_filter_on_g_test(Ctx) ->
     Results =
         [{true,true,true,Bd,Be,Bf,false} || Bd <- ts_booleans(), Be <- ts_booleans(),
                                          Bf <- ts_booleans()],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
     ).
@@ -614,7 +614,7 @@ all_booleans_filter_on_d_and_f_test(Ctx) ->
         "WHERE a = true AND b = true AND c = true AND d = false AND f = true",
     Results =
         [{true,true,true,false,Be,true,Bg} || Be <- ts_booleans(), Bg <- ts_booleans()],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
     ).
@@ -644,7 +644,7 @@ all_timestamps_across_quanta_test(Ctx) ->
         "WHERE a = 2 AND b > 200 AND b < 3000 AND c = 3",
     Results =
         [{2,B,3,4,5} || B <- lists:seq(300, 2900, 100)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
     ).
@@ -655,7 +655,7 @@ all_timestamps_single_quanta_test(Ctx) ->
         "WHERE a = 2 AND b > 200 AND b <= 900 AND c = 3",
     Results =
         [{2,B,3,4,5} || B <- lists:seq(300, 900, 100)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns,Results},
         run_query(Ctx, Query)
     ).

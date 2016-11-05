@@ -103,7 +103,7 @@ basic_table_hinted_handoff_test(Config) ->
         "SELECT * FROM mytab "
         "WHERE a = 1 AND b >= 1000 AND b <= 5000",
     ExpectedResultSet = [{1,B} || B <- lists:seq(1000,5000,1000)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, ExpectedResultSet},
         run_query(rt:pbc(Node_B), Query, Config)
     ),
@@ -132,7 +132,7 @@ additional_columns_on_local_key_table_hinted_handoff_test(Config) ->
         "SELECT * FROM mytab "
         "WHERE a = 1 AND b >= 1000 AND b <= 5000",
     ExpectedResultSet = [{1,B,C} || B <- lists:seq(1000,5000,1000), C <- lists:seq(1000,5000,1000)],
-    ts_util:assert_row_sets(
+    ts_data:assert_row_sets(
         {rt_ignore_columns, ExpectedResultSet},
         run_query(rt:pbc(Node_B), Query, Config)
     ),

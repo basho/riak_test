@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2106 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -34,7 +34,6 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(SPANNING_STEP, (1000)).
--define(TEST_TYPE, normal).
 
 confirm() ->
     %% will fail if ts_simple_put_all_null_datatypes fails
@@ -54,26 +53,29 @@ confirm() ->
     Series = <<"seriesX">>,
     N = 11,
     Data = make_data(N, Family, Series, []),
-    ClusterConn = ts_util:cluster_and_connect(single),
-    Got = ts_util:ts_put(ClusterConn, ?TEST_TYPE, DDL, Data),
+    Cluster = ts_setup:start_cluster(1),
+    Table = ts_data:get_default_bucket(),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    Got = ts_ops:put(Cluster, Table, Data),
     ?assertEqual(ok, Got),
     Qry = "SELECT * FROM GeoCheckin WHERE"
           " myfamily='" ++ binary_to_list(Family) ++ "'"
           " AND myseries='" ++ binary_to_list(Series) ++ "'"
           " AND time >= 1000 AND time <= " ++ integer_to_list(N * 1000) ++
           " AND myvarchar IS NULL",
-    {ok, {_Fields, Rows}} = ts_util:ts_query(ClusterConn, ?TEST_TYPE, DDL, Data, Qry),
+    {ok, {_Fields, Rows}} = ts_ops:query(Cluster, Qry),
     ?assertNotEqual(0, length(Rows)),
     NullableFields = [ "myvarchar", "myint", "myfloat", "mybool", "mytimestamp" ],
     lists:foreach(fun (Field) ->
-                query_field(Field, ClusterConn, DDL, Data, Family, Series, N)
+                query_field(Field, Cluster, Data, Family, Series, N)
         end, NullableFields),
     pass.
 
-query_field(Field, ClusterConn, DDL, Data, Family, Series, N) ->
-    RowsAll = query_all(ClusterConn, DDL, Data, Family, Series, N),
-    RowsIsNull = query_is_null(ClusterConn, DDL, Data, Family, Series, N, Field),
-    RowsIsNotNull = query_is_not_null(ClusterConn, DDL, Data, Family, Series, N, Field),
+query_field(Field, Cluster, Data, Family, Series, N) ->
+    RowsAll = query_all(Cluster, Family, Series, N),
+    RowsIsNull = query_is_null(Cluster, Data, Family, Series, N, Field),
+    RowsIsNotNull = query_is_not_null(Cluster, Data, Family, Series, N, Field),
     ?assertEqual(RowsAll, RowsIsNull + RowsIsNotNull).
 
 query_base(Family, Series, N) ->
@@ -82,17 +84,17 @@ query_base(Family, Series, N) ->
     " AND myseries='" ++ binary_to_list(Series) ++ "'"
     " AND time >= 1000 AND time <= " ++ integer_to_list(N * 1000 + ?SPANNING_STEP).
 
-query_all(ClusterConn, DDL, Data, Family, Series, N) ->
+query_all(Cluster, Family, Series, N) ->
     Qry = query_base(Family, Series, N),
-    {ok, {_Fields, Rows}} = ts_util:ts_query(ClusterConn, ?TEST_TYPE, DDL, Data, Qry),
+    {ok, {_Fields, Rows}} = ts_ops:query(Cluster, Qry),
     RowsN = length(Rows),
     ?assertNotEqual(0, RowsN),
     RowsN.
 
-query_is_null(ClusterConn, DDL, Data, Family, Series, N, Field) ->
+query_is_null(Cluster, Data, Family, Series, N, Field) ->
     Qry = query_base(Family, Series, N) ++
           " AND " ++ Field ++ " IS NULL",
-    {ok, {_Fields, Rows}} = ts_util:ts_query(ClusterConn, ?TEST_TYPE, DDL, Data, Qry),
+    {ok, {_Fields, Rows}} = ts_ops:query(Cluster, Qry),
     RowsN = length(Rows),
     %% the number of NULL rows can be determined by any non-key field being NULL
     RowsNull = lists:foldr(fun (El, Acc) ->
@@ -104,10 +106,10 @@ query_is_null(ClusterConn, DDL, Data, Family, Series, N, Field) ->
     ?assertEqual(RowsNull, RowsN),
     RowsN.
 
-query_is_not_null(ClusterConn, DDL, Data, Family, Series, N, Field) ->
+query_is_not_null(Cluster, Data, Family, Series, N, Field) ->
     Qry = query_base(Family, Series, N) ++
           " AND " ++ Field ++ " IS NOT NULL",
-    {ok, {_Fields, Rows}} = ts_util:ts_query(ClusterConn, ?TEST_TYPE, DDL, Data, Qry),
+    {ok, {_Fields, Rows}} = ts_ops:query(Cluster, Qry),
     RowsN = length(Rows),
     %% the number of NULL rows can be determined by any non-key field being NULL
     RowsNotNull = lists:foldr(fun (El, Acc) ->

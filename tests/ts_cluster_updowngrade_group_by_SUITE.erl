@@ -147,7 +147,7 @@ make_group_by_2_test(DoesSelectPass) ->
 sorted_assert(String, {ok, {ECols, Exp}}, {ok, {GCols, Got}}) ->
     Exp2 = lists:sort(Exp),
     Got2 = lists:sort(Got),
-    ts_util:assert_float(String, {ECols, Exp2}, {GCols, Got2});
+    ts_data:assert_float(String, {ECols, Exp2}, {GCols, Got2});
 sorted_assert(String, Exp, Got) ->
     ok = log_error(String ++ " banjo", Exp, Got),
     fail.

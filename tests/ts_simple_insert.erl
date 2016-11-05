@@ -27,40 +27,38 @@
 -export([confirm/0]).
 
 confirm() ->
-    DDL = ts_util:get_ddl(),
-    Table = ts_util:get_default_bucket(),
-    Columns = ts_util:get_cols(),
-    {Cluster, Conn} = ts_util:cluster_and_connect(single),
-    Got = ts_util:create_and_activate_bucket_type(Cluster, DDL),
-    ExpectedActivationMessage = Table ++ " has been activated\n",
-    ?assertEqual(ok, element(1, Got)),
-    ?assertEqual(ExpectedActivationMessage,
-        lists:sublist(element(2, Got), 1, length(ExpectedActivationMessage))),
+    Table = ts_data:get_default_bucket(),
+    DDL = ts_data:get_ddl(),
+    Columns = ts_data:get_cols(),
 
-    Data1 = ts_util:get_valid_select_data(),
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+
+    Data1 = ts_data:get_valid_select_data(),
     Insert1Fn = fun(Datum, Acc) ->
-                   [ts_util:ts_insert(Conn, Table, Columns, Datum) | Acc]
+                   [ts_ops:insert(Cluster, Table, Columns, Datum) | Acc]
                end,
     Got1 = lists:reverse(lists:foldl(Insert1Fn, [], Data1)),
     Expected1 = lists:duplicate(10, {ok,{[],[]}}),
-    Result1 = ts_util:assert("Insert With Columns", Expected1, Got1),
+    Result1 = ts_data:assert("Insert With Columns", Expected1, Got1),
 
     Qry2 = "select * from GeoCheckin Where time >= 1 and time <= 10 and myfamily = 'family1' and myseries ='seriesX'",
-    Got2 = ts_util:single_query(Conn, Qry2),
-    Expected2 = {ok, {Columns, ts_util:exclusive_result_from_data(Data1, 1, 10)}},
-    Result2 = ts_util:assert("Insert With Columns (results)", Expected2, Got2),
+    Got2 = ts_ops:query(Cluster, Qry2),
+    Expected2 = {ok, {Columns, ts_data:exclusive_result_from_data(Data1, 1, 10)}},
+    Result2 = ts_data:assert("Insert With Columns (results)", Expected2, Got2),
 
-    Data3 = ts_util:get_valid_select_data(fun() -> lists:seq(11, 20) end),
+    Data3 = ts_data:get_valid_select_data(fun() -> lists:seq(11, 20) end),
     Insert3Fn = fun(Datum, Acc) ->
-                    [ts_util:ts_insert_no_columns(Conn, Table, Datum) | Acc]
+                    [ts_ops:insert_no_columns(Cluster, Table, Datum) | Acc]
                end,
     Got3 = lists:reverse(lists:foldl(Insert3Fn, [], Data3)),
-    Result3 = ts_util:assert("Insert Without Columns", Expected1, Got3),
+    Result3 = ts_data:assert("Insert Without Columns", Expected1, Got3),
 
     Qry4 = "select * from GeoCheckin Where time >= 11 and time <= 20 and myfamily = 'family1' and myseries ='seriesX'",
-    Got4 = ts_util:single_query(Conn, Qry4),
-    Expected4 = {ok, {Columns, ts_util:exclusive_result_from_data(Data3, 1, 10)}},
-    Result4 = ts_util:assert("Insert Without Columns (results)", Expected4, Got4),
+    Got4 = ts_ops:query(Cluster, Qry4),
+    Expected4 = {ok, {Columns, ts_data:exclusive_result_from_data(Data3, 1, 10)}},
+    Result4 = ts_data:assert("Insert Without Columns (results)", Expected4, Got4),
 
     %% inserting columns out of order and partial, excluding temperature
     Columns5 = [<<"myfamily">>, <<"time">>, <<"weather">>, <<"myseries">>],
@@ -72,13 +70,13 @@ confirm() ->
             } || I <- lists:seq(21, 30) ],
 
     Insert5Fn = fun(Datum, Acc) ->
-                    [ts_util:ts_insert(Conn, Table, Columns5, Datum) | Acc]
+                    [ts_ops:insert(Cluster, Table, Columns5, Datum) | Acc]
             end,
     Got5 = lists:reverse(lists:foldl(Insert5Fn, [], Data5)),
     Expected5 = [ {ok,{[],[]}} || _I <- lists:seq(21, 30) ],
-    Result5 = ts_util:assert("Insert with NULL (results)", Expected5, Got5),
+    Result5 = ts_data:assert("Insert with NULL (results)", Expected5, Got5),
 
-    ts_util:results([
+    ts_data:results([
         Result1,
         Result2,
         Result3,

@@ -36,7 +36,7 @@ suite() ->
          {with_quotes_prop, ?PROP_WITH_QUOTES}]).
 
 init_per_suite(Config) ->
-    Cluster = ts_util:build_cluster(multiple),
+    Cluster = ts_setup:start_cluster(3),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -80,9 +80,10 @@ re_create_fail_test(Ctx) ->
     pass.
 
 describe_test(Ctx) ->
-    C = client_pid(Ctx),
-    Qry = io_lib:format("DESCRIBE ~s", [ts_util:get_default_bucket()]),
-    Got = ts_util:single_query(C, Qry),
+
+    Qry = io_lib:format("DESCRIBE ~s", [ts_data:get_default_bucket()]),
+    Cluster = ?config(cluster, Ctx),
+    Got = ts_ops:query(Cluster, Qry),
     ?assertEqual(table_described(), Got),
     pass.
 
@@ -90,8 +91,8 @@ get_put_data_test(Ctx) ->
     C = client_pid(Ctx),
     Data = [{<<"a">>, <<"b">>, 10101010, <<"not bad">>, 42.24}],
     Key = [<<"a">>, <<"b">>, 10101010],
-    ?assertMatch(ok, riakc_ts:put(C, ts_util:get_default_bucket(), Data)),
-    Got = riakc_ts:get(C, ts_util:get_default_bucket(), Key, []),
+    ?assertMatch(ok, riakc_ts:put(C, ts_data:get_default_bucket(), Data)),
+    Got = riakc_ts:get(C, ts_data:get_default_bucket(), Key, []),
     lager:info("get_put_data_test Got ~p", [Got]),
     ?assertMatch({ok, {_, Data}}, Got),
     pass.
@@ -117,14 +118,14 @@ get_set_property_test(Ctx) ->
 get_bucket_props_from_node(Node) ->
     rpc:call(
       Node, riak_core_claimant, get_bucket_type,
-      [list_to_binary(ts_util:get_default_bucket()), undefined, false]).
+      [list_to_binary(ts_data:get_default_bucket()), undefined, false]).
 
 client_pid(Ctx) ->
     Nodes = ?config(cluster, Ctx),
     rt:pbc(hd(Nodes)).
 
 ddl_common() ->
-    ts_util:get_ddl(small).
+    ts_data:get_ddl(small).
 
 table_described() ->
     {ok, {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>, <<"Interval">>, <<"Unit">>],

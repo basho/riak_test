@@ -42,7 +42,7 @@ run_tests(PvalP1, PvalP2) ->
     Data = make_data(PvalP1, PvalP2),
     io:format("Data to be written:\n~p\n...\n~p\n", [hd(Data), lists:last(Data)]),
 
-    Cluster = ts_util:build_cluster(multiple),
+    Cluster = ts_setup:start_cluster(3),
 
     %% use riak-admin to create a bucket
     TableDef = io_lib:format(

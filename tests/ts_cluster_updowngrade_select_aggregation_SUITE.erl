@@ -41,13 +41,13 @@ make_scenarios() ->
 
 
 make_scenario_invariants(Config) ->
-    DDL = ts_util:get_ddl(aggregation, "~s"),
+    DDL = ts_data:get_ddl(aggregation, "~s"),
     {SelectVsExpected, Data} = make_queries_and_data(),
     Create = #create{ddl = DDL,   expected = {ok, {[], []}}},
     Insert = #insert{data = Data, expected = ok},
     Selects = [#select{qry        = Q,   
                        expected   = E,
-                       assert_mod = ts_util,
+                       assert_mod = ts_data,
                        assert_fun = assert_float} || {Q, E} <- SelectVsExpected],
     DefaultTestSets = [#test_set{testname   = "basic_select_aggregation",
                                  create     = Create,
@@ -57,7 +57,7 @@ make_scenario_invariants(Config) ->
 
 make_queries_and_data() ->
     Count = 10,
-    Data = ts_util:get_valid_aggregation_data(Count),
+    Data = ts_data:get_valid_aggregation_data(Count),
     Column4 = [element(?TEMPERATURE_COL_INDEX,   X) || X <- Data],
     Column5 = [element(?PRESSURE_COL_INDEX,      X) || X <- Data],
     Column6 = [element(?PRECIPITATION_COL_INDEX, X) || X <- Data],
