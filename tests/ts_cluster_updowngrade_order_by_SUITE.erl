@@ -63,11 +63,11 @@ make_scenarios() ->
                                ensure_degraded_caps = [{{riak_kv, sql_select_version}, v2}],
                                convert_config_to_previous = fun ts_updown_util:convert_riak_conf_to_previous/1}
                      || TableNodeVsn            <- [current, previous],
-                        QueryNodeVsn            <- [current, previous],
-                        NeedTableNodeTransition <- [true, false],
-                        NeedQueryNodeTransition <- [true],
-                        NeedPreClusterMixed     <- [true],
-                        NeedPostClusterMixed    <- [true]],
+                        QueryNodeVsn            <- [current],
+                        NeedTableNodeTransition <- [false],
+                        NeedQueryNodeTransition <- [false],
+                        NeedPreClusterMixed     <- [false],
+                        NeedPostClusterMixed    <- [false]],
     [add_tests(X) || X <- BaseScenarios].
 
 %% This test will not use config invariants
@@ -79,19 +79,6 @@ make_scenario_invariants(Config) ->
 %% ORDER BY will always work if
 %% the query node is 1.5
 %% the query node is queried *AFTER* a transition
-add_tests(#scenario{query_node_vsn             = current,
-                    need_query_node_transition = true} = Scen) ->
-    Tests = [
-             make_select_order_by_test(select_fails)
-            ],
-    Scen#scenario{tests = Tests};
-add_tests(#scenario{query_node_vsn             = previous,
-                    need_query_node_transition = false} = Scen) ->
-    Tests = [
-             make_select_order_by_test(select_fails)
-            ],
-    Scen#scenario{tests = Tests};
-%% in all other scenarios ORDER BY should work
 add_tests(Scen) ->
     Tests = [
              make_select_order_by_test(select_passes)

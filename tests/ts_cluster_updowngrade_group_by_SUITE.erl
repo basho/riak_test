@@ -42,12 +42,12 @@ make_scenarios() ->
                                ensure_full_caps     = [{{riak_kv, sql_select_version}, v3}],
                                ensure_degraded_caps = [{{riak_kv, sql_select_version}, v2}],
                                convert_config_to_previous = fun ts_updown_util:convert_riak_conf_to_previous/1}
-                     || TableNodeVsn            <- [current, previous],
-                        QueryNodeVsn            <- [current, previous],
-                        NeedTableNodeTransition <- [true, false],
-                        NeedQueryNodeTransition <- [true, false],
-                        NeedPreClusterMixed     <- [true, false],
-                        NeedPostClusterMixed    <- [true, false]],
+                     || TableNodeVsn            <- [previous, current],
+                        QueryNodeVsn            <- [current],
+                        NeedTableNodeTransition <- [false],
+                        NeedQueryNodeTransition <- [false],
+                        NeedPreClusterMixed     <- [false],
+                        NeedPostClusterMixed    <- [false]],
     [add_tests(X) || X <- BaseScenarios].
 
 %% This test will not use config invariants
@@ -105,8 +105,8 @@ make_group_by_2_test(DoesSelectPass) ->
                      "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c,d))",
                      expected   = {ok, {[], []}}},
 
-    Insert = #insert{data     = [{1,1,CE,D,CE} || CE <- lists:seq(1,1000),
-                                                  D <- [1,2,3]],
+    Insert = #insert{data = [{1,1,CE,D,CE} || CE <- lists:seq(1,1000),
+                                              D <- [1,2,3]],
                      expected = ok},
 
     {SelExp, AssertFn}
