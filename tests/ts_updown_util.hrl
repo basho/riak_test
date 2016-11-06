@@ -97,38 +97,21 @@
           ensure_degraded_caps = [] :: [cap_with_ver()]
          }).
 
-
-%% fail record
--record(fail, {
-          message  :: binary(),
-          expected :: term(),
-          got      :: term()
-         }).
-
-
 %% Error report
 -record(failure_report, {
-          %% node composition, with versions at each node
-          cluster_before_create :: [{node(), version()}],
-          cluster_before_select :: [{node(), version()}],
-
+          cluster  :: [{node(), version()}],
           %% node where table was created
           table_node :: node(),
-
           %% node where the failing SELECT was issued
           query_node :: node(),
-
-          %% whether the table and querying nodes were upgraded or
-          %% downgraded prior to SELECT query
-          did_transition_table_node :: boolean(),
-          did_transition_query_node :: boolean(),
 
           %% the failing test proper
           failing_test :: binary(),
 
           %% Expected and Got
+          message  :: binary(),
           expected :: term(),
-          error :: term()
+          got      :: term()
          }).
 
 -endif.

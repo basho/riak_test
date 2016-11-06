@@ -19,6 +19,33 @@
 %% -------------------------------------------------------------------
 %%
 %% @doc Facilities to use in CT-enabled upgrade/downgrade tests.
+%%
+%% The purpose if this module is to enable CT test module writers to
+%% run a cluster through a succession of upgrade/downgrades
+%% (scenarios), each consisting of these three stages:
+%%
+%%   (1) table creation, via a CREATE TABLE query,
+%%   (2) inserting data, via riakc_ts:put,
+%%   (3) querying data back, via one or more SELECT queries.
+%%
+%% Scenarios (see #scenario{} in ts_updown_util.hrl) define which
+%% version (previous or current, whichever they are in your
+%% ~/.riak_test.config), which nodes, if any, to transitions before
+%% CREATE and, separately, before SELECT stages, and which SELECTs to
+%% run.  Each of the stages or queries can be expected to fail.
+%%
+%% Queries to nodes can be made using a client of matching version or
+%% the current client (controlled by 'use_previous_client' property in
+%% Config).
+%%
+%% The contents of riak.conf can be manipulated after a node
+%% transition using hooks (#scenario.convert_config_to_previous,
+%% .convert_config_to_current}).
+%%
+%% If an upgrade/downgrade involves a change in capabilities, these
+%% would need to be listed in #scenario.ensure_full_caps and
+%% .ensure_degraded_caps.
+
 
 -module(ts_updown_util).
 
@@ -34,7 +61,9 @@
 -include("ts_updown_util.hrl").
 
 -type versioned_cluster() :: [{node(), version()}].
+
 %% preparations
+%% ------------
 
 setup(Config) ->
     lists:foldl(
@@ -85,6 +114,7 @@ maybe_shutdown_client_node(Config) ->
 
 
 %% scenarios
+%% ---------
 
 -spec run_scenarios(config(), [#scenario{}]) -> [#failure_report{}].
 run_scenarios(Config, Scenarios) ->
@@ -100,38 +130,59 @@ run_scenarios(Config, Scenarios) ->
 -spec run_scenario(config(), #scenario{})
                   -> [#failure_report{}].
 run_scenario(Config,
+             #scenario{tests = Tests} = Scenario) ->
+    PrevRiakcNode =
+        ?CFG(previous_client_node, Config),
+    NodesAtVersions0 =
+        [{N, rtdev:node_version(rtdev:node_id(N))} || N <- ?CFG(nodes, Config)],
+
+    %% 1. retrieve scenario-invariant data from Config
+    AllTests =
+        add_timestamps(
+          lists:append(
+            [proplists:get_value(default_tests, Config, []), Tests])),
+
+    {_NodesAtVersions9, _TableNode9, _QueryNode9, Failures} =
+        lists:foldl(
+          fun(Stage, {NodesAtVersionsI, TableNodeI, QueryNodeI, []}) ->
+                  {NodesAtVersionsJ, TableNodeJ, QueryNodeJ, Failures} =
+                      Stage(NodesAtVersionsI, TableNodeI, QueryNodeI, PrevRiakcNode,
+                            Scenario#scenario{tests = AllTests}),
+                  {NodesAtVersionsJ, TableNodeJ, QueryNodeJ, Failures};
+             (_Stage, PrevState) ->
+                  %% not doing anything because a previous stage has failed
+                  PrevState
+          end,
+          {NodesAtVersions0, node_tbd, node_tbd, []},
+          [fun create_stage/5,
+           fun insert_stage/5,
+           fun select_stage/5]),
+
+    case Failures of
+        [] -> ok;
+        _  -> ct:pal("Failing queries in this scenario:\n"
+                     "----------------\n"
+                     "~s\n", [layout_fails_for_printing(Failures, Scenario)])
+    end,
+
+    Failures.
+
+
+%% running tests: stages
+%% ---------------------
+
+create_stage(NodesAtVersions0, _TableNode, _QueryNode,
+             PrevRiakcNode,
              #scenario{table_node_vsn = TableNodeVsn,
                        query_node_vsn = QueryNodeVsn,
-                       need_table_node_transition = NeedTableNodeTransition,
-                       need_query_node_transition = NeedQueryNodeTransition,
                        need_pre_cluster_mixed  = NeedPreClusterMixed,
-                       need_post_cluster_mixed = NeedPostClusterMixed,
                        convert_config_to_previous = ConvertConfigToPreviousFun,
                        convert_config_to_current  = ConvertConfigToCurrentFun,
                        ensure_full_caps     = EnsureFullCaps,
                        ensure_degraded_caps = EnsureDegradedCaps,
-                       %% for these, we may have invariants in Config:
                        tests = Tests}) ->
-    NodesAtVersions0 =
-        [{N, rtdev:node_version(rtdev:node_id(N))} || N <- ?CFG(nodes, Config)],
-    PrevClientNode = ?CFG(previous_client_node, Config),
     ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
     CapsReqs = {EnsureFullCaps, EnsureDegradedCaps},
-
-    %% 1. retrieve scenario-invariant data from Config
-    TestsToRun = case Tests of
-                     [] -> add_timestamps(?CFG(default_tests, Config));
-                     Ts -> add_timestamps(Ts)
-                 end,
-
-    ct:log("Scenario: initial table/query_node_vsn: ~p/~p\n"
-           "          need_table_node_transition: ~p\n"
-           "          need_query_node_transition: ~p\n"
-           "          need_pre_cluster_mixed: ~p\n"
-           "          need_post_cluster_mixed: ~p\n",
-           [TableNodeVsn, QueryNodeVsn,
-            NeedTableNodeTransition, NeedQueryNodeTransition,
-            NeedPreClusterMixed, NeedPostClusterMixed]),
 
     %% 2. Pick two nodes for create table and subsequent selects
     {TableNode, NodesAtVersions1} =
@@ -147,12 +198,40 @@ run_scenario(Config,
           ConvConfFuns, CapsReqs),
 
     %% 4. For each table in the test, issue CREATE TABLE queries
-    CreateResults = [make_tables(X, TableNode, PrevClientNode)
-                     || X <- TestsToRun],
+    Fails =
+        lists:append(
+          [make_tables(X, NodesAtVersions3, TableNode, QueryNode, PrevRiakcNode)
+           || X <- Tests]),
 
+    {NodesAtVersions3, TableNode, QueryNode, Fails}.
+
+
+insert_stage(NodesAtVersions3, TableNode, QueryNode,
+             _PrevRiakcNode,  %% no need to fall back to PrevRiakcNode as we use riakc_ts:put
+             #scenario{tests = Tests}) ->
     %% 5. For each table in the test, issue INSERT queries
-    InsertResults = [insert_data(X, TableNode)
-                     || X <- TestsToRun],
+    Fails =
+        lists:append(
+          [insert_data(X, NodesAtVersions3, TableNode, QueryNode)
+           || X <- Tests]),
+
+    {NodesAtVersions3, TableNode, QueryNode, Fails}.
+
+
+select_stage(NodesAtVersions3, TableNode, QueryNode,
+             PrevRiakcNode,
+             #scenario{table_node_vsn = TableNodeVsn,
+                       query_node_vsn = QueryNodeVsn,
+                       need_table_node_transition = NeedTableNodeTransition,
+                       need_query_node_transition = NeedQueryNodeTransition,
+                       need_post_cluster_mixed = NeedPostClusterMixed,
+                       convert_config_to_previous = ConvertConfigToPreviousFun,
+                       convert_config_to_current  = ConvertConfigToCurrentFun,
+                       ensure_full_caps     = EnsureFullCaps,
+                       ensure_degraded_caps = EnsureDegradedCaps,
+                       tests = Tests}) ->
+    ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
+    CapsReqs = {EnsureFullCaps, EnsureDegradedCaps},
 
     %% 6. possibly do a transition, on none, one of, or both create
     %%    table node and query node
@@ -178,33 +257,167 @@ run_scenario(Config,
                        ConvConfFuns, CapsReqs),
 
     %% 8. issue the queries and collect results
-    ct:log("Issuing queries at ~p", [QueryNode]),
+    Fails =
+        lists:append(
+          [run_selects(X, NodesAtVersions6, TableNode, QueryNode, PrevRiakcNode)
+           || X <- Tests]),
 
-    SelectResults = [run_selects(X, QueryNode, PrevClientNode) || X <- TestsToRun],
+    {NodesAtVersions6, TableNode, QueryNode, Fails}.
 
-    Results = lists:flatten(CreateResults ++ InsertResults ++ SelectResults),
 
-    Failures = [#failure_report{cluster_before_create = NodesAtVersions2,
-                                cluster_before_select = NodesAtVersions6,
-                                table_node = TableNode,
-                                query_node = QueryNode,
-                                did_transition_table_node = NeedTableNodeTransition,
-                                did_transition_query_node = NeedQueryNodeTransition,
-                                failing_test = Msg,
-                                expected = Exp,
-                                error    = Got} || #fail{message  = Msg,
-                                                         expected = Exp,
-                                                         got      = Got}  <- Results],
+add_timestamps(TestSets) ->
+    [X#test_set{timestamp = make_timestamp()} || X <- TestSets].
 
-    case Failures of
-        [] -> ok;
-        _  -> ct:pal("Failing queries in this scenario:\n"
-                     "----------------\n"
-                     "~s\n", [layout_fails_for_printing(Failures)])
-    end,
+make_timestamp() ->
+    {_Mega, Sec, Milli} = os:timestamp(),
+    fmt("~b~b", [Sec, Milli]).
 
-    Failures.
 
+%% running test stages: create, insert, select
+%% -------------------------------------------
+
+make_tables(#test_set{create = #create{should_skip = true}}, _, _, _, _) ->
+    [];
+make_tables(#test_set{testname  = Testname,
+                      timestamp = Timestamp,
+                      create    = #create{ddl      = DDLFmt,
+                                          expected = Exp}},
+            NodesAtVersions, TableNode, QueryNode,
+            PrevClientNode) ->
+    %% fast machines:
+    timer:sleep(1),
+    Table = get_table_name(Testname, Timestamp),
+    DDL = fmt(DDLFmt, [Table]),
+    case query_with_client(DDL, TableNode, PrevClientNode) of
+        Exp ->
+            ok = wait_until_active_table(TableNode, PrevClientNode, Table, 5),
+            ct:log("Table ~p created on ~p", [Table, TableNode]),
+            [];
+        {error, {_No, Error}} ->
+            ct:log("Failed to create table ~p: (~s) with ~s", [Table, Error, DDL]),
+            [#failure_report{failing_test = make_msg("Creation of ~s failed", [Table]),
+                             cluster      = NodesAtVersions,
+                             table_node   = TableNode,
+                             query_node   = QueryNode,
+                             expected     = Exp,
+                             got          = Error}]
+    end.
+
+
+insert_data(#test_set{insert = #insert{should_skip = true}}, _, _, _) ->
+    [];
+insert_data(#test_set{testname  = Testname,
+                      timestamp = Timestamp,
+                      insert    = #insert{data     = Data,
+                                          expected = Exp}},
+            NodesAtVersions, TableNode, QueryNode) ->
+    Client1 = rt:pbc(TableNode),
+    Table = get_table_name(Testname, Timestamp),
+    case riakc_ts:put(Client1, Table, Data) of
+        Exp ->
+            ct:log("Table ~p on ~p had ~b records successfully inserted",
+                   [Table, TableNode, length(Data)]),
+            [];
+        Error ->
+            ct:log("Failed to insert data into ~p (~p)", [Table, Error]),
+            [#failure_report{message      = make_msg("Insert of data into ~s failed", [Table]),
+                             cluster      = NodesAtVersions,
+                             table_node   = TableNode,
+                             query_node   = QueryNode,
+                             expected     = Exp,
+                             got          = Error}]
+    end.
+
+
+run_selects(#test_set{testname  = Testname,
+                      timestamp = Timestamp,
+                      selects   = Selects},
+            NodesAtVersions, TableNode, QueryNode,
+            PrevClientNode) ->
+    QryNos = lists:seq(1, length(Selects)),
+    Zip = lists:zip(Selects, QryNos),
+    Tablename = get_table_name(Testname, Timestamp),
+
+    RunSelect =
+        fun(#select{should_skip = true}, _QryNo) ->
+                [];
+           (#select{qry        = Q,
+                    expected   = Exp,
+                    assert_mod = Mod,
+                    assert_fun = Fun}, QryNo) ->
+                SelectQuery = fmt(Q, [Tablename]),
+                Got = query_with_client(SelectQuery, QueryNode, PrevClientNode),
+                case Mod:Fun(fmt("Query #~p", [QryNo]), Exp, Got) of
+                    pass -> [];
+                    fail -> [#failure_report{message    = SelectQuery,
+                                             cluster    = NodesAtVersions,
+                                             table_node = TableNode,
+                                             query_node = QueryNode,
+                                             expected   = Exp,
+                                             got        = Got}]
+                end
+        end,
+    lists:append(
+      [RunSelect(S, QN) || {S, QN} <- Zip]).
+
+
+
+%% query wrapper, possibly using a previous version client
+%% -------------------------------------------------------
+
+query_with_client(Query, Node, PrevClientNode) ->
+    Version = rtdev:node_version(rtdev:node_id(Node)),
+    case Version of
+        current ->
+            Client = rt:pbc(Node),
+            riakc_ts:query(Client, Query);
+        previous ->
+            ConnInfo = proplists:get_value(Node, rt:connection_info([Node])),
+            {IP, Port} = proplists:get_value(pb, ConnInfo),
+            ct:log("using ~p client to contact node ~p at ~p:~p", [Version, Node, IP, Port]),
+            {ok, Client} =
+                rpc:call(
+                  PrevClientNode,
+                  riakc_pb_socket, start_link, [IP, Port, [{auto_reconnect, true}]]),
+            rpc:call(
+              PrevClientNode,
+              riakc_ts, query, [Client, Query])
+    end.
+
+
+
+layout_fails_for_printing(Failures,
+                          #scenario{table_node_vsn = TableNodeVsn,
+                                    query_node_vsn = QueryNodeVsn}) ->
+    [begin
+         DidTableNodeTransition =
+             TableNodeVsn /= proplists:get_value(TableNode, NodesAtVersions),
+         DidQueryNodeTransition =
+             QueryNodeVsn /= proplists:get_value(QueryNode, NodesAtVersions),
+         lists:flatten(
+           [io_lib:format(
+              "  Cluster: ~p\n"
+              "TableNode: ~p, transitioned? ~p\n"
+              "QueryNode: ~p, transitioned? ~p\n"
+              "     Test: ~p\n"
+              " Expected: ~p\n"
+              "      Got: ~p\n\n",
+              [NodesAtVersions,
+               TableNode, DidTableNodeTransition,
+               QueryNode, DidQueryNodeTransition,
+               FailingTest,
+               Expected,
+               Got])])
+     end || #failure_report{cluster    = NodesAtVersions,
+                            table_node = TableNode,
+                            query_node = QueryNode,
+                            failing_test = FailingTest,
+                            expected = Expected,
+                            got = Got} <- Failures].
+
+
+%% cluster preparation & node transitions
+%% --------------------------------------
 
 -spec is_cluster_mixed(versioned_cluster()) -> boolean().
 is_cluster_mixed(NodesAtVersions) ->
@@ -328,10 +541,16 @@ possibly_transition_node(NodesAtVersions, Node, ReqVsn, ConvConfFuns) ->
                              {Node, ReqVsn})
     end.
 
-
 other_version(current) -> previous;
 other_version(previous) -> current.
 
+
+%% misc functions
+%% --------------
+
+get_table_name(Testname, Timestamp) when is_list(Testname) andalso
+                                         is_list(Timestamp) ->
+    Testname ++ Timestamp.
 
 wait_until_active_table(_TargetNode, _PrevClientNode, Table, 0) ->
     ct:fail("Table ~s took too long to activate", [Table]),
@@ -345,128 +564,6 @@ wait_until_active_table(TargetNode, PrevClientNode, Table, N) ->
             wait_until_active_table(TargetNode, PrevClientNode, Table, N-1)
     end.
 
-
-layout_fails_for_printing(FF) ->
-    lists:flatten(
-      [io_lib:format(
-         "  Cluster before CREATE: ~p\n"
-         "  Cluster before SELECT: ~p\n"
-         "TableNode: ~p, transitioned? ~p\n"
-         "QueryNode: ~p, transitioned? ~p\n"
-         "     Test: ~p\n"
-         " Expected: ~p\n"
-         "      Got: ~p\n\n",
-         [NodesAtVersions0,
-          NodesAtVersions1,
-          TableNode, DidTableNodeTransition,
-          QueryNode, DidQueryNodeTransition,
-          FailingTest, Expected, Error])
-       || #failure_report{cluster_before_create = NodesAtVersions0,
-                          cluster_before_select = NodesAtVersions1,
-                          table_node = TableNode,
-                          query_node = QueryNode,
-                          did_transition_table_node = DidTableNodeTransition,
-                          did_transition_query_node = DidQueryNodeTransition,
-                          failing_test = FailingTest,
-                          expected = Expected,
-                          error = Error} <- FF]).
-
-make_tables(#test_set{create = #create{should_skip = true}}, _TableNode, _PrevClientNode) ->
-    pass;
-make_tables(#test_set{testname  = Testname,
-                      timestamp = Timestamp,
-                      create    = #create{ddl      = DDLFmt,
-                                          expected = Exp}}, TableNode, PrevClientNode) ->
-    %% fast machines:
-    timer:sleep(1),
-    Table = get_table_name(Testname, Timestamp),
-    DDL = fmt(DDLFmt, [Table]),
-    case query_with_client(DDL, TableNode, PrevClientNode) of
-        Exp ->
-            ok = wait_until_active_table(TableNode, PrevClientNode, Table, 5),
-            ct:log("Table ~p created on ~p", [Table, TableNode]),
-            pass;
-        {error, {_No, Error}} ->
-            ct:log("Failed to create table ~p: (~s) with ~s", [Table, Error, DDL]),
-            #fail{message  = make_msg("Creation of ~s failed", [Table]),
-                  expected = Exp,
-                  got      = Error}
-    end.
-
-insert_data(#test_set{insert = #insert{should_skip = true}}, _TableNode) ->
-    pass;
-insert_data(#test_set{testname  = Testname,
-                      timestamp = Timestamp,
-                      insert    = #insert{data     = Data,
-                                          expected = Exp}}, TableNode) ->
-    Client1 = rt:pbc(TableNode),
-    Table = get_table_name(Testname, Timestamp),
-    case riakc_ts:put(Client1, Table, Data) of
-        Exp ->
-            ct:log("Table ~p on ~p had ~b records successfully inserted)",
-                   [Table, TableNode, length(Data)]),
-            pass;
-        Error ->
-            ct:log("Failed to insert data into ~p (~p)", [Table, Error]),
-            #fail{message  = make_msg("Insert of data into ~s failed", [Table]),
-                  expected = Exp,
-                  got      = Error}
-    end.
-
-run_selects(#test_set{testname  = Testname,
-                      timestamp = Timestamp,
-                      selects   = Selects}, QueryNode, PrevClientNode) ->
-    QryNos = lists:seq(1, length(Selects)),
-    Zip = lists:zip(Selects, QryNos),
-    Tablename = get_table_name(Testname, Timestamp),
-    lists:flatten([run_select(S, QN, Tablename, QueryNode, PrevClientNode) || {S, QN} <- Zip]).
-
-run_select(#select{should_skip = true}, _QryNo, _Tablename, _QueryNode, _PrevClientNode) ->
-    pass;
-run_select(#select{qry        = Q,
-                   expected   = Exp,
-                   assert_mod = Mod,
-                   assert_fun = Fun}, QryNo, Tablename, QueryNode, PrevClientNode) ->
-    SelectQuery = fmt(Q, [Tablename]),
-    Got = query_with_client(SelectQuery, QueryNode, PrevClientNode),
-    case Mod:Fun(fmt("Query #~p", [QryNo]), Exp, Got) of
-        pass -> pass;
-        fail -> #fail{message  = SelectQuery,
-                      expected = Exp,
-                      got      = Got}
-    end.
-
-query_with_client(Query, Node, PrevClientNode) ->
-    Version = rtdev:node_version(rtdev:node_id(Node)),
-    case Version of
-        current ->
-            Client = rt:pbc(Node),
-            riakc_ts:query(Client, Query);
-        previous ->
-            ConnInfo = proplists:get_value(Node, rt:connection_info([Node])),
-            {IP, Port} = proplists:get_value(pb, ConnInfo),
-            ct:log("using ~p client to contact node ~p at ~p:~p", [Version, Node, IP, Port]),
-            {ok, Client} =
-                rpc:call(
-                  PrevClientNode,
-                  riakc_pb_socket, start_link, [IP, Port, [{auto_reconnect, true}]]),
-            rpc:call(
-              PrevClientNode,
-              riakc_ts, query, [Client, Query])
-    end.
-
-
-add_timestamps(TestSets) ->
-    [X#test_set{timestamp = make_timestamp()} || X <- TestSets].
-
-make_timestamp() ->
-    {_Mega, Sec, Milli} = os:timestamp(),
-    fmt("~b~b", [Sec, Milli]).
-
-get_table_name(Testname, Timestamp) when is_list(Testname) andalso
-                                         is_list(Timestamp) ->
-    Testname ++ Timestamp.
-
 make_msg(Format, Payload) ->
     list_to_binary(fmt(Format, Payload)).
 
@@ -477,7 +574,10 @@ make_msg(Format, Payload) ->
 %%   riak_kv.query.timeseries.qbuf_expire_ms,
 %%   riak_kv.query.timeseries.qbuf_incomplete_release_ms
 %% let's comment them out?
-convert_riak_conf_to_previous(RiakConfPath) ->
+convert_riak_conf_to_previous(Config) ->
+    DatafPath = ?CFG(new_data_dir, Config),
+    RiakConfPath = filename:join(DatafPath, "../etc/riak.conf"),
+    ct:pal("RiakConfPath ~p", [RiakConfPath]),
     {ok, Content0} = file:read_file(RiakConfPath),
     Content9 =
         re:replace(
