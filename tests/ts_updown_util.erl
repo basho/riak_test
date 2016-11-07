@@ -131,6 +131,12 @@ run_scenarios(Config, Scenarios) ->
                   -> [#failure_report{}].
 run_scenario(Config,
              #scenario{tests = Tests} = Scenario) ->
+    ct:pal("Scenario: table/query node vsn: ~p/~p\n"
+           "          Need table/query node transition: ~p/~p",
+           [Scenario#scenario.table_node_vsn,
+            Scenario#scenario.query_node_vsn,
+            Scenario#scenario.need_table_node_transition,
+            Scenario#scenario.need_query_node_transition]),
     PrevRiakcNode =
         ?CFG(previous_client_node, Config),
     NodesAtVersions0 =
@@ -181,6 +187,7 @@ create_stage(NodesAtVersions0, _TableNode, _QueryNode,
                        ensure_full_caps     = EnsureFullCaps,
                        ensure_degraded_caps = EnsureDegradedCaps,
                        tests = Tests}) ->
+    ct:pal("Creating tables", []),
     ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
     CapsReqs = {EnsureFullCaps, EnsureDegradedCaps},
 
@@ -209,6 +216,7 @@ create_stage(NodesAtVersions0, _TableNode, _QueryNode,
 insert_stage(NodesAtVersions3, TableNode, QueryNode,
              _PrevRiakcNode,  %% no need to fall back to PrevRiakcNode as we use riakc_ts:put
              #scenario{tests = Tests}) ->
+    ct:pal("Inserting data", []),
     %% 5. For each table in the test, issue INSERT queries
     Fails =
         lists:append(
@@ -230,6 +238,7 @@ select_stage(NodesAtVersions3, TableNode, QueryNode,
                        ensure_full_caps     = EnsureFullCaps,
                        ensure_degraded_caps = EnsureDegradedCaps,
                        tests = Tests}) ->
+    ct:pal("Running selects", []),
     ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
     CapsReqs = {EnsureFullCaps, EnsureDegradedCaps},
 
@@ -476,7 +485,6 @@ ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes,
             false ->
                 DegradedCaps
         end,
-    ct:log("will require capabilities: ~p", [CapsToCheck]),
     lists:foreach(
       fun({Node, {Cap, Ver}}) ->
               ok = rt:wait_until_capability(Node, Cap, Ver)
@@ -577,7 +585,6 @@ make_msg(Format, Payload) ->
 convert_riak_conf_to_previous(Config) ->
     DatafPath = ?CFG(new_data_dir, Config),
     RiakConfPath = filename:join(DatafPath, "../etc/riak.conf"),
-    ct:pal("RiakConfPath ~p", [RiakConfPath]),
     {ok, Content0} = file:read_file(RiakConfPath),
     Content9 =
         re:replace(
