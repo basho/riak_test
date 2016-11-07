@@ -134,8 +134,9 @@ main(Args) ->
 
     CommandLineTests = parse_command_line_tests(ParsedArgs),
     Tests0 = which_tests_to_run(Report, CommandLineTests),
+    lager:info("Running Tests: ~p", [[TestName || {_, {TestName,_}} <- Tests0]]),
 
-    case Tests0 of
+  case Tests0 of
         [] ->
             lager:warning("No tests are scheduled to run"),
             init:stop(1);
@@ -219,6 +220,8 @@ parse_command_line_tests(ParsedArgs) ->
     [code:add_patha(CodePath) || CodePath <- CodePaths,
                                  CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
+    lager:info("Dirs: ~p", [Dirs]),
+
     SkipTests = string:tokens(proplists:get_value(skip, ParsedArgs, []), [$,]),
     DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
     lists:foldl(fun(Test, Tests) ->
@@ -238,8 +241,11 @@ parse_command_line_tests(ParsedArgs) ->
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
     CommaSepTests = string:tokens(Test, [$,]),
-    CodePathList = [filename:dirname(TestName) || TestName <- CommaSepTests],
-    TestNameList = [filename:rootname(filename:basename(TestName)) || TestName <- CommaSepTests],
+    WCTests = [TestA || TestA <- CommaSepTests, string:str(TestA, "*") > 0],
+    NotWCTest = [TestB || TestB <- CommaSepTests, string:str(TestB, "*") =:= 0],
+    AllTests = lists:append([filelib:wildcard(TestC) || TestC <- WCTests])++NotWCTest,
+    CodePathList = [filename:dirname(TestName) || TestName <- AllTests],
+    TestNameList = [filename:rootname(filename:basename(TestName)) || TestName <- AllTests],
     {CodePathList++CodePaths, TestNameList++TestNames}.
 
 which_tests_to_run(undefined, CommandLineTests) ->
