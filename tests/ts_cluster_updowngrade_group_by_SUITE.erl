@@ -43,7 +43,7 @@ make_scenarios() ->
                                ensure_degraded_caps = [{{riak_kv, sql_select_version}, v2}],
                                convert_config_to_previous = fun ts_updown_util:convert_riak_conf_to_previous/1}
                      || TableNodeVsn            <- [previous, current],
-                        QueryNodeVsn            <- [current],
+                        QueryNodeVsn            <- [previous, current],
                         NeedTableNodeTransition <- [false],
                         NeedQueryNodeTransition <- [false],
                         NeedPreClusterMixed     <- [false],
