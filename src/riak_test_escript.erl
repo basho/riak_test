@@ -116,7 +116,6 @@ main(Args) ->
                                           {lager_file_backend, [{file, "log/test.log"},
                                                                 {level, ConsoleLagerLevel}]}]),
     lager:start(),
-
     %% Report
     Report = case proplists:get_value(report, ParsedArgs, undefined) of
         undefined -> undefined;
@@ -135,8 +134,7 @@ main(Args) ->
     CommandLineTests = parse_command_line_tests(ParsedArgs),
     Tests0 = which_tests_to_run(Report, CommandLineTests),
     lager:info("Running Tests: ~p", [[TestName || {_, {TestName,_}} <- Tests0]]),
-
-  case Tests0 of
+    case Tests0 of
         [] ->
             lager:warning("No tests are scheduled to run"),
             init:stop(1);
@@ -220,8 +218,6 @@ parse_command_line_tests(ParsedArgs) ->
     [code:add_patha(CodePath) || CodePath <- CodePaths,
                                  CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
-    lager:info("Dirs: ~p", [Dirs]),
-
     SkipTests = string:tokens(proplists:get_value(skip, ParsedArgs, []), [$,]),
     DirTests = lists:append([load_tests_in_dir(Dir, SkipTests) || Dir <- Dirs]),
     lists:foldl(fun(Test, Tests) ->
@@ -240,13 +236,54 @@ parse_command_line_tests(ParsedArgs) ->
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
+
+    RTTestPaths = get_test_paths(),
     CommaSepTests = string:tokens(Test, [$,]),
-    WCTests = [TestA || TestA <- CommaSepTests, string:str(TestA, "*") > 0],
-    NotWCTest = [TestB || TestB <- CommaSepTests, string:str(TestB, "*") =:= 0],
-    AllTests = lists:append([filelib:wildcard(TestC) || TestC <- WCTests])++NotWCTest,
+
+    WCTestsNoPrefix = [get_test_with_valid_prefix(TestA, RTTestPaths) || TestA <- CommaSepTests, get_test_type(TestA) =:= yes_wc_no_prefix],
+    WCTestsPrefix = [TestA || TestA <- CommaSepTests, get_test_type(TestA) =:= yes_wc_yes_prefix],
+    NotWCTestsNoPrefix = [get_test_with_valid_prefix(TestA, RTTestPaths) || TestA <- CommaSepTests, get_test_type(TestA) =:= no_wc_no_prefix],
+    NotWCTestsPrefix = [TestA || TestA <- CommaSepTests, get_test_type(TestA) =:= no_wc_yes_prefix],
+
+    AllWCTests = lists:append([filelib:wildcard(TestC) || TestC <- WCTestsNoPrefix++WCTestsPrefix]),
+    AllNotWCTests = NotWCTestsNoPrefix++NotWCTestsPrefix,
+    AllTests = AllWCTests++AllNotWCTests,
+
     CodePathList = [filename:dirname(TestName) || TestName <- AllTests],
     TestNameList = [filename:rootname(filename:basename(TestName)) || TestName <- AllTests],
     {CodePathList++CodePaths, TestNameList++TestNames}.
+
+get_test_type(Test) ->
+    case string:str(Test, "*") of
+        0 ->
+          case string:str(Test, "/") of
+              0 -> no_wc_no_prefix;
+              _ ->  no_wc_yes_prefix
+          end;
+        _ ->
+          case string:str(Test, "/") of
+              0 -> yes_wc_no_prefix;
+              _ -> yes_wc_yes_prefix
+          end
+    end.
+
+get_test_paths() ->
+    RTTestPaths = rt_config:get(test_paths, ["tests"]),
+    case RTTestPaths of
+        ["tests"] ->
+            RTTestPaths;
+        _ -> RTTestPaths++["tests"]
+    end.
+
+get_test_with_valid_prefix(Test, []) ->
+    Test;
+
+get_test_with_valid_prefix(Test, TestPaths) ->
+    [FirstPath|Rest] = TestPaths,
+    case filelib:wildcard(FirstPath++"/"++Test) of
+          [] -> get_test_with_valid_prefix(Test, Rest);
+          _  -> FirstPath++"/"++Test
+    end.
 
 which_tests_to_run(undefined, CommandLineTests) ->
     {Tests, NonTests} =
