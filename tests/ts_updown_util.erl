@@ -187,7 +187,7 @@ create_stage(NodesAtVersions0, _TableNode, _QueryNode,
                        ensure_full_caps     = EnsureFullCaps,
                        ensure_degraded_caps = EnsureDegradedCaps,
                        tests = Tests}) ->
-    ct:pal("Creating tables", []),
+    ct:pal("Creating tables in ~p", [NodesAtVersions0]),
     ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
     CapsReqs = {EnsureFullCaps, EnsureDegradedCaps},
 
@@ -204,6 +204,7 @@ create_stage(NodesAtVersions0, _TableNode, _QueryNode,
           NodesAtVersions2, NeedPreClusterMixed, [TableNode, QueryNode],
           ConvConfFuns, CapsReqs),
 
+    ct:pal("Selected Table/Query nodes ~p/~p", [TableNode, QueryNode]),
     %% 4. For each table in the test, issue CREATE TABLE queries
     Fails =
         lists:append(
@@ -216,7 +217,7 @@ create_stage(NodesAtVersions0, _TableNode, _QueryNode,
 insert_stage(NodesAtVersions3, TableNode, QueryNode,
              _PrevRiakcNode,  %% no need to fall back to PrevRiakcNode as we use riakc_ts:put
              #scenario{tests = Tests}) ->
-    ct:pal("Inserting data", []),
+    ct:pal("Inserting data in ~p", [NodesAtVersions3]),
     %% 5. For each table in the test, issue INSERT queries
     Fails =
         lists:append(
@@ -238,7 +239,7 @@ select_stage(NodesAtVersions3, TableNode, QueryNode,
                        ensure_full_caps     = EnsureFullCaps,
                        ensure_degraded_caps = EnsureDegradedCaps,
                        tests = Tests}) ->
-    ct:pal("Running selects", []),
+    ct:pal("Running selects ~p", [NodesAtVersions3]),
     ConvConfFuns = {ConvertConfigToPreviousFun, ConvertConfigToCurrentFun},
     CapsReqs = {EnsureFullCaps, EnsureDegradedCaps},
 
