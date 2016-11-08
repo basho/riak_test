@@ -500,13 +500,18 @@ ensure_cluster(NodesAtVersions0, NeedClusterMixed, ImmutableNodes,
 find_or_make_node_at_vsn(NodesAtVersions0, ReqVersion, ImmutableNodes, ConvConfFuns) ->
     MutableNodes =
         [{N, V} || {N, V} <- NodesAtVersions0, not lists:member(N, ImmutableNodes)],
-    case hd(MutableNodes) of
-        {Node, Vsn} when Vsn == ReqVersion ->
-            {Node, NodesAtVersions0};
-        {Node, TransitionMe} ->
-            OtherVersion = other_version(TransitionMe),
-            ok = transition_node(Node, OtherVersion, ConvConfFuns),
-            {Node, lists:keyreplace(Node, 1, NodesAtVersions0, {Node, OtherVersion})}
+    case lists:keyfind(ReqVersion, 2, MutableNodes) of
+        {SuitableNode, ReqVersion} ->
+            {SuitableNode, NodesAtVersions0};
+        false ->
+            case hd(MutableNodes) of
+                {Node, Vsn} when Vsn == ReqVersion ->
+                    {Node, NodesAtVersions0};
+                {Node, TransitionMe} ->
+                    OtherVersion = other_version(TransitionMe),
+                    ok = transition_node(Node, OtherVersion, ConvConfFuns),
+                    {Node, lists:keyreplace(Node, 1, NodesAtVersions0, {Node, OtherVersion})}
+            end
     end.
 
 
