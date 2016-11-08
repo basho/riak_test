@@ -35,12 +35,12 @@ make_scenarios() ->
                need_query_node_transition = NeedQueryNodeTransition,
                need_pre_cluster_mixed     = NeedPreClusterMixed,
                need_post_cluster_mixed    = NeedPostClusterMixed,
-               ensure_full_caps     = [{{riak_kv, sql_select_version}, v3}],
-               ensure_degraded_caps = [{{riak_kv, sql_select_version}, v2}],
+               ensure_full_caps     = [{{riak_kv, sql_select_version}, v3}, {{riak_kv, riak_ql_ddl_rec_version}, v2}],
+               ensure_degraded_caps = [{{riak_kv, sql_select_version}, v2}, {{riak_kv, riak_ql_ddl_rec_version}, v1}],
                convert_config_to_previous = fun ts_updown_util:convert_riak_conf_to_previous/1}
-     || TableNodeVsn            <- [current, previous],
-        QueryNodeVsn            <- [current, previous],
-        NeedTableNodeTransition <- [false],
+     || TableNodeVsn            <- [previous, current],
+        QueryNodeVsn            <- [previous, current],
+        NeedTableNodeTransition <- [false, true],
         NeedQueryNodeTransition <- [false],
         NeedPreClusterMixed     <- [false],
         NeedPostClusterMixed    <- [false]].
