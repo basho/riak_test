@@ -258,11 +258,11 @@ process_tests(Test, Acc) ->
 get_test_with_valid_prefix(Test, []) ->
     Test;
 
-get_test_with_valid_prefix(Test, TestPaths) ->
-    [FirstPath|Rest] = TestPaths,
-    case filelib:wildcard(FirstPath++"/"++Test) of
+get_test_with_valid_prefix(Test, [FirstPath|Rest]) ->
+    TestPath = FirstPath++"/"++Test,
+    case filelib:wildcard(TestPath) of
           [] -> get_test_with_valid_prefix(Test, Rest);
-          _  -> FirstPath++"/"++Test
+          _  -> TestPath
     end.
 
 which_tests_to_run(undefined, CommandLineTests) ->
