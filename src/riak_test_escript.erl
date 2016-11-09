@@ -236,43 +236,23 @@ parse_command_line_tests(ParsedArgs) ->
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
-
-    RTTestPaths = get_test_paths(),
     CommaSepTests = string:tokens(Test, [$,]),
-
-    WCTestsNoPrefix = [get_test_with_valid_prefix(TestA, RTTestPaths) || TestA <- CommaSepTests, get_test_type(TestA) =:= yes_wc_no_prefix],
-    WCTestsPrefix = [TestA || TestA <- CommaSepTests, get_test_type(TestA) =:= yes_wc_yes_prefix],
-    NotWCTestsNoPrefix = [get_test_with_valid_prefix(TestA, RTTestPaths) || TestA <- CommaSepTests, get_test_type(TestA) =:= no_wc_no_prefix],
-    NotWCTestsPrefix = [TestA || TestA <- CommaSepTests, get_test_type(TestA) =:= no_wc_yes_prefix],
-
-    AllWCTests = lists:append([filelib:wildcard(TestC) || TestC <- WCTestsNoPrefix++WCTestsPrefix]),
-    AllNotWCTests = NotWCTestsNoPrefix++NotWCTestsPrefix,
-    AllTests = AllWCTests++AllNotWCTests,
-
-    CodePathList = [filename:dirname(TestName) || TestName <- AllTests],
-    TestNameList = [filename:rootname(filename:basename(TestName)) || TestName <- AllTests],
+    All = lists:foldl(fun process_tests/2, [], CommaSepTests),
+    {CodePathList,TestNameList} = lists:unzip([{filename:dirname(TestName),filename:rootname(filename:basename(TestName))} || TestName <- All]),
     {CodePathList++CodePaths, TestNameList++TestNames}.
 
-get_test_type(Test) ->
+process_tests(Test, Acc) ->
     case string:str(Test, "*") of
         0 ->
           case string:str(Test, "/") of
-              0 -> no_wc_no_prefix;
-              _ ->  no_wc_yes_prefix
+              0 -> [get_test_with_valid_prefix(Test, ["tests"|rt_config:get(test_paths, [])])|Acc];
+              _ ->  [Test|Acc]
           end;
         _ ->
           case string:str(Test, "/") of
-              0 -> yes_wc_no_prefix;
-              _ -> yes_wc_yes_prefix
+              0 -> filelib:wildcard(get_test_with_valid_prefix(Test, ["tests"|rt_config:get(test_paths, [])]))++Acc;
+              _ -> filelib:wildcard(Test)++Acc
           end
-    end.
-
-get_test_paths() ->
-    RTTestPaths = rt_config:get(test_paths, ["tests"]),
-    case RTTestPaths of
-        ["tests"] ->
-            RTTestPaths;
-        _ -> RTTestPaths++["tests"]
     end.
 
 get_test_with_valid_prefix(Test, []) ->
