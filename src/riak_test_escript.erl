@@ -116,7 +116,6 @@ main(Args) ->
                                           {lager_file_backend, [{file, "log/test.log"},
                                                                 {level, ConsoleLagerLevel}]}]),
     lager:start(),
-
     %% Report
     Report = case proplists:get_value(report, ParsedArgs, undefined) of
         undefined -> undefined;
@@ -134,7 +133,7 @@ main(Args) ->
 
     CommandLineTests = parse_command_line_tests(ParsedArgs),
     Tests0 = which_tests_to_run(Report, CommandLineTests),
-
+    lager:info("Running Tests: ~p", [[TestName || {_, {TestName,_}} <- Tests0]]),
     case Tests0 of
         [] ->
             lager:warning("No tests are scheduled to run"),
@@ -215,6 +214,7 @@ parse_command_line_tests(ParsedArgs) ->
         lists:foldl(fun extract_test_names/2,
                     {[], []},
                     proplists:get_all_values(tests, ParsedArgs)),
+
     [code:add_patha(CodePath) || CodePath <- CodePaths,
                                  CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
@@ -236,8 +236,34 @@ parse_command_line_tests(ParsedArgs) ->
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
-    {[filename:dirname(Test) | CodePaths],
-     [filename:rootname(filename:basename(Test)) | TestNames]}.
+    CommaSepTests = string:tokens(Test, [$,]),
+    All = lists:foldl(fun process_tests/2, [], CommaSepTests),
+    {CodePathList,TestNameList} = lists:unzip([{filename:dirname(TestName),filename:rootname(filename:basename(TestName))} || TestName <- All]),
+    {CodePathList++CodePaths, TestNameList++TestNames}.
+
+process_tests(Test, Acc) ->
+    case string:str(Test, "*") of
+        0 ->
+          case string:str(Test, "/") of
+              0 -> [get_test_with_valid_prefix(Test, ["tests"|rt_config:get(test_paths, [])])|Acc];
+              _ ->  [Test|Acc]
+          end;
+        _ ->
+          case string:str(Test, "/") of
+              0 -> filelib:wildcard(get_test_with_valid_prefix(Test, ["tests"|rt_config:get(test_paths, [])]))++Acc;
+              _ -> filelib:wildcard(Test)++Acc
+          end
+    end.
+
+get_test_with_valid_prefix(Test, []) ->
+    Test;
+
+get_test_with_valid_prefix(Test, [FirstPath|Rest]) ->
+    TestPath = FirstPath++"/"++Test,
+    case filelib:wildcard(TestPath) of
+          [] -> get_test_with_valid_prefix(Test, Rest);
+          _  -> TestPath
+    end.
 
 which_tests_to_run(undefined, CommandLineTests) ->
     {Tests, NonTests} =
