@@ -1,6 +1,6 @@
 % -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -138,14 +138,8 @@ test_quanta_range(Table, ExpectedData, Nodes, NumQuanta, QuantumMS) ->
           CoverageEntries),
     ?assertEqual(lists:sort(ExpectedData), lists:sort(Results)),
 
-    %% Expect {error,{1001,<<"{too_many_subqueries,13}">>}} if NumQuanta > 5
-    case NumQuanta > 5 of
-        true ->
-            ?assertMatch({error, {1001, _}}, riakc_ts:query(OtherPid, Qry));
-        false ->
-            {ok, {_, StraightQueryResults}} = riakc_ts:query(OtherPid, Qry),
-            ?assertEqual(lists:sort(ExpectedData), lists:sort(StraightQueryResults))
-    end.
+    {ok, {_, StraightQueryResults}} = riakc_ts:query(OtherPid, Qry),
+    ?assertEqual(lists:sort(ExpectedData), lists:sort(StraightQueryResults)).
 
 time_within_range(Time, Lower, LowerIncl, Upper, UpperIncl) ->
     if

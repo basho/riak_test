@@ -32,12 +32,42 @@ client_vsn() ->
 
 -spec set_up_slave_for_previous_client(node()) -> node().
 set_up_slave_for_previous_client(SlaveNode) ->
-    {ok, SlaveNode} = rt_slave:start(SlaveNode, "-setcookie riak"),
-    PrevRiakcPath =
-        hd(filelib:wildcard(
-             filename:join(
-               [rtdev:relpath(previous),
-                "dev/dev1/lib/riakc-*/ebin"]))),
-    true = rpc:call(
-             SlaveNode, code, replace_path, ["riakc", PrevRiakcPath]),
+    Paths = code:get_path(),
+    PrevRiakcPath = ebin_path("riakc"),
+    PrevRiakPbPath = ebin_path("riak_pb"),
+    ThisNodePath =
+        lists:append(
+          [" -pa " ++ P || P <- Paths]),
+    ReplacedPath =
+        fmt("~s -pa '~s' -pa '~s'", [ThisNodePath, PrevRiakcPath, PrevRiakPbPath]),
+
+    {ok, SlaveNode} =
+        rt_slave:start(
+          SlaveNode,
+          [{erl_flags, ReplacedPath}]),
+    Which = rpc:call(
+             SlaveNode, code, which, [riakc_ts]),
+    true = is_list(Which),
     SlaveNode.
+
+
+ebin_path(App) ->
+    %% first try the case of devrel (may have different
+    %% versions of riak-erlang-client installed)
+    case wild_ebin_path(App ++ "-*") of
+        [] ->
+            %% the user did a stagedevrel, so retry with the
+            %% symlink name instead
+            hd(wild_ebin_path(App));
+        VersionedRiakcDirs ->
+            hd(VersionedRiakcDirs)
+    end.
+
+wild_ebin_path(WildcardElem) ->
+    lists:sort(
+      filelib:wildcard(
+        filename:join(
+          [rtdev:relpath(previous),
+           "dev/dev1/lib/"++WildcardElem++"/ebin"]))).
+fmt(F, A) ->
+    lists:flatten(io_lib:format(F, A)).

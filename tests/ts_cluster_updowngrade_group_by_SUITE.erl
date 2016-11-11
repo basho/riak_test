@@ -29,20 +29,27 @@
 %% yes this 1.3 error is bonkers and a proper chocolate teapot but that's the error
 -define(SELECTERROR, {error, {1020, <<"Used group as a measure of time in 1000group. Only s, m, h and d are allowed.">>}}).
 
+make_initial_config(Config) ->
+    [{use_previous_client, true} | Config].
+
 make_scenarios() ->
-    BaseScenarios = [#scenario{table_node_vsn             = TableNodeVsn,
-                               query_node_vsn             = QueryNodeVsn,
-                               need_table_node_transition = NeedTableNodeTransition,
-                               need_query_node_transition = NeedQueryNodeTransition,
-                               need_pre_cluster_mixed     = NeedPreClusterMixed,
-                               need_post_cluster_mixed    = NeedPostClusterMixed}
-                     || TableNodeVsn            <- [current, previous],
-                        QueryNodeVsn            <- [current, previous],
-                        NeedTableNodeTransition <- [true, false],
-                        NeedQueryNodeTransition <- [true, false],
-                        NeedPreClusterMixed     <- [true, false],
-                        NeedPostClusterMixed    <- [true, false]],
-    lists:flatten([add_tests(X) || X <- BaseScenarios]).
+    BaseScenarios =
+        [#scenario{table_node_vsn             = TableNodeVsn,
+                   query_node_vsn             = QueryNodeVsn,
+                   need_table_node_transition = NeedTableNodeTransition,
+                   need_query_node_transition = NeedQueryNodeTransition,
+                   need_pre_cluster_mixed     = NeedPreClusterMixed,
+                   need_post_cluster_mixed    = NeedPostClusterMixed,
+                   ensure_full_caps     = [{{riak_kv, sql_select_version}, v3}, {{riak_kv, riak_ql_ddl_rec_version}, v2}],
+                   ensure_degraded_caps = [{{riak_kv, sql_select_version}, v2}, {{riak_kv, riak_ql_ddl_rec_version}, v1}],
+                   convert_config_to_previous = fun ts_updown_util:convert_riak_conf_to_previous/1}
+         || TableNodeVsn            <- [previous, current],
+            QueryNodeVsn            <- [previous, current],
+            NeedTableNodeTransition <- [true, false],
+            NeedQueryNodeTransition <- [true, false],
+            NeedPreClusterMixed     <- [true, false],
+            NeedPostClusterMixed    <- [true, false]],
+    [add_tests(X) || X <- BaseScenarios].
 
 %% This test will not use config invariants
 %% see ts_cluster_updowngrade_select_aggregation_SUITE.erl for an example
@@ -50,34 +57,12 @@ make_scenarios() ->
 make_scenario_invariants(Config) ->
     Config.
 
-%% GROUP BY will always work if
-%% the query node is 1.4
-%% the query node is queried *AFTER* a transition
-%% this scenario the query node starts at 1.4 and remains there
-%% the cluster is either mixed or all 1.4
-add_tests(#scenario{query_node_vsn             = current,
-                    need_query_node_transition = false} = Scen) ->
-    Tests = [
-             make_select_grouped_field_test(select_passes),
-             make_group_by_2_test(select_passes)
-            ],
-    Scen#scenario{tests = Tests};
-%% in this scenario the query node starts at 1.3 and transitions to 1.4 before
-%% the select happens - the intial cluster is mixed and the final can be
-%% mixed or all 1.4
-add_tests(#scenario{query_node_vsn             = previous,
-                    need_query_node_transition = true} = Scen) ->
-    Tests = [
-             make_select_grouped_field_test(select_passes),
-             make_group_by_2_test(select_passes)
-            ],
-    Scen#scenario{tests = Tests};
-%% all other scenarios (all 1.3 or mixed with a 1.3 query node) GROUP BY
-%% wont work
+%% GROUP BY will always work for up/downgrades between 1.4 and 1.5 and
+%% newer versions
 add_tests(Scen) ->
     Tests = [
-             make_select_grouped_field_test(select_fails),
-             make_group_by_2_test(select_fails)
+             make_select_grouped_field_test(select_passes),
+             make_group_by_2_test(select_passes)
             ],
     Scen#scenario{tests = Tests}.
 
@@ -92,11 +77,11 @@ make_select_grouped_field_test(DoesSelectPass) ->
     Insert = #insert{data = [{1,B,C} || B <- [1,2,3], C <- [1,2,3]],
                      expected = ok},
 
-    {SelExp, AssertFn} 
+    {SelExp, AssertFn}
         = case DoesSelectPass of
-              select_passes -> 
+              select_passes ->
                   {{ok, {[<<"c">>], [{2},{1},{3}]}}, sorted_assert};
-              select_fails  -> 
+              select_fails  ->
                   {?SELECTERROR, plain_assert}
              end,
     Select = #select{qry = "SELECT c FROM ~s "
@@ -105,7 +90,7 @@ make_select_grouped_field_test(DoesSelectPass) ->
                      expected   = SelExp,
                      assert_mod = ?MODULE,
                      assert_fun = AssertFn},
-    
+
     #test_set{testname = "grouped_field_test",
               create  = Create,
               insert  = Insert,
@@ -121,13 +106,13 @@ make_group_by_2_test(DoesSelectPass) ->
                      "PRIMARY KEY ((a,b,quantum(c,1,s)), a,b,c,d))",
                      expected   = {ok, {[], []}}},
 
-    Insert = #insert{data     = [{1,1,CE,D,CE} || CE <- lists:seq(1,1000), 
-                                                  D <- [1,2,3]],
+    Insert = #insert{data = [{1,1,CE,D,CE} || CE <- lists:seq(1,1000),
+                                              D <- [1,2,3]],
                      expected = ok},
 
     {SelExp, AssertFn}
         = case DoesSelectPass of
-              select_passes -> {{ok, {[<<"d">>, <<"AVG(e)">>], 
+              select_passes -> {{ok, {[<<"d">>, <<"AVG(e)">>],
                                       [{2,500.5}, {3,500.5}, {1,500.5}]}},
                                 sorted_assert};
               select_fails  -> {?SELECTERROR, plain_assert}
@@ -138,12 +123,12 @@ make_group_by_2_test(DoesSelectPass) ->
                      expected = SelExp,
                      assert_mod = ?MODULE,
                      assert_fun = AssertFn},
-    
+
     #test_set{testname = "group_by_2",
               create  = Create,
               insert  = Insert,
               selects = [Select]}.
- 
+
 sorted_assert(String, {ok, {ECols, Exp}}, {ok, {GCols, Got}}) ->
     Exp2 = lists:sort(Exp),
     Got2 = lists:sort(Got),

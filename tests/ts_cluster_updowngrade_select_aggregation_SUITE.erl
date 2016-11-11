@@ -25,19 +25,25 @@
 -define(PRESSURE_COL_INDEX, 5).
 -define(PRECIPITATION_COL_INDEX, 6).
 
+make_initial_config(Config) ->
+    [{use_previous_client, true} | Config].
+
 make_scenarios() ->
     [#scenario{table_node_vsn             = TableNodeVsn,
                query_node_vsn             = QueryNodeVsn,
                need_table_node_transition = NeedTableNodeTransition,
                need_query_node_transition = NeedQueryNodeTransition,
                need_pre_cluster_mixed     = NeedPreClusterMixed,
-               need_post_cluster_mixed    = NeedPostClusterMixed}
-     || TableNodeVsn            <- [current, previous],
-        QueryNodeVsn            <- [current, previous],
-        NeedTableNodeTransition <- [true, false],
-        NeedQueryNodeTransition <- [true, false],
-        NeedPreClusterMixed     <- [true, false],
-        NeedPostClusterMixed    <- [true, false]].
+               need_post_cluster_mixed    = NeedPostClusterMixed,
+               ensure_full_caps     = [{{riak_kv, sql_select_version}, v3}, {{riak_kv, riak_ql_ddl_rec_version}, v2}],
+               ensure_degraded_caps = [{{riak_kv, sql_select_version}, v2}, {{riak_kv, riak_ql_ddl_rec_version}, v1}],
+               convert_config_to_previous = fun ts_updown_util:convert_riak_conf_to_previous/1}
+     || TableNodeVsn            <- [previous, current],
+        QueryNodeVsn            <- [previous, current],
+        NeedTableNodeTransition <- [false, true],
+        NeedQueryNodeTransition <- [false],
+        NeedPreClusterMixed     <- [false],
+        NeedPostClusterMixed    <- [false]].
 
 
 make_scenario_invariants(Config) ->
@@ -45,7 +51,7 @@ make_scenario_invariants(Config) ->
     {SelectVsExpected, Data} = make_queries_and_data(),
     Create = #create{ddl = DDL,   expected = {ok, {[], []}}},
     Insert = #insert{data = Data, expected = ok},
-    Selects = [#select{qry        = Q,   
+    Selects = [#select{qry        = Q,
                        expected   = E,
                        assert_mod = ts_data,
                        assert_fun = assert_float} || {Q, E} <- SelectVsExpected],
