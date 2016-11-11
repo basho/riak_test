@@ -161,8 +161,7 @@ check_kill_repair(Node1) ->
             lager:info("Repair was forcibly killed");
         user_request ->
             lager:info("Repair exited gracefully, we should be able to "
-                       "trigger another repair immediately"),
-            normal = run_2i_repair(Node1)
+                       "trigger another repair immediately")
     end,
     pass.
 
