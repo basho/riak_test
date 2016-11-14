@@ -1327,8 +1327,10 @@ systest_verify_delete(Node, Start, End, Bucket, R) ->
 systest_write(Node, Size) ->
     systest_write(Node, Size, 2).
 
-systest_write(Node, Size, W) ->
-    systest_write(Node, 1, Size, <<"systest">>, W).
+systest_write(Node, Size, W) when is_integer(W) ->
+    systest_write(Node, 1, Size, <<"systest">>, W);
+systest_write(Node, Size, Bucket) ->
+    systest_write(Node, 1, Size, Bucket, 2).
 
 systest_write(Node, Start, End, Bucket, W) ->
     systest_write(Node, Start, End, Bucket, W, <<>>).
