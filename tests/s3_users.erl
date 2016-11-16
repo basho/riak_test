@@ -20,11 +20,10 @@ verify_create_user([Node|_]) ->
                            riak_s3_user,
                            create,
                            [Username, DisplayName]),
-    {Username, Options} = rpc:call(Node, riak_core_security, get_user, [Username]),
+    DN = rpc:call(Node, riak_s3_user, get_display_name, [User]),
 
     io:format("User: ~p", [User]),
-    io:format("Options: ~p", [Options]),
-    ?assertEqual(DisplayName, proplists:get_value("s3.DisplayName", Options)).
+    ?assertEqual(DisplayName, DN).
 
 verify_grant_user([Node|_]) ->
     Username = "jorge",
