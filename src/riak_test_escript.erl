@@ -148,6 +148,7 @@ main(Args) ->
                     Tests0;
                 {_, undefined} ->
                     Tests0;
+                %% TODO don't understand what this does
                 {Offset, Workers} ->
                     TestCount = length(Tests0),
                     %% Avoid dividing by zero, computers hate that
