@@ -78,7 +78,6 @@ client_pid(Ctx) ->
 
 run_query(Ctx, Query) ->
     riakc_ts:query(client_pid(Ctx), Query).
-
 %%%
 %%% TABLE 1
 %%%
@@ -660,7 +659,7 @@ all_timestamps_single_quanta_test(Ctx) ->
         [{2,B,3,4,5} || B <- lists:seq(300, 900, 100)],
     ts_data:assert_row_sets(
         {rt_ignore_columns,Results},
-        run_query(Ctx, Query)
+        riakc_ts:query(client_pid(Ctx), Query)
     ).
 
 %%%
