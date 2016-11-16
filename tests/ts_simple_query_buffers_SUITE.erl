@@ -103,14 +103,14 @@ query_orderby_comprehensive(Cfg) ->
             F3 <- ?ORDBY_COLS,
             F4 <- ?ORDBY_COLS,
             F5 <- ?ORDBY_COLS,
-            all_different([F1, F2, F3, F4, F5]),
-            not_all_undefined([F1, F2, F3, F4, F5])],
+            all_different([F1, F2, F3, F4, F5])],
     OrderByBattery2 =
-        lists:map(
-          fun(FF) ->
-                  [F || F <- FF, F /= undefined]
-          end,
-          OrderByBattery1),
+        lists:usort(
+          lists:map(
+            fun(FF) ->
+                    [F || F <- FF, F /= undefined]
+            end,
+            OrderByBattery1)),
     lists:foreach(
       fun(Items) ->
               Variants =
@@ -118,23 +118,23 @@ query_orderby_comprehensive(Cfg) ->
               lists:foreach(
                 fun(Var) ->
                         check_sorted(C, ?TABLE, Data, [{order_by, Var}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 1}, {offset, 10}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 4}, {offset, 5}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 55}, {offset, 11}])
+                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 1}]),
+                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 2}, {offset, 4}])
                 end,
                 Variants)
       end,
       OrderByBattery2).
 
 all_different(XX) ->
-    length(lists:usort(XX)) == length(XX).
-not_all_undefined(XX) ->
-    not lists:all(fun(X) -> X == undefined end, XX).
+    YY = [X || X <- XX, X /= undefined],
+    length(lists:usort(YY)) == length(YY).
 
 %% given a single list of fields, e.g., ["a", "b", "c"], produce all
 %% variants featuring all possible modifiers with each field, thus:
 %%  [[{"a", "asc", "nulls first"}, ...], ...,
 %%   [{"a", undefined, undefined}, ...]]
+make_ordby_item_variants([]) ->
+    [[]];  %% this special case gets lost in rolling/unrolling wizardry
 make_ordby_item_variants(FF) ->
     Modifiers =
         [{Dir, Nul} || Dir <- ["asc", "desc", undefined],
@@ -270,6 +270,7 @@ check_sorted(C, Table, OrigData, Clauses) ->
     check_sorted(C, Table, OrigData, Clauses, [{allow_qbuf_reuse, true}]).
 check_sorted(C, Table, OrigData, Clauses, Options) ->
     Query = ts_qbuf_util:full_query(Table, Clauses),
+    ct:log("Query: \"~s\"", [Query]),
     {ok, {_Cols, Returned}} =
         riakc_ts:query(C, Query, [], undefined, Options),
     OrderBy = proplists:get_value(order_by, Clauses),
@@ -279,7 +280,6 @@ check_sorted(C, Table, OrigData, Clauses, Options) ->
     %% including sorting according to ORDER BY
     %% uncomment these log entries to inspect the data visually (else
     %% it's just going to blow up the log into tens of megs):
-    %% ct:log("Query: \"~s\"", [Query]),
     %% ct:log("Fetched ~p", [Returned]),
     PreSelected = sort_by(
                     where_filter(OrigData, [{"a", ?WHERE_FILTER_A},
