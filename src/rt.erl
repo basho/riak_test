@@ -1401,7 +1401,7 @@ object_value(1, Obj, _SquashSiblings) ->
 object_value(_ValueCount, Obj, false) ->
     riak_object:get_value(Obj);
 object_value(_ValueCount, Obj, true) ->
-    lager:debug("Siblings detected for ~p:~p", [riak_object:bucket(Obj), riak_object:key(Obj)]),
+    lager:debug("Siblings detected for ~p:~p~n~p", [riak_object:bucket(Obj), riak_object:key(Obj), Obj]),
     Contents = riak_object:get_contents(Obj),
     case lists:foldl(fun sibling_compare/2, {true, undefined}, Contents) of
         {true, {_, _, _, Value}} ->

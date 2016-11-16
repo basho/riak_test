@@ -51,12 +51,10 @@ confirm() ->
     %% let the repl flow
     repl_power_activate(ClusterA, ClusterB),
 
-    AValue = get_counter(hd(ClusterA)),
-    BValue = get_counter(hd(ClusterB)),
-    ExpectedValve = AExpected + BExpected,
+    ExpectedValue = AExpected + BExpected,
 
-    ?assertEqual(ExpectedValve, AValue),
-    ?assertEqual(ExpectedValve, BValue),
+    ?assertEqual(ok, rt:wait_until(fun() -> verify_counter(ExpectedValue, hd(ClusterA)) end)),
+    ?assertEqual(ok, rt:wait_until(fun() -> verify_counter(ExpectedValue, hd(ClusterB)) end)),
     pass.
 
 make_clusters() ->
@@ -86,6 +84,9 @@ increment_counter(Client, Amt) ->
 get_counter({Client, _Node}) ->
     {ok, Val} = rhc:counter_val(Client, ?BUCKET, ?KEY),
     Val.
+
+verify_counter(ExpectedValue, Node) ->
+    ExpectedValue == get_counter(Node).
 
 rand_amt() ->
     crypto:rand_uniform(-100, 100).

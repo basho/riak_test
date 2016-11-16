@@ -17,30 +17,32 @@
 %% under the License.
 %%
 %%-------------------------------------------------------------------
--module(yz_kv_intercepts).
+-module(yz_solrq_helper_intercepts).
 -compile(export_all).
 
 -include("intercept.hrl").
 
--define(M, yz_kv_orig).
+-define(M, yz_solrq_helper_orig).
 
-handle_delete_operation(BProps, Obj, Docs, BKey, LP) ->
+handle_get_ops_for_no_sibling_deletes(LI, P, Obj) ->
     Lookup = ets:lookup(intercepts_tab, del_put),
     case Lookup of
-        [] -> original_delete_op(BProps, Obj, Docs, BKey, LP);
+        [] -> original_get_ops_for_no_sibling_deletes(LI, P, Obj);
         _ ->
             case proplists:get_value(del_put, Lookup) of
                 0 ->
                     error_logger:info_msg(
-                      "Delete operation intercepted for BKey ~p", [BKey]),
+                      "Delete operation intercepted for BKey ~p",
+                        [{riak_object:bucket(Obj), riak_object:key(Obj)}]),
                     ets:update_counter(intercepts_tab, del_put, 1),
                     [];
                 _ ->
-                    original_delete_op(BProps, Obj, Docs, BKey, LP)
+                    original_get_ops_for_no_sibling_deletes(LI, P, Obj)
             end
     end.
 
-original_delete_op(BProps, Obj, Docs, BKey, LP) ->
+original_get_ops_for_no_sibling_deletes(LI, P, Obj) ->
     error_logger:info_msg(
-      "Delete operation original for BKey ~p | ~p", [BKey, Docs]),
-    ?M:delete_operation_orig(BProps, Obj, Docs, BKey, LP).
+      "Delete operation original for BKey ~p",
+        [{riak_object:bucket(Obj), riak_object:key(Obj)}]),
+    ?M:get_ops_for_no_sibling_deletes_orig(LI, P, Obj).

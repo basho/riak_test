@@ -23,7 +23,15 @@
             [
              {anti_entropy, {on, []}},
              {anti_entropy_build_limit, {100, 1000}},
-             {anti_entropy_concurrency, 100}
+             {anti_entropy_concurrency, 100},
+             %% In mixed clusters, don't allow the object has version
+             %% to upgrade from `legacy` as the replication will no
+             %% no longer be able to complete
+             {override_capability,
+               [{object_hash_version,
+                 [{use, legacy},
+                  {prefer, legacy}]
+                }]}
             ]
         },
         {riak_repl,
