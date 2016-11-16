@@ -92,7 +92,7 @@ full_query(Table, OptionalClauses) ->
             Item <- [order_by, limit, offset]],
     fmt("~s~s~s~s",
         [base_query(Table),
-         [fmt(" order by ~s", [make_orderby_list(OrderBy)]) || OrderBy /= undefined],
+         [fmt(" order by ~s", [make_orderby_list(OrderBy)]) || OrderBy /= []],
          [fmt(" limit ~b", [Limit])                         || Limit   /= undefined],
          [fmt(" offset ~b", [Offset])                       || Offset  /= undefined]]).
 
