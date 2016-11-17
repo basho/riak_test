@@ -396,6 +396,8 @@ assert_row_sets({rt_ignore_columns, Expected}, {_, {_, Actual}}) ->
     ct_verify_rows(Expected, Actual);
 assert_row_sets({_, {ColExpected, Expected}}, {_, {ColsActual, Actual}}) ->
     ?assertEqual(ColExpected, ColsActual),
+    ct_verify_rows(Expected, Actual);
+assert_row_sets(Expected, Actual) when is_list(Expected), is_list(Actual) ->
     ct_verify_rows(Expected, Actual).
 
 ct_verify_rows(Expected, Actual) ->
