@@ -32,7 +32,7 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    [_Node|_] = Cluster = ts_util:build_cluster(multiple),
+    [_Node|_] = Cluster = ts_setup:start_cluster(3),
     proc_lib:spawn(
         fun() ->
             register(random_num_proc, self()),

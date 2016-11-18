@@ -34,7 +34,7 @@ suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    [Node|_] = Cluster = ts_util:build_cluster(multiple),
+    [Node|_] = Cluster = ts_setup:start_cluster(3),
     Pid = rt:pbc(Node),
     table_def_basic_create_data(Cluster, Pid),
     desc_on_quantum_table_create_data(Pid),
@@ -75,13 +75,14 @@ client_pid(Ctx) ->
 %%%
 %%%
 
-table_def_basic_create_data(Cluster, Pid) ->
-    ts_util:create_and_activate_bucket_type(Cluster,
-            "CREATE TABLE basic_table ("
-            "a SINT64 NOT NULL, "
-            "b SINT64 NOT NULL, "
-            "c TIMESTAMP NOT NULL, "
-            "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c))", <<"basic_table">> ),
+table_def_basic_create_data(_Cluster, Pid) ->
+    Table_def =
+        "CREATE TABLE basic_table ("
+        "a SINT64 NOT NULL, "
+        "b SINT64 NOT NULL, "
+        "c TIMESTAMP NOT NULL, "
+        "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c))",
+    {ok, _} = riakc_ts:query(Pid, Table_def),
     ok = riakc_ts:put(Pid, <<"basic_table">>,
             [{1,1,N} || N <- lists:seq(100,5000,100)]).
 
@@ -96,13 +97,14 @@ basic_table_stream_list_keys_test(Ctx) ->
 %%%
 %%%
 
-create_data_in_basic_varchar_table(Cluster, Pid) ->
-    ts_util:create_and_activate_bucket_type(Cluster,
-            "CREATE TABLE basic_varchar_table ("
-            "a SINT64 NOT NULL, "
-            "b VARCHAR NOT NULL, "
-            "c TIMESTAMP NOT NULL, "
-            "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c))", <<"basic_varchar_table">> ),
+create_data_in_basic_varchar_table(_Cluster, Pid) ->
+    Table_def =
+        "CREATE TABLE basic_varchar_table ("
+        "a SINT64 NOT NULL, "
+        "b VARCHAR NOT NULL, "
+        "c TIMESTAMP NOT NULL, "
+        "PRIMARY KEY ((a,b,quantum(c, 1, 's')), a,b,c))",
+    {ok, _} = riakc_ts:query(Pid, Table_def),
     ok = riakc_ts:put(Pid, <<"basic_varchar_table">>,
             [{1,<<N:32>>,N} || N <- lists:seq(100,5000,100)]).
 
