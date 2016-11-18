@@ -51,9 +51,8 @@ run_query(ClusterConn, NVal, NPuts, Q, NSpans) ->
 
     {Cluster, Conn} = ClusterConn,
 
-    Table = ts_data:get_default_bucket(),
-    {ok, _} = ts_setup:create_bucket_type(Cluster, DDL, Table, NVal),
-    ok = ts_setup:activate_bucket_type(Cluster, Table),
+    {ok, _} = ts_setup:create_bucket_type(Cluster, DDL, Bucket, NVal),
+    ok = ts_setup:activate_bucket_type(Cluster, Bucket),
     ok = riakc_ts:put(Conn, Bucket, Data),
     {ok, {_, Got}} = ts_ops:query(Cluster, Query),
     ?assertEqual(Data, Got),
