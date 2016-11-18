@@ -68,31 +68,31 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     C = rt:pbc(Node),
 
     %% 1. put some data
-    ok = confirm_put(C, Data),
+    ok = confirm_put(Node, Data),
 
     %% 2. get a single key
-    ok = confirm_get(C, lists:nth(12, Data)),
+    ok = confirm_get(Node, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
     %% 3. list keys and delete one
-    ok = confirm_nx_list_keys(C),
-    {ok, First} = confirm_list_keys(C, ?LIFESPAN),
+    ok = confirm_nx_list_keys(Node),
+    {ok, First} = confirm_list_keys(Node, ?LIFESPAN),
     io:format("Before delete = ~p", [length(First)]),
 
-    ok = confirm_delete(C, lists:nth(14, Data)),
+    ok = confirm_delete(Node, lists:nth(14, Data)),
     ok = confirm_nx_delete(C),
 
     %% Pause briefly. Deletions have a default 3 second
     %% reaping interval, and our list keys test may run
     %% afoul of that.
     timer:sleep(3500),
-    {ok, RemainingKeys} = confirm_list_keys(C, ?LIFESPAN - 1),
+    {ok, RemainingKeys} = confirm_list_keys(Node, ?LIFESPAN - 1),
 
     %% 5. select
     ok = confirm_select(C, PvalP1, PvalP2),
 
     %% 6. single-key get some data
-    ok = confirm_get(C, lists:nth(12, Data)),
+    ok = confirm_get(Node, lists:nth(12, Data)),
     ok = confirm_nx_get(C),
 
     %% Switch to protocol buffer mode and repeat a few tests
@@ -101,11 +101,10 @@ confirm_all_from_node(Node, Data, PvalP1, PvalP2) ->
     ok = confirm_select(C, PvalP1, PvalP2, [{use_ttb, false}]),
 
     %% 6 (redux). single-key get some data
-    ok = confirm_get(C, lists:nth(12, Data), [{use_ttb, false}]),
+    ok = confirm_get(Node, lists:nth(12, Data), [{use_ttb, false}]),
     ok = confirm_nx_get(C, [{use_ttb, false}]),
 
-    ok = confirm_delete_all(C, RemainingKeys),
-    {ok, []} = confirm_list_keys(C, 0).
+    ok = confirm_delete_all(Node, RemainingKeys).
 
 
 make_data(PvalP1, PvalP2) ->
@@ -119,36 +118,36 @@ make_data(PvalP1, PvalP2) ->
         end,
         [], lists:seq(?LIFESPAN, 1, -1))).
 
-confirm_put(C, Data) ->
-    ResFail = riakc_ts:put(C, <<"no-bucket-like-this">>, Data),
+confirm_put(Node, Data) ->
+    ResFail = riakc_ts:put(rt:pbc(Node), <<"no-bucket-like-this">>, Data),
     io:format("Nothing put in a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     %% Res = lists:map(fun(Datum) -> riakc_ts:put(C, ?BUCKET, [Datum]), timer:sleep(300) end, Data0),
     %% (for future tests of batch put writing order)
-    Res = riakc_ts:put(C, ?BUCKET, Data),
+    Res = riakc_ts:put(rt:pbc(Node), ?BUCKET, Data),
     io:format("Put ~b records: ~p\n", [length(Data), Res]),
     ?assertEqual(ok, Res),
     ok.
 
-confirm_delete(C, {Pooter1, Pooter2, Timepoint, _} = Record) ->
-    ResFail = riakc_ts:delete(C, <<"no-bucket-like-this">>, ?BADKEY, []),
+confirm_delete(Node, {Pooter1, Pooter2, Timepoint, _} = Record) ->
+    ResFail = riakc_ts:delete(rt:pbc(Node), <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Nothing deleted from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     Key = [Pooter1, Pooter2, Timepoint],
 
     BadKey1 = [Pooter1],
-    BadRes1 = riakc_ts:delete(C, ?BUCKET, BadKey1, []),
+    BadRes1 = riakc_ts:delete(rt:pbc(Node), ?BUCKET, BadKey1, []),
     io:format("Not deleted because short key: ~p\n", [BadRes1]),
     ?assertMatch({error, _}, BadRes1),
 
     BadKey2 = Key ++ [43],
-    BadRes2 = riakc_ts:delete(C, ?BUCKET, BadKey2, []),
+    BadRes2 = riakc_ts:delete(rt:pbc(Node), ?BUCKET, BadKey2, []),
     io:format("Not deleted because long key: ~p\n", [BadRes2]),
     ?assertMatch({error, _}, BadRes2),
 
-    Res = riakc_ts:delete(C, ?BUCKET, Key, []),
+    Res = riakc_ts:delete(rt:pbc(Node), ?BUCKET, Key, []),
     io:format("Deleted record ~p: ~p\n", [Record, Res]),
     ?assertEqual(ok, Res),
     ok.
@@ -183,15 +182,15 @@ confirm_select(C, PvalP1, PvalP2, Options) ->
     ?assertEqual(10 - 1 - 1, length(Rows)),
     ok.
 
-confirm_get(C, Record) ->
-    confirm_get(C, Record, []).
-confirm_get(C, Record = {Pooter1, Pooter2, Timepoint, _}, Options) ->
-    ResFail = riakc_ts:get(C, <<"no-bucket-like-this">>, ?BADKEY, []),
+confirm_get(Node, Record) ->
+    confirm_get(Node, Record, []).
+confirm_get(Node, Record = {Pooter1, Pooter2, Timepoint, _}, Options) ->
+    ResFail = riakc_ts:get(rt:pbc(Node), <<"no-bucket-like-this">>, ?BADKEY, []),
     io:format("Got nothing from a non-existent bucket: ~p\n", [ResFail]),
     ?assertMatch({error, _}, ResFail),
 
     Key = [Pooter1, Pooter2, Timepoint],
-    Res = riakc_ts:get(C, ?BUCKET, Key, Options),
+    Res = riakc_ts:get(rt:pbc(Node), ?BUCKET, Key, Options),
     io:format("Get a single record: ~p\n", [Res]),
     ?assertMatch({ok, {_, [Record]}}, Res),
     ok.
@@ -204,40 +203,44 @@ confirm_nx_get(C, Options) ->
     ?assertMatch({ok, {[], []}}, Res),
     ok.
 
-confirm_nx_list_keys(C) ->
-    {Status, Reason} = list_keys(C, <<"no-bucket-like-this">>),
+confirm_nx_list_keys(Node) ->
+    {Status, Reason} = list_keys(Node, <<"no-bucket-like-this">>),
     io:format("Nothing listed from a non-existent bucket: ~p\n", [Reason]),
     ?assertMatch(error, Status),
     ok.
 
-confirm_list_keys(C, N) ->
-    confirm_list_keys(C, N, 15).
+confirm_list_keys(Node, N) ->
+    confirm_list_keys(Node, N, 15).
 confirm_list_keys(_C, _N, 0) ->
     io:format("stream_list_keys is lying\n", []),
     fail;
-confirm_list_keys(C, N, TriesToGo) ->
-    {Status, Keys} = list_keys(C, ?BUCKET),
+confirm_list_keys(Node, N, TriesToGo) ->
+    {Status, Keys} = list_keys(Node, ?BUCKET),
     case length(Keys) of
         N ->
             {ok, Keys};
         _NotN ->
             io:format("Listed ~b (expected ~b) keys streaming (~p). Retrying.\n", [length(Keys), N, Status]),
-            confirm_list_keys(C, N, TriesToGo - 1)
+            confirm_list_keys(Node, N, TriesToGo - 1)
     end.
 
-confirm_delete_all(C, AllKeys) ->
+confirm_delete_all(Node, AllKeys) ->
     io:format("Deleting ~b keys\n", [length(AllKeys)]),
     lists:foreach(
-      fun(K) -> ok = riakc_ts:delete(C, ?BUCKET, tuple_to_list(K), []) end,
+      fun(K) -> ok = riakc_ts:delete(rt:pbc(Node), ?BUCKET, tuple_to_list(K), []) end,
       AllKeys),
     timer:sleep(3500),
-    {ok, Res} = list_keys(C, ?BUCKET),
+    Res = lists:foldl(
+        fun(K, AccIn) ->
+            {ok, {_, Row}} = riakc_ts:get(rt:pbc(Node), ?BUCKET, tuple_to_list(K), []),
+            AccIn++Row
+        end, [], AllKeys),
     io:format("Deleted all: ~p\n", [Res]),
     ?assertMatch([], Res),
     ok.
 
-list_keys(C, Bucket) ->
-    {ok, ReqId1} = riakc_ts:stream_list_keys(C, Bucket, []),
+list_keys(Node, Bucket) ->
+    {ok, ReqId1} = riakc_ts:stream_list_keys(rt:pbc(Node), Bucket, []),
     receive_keys(ReqId1, []).
 
 receive_keys(ReqId, Acc) ->

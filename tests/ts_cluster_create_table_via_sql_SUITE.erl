@@ -128,12 +128,12 @@ ddl_common() ->
     ts_data:get_ddl(small).
 
 table_described() ->
-    {ok, {[<<"Column">>,<<"Type">>,<<"Is Null">>,<<"Primary Key">>, <<"Local Key">>, <<"Interval">>, <<"Unit">>],
-     [{<<"myfamily">>,   <<"varchar">>,   false,  1,  1, [], []},
-      {<<"myseries">>,   <<"varchar">>,   false,  2,  2, [], []},
-      {<<"time">>,       <<"timestamp">>, false,  3,  3, 15, <<"m">>},
-      {<<"weather">>,    <<"varchar">>,   false, [], [], [], []},
-      {<<"temperature">>,<<"double">>,    true,  [], [], [], []}]}}.
+    {ok,{[<<"Column">>,<<"Type">>,<<"Nullable">>,<<"Partition Key">>,<<"Local Key">>, <<"Interval">>,<<"Unit">>,<<"Sort Order">>],
+         [{<<"myfamily">>,<<"varchar">>,false,1,1,[],[], []},
+          {<<"myseries">>,<<"varchar">>,false,2,2,[],[], []},
+          {<<"time">>,<<"timestamp">>,false,3,3,15, <<"m">>,[]},
+          {<<"weather">>,<<"varchar">>,false,[],[],[], [],[]},
+          {<<"temperature">>,<<"double">>,true,[],[],[], [],[]}]}}.
 
 enquote_varchar(P) when is_binary(P) ->
     re:replace(P, "'", "''", [global, {return, binary}]);
