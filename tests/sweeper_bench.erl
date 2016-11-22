@@ -124,10 +124,10 @@ bacho_bench_config(HostList, Operations) ->
 
 disable_sweep_scheduling(Nodes) ->
     lager:info("disable sweep scheduling"),
-    {Succ, Fail} = rpc:multicall(Nodes, riak_kv_sweeper, disable_sweep_scheduling, []),
-    FalseResults =
-        [false || false <- Succ],
-    0 = length(FalseResults) + length(Fail).
+    {Succ, Fail} = rpc:multicall(Nodes, riak_kv_sweeper, stop_all_sweeps, []),
+    BadResults = [Res || Res <- Succ, not is_integer(Res)],
+    ?assertEqual([], BadResults),
+    ?assertEqual([], Fail).
 
 %% enable_sweep_scheduling(Nodes) ->
 %%     lager:info("enable sweep scheduling"),
