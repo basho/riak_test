@@ -32,6 +32,7 @@
 -cover_modules([riak_kv_sweeper]).
 -export([confirm/0,
          manually_sweep_all/1,
+         stop_all_sweeps/1,
          set_tombstone_grace/2,
          check_reaps/3,
          get_sweep_status/1]).

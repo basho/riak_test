@@ -12,7 +12,7 @@
 -cover_modules([riak_kv_sweeper]).
 
 -import(verify_sweep_reaper, [manually_sweep_all/1,
-                              disable_sweep_scheduling/1,
+                              stop_all_sweeps/1,
                               set_tombstone_grace/2,
                               check_reaps/3,
                               get_sweep_status/1]).
@@ -39,7 +39,7 @@ confirm() ->
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
     
     [Client] = create_pb_clients(Nodes),
-    disable_sweep_scheduling(Nodes), %% Disable sweeps so they don't mess with our tests.
+    stop_all_sweeps(Nodes), %% Disable sweeps so they don't mess with our tests.
     verify_object_ttl(Client),
     verify_bucket_ttl(Client),
     set_tombstone_grace(Nodes, ?SHORT_TOMBSTONE_GRACE),
