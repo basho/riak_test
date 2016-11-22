@@ -32,7 +32,6 @@
 -cover_modules([riak_kv_sweeper]).
 -export([confirm/0,
          manually_sweep_all/1,
-         disable_sweep_scheduling/1,
          set_tombstone_grace/2,
          check_reaps/3,
          get_sweep_status/1]).
@@ -116,7 +115,7 @@ verify_no_reap([Node|_] = Nodes, KV) ->
     %% Keys should not be reaped since
     %% the tombstone grace period is 1w.
     false = check_reaps(Node, Client, KV),
-    disable_sweep_scheduling(Nodes),
+    stop_all_sweeps(Nodes),
     false = check_reaps(Node, Client, KV),
     enable_sweep_scheduling(Nodes),
     riakc_pb_socket:stop(Client).
@@ -137,7 +136,7 @@ verify_reap([Node|_] = _Nodes, KV1, KV2) ->
 verify_manual_sweep([Node|_] = Nodes, KV) ->
     format_subtest(verify_manual_sweep),
     Client = rt:pbc(Node),
-    disable_sweep_scheduling(Nodes),
+    stop_all_sweeps(Nodes),
     write_data(Client, KV),
     delete_keys(Client, KV),
     timer:sleep(?SHORT_TOMBSTONE_GRACE * 1500),
@@ -164,7 +163,7 @@ verify_remove_add_participant([Node|_] = Nodes, KV) ->
 %% Verify that AAE only repair in the grace period
 verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
     format_subtest(verify_aae_in_grace),
-    disable_sweep_scheduling(Nodes),
+    stop_all_sweeps(Nodes),
     Client = rt:pbc(Node),
     timer:sleep(timer:seconds(10)),
     write_data(Client, KV1, [{n_val, 1}]), 
@@ -200,7 +199,7 @@ verify_aae_and_reaper_interaction([Node|_] = Nodes, KV1, KV2, KV3) ->
 %% Verify that the sweeper schedules consistently
 verify_scheduling([Node|_] = Nodes) ->
     format_subtest(verify_scheduling),
-    disable_sweep_scheduling(Nodes),
+    stop_all_sweeps(Nodes),
     %% First manually sweep then scheduled sweeps
     %% should be in same order
     Indices = manually_sweep_all(Node),
@@ -215,7 +214,7 @@ verify_scheduling([Node|_] = Nodes) ->
 
     timer:sleep(10000),
     %% Manual sweeps reverse the scheduled should be in the same order.
-    disable_sweep_scheduling(Nodes),
+    stop_all_sweeps(Nodes),
     [begin manual_sweep(Node, Index), timer:sleep(1000) end ||
       Index <- lists:reverse(Indices)],
     rt:stop(Node),
@@ -241,7 +240,6 @@ create_all_possible_lists(List) ->
 check_bucket_acc([Node|_] = Nodes, KV10, KV11) ->
     format_subtest(check_bucket_acc),
     stop_all_sweeps(Nodes),
-    disable_sweep_scheduling(Nodes),
     Client = rt:pbc(Node),
     write_data(Client, KV10),
     manually_sweep_all(Node),
@@ -257,7 +255,7 @@ test_restart_sweep([Node|_] = Nodes, KV) ->
     format_subtest(test_restart_sweep),
     disable_aae(Node),
     set_tombstone_grace(Nodes, ?SHORT_TOMBSTONE_GRACE),
-    disable_sweep_scheduling(Nodes),
+    stop_all_sweeps(Nodes),
     Client = rt:pbc(Node),
     write_data(Client, KV),
     delete_keys(Client, KV),
@@ -398,16 +396,9 @@ set_sweep_concurrency(Nodes, N) ->
 stop_all_sweeps(Nodes) ->
     lager:info("stop all sweeps"),
     {Succ, Fail} = rpc:multicall(Nodes, riak_kv_sweeper, stop_all_sweeps, []),
-    FalseResults =
-        [false || false <- Succ],
-    0 = length(FalseResults) + length(Fail).
-
-disable_sweep_scheduling(Nodes) ->
-    lager:info("disable sweep scheduling"),
-    {Succ, Fail} = rpc:multicall(Nodes, riak_kv_sweeper, disable_sweep_scheduling, []),
-    FalseResults =
-        [false || false <- Succ],
-    0 = length(FalseResults) + length(Fail).
+    BadResults = [Res || Res <- Succ, not is_integer(Res)],
+    ?assertEqual([], BadResults),
+    ?assertEqual([], Fail).
 
 enable_sweep_scheduling(Nodes) ->
     lager:info("enable sweep scheduling"),
