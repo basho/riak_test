@@ -26,8 +26,7 @@ verify_create_user([Node1, _Node2|_]) ->
       fun() ->
               User2 = rpc:call(Node1, riak_s3_user, find_by_access_key, [AccessKey]),
               % TODO: name vs username, pick one
-              Username =:= rpc:call(Node1, riak_s3_user, get_name, [User2]) andalso
-              DisplayName =:= rpc:call(Node1, riak_s3_user, get_display_name, [User2])
+              User2 =:= User
       end).
 
 verify_grant_user([Node1, Node2|_]) ->
