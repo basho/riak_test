@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% ts_overload_reported - test to ensure overload is handled correctly.
+%% ts_cluster_overload_reported - test to ensure overload is handled correctly.
 %% based on overload test, simplified to slam TS w/ queries until an overload
 %% occurs to ensure {error, atom()} responses are handled correctly w/i TS.
 %%
@@ -21,7 +21,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(ts_overload_reported).
+-module(ts_cluster_overload_reported).
 -include_lib("eunit/include/eunit.hrl").
 
 -export([confirm/0]).
