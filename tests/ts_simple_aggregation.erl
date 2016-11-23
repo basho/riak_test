@@ -160,14 +160,16 @@ verify_aggregation(ClusterType) ->
     StdDev5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / Count5),
     Sample4 = math:sqrt(lists:foldl(StdDevFun4, 0, C4) / (Count4-1)),
     Sample5 = math:sqrt(lists:foldl(StdDevFun5, 0, C5) / (Count5-1)),
+    POPSTD = 2.8722813232690143, %%this is the std of 1-10, calculated using numpy
     Qry9 = "SELECT STDDEV_POP(temperature), STDDEV_POP(pressure)," ++
            " STDDEV(temperature), STDDEV(pressure), " ++
-           " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure) FROM " ++ Bucket ++ Where,
+           " STDDEV_SAMP(temperature), STDDEV_SAMP(pressure)," ++
+           " STDDEV_POP(time) FROM " ++ Bucket ++ Where,
     Got9 = ts_ops:query(Cluster, Qry9),
     Expected9 = {ok, {[<<"STDDEV_POP(temperature)">>, <<"STDDEV_POP(pressure)">>,
                   <<"STDDEV(temperature)">>, <<"STDDEV(pressure)">>,
-                  <<"STDDEV_SAMP(temperature)">>, <<"STDDEV_SAMP(pressure)">>],
-                 [{StdDev4, StdDev5, Sample4, Sample5, Sample4, Sample5}]}},
+                  <<"STDDEV_SAMP(temperature)">>, <<"STDDEV_SAMP(pressure)">>, <<"STDDEV_POP(time)">>],
+                 [{StdDev4, StdDev5, Sample4, Sample5, Sample4, Sample5, POPSTD}]}},
     Result9 = ts_data:assert_float(test_name(ClusterType, "Standard Deviation"), Expected9, Got9),
 
     Qry10 = "SELECT SUM(temperature), MIN(pressure), AVG(pressure) FROM " ++ Bucket ++ Where,
