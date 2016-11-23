@@ -66,15 +66,10 @@ confirm() ->
     Expected6 = {error, {1001, <<".*Function 'STDDEV_SAMP' called with arguments of the wrong type [[]boolean[]].*">>}},
     Result6 = ts_data:assert_error_regex("STDDEV_SAMP - boolean", Expected6, Got6),
 
-    %Qry7 = "SELECT STDDEV_POP(time) FROM " ++ Bucket,
-    %Got7 = ts_ops:query(Cluster, Qry7),
-    %Expected7 = {error, {1001, <<".*Function 'STDDEV_POP' called with arguments of the wrong type [[]timestamp[]].*">>}},
-    %Result7 = ts_data:assert_error_regex("STDDEV_POP - timestamp", Expected7, Got7),
-
-    Qry8 = "SELECT Mean(mybool) FROM " ++ Bucket,
-    Got8 = ts_ops:query(Cluster, Qry8),
-    Expected8 = {error, {1001, <<".*Function 'AVG' called with arguments of the wrong type [[]boolean[]].*">>}},
-    Result8 = ts_data:assert_error_regex("MEAN - boolean", Expected8, Got8),
+    Qry7 = "SELECT Mean(mybool) FROM " ++ Bucket,
+    Got7 = ts_ops:query(Cluster, Qry7),
+    Expected7 = {error, {1001, <<".*Function 'AVG' called with arguments of the wrong type [[]boolean[]].*">>}},
+    Result7 = ts_data:assert_error_regex("MEAN - boolean", Expected7, Got7),
 
     ts_data:results([
              Result1,
@@ -83,8 +78,7 @@ confirm() ->
              Result4,
              Result5,
              Result6,
-     %        Result7,
-             Result8
+             Result7
             ]),
 
     pass.
