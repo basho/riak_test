@@ -64,11 +64,13 @@ build_cluster() ->
 run_commands([], _State, _ShouldIncrement) ->
     pass;
 run_commands([{drain, discard} | T], State, ShouldIncrement) ->
-    {_Error, Response, NewState, NewShdIncr} = riak_shell:loop_TEST(riak_shell:make_cmd(), State, ShouldIncrement),
+    {_, Cmd} = riak_shell:make_cmd_TEST(),
+    {_Error, Response, NewState, NewShdIncr} = riak_shell:loop_TEST(Cmd, State, ShouldIncrement),
     lager:info("Message drained and discared unchecked ~p", [lists:flatten(Response)]),
     run_commands(T, NewState, NewShdIncr);
 run_commands([{drain, Expected} | T], State, ShouldIncrement) ->
-    {_Error, Response, NewState, NewShdIncr} = riak_shell:loop_TEST(riak_shell:make_cmd(), State, ShouldIncrement),
+    {_, Cmd} = riak_shell:make_cmd_TEST(),
+    {_Error, Response, NewState, NewShdIncr} = riak_shell:loop_TEST(Cmd, State, ShouldIncrement),
     case lists:flatten(Response) of
         Expected -> lager:info("Message drained successfully ~p", [Expected]),
                     run_commands(T, NewState, NewShdIncr);
@@ -114,8 +116,9 @@ run_cmd(Cmd, State, ShouldIncrement) ->
     %% we have to emulate that here as we are the shell
     %% we are going to send a message at some time in the future
     %% and then go into a loop waiting for it
-    timer:apply_after(500, riak_shell, send_to_shell, [self(), {command, Cmd}]),
-    riak_shell:loop_TEST(riak_shell:make_cmd(Cmd), State, ShouldIncrement).
+    {Toks, CmdRecord} = riak_shell:make_cmd_TEST(Cmd),
+    timer:apply_after(500, riak_shell, send_to_shell, [self(), {command, Toks}]),
+    riak_shell:loop_TEST(CmdRecord, State, ShouldIncrement).
 
 print_error(Format, Cmd, Expected, Got) ->
     lager:info(?PREFIX ++ "Match Failure"),
