@@ -31,7 +31,9 @@ confirm() ->
     DDL = ts_data:get_ddl(),
     Data = ts_data:get_valid_select_data(),
     TooMuchData = [list_to_tuple(tuple_to_list(Row) ++ [<<"rubbish">>]) || Row <- Data],
-    TooLittleData = [list_to_tuple(lists:reverse(tl(lists:reverse(tuple_to_list(Row))))) || Row <- Data],
+    %% remove the last 2 columns to chomp into a not null field because it is
+    %% completely valid to drop the final 1 column that is nullable.
+    TooLittleData = [list_to_tuple(lists:reverse(tl(tl(lists:reverse(tuple_to_list(Row)))))) || Row <- Data],
     WrongColumns = TooMuchData ++ TooLittleData,
     Columns = ts_data:get_cols(),
 
