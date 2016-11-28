@@ -39,8 +39,11 @@ cd $RT_DEST_DIR
 git init 
 
 ## Some versions of git and/or OS require these fields
-git config user.name "Riak Test"
-git config user.email "dev@basho.com"
+git config --local user.name "Riak Test"
+git config --local user.email "dev@basho.com"
+git config --local core.autocrlf input
+git config --local core.safecrlf false
+git config --local core.filemode true
 
 git add --all --force .
 git commit -a -m "riak_test init" > /dev/null
