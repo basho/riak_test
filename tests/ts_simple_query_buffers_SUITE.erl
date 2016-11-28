@@ -58,7 +58,7 @@ suite() ->
     [{timetrap, {minutes, 5}}].
 
 init_per_suite(Cfg) ->
-    Cluster = ts_util:build_cluster(single),
+    Cluster = ts_setup:start_cluster(1),
     C = rt:pbc(hd(Cluster)),
     Data = ts_qbuf_util:make_data(),
     ExtraData = ts_qbuf_util:make_extra_data(),
@@ -216,14 +216,11 @@ init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
     QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
-    Cmd = fmt("chmod -w '~s'", [QBufDir]),
-    CmdOut = "" = os:cmd(Cmd),
-    ct:log("~s: '~s'", [Cmd, CmdOut]),
+    modify_dir_access(take_away, QBufDir),
     Cfg;
+
 init_per_testcase(_, Cfg) ->
     Cfg.
-
-
 
 end_per_testcase(query_orderby_max_quanta_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
@@ -238,9 +235,7 @@ end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
     QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
-    Cmd = fmt("chmod +w '~s'", [QBufDir]),
-    CmdOut = "" = os:cmd(Cmd),
-    ct:log("~s: '~s'", [Cmd, CmdOut]),
+    modify_dir_access(give_back, QBufDir),
     ok;
 end_per_testcase(_, Cfg) ->
     Cfg.
@@ -391,5 +386,14 @@ col_no({[A|_], _}) ->
 col_no({[A|_], _, _}) ->
     A - $a + 1.
 
-fmt(F, A) ->
-    lists:flatten(io_lib:format(F, A)).
+
+modify_dir_access(take_away, QBufDir) ->
+    ct:pal("take away access to ~s\n", [QBufDir]),
+    ok = file:rename(QBufDir, QBufDir++".boo"),
+    ok = file:write_file(QBufDir, "nothing here");
+
+modify_dir_access(give_back, QBufDir) ->
+    ct:pal("restore access to ~s\n", [QBufDir]),
+    ok = file:delete(QBufDir),
+    ok = file:rename(QBufDir++".boo", QBufDir).
+
