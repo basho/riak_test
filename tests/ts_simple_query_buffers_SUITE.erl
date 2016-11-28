@@ -216,10 +216,9 @@ init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
     QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
-    OSType = os:cmd("uname"),
-    Cmd = get_write_perm_cmd(take_away, OSType) ++  fmt(" ~s", [QBufDir]),
-    CmdOut = "" = os:cmd(Cmd),
-    ct:log("~s: '~s'", [Cmd, CmdOut]),
+    Cmd = get_write_perm_cmd(take_away, QBufDir),
+    ct:log("running ~s", [Cmd]),
+    "" = os:cmd(Cmd),
     Cfg;
 
 init_per_testcase(_, Cfg) ->
@@ -238,11 +237,9 @@ end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
     QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
-    OSType = os:cmd("uname"),
-    Cmd = get_write_perm_cmd(give_back, OSType) ++  fmt(" ~s", [QBufDir]),
-    CmdOut = "" = os:cmd(Cmd),
-    ct:log("~s: '~s'", [Cmd, CmdOut]),
-
+    Cmd = get_write_perm_cmd(give_back, QBufDir),
+    ct:log("running ~s", [Cmd]),
+    "" = os:cmd(Cmd),
     ok;
 end_per_testcase(_, Cfg) ->
     Cfg.
@@ -396,11 +393,9 @@ col_no({[A|_], _, _}) ->
 fmt(F, A) ->
     lists:flatten(io_lib:format(F, A)).
 
-get_write_perm_cmd(take_away, "Linux\n") ->
-  "chattr +i";
-get_write_perm_cmd(give_back, "Linux\n") ->
-  "chattr -i";
-get_write_perm_cmd(take_away, "Darwin\n") ->
-  "chflags schg";
-get_write_perm_cmd(give_back, "Darwin\n") ->
-  "chflags noschg".
+get_write_perm_cmd(take_away, QBufDir) ->
+    ct:pal("take away perms on ~s\n", [QBufDir]),
+    fmt("sh -c \"mv '~s' '~s.boo' && touch '~s'\"", [QBufDir, QBufDir, QBufDir]);
+get_write_perm_cmd(give_back, QBufDir) ->
+    ct:pal("restore perms on ~s\n", [QBufDir]),
+    fmt("sh -c \"rm '~s' && mv '~s.boo' '~s'\"", [QBufDir, QBufDir, QBufDir]).
