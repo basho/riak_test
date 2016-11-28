@@ -218,7 +218,8 @@ init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
     Cmd = get_write_perm_cmd(take_away, QBufDir),
     ct:log("running ~s", [Cmd]),
-    "" = os:cmd(Cmd),
+    CmdOut = "" = os:cmd(Cmd),
+    ct:log("~s: '~s'", [Cmd, CmdOut]),
     Cfg;
 
 init_per_testcase(_, Cfg) ->
@@ -239,7 +240,8 @@ end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
     Cmd = get_write_perm_cmd(give_back, QBufDir),
     ct:log("running ~s", [Cmd]),
-    "" = os:cmd(Cmd),
+    CmdOut = "" = os:cmd(Cmd),
+    ct:log("~s: '~s'", [Cmd, CmdOut]),
     ok;
 end_per_testcase(_, Cfg) ->
     Cfg.
