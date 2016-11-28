@@ -389,11 +389,11 @@ col_no({[A|_], _, _}) ->
 
 modify_dir_access(take_away, QBufDir) ->
     ct:pal("take away access to ~s\n", [QBufDir]),
-    file:rename(QBufDir, QBufDir++".boo"),
-    file:write_file(QBufDir, "nothing here");
+    ok = file:rename(QBufDir, QBufDir++".boo"),
+    ok = file:write_file(QBufDir, "nothing here");
 
 modify_dir_access(give_back, QBufDir) ->
     ct:pal("restore access to ~s\n", [QBufDir]),
-    file:delete(QBufDir),
-    file:rename(QBufDir++".boo", QBufDir).
+    ok = file:delete(QBufDir),
+    ok = file:rename(QBufDir++".boo", QBufDir).
 
