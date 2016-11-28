@@ -43,7 +43,7 @@ get(Nodes, Table, Key, Options) ->
 
 'query'(Nodes, Qry, Options) ->
     lager:info("Running query ~ts", [Qry]),
-    Got = riakc_ts:query(ts_setup:conn(Nodes), Qry, Options),
+    Got = riakc_ts:query(ts_setup:conn(Nodes), Qry, [], undefined, Options),
     lager:info("Result is ~p", [Got]),
     Got.
 
