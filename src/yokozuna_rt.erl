@@ -26,6 +26,7 @@
          check_exists/2,
          clear_trees/1,
          commit/2,
+         drain_solrqs/1,
          expire_trees/1,
          gen_keys/1,
          host_entries/1,
@@ -46,6 +47,7 @@
          wait_for_index/2,
          wait_for_schema/2,
          wait_for_schema/3,
+         wait_until/2,
          write_data/5,
          write_data/6,
          http/4,
@@ -72,7 +74,7 @@ host_entries(ClusterConnInfo) ->
     [riak_http(I) || {_,I} <- ClusterConnInfo].
 
 %% @doc Generate `SeqMax' keys. Yokozuna supports only UTF-8 compatible keys.
--spec gen_keys(pos_integer()) -> [binary()].
+-spec gen_keys(pos_integer()) -> list().
 gen_keys(SeqMax) ->
     [<<N:64/integer>> || N <- lists:seq(1, SeqMax),
                          not lists:any(
@@ -243,6 +245,7 @@ brutal_kill_remove_index_dirs(Nodes, IndexName, Services) ->
 -spec remove_index_dirs([node()], index_name(), [atom()]) -> ok.
 remove_index_dirs(Nodes, IndexName, Services) ->
     IndexDirs = get_index_dirs(IndexName, Nodes),
+    [rt:stop(ANode) || ANode <- Nodes],
     remove_index_dirs2(Nodes, IndexDirs, Services),
     ok.
 
@@ -451,6 +454,13 @@ commit(Nodes, Index) ->
     lager:info("Commit search writes to ~s at softcommit (default) ~p",
                [Index, ?SOFTCOMMIT]),
     rpc:multicall(Nodes, yz_solr, commit, [Index]),
+    ok.
+
+-spec drain_solrqs(node() | cluster()) -> ok.
+drain_solrqs(Cluster) when is_list(Cluster) ->
+    [drain_solrqs(Node) || Node <- Cluster];
+drain_solrqs(Node) ->
+    rpc:call(Node, yz_solrq_drain_mgr, drain, []),
     ok.
 
 -spec override_schema(pid(), [node()], index_name(), schema_name(), string()) ->
