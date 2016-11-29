@@ -15,8 +15,8 @@ time,timestamp,false,3,3,15,m,
 weather,varchar,false,,,,,
 temperature,double,true,,,,,
 "}}.
-{{command, "SHOW TABLES;\n"}, {result, "Table
-GeoCheckin
+{{command, "SHOW TABLES;\n"}, {result, "Table,Status
+GeoCheckin,Active
 "}}.
 {{command, "EXPLAIN SELECT * FROM GeoCheckin WHERE myfamily = 'family1' AND myseries = 'series1' AND time >= 2 AND time <= 7000000 AND weather='fair';"}, {result, "Subquery,Coverage Plan,Range Scan Start Key,Is Start Inclusive?,Range Scan End Key,Is End Inclusive?,Filter
 1,\"dev1@127.0.0.1/12, dev2@127.0.0.1/10, dev3@127.0.0.1/11\",\"myfamily = 'family1', myseries = 'series1', time = 2\",false,\"myfamily = 'family1', myseries = 'series1', time = 900000\",false,(weather = 'fair')
