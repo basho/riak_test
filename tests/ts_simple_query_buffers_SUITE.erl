@@ -39,8 +39,8 @@
 -export([suite/0, init_per_suite/1, groups/0, all/0,
          init_per_testcase/2, end_per_testcase/2]).
 -export([query_orderby_comprehensive/1,
-         query_orderby_no_updates/1,
-         query_orderby_expiring/1,
+         %% query_orderby_no_updates/1,
+         %% query_orderby_expiring/1,  %% re-enable when clients will (in 1.6) learn to make use of qbuf_id
          query_orderby_max_quanta_error/1,
          query_orderby_max_data_size_error/1,
          query_orderby_ldb_io_error/1]).
@@ -55,7 +55,7 @@
 
 
 suite() ->
-    [{timetrap, {minutes, 5}}].
+    [{timetrap, {minutes, 15}}].
 
 init_per_suite(Cfg) ->
     Cluster = ts_setup:start_cluster(1),
@@ -81,11 +81,11 @@ all() ->
      query_orderby_max_data_size_error,
      query_orderby_ldb_io_error,
      %% 2. check LIMIT and ORDER BY, not involving follow-up queries
-     query_orderby_comprehensive,
+     query_orderby_comprehensive
      %% 1. check that query buffers persist and do not pick up updates to
      %% the mother table (and do, after expiry)
-     query_orderby_no_updates,
-     query_orderby_expiring
+     %% query_orderby_no_updates
+     %% query_orderby_expiring
     ].
 
 %%
@@ -95,7 +95,7 @@ all() ->
 query_orderby_comprehensive(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
     Data = proplists:get_value(data, Cfg),
-    ct:print("Testing all possible combinations of up to 5 elements in ORDER BY (can take some 2 min) ...", []),
+    ct:print("Testing all possible combinations of up to 5 elements in ORDER BY (can take 5 min or more) ...", []),
     OrderByBattery1 =
         [[F1, F2, F3, F4, F5] ||
             F1 <- ?ORDBY_COLS,
@@ -150,53 +150,6 @@ rollup(_, [], Acc) ->
 rollup(N, FF, Acc) ->
     {R, T} = lists:split(N, FF),
     rollup(N, T, [R | Acc]).
-
-
-query_orderby_no_updates(Cfg) ->
-    C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
-    Data = proplists:get_value(data, Cfg),
-    ExtraData = proplists:get_value(extra_data, Cfg),
-    check_sorted(C, ?TABLE2, Data, [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]),
-    %% (a query buffer has been created)
-    %% add a record
-    ct:print("Adding extra data to see if query buffers do NOT pick it up", []),
-    ok = ts_qbuf_util:insert_data(C, ?TABLE2, ExtraData),
-
-    %% .. and check that the results don't include it
-    check_sorted(C, ?TABLE2, Data,
-                 [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]),
-
-    %% a query with ONLY should have a query buffer of its own
-    check_sorted(C, ?TABLE2, Data ++ ExtraData,
-                 [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, false}]),
-
-    %% .. and check again, that the results still don't include the added record
-    check_sorted(C, ?TABLE2, Data,
-                 [{order_by, [{"d", undefined, undefined}]}, [{allow_qbuf_reuse, true}]]).
-
-
-query_orderby_expiring(Cfg) ->
-    Node = hd(proplists:get_value(cluster, Cfg)),
-    C = rt:pbc(Node),
-    Data = proplists:get_value(data, Cfg),
-    ExtraData = proplists:get_value(extra_data, Cfg),
-
-    %% (extra data have been added in query_orderby_no_updates)
-    SQL_s = ts_qbuf_util:full_query(?TABLE2, [{order_by, [{"d", undefined, undefined}]}]),
-    {select, SQL_q} =
-        rpc:call(Node, riak_ql_parser, ql_parse,
-                 [rpc:call(Node, riak_ql_lexer, get_tokens,
-                           [SQL_s])]),
-    {ok, SQL} =
-        rpc:call(Node, riak_kv_ts_util, build_sql_record,
-                 [select, SQL_q, []]),
-
-    {ok, QBufRef} = rpc:call(Node, riak_kv_qry_buffers, make_qref, [SQL]),
-    {ok, Expiry} = rpc:call(Node, riak_kv_qry_buffers, get_qbuf_expiry, [QBufRef]),
-    ct:print("Sleeping for ~b msec until qbuf expires", [Expiry + 1100]),
-    timer:sleep(Expiry + 1100),
-    %% .. and check that the results does include it
-    check_sorted(C, ?TABLE2, Data ++ ExtraData, [{order_by, [{"d", undefined, undefined}]}], [{allow_qbuf_reuse, true}]).
 
 
 %%
