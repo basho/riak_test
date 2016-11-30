@@ -659,13 +659,13 @@ with_security_when_user_is_given_permissions_user_can_describe_table_test(Ctx) -
             "PRIMARY KEY  ((a,b,quantum(c, 1, 's')), a,b,c))")
     ),
     ?assertEqual(
-        {ok,{[<<"Column">>,<<"Type">>,<<"Is Null">>,
-            <<"Primary Key">>,<<"Local Key">>,
-            <<"Interval">>,<<"Unit">>],
-            [{<<"a">>,<<"sint64">>,false,1,1,[],[]},
-                {<<"b">>,<<"sint64">>,false,2,2,[],[]},
-                {<<"c">>,<<"timestamp">>,false,3,3,1,
-                    <<"s">>}]}},
+        {ok,{[<<"Column">>,<<"Type">>,<<"Nullable">>,
+            <<"Partition Key">>,<<"Local Key">>,
+            <<"Interval">>,<<"Unit">>,<<"Sort Order">>],
+            [{<<"a">>,<<"sint64">>,false,1,1,[],[],[]},
+                {<<"b">>,<<"sint64">>,false,2,2,[],[],[]},
+                {<<"c">>,<<"timestamp">>,false,3,3,1,<<"s">>,
+                    []}]}},
         riakc_ts:query(Pid, "DESCRIBE table16")
     ),
     add_table_to_list(Ctx, <<"table16">>).
