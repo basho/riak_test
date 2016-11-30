@@ -7,7 +7,7 @@
 - 3: show_nodes; 
 "}}.
 {{command, "show_nodes; "}, {result, "The connected nodes are: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']"}}.
-{{command, "CREATE TABLE GeoCheckin (myfamily varchar not null, myseries varchar not null, time  timestamp not null, weather  varchar not null, temperature double, PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time));\n"}, {result, ""}}.
+{{command, "CREATE TABLE GeoCheckin (myfamily varchar not null, myseries varchar not null, time  timestamp not null, weather  varchar not null, temperature double, PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time));\n"}, {result, "Table GeoCheckin successfully created and activated."}}.
 {{command, "describe GeoCheckin;\n"}, {result, "Column,Type,Nullable,Partition Key,Local Key,Interval,Unit,Sort Order
 myfamily,varchar,false,1,1,,,
 myseries,varchar,false,2,2,,,
@@ -15,8 +15,8 @@ time,timestamp,false,3,3,15,m,
 weather,varchar,false,,,,,
 temperature,double,true,,,,,
 "}}.
-{{command, "SHOW TABLES;\n"}, {result, "Table
-GeoCheckin
+{{command, "SHOW TABLES;\n"}, {result, "Table,Status
+GeoCheckin,Active
 "}}.
 {{command, "EXPLAIN SELECT * FROM GeoCheckin WHERE myfamily = 'family1' AND myseries = 'series1' AND time >= 2 AND time <= 7000000 AND weather='fair';"}, {result, "Subquery,Coverage Plan,Range Scan Start Key,Is Start Inclusive?,Range Scan End Key,Is End Inclusive?,Filter
 1,\"dev1@127.0.0.1/12, dev2@127.0.0.1/10, dev3@127.0.0.1/11\",\"myfamily = 'family1', myseries = 'series1', time = 2\",false,\"myfamily = 'family1', myseries = 'series1', time = 900000\",false,(weather = 'fair')
@@ -29,22 +29,22 @@ GeoCheckin
 8,\"dev1@127.0.0.1/55, dev2@127.0.0.1/53, dev3@127.0.0.1/54\",\"myfamily = 'family1', myseries = 'series1', time = 6300000\",false,\"myfamily = 'family1', myseries = 'series1', time = 7000000\",false,(weather = 'fair')
 "}}.
 {{command, "EXPLAIN SELECT * FROM GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, ""}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',2,'rain',24.5);\n"}, {result, ""}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',3,'rain',23.0);\n"}, {result, ""}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',4,'sunny',28.6);\n"}, {result, ""}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',5,'sunny',24.7);\n"}, {result, ""}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',6,'cloudy',32.789);\n"}, {result, ""}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',7,'cloudy',27.9);\n"}, {result, ""}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',8,'blizard',45.55);\n"}, {result, ""}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',8,'fog',34.9);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',2,'rain',24.5);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',3,'rain',23.0);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',4,'sunny',28.6);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',5,'sunny',24.7);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',6,'cloudy',32.789);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',7,'cloudy',27.9);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',8,'blizard',45.55);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',8,'fog',34.9);\n"}, {result, "Inserted 1 row."}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',9,'fog',28);\n"}, {result, "Error (1003): Invalid data found at row index(es) 1"}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',9,'fog',28.7);\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',9,'fog',28.7);\n"}, {result, "Inserted 1 row."}}.
 {{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,28);\n"}, {result, "Error (1003): Invalid data found at row index(es) 1"}}.
-{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,'hail',38.1);\n"}, {result, ""}}.
-{{command, "select time, weather, temperature from GeoCheckin where myfamily='family1' and myseries='seriesX' and time > 10 and time < 1000;\n"}, {result, ""}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,'hail',38.1);\n"}, {result, "Inserted 1 row."}}.
+{{command, "select time, weather, temperature from GeoCheckin where myfamily='family1' and myseries='seriesX' and time > 10 and time < 1000;\n"}, {result, "No rows returned."}}.
 {{command, "select * from GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
-{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1420113600000 and time <= 1420119300000;\n"}, {result, []}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1420113600000 and time <= 1420119300000;\n"}, {result, "No rows returned."}}.
 {{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1 and time <= 2;\n"},
  {result,
 "myfamily,myseries,time,weather,temperature
@@ -73,13 +73,33 @@ family1,series1,1970-01-01T00:00:00.007Z,cloudy,27.9
 {{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
 {{command, "connect dev2@127.0.0.1; "}, {result, "Connected to 'dev2@127.0.0.1' on port 10027"}}.
 {{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev2@127.0.0.1' on port 10027"}}.
-{{command, "CREATE TABLE GeoCheckin2 ( region VARCHAR NOT NULL, state VARCHAR NOT NULL, time TIMESTAMP NOT NULL, weather VARCHAR NOT NULL, temperature DOUBLE, PRIMARY KEY ( (region, state, QUANTUM(time, 15, 'm')),region, state, time));\n"}, {result, ""}}.
-{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523183, 'raining', 11.2);\n"}, {result, ""}}.
-{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523189, 'snowing', 19.2);\n"}, {result, ""}}.
+{{command, "CREATE TABLE GeoCheckin2 ( region VARCHAR NOT NULL, state VARCHAR NOT NULL, time TIMESTAMP NOT NULL, weather VARCHAR NOT NULL, temperature DOUBLE, PRIMARY KEY ( (region, state, QUANTUM(time, 15, 'm')),region, state, time));\n"}, {result, "Table GeoCheckin2 successfully created and activated."}}.
+{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523183, 'raining', 11.2);\n"}, {result, "Inserted 1 row."}}.
+{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523189, 'snowing', 19.2);\n"}, {result, "Inserted 1 row."}}.
 {{command, "SELECT 555, 1.1, 1e1, 1.123e-2 from GeoCheckin2 WHERE time > 1452252523182 AND time < 1452252543182 AND region = 'South Atlantic' AND state = 'South Carolina';\n"}, {result, "555,1.1,10.0,0.01123
 555,1.1,10.0,0.01123
 555,1.1,10.0,0.01123
 "}}.
+{{command, "SHOW CREATE TABLE GeoCheckin2;\n"}, {result, "CREATE TABLE GeoCheckin2 (region VARCHAR NOT NULL,
+state VARCHAR NOT NULL,
+time TIMESTAMP NOT NULL,
+weather VARCHAR NOT NULL,
+temperature DOUBLE,
+PRIMARY KEY ((region, state, QUANTUM(time, 15, 'm')),
+region, state, time))
+WITH (active = true,
+allow_mult = true,
+dvv_enabled = true,
+dw = quorum,
+last_write_wins = false,
+n_val = 3,
+notfound_ok = true,
+postcommit = '',
+pr = 0,
+pw = 0,
+r = quorum,
+rw = quorum,
+w = quorum)"}}.
 {{command, "h; "}, {result, "Error: invalid function call : history_EXT:h []
 You can rerun a command by finding the command in the history list
 with `show_history;` and using the number next to it as the argument

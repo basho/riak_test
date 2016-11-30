@@ -51,12 +51,12 @@ create_table_test(Pid) ->
     lager:info("~n~nStart running the command set-------------------------", []),
     CreateTable = lists:flatten(io_lib:format("~s;", [ts_data:get_ddl(small)])),
     Describe =
-        "Column,Type,Is Null,Primary Key,Local Key,Interval,Unit\n"
-        "myfamily,varchar,false,1,1,,\n"
-        "myseries,varchar,false,2,2,,\n"
-        "time,timestamp,false,3,3,15,m\n"
-        "weather,varchar,false,,,,\n"
-        "temperature,double,true,,,,\n",
+        "Column,Type,Nullable,Partition Key,Local Key,Interval,Unit,Sort Order\n"
+        "myfamily,varchar,false,1,1,,,\n"
+        "myseries,varchar,false,2,2,,,\n"
+        "time,timestamp,false,3,3,15,m,\n"
+        "weather,varchar,false,,,,,\n"
+        "temperature,double,true,,,,,\n",
     Cmds = [
             %% 'connection prompt on' means you need to do unicode printing and stuff
             {run,
@@ -67,7 +67,7 @@ create_table_test(Pid) ->
              "show_connection;"},
             {run,
              "connect 'dev1@127.0.0.1';"},
-            {{match, ""},
+            {{match, "Table GeoCheckin successfully created and activated."},
                 CreateTable},
             {{match, Describe},
              "DESCRIBE GeoCheckin;"}
