@@ -79,7 +79,6 @@ family1,series1,1970-01-01T00:00:00.007Z,cloudy,27.9
 {{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523189, 'snowing', 19.2);\n"}, {result, "Inserted 1 row."}}.
 {{command, "SELECT 555, 1.1, 1e1, 1.123e-2 from GeoCheckin2 WHERE time > 1452252523182 AND time < 1452252543182 AND region = 'South Atlantic' AND state = 'South Carolina';\n"}, {result, "555,1.1,10.0,0.01123
 555,1.1,10.0,0.01123
-555,1.1,10.0,0.01123
 "}}.
 {{command, "CREATE TABLE deletetable ( myfamily varchar not null, myseries varchar not null, time timestamp not null, weather varchar not null, temperature double, PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time));"}, {result, "Table deletetable successfully created and activated."}}.
 {{command, "insert into deletetable (myfamily, myseries, time, weather, temperature) values ('berl', 'saf', 3, 'safa', 3.3);"}, {result, "Inserted 1 row."}}.
