@@ -15,9 +15,12 @@
 
 -define(CONF,
         [
-         {riak_core,
-          [{ring_creation_size, 8}]
-         },
+         {riak_core, [
+             {ring_creation_size, 8},
+             {vnode_parallel_start, 64},
+             {forced_ownership_handoff, 64},
+             {handoff_concurrency, 64}
+         ]},
          {riak_kv,
           [{delete_mode, keep},
            {anti_entropy_build_limit, {100, 1000}},
@@ -71,9 +74,6 @@ confirm() ->
 
     lager:info("Test to make sure siblings don't exist after partition"),
     test_siblings(Nodes, ?BUCKET, ?INDEX),
-    lager:info("Verify counts and operations after heal + transfers + commits"),
-    ok = rt:wait_until(fun() -> validate_test_siblings(Pid, ?BUCKET, ?INDEX)
-                       end),
 
     %% Stop PB connection
     riakc_pb_socket:stop(Pid),
@@ -314,112 +314,60 @@ test_and_validate_delete_aae(Pid, Cluster, Bucket, Index) ->
 %%        after healing partitions. The CRDT map merges so the search
 %%        results be consistent.
 test_siblings(Cluster, Bucket, Index) ->
-    Key1 = <<"Movies">>,
-    Key2 = <<"Games">>,
-    Set1 = <<"directors">>,
-    Set2 = <<"characters">>,
-
-    %% make siblings
+    %% Split the cluster into [dev1], [dev2, ..., dev5]
     {P1, P2} = lists:split(1, Cluster),
-
-    %% Create an object in Partition 1 and siblings in Partition 2
     lager:info("Create partition: ~p | ~p", [P1, P2]),
     Partition = rt:partition(P1, P2),
-
-    %% PB connections for accessing each side
-    Pid1 = rt:pbc(hd(P1)),
-    Pid2 = rt:pbc(hd(P2)),
-
-    riakc_pb_socket:set_options(Pid1, [queue_if_disconnected, auto_reconnect]),
-    riakc_pb_socket:set_options(Pid2, [queue_if_disconnected, auto_reconnect]),
+    Node1 = hd(P1), Pid1 = rt:pbc(Node1),
+    Node2 = hd(P2), Pid2 = rt:pbc(Node2),
 
     %% P1 writes
-    lager:info("Writing to Partition 1 Set 1: Key ~p | Director ~p",
-               [Key1, <<"Kubrick">>]),
-    M1 = riakc_map:update(
-           {Set1, set},
-           fun(S) ->
-                   riakc_set:add_element(<<"Kubrick">>, S)
-           end, riakc_map:new()),
-    ok = riakc_pb_socket:update_type(
-           Pid1,
-           Bucket,
-           Key1,
-           riakc_map:to_op(M1)),
+    add_item_to_set(Node1, Bucket, <<"Movies">>, <<"directors">>, <<"Kubrick">>),
+    add_item_to_set(Node1, Bucket, <<"Movies">>, <<"directors">>, <<"Demme">>),
 
-    lager:info("Writing to Partition 1 Set 1: Key ~p | Director ~p",
-               [Key1, <<"Demme">>]),
-    M2 = riakc_map:update(
-           {Set1, set},
-           fun(S) ->
-                   riakc_set:add_element(<<"Demme">>, S)
-           end, riakc_map:new()),
-    ok = riakc_pb_socket:update_type(
-           Pid1,
-           Bucket,
-           Key1,
-           riakc_map:to_op(M2)),
+    %% P2 writes and deletes
+    add_item_to_set(Node2, Bucket, <<"Games">>, <<"characters">>, <<"Sonic">>),
 
-    %% P2 Siblings
-    lager:info("Writing to Partition 2 Set 2: Key ~p | Char ~p",
-               [Key2, <<"Sonic">>]),
-    M3 = riakc_map:update(
-           {Set2, set},
-           fun(S) ->
-                   riakc_set:add_element(<<"Sonic">>, S)
-           end, riakc_map:new()),
-    ok = riakc_pb_socket:update_type(
-           Pid2,
-           Bucket,
-           Key2,
-           riakc_map:to_op(M3)),
+    %lager:info("Delete BKey ~p from Partition 2", [{Bucket, <<"Games">>}]),
+    ok = riakc_pb_socket:delete(Pid2, Bucket, <<"Games">>),
 
-    lager:info("Delete key from Partition 2: Key ~p", [Key2]),
-    ok = riakc_pb_socket:delete(Pid2, Bucket, Key2),
+    add_item_to_set(Node2, Bucket, <<"Games">>, <<"characters">>, <<"Crash">>),
+    add_item_to_set(Node2, Bucket, <<"Games">>, <<"characters">>, <<"Mario">>),
+    add_item_to_set(Node2, Bucket, <<"Movies">>, <<"directors">>, <<"Klimov">>),
 
-    lager:info("Writing to Partition 2 Set 2: after delete: Key ~p | Char"
-               " ~p", [Key2, <<"Crash">>]),
-    M4 = riakc_map:update(
-           {Set2, set},
-           fun(S) ->
-                   riakc_set:add_element(<<"Crash">>, S)
-           end, riakc_map:new()),
-    ok = riakc_pb_socket:update_type(
-           Pid2,
-           Bucket,
-           Key2,
-           riakc_map:to_op(M4)),
-
-    lager:info("Writing to Partition 2 Set 2: Key ~p | Char ~p",
-               [Key2, <<"Mario">>]),
-    M5 = riakc_map:update(
-           {Set2, set},
-           fun(S) ->
-                   riakc_set:add_element(<<"Mario">>, S)
-           end, riakc_map:new()),
-    ok = riakc_pb_socket:update_type(
-           Pid2,
-           Bucket,
-           Key2,
-           riakc_map:to_op(M5)),
-
-    lager:info("Writing to Partition 2 Set 1: Key ~p | Director ~p",
-               [Key1, <<"Klimov">>]),
-    M6 = riakc_map:update(
-           {Set1, set},
-           fun(S) ->
-                   riakc_set:add_element(<<"Klimov">>, S)
-           end, riakc_map:new()),
-    ok = riakc_pb_socket:update_type(
-           Pid2,
-           Bucket,
-           Key1,
-           riakc_map:to_op(M6)),
-
+    %%
+    %% Heal the partition, and wait for all handoff to complete.
+    %% drain and commit, for good measure.
+    %% At this point, all merges should have taken place.
+    %%
     rt:heal(Partition),
     rt:wait_until_transfers_complete(Cluster),
+    drain_and_commit(Cluster, Index),
 
-    drain_and_commit(Cluster, Index).
+    lager:info("Verify counts and operations after heal + transfers + commits"),
+    ok = rt:wait_until(fun() -> validate_test_siblings(Pid1, ?BUCKET, ?INDEX)
+    end).
+
+
+add_item_to_set(Node, Bucket, Key, Set, Element) ->
+    Pid = rt:pbc(Node),
+    lager:info(
+        "Writing element ~p to ~p set under BKey ~p to node ~p",
+        [Element, Set, {Bucket, Key}, Node]),
+    Map = riakc_map:update(
+        {Set, set},
+        fun(S) ->
+            riakc_set:add_element(Element, S)
+        end,
+        riakc_map:new()),
+    ok = riakc_pb_socket:update_type(
+        Pid,
+        Bucket,
+        Key,
+        riakc_map:to_op(Map)),
+    riakc_pb_socket:stop(Pid),
+    ok.
+
 
 validate_sample_data(Pid, Key, Index) ->
     try
