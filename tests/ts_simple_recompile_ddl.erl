@@ -19,14 +19,13 @@
 %% -------------------------------------------------------------------
 
 -module(ts_simple_recompile_ddl).
-
 -behavior(riak_test).
 
 -include_lib("eunit/include/eunit.hrl").
 
 -export([confirm/0]).
--define(LEGACY_TABLE, riak_kv_compile_tab).
--define(DETS_TABLE, riak_kv_compile_tab_v2).
+-define(PREVIOUS_TABLE, riak_kv_compile_tab_v2).
+-define(CURRENT_TABLE, riak_kv_compile_tab_v3).
 
 confirm() ->
     [Node | _Rest] = Cluster = ts_setup:start_cluster(1),
@@ -36,49 +35,58 @@ confirm() ->
             ts_setup:create_bucket_type(Cluster, DDL, Table),
             ts_setup:activate_bucket_type(Cluster, Table)
         end, test_tables()),
+    %% failure on this line indicates the test is out-of-sync w/ current
+    verify_dets_entries_current(),
     rt:stop(Node),
     simulate_old_dets_entries(),
+    %% on start, Riak TS should recompile DDLs as needed
     rt:start(Node),
     rt:wait_for_service(Node, riak_kv),
-    verify_resulting_dets_entries(),
+    %% failure on this line indicates is either:
+    %% 1. that the test is out-of-sync w/ simulating previous
+    %% 2. that the feature-under-test is failing
+    verify_dets_entries_current(),
     pass.
 
+open_dets(_Table = ?CURRENT_TABLE) ->
+    DetsPath = rtdev:riak_data(1),
+    riak_kv_compile_tab:new(DetsPath);
 open_dets(Table) ->
     FileDir = rtdev:riak_data(1),
-    FilePath = filename:join(FileDir, [Table, ".dets"]),
-    {ok, Table} = dets:open_file(Table, [{type, set}, {repair, force}, {file, FilePath}]).
+    DetsPath = filename:join(FileDir, [Table, ".dets"]),
+    {ok, Table} = dets:open_file(Table, [{type, set}, {repair, force}, {file, DetsPath}]).
 
 simulate_old_dets_entries() ->
-    open_dets(?DETS_TABLE),
-    open_dets(?LEGACY_TABLE),
-    Pid = spawn_link(fun() -> ok end),
-    Pid2 = spawn_link(fun() -> ok end),
-    Pid3 = spawn_link(fun() -> ok end),
+    open_dets(?CURRENT_TABLE),
+    open_dets(?PREVIOUS_TABLE),
     Table1DDL = sql_to_ddl(create_table_sql("Table1")),
     Table2DDL = sql_to_ddl(create_table_sql("Table2")),
     Table3DDL = sql_to_ddl(create_table_sql("Table3")),
 
     %% Here we want to test 3 degenerate cases:
-    %% 1) An old DETS entry (pre-1.3) which does not a DDL compiler version
-    %% 2) A compiled table with an older (pre-1.3) version
-    %% 3) A table which seemingly was stuck in the compiling state
-    ok = dets:insert(?LEGACY_TABLE, {<<"Table1">>, Table1DDL, Pid, compiled}),
-    ok = dets:insert(?DETS_TABLE, {<<"Table2">>, 1, Table2DDL, Pid2, compiled}),
-    ok = dets:insert(?DETS_TABLE, {<<"Table3">>, 1, Table3DDL, Pid3, compiling}),
-    dets:close(?LEGACY_TABLE),
-    dets:close(?DETS_TABLE).
+    %% 1) An old DETS entry in compiled state
+    %% 2) An old DETS entry in compiling state
+    %% 3) A current, valid DETS entry
+    ok = riak_kv_compile_tab:insert_previous(<<"Table1">>, Table1DDL, compiled),
+    ok = riak_kv_compile_tab:insert_previous(<<"Table2">>, Table2DDL, compiling),
+    ok = riak_kv_compile_tab:insert(<<"Table3">>, Table3DDL),
+    dets:close(?PREVIOUS_TABLE),
+    dets:close(?CURRENT_TABLE).
 
-verify_resulting_dets_entries() ->
-    open_dets(?DETS_TABLE),
-    open_dets(?LEGACY_TABLE),
-    lager:debug("DETS =~p", [dets:match(?DETS_TABLE, {'$1', '$2','$3','$4','$5'})]),
+verify_dets_entries_current() ->
+    CurrentV = v2,
+    open_dets(?CURRENT_TABLE),
+    open_dets(?PREVIOUS_TABLE),
+
     lists:foreach(fun(T) ->
+        Versions = riak_kv_compile_tab:get_compiled_ddl_versions(T),
+        ContainsCurrentV = lists:any(fun(V) -> V =:= CurrentV end, Versions),
         ?assertEqual(
-            [[2, compiled]],
-            dets:match(?DETS_TABLE, {T,'$1','_','_','$2'}))
+           {true, T, Versions},
+           {ContainsCurrentV, T, Versions})
         end, test_tables()),
-    dets:close(?LEGACY_TABLE),
-    dets:close(?DETS_TABLE).
+    dets:close(?PREVIOUS_TABLE),
+    dets:close(?CURRENT_TABLE).
 
 test_tables() ->
     [<<"Table1">>,<<"Table2">>,<<"Table3">>].
