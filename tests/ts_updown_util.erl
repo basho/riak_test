@@ -598,6 +598,7 @@ convert_riak_conf_to_previous(Config) ->
           <<"(^riak_kv.query.timeseries.max_returned_data_size"
             %% this key exists in 1.4, but has a cap of 256, whereas
             %% 1.5 has no upper limit
+            "|^riak_kv.query.timeseries.max_running_fsms"
             "|^riak_kv.query.timeseries.max_quanta_span"
             "|^riak_kv.query.timeseries.qbuf_soft_watermark"
             "|^riak_kv.query.timeseries.qbuf_hard_watermark"
