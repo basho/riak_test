@@ -52,15 +52,17 @@ ensure_ack_tests(Nodes) ->
     %% verify data is replicated to B
     lager:info("Reading 1 key written from ~p", [LeaderB]),
     ?assertEqual(0, repl_util:wait_for_reads(LeaderB, 1, 1, TestBucket, 2)),
+    lager:info("Checking unacked on ~p", [LeaderA]),
+    ?assertEqual(ok, rt:wait_until(fun () -> check_unacked(LeaderA) end)).
 
+check_unacked(LeaderA) ->
     RTQStatus = rpc:call(LeaderA, riak_repl2_rtq, status, []),
-
     Consumers = proplists:get_value(consumers, RTQStatus),
     case proplists:get_value("B", Consumers) of
         undefined ->
-            [];
+            missing_consumer;
         Consumer ->
             Unacked = proplists:get_value(unacked, Consumer, 0),
-            lager:info("unacked: ~p", [Unacked]),
-            ?assertEqual(0, Unacked)
+            lager:info("unacked: ~p", [Unacked]), 
+            Unacked == 0
     end.
