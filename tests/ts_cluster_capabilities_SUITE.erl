@@ -163,13 +163,13 @@ sql_select_join_with_all_nodes_upgraded_test(Config) ->
     rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
     rt:upgrade(Node_B, ?TS_VERSION_CURRENT),
     rt:upgrade(Node_C, ?TS_VERSION_CURRENT),
-    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
-    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v2),
-    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v3),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v3),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v3),
     ok.
 
 %% This test passed for 1.4.0, expecting v1 where commented, but fails for 1.5.0 due to code change. We set it to expect
-%% v2 until future changes are made. After 1.5.0 if this test will fail if new code is introduced to handle capability
+%% v3 until future changes are made. After 1.5.0 if this test will fail if new code is introduced to handle capability
 %% communication. https://bashoeng.atlassian.net/browse/RTS-1415
 sql_select_downgrade_a_node_test(Config) ->
     Vsn131 = ?config(?TS_VERSION_1_3, Config),
@@ -177,14 +177,14 @@ sql_select_downgrade_a_node_test(Config) ->
         rt:deploy_nodes([Vsn131, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    % rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
+    % rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v3),
     rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v1),
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v1),
     rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
-    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v2),
-    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v3),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v3),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v3),
 
     %% pending changes to how capabilities are communicated around the ring, this
     %% section will expect v2. Once capabilities are changed in a future version of riak
@@ -192,8 +192,8 @@ sql_select_downgrade_a_node_test(Config) ->
     %% the expected version should go back to v1.
     rt:upgrade(Node_A, Vsn131),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v2),
-    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v3),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v3),
     ok.
 
 %%--------------------------------------------------------------------
