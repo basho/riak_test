@@ -24,8 +24,6 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([confirm/0]).
--define(PREVIOUS_TABLE, riak_kv_compile_tab_v2).
--define(CURRENT_TABLE, riak_kv_compile_tab_v3).
 
 confirm() ->
     [Node | _Rest] = Cluster = ts_setup:start_cluster(1),
@@ -36,29 +34,31 @@ confirm() ->
             ts_setup:activate_bucket_type(Cluster, Table)
         end, test_tables()),
     %% failure on this line indicates the test is out-of-sync w/ current
-    verify_dets_entries_current(),
+    verify_compile_tab_current(Node),
+    simulate_compile_tab_previous(Node),
     rt:stop(Node),
-    simulate_old_dets_entries(),
     %% on start, Riak TS should recompile DDLs as needed
     rt:start(Node),
     rt:wait_for_service(Node, riak_kv),
     %% failure on this line indicates is either:
     %% 1. that the test is out-of-sync w/ simulating previous
     %% 2. that the feature-under-test is failing
-    verify_dets_entries_current(),
+    verify_compile_tab_current(Node),
     pass.
 
-open_dets(_Table = ?CURRENT_TABLE) ->
-    DetsPath = rtdev:riak_data(1),
-    riak_kv_compile_tab:new(DetsPath);
-open_dets(Table) ->
-    FileDir = rtdev:riak_data(1),
-    DetsPath = filename:join(FileDir, [Table, ".dets"]),
-    {ok, Table} = dets:open_file(Table, [{type, set}, {repair, force}, {file, DetsPath}]).
+%% compile_tab_open(Node) ->
+%%     DetsPath = rtdev:riak_data(1),
+%%     riak_kv_compile_tab:new(DetsPath).
 
-simulate_old_dets_entries() ->
-    open_dets(?CURRENT_TABLE),
-    open_dets(?PREVIOUS_TABLE),
+insert_previous(Node, Table, DDL, CompilerState) ->
+    ok = rpc:call(Node, riak_kv_compile_tab, insert_previous,
+                  [Table, DDL, CompilerState]).
+
+insert(Node, Table, DDL) ->
+    ok = rpc:call(Node, riak_kv_compile_tab, insert,
+                  [Table, DDL]).
+
+simulate_compile_tab_previous(Node) ->
     Table1DDL = sql_to_ddl(create_table_sql("Table1")),
     Table2DDL = sql_to_ddl(create_table_sql("Table2")),
     Table3DDL = sql_to_ddl(create_table_sql("Table3")),
@@ -67,31 +67,28 @@ simulate_old_dets_entries() ->
     %% 1) An old DETS entry in compiled state
     %% 2) An old DETS entry in compiling state
     %% 3) A current, valid DETS entry
-    ok = riak_kv_compile_tab:insert_previous(<<"Table1">>, Table1DDL, compiled),
-    ok = riak_kv_compile_tab:insert_previous(<<"Table2">>, Table2DDL, compiling),
-    ok = riak_kv_compile_tab:insert(<<"Table3">>, Table3DDL),
-    dets:close(?PREVIOUS_TABLE),
-    dets:close(?CURRENT_TABLE).
+    insert_previous(Node, <<"Table1">>, Table1DDL, compiled),
+    insert_previous(Node, <<"Table2">>, Table2DDL, compiling),
+    insert(Node, <<"Table3">>, Table3DDL).
 
-verify_dets_entries_current() ->
-    CurrentV = v2,
-    open_dets(?CURRENT_TABLE),
-    open_dets(?PREVIOUS_TABLE),
+assert_compiled_ddl_versions_current(Node, Table) ->
+    ?assertEqual(ok,
+                 rpc:call(Node, riak_kv_compile_tab, assert_compiled_ddl_versions_current,
+                          [Table])).
 
+verify_compile_tab_current(Node) ->
     lists:foreach(fun(T) ->
-        Versions = riak_kv_compile_tab:get_compiled_ddl_versions(T),
-        ContainsCurrentV = lists:any(fun(V) -> V =:= CurrentV end, Versions),
-        ?assertEqual(
-           {true, T, Versions},
-           {ContainsCurrentV, T, Versions})
-        end, test_tables()),
-    dets:close(?PREVIOUS_TABLE),
-    dets:close(?CURRENT_TABLE).
+                          assert_compiled_ddl_versions_current(Node, T)
+                  end, test_tables()).
 
 test_tables() ->
     [<<"Table1">>,<<"Table2">>,<<"Table3">>].
 
 create_table_sql(TableName) ->
+    % presence of a field that isn't allowed for downgrade, i.e. BLOB for
+    % 1.4 -> 1.5, should not be present. Such assertions should be tested
+    % in riak_ql and/or riak_kv, not in riak_test.
+
     lists:flatten(io_lib:format("CREATE TABLE ~s ("
     " datum       varchar   not null,"
     " someseries  varchar   not null,"
