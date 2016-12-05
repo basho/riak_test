@@ -376,7 +376,7 @@ archive_ct_logs_to_giddyup(Base) ->
 
 maybe_post_ct_to_giddyup(ok, Base, CTLogTarFile) ->
     {ok, Contents} = file:read_file(CTLogTarFile),
-    giddyup:post_artifact(Base, {"ct_logs.tar.gz", Contents}),
+    giddyup:post_artifact(Base, {"ct_logs.html.tar.gz", Contents}),
     file:delete(CTLogTarFile);
 %% If we fail to create the tar file for any reason, skip the upload
 maybe_post_ct_to_giddyup(_Error, _Base, _CTLogTarFile) ->

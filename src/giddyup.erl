@@ -173,6 +173,7 @@ guess_ctype(FName) ->
     case string:tokens(filename:basename(FName), ".") of
         [_, "log"|_] -> "text/plain"; %% console.log, erlang.log.5, etc
         ["erl_crash", "dump"] -> "text/plain"; %% An erl_crash.dump file
+        [_, "html", "tar", "gz"] -> "binary/tgz-website"; %% Entire static website
         [_, Else] ->
             case mochiweb_mime:from_extension(Else) of
                 undefined -> "binary/octet-stream";
