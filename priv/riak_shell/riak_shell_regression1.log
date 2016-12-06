@@ -96,17 +96,17 @@ temperature DOUBLE,
 PRIMARY KEY ((region, state, QUANTUM(time, 15, 'm')),
 region, state, time))
 WITH (active = true,
-allow_mult = true,
-dvv_enabled = true,
-dw = quorum,
-last_write_wins = false,
+allow_mult = false,
+dvv_enabled = false,
+dw = one,
+last_write_wins = true,
 n_val = 3,
 notfound_ok = true,
 postcommit = '',
 pr = 0,
 pw = 0,
-r = quorum,
-rw = quorum,
+r = one,
+rw = one,
 w = quorum)"}}.
 {{command, "h; "}, {result, "Error: invalid function call : history_EXT:h []
 You can rerun a command by finding the command in the history list
