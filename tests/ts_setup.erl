@@ -79,16 +79,22 @@ activate_bucket_type(Cluster, Table) ->
 
 -spec activate_bucket_type([node()], string(), pos_integer()) -> ok | term().
 activate_bucket_type(Cluster, Table, Retries) ->
+    activate_bucket_type(Cluster, Table, 0, Retries).
+
+-spec activate_bucket_type([node()], string(), non_neg_integer(), non_neg_integer()) -> ok | term().
+activate_bucket_type(Cluster, Table, RetriesSoFar, RetriesLeft) ->
     [Node|_Rest] = Cluster,
     {ok, Msg} = Result = rt:admin(Node, ["bucket-type", "activate", table_to_list(Table)]),
     %% Look for a successful message
     case string:str(Msg, "has been activated") of
         0 ->
             lager:error("Could not activate bucket type. Retrying. Result = ~p", [Result]),
-            case Retries of
+            case RetriesLeft of
                 0 -> Result;
-                _ -> timer:sleep(timer:seconds(1)),
-                     activate_bucket_type(Cluster, Table, Retries-1)
+
+                %% Increase the delay as we keep retrying
+                _ -> timer:sleep(timer:seconds(1+RetriesSoFar)),
+                     activate_bucket_type(Cluster, Table, RetriesSoFar+1, RetriesLeft-1)
             end;
         _ -> ok
     end.
