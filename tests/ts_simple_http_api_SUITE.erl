@@ -36,7 +36,8 @@ suite() ->
 init_per_suite(Config) ->
     application:start(ibrowse),
     [Node|_] = Cluster = ts_setup:start_cluster(1),
-    rt:wait_for_service(Node, [riak_kv, riak_pipe, riak_repl]),
+    rt:wait_until_pingable(Node),
+    rt:wait_for_service(Node, riak_kv),
     [{cluster, Cluster} | Config].
 
 end_per_suite(_Config) ->
@@ -61,10 +62,12 @@ all() ->
     [ create_table_test,
       create_bad_table_test,
       create_existing_table_test,
+      show_tables_test,
       describe_table_test,
       describe_nonexisting_table_test,
       bad_describe_query_test,
       post_single_row_test,
+      post_single_row_with_null_test,
       post_single_row_missing_field_test,
       post_single_row_wrong_field_test,
       post_several_rows_test,
@@ -72,6 +75,7 @@ all() ->
       list_keys_test,
       list_keys_nonexisting_table_test,
       select_test,
+      select_with_null_test,
       select_subset_test,
       invalid_select_test,
       invalid_query_test,
@@ -128,6 +132,12 @@ create_existing_table_test(Cfg) ->
     "text/plain" = content_type(Headers),
     "Table \"bob\" already exists" = Body.
 
+show_tables_test(Cfg) ->
+    Query = "show tables",
+    {ok, "200", Headers, Body } = execute_query(Query, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"columns\":[\"Table\",\"Status\"],"
+        "\"rows\":[[\"bob\",\"Active\"]]}" = Body.
 
 describe_table_test(Cfg) ->
     Query = "describe bob",
@@ -150,6 +160,12 @@ bad_describe_query_test(Cfg) ->
 %%% put
 post_single_row_test(Cfg) ->
     RowStr = row("q1", "w1", 11, 110),
+    {ok, "200", Headers, RespBody} = post_data("bob", RowStr, Cfg),
+    "application/json" = content_type(Headers),
+    RespBody = success_body().
+
+post_single_row_with_null_test(Cfg) ->
+    RowStr = row("qN", "wN", 11, null),
     {ok, "200", Headers, RespBody} = post_data("bob", RowStr, Cfg),
     "application/json" = content_type(Headers),
     RespBody = success_body().
@@ -187,7 +203,7 @@ list_keys_test(Cfg) ->
     {"200", Headers, Body} = list_keys("bob", Cfg),
     "text/plain" = content_type(Headers),
     RecordURLs = string:tokens(Body, "\n"),
-    ?assertEqual(length(RecordURLs), 3),
+    ?assertEqual(length(RecordURLs), 4),
     %% do a get on each key
     lists:foreach(
       fun(URL) ->
@@ -209,6 +225,13 @@ select_test(Cfg) ->
     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
         "\"rows\":[[\"q1\",\"w1\",11,110],"
         "[\"q1\",\"w1\",20,119]]}" = Body.
+
+select_with_null_test(Cfg) ->
+    Select = "select * from bob where a='qN' and b='wN' and c>1 and c<99 and d is null",
+    {ok,"200", Headers, Body} = execute_query(Select, Cfg),
+    "application/json" = content_type(Headers),
+    "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
+        "\"rows\":[[\"qN\",\"wN\",11,[]]]}" = Body.
 
 select_subset_test(Cfg) ->
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<15",
@@ -239,7 +262,8 @@ delete_data_existing_row_test(Cfg) ->
     Body = success_body(),
     Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
     {ok, "200", _Headers2,
-     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],\"rows\":[[\"q1\",\"w1\",20,119]]}"} =
+     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
+     "\"rows\":[[\"q1\",\"w1\",20,119]]}"} =
         execute_query(Select, Cfg).
 
 delete_data_nonexisting_row_test(Cfg) ->
@@ -350,8 +374,14 @@ delete_url_wrong_path(Node, Table, A, B, C) ->
 
 
 row(A, B, C, D) ->
-    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~B}",
-                  [A, B, C, D]).
+    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~s}",
+                  [A, B, C, number_or_null(D)]).
+
+number_or_null(null) ->
+    "null";
+number_or_null(A) ->
+    io_lib:format("~B", [A]).
+
 
 missing_field_row(A, C, D) ->
     io_lib:format("{\"a\": \"~s\", \"c\": ~B, \"d\":~B}",
