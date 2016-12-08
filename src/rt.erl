@@ -67,6 +67,7 @@
          enable_search_hook/2,
          ensure_random_seeded/0,
          expect_in_log/2,
+         find_version_by_name/1,
          get_call_count/2,
          get_deps/0,
          get_ip/1,
@@ -76,6 +77,7 @@
          get_ring/1,
          get_version/0,
          get_version/1,
+         grep_test_functions/1,
          heal/1,
          http_url/1,
          https_url/1,
@@ -101,6 +103,7 @@
          pbc_read_check/4,
          pbc_read_check/5,
          pbc_set_bucket_prop/3,
+         pbc_set_bucket_type/3,
          pbc_write/4,
          pbc_put_dir/3,
          pbc_put_file/4,
@@ -135,6 +138,7 @@
          stop_tracing/0,
          stop_and_wait/1,
          str/2,
+         str_mult/2,
          systest_read/2,
          systest_read/3,
          systest_read/5,
@@ -225,6 +229,11 @@ str(String, Substr) ->
         0 -> false;
         _ -> true
     end.
+
+%% @doc if String contains any of Substrs, return true.
+-spec str_mult(string(), [string()]) -> boolean().
+str_mult(String, Substrs) ->
+    lists:any(fun(S) -> str(String, S) end, Substrs).
 
 -spec set_conf(atom(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
@@ -1577,6 +1586,11 @@ pbc_write(Pid, Bucket, Key, Value, CT) ->
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
     riakc_pb_socket:set_bucket(Pid, Bucket, PropList).
 
+%% @doc sets a bucket type property/properties via the erlang protobuf client
+-spec pbc_set_bucket_type(pid(), binary(), [proplists:property()]) -> atom().
+pbc_set_bucket_type(Pid, Bucket, PropList) ->
+    riakc_pb_socket:set_bucket_type(Pid, Bucket, PropList).
+
 %% @doc Puts the contents of the given file into the given bucket using the
 %% filename as a key and assuming a plain text content type.
 pbc_put_file(Pid, Bucket, Key, Filename) ->
@@ -1799,6 +1813,20 @@ get_version(Vsn) ->
 get_version() ->
     ?HARNESS:get_version().
 
+%% @doc Finds a list of all test nodes with a matching name.
+-spec find_version_by_name([binary()]) -> [atom()].
+find_version_by_name(Names) ->
+    ?HARNESS:find_version_by_name(Names).
+
+%% @doc Return all functions in the module as atoms that end with 'test'.
+-spec grep_test_functions(module()) -> [atom()].
+grep_test_functions(Module) when is_atom(Module) ->
+    Functions = Module:module_info(exports),
+    [Fn || {Fn,1} <- Functions, is_ending_with_test(Fn)].
+
+is_ending_with_test(Fn) ->
+    lists:suffix("test", atom_to_list(Fn)).
+
 %% @doc outputs some useful information about nodes that are up
 whats_up() ->
     ?HARNESS:whats_up().
@@ -1831,7 +1859,7 @@ log_to_nodes(Nodes0, LFmt, LArgs) ->
            end,
     [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 
-%% @private utility function
+%% @doc Parallel map
 pmap(F, L) ->
     Parent = self(),
     lists:foldl(

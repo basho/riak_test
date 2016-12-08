@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2012-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -166,5 +166,7 @@ getpid_up_test(Node) ->
 getpid_down_test(Node) ->
     lager:info("Test riak getpid fails on ~s", [Node]),
     {ok, PidOut} = rt:riak(Node, ["getpid"]),
+    %% note that the error message is slightly different to the
+    %% other commands
     ?assert(rt:str(PidOut, "Node is not running!")),
     ok.

@@ -99,6 +99,8 @@ determine_test_suite(Vsn) ->
             verify_authentication_post20(Vsn);
         <<"riak-2.", _/binary>> ->
             verify_authentication_post20(Vsn);
+        <<"riak_ts", _/binary>> ->
+            verify_authentication_post20(Vsn);
         _ ->
             verify_authentication_pre20(Vsn)
     end.

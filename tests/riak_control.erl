@@ -190,6 +190,11 @@ validate_partitions({ControlVsn, ControlNode}, VersionedNodes) ->
                              [{<<"partitions">>, NodePartitions},
                                  {<<"default_n_val">>, _}]} = verify_resource(ControlNode, "/admin/partitions"),
                          NodePartitions;
+                     <<"riak_ts", _/binary>> ->
+                         {struct,
+                              [{<<"partitions">>, NodePartitions},
+                                  {<<"default_n_val">>, _}]} = verify_resource(ControlNode, "/admin/partitions"),
+                             NodePartitions;
                      _ ->
                          {struct,
                              [{<<"partitions">>, NodePartitions}]} = verify_resource(ControlNode, "/admin/partitions"),
@@ -203,6 +208,8 @@ validate_partitions({ControlVsn, ControlNode}, VersionedNodes) ->
         <<"riak_ee-2.", _/binary>> ->
             true;
         <<"riak-2.", _/binary>> ->
+            true;
+        <<"riak_ts", _/binary>> ->
             true;
         _ ->
             MixedCluster = mixed_cluster(VersionedNodes),

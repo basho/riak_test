@@ -23,6 +23,7 @@
 -export([put_an_object/2, put_an_object/4, int_to_key/1,
          stream_pb/2, stream_pb/3, pb_query/3, http_query/2,
          http_query/3, http_stream/3, int_to_field1_bin/1, url/2,
+         query_to_url/3,
          assertExactQuery/5, assertRangeQuery/7]).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
@@ -36,8 +37,8 @@
 confirm() ->
     Nodes = rt:build_cluster(3),
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
-    
-    %% First test with sorting non-paginated results off by default 
+
+    %% First test with sorting non-paginated results off by default
     SetResult = rpc:multicall(Nodes, application, set_env,
                               [riak_kv, secondary_index_sort_default, false]),
     AOK = [ok || _ <- lists:seq(1, length(Nodes))],
@@ -46,9 +47,9 @@ confirm() ->
     PBC = rt:pbc(hd(Nodes)),
     HTTPC = rt:httpc(hd(Nodes)),
     Clients = [{pb, PBC}, {http, HTTPC}],
-    
+
     [put_an_object(PBC, N) || N <- lists:seq(0, 20)],
-    
+
     K = fun int_to_key/1,
 
     assertExactQuery(Clients, ?KEYS(5), <<"field1_bin">>, <<"val5">>),
@@ -65,7 +66,7 @@ confirm() ->
     [?assertMatch(ok, riakc_pb_socket:delete(PBC, ?BUCKET, KD)) || KD <- ToDel],
     lager:info("Make sure the tombstone is reaped..."),
     ?assertMatch(ok, rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, ?BUCKET, ToDel) end)),
-    
+
     assertExactQuery(Clients, [], <<"field1_bin">>, <<"val5">>),
     assertExactQuery(Clients, [], <<"field2_int">>, 5),
     assertExactQuery(Clients, ?KEYS(6, 9), <<"field3_int">>, 5),
@@ -83,7 +84,7 @@ confirm() ->
     SetResult2 = rpc:multicall(Nodes, application, set_env,
                                [riak_kv, secondary_index_sort_default, true]),
     ?assertMatch({AOK, []}, SetResult2),
-                                                    
+
     assertExactQuery(Clients, ?KEYS(15, 19),
                      <<"field3_int">>, 15, {undefined, true}),
     %% Keys ordered by val index term, since 2i order is {term, key}
@@ -115,7 +116,7 @@ assertExactQuery(Clients, Expected, Index, Value) ->
 assertExactQuery(Clients, Expected, Index, Value, Sorted) when is_list(Clients) ->
     [assertExactQuery(C, Expected, Index, Value, Sorted) || C <- Clients];
 assertExactQuery({ClientType, Client}, Expected, Index, Value,
-                 {Sort, ExpectSorted}) -> 
+                 {Sort, ExpectSorted}) ->
     lager:info("Searching Index ~p for ~p, sort: ~p ~p with client ~p",
                [Index, Value, Sort, ExpectSorted, ClientType]),
     {ok, ?INDEX_RESULTS{keys=Results}} = case ClientType of
@@ -125,7 +126,7 @@ assertExactQuery({ClientType, Client}, Expected, Index, Value,
         http ->
             rhc:get_index(Client, ?BUCKET, Index, Value, [{pagination_sort, Sort}])
     end,
-            
+
     ActualKeys = case ExpectSorted of
         true -> Results;
         _ -> lists:sort(Results)
@@ -133,7 +134,7 @@ assertExactQuery({ClientType, Client}, Expected, Index, Value,
     lager:info("Expected: ~p", [Expected]),
     lager:info("Actual  : ~p", [Results]),
     lager:info("Sorted  : ~p", [ActualKeys]),
-    ?assertEqual(Expected, ActualKeys). 
+    ?assertEqual(Expected, ActualKeys).
 
 assertRangeQuery(Clients, Expected, Index, StartValue, EndValue) ->
     assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, undefined).
@@ -141,7 +142,7 @@ assertRangeQuery(Clients, Expected, Index, StartValue, EndValue) ->
 assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re) ->
     assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, {false, false}),
     assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, {true, true}).
-    
+
 assertRangeQuery(Clients, Expected, Index, StartValue, EndValue, Re, Sort) when is_list(Clients) ->
     [assertRangeQuery(C, Expected, Index, StartValue, EndValue, Re, Sort) || C <- Clients];
 assertRangeQuery({ClientType, Client}, Expected, Index, StartValue, EndValue, Re,
@@ -170,7 +171,7 @@ assertRangeQuery({ClientType, Client}, Expected, Index, StartValue, EndValue, Re
 %% general 2i utility
 put_an_object(Pid, N) ->
     Key = int_to_key(N),
-    Data = io_lib:format("data~p", [N]),
+    Data = list_to_binary(io_lib:format("data~p", [N])),
     BinIndex = int_to_field1_bin(N),
     Indexes = [{"field1_bin", BinIndex},
                {"field2_int", N},
@@ -223,6 +224,9 @@ stream_loop(Acc) ->
         {_Ref, ?INDEX_STREAM_RESULT{terms=Results}} ->
             Acc2 = orddict:update(results, fun(Existing) -> Existing++Results end, Results, Acc),
             stream_loop(Acc2);
+        {_Ref, {ok, ?INDEX_STREAM_BODY_RESULT{objects=Objects}}} ->
+            Acc2 = orddict:update(results, fun(Existing) -> Existing++Objects end, Objects, Acc),
+            stream_loop(Acc2);
         {_Ref, {error, <<"{error,timeout}">>}} ->
             {error, timeout};
         {_Ref, Wat} ->
@@ -244,16 +248,17 @@ http_query(NodePath, Q) ->
 http_query(NodePath, Query, Opts) ->
     http_query(NodePath, Query, Opts, undefined).
 
-http_query(NodePath, {Field, Value}, Opts, Pid) ->
+http_query(NodePath, Query, Opts, Pid) ->
+    http_get(query_to_url(NodePath, Query, Opts), Pid).
+
+query_to_url(NodePath, {Field, Value}, Opts) ->
     QString = opts_to_qstring(Opts, []),
     Flag = case is_integer(Value) of true -> "w"; false -> "s" end,
-    Url = url("~s/buckets/~s/index/~s/~"++Flag++"~s", [NodePath, ?BUCKET, Field, Value, QString]),
-    http_get(Url, Pid);
-http_query(NodePath, {Field, Start, End}, Opts, Pid) ->
+    url("~s/buckets/~s/index/~s/~"++Flag++"~s", [NodePath, ?BUCKET, Field, Value, QString]);
+query_to_url(NodePath, {Field, Start, End}, Opts) ->
     QString = opts_to_qstring(Opts, []),
     Flag = case is_integer(Start) of true -> "w"; false -> "s" end,
-    Url = url("~s/buckets/~s/index/~s/~"++Flag++"/~"++Flag++"~s", [NodePath, ?BUCKET, Field, Start, End, QString]),
-    http_get(Url, Pid).
+    url("~s/buckets/~s/index/~s/~"++Flag++"/~"++Flag++"~s", [NodePath, ?BUCKET, Field, Start, End, QString]).
 
 url(Format, Elements) ->
     Path = io_lib:format(Format, Elements),
@@ -300,7 +305,7 @@ start_http_stream(Ref) ->
         Other -> lager:error("Unexpected message ~p", [Other]),
                  {error, unknown_message}
     after 60000 ->
-            {error, timeout_local} 
+            {error, timeout_local}
     end.
 
 http_stream_loop(Ref, Acc, {Boundary, BLen}=B) ->
@@ -329,4 +334,3 @@ get_boundary("multipart/mixed;boundary=" ++ Boundary) ->
     {B, byte_size(B)};
 get_boundary(_) ->
     undefined.
-

@@ -1,0 +1,240 @@
+%% -*- erlang -*-
+{{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
+{{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev1@127.0.0.1' on port 10017"}}.
+{{command, "show_nodes; "}, {result, "The connected nodes are: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']"}}.
+{{command, "show_history; "}, {result, "The history contains:
+- 1: reconnect; 
+- 2: show_connection; 
+- 3: show_nodes; 
+"}}.
+{{command, "show_nodes; "}, {result, "The connected nodes are: ['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1']"}}.
+{{command, "CREATE TABLE GeoCheckin (myfamily varchar not null, myseries varchar not null, time  timestamp not null, weather  varchar not null, temperature double, PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time));\n"}, {result, "Table GeoCheckin successfully created and activated."}}.
+{{command, "describe GeoCheckin;\n"}, {result, "Column,Type,Nullable,Partition Key,Local Key,Interval,Unit,Sort Order
+myfamily,varchar,false,1,1,,,
+myseries,varchar,false,2,2,,,
+time,timestamp,false,3,3,15,m,
+weather,varchar,false,,,,,
+temperature,double,true,,,,,
+"}}.
+{{command, "SHOW TABLES;\n"}, {result, "Table,Status
+GeoCheckin,Active
+"}}.
+{{command, "EXPLAIN SELECT * FROM GeoCheckin WHERE myfamily = 'family1' AND myseries = 'series1' AND time >= 2 AND time <= 7000000 AND weather='fair';"}, {result, "Subquery,Coverage Plan,Range Scan Start Key,Is Start Inclusive?,Range Scan End Key,Is End Inclusive?,Filter
+1,\"dev1@127.0.0.1/12, dev2@127.0.0.1/10, dev3@127.0.0.1/11\",\"myfamily = 'family1', myseries = 'series1', time = 2\",false,\"myfamily = 'family1', myseries = 'series1', time = 900000\",false,(weather = 'fair')
+2,\"dev1@127.0.0.1/40, dev3@127.0.0.1/38, dev3@127.0.0.1/39\",\"myfamily = 'family1', myseries = 'series1', time = 900000\",false,\"myfamily = 'family1', myseries = 'series1', time = 1800000\",false,(weather = 'fair')
+3,\"dev1@127.0.0.1/36, dev2@127.0.0.1/37, dev3@127.0.0.1/38\",\"myfamily = 'family1', myseries = 'series1', time = 1800000\",false,\"myfamily = 'family1', myseries = 'series1', time = 2700000\",false,(weather = 'fair')
+4,\"dev1@127.0.0.1/24, dev3@127.0.0.1/22, dev3@127.0.0.1/23\",\"myfamily = 'family1', myseries = 'series1', time = 2700000\",false,\"myfamily = 'family1', myseries = 'series1', time = 3600000\",false,(weather = 'fair')
+5,\"dev2@127.0.0.1/17, dev2@127.0.0.1/18, dev3@127.0.0.1/19\",\"myfamily = 'family1', myseries = 'series1', time = 3600000\",false,\"myfamily = 'family1', myseries = 'series1', time = 4500000\",false,(weather = 'fair')
+6,\"dev1@127.0.0.1/59, dev1@127.0.0.1/60, dev2@127.0.0.1/61\",\"myfamily = 'family1', myseries = 'series1', time = 4500000\",false,\"myfamily = 'family1', myseries = 'series1', time = 5400000\",false,(weather = 'fair')
+7,\"dev1@127.0.0.1/12, dev2@127.0.0.1/13, dev3@127.0.0.1/11\",\"myfamily = 'family1', myseries = 'series1', time = 5400000\",false,\"myfamily = 'family1', myseries = 'series1', time = 6300000\",false,(weather = 'fair')
+8,\"dev1@127.0.0.1/55, dev2@127.0.0.1/53, dev3@127.0.0.1/54\",\"myfamily = 'family1', myseries = 'series1', time = 6300000\",false,\"myfamily = 'family1', myseries = 'series1', time = 7000000\",false,(weather = 'fair')
+"}}.
+{{command, "EXPLAIN SELECT * FROM GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',1,'snow',25.2);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',2,'rain',24.5);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',3,'rain',23.0);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',4,'sunny',28.6);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',5,'sunny',24.7);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',6,'cloudy',32.789);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',7,'cloudy',27.9);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',8,'blizard',45.55);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',8,'fog',34.9);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',9,'fog',28);\n"}, {result, "Error (1003): Invalid data found at row index(es) 1"}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',9,'fog',28.7);\n"}, {result, "Inserted 1 row."}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,28);\n"}, {result, "Error (1003): Invalid data found at row index(es) 1"}}.
+{{command, "insert into GeoCheckin (myfamily, myseries, time, weather, temperature) values ('family1','series1',10,'hail',38.1);\n"}, {result, "Inserted 1 row."}}.
+{{command, "select time, weather, temperature from GeoCheckin where myfamily='family1' and myseries='seriesX' and time > 10 and time < 1000;\n"}, {result, "No rows returned."}}.
+{{command, "select * from GeoCheckin;\n"}, {result, "Error (1001): The query must have a where clause."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1420113600000 and time <= 1420119300000;\n"}, {result, "No rows returned."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 1 and time <= 2;\n"},
+ {result,
+"myfamily,myseries,time,weather,temperature
+family1,series1,1970-01-01T00:00:00.001Z,snow,25.2
+family1,series1,1970-01-01T00:00:00.002Z,rain,24.5
+"}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10 and time <= 8;\n"}, {result, "Error (1001): The lower time bound is greater than the upper time bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 10;\n"}, {result, "Error (1001): Where clause has no upper bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time <= 8;\n"}, {result, "Error (1001): Where clause has no lower bound."}}.
+{{command, "select * from GeoCheckin where myfamily = 'family1' and myseries = 'series1' and time >= 2 and time <= 7;\n"}, {result,
+"myfamily,myseries,time,weather,temperature
+family1,series1,1970-01-01T00:00:00.002Z,rain,24.5
+family1,series1,1970-01-01T00:00:00.003Z,rain,23.0
+family1,series1,1970-01-01T00:00:00.004Z,sunny,28.6
+family1,series1,1970-01-01T00:00:00.005Z,sunny,24.7
+family1,series1,1970-01-01T00:00:00.006Z,cloudy,32.789
+family1,series1,1970-01-01T00:00:00.007Z,cloudy,27.9
+"}}.
+{{command, "show_cookie; "}, {result, "Cookie is riak [actual riak]"}}.
+{{command, "show_config; "}, {result, "The config is [{cookie,riak},
+               {logging,off},
+               {nodes,['dev1@127.0.0.1','dev2@127.0.0.1','dev3@127.0.0.1',
+                       'dev4@127.0.0.1','dev5@127.0.0.1','dev6@127.0.0.1',
+                       'dev7@127.0.0.1','dev8@127.0.0.1']}]
+"}}.
+{{command, "reconnect; "}, {result, "Reconnected to 'dev1@127.0.0.1' on port 10017"}}.
+{{command, "connect dev2@127.0.0.1; "}, {result, "Connected to 'dev2@127.0.0.1' on port 10027"}}.
+{{command, "show_connection; "}, {result, "riak-shell is connected to: 'dev2@127.0.0.1' on port 10027"}}.
+{{command, "CREATE TABLE GeoCheckin2 ( region VARCHAR NOT NULL, state VARCHAR NOT NULL, time TIMESTAMP NOT NULL, weather VARCHAR NOT NULL, temperature DOUBLE, PRIMARY KEY ( (region, state, QUANTUM(time, 15, 'm')),region, state, time));\n"}, {result, "Table GeoCheckin2 successfully created and activated."}}.
+{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523183, 'raining', 11.2);\n"}, {result, "Inserted 1 row."}}.
+{{command, "INSERT INTO GeoCheckin2 (region, state, time, weather, temperature) VALUES ('South Atlantic', 'South Carolina', 1452252523189, 'snowing', 19.2);\n"}, {result, "Inserted 1 row."}}.
+{{command, "SELECT 555, 1.1, 1e1, 1.123e-2 from GeoCheckin2 WHERE time > 1452252523182 AND time < 1452252543182 AND region = 'South Atlantic' AND state = 'South Carolina';\n"}, {result, "555,1.1,10.0,0.01123
+555,1.1,10.0,0.01123
+555,1.1,10.0,0.01123
+"}}.
+{{command, "CREATE TABLE deletetable ( myfamily varchar not null, myseries varchar not null, time timestamp not null, weather varchar not null, temperature double, PRIMARY KEY ((myfamily, myseries, quantum(time, 15, 'm')), myfamily, myseries, time));"}, {result, "Table deletetable successfully created and activated."}}.
+{{command, "insert into deletetable (myfamily, myseries, time, weather, temperature) values ('berl', 'saf', 3, 'safa', 3.3);"}, {result, "Inserted 1 row."}}.
+{{command, "select * from deletetable where myfamily = 'berl' and myseries = 'saf' and time > 1 and time < 5;"}, {result, "myfamily,myseries,time,weather,temperature\nberl,saf,1970-01-01T00:00:00.003Z,safa,3.3\n"
+}}.
+{{command, "delete from deletetable where myfamily = 'berl' and myseries = 'saf' and time = 3;"}, {result, ""}}.
+{{command, "select * from deletetable where myfamily = 'berl' and myseries = 'saf' and time > 1 and time < 5;"}, {result, "No rows returned."}}.
+{{command, "delete from deletetable where myfamily = 'berl' and myseries = 'saf' and timebob = 3;"}, {result, "Error (1009): Unable to get delete key: [\"invalid key\"]"}}.
+{{command, "SHOW CREATE TABLE GeoCheckin2;\n"}, {result, "CREATE TABLE GeoCheckin2 (region VARCHAR NOT NULL,
+state VARCHAR NOT NULL,
+time TIMESTAMP NOT NULL,
+weather VARCHAR NOT NULL,
+temperature DOUBLE,
+PRIMARY KEY ((region, state, QUANTUM(time, 15, 'm')),
+region, state, time))
+WITH (active = true,
+allow_mult = true,
+dvv_enabled = true,
+dw = quorum,
+last_write_wins = false,
+n_val = 3,
+notfound_ok = true,
+postcommit = '',
+pr = 0,
+pw = 0,
+r = quorum,
+rw = quorum,
+w = quorum)"}}.
+{{command, "h; "}, {result, "Error: invalid function call : history_EXT:h []
+You can rerun a command by finding the command in the history list
+with `show_history;` and using the number next to it as the argument
+to `history` or `h`: `history 3;` or `h 3;` for example."}}.
+{{command, "help ; "}, {result, "The following functions are available
+
+Extension 'connection':
+    connect, connection_prompt, ping, reconnect, show_connection, show_cookie
+    show_nodes
+
+Extension 'debug':
+    load, observer
+
+Extension 'history':
+    clear_history, h, history, show_history
+
+Extension 'log':
+    date_log, log, logfile, regression_log, replay_log, show_log_status
+
+Extension 'shell':
+    about, q, quit, show_config, show_version
+
+You can get more help by calling help with the
+extension name and function name like 'help shell quit;'
+
+For SQL help type 'help SQL'"}}.
+{{command, "help ; "}, {result, "The following functions are available
+
+Extension 'connection':
+    connect, connection_prompt, ping, reconnect, show_connection, show_cookie
+    show_nodes
+
+Extension 'debug':
+    load, observer
+
+Extension 'history':
+    clear_history, h, history, show_history
+
+Extension 'log':
+    date_log, log, logfile, regression_log, replay_log, show_log_status
+
+Extension 'shell':
+    about, q, quit, show_config, show_version
+
+You can get more help by calling help with the
+extension name and function name like 'help shell quit;'
+
+For SQL help type 'help SQL'"}}.
+{{command, "date_log; "}, {result, "Error: invalid function call : log_EXT:date_log []
+Toggle adding a timestamp to the name of the log file with `date_log on ;`
+and off with `date_log off ;`
+The filename will be something like \"riak_shell.2016_02_15-16:42:22.log\"
+You will get a new log file for each session of riak-shell.
+
+The default can be set in the config file."}}.
+{{command, "date_log off; "}, {result, "Log files will not contain a date/time stamp."}}.
+{{command, "help; "}, {result, "The following functions are available
+
+Extension 'connection':
+    connect, connection_prompt, ping, reconnect, show_connection, show_cookie
+    show_nodes
+
+Extension 'debug':
+    load, observer
+
+Extension 'history':
+    clear_history, h, history, show_history
+
+Extension 'log':
+    date_log, log, logfile, regression_log, replay_log, show_log_status
+
+Extension 'shell':
+    about, q, quit, show_config, show_version
+
+You can get more help by calling help with the
+extension name and function name like 'help shell quit;'
+
+For SQL help type 'help SQL'"}}.
+{{command, "help sql ; "}, {result, "The following SQL help commands are supported:
+CREATE   - using CREATE TABLE statements
+DELETE   - deleting data with DELETE FROM
+DESCRIBE - examining table structures
+EXPLAIN  - understanding SELECT query execution paths
+INSERT   - inserting data with INSERT INTO statements
+SELECT   - querying data
+SHOW     - listing tables
+
+SELECT can be used with ORDER BY, GROUP BY and LIMIT clauses. It supports arithmetic on column values and has a variety of aggregation functions: COUNT, SUM, MEAN, AVG, MAX, MIN, STDDEV, STDDEV_SAMP and STDDEV_POP
+
+To get more help type 'help SQL SELECT' (replacing SELECT with another statement as appropriate)"}}.
+{{command, "help sql select; "}, {result, "You can use the SELECT statement to query your Time Series data.
+(this example uses the table definition from 'help SQL CREATE' and the data from 'help SQL INSERT')
+
+An example of the format is shown below:
+
+(1)>SELECT * FROM mytable where keyfield = 'keyvalue' and timefield > '2016-11-30 19:15:00' and timefield < '2016-11-30 19:45:00';
+
+You can specify individual field names, and apply functions or arithmetic to them:
+
+(2)>SELECT otherfield1 FROM mytable where keyfield = 'keyvalue' and timefield > '2016-11-30 19:15:00' and timefield < '2016-11-30 19:45:00';
+
+(3)>SELECT otherfield1/2 FROM mytable where keyfield = 'keyvalue' and timefield > '2016-11-30 19:15:00' and timefield < '2016-11-30 19:45:00';
+
+(4)>SELECT MEAN(otherfield1) FROM mytable where keyfield = 'keyvalue' and timefield > '2016-11-30 19:15:00' and timefield < '2016-11-30 19:45:00';
+
+The functions supported are:
+* COUNT
+* SUM
+* MEAN and AVG
+* MIN
+* MAX
+* STDEV and STDDEV_SAMP
+* STDDEVPOP
+
+You can also decorate SELECT statements with ORDER BY, GROUP BY and LIMIT
+
+For more details please go to http://docs.basho.com/riak/ts
+"}}.
+{{command, "help history; "}, {result, "The following functions are available
+
+Extension 'history':
+    clear_history, h, history, show_history
+
+You can get more help by calling help with the
+extension name and function name like 'help history clear_history;'
+
+For SQL help type 'help SQL'"}}.
+{{command, "help history h; "}, {result, "You can rerun a command by finding the command in the history list
+with `show_history;` and using the number next to it as the argument
+to `history` or `h`: `history 3;` or `h 3;` for example."}}.

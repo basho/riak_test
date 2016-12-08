@@ -23,7 +23,7 @@
 # Export different tags to get a different build. N.B. You will need to
 # remove the builds from kerl (e.g., kerl delete build $BUILDNAME) and
 # possibly remove the directories above.
-: ${R16_TAG:="OTP_R16B02_basho9"}
+: ${R16_TAG:="OTP_R16B02_basho10"}
 : ${R15_TAG:="basho_OTP_R15B01p"}
 
 # By default the Open Source version of Riak will be used, but for internal
