@@ -399,7 +399,16 @@ get_and_update(Pid, map) ->
           || I <- lists:seq(1, 10) ].
 
 all_stats(Node) ->
-    common_stats() ++ product_stats(rt:product(Node)).
+    common_stats() ++ product_stats(rt:product(Node)) ++ maybe_ts_stats(binary:match(rtdev:get_version(current),<<"ts">>)).
+
+maybe_ts_stats(nomatch) ->
+    [];
+
+maybe_ts_stats(_) ->
+    [
+        <<"riak_ql_version">>,
+        <<"riak_shell_version">>
+    ].
 
 common_stats() ->
     [
@@ -687,8 +696,6 @@ common_stats() ->
         <<"precommit_fail">>,
         <<"protobuffs_version">>,
         <<"public_key_version">>,
-        <<"riak_ql_version">>,
-        <<"riak_shell_version">>,
         <<"read_repairs">>,
         <<"read_repairs_counter">>,
         <<"read_repairs_counter_total">>,
