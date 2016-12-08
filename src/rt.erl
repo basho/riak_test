@@ -745,6 +745,7 @@ wait_until_transfers_complete([Node0|_]) ->
     lager:info("Wait until transfers complete ~p", [Node0]),
     F = fun(Node) ->
                 {DownNodes, Transfers} = rpc:call(Node, riak_core_status, transfers, []),
+                lager:info("DownNodes: ~p Transfers: ~p", [DownNodes, Transfers]),
                 DownNodes =:= [] andalso Transfers =:= []
         end,
     ?assertEqual(ok, wait_until(Node0, F)),
@@ -756,6 +757,7 @@ wait_for_service(Node, Services) when is_list(Services) ->
                     {badrpc, Error} ->
                         {badrpc, Error};
                     CurrServices when is_list(CurrServices) ->
+                        lager:info("Waiting for services ~p: current services: ~p", [Services, CurrServices]),
                         lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
                     Res ->
                         Res
