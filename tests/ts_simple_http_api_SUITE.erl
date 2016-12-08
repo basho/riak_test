@@ -350,8 +350,14 @@ delete_url_wrong_path(Node, Table, A, B, C) ->
 
 
 row(A, B, C, D) ->
-    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~B}",
-                  [A, B, C, D]).
+    io_lib:format("{\"a\": \"~s\", \"b\": \"~s\", \"c\": ~B, \"d\":~s}",
+                  [A, B, C, number_or_null(D)]).
+
+number_or_null(null) ->
+    "null";
+number_or_null(A) ->
+    io_lib:format("~B", [A]).
+
 
 missing_field_row(A, C, D) ->
     io_lib:format("{\"a\": \"~s\", \"c\": ~B, \"d\":~B}",
