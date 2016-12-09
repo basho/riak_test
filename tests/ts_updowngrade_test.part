@@ -54,7 +54,7 @@ run_this_test(Config) ->
     case ts_updown_util:run_scenarios(Config, make_scenarios()) of
         [] ->
             pass;
-        _ ->
-            ct:fail("There were failing queries", [])
+        Errors ->
+            ct:fail("There were failing queries~n~p", [Errors])
     end.
 
