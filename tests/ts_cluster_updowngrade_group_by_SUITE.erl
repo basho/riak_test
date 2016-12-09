@@ -30,7 +30,7 @@
 -define(SELECTERROR, {error, {1020, <<"Used group as a measure of time in 1000group. Only s, m, h and d are allowed.">>}}).
 
 make_initial_config(Config) ->
-    [{use_previous_client, true} | Config].
+    [{use_previous_client, false} | Config].
 
 make_scenarios() ->
     BaseScenarios =
