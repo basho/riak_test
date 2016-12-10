@@ -175,7 +175,7 @@ make_data() ->
     [{list_to_binary(fmt("A~5..0b", [I rem 2])),
       <<"B">>,
       I + 1,
-      if I rem 5 == 0 -> []; el/=se -> I end}  %% sprinkle some NULLs
+      if I rem 5 == 0 -> null; el/=se -> I end}  %% sprinkle some NULLs
      || I <- lists:seq(1, 300)].
 make_data_ann(Columns, Data) ->
     [lists:zip(Columns, tuple_to_list(Row)) || Row <- Data].
