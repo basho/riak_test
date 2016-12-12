@@ -38,7 +38,9 @@ init_per_suite(Config) ->
     [Node|_] = Cluster = ts_setup:start_cluster(1),
     rt:wait_until_pingable(Node),
     rt:wait_for_service(Node, riak_kv),
-    [{cluster, Cluster} | Config].
+    Cfg = [{cluster, Cluster} | Config],
+    ok = wait_for_web_machine(60, Cfg),
+    Cfg.
 
 end_per_suite(_Config) ->
     ok.
@@ -89,6 +91,17 @@ all() ->
 %% column_names_def_1() ->
 %%     [<<"a">>, <<"b">>, <<"c">>].
 
+wait_for_web_machine(Secs, _) when Secs =< 0 ->
+    {error, "Webmachine not ready in time."};
+wait_for_web_machine(Secs, Cfg) ->
+    %% use SHOW TABLES to detect readiness because it does not modify state
+    case execute_query("SHOW TABLES", Cfg) of
+        {ok, "200", _, _} ->
+            ok;
+        {ok, "503", _, _} ->
+            timer:sleep(1000),
+            wait_for_web_machine(Secs-1, Cfg)
+    end.
 
 table_def_bob() ->
     "create table bob ("
