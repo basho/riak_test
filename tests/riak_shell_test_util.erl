@@ -107,7 +107,9 @@ run_commands([{run, Cmd} | T], State, ShouldIncrement) ->
     run_commands(T, NewState, ShouldIncrement).
 
 cleanup_output(In) ->
-    re:replace(lists:flatten(In), "[\r\n]", "", [global,{return,list}]).
+    InBin = unicode:characters_to_binary(lists:flatten(In)),
+    {ok, Regex} = re:compile("[\r\n]", [unicode]),
+    re:replace(InBin, Regex, "", [global,{return,list}]).
 
 run_cmd(Command, State, ShouldIncrement) ->
     %% the riak-shell works by spawning a process that has captured
