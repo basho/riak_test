@@ -82,8 +82,7 @@ confirm() ->
 
     lager:info("Checking non-SSL results in error"),
     %% can connect without credentials, but not do anything
-    {ok, PB0} =  riakc_pb_socket:start("127.0.0.1", Port,
-                                       []),
+    {ok, PB0} = pbc([{host, "127.0.0.1"}, {port, Port}], []),
     ?assertEqual({error, <<"Security is enabled, please STARTTLS first">>},
                  riakc_pb_socket:ping(PB0)),
 
@@ -95,16 +94,17 @@ confirm() ->
 
     lager:info("Checking SSL requires peer cert validation"),
     %% can't connect without specifying cacert to validate the server
-    ?assertMatch({error, _}, riakc_pb_socket:start("127.0.0.1", Port,
-                                                   [{credentials, UsernameBin,
-                                                     "pass"}])),
+    ?assertMatch({error, _}, pbc([{host, "127.0.0.1"}, {port, Port}],
+                                 [{credentials, UsernameBin,
+                                   "pass"}])),
 
     lager:info("Checking that authentication is required"),
     %% invalid credentials should be invalid
-    ?assertEqual({error, {tcp, <<"Authentication failed">>}}, riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, UsernameBin,
-                                        "pass"}, {cacertfile,
-                                                  filename:join([CertDir, "rootCA/cert.pem"])}])),
+    ?assertEqual({error, {tcp, <<"Authentication failed">>}},
+                 pbc([{host, "127.0.0.1"}, {port, Port}],
+                     [{credentials, UsernameBin,
+                       "pass"}, {cacertfile,
+                                 filename:join([CertDir, "rootCA/cert.pem"])}])),
 
     lager:info("Creating user"),
     %% grant the user credentials
@@ -117,10 +117,10 @@ confirm() ->
 
     lager:info("Checking that credentials are ignored in trust mode"),
     %% invalid credentials should be ignored in trust mode
-    {ok, PB1} = riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, UsernameBin,
-                                        "pass"}, {cacertfile,
-                                                  filename:join([CertDir, "rootCA/cert.pem"])}]),
+    {ok, PB1} = pbc([{host, "127.0.0.1"}, {port, Port}],
+                    [{credentials, UsernameBin,
+                      "pass"}, {cacertfile,
+                                filename:join([CertDir, "rootCA/cert.pem"])}]),
     ?assertEqual(pong, riakc_pb_socket:ping(PB1)),
     riakc_pb_socket:stop(PB1),
 
@@ -131,17 +131,18 @@ confirm() ->
 
     lager:info("Checking that incorrect password fails auth"),
     %% invalid credentials should be invalid
-    ?assertEqual({error, {tcp, <<"Authentication failed">>}}, riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, UsernameBin,
-                                        "pass"}, {cacertfile,
-                                                  filename:join([CertDir, "rootCA/cert.pem"])}])),
+    ?assertEqual({error, {tcp, <<"Authentication failed">>}},
+                 pbc([{host, "127.0.0.1"}, {port, Port}],
+                     [{credentials, UsernameBin,
+                       "pass"}, {cacertfile,
+                                 filename:join([CertDir, "rootCA/cert.pem"])}])),
 
     lager:info("Checking that correct password is successful"),
     %% valid credentials should be valid
-    {ok, PB2} = riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, UsernameBin,
-                                        "password"}, {cacertfile,
-                                                  filename:join([CertDir, "rootCA/cert.pem"])}]),
+    {ok, PB2} = pbc([{host, "127.0.0.1"}, {port, Port}],
+                    [{credentials, UsernameBin,
+                      "password"}, {cacertfile,
+                                    filename:join([CertDir, "rootCA/cert.pem"])}]),
     ?assertEqual(pong, riakc_pb_socket:ping(PB2)),
     riakc_pb_socket:stop(PB2),
 
@@ -156,13 +157,13 @@ confirm() ->
 
     lager:info("Checking certificate authentication"),
     %% valid credentials should be valid
-    {ok, PB3} = riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, "site4.basho.com",
-                                        "password"},
-                                       {cacertfile, filename:join([CertDir, "site4.basho.com/cacerts.pem"])},
-                                       {certfile, filename:join([CertDir, "site4.basho.com/cert.pem"])},
-                                       {keyfile, filename:join([CertDir, "site4.basho.com/key.pem"])}
-                                      ]),
+    {ok, PB3} = pbc([{host, "127.0.0.1"}, {port, Port}],
+                    [{credentials, "site4.basho.com",
+                      "password"},
+                     {cacertfile, filename:join([CertDir, "site4.basho.com/cacerts.pem"])},
+                     {certfile, filename:join([CertDir, "site4.basho.com/cert.pem"])},
+                     {keyfile, filename:join([CertDir, "site4.basho.com/key.pem"])}
+                    ]),
     ?assertEqual(pong, riakc_pb_socket:ping(PB3)),
     riakc_pb_socket:stop(PB3),
 
@@ -177,35 +178,38 @@ confirm() ->
 
     lager:info("Checking auth with mismatched user/cert fails"),
     %% authing with mismatched user should fail
-    ?assertEqual({error, {tcp, <<"Authentication failed">>}}, riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, "site5.basho.com",
-                                        "password"},
-                                       {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
-                                       {certfile, filename:join([CertDir, "site4.basho.com/cert.pem"])},
-                                       {keyfile, filename:join([CertDir, "site4.basho.com/key.pem"])}
-                                      ])),
+    ?assertEqual({error, {tcp, <<"Authentication failed">>}},
+                 pbc([{host, "127.0.0.1"}, {port, Port}],
+                     [{credentials, "site5.basho.com",
+                       "password"},
+                      {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
+                      {certfile, filename:join([CertDir, "site4.basho.com/cert.pem"])},
+                      {keyfile, filename:join([CertDir, "site4.basho.com/key.pem"])}
+                     ])),
 
     lager:info("Checking revoked certificates are denied"),
-    ?assertMatch({error, {tcp, _Reason}}, riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, "site5.basho.com",
-                                        "password"},
-                                       {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
-                                       {certfile, filename:join([CertDir, "site5.basho.com/cert.pem"])},
-                                       {keyfile, filename:join([CertDir, "site5.basho.com/key.pem"])}
-                                      ])),
+    ?assertMatch({error, {tcp, _Reason}},
+                 pbc([{host, "127.0.0.1"}, {port, Port}],
+                     [{credentials, "site5.basho.com",
+                       "password"},
+                      {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
+                      {certfile, filename:join([CertDir, "site5.basho.com/cert.pem"])},
+                      {keyfile, filename:join([CertDir, "site5.basho.com/key.pem"])}
+                     ])),
 
     lager:info("Checking auth with non-peer certificate fails"),
     %% authing with non-peer certificate should fail
-    ?assertMatch({error, {tcp, _Reason}}, riakc_pb_socket:start("127.0.0.1", Port,
-                                                  [{credentials, "site5.basho.com",
-                                                    "password"},
-                                                   {cacertfile, filename:join([PrivDir,
-                                                                               "certs/CA/rootCA/cert.pem"])},
-                                                   {certfile, filename:join([PrivDir,
-                                                                             "certs/cacert.org/ca-cert.pem"])},
-                                                   {keyfile, filename:join([PrivDir,
-                                                                            "certs/cacert.org/ca-key.pem"])}
-                                                  ])),
+    ?assertMatch({error, {tcp, _Reason}},
+                 pbc([{host, "127.0.0.1"}, {port, Port}],
+                     [{credentials, "site5.basho.com",
+                       "password"},
+                      {cacertfile, filename:join([PrivDir,
+                                                  "certs/CA/rootCA/cert.pem"])},
+                      {certfile, filename:join([PrivDir,
+                                                "certs/cacert.org/ca-cert.pem"])},
+                      {keyfile, filename:join([PrivDir,
+                                               "certs/cacert.org/ca-key.pem"])}
+                     ])),
 
     lager:info("cert from intermediate CA should work"),
     %% grant the user credential
@@ -216,12 +220,12 @@ confirm() ->
                                                          "127.0.0.1/32",
                                                          "certificate"]]),
 
-    {ok, PB4} = riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, "site1.basho.com", "password"},
-                                       {cacertfile, filename:join([CertDir, "site1.basho.com/cacerts.pem"])},
-                                       {certfile, filename:join([CertDir, "site1.basho.com/cert.pem"])},
-                                       {keyfile, filename:join([CertDir, "site1.basho.com/key.pem"])}
-                                      ]),
+    {ok, PB4} = pbc([{host, "127.0.0.1"}, {port, Port}],
+                    [{credentials, "site1.basho.com", "password"},
+                     {cacertfile, filename:join([CertDir, "site1.basho.com/cacerts.pem"])},
+                     {certfile, filename:join([CertDir, "site1.basho.com/cert.pem"])},
+                     {keyfile, filename:join([CertDir, "site1.basho.com/key.pem"])}
+                    ]),
 
     ?assertEqual(pong, riakc_pb_socket:ping(PB4)),
     riakc_pb_socket:stop(PB4),
@@ -235,12 +239,13 @@ confirm() ->
                                                          "127.0.0.1/32",
                                                          "certificate"]]),
 
-    ?assertMatch({error, {tcp, _Reason}}, riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, "site6.basho.com", "password"},
-                                       {cacertfile, filename:join([CertDir, "site6.basho.com/cacerts.pem"])},
-                                       {certfile, filename:join([CertDir, "site6.basho.com/cert.pem"])},
-                                       {keyfile, filename:join([CertDir, "site6.basho.com/key.pem"])}
-                                      ])),
+    ?assertMatch({error, {tcp, _Reason}},
+                 pbc([{host, "127.0.0.1"}, {port, Port}],
+                     [{credentials, "site6.basho.com", "password"},
+                      {cacertfile, filename:join([CertDir, "site6.basho.com/cacerts.pem"])},
+                      {certfile, filename:join([CertDir, "site6.basho.com/cert.pem"])},
+                      {keyfile, filename:join([CertDir, "site6.basho.com/key.pem"])}
+                     ])),
 
     lager:info("checking a certificate signed by a leaf CA is not honored"),
     %% grant the user credential
@@ -251,18 +256,19 @@ confirm() ->
                                                          "127.0.0.1/32",
                                                          "certificate"]]),
 
-    ?assertMatch({error, {tcp, _Reason}}, riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, "site7.basho.com", "password"},
-                                       {cacertfile, filename:join([CertDir, "site7.basho.com/cacerts.pem"])},
-                                       {certfile, filename:join([CertDir, "site7.basho.com/cert.pem"])},
-                                       {keyfile, filename:join([CertDir, "site7.basho.com/key.pem"])}
-                                      ])),
+    ?assertMatch({error, {tcp, _Reason}},
+                 pbc([{host, "127.0.0.1"}, {port, Port}],
+                     [{credentials, "site7.basho.com", "password"},
+                      {cacertfile, filename:join([CertDir, "site7.basho.com/cacerts.pem"])},
+                      {certfile, filename:join([CertDir, "site7.basho.com/cert.pem"])},
+                      {keyfile, filename:join([CertDir, "site7.basho.com/key.pem"])}
+                     ])),
 
     %% time to actually do some stuff
-    {ok, PB} = riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, UsernameBin, "password"},
-                                       {cacertfile,
-                                                  filename:join([CertDir, "rootCA/cert.pem"])}]),
+    {ok, PB} = pbc([{host, "127.0.0.1"}, {port, Port}],
+                   [{credentials, UsernameBin, "password"},
+                    {cacertfile,
+                     filename:join([CertDir, "rootCA/cert.pem"])}]),
     ?assertEqual(pong, riakc_pb_socket:ping(PB)),
 
     lager:info("verifying that user cannot get/put without grants"),
@@ -734,10 +740,10 @@ group_test(Node, Port, CertDir) ->
     ok = rpc:call(Node, riak_core_console, add_source, [["myuser", "127.0.0.1/32",
                                                     "trust"]]),
 
-    {ok, PB} = riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, "myuser", "password"},
-                                       {cacertfile,
-                                        filename:join([CertDir, "rootCA/cert.pem"])}]),
+    {ok, PB} = pbc([{host, "127.0.0.1"}, {port, Port}],
+                   [{credentials, "myuser", "password"},
+                    {cacertfile,
+                     filename:join([CertDir, "rootCA/cert.pem"])}]),
 
     ?assertMatch({error, notfound}, (riakc_pb_socket:get(PB, {<<"mytype2">>,
                                                               <<"hello">>},
@@ -818,3 +824,20 @@ reduce_set_union(List, A) ->
 mapred_modfun_input(Pipe, _Args, _Timeout) ->
     riak_pipe:queue_work(Pipe, {{<<"hello">>, <<"world">>}, {struct, []}}),
     riak_pipe:eoi(Pipe).
+
+%% TODO: consider factoring down as an alternative to rt:pbc/2
+pbc([{host, Host}, {port, Port}], Options) ->
+    Retries = 3,
+    %% NOTE: no rt:wait_for_service(Node, riak_kv), this connection timeout
+    %% pattern matches better how clients are expected to interact w/ Riak
+    pb_socket_start(Host, Port, Options, Retries, undefined).
+pb_socket_start(_Host, _Port, _Options, _Retries = 0, Err) ->
+    Err;
+pb_socket_start(Host, Port, Options, Retries, _Err) ->
+    case riakc_pb_socket:start(Host, Port, Options) of
+        Err0 = {error, {tcp, timeout}} ->
+            timer:sleep(100),
+            pb_socket_start(Host, Port, Options, Retries - 1, Err0);
+        Res = {ok, _Pid} -> Res;
+        Err1 = {error, _Reason} -> Err1
+    end.
