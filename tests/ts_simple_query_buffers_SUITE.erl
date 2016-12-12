@@ -55,7 +55,7 @@
 
 
 suite() ->
-    [{timetrap, {minutes, 15}}].
+    [{timetrap, {hours, 2}}].
 
 init_per_suite(Cfg) ->
     Cluster = ts_setup:start_cluster(1),
