@@ -116,6 +116,7 @@ main(Args) ->
                                           {lager_file_backend, [{file, "log/test.log"},
                                                                 {level, ConsoleLagerLevel}]}]),
     lager:start(),
+    [lager:info("Config ~s = ~p", [K, V]) || {K, V} <- lists:keysort(1, rt_config:get_all())],
     %% Report
     Report = case proplists:get_value(report, ParsedArgs, undefined) of
         undefined -> undefined;
