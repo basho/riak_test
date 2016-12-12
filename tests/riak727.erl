@@ -50,6 +50,11 @@ confirm() ->
 %% typed, and custom typed buckets are as expected.
 -spec verify_default_bucket_props(node(), binary()) -> ok | no_return().
 verify_default_bucket_props(Node, Type) ->
+    %% Once in a blue moon we'll try to create a bucket type before
+    %% all capabilities have been registered. Bucket type creation
+    %% fails if this one isn't present yet.
+    rt:wait_until_capability(Node, {riak_core,bucket_types}, true),
+
     rt:create_and_activate_bucket_type(Node, Type, [{nonsense, <<"value">>}]),
 
     DefProps = get_props(Node, <<"default">>),
