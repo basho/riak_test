@@ -117,9 +117,7 @@ query_orderby_comprehensive(Cfg) ->
                   make_ordby_item_variants(Items),
               lists:foreach(
                 fun(Var) ->
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 1}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 2}, {offset, 4}])
+                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 12}, {offset, 4}])
                 end,
                 Variants)
       end,
