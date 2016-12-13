@@ -226,8 +226,6 @@ get_fs_coord_status_item(Node, SinkName, ItemName) ->
     ClusterProps = proplists:get_value(SinkName, FS_CoordProps),
     proplists:get_value(ItemName, ClusterProps).
 
-
-
 start_and_wait_until_fullsync_complete(Node) ->
     start_and_wait_until_fullsync_complete(Node, undefined).
 
