@@ -5,7 +5,8 @@
 
 -define(TEST_BUCKET,
         <<"repl-cancel-fullsync-failures-systest_a">>).
--define(NUM_KEYS, 1000).
+%% increased from 1000 to 10000 b/c replication is completing before cancel sometimes (flappy test)
+-define(NUM_KEYS, 10000).
 
 -define(CONF(Retries), [
         {riak_core,
@@ -23,7 +24,7 @@
             [
              %% Specify fast building of AAE trees
              {anti_entropy, {on, []}},
-             {anti_entropy_build_limit, {100, 1000}},
+             {anti_entropy_build_limit, {100, ?NUM_KEYS div 2}}, %%<< intentionally half of ?NUM_KEYS
              {anti_entropy_concurrency, 100}
             ]
         },
