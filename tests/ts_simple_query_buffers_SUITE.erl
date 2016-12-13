@@ -76,12 +76,12 @@ groups() ->
 
 all() ->
     [
+     %% 2. check LIMIT and ORDER BY, not involving follow-up queries
+     query_orderby_comprehensive,
      %% 3. check how error conditions are reported
      query_orderby_max_quanta_error,
      query_orderby_max_data_size_error,
-     query_orderby_ldb_io_error,
-     %% 2. check LIMIT and ORDER BY, not involving follow-up queries
-     query_orderby_comprehensive
+     query_orderby_ldb_io_error
      %% 1. check that query buffers persist and do not pick up updates to
      %% the mother table (and do, after expiry)
      %% query_orderby_no_updates
