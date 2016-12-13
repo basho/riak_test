@@ -220,7 +220,7 @@ check_sorted(C, Table, OrigData, Clauses, Options) ->
     Query = ts_qbuf_util:full_query(Table, Clauses),
     ct:log("Query: \"~s\"", [Query]),
     {ok, {_Cols, Returned}} =
-        riakc_ts:query(C, Query, [], undefined, Options),
+        guarded_query(C, Query, Options, 3),
     OrderBy = proplists:get_value(order_by, Clauses),
     Limit   = proplists:get_value(limit, Clauses),
     Offset  = proplists:get_value(offset, Clauses),
@@ -248,6 +248,21 @@ check_sorted(C, Table, OrigData, Clauses, Options) ->
         false ->
             ct:fail("Query ~s failed\nGot ~p\nNeed: ~p\n", [Query, Returned, PreLimited])
     end.
+
+guarded_query(_C, _Query, _Options, 0) ->
+    {error, exhausted_retries};
+guarded_query(C, Query, Options, Retries) ->
+    case riakc_ts:query(C, Query, [], undefined, Options) of
+        {ok, Result} ->
+            {ok, Result};
+        {error, {1027, _Msg}} ->
+            ct:pal("Retrying query on qbuf internal error (~p)", [_Msg]),
+            guarded_query(C, Query, Options, Retries - 1);
+        {error, {1013, _Msg}} ->
+            ct:pal("Retrying query on no response from backend (~p)", [_Msg]),
+            guarded_query(C, Query, Options, Retries - 1)
+    end.
+
 
 safe_offset(undefined) -> 0;
 safe_offset(X) -> X.
