@@ -106,7 +106,7 @@ wait_for_web_machine(Secs, Cfg) ->
 table_def_bob() ->
     "create table bob ("
     " a varchar not null,"
-    " b varchar not null,"
+    " b blob not null,"
     " c timestamp not null,"
     " d sint64,"
     " primary key ((a, b, quantum(c, 1, m)), a, b, c))".
@@ -172,13 +172,13 @@ bad_describe_query_test(Cfg) ->
 
 %%% put
 post_single_row_test(Cfg) ->
-    RowStr = row("q1", "w1", 11, 110),
+    RowStr = row("q1", base64:encode_to_string("w1"), 11, 110),
     {ok, "200", Headers, RespBody} = post_data("bob", RowStr, Cfg),
     "application/json" = content_type(Headers),
     RespBody = success_body().
 
 post_single_row_with_null_test(Cfg) ->
-    RowStr = row("qN", "wN", 11, null),
+    RowStr = row("qN", base64:encode_to_string("wN"), 11, null),
     {ok, "200", Headers, RespBody} = post_data("bob", RowStr, Cfg),
     "application/json" = content_type(Headers),
     RespBody = success_body().
@@ -191,14 +191,15 @@ post_single_row_missing_field_test(Cfg) ->
     "Missing field \"b\" for key in table \"bob\"" = Body.
 
 post_single_row_wrong_field_test(Cfg) ->
-    RowStr = wrong_field_type_row("q1", "w1", 12, "raining"),
+    RowStr = wrong_field_type_row("q1", base64:encode_to_string("w1"), 12, "raining"),
     {ok,"400", Headers, Body} = post_data("bob", RowStr, Cfg),
     "text/plain" = content_type(Headers),
     "Bad value for field \"d\" of type sint64 in table \"bob\"" = Body.
 
 
 post_several_rows_test(Cfg) ->
-    RowStrs = string:join([row("q1", "w2", 20, 150), row("q1", "w1", 20, 119)],
+    RowStrs = string:join([row("q1", base64:encode_to_string("w2"), 20, 150),
+                           row("q1", base64:encode_to_string("w1"), 20, 119)],
                           ", "),
     Body = io_lib:format("[~s]", [RowStrs]),
     {ok, "200", Headers, RespBody} = post_data("bob", Body, Cfg),
@@ -206,7 +207,7 @@ post_several_rows_test(Cfg) ->
     RespBody = success_body().
 
 post_row_to_nonexisting_table_test(Cfg) ->
-    RowStr = row("q1", "w1", 30, 142),
+    RowStr = row("q1", base64:encode_to_string("w1"), 30, 142),
     {ok,"404", Headers, Body} = post_data("bill", RowStr, Cfg),
     "text/plain" = content_type(Headers),
     "Table \"bill\" does not exist" = Body.
@@ -232,26 +233,30 @@ list_keys_nonexisting_table_test(Cfg) ->
 
 %%% select
 select_test(Cfg) ->
-    Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
+    Select = "select * from bob where a='q1' and b=" ++
+        hexlify("w1") ++ " and c>1 and c<99",
     {ok,"200", Headers, Body} = execute_query(Select, Cfg),
     "application/json" = content_type(Headers),
-    "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
-        "\"rows\":[[\"q1\",\"w1\",11,110],"
-        "[\"q1\",\"w1\",20,119]]}" = Body.
+    ?assertEqual(
+       "{\"columns\":[\"a\",\"b\",\"c\",\"d\"]," ++
+           "\"rows\":[[\"q1\",\"" ++ base64:encode_to_string("w1") ++ "\",11,110]," ++
+           "[\"q1\",\"" ++ base64:encode_to_string("w1") ++ "\",20,119]]}", Body).
 
 select_with_null_test(Cfg) ->
-    Select = "select * from bob where a='qN' and b='wN' and c>1 and c<99 and d is null",
+    Select = "select * from bob where a='qN' and b=" ++ hexlify("wN") ++ " and c>1 and c<99 and d is null",
     {ok,"200", Headers, Body} = execute_query(Select, Cfg),
     "application/json" = content_type(Headers),
-    "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
-        "\"rows\":[[\"qN\",\"wN\",11,[]]]}" = Body.
+    ?assertEqual(
+       "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
+       "\"rows\":[[\"qN\",\"" ++ base64:encode_to_string("wN") ++ "\",11,[]]]}", Body).
 
 select_subset_test(Cfg) ->
-    Select = "select * from bob where a='q1' and b='w1' and c>1 and c<15",
+    Select = "select * from bob where a='q1' and b=" ++ hexlify("w1") ++ " and c>1 and c<15",
     {ok, "200", Headers, Body} = execute_query(Select, Cfg),
     "application/json" = content_type(Headers),
-    "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
-        "\"rows\":[[\"q1\",\"w1\",11,110]]}" = Body.
+    ?assertEqual(
+       "{\"columns\":[\"a\",\"b\",\"c\",\"d\"]," ++
+           "\"rows\":[[\"q1\",\"" ++ base64:encode_to_string("w1") ++ "\",11,110]]}", Body).
 
 invalid_select_test(Cfg) ->
     Select = "select * from bob where a='q1' and c>1 and c<15",
@@ -270,28 +275,30 @@ invalid_query_test(Cfg) ->
 
 %%% delete
 delete_data_existing_row_test(Cfg) ->
-    {ok, "200", Headers, Body} = delete("bob", "q1", "w1", 11, Cfg),
+    {ok, "200", Headers, Body} = delete("bob", "q1", base64:encode_to_string("w1"), 11, Cfg),
     "application/json" = content_type(Headers),
     Body = success_body(),
-    Select = "select * from bob where a='q1' and b='w1' and c>1 and c<99",
-    {ok, "200", _Headers2,
-     "{\"columns\":[\"a\",\"b\",\"c\",\"d\"],"
-     "\"rows\":[[\"q1\",\"w1\",20,119]]}"} =
-        execute_query(Select, Cfg).
+    Select = "select * from bob where a='q1' and b=" ++ hexlify("w1") ++ " and c>1 and c<99",
+    {ok, "200", _Headers2, QueryBody} = execute_query(Select, Cfg),
+    ?assertEqual(
+       "{\"columns\":[\"a\",\"b\",\"c\",\"d\"]," ++
+           "\"rows\":[[\"q1\",\"" ++ base64:encode_to_string("w1") ++ "\",20,119]]}",
+       QueryBody).
+
 
 delete_data_nonexisting_row_test(Cfg) ->
-    {ok, "404", Headers, Body } = delete("bob", "q1", "w1", 500, Cfg),
+    {ok, "404", Headers, Body } = delete("bob", "q1", base64:encode_to_string("w1"), 500, Cfg),
     "text/plain" = content_type(Headers),
     "Key not found"
         = Body.
 
 delete_data_nonexisting_table_test(Cfg) ->
-    {ok, "404", Headers, Body } = delete("bill", "q1", "w1", 20, Cfg),
+    {ok, "404", Headers, Body } = delete("bill", "q1", base64:encode_to_string("w1"), 20, Cfg),
     "text/plain" = content_type(Headers),
     "Table \"bill\" does not exist" = Body.
 
 delete_data_wrong_path_test(Cfg) ->
-    {ok, "400", Headers, Body} = delete_wrong_path("bob", "q1", "w1", 20, Cfg),
+    {ok, "400", Headers, Body} = delete_wrong_path("bob", "q1", base64:encode_to_string("w1"), 20, Cfg),
     "text/plain" = content_type(Headers),
     "Not all key-constituent fields given on URL" = Body.
 
@@ -410,3 +417,6 @@ success_body() ->
 
 content_type(Headers) ->
     proplists:get_value("Content-Type", Headers).
+
+hexlify(Bin) ->
+    lists:flatten(io_lib:format("0x~s", [mochihex:to_hex(Bin)])).
