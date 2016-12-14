@@ -34,7 +34,15 @@
             [
              {anti_entropy, {on, []}},
              {anti_entropy_build_limit, {100, 1000}},
-             {anti_entropy_concurrency, 100}
+             {anti_entropy_concurrency, 100},
+             %% In mixed clusters, don't allow the object has version
+             %% to upgrade from `legacy` as the replication will no
+             %% no longer be able to complete
+             {override_capability,
+               [{object_hash_version,
+                 [{use, legacy},
+                  {prefer, legacy}]
+                }]}
             ]
         },
         {riak_repl,
@@ -182,6 +190,7 @@ verify_replication(AVersion, BVersion, Start, End, Realtime) ->
 configure_clusters(AVersion, BVersion, Realtime) ->
     rt:set_advanced_conf(all, ?CONF(infinity)),
 
+    rt:copy_conf(6, previous, current),
     Nodes = [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),
