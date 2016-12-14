@@ -282,13 +282,16 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 
 -spec connection_info(node() | [node()]) -> interfaces() | conn_info().
 connection_info(Node) when is_atom(Node) ->
-    {ok, [{PB_IP, PB_Port}]} = get_pb_conn_info(Node),
-    {ok, [{HTTP_IP, HTTP_Port}]} = get_http_conn_info(Node),
-    case get_https_conn_info(Node) of
-        undefined ->
-            [{http, {HTTP_IP, HTTP_Port}}, {pb, {PB_IP, PB_Port}}];
-        {ok, [{HTTPS_IP, HTTPS_Port}]} ->
-            [{http, {HTTP_IP, HTTP_Port}}, {https, {HTTPS_IP, HTTPS_Port}}, {pb, {PB_IP, PB_Port}}]
+    {ok, [PB_Info]} = get_pb_conn_info(Node),
+    {ok, [HTTP_Info]} = get_http_conn_info(Node),
+    Info0 = [{pb, PB_Info}, {http, HTTP_Info}],
+    Info1 = case get_https_conn_info(Node) of
+        undefined -> Info0;
+        {ok, [{HTTPS_IP, HTTPS_Port}]} -> [{https, {HTTPS_IP, HTTPS_Port}} | Info0]
+    end,
+    case get_s3_conn_info(Node) of
+        undefined -> Info1;
+        {ok, [{S3_IP, S3_Port}]} -> [{s3, {S3_IP, S3_Port}} | Info1]
     end;
 connection_info(Nodes) when is_list(Nodes) ->
     [ {Node, connection_info(Node)} || Node <- Nodes].
@@ -322,6 +325,15 @@ get_http_conn_info(Node) ->
 get_https_conn_info(Node) ->
     case rpc_get_env(Node, [{riak_api, https},
                             {riak_core, https}]) of
+        {ok, [{IP, Port}|_]} ->
+            {ok, [{IP, Port}]};
+        _ ->
+            undefined
+    end.
+
+-spec get_s3_conn_info(node()) -> [{inet:ip_address(), pos_integer()}].
+get_s3_conn_info(Node) ->
+    case rpc_get_env(Node, [{riak_s3_api, http}]) of
         {ok, [{IP, Port}|_]} ->
             {ok, [{IP, Port}]};
         _ ->
@@ -1644,6 +1656,12 @@ http_url(Nodes) when is_list(Nodes) ->
      end || {_Node, Connections} <- connection_info(Nodes)];
 http_url(Node) ->
     hd(http_url([Node])).
+
+s3_url(Nodes) when is_list(Nodes) ->
+    [begin
+         {Host, Port} = orddict:fetch(s3, Connections),
+         lists:flatten(io_lib:format("http://~s:~b", [Host, Port]))
+     end || {_Node, Connections} <- connection_info(Nodes)].
 
 %% @doc get me an http client.
 -spec httpc(node()) -> term().
