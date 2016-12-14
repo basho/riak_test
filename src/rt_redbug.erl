@@ -42,6 +42,8 @@ set_tracing_applied(TracingApplied) when is_boolean(TracingApplied) ->
 is_tracing_applied() ->
 	(catch ets:lookup_element(rt_trace_tab, apply_traces, 2)) == true.
 
+%% Apply traces to one or more nodes using redbug tracing and syntax.
+%%
 %% eper documentation for the redbug trace string and options is here:
 %%
 %% https://github.com/massemanet/eper/blob/master/doc/redbug.txt
@@ -51,8 +53,15 @@ is_tracing_applied() ->
 %% http://roberto-aloi.com/erlang/profiling-erlang-applications-using-redbug
 %%
 %% Set a trace on a function
-%%     "riak_kv_qry_compiler:compile"
+%%     rt_redbug:trace(Node, "riak_kv_qry_compiler:compile").
+%%     rt_redbug:trace(Node, ["riak_kv_qry_compiler:compile", "riak_ql_parser:parse"]).
 %%
+%% Multiple traces can be set in one call. Calling the `rt_redbug:trace`
+%% function a second time stops the traces started by the first call.
+%%
+%% Traces can be stopped by calling `rt_redbug:stop(Nodes)` with the nodes in
+%% the test cluster. This is important if there are multiple tests in the same
+%% suite, but not if the cluster is torn down at the end of the suite.
 trace(Nodes, TraceStrings) ->
 	trace(Nodes, TraceStrings, []).
 
@@ -68,7 +77,6 @@ trace(Nodes, TraceStrings, Options1) when (is_atom(Nodes) orelse is_list(Nodes))
 
 %%
 apply_trace(Node, TraceString, Options) ->
-	lager:info("APPLY TRACE ~p", [TraceString]),
 	rpc:call(Node, redbug, start, [TraceString, Options]).
 
 %%
