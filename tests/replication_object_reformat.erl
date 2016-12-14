@@ -1,3 +1,14 @@
+%% XXX XXX XXX
+%%
+%% This test is being retired as of December 2016. The rolling
+%% downgrade is prone to race conditions, and it's testing something
+%% which is no longer relevant to our customers.
+%%
+%% However, it should be retained for reference/rewriting, because we
+%% may need to do future replication object version migrations.
+%%
+%% -John R. Daily, December 14 2016.
+
 -module(replication_object_reformat).
 -behavior(riak_test).
 -export([confirm/0]).
