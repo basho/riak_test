@@ -12,6 +12,12 @@ confirm() ->
     Nodes = rt:deploy_nodes(?NODE_COUNT),
     ok = rt:wait_until_nodes_ready(Nodes),
 
+    %% Set to testing profile backend on all the nodes
+    {[ok, ok, ok], []} = rpc:multicall(Nodes,
+                                       application,
+                                       set_env,
+                                       [riak_s3_api, default_user_backend, riak_s3_user_profile_backend]),
+
     %% Get S3 URLs
     URLs = rt:s3_url(Nodes),
     S3_URL = lists:nth(random:uniform(?NODE_COUNT), URLs),
@@ -20,7 +26,7 @@ confirm() ->
     Cmd = lists:flatten([
                             "cd ../s3-api-tests",
                             " && ",
-                            io_lib:format("./gradlew -Ds3.api.baseUrl=~s s3ApiTests --info", [S3_URL])
+                            io_lib:format("./gradlew -Ds3.api.baseUrl=~s test --info", [S3_URL])
                         ]),
     lager:info(Cmd),
     Output = os:cmd(Cmd),
