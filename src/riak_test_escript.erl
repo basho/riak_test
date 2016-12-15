@@ -214,12 +214,8 @@ parse_command_line_tests(ParsedArgs) ->
     %% this is a little ugly, the process that creates the ets table to store
     %% the tracing state cannot shutdown or the table will be gc'ed, so create
     %% a dummy proc that doens't die
-    proc_lib:spawn(
-        fun() ->
-            rt_redbug:new(),
-            rt_redbug:set_tracing_applied(proplists:is_defined(apply_traces, ParsedArgs)),
-            timer:sleep(infinity)
-        end),
+    rt_redbug:new(),
+    rt_redbug:set_tracing_applied(proplists:is_defined(apply_traces, ParsedArgs)),
     %% Parse Command Line Tests
     {CodePaths, SpecificTests} =
         lists:foldl(fun extract_test_names/2,

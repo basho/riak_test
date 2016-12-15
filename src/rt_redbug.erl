@@ -33,14 +33,14 @@
 
 %% Create a new ets to store globally whether we're tracing or not.
 new() -> 
-    rt_trace_tab = ets:new(rt_trace_tab, [named_table]).
+    ok.
 
 set_tracing_applied(TracingApplied) when is_boolean(TracingApplied) ->
     lager:info("Setting apply tracing to ~p", [TracingApplied]),
-    ets:insert(rt_trace_tab, {apply_traces,TracingApplied}).
+    rt_config:set(apply_traces, TracingApplied).
 
 is_tracing_applied() ->
-    (catch ets:lookup_element(rt_trace_tab, apply_traces, 2)) == true.
+    rt_config:get(apply_traces).
 
 %% Apply traces to one or more nodes using redbug tracing and syntax.
 %%
