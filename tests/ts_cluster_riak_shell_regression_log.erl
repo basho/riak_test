@@ -35,6 +35,7 @@ confirm() ->
     _Conn = ts_setup:conn(Nodes),
     lager:info("Built a cluster of ~p~n", [Nodes]),
     Self = self(),
+    trace(Nodes),
     _Pid = spawn_link(fun() -> load_log_file(Self) end),
     Got1 = riak_shell_test_util:loop(),
     Result = ts_data:assert("Regression Log", pass, Got1),
@@ -54,3 +55,26 @@ load_log_file(Pid) ->
                                                ?DONT_INCREMENT_PROMPT),
     lager:info("~n~n------------------------------------------------------", []),
     Pid ! Result.
+
+trace(Nodes) ->
+    TraceStrings = [
+                    "riak_kv_ts_svc:create_table -> return",
+                    % "riak_kv_ts_util:create_table -> return",
+                    % "riak_kv_wm_timeseries_query:create_table -> return",
+                    % "riak_kv_ts_svc:check_table_and_call -> return",
+                    % "riak_kv_ts_util:get_table_ddl -> return",
+                    "riak_ql_parser:make_insert -> return",
+                    "riak_core_bucket:get_bucket -> return",
+                    "riak_core_bucket_type:get -> return",
+                    "riak_core_metadata:get -> return",
+                    "riak_kv_ts_svc:create_table -> stack",
+                    % "riak_kv_ts_util:create_table -> stack",
+                    % "riak_kv_wm_timeseries_query:create_table -> stack",
+                    % "riak_kv_ts_svc:check_table_and_call -> stack",
+                    % "riak_kv_ts_util:get_table_ddl -> stack",
+                    "riak_ql_parser:make_insert -> stack",
+                    "riak_core_bucket:get_bucket -> stack",
+                    "riak_core_bucket_type:get -> stack",
+                    "riak_core_metadata:get -> stack"
+                   ],
+    rt_redbug:trace(Nodes, TraceStrings).
