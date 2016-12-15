@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -19,7 +19,11 @@
 %% -------------------------------------------------------------------
 -module(giddyup).
 
--export([get_suite/1, post_result/1, post_artifact/2]).
+-export([
+    get_suite/1,
+    post_result/1,
+    post_all_artifacts/4,
+    post_artifact/2]).
 -define(STREAM_CHUNK_SIZE, 8192).
 -include("rt.hrl").
 
@@ -90,6 +94,45 @@ post_result(TestResult) ->
         error ->
             error
     end.
+
+%% Store all generated logs in S3
+post_all_artifacts(TestResult, Base, Log, CoverageFile) ->
+
+    %% First initialize the tar file
+    {Tar, TarFile} = create_tar_file(),
+
+    %% Now push up the artifacts, starting with the test log
+    post_artifact_and_add_to_tar(Base, Tar, {"riak_test.log", Log}),
+
+    lists:foreach(fun({Name, Port}) ->
+                      Contents = make_req_body(Port),
+                      post_artifact_and_add_to_tar(Base, Tar, {Name, Contents})
+                  end, rt:get_node_logs()),
+    maybe_post_debug_logs(Base, Tar),
+    lists:foreach(fun(CoverFile) ->
+            Name = filename:basename(CoverFile) ++ ".gz",
+            Contents = zlib:gzip(element(2, file:read_file(CoverFile))),
+            post_artifact_and_add_to_tar(Base, Tar, {Name, Contents})
+        end, [CoverageFile || CoverageFile /= cover_disabled]),
+
+    ResultPlusGiddyUp = TestResult ++
+        [{giddyup_url, list_to_binary(Base)}],
+    [rt:post_result(ResultPlusGiddyUp, WebHook) ||
+        WebHook <- get_webhooks()],
+
+    %% Upload all the ct_logs as an HTML tar file
+    upload_ct_logs(Base),
+    add_ct_logs_to_tar(Tar),
+    erl_tar:close(Tar),
+
+    %% Finally upload the collection of artifacts as a tar file
+    {ok, Contents} = file:read_file(TarFile),
+    post_artifact(Base, {"artifacts.tar.gz", Contents}),
+    file:delete(TarFile).
+
+post_artifact_and_add_to_tar(Base, Tar, {Name, Contents}) ->
+    post_artifact(Base, {Name, Contents}),
+    ok = erl_tar:add(Tar, Contents, Name, []).
 
 post_artifact(TRURL, {FName, Body}) ->
     %% First compute the path of where to post the artifact
@@ -168,7 +211,7 @@ read_fully(File, Data0) ->
             Data0
     end.
 
-%% Guesses the MIME type of the file being uploaded.
+%% Guesses the content type of the file being uploaded.
 guess_ctype(FName) ->
     case string:tokens(filename:basename(FName), ".") of
         [_, "log"|_] -> "text/plain"; %% console.log, erlang.log.5, etc
@@ -180,4 +223,59 @@ guess_ctype(FName) ->
                 CTG -> CTG
             end;
         _ -> "binary/octet-stream"
+    end.
+
+%% Upload a tar file of just the common test logs to be a web site
+upload_ct_logs(Base) ->
+    TarFile = "/tmp/ct_logs" ++ integer_to_list(erlang:phash2(make_ref())),
+    ok = erl_tar:create(TarFile, ["ct_logs"], [write, compressed]),
+    {ok, Contents} = file:read_file(TarFile),
+    giddyup:post_artifact(Base, {"ct_logs.html.tar.gz", Contents}),
+    file:delete(TarFile).
+
+%% Create a tar file of all artifacts
+create_tar_file() ->
+    TarFile = "/tmp/all_artifacts" ++ integer_to_list(erlang:phash2(make_ref())),
+    {ok, Tar} = erl_tar:open(TarFile, [write, compressed]),
+    {Tar, TarFile}.
+
+%% Add everything in the ct_logs directory to the tar file
+%% This second pass is required due to limitations in reading and writing
+%% tar files in erl_tar.
+add_ct_logs_to_tar(Tar) ->
+    AddFileFun = fun(FileName, Acc) ->
+        {ok, Contents} = file:read_file(FileName),
+        ok = erl_tar:add(Tar, Contents, FileName, []),
+        Acc
+    end,
+    filelib:fold_files("ct_logs", ".*", true, AddFileFun, []).
+
+maybe_post_debug_logs(Base, Tar) ->
+    case rt_config:get(giddyup_post_debug_logs, true) of
+        true ->
+            NodeDebugLogs = rt:get_node_debug_logs(),
+            lists:foreach(fun({Name, Contents}) ->
+                giddyup:post_artifact(Base, {Name, Contents}),
+                erl_tar:add(Tar, Contents, Name, [])
+                end, NodeDebugLogs);
+        _ ->
+            false
+    end.
+
+get_webhooks() ->
+    Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
+        [],
+        rt_config:get(webhooks, [])),
+    lists:filter(fun(E) -> E =/= undefined end, Hooks).
+
+parse_webhook(Props) ->
+    Url = proplists:get_value(url, Props),
+    case is_list(Url) of
+        true ->
+            #rt_webhook{url= Url,
+                name=proplists:get_value(name, Props, "Webhook"),
+                headers=proplists:get_value(headers, Props, [])};
+        false ->
+            lager:error("Invalid configuration for webhook : ~p", Props),
+            undefined
     end.
