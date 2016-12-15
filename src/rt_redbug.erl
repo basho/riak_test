@@ -36,11 +36,11 @@ new() ->
     rt_trace_tab = ets:new(rt_trace_tab, [named_table]).
 
 set_tracing_applied(TracingApplied) when is_boolean(TracingApplied) ->
-	lager:info("Setting apply tracing to ~p", [TracingApplied]),
+    lager:info("Setting apply tracing to ~p", [TracingApplied]),
     ets:insert(rt_trace_tab, {apply_traces,TracingApplied}).
 
 is_tracing_applied() ->
-	(catch ets:lookup_element(rt_trace_tab, apply_traces, 2)) == true.
+    (catch ets:lookup_element(rt_trace_tab, apply_traces, 2)) == true.
 
 %% Apply traces to one or more nodes using redbug tracing and syntax.
 %%
@@ -63,48 +63,48 @@ is_tracing_applied() ->
 %% the test cluster. This is important if there are multiple tests in the same
 %% suite, but not if the cluster is torn down at the end of the suite.
 trace(Nodes, TraceStrings) ->
-	trace(Nodes, TraceStrings, []).
+    trace(Nodes, TraceStrings, []).
 
 trace(Nodes, TraceStrings, Options1) when (is_atom(Nodes) orelse is_list(Nodes)) ->
-	case is_tracing_applied() of
-		true ->
-			Options2 = apply_options_to_defaults(Options1),
-			[apply_trace(N, TraceStrings, Options2) || N <- ensure_list(Nodes)],
-			ok;
-		false ->
-			ok
-	end.
+    case is_tracing_applied() of
+        true ->
+            Options2 = apply_options_to_defaults(Options1),
+            [apply_trace(N, TraceStrings, Options2) || N <- ensure_list(Nodes)],
+            ok;
+        false ->
+            ok
+    end.
 
 %%
 apply_trace(Node, TraceString, Options) ->
-	rpc:call(Node, redbug, start, [TraceString, Options]).
+    rpc:call(Node, redbug, start, [TraceString, Options]).
 
 %%
 apply_options_to_defaults(Options) ->
-	lists:foldl(
-		fun({K,_} = E,Acc) ->
-			lists:keystore(K, 1, Acc, E)
-		end, default_trace_options(), Options).
+    lists:foldl(
+        fun({K,_} = E,Acc) ->
+            lists:keystore(K, 1, Acc, E)
+        end, default_trace_options(), Options).
 
 %%
 default_trace_options() ->
-	[
-	 %% default ct timeout of 30 minutes
-	 %% http://erlang.org/doc/apps/common_test/write_test_chapter.html#id77922
-	 {time,(30*60*1000)}
-	].
+    [
+     %% default ct timeout of 30 minutes
+     %% http://erlang.org/doc/apps/common_test/write_test_chapter.html#id77922
+     {time,(30*60*1000)}
+    ].
 
 %% Stop redbug tracing on a node or list of nodes
 stop(Nodes) ->
-	case is_tracing_applied() of
-		true ->
-			[rpc:call(N, redbug, stop, []) || N <- ensure_list(Nodes)],
-			ok;
-		false ->
-			ok
-	end.
+    case is_tracing_applied() of
+        true ->
+            [rpc:call(N, redbug, stop, []) || N <- ensure_list(Nodes)],
+            ok;
+        false ->
+            ok
+    end.
 
 %% Doesn't work on lists of strings!
 ensure_list(V) ->
-	lists:flatten([V]).
+    lists:flatten([V]).
 
