@@ -26,21 +26,22 @@
 -module(rt_redbug).
 
 -export([is_tracing_applied/0]).
--export([new/0]).
 -export([set_tracing_applied/1]).
 -export([stop/1]).
 -export([trace/2, trace/3]).
 
-%% Create a new ets to store globally whether we're tracing or not.
-new() -> 
-    ok.
-
 set_tracing_applied(TracingApplied) when is_boolean(TracingApplied) ->
-    lager:info("Setting apply tracing to ~p", [TracingApplied]),
-    rt_config:set(apply_traces, TracingApplied).
+    %% If this flag is set on the command line, but not in the config file
+    %% then switch it on.
+    Enabled = case rt_config:get(apply_traces, undefined) of
+        undefined -> TracingApplied;
+        ConfigValue -> ConfigValue
+    end,
+    lager:info("Setting apply tracing to ~p", [Enabled]),
+    rt_config:set(apply_traces, Enabled).
 
 is_tracing_applied() ->
-    rt_config:get(apply_traces).
+    rt_config:get(apply_traces, false).
 
 %% Apply traces to one or more nodes using redbug tracing and syntax.
 %%
