@@ -44,7 +44,8 @@ cli_options() ->
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
  {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
- {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
+ {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"},
+ {apply_traces,undefined, "trace",    undefined,  "Apply traces to the target node, defined in the SUITEs"}
 ].
 
 print_help() ->
@@ -210,6 +211,11 @@ parse_command_line_tests(ParsedArgs) ->
                    [] -> [undefined];
                    UpgradeList -> UpgradeList
                end,
+    %% this is a little ugly, the process that creates the ets table to store
+    %% the tracing state cannot shutdown or the table will be gc'ed, so create
+    %% a dummy proc that doens't die
+    rt_redbug:new(),
+    rt_redbug:set_tracing_applied(proplists:is_defined(apply_traces, ParsedArgs)),
     %% Parse Command Line Tests
     {CodePaths, SpecificTests} =
         lists:foldl(fun extract_test_names/2,
