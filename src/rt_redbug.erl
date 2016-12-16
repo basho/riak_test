@@ -91,7 +91,12 @@ default_trace_options() ->
     [
      %% default ct timeout of 30 minutes
      %% http://erlang.org/doc/apps/common_test/write_test_chapter.html#id77922
-     {time,(30*60*1000)}
+     {time,(30*60*1000)},
+     %% raise the threshold for the number of traces that can be received by
+     %% redbug before tracing is suspended
+     {msgs, 1000},
+     %% print milliseconds
+     {print_msec, true}
     ].
 
 %% Stop redbug tracing on a node or list of nodes
