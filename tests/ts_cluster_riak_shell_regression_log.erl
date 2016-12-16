@@ -26,7 +26,25 @@
 -export([confirm/0]).
 
 -define(DONT_INCREMENT_PROMPT, false).
--define(LOG_FILE, "priv/riak_shell/riak_shell_regression1.log").
+%% HACK: split the regression log file in two to deal w/ activation slowness,
+%% so a failed race on build boxes. The following considerations were made:
+%% 1. Splitting the log can/should be done to make the log less monolithic.
+%%    This will happen, but is not what the splitting is doing here. The
+%%    splitting here is to put CREATE TABLE commands in one log and use of
+%%    the created tables in another log to allow sufficient time for the
+%%    tables to be activated.
+%% 2. Adding a sleep (HACK) or wait_until (preferred)  command in riak_shell
+%%    can/should be done, but not on the eve of a release. This is the
+%%    prefered option since it allows for regression to impose a maximum
+%%    allowable time for table activation.
+%% 3. The fixed time to wait for table activation w/i CREATE TABLE can/should
+%%    be changed to allow for a longer wait.
+%% 4. When a table is created but activation has not completed, the response
+%%    can/should be different. But, even w/ this, riak_shell doesn't have
+%%    sufficient programming capability to perform a wait. Failing the test
+%%    if activation didn't complete is not helpful.
+-define(LOG_FILE_CREATE, "priv/riak_shell/riak_shell_regression1.log").
+-define(LOG_FILE_USE,    "priv/riak_shell/riak_shell_regression2.log").
 
 %% we cant run the test in this process as it receives various messages
 %% and the running test interprets then as being messages to the shell
@@ -48,7 +66,9 @@ load_log_file(Pid) ->
     lager:info("~n~nLoad the log -------------------------", []),
     Cmds = [
             {{match, "No Regression Errors."},
-              ts_data:flat_format("regression_log \"~s\";", [?LOG_FILE])}
+              ts_data:flat_format("regression_log \"~s\";", [?LOG_FILE_CREATE])},
+            {{match, "No Regression Errors."},
+              ts_data:flat_format("regression_log \"~s\";", [?LOG_FILE_USE])}
            ],
     Result = riak_shell_test_util:run_commands(Cmds, State,
                                                ?DONT_INCREMENT_PROMPT),
