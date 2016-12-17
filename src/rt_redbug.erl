@@ -31,13 +31,17 @@
 -export([trace/2, trace/3]).
 
 set_tracing_applied(TracingApplied) when is_boolean(TracingApplied) ->
-    %% If this flag is set on the command line, but not in the config file
-    %% then switch it on.
-    Enabled = case rt_config:get(apply_traces, undefined) of
-        undefined -> TracingApplied;
-        ConfigValue -> ConfigValue
+    %% Enable redbug tracing if enabled via command-line or config file
+    Enabled = case TracingApplied of
+        true -> TracingApplied;
+        _ -> rt_config:get(apply_traces, false)
     end,
-    lager:info("Setting apply tracing to ~p", [Enabled]),
+    case Enabled of
+        true ->
+            lager:warning("Will enable any redbug traces contained in the test");
+        _ ->
+            lager:warning("Will not enable any redbug traces contained in the test")
+    end,
     rt_config:set(apply_traces, Enabled).
 
 is_tracing_applied() ->
