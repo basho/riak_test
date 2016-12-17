@@ -26,16 +26,27 @@
 
 confirm() ->
     %% Set the maximum wait between CREATE TABLE and subsequent query in milliseconds.
-    MaxWait = 5000,
-    NodeCount = 8,
-    [_Node,ClientNode|_NodesT] = _Cluster = ts_setup:start_cluster(NodeCount),
+    MaxWait = 1000,
+    NodeCount = 3,
+    [_Node,ClientNode|_NodesT] = Cluster = ts_setup:start_cluster(NodeCount),
     PBPid = rt:pbc(ClientNode),
+
+    slow_ddl_compilation(Cluster),
+
+    create_and_query(PBPid, 0),
     Waits = [ case Div of
                   0 -> MaxWait;
                   _ -> MaxWait div Div
               end || Div <- [0, 20, 10, 5, 2, 1] ],
     [ create_and_query(PBPid, Wait) || Wait <- Waits ],
     pass.
+
+slow_ddl_compilation(INodes) ->
+    %% NOTE: even w/ slow ddl compilation, the test passes on dev hardware
+    [ rt_intercept:add(
+        Node, {riak_kv_ts_newtype, [{{new_type, 1}, really_delayed_new_type}]}) ||
+      Node <- INodes ],
+    [rt_intercept:wait_until_loaded(Node) || Node <- INodes].
 
 create_and_query(PBPid, PostCreateWait) ->
     EmptyRes = {ok, {[], []}},
