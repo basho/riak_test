@@ -28,10 +28,7 @@ confirm() ->
     %% Set the maximum wait between CREATE TABLE and subsequent query in milliseconds.
     MaxWait = 1000,
     NodeCount = 8,
-    %% massive attack perturbed the race condition consistently, not ideal, but
-    %% once identified, this test should be changed to a feature test by reducing
-    %% to a single run.
-    Runs = 100,
+    Runs = 30,
     [_Node,ClientNode|_NodesT] = Cluster = ts_setup:start_cluster(NodeCount),
     PBPid = rt:pbc(ClientNode),
     slow_ddl_compilation(Cluster),
@@ -45,7 +42,7 @@ run(_PBPid, _Cluster, _MaxWait, _Run=0, _Runs) ->
 run(PBPid, Cluster, MaxWait, Run, Runs) ->
     lager:info("Run ~p/~p", [Run, Runs]),
     Waits = [ case Div of
-                  0 -> MaxWait;
+                  0 -> 0;
                   _ -> MaxWait div Div
               end || Div <- [0, 20, 10, 5, 2, 1] ],
     [ create_and_query(PBPid, Wait) || Wait <- Waits ],
