@@ -211,10 +211,6 @@ parse_command_line_tests(ParsedArgs) ->
                    [] -> [undefined];
                    UpgradeList -> UpgradeList
                end,
-    %% this is a little ugly, the process that creates the ets table to store
-    %% the tracing state cannot shutdown or the table will be gc'ed, so create
-    %% a dummy proc that doens't die
-    rt_redbug:new(),
     rt_redbug:set_tracing_applied(proplists:is_defined(apply_traces, ParsedArgs)),
     %% Parse Command Line Tests
     {CodePaths, SpecificTests} =
