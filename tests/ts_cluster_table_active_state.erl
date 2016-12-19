@@ -27,19 +27,29 @@
 confirm() ->
     %% Set the maximum wait between CREATE TABLE and subsequent query in milliseconds.
     MaxWait = 1000,
-    NodeCount = 3,
+    NodeCount = 8,
+    %% massive attack perturbed the race condition consistently, not ideal, but
+    %% once identified, this test should be changed to a feature test by reducing
+    %% to a single run.
+    Runs = 100,
     [_Node,ClientNode|_NodesT] = Cluster = ts_setup:start_cluster(NodeCount),
     PBPid = rt:pbc(ClientNode),
-
     slow_ddl_compilation(Cluster),
-
+    enable_trace(Cluster),
     create_and_query(PBPid, 0),
+    run(PBPid, Cluster, MaxWait, Runs, Runs),
+    pass.
+
+run(_PBPid, _Cluster, _MaxWait, _Run=0, _Runs) ->
+    pass;
+run(PBPid, Cluster, MaxWait, Run, Runs) ->
+    lager:info("Run ~p/~p", [Run, Runs]),
     Waits = [ case Div of
                   0 -> MaxWait;
                   _ -> MaxWait div Div
               end || Div <- [0, 20, 10, 5, 2, 1] ],
     [ create_and_query(PBPid, Wait) || Wait <- Waits ],
-    pass.
+    run(PBPid, Cluster, MaxWait, Run-1, Runs).
 
 slow_ddl_compilation(INodes) ->
     %% NOTE: even w/ slow ddl compilation, the test passes on dev hardware
@@ -47,6 +57,11 @@ slow_ddl_compilation(INodes) ->
         Node, {riak_kv_ts_newtype, [{{new_type, 1}, really_delayed_new_type}]}) ||
       Node <- INodes ],
     [rt_intercept:wait_until_loaded(Node) || Node <- INodes].
+
+enable_trace(Nodes) ->
+    rt_redbug:trace(Nodes,
+                    ["riak_core_bucket_type -> return",
+                     "riak_kv_ts_newtype:new_type -> return"]).
 
 create_and_query(PBPid, PostCreateWait) ->
     EmptyRes = {ok, {[], []}},
@@ -56,10 +71,10 @@ create_and_query(PBPid, PostCreateWait) ->
     CreateRes = riakc_ts:query(PBPid, CreateSql),
     timer:sleep(PostCreateWait),
     InsertRes = riakc_ts:query(PBPid, InsertSql),
-    ?assertMatch(EmptyRes,
-                 CreateRes),
-    ?assertMatch(EmptyRes,
-                 InsertRes).
+    ?assertMatch({PostCreateWait, EmptyRes},
+                 {PostCreateWait, CreateRes}),
+    ?assertMatch({PostCreateWait, EmptyRes},
+                 {PostCreateWait, InsertRes}).
 
 create_sql(Table) ->
     "CREATE TABLE " ++ Table ++
