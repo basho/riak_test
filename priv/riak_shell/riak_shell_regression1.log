@@ -193,7 +193,7 @@ DESCRIBE - examining table structures
 EXPLAIN  - understanding SELECT query execution paths
 INSERT   - inserting data with INSERT INTO statements
 SELECT   - querying data
-SHOW     - listing tables
+SHOW     - listing tables or showing table creation SQL
 
 SELECT can be used with ORDER BY, GROUP BY and LIMIT clauses. It supports arithmetic on column values and has a variety of aggregation functions: COUNT, SUM, MEAN, AVG, MAX, MIN, STDDEV, STDDEV_SAMP and STDDEV_POP
 
@@ -222,7 +222,7 @@ The functions supported are:
 * STDEV and STDDEV_SAMP
 * STDDEVPOP
 
-You can also decorate SELECT statements with ORDER BY, GROUP BY and LIMIT
+You can also decorate SELECT statements with ORDER BY, GROUP BY, LIMIT and OFFSET
 
 For more details please go to http://docs.basho.com/riak/ts
 "}}.
