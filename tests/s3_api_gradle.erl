@@ -11,9 +11,12 @@
 -define(NODE_COUNT, 3).
 -define(TEST_USER, ["test", "test@example.com"]).
 -define(METADATA_KEY, [{<<"security">>, <<"users">>}, <<"test">>]).
+-define(S3_ACCESS_KEY, "s3.access_key_id").
+-define(S3_SECRET_KEY, "s3.secret_access_key").
 
 confirm() ->
     %% Build a simple cluster
+    rt:set_backend(eleveldb),
     Nodes = rt:build_cluster(?NODE_COUNT),
 
     %% Choose random node to interact with
@@ -23,16 +26,11 @@ confirm() ->
     _ = rpc:call(Node, riak_s3_user, create, ?TEST_USER),
     rt:wait_until(fun() ->
                         {Results, []} = rpc:multicall(Nodes, riak_core_metadata, get, ?METADATA_KEY),
-                        case lists:filter(fun(R) -> R == undefined end, Results) of
-                            [] -> false;
-                            _ -> true
-                        end
+                        lists:all(fun(R) -> R =/= undefined end, Results)
                   end),
-    [
-        {"s3.access_key_id", S3AccessKey},
-        {"s3.display_name", _},
-        {"s3.secret_access_key", S3SecretKey}
-    ] = rpc:call(Node, riak_core_metadata, get, ?METADATA_KEY),
+    S3User = rpc:call(Node, riak_core_metadata, get, ?METADATA_KEY),
+    {?S3_ACCESS_KEY, S3AccessKey} = lists:keyfind(?S3_ACCESS_KEY, 1, S3User),
+    {?S3_SECRET_KEY, S3SecretKey} = lists:keyfind(?S3_SECRET_KEY, 1, S3User),
 
     %% Get S3 URLs
     URLs = rt:s3_url(Nodes),
@@ -47,7 +45,7 @@ confirm() ->
     Cmd = lists:flatten(io_lib:format(
         "cd ../s3-api-tests"
         " && "
-        "./gradlew -Daws.accessKeyId=~s -Daws.secretKey=~s -Ds3.api.baseUrl=~s test --info",
+        "./gradlew -Daws.accessKeyId=~s -Daws.secretKey=~s -Ds3.api.baseUrl=~s test --stacktrace --info",
         Args)),
     lager:info(Cmd),
     Output = os:cmd(Cmd),
