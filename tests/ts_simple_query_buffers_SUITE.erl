@@ -49,7 +49,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("ts_qbuf_util.hrl").
 
--define(TABLE2, "t2").  %% used to check for expiry; not to interfere with t1
 -define(RIDICULOUSLY_SMALL_MAX_QUERY_DATA_SIZE, 100).
 -define(RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA, 3).
 
@@ -63,9 +62,7 @@ init_per_suite(Cfg) ->
     Data = ts_qbuf_util:make_data(),
     ExtraData = ts_qbuf_util:make_extra_data(),
     ok = ts_qbuf_util:create_table(C, ?TABLE),
-    ok = ts_qbuf_util:create_table(C, ?TABLE2),
     ok = ts_qbuf_util:insert_data(C, ?TABLE,  Data),
-    ok = ts_qbuf_util:insert_data(C, ?TABLE2, Data),
     [{cluster, Cluster},
      {data, Data},
      {extra_data, ExtraData}
