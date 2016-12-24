@@ -165,7 +165,7 @@ init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 
 init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
+    QBufDir = get_qbuf_dir(Node),
     modify_dir_access(take_away, QBufDir),
     Cfg;
 
@@ -184,7 +184,7 @@ end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 
 end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
+    QBufDir = get_qbuf_dir(Node),
     modify_dir_access(give_back, QBufDir),
     ok;
 end_per_testcase(_, Cfg) ->
@@ -336,6 +336,15 @@ col_no({[A|_], _}) ->
 col_no({[A|_], _, _}) ->
     A - $a + 1.
 
+
+get_qbuf_dir(Node) ->
+    {ok, QBufDir} = rpc:call(Node, application, get_env, [riak_kv, timeseries_query_buffers_root_path]),
+    case hd(QBufDir) of
+        $/ ->
+            QBufDir;
+        _ ->
+            filename:join([rtdev:node_path(Node), QBufDir])
+    end.
 
 modify_dir_access(take_away, QBufDir) ->
     ct:pal("take away access to ~s\n", [QBufDir]),
