@@ -61,10 +61,9 @@ confirm() ->
                       _ -> true
                   end,
 
-    lager:info("Checking non-SSL results in error"),
-    %% connections over regular HTTP get told to go elsewhere
+    lager:info("Checking non-SSL demands authentication"),
     C0 = rhc:create(IP0, Port0, "riak", []),
-    ?assertMatch({error, {ok, "426", _, _}}, rhc:ping(C0)),
+    ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C0)),
 
     lager:info("Checking SSL demands authentication"),
     C1 = rhc:create(IP, Port, "riak", [{is_ssl, true}]),
