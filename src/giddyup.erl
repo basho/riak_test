@@ -97,42 +97,35 @@ post_result(TestResult) ->
 
 %% Store all generated logs in S3
 post_all_artifacts(TestResult, Base, Log, CoverageFile) ->
+    %% Start with the test log
+    ZipList0 = post_artifact_and_add_to_zip(Base, [], {"riak_test.log", Log}),
 
-    %% First initialize the tar file
-    {Tar, TarFile} = create_tar_file(),
-
-    %% Now push up the artifacts, starting with the test log
-    post_artifact_and_add_to_tar(Base, Tar, {"riak_test.log", Log}),
-
-    lists:foreach(fun({Name, Port}) ->
+    ZipList1 = lists:foldl(fun({Name, Port}, Acc) ->
                       Contents = make_req_body(Port),
-                      post_artifact_and_add_to_tar(Base, Tar, {Name, Contents})
-                  end, rt:get_node_logs()),
-    maybe_post_debug_logs(Base, Tar),
-    lists:foreach(fun(CoverFile) ->
+                      post_artifact_and_add_to_zip(Base, Acc, {Name, Contents})
+                  end, ZipList0, rt:get_node_logs()),
+    ZipList2 = maybe_post_debug_logs(Base, ZipList1),
+    ZipList3 = lists:foldl(fun(CoverFile, Acc) ->
             Name = filename:basename(CoverFile) ++ ".gz",
             Contents = zlib:gzip(element(2, file:read_file(CoverFile))),
-            post_artifact_and_add_to_tar(Base, Tar, {Name, Contents})
-        end, [CoverageFile || CoverageFile /= cover_disabled]),
+            post_artifact_and_add_to_zip(Base, Acc, {Name, Contents})
+        end, ZipList2, [CoverageFile || CoverageFile /= cover_disabled]),
 
     ResultPlusGiddyUp = TestResult ++
         [{giddyup_url, list_to_binary(Base)}],
     [rt:post_result(ResultPlusGiddyUp, WebHook) ||
         WebHook <- get_webhooks()],
 
-    %% Upload all the ct_logs as an HTML tar file
-    upload_ct_logs(Base, filelib:is_dir("ct_logs")),
-    add_ct_logs_to_tar(Tar),
-    erl_tar:close(Tar),
+    %% Upload all the ct_logs as an HTML zip website
+    upload_zipfile(Base, ["ct_logs"], "ct_logs.html.zip"),
+    ZipList4 = add_ct_logs_to_zip(ZipList3),
 
-    %% Finally upload the collection of artifacts as a tar file
-    {ok, Contents} = file:read_file(TarFile),
-    post_artifact(Base, {"artifacts.tar.gz", Contents}),
-    file:delete(TarFile).
+    %% Finally upload the collection of artifacts as a zip file
+    upload_zipfile(Base, ZipList4, "artifacts.zip").
 
-post_artifact_and_add_to_tar(Base, Tar, {Name, Contents}) ->
+post_artifact_and_add_to_zip(Base, ZipList, {Name, Contents}) ->
     post_artifact(Base, {Name, Contents}),
-    ok = erl_tar:add(Tar, Contents, Name, []).
+    lists:append(ZipList, [{Name, Contents}]).
 
 post_artifact(TRURL, {FName, Body}) ->
     %% First compute the path of where to post the artifact
@@ -216,7 +209,7 @@ guess_ctype(FName) ->
     case string:tokens(filename:basename(FName), ".") of
         [_, "log"|_] -> "text/plain"; %% console.log, erlang.log.5, etc
         ["erl_crash", "dump"] -> "text/plain"; %% An erl_crash.dump file
-        [_, "html", "tar", "gz"] -> "binary/tgz-website"; %% Entire static website
+        [_, "html", "zip"] -> "binary/zip-website"; %% Entire static website
         [_, Else] ->
             case mochiweb_mime:from_extension(Else) of
                 undefined -> "binary/octet-stream";
@@ -225,43 +218,30 @@ guess_ctype(FName) ->
         _ -> "binary/octet-stream"
     end.
 
-%% Upload a tar file of just the common test logs to be a web site
-upload_ct_logs(_Base, false) ->
-    ok;
-upload_ct_logs(Base, true) ->
-    TarFile = "/tmp/ct_logs" ++ integer_to_list(erlang:phash2(make_ref())),
-    ok = erl_tar:create(TarFile, ["ct_logs"], [write, compressed]),
-    {ok, Contents} = file:read_file(TarFile),
-    giddyup:post_artifact(Base, {"ct_logs.html.tar.gz", Contents}),
-    file:delete(TarFile).
+upload_zipfile(Base, FileList, ZipName) ->
+    ZipFile = "/tmp/zip_file" ++ integer_to_list(erlang:phash2(make_ref())),
+    {ok, _} = zip:create(ZipFile, FileList, [{compress, all}]),
+    {ok, Contents} = file:read_file(ZipFile),
+    giddyup:post_artifact(Base, {ZipName, Contents}),
+    file:delete(ZipFile).
 
-%% Create a tar file of all artifacts
-create_tar_file() ->
-    TarFile = "/tmp/all_artifacts" ++ integer_to_list(erlang:phash2(make_ref())),
-    {ok, Tar} = erl_tar:open(TarFile, [write, compressed]),
-    {Tar, TarFile}.
-
-%% Add everything in the ct_logs directory to the tar file
-%% This second pass is required due to limitations in reading and writing
-%% tar files in erl_tar.
-add_ct_logs_to_tar(Tar) ->
+%% Add everything in the ct_logs directory to the zip file
+add_ct_logs_to_zip(ZipList) ->
     AddFileFun = fun(FileName, Acc) ->
         {ok, Contents} = file:read_file(FileName),
-        ok = erl_tar:add(Tar, Contents, FileName, []),
-        Acc
+        lists:append(Acc, [{FileName, Contents}])
     end,
-    filelib:fold_files("ct_logs", ".*", true, AddFileFun, []).
+    filelib:fold_files("ct_logs", ".*", true, AddFileFun, ZipList).
 
-maybe_post_debug_logs(Base, Tar) ->
+maybe_post_debug_logs(Base, ZipList) ->
     case rt_config:get(giddyup_post_debug_logs, true) of
         true ->
             NodeDebugLogs = rt:get_node_debug_logs(),
-            lists:foreach(fun({Name, Contents}) ->
-                giddyup:post_artifact(Base, {Name, Contents}),
-                erl_tar:add(Tar, Contents, Name, [])
-                end, NodeDebugLogs);
+            lists:foldl(fun({Name, Contents}, Acc) ->
+                post_artifact_and_add_to_zip(Base, Acc, {Name, Contents})
+                end, ZipList, NodeDebugLogs);
         _ ->
-            false
+            ZipList
     end.
 
 get_webhooks() ->
