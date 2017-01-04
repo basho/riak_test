@@ -121,7 +121,7 @@ post_all_artifacts(TestResult, Base, Log, CoverageFile) ->
         WebHook <- get_webhooks()],
 
     %% Upload all the ct_logs as an HTML tar file
-    upload_ct_logs(Base),
+    upload_ct_logs(Base, filelib:is_dir("ct_logs")),
     add_ct_logs_to_tar(Tar),
     erl_tar:close(Tar),
 
@@ -226,7 +226,9 @@ guess_ctype(FName) ->
     end.
 
 %% Upload a tar file of just the common test logs to be a web site
-upload_ct_logs(Base) ->
+upload_ct_logs(_Base, false) ->
+    ok;
+upload_ct_logs(Base, true) ->
     TarFile = "/tmp/ct_logs" ++ integer_to_list(erlang:phash2(make_ref())),
     ok = erl_tar:create(TarFile, ["ct_logs"], [write, compressed]),
     {ok, Contents} = file:read_file(TarFile),
