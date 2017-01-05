@@ -43,9 +43,9 @@ confirm() ->
         S3_URL
     ],
     Cmd = lists:flatten(io_lib:format(
-        "cd ../s3-api-tests"
+        "cd deps/s3_api_tests"
         " && "
-        "./gradlew -Daws.accessKeyId=~s -Daws.secretKey=~s -Ds3.api.baseUrl=~s test --stacktrace --info",
+        "./gradlew -Daws.accessKeyId=~s -Daws.secretKey=~s -Ds3.api.baseUrl=~s s3MinimalAPITests --stacktrace --info",
         Args)),
     lager:info(Cmd),
     Output = os:cmd(Cmd),
