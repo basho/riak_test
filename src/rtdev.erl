@@ -92,6 +92,9 @@ run_riak(N, Path, Cmd) ->
             R
     end.
 
+riak_data(N) when is_integer(N) ->
+    lists:flatten(io_lib:format("~s/dev/dev~b/data", [relpath(current), N])).
+
 run_riak_repl(N, Path, Cmd) ->
     lager:info("Running: ~s", [riakcmd(Path, N, Cmd)]),
     os:cmd(riakreplcmd(Path, N, Cmd)).
@@ -165,6 +168,10 @@ upgrade(Node, NewVersion, Config, UpgradeCallback) ->
     rt_config:set(rt_versions, VersionMap),
     case Config of
         same -> ok;
+        _ when is_function(Config) ->
+            RiakConfPath =
+                io_lib:format("~s/dev/dev~b/etc/riak.conf", [NewPath, N]),
+            Config(RiakConfPath);
         _ -> update_app_config(Node, Config)
     end,
     Params = [
@@ -671,9 +678,9 @@ admin(Node, Args, Options) ->
     N = node_id(Node),
     Path = relpath(node_version(N)),
     Cmd = riak_admin_cmd(Path, N, Args),
-    lager:info("Running: ~s", [Cmd]),
+    lager:info("Running: ~ts", [Cmd]),
     Result = execute_admin_cmd(Cmd, Options),
-    lager:info("~p", [Result]),
+    lager:info("~ts", [Result]),
     {ok, Result}.
 
 execute_admin_cmd(Cmd, Options) ->
@@ -774,6 +781,32 @@ get_version(Vsn) ->
 %% @doc Read the VERSION file for the `current` version
 get_version() ->
     get_version(current).
+
+%% Check all of the versions and find the devrel matching
+%% Any of the binary version names, e.g., <<"riak_ts-1.3.1">>
+find_version_by_name(Names) when is_list(Names) ->
+    Versions = rt:versions(),
+    Matches = lists:foldl(
+        fun(Name, Acc) ->
+            find_version_by_name(Versions, Name) ++ Acc
+        end, [], Names),
+    Matches.
+
+find_version_by_name(Versions, Name) ->
+    Match = lists:filter(
+        fun(Vsn) ->
+            NodeName = node_name_as_string(rt:get_version(Vsn)),
+            case string:str(NodeName, Name) of
+                0 -> false;
+                _ -> true
+            end
+        end, Versions),
+    Match.
+
+node_name_as_string(unknown) ->
+    "";
+node_name_as_string(BinName) when is_binary(BinName) ->
+    binary_to_list(BinName).
 
 teardown() ->
     rt_cover:maybe_stop_on_nodes(),
