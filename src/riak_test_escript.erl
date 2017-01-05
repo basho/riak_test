@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -347,70 +347,16 @@ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
     case Report of
         undefined -> ok;
         _ ->
-            {value, {log, L}, TestResult} =
+            {value, {log, Log}, TestResult} =
                 lists:keytake(log, 1, SingleTestResult),
             case giddyup:post_result(TestResult) of
                 error -> woops;
                 {ok, Base} ->
-                    %% Now push up the artifacts, starting with the test log
-                    giddyup:post_artifact(Base, {"riak_test.log", L}),
-                    [giddyup:post_artifact(Base, File)
-                     || File <- rt:get_node_logs()],
-                    maybe_post_debug_logs(Base),
-                    [giddyup:post_artifact(
-                       Base,
-                       {filename:basename(CoverageFile) ++ ".gz",
-                        zlib:gzip(element(2,file:read_file(CoverageFile)))})
-                     || CoverageFile /= cover_disabled],
-                    ResultPlusGiddyUp = TestResult ++
-                                        [{giddyup_url, list_to_binary(Base)}],
-                    [rt:post_result(ResultPlusGiddyUp, WebHook) ||
-                     WebHook <- get_webhooks()],
-                    archive_ct_logs_to_giddyup(Base)
+                    giddyup:post_all_artifacts(TestResult, Base, Log, CoverageFile)
             end
     end,
     rt_cover:stop(),
     [{coverdata, CoverageFile} | SingleTestResult].
-
-archive_ct_logs_to_giddyup(Base) ->
-    CTLogTarFile = "/tmp/ctlogs_" ++ integer_to_list(erlang:phash2(make_ref())),
-    Result = erl_tar:create(CTLogTarFile, ["ct_logs"], [compressed]),
-    maybe_post_ct_to_giddyup(Result, Base, CTLogTarFile).
-
-maybe_post_ct_to_giddyup(ok, Base, CTLogTarFile) ->
-    {ok, Contents} = file:read_file(CTLogTarFile),
-    giddyup:post_artifact(Base, {"ct_logs.html.tar.gz", Contents}),
-    file:delete(CTLogTarFile);
-%% If we fail to create the tar file for any reason, skip the upload
-maybe_post_ct_to_giddyup(_Error, _Base, _CTLogTarFile) ->
-    ok.
-maybe_post_debug_logs(Base) ->
-    case rt_config:get(giddyup_post_debug_logs, true) of
-        true ->
-            NodeDebugLogs = rt:get_node_debug_logs(),
-            [giddyup:post_artifact(Base, File)
-             || File <- NodeDebugLogs];
-        _ ->
-            false
-    end.
-
-get_webhooks() ->
-    Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
-                        [],
-                        rt_config:get(webhooks, [])),
-    lists:filter(fun(E) -> E =/= undefined end, Hooks).
-
-parse_webhook(Props) ->
-    Url = proplists:get_value(url, Props),
-    case is_list(Url) of
-        true ->
-            #rt_webhook{url= Url,
-                        name=proplists:get_value(name, Props, "Webhook"),
-                        headers=proplists:get_value(headers, Props, [])};
-        false ->
-            lager:error("Invalid configuration for webhook : ~p", Props),
-            undefined
-    end.
 
 print_summary(TestResults, CoverResult, Verbose) ->
     io:format("~nTest Results:~n"),
