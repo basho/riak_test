@@ -84,7 +84,7 @@ confirm() ->
     %% can connect without credentials, but not do anything
     {ok, PB0} =  riakc_pb_socket:start("127.0.0.1", Port,
                                        []),
-    ?assertEqual({error, <<"Security is enabled, please STARTTLS first">>},
+    ?assertEqual({error, <<"Security is enabled, please start TLS (optional) and/or authenticate first.">>},
                  riakc_pb_socket:ping(PB0)),
 
     riakc_pb_socket:stop(PB0),
