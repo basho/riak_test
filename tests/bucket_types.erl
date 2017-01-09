@@ -8,6 +8,7 @@
 confirm() ->
     application:start(inets),
     lager:info("Deploy some nodes"),
+    rt:set_backend(eleveldb),
     Nodes = rt:build_cluster(4, [], [
                                      {riak_core, [{default_bucket_props,
                                                    [
@@ -16,10 +17,7 @@ confirm() ->
                                                        {dvv_enabled, true}
                                                    ]}]}]),
     Node = hd(Nodes),
-
-    RMD = riak_test_runner:metadata(),
-    HaveIndexes = case proplists:get_value(backend, RMD) of
-                      undefined -> false; %% default is da 'cask
+    HaveIndexes = case rt:get_backend() of
                       bitcask -> false;
                       _ -> true
                   end,

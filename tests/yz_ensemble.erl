@@ -18,7 +18,7 @@ confirm() ->
     NumNodes = 3,
     NVal = 3,
     ConfigB = ensemble_util:fast_config(NVal),
-    Config = ConfigB ++ [{yokozuna, [{enabled, true}]}],
+    Config = ConfigB ++ [{yokozuna, [{enabled, false}]}],
     lager:info("Building cluster and waiting for ensemble to stablize"),
     Nodes = build_cluster_with_yz_support(NumNodes, Config, NVal),
     rt:wait_for_cluster_service(Nodes, yokozuna),

@@ -37,13 +37,14 @@ confirm() ->
     %% Build Cluster
     TestMetaData = riak_test_runner:metadata(),
     %% Only run 2i for level
-    Backend = proplists:get_value(backend, TestMetaData),
+    rt:set_backend(eleveldb),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
-    Config = [{riak_search, [{enabled, true}]}, {riak_pipe, [{worker_limit, 200}]}],
+    Config = [{riak_search, [{enabled, false}]}, {riak_pipe, [{worker_limit, 200}]}],
     NumNodes = 4,
     Vsns = [{OldVsn, Config} || _ <- lists:seq(1,NumNodes)],
     Nodes = rt:build_cluster(Vsns),
+    Backend = rt:get_backend(),
 
     seed_cluster(Nodes),
 

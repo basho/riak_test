@@ -62,18 +62,20 @@ confirm() ->
                 {job_accept_class, undefined}
                 ]},
             {riak_search, [
-                           {enabled, true}
+                           {enabled, false}
                           ]}
            ],
 
     MD = riak_test_runner:metadata(),
-    HaveIndexes = case proplists:get_value(backend, MD) of
-                      undefined -> false; %% default is da 'cask
+
+    rt:set_backend(eleveldb),
+    Nodes = rt:build_cluster(4, Conf),
+
+    HaveIndexes = case rt:get_backend() of
                       bitcask -> false;
                       _ -> true
                   end,
 
-    Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
     %% enable security on the cluster
     ok = rpc:call(Node, riak_core_console, security_enable, [[]]),

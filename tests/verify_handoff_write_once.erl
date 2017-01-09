@@ -72,7 +72,7 @@ create_config(Backend) ->
         {handoff_receive_timeout, 2000},
         {vnode_management_timer, 100}]},
     {riak_kv, [
-        {storage_backend, Backend}]}
+        {storage_backend, riak_kv_eleveldb_backend}]}
     ].
 
 run_test(Config, AsyncWrites) ->

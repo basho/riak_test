@@ -25,7 +25,7 @@
 confirm() ->
     NumNodes = 5,
     NVal = 5,
-    Config = ensemble_util:fast_config(NVal),
+    Config = ensemble_util:fast_config(NVal, 16, false),
     lager:info("Building cluster and waiting for ensemble to stablize"),
     ensemble_util:build_cluster(NumNodes, Config, NVal),
     pass.

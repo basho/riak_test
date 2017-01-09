@@ -30,11 +30,12 @@
                 {?MTYPE, map}]).
 -define(CONF, [
         {yokozuna,
-            [{enabled, true}]
+            [{enabled, false}]
         }]).
 
 %% You should have curl installed locally to do this.
 confirm() ->
+    rt:set_backend(eleveldb),
     Nodes = rt:deploy_nodes(1, ?CONF),
     [Node1] = Nodes,
     verify_dt_converge:create_bucket_types(Nodes, ?TYPES),

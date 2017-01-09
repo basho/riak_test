@@ -8,9 +8,10 @@
 -define(BUCKET, <<"bucket">>).
 
 confirm() ->
-    Backend = proplists:get_value(backend, riak_test_runner:metadata()),
+    Backend = eleveldb,
     lager:info("Running with backend ~p", [Backend]),
-    ?assertEqual(bitcask, Backend),
+    %?assertEqual(bitcask, Backend),
+    rt:set_backend(eleveldb),
     [Node1 | _Rest] = _Nodes = rt:build_cluster(?NUM_NODES),
     PBC = rt:pbc(Node1),
     lager:info("Setting last write wins on bucket"),

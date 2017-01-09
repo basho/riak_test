@@ -33,8 +33,7 @@ confirm() ->
     RingSize = list_to_integer(rt_config:config_or_os_env(ring_size, "16")),
     NVal = rt_config:config_or_os_env(n_val, undefined),
     TestMetaData = riak_test_runner:metadata(),
-    KVBackend = proplists:get_value(backend, TestMetaData),
-
+    KVBackend = eleveldb,
     NumNodes = rt_config:config_or_os_env(num_nodes, 4),
     HOConcurrency = rt_config:config_or_os_env(ho_concurrency, 2),
     {_KVBackendMod, KVDataDir} = backend_mod_dir(KVBackend),
@@ -57,7 +56,7 @@ confirm() ->
              ]},
             {riak_search,
              [
-              {enabled, true}
+              {enabled, false}
              ]},
             %% @TODO This is only to test whether the test failure happens
             %% without AAE. The AAE errors found in the logs could be unrelated
@@ -313,7 +312,7 @@ data_path(Node, Suffix, Partition) ->
 
 backend_mod_dir(undefined) ->
     %% riak_test defaults to bitcask when undefined
-    backend_mod_dir(bitcask);
+    backend_mod_dir(eleveldb;
 backend_mod_dir(bitcask) ->
     {riak_kv_bitcask_backend, "bitcask"};
 backend_mod_dir(eleveldb) ->

@@ -39,7 +39,7 @@
 confirm() ->
     NVal = 5,
     Quorum = NVal div 2 + 1,
-    Config = ensemble_util:fast_config(NVal),
+    Config = ensemble_util:fast_config(NVal, 16, false),
     lager:info("Building cluster and waiting for ensemble to stablize"),
     Nodes = ensemble_util:build_cluster(8, Config, NVal),
     Node = hd(Nodes),

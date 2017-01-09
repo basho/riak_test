@@ -48,7 +48,7 @@
         [{riak_kv,
           [
            % Speedy AAE configuration
-           {anti_entropy, {on, []}},
+           {anti_entropy, {off, []}},
            {anti_entropy_build_limit, {100, 1000}},
            {anti_entropy_concurrency, 100},
            {anti_entropy_expire, 24 * 60 * 60 * 1000}, % Not for now!
@@ -273,7 +273,7 @@ wipe_out_aae_data(Node, Partition) ->
     ok.
 
 base_dir_for_backend(undefined) ->
-    base_dir_for_backend(bitcask);
+    base_dir_for_backend(eleveldb);
 base_dir_for_backend(bitcask) ->
     "bitcask";
 base_dir_for_backend(eleveldb) ->

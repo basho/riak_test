@@ -31,7 +31,7 @@
 -define(SEARCH_REPO, "git://github.com/basho/riak_search").
 
 confirm() ->
-    Config = [{riak_search, [{enabled, true}]}],
+    Config = [{riak_search, [{enabled, false}]}],
     [Node0 | _RestNodes] = Nodes = rt:build_cluster(3, Config),
     rt:wait_until_ring_converged(Nodes),
 

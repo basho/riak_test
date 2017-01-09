@@ -31,6 +31,7 @@
 -define(N_VAL, 3).
 
 confirm() ->
+    rt:set_backend(eleveldb),
     [Node1] = rt:build_cluster(1,
                                [{riak_kv,
                                  [{anti_entropy, {off, []}},
@@ -66,7 +67,7 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     lager:info("Put half the objects, now enable AAE and build tress"),
     %% Enable AAE and build trees.
     ok = rpc:call(Node1, application, set_env,
-                  [riak_kv, anti_entropy, {on, [debug]}]),
+                  [riak_kv, anti_entropy, {off, [debug]}]),
     ok = rpc:call(Node1, riak_kv_entropy_manager, enable, []),
     rt:wait_until_aae_trees_built([Node1]),
 

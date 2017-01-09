@@ -45,7 +45,7 @@ confirm() ->
                     ]}
                 ]},
             {riak_search, [
-                           {enabled, true}
+                           {enabled, false}
                           ]}
            ],
 

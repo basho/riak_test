@@ -42,7 +42,8 @@
         %% increase AAE activity
         {anti_entropy_build_limit, {100, 1000}},
         {anti_entropy_concurrency, 8}
-    ]}
+    ]},
+    {riak_kv, [{anti_entropy, {off, []}}]}
 ]).
 
 confirm() ->

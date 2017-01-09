@@ -24,7 +24,7 @@
            {anti_entropy_concurrency, 8},
            {anti_entropy_tick, 1000}]},
          {yokozuna,
-          [{enabled, true}]
+          [{enabled, false}]
          }]).
 
 confirm() ->

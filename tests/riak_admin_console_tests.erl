@@ -154,6 +154,7 @@ riak_admin_tests(Node) ->
 confirm() ->
     %% Deploy a node to test against
     lager:info("Deploy node to test riak command line"),
+    rt:set_backend(eleveldb),
     [Node] = rt:deploy_nodes(1),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
     rt_intercept:add(Node,

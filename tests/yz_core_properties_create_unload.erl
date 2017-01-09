@@ -30,7 +30,7 @@
                ]},
               {yokozuna,
                [
-                {enabled, true},
+                {enabled, false},
                 {anti_entropy_tick, 1000}
                ]}]).
 -define(INDEX, <<"test_idx_core">>).

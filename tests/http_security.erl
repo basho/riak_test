@@ -40,9 +40,10 @@ confirm() ->
                             ]}
                     ]},
              {riak_search, [
-                     {enabled, true}
+                     {enabled, false}
                     ]}
     ],
+    rt:set_backend(eleveldb),
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
     %% enable security on the cluster
@@ -54,9 +55,7 @@ confirm() ->
     {ok, [{IP, Port}]} = rpc:call(Node, application, get_env,
                                   [riak_api, https]),
 
-    MD = riak_test_runner:metadata(),
-    HaveIndexes = case proplists:get_value(backend, MD) of
-                      undefined -> false; %% default is da 'cask
+    HaveIndexes = case rt:get_backend(), of
                       bitcask -> false;
                       _ -> true
                   end,

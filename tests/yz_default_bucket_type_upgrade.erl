@@ -54,7 +54,7 @@
          {yokozuna,
           [
            {anti_entropy_tick, 1000},
-           {enabled, true}
+           {enabled, false}
           ]}
         ]).
 

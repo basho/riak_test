@@ -159,7 +159,7 @@
           ]},
          {yokozuna,
           [
-           {enabled, true}
+           {enabled, false}
           ]}
         ]).
 

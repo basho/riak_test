@@ -49,6 +49,7 @@ confirm() ->
                                                  {dvv_enabled, true}]}]},
             {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]}],
 
+    rt:set_backend(eleveldb),
     [Node] = rt:deploy_nodes(1, Conf),
     Client = rt:pbc(Node),
     riakc_pb_socket:set_options(Client, [queue_if_disconnected]),

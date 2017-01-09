@@ -291,7 +291,7 @@ backend_dir() ->
 
 backend_dir(undefined) ->
     %% riak_test defaults to bitcask when undefined
-    backend_dir(bitcask);
+    backend_dir(eleveldb);
 backend_dir(bitcask) ->
     "bitcask";
 backend_dir(eleveldb) ->

@@ -43,7 +43,7 @@ confirm() ->
     %% in order to test asynchronous puts
     %%
     [Cluster1, Cluster2] = rt:deploy_clusters([
-        {4, config(?DEFAULT_RING_SIZE, ?NVAL)},
+        {4, config(?DEFAULT_RING_SIZE, ?NVAL, riak_kv_eleveldb_backend)},
         {1, config(?DEFAULT_RING_SIZE, ?NVAL, riak_kv_eleveldb_backend)}
     ]),
     rt:join_cluster(Cluster1),

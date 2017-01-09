@@ -19,7 +19,7 @@ confirm() ->
             {riak_kv,
                 [
                  %% Specify fast building of AAE trees
-                 {anti_entropy, {on, []}},
+                 {anti_entropy, {off, []}},
                  {anti_entropy_build_limit, {100, 1000}},
                  {anti_entropy_concurrency, 100}
                 ]

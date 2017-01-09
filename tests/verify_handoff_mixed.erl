@@ -54,7 +54,7 @@ confirm() ->
     UpgradeVsn = proplists:get_value(upgrade_version,
                                      riak_test_runner:metadata(),
                                      previous),
-    SearchEnabled = [{riak_search, [{enabled, true}]}],
+    SearchEnabled = [{riak_search, [{enabled, false}]}],
     Versions = [{current, SearchEnabled},
                 {UpgradeVsn, SearchEnabled}],
     Services = [riak_kv, riak_search, riak_pipe],

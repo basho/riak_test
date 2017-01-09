@@ -12,13 +12,14 @@
 
 confirm() ->
     TestMetaData = riak_test_runner:metadata(),
-    Backend = proplists:get_value(backend, TestMetaData),
+    Backend = eleveldb,
     lager:info("Running with backend (this better be Bitcask!) ~p", [Backend]),
-    ?assertEqual({backend, bitcask}, {backend, Backend}),
+    %?assertEqual({backend, bitcask}, {backend, Backend}),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
     % Configure for fast merge checks
     Config = [{riak_kv, [{bitcask_merge_check_interval, 2000}]},
               {bitcask, [{max_file_size, 100}]}],
+    rt:set_backend(eleveldb),
     Nodes = rt:build_cluster([{OldVsn, Config}]),
     verify_bitcask_tombstone2_upgrade(Nodes),
     pass.
