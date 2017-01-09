@@ -147,7 +147,8 @@ acc_preflists(Pl, PlCounts) ->
                 end, PlCounts, Pl).
 
 test_data_ts(Start, End) ->
-    ts_data:get_valid_select_data(fun() -> lists:seq(Start, End) end).
+    StepSize = 1000*60*5,
+    ts_data:get_valid_select_data(fun() -> lists:seq(1 + StepSize*Start, 1 + StepSize*End, StepSize) end).
 
 key_ts(Data) -> 
     lists:sublist(tuple_to_list(Data), 3).
@@ -159,7 +160,6 @@ write_data_ts(Node, KVs, Table) ->
     write_data_ts(Node, KVs, Table, []).
 
 write_data_ts(Node, KVs, Table, _Opts) ->
-    %PB = rt:pbc(Node),
     [begin
          O =
          case ts_ops:get([Node], Table, key_ts(TS_Data_Tuple)) of
@@ -170,7 +170,6 @@ write_data_ts(Node, KVs, Table, _Opts) ->
          end,
          ?assertMatch(ok, ts_ops:put([Node], Table, O))
      end || TS_Data_Tuple <- KVs],
-    %riakc_pb_socket:stop(PB),
     ok.
 
 % @doc Verifies that the data is eventually restored to the expected set.
@@ -324,11 +323,7 @@ wipe_out_aae_data(Node, Partition) ->
     rt:clean_data_dir(Node, "anti_entropy/"++integer_to_list(Partition)),
     ok.
 
-base_dir_for_backend(undefined) ->
-    base_dir_for_backend(bitcask);
-base_dir_for_backend(bitcask) ->
-    "bitcask";
-base_dir_for_backend(eleveldb) ->
+base_dir_for_backend() ->
     "leveldb".
 
 restart_vnode(Node, Service, Partition) ->
@@ -352,9 +347,7 @@ restart_vnode(Node, Service, Partition) ->
                [Partition, NewPid]).
 
 dir_for_partition(Partition) ->
-    TestMetaData = riak_test_runner:metadata(),
-    KVBackend = proplists:get_value(backend, TestMetaData),
-    BaseDir = base_dir_for_backend(KVBackend),
+    BaseDir = base_dir_for_backend(),
     filename:join([BaseDir, integer_to_list(Partition)]).
 
 % @doc True if the AAE stats report zero data repairs for last exchange
@@ -398,4 +391,3 @@ all_hashtrees_upgraded(Node) when is_atom(Node) ->
         _ ->
             false
      end.
-    
