@@ -66,7 +66,7 @@ confirm() ->
                           ]}
            ],
 
-    MD = riak_test_runner:metadata(),
+    %MD = riak_test_runner:metadata(),
 
     rt:set_backend(eleveldb),
     Nodes = rt:build_cluster(4, Conf),

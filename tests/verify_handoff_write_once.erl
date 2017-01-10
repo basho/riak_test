@@ -58,7 +58,7 @@ confirm() ->
 
     pass.
 
-create_config(Backend) ->
+create_config(_) ->
     [{riak_core, [
         {default_bucket_props,
             [

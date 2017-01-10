@@ -298,8 +298,8 @@ get(Node, Bucket, Key) ->
     {ok, Val} = riakc_pb_socket:get(Client, Bucket, Key),
     riakc_obj:get_value(Val).
 
-config(RingSize, NVal) ->
-    config(RingSize, NVal, riak_kv_multi_backend).
+%config(RingSize, NVal) ->
+%    config(RingSize, NVal, riak_kv_multi_backend).
 
 config(RingSize, NVal, Backend) ->
     [
