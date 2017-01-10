@@ -74,7 +74,7 @@ config_aae(true) ->
     {riak_kv, [{anti_entropy_build_limit, {100, 1000}},
                {anti_entropy_concurrency, 100},
                {anti_entropy_tick, 100},
-               {anti_entropy, {on, []}},
+               {anti_entropy, {off, []}},
                {anti_entropy_timeout, 5000},
 	       {storage_backend, riak_kv_eleveldb_backend}]};
 config_aae(false) ->
