@@ -168,7 +168,7 @@ init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 
 init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
+    {ok, QBufDir} = rpc:call(Node, application, get_env, [riak_kv, timeseries_query_buffers_root_path]),
     modify_dir_access(take_away, QBufDir),
     Cfg;
 
@@ -187,7 +187,7 @@ end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 
 end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
+    {ok, QBufDir} = rpc:call(Node, application, get_env, [riak_kv, timeseries_query_buffers_root_path]),
     modify_dir_access(give_back, QBufDir),
     ok;
 end_per_testcase(_, Cfg) ->
