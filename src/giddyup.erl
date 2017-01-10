@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -19,7 +19,11 @@
 %% -------------------------------------------------------------------
 -module(giddyup).
 
--export([get_suite/1, post_result/1, post_artifact/2]).
+-export([
+    get_suite/1,
+    post_result/1,
+    post_all_artifacts/4,
+    post_artifact/2]).
 -define(STREAM_CHUNK_SIZE, 8192).
 -include("rt.hrl").
 
@@ -90,6 +94,38 @@ post_result(TestResult) ->
         error ->
             error
     end.
+
+%% Store all generated logs in S3
+post_all_artifacts(TestResult, Base, Log, CoverageFile) ->
+    %% Start with the test log
+    ZipList0 = post_artifact_and_add_to_zip(Base, [], {"riak_test.log", Log}),
+
+    ZipList1 = lists:foldl(fun({Name, Port}, Acc) ->
+                      Contents = make_req_body(Port),
+                      post_artifact_and_add_to_zip(Base, Acc, {Name, Contents})
+                  end, ZipList0, rt:get_node_logs()),
+    ZipList2 = maybe_post_debug_logs(Base, ZipList1),
+    ZipList3 = lists:foldl(fun(CoverFile, Acc) ->
+            Name = filename:basename(CoverFile) ++ ".gz",
+            Contents = zlib:gzip(element(2, file:read_file(CoverFile))),
+            post_artifact_and_add_to_zip(Base, Acc, {Name, Contents})
+        end, ZipList2, [CoverageFile || CoverageFile /= cover_disabled]),
+
+    ResultPlusGiddyUp = TestResult ++
+        [{giddyup_url, list_to_binary(Base)}],
+    [rt:post_result(ResultPlusGiddyUp, WebHook) ||
+        WebHook <- get_webhooks()],
+
+    %% Upload all the ct_logs as an HTML zip website
+    upload_zipfile(Base, ["ct_logs"], "ct_logs.html.zip"),
+    ZipList4 = add_ct_logs_to_zip(ZipList3),
+
+    %% Finally upload the collection of artifacts as a zip file
+    upload_zipfile(Base, ZipList4, "artifacts.zip").
+
+post_artifact_and_add_to_zip(Base, ZipList, {Name, Contents}) ->
+    post_artifact(Base, {Name, Contents}),
+    lists:append(ZipList, [{Name, Contents}]).
 
 post_artifact(TRURL, {FName, Body}) ->
     %% First compute the path of where to post the artifact
@@ -168,15 +204,60 @@ read_fully(File, Data0) ->
             Data0
     end.
 
-%% Guesses the MIME type of the file being uploaded.
+%% Guesses the content type of the file being uploaded.
 guess_ctype(FName) ->
     case string:tokens(filename:basename(FName), ".") of
         [_, "log"|_] -> "text/plain"; %% console.log, erlang.log.5, etc
         ["erl_crash", "dump"] -> "text/plain"; %% An erl_crash.dump file
+        [_, "html", "zip"] -> "binary/zip-website"; %% Entire static website
         [_, Else] ->
             case mochiweb_mime:from_extension(Else) of
                 undefined -> "binary/octet-stream";
                 CTG -> CTG
             end;
         _ -> "binary/octet-stream"
+    end.
+
+upload_zipfile(Base, FileList, ZipName) ->
+    ZipFile = "/tmp/zip_file" ++ integer_to_list(erlang:phash2(make_ref())),
+    {ok, _} = zip:create(ZipFile, FileList, [{compress, all}]),
+    {ok, Contents} = file:read_file(ZipFile),
+    giddyup:post_artifact(Base, {ZipName, Contents}),
+    file:delete(ZipFile).
+
+%% Add everything in the ct_logs directory to the zip file
+add_ct_logs_to_zip(ZipList) ->
+    AddFileFun = fun(FileName, Acc) ->
+        {ok, Contents} = file:read_file(FileName),
+        lists:append(Acc, [{FileName, Contents}])
+    end,
+    filelib:fold_files("ct_logs", ".*", true, AddFileFun, ZipList).
+
+maybe_post_debug_logs(Base, ZipList) ->
+    case rt_config:get(giddyup_post_debug_logs, true) of
+        true ->
+            NodeDebugLogs = rt:get_node_debug_logs(),
+            lists:foldl(fun({Name, Contents}, Acc) ->
+                post_artifact_and_add_to_zip(Base, Acc, {Name, Contents})
+                end, ZipList, NodeDebugLogs);
+        _ ->
+            ZipList
+    end.
+
+get_webhooks() ->
+    Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
+        [],
+        rt_config:get(webhooks, [])),
+    lists:filter(fun(E) -> E =/= undefined end, Hooks).
+
+parse_webhook(Props) ->
+    Url = proplists:get_value(url, Props),
+    case is_list(Url) of
+        true ->
+            #rt_webhook{url= Url,
+                name=proplists:get_value(name, Props, "Webhook"),
+                headers=proplists:get_value(headers, Props, [])};
+        false ->
+            lager:error("Invalid configuration for webhook : ~p", Props),
+            undefined
     end.

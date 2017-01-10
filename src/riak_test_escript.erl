@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -44,7 +44,8 @@ cli_options() ->
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
  {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
- {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
+ {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"},
+ {apply_traces,undefined, "trace",    undefined,  "Apply traces to the target node, defined in the SUITEs"}
 ].
 
 print_help() ->
@@ -116,7 +117,7 @@ main(Args) ->
                                           {lager_file_backend, [{file, "log/test.log"},
                                                                 {level, ConsoleLagerLevel}]}]),
     lager:start(),
-
+    [lager:info("Config ~s = ~p", [K, V]) || {K, V} <- lists:keysort(1, rt_config:get_all())],
     %% Report
     Report = case proplists:get_value(report, ParsedArgs, undefined) of
         undefined -> undefined;
@@ -134,7 +135,7 @@ main(Args) ->
 
     CommandLineTests = parse_command_line_tests(ParsedArgs),
     Tests0 = which_tests_to_run(Report, CommandLineTests),
-
+    lager:info("Running Tests: ~p", [[TestName || {_, {TestName,_}} <- Tests0]]),
     case Tests0 of
         [] ->
             lager:warning("No tests are scheduled to run"),
@@ -152,6 +153,8 @@ main(Args) ->
                 {Offset, Workers} ->
                     TestCount = length(Tests0),
                     %% Avoid dividing by zero, computers hate that
+                    %% TODO: don't anthropomorphise the computers
+                    %% they don't like that either
                     Denominator = case Workers rem (TestCount+1) of
                                       0 -> 1;
                                       D -> D
@@ -164,7 +167,6 @@ main(Args) ->
                     TestB ++ TestA
             end,
 
-    io:format("Tests to run: ~p~n", [Tests]),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
     add_deps("deps"),
@@ -177,7 +179,7 @@ main(Args) ->
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),
 
-    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {Test, TestMetaData} <- Tests]),
+    TestResults = lists:filter(fun results_filter/1, [ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {TestType, {Test, TestMetaData}} <- Tests]),
     [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) || R <- TestResults],
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
@@ -209,11 +211,13 @@ parse_command_line_tests(ParsedArgs) ->
                    [] -> [undefined];
                    UpgradeList -> UpgradeList
                end,
+    rt_redbug:set_tracing_applied(proplists:is_defined(apply_traces, ParsedArgs)),
     %% Parse Command Line Tests
     {CodePaths, SpecificTests} =
         lists:foldl(fun extract_test_names/2,
                     {[], []},
                     proplists:get_all_values(tests, ParsedArgs)),
+
     [code:add_patha(CodePath) || CodePath <- CodePaths,
                                  CodePath /= "."],
     Dirs = proplists:get_all_values(dir, ParsedArgs),
@@ -235,12 +239,38 @@ parse_command_line_tests(ParsedArgs) ->
         end, [], lists:usort(DirTests ++ SpecificTests)).
 
 extract_test_names(Test, {CodePaths, TestNames}) ->
-    {[filename:dirname(Test) | CodePaths],
-     [filename:rootname(filename:basename(Test)) | TestNames]}.
+    CommaSepTests = string:tokens(Test, [$,]),
+    All = lists:foldl(fun process_tests/2, [], CommaSepTests),
+    {CodePathList,TestNameList} = lists:unzip([{filename:dirname(TestName),filename:rootname(filename:basename(TestName))} || TestName <- All]),
+    {CodePathList++CodePaths, TestNameList++TestNames}.
+
+process_tests(Test, Acc) ->
+    case string:str(Test, "*") of
+        0 ->
+          case string:str(Test, "/") of
+              0 -> [get_test_with_valid_prefix(Test, ["tests"|rt_config:get(test_paths, [])])|Acc];
+              _ ->  [Test|Acc]
+          end;
+        _ ->
+          case string:str(Test, "/") of
+              0 -> filelib:wildcard(get_test_with_valid_prefix(Test, ["tests"|rt_config:get(test_paths, [])]))++Acc;
+              _ -> filelib:wildcard(Test)++Acc
+          end
+    end.
+
+get_test_with_valid_prefix(Test, []) ->
+    Test;
+
+get_test_with_valid_prefix(Test, [FirstPath|Rest]) ->
+    TestPath = FirstPath++"/"++Test,
+    case filelib:wildcard(TestPath) of
+          [] -> get_test_with_valid_prefix(Test, Rest);
+          _  -> TestPath
+    end.
 
 which_tests_to_run(undefined, CommandLineTests) ->
     {Tests, NonTests} =
-        lists:partition(fun is_runnable_test/1, CommandLineTests),
+        lists:foldl(fun is_runnable/2, {[], []}, CommandLineTests),
     lager:info("These modules are not runnable tests: ~p",
                [[NTMod || {NTMod, _} <- NonTests]]),
     Tests;
@@ -248,7 +278,7 @@ which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
 which_tests_to_run(Platform, CommandLineTests) ->
     Suite = filter_zip_suite(Platform, CommandLineTests),
     {Tests, NonTests} =
-        lists:partition(fun is_runnable_test/1,
+        lists:foldl(fun is_runnable/2, {[], []},
                         lists:foldr(fun filter_merge_tests/2, [], Suite)),
 
     lager:info("These modules are not runnable tests: ~p",
@@ -283,14 +313,28 @@ filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
     end.
 
 %% Check for api compatibility
+is_runnable(TestSpec, {Tests, NotTests}) ->
+    case is_runnable_test(TestSpec) of
+        {Type, true}  -> {[{Type, TestSpec} | Tests], NotTests};
+        {Type, false} -> {Tests,                      [{Type, TestSpec} | NotTests]}
+    end.
+
 is_runnable_test({TestModule, _}) ->
     {Mod, Fun} = riak_test_runner:function_name(TestModule),
-    code:ensure_loaded(Mod),
-    erlang:function_exported(Mod, Fun, 0).
+    {module, Mod} = code:ensure_loaded(Mod),
+    %% yeah, I woulda thunk you could call beam_lib:chunks on the
+    %% Mod but it gives a posix enoent, so go figure
+    {file, File} = code:is_loaded(Mod),
+    {ok, {Mod, [{abstract_code, {raw_abstract_v1, AST}}]}} = beam_lib:chunks(File, [abstract_code]),
+    case is_common_test(AST) of
+        false -> {riak_test, erlang:function_exported(Mod, Fun, 0)};
+        true  -> {common_test, true}
+    end.
 
-run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
+run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
+    io:format("in run_test Test is ~p~n", [Test]),
     rt_cover:maybe_start(Test),
-    SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData,
+    SingleTestResult = riak_test_runner:confirm(Test, TestType, Outdir, TestMetaData,
                                                 HarnessArgs),
     CoverDir = rt_config:get(cover_output, "coverage"),
     case NumTests of
@@ -303,57 +347,16 @@ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
     case Report of
         undefined -> ok;
         _ ->
-            {value, {log, L}, TestResult} =
+            {value, {log, Log}, TestResult} =
                 lists:keytake(log, 1, SingleTestResult),
             case giddyup:post_result(TestResult) of
                 error -> woops;
                 {ok, Base} ->
-                    %% Now push up the artifacts, starting with the test log
-                    giddyup:post_artifact(Base, {"riak_test.log", L}),
-                    [giddyup:post_artifact(Base, File)
-                     || File <- rt:get_node_logs()],
-                    maybe_post_debug_logs(Base),
-                    [giddyup:post_artifact(
-                       Base,
-                       {filename:basename(CoverageFile) ++ ".gz",
-                        zlib:gzip(element(2,file:read_file(CoverageFile)))})
-                     || CoverageFile /= cover_disabled],
-                    ResultPlusGiddyUp = TestResult ++
-                                        [{giddyup_url, list_to_binary(Base)}],
-                    [rt:post_result(ResultPlusGiddyUp, WebHook) ||
-                     WebHook <- get_webhooks()]
+                    giddyup:post_all_artifacts(TestResult, Base, Log, CoverageFile)
             end
     end,
     rt_cover:stop(),
     [{coverdata, CoverageFile} | SingleTestResult].
-
-maybe_post_debug_logs(Base) ->
-    case rt_config:get(giddyup_post_debug_logs, true) of
-        true ->
-            NodeDebugLogs = rt:get_node_debug_logs(),
-            [giddyup:post_artifact(Base, File)
-             || File <- NodeDebugLogs];
-        _ ->
-            false
-    end.
-
-get_webhooks() ->
-    Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
-                        [],
-                        rt_config:get(webhooks, [])),
-    lists:filter(fun(E) -> E =/= undefined end, Hooks).
-
-parse_webhook(Props) ->
-    Url = proplists:get_value(url, Props),
-    case is_list(Url) of
-        true ->
-            #rt_webhook{url= Url,
-                        name=proplists:get_value(name, Props, "Webhook"),
-                        headers=proplists:get_value(headers, Props, [])};
-        false ->
-            lager:error("Invalid configuration for webhook : ~p", Props),
-            undefined
-    end.
 
 print_summary(TestResults, CoverResult, Verbose) ->
     io:format("~nTest Results:~n"),
@@ -450,3 +453,13 @@ so_kill_riak_maybe() ->
             io:format("Leaving Riak Up... "),
             rt:whats_up()
     end.
+
+is_common_test([]) -> 
+    false;
+is_common_test([{attribute, _, file, {File, _}} | T]) ->
+    case filename:basename(File) of
+        "ct.hrl" -> true;
+        _        -> is_common_test(T)
+    end;
+is_common_test([_H | T]) -> 
+    is_common_test(T).
