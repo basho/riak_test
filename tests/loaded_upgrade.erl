@@ -44,7 +44,7 @@ confirm() ->
     NumNodes = 4,
     Vsns = [{OldVsn, Config} || _ <- lists:seq(1,NumNodes)],
     Nodes = rt:build_cluster(Vsns),
-    Backend = rt:get_backend(),
+    Backend = rt:get_backends(),
 
     seed_cluster(Nodes),
 

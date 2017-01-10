@@ -17,7 +17,8 @@ confirm() ->
                                                        {dvv_enabled, true}
                                                    ]}]}]),
     Node = hd(Nodes),
-    HaveIndexes = case rt:get_backend() of
+    lager:info("Backends: ~p", [rt:get_backends()]),
+    HaveIndexes = case rt:get_backends() of
                       bitcask -> false;
                       _ -> true
                   end,

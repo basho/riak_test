@@ -40,7 +40,7 @@ confirm() ->
 
 fullsync_enabled_and_started() ->
     rt:set_advanced_conf(all, ?CONF),
-
+    rt:set_backend(eleveldb),
     [ANodes, BNodes] = rt:build_clusters([3, 3]),
 
     rt:wait_for_cluster_service(ANodes, riak_repl),

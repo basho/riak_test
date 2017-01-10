@@ -48,7 +48,7 @@ confirm() ->
                            {enabled, false}
                           ]}
            ],
-
+    rt:set_backend(eleveldb),
     Nodes = rt:build_cluster(4, Conf),
     Node = hd(Nodes),
     %% enable security on the cluster

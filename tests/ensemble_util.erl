@@ -26,6 +26,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 build_cluster(Num, Config, NVal) ->
+    rt:set_backend(eleveldb),
     Nodes = rt:deploy_nodes(Num, Config),
     Node = hd(Nodes),
     rt:join_cluster(Nodes),
@@ -35,6 +36,7 @@ build_cluster(Num, Config, NVal) ->
     Nodes.
 
 build_cluster_without_quorum(Num, Config) ->
+    rt:set_backend(eleveldb),
     Nodes = rt:deploy_nodes(Num, Config),
     SetupLogCaptureFun = fun(Node) ->
        rt:setup_log_capture(Node)
@@ -74,9 +76,10 @@ config_aae(true) ->
                {anti_entropy_tick, 100},
                {anti_entropy, {on, []}},
                {anti_entropy_timeout, 5000},
-	       {storage_backend, riak_kv_memory_backend}]};
+	       {storage_backend, riak_kv_eleveldb_backend}]};
 config_aae(false) ->
-    {riak_kv, [{anti_entropy, {off, []}}]}.
+    {riak_kv, [{anti_entropy, {off, []}},
+               {storage_backend, riak_kv_eleveldb_backend}]}.
 
 ensembles(Node) ->
     rpc:call(Node, riak_kv_ensembles, ensembles, []).

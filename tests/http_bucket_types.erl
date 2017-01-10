@@ -22,7 +22,7 @@ confirm() ->
     Node = hd(Nodes),
 
     %RMD = riak_test_runner:metadata(),
-    HaveIndexes = case rt:get_backend() of
+    HaveIndexes = case rt:get_backends() of
                       bitcask -> false;
                       _ -> true
                   end,

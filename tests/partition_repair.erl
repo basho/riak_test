@@ -40,7 +40,7 @@ confirm() ->
     Bucket = <<"scotts_spam">>,
 
     lager:info("Build a cluster"),
-    lager:info("riak_search enabled: true"),
+    lager:info("riak_search enabled: false"),
     lager:info("ring_creation_size: ~p", [RingSize]),
     lager:info("n_val: ~p", [NVal]),
     lager:info("num nodes: ~p", [NumNodes]),
@@ -70,7 +70,7 @@ confirm() ->
             %%    [{lager_file_backend,
             %%      [{"./log/console.log",debug,10485760,"$D0",5}]}]}]}
            ],
-
+    rt:set_backend(eleveldb),
     Nodes = rt:build_cluster(NumNodes, Conf),
 
     case NVal of

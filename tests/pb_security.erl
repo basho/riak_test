@@ -71,7 +71,7 @@ confirm() ->
     rt:set_backend(eleveldb),
     Nodes = rt:build_cluster(4, Conf),
 
-    HaveIndexes = case rt:get_backend() of
+    HaveIndexes = case rt:get_backends() of
                       bitcask -> false;
                       _ -> true
                   end,

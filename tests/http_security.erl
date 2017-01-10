@@ -55,7 +55,7 @@ confirm() ->
     {ok, [{IP, Port}]} = rpc:call(Node, application, get_env,
                                   [riak_api, https]),
 
-    HaveIndexes = case rt:get_backend() of
+    HaveIndexes = case rt:get_backends() of
                       bitcask -> false;
                       _ -> true
                   end,

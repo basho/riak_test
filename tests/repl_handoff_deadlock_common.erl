@@ -79,6 +79,7 @@ confirm(Strategy) ->
     pass.
 
 make_clusters(KeylistOrAae) ->
+    rt:set_backend(eleveldb),
     Nodes = rt:deploy_nodes(6, ?CONF(KeylistOrAae), [riak_kv, riak_repl]),
     {ClusterA, ClusterB} = lists:split(3, Nodes),
     A = make_cluster(ClusterA, "A"),

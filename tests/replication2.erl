@@ -33,6 +33,7 @@ confirm() ->
     ],
 
     lager:info("Building Clusters A and B"),
+    rt:set_backend(eleveldb),
     [ANodes, BNodes] = rt:build_clusters([{ClusterASize, Conf}, {NumNodes - ClusterASize, Conf}]),
 
     %lager:info("Skipping all tests"),
