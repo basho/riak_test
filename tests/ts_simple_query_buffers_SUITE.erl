@@ -49,7 +49,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("ts_qbuf_util.hrl").
 
--define(TABLE2, "t2").  %% used to check for expiry; not to interfere with t1
 -define(RIDICULOUSLY_SMALL_MAX_QUERY_DATA_SIZE, 100).
 -define(RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA, 3).
 
@@ -63,9 +62,7 @@ init_per_suite(Cfg) ->
     Data = ts_qbuf_util:make_data(),
     ExtraData = ts_qbuf_util:make_extra_data(),
     ok = ts_qbuf_util:create_table(C, ?TABLE),
-    ok = ts_qbuf_util:create_table(C, ?TABLE2),
     ok = ts_qbuf_util:insert_data(C, ?TABLE,  Data),
-    ok = ts_qbuf_util:insert_data(C, ?TABLE2, Data),
     [{cluster, Cluster},
      {data, Data},
      {extra_data, ExtraData}
@@ -76,12 +73,12 @@ groups() ->
 
 all() ->
     [
+     %% 2. check LIMIT and ORDER BY, not involving follow-up queries
+     query_orderby_comprehensive,
      %% 3. check how error conditions are reported
      query_orderby_max_quanta_error,
      query_orderby_max_data_size_error,
-     query_orderby_ldb_io_error,
-     %% 2. check LIMIT and ORDER BY, not involving follow-up queries
-     query_orderby_comprehensive
+     query_orderby_ldb_io_error
      %% 1. check that query buffers persist and do not pick up updates to
      %% the mother table (and do, after expiry)
      %% query_orderby_no_updates
@@ -117,9 +114,7 @@ query_orderby_comprehensive(Cfg) ->
                   make_ordby_item_variants(Items),
               lists:foreach(
                 fun(Var) ->
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 1}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 2}, {offset, 4}])
+                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 12}, {offset, 4}])
                 end,
                 Variants)
       end,
@@ -220,7 +215,7 @@ check_sorted(C, Table, OrigData, Clauses, Options) ->
     Query = ts_qbuf_util:full_query(Table, Clauses),
     ct:log("Query: \"~s\"", [Query]),
     {ok, {_Cols, Returned}} =
-        riakc_ts:query(C, Query, [], undefined, Options),
+        guarded_query(C, Query, Options, 3),
     OrderBy = proplists:get_value(order_by, Clauses),
     Limit   = proplists:get_value(limit, Clauses),
     Offset  = proplists:get_value(offset, Clauses),
@@ -248,6 +243,21 @@ check_sorted(C, Table, OrigData, Clauses, Options) ->
         false ->
             ct:fail("Query ~s failed\nGot ~p\nNeed: ~p\n", [Query, Returned, PreLimited])
     end.
+
+guarded_query(_C, _Query, _Options, 0) ->
+    {error, exhausted_retries};
+guarded_query(C, Query, Options, Retries) ->
+    case riakc_ts:query(C, Query, [], undefined, Options) of
+        {ok, Result} ->
+            {ok, Result};
+        {error, {1027, _Msg}} ->
+            ct:pal("Retrying query on qbuf internal error (~p)", [_Msg]),
+            guarded_query(C, Query, Options, Retries - 1);
+        {error, {1013, _Msg}} ->
+            ct:pal("Retrying query on no response from backend (~p)", [_Msg]),
+            guarded_query(C, Query, Options, Retries - 1)
+    end.
+
 
 safe_offset(undefined) -> 0;
 safe_offset(X) -> X.
