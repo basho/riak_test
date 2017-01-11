@@ -21,10 +21,10 @@
 %% @private
 -module(riak_test_escript).
 -include("rt.hrl").
--export([main/2]).
+-export([main/1]).
 -export([add_deps/1]).
 
-add_deps(Path) ->er
+add_deps(Path) ->
     {ok, Deps} = file:list_dir(Path),
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
     ok.
