@@ -559,6 +559,9 @@ stop_all(DevPath) ->
                 {ok, _} ->
                     true = erlang:set_cookie(MyNode, riak);
                 {error,{already_started,_}} ->
+                    ok;
+                {error,Error} ->
+                    lager:info("Error:  ~w", [Error]),
                     ok
             end,
             lager:info("Trying to obtain node shutdown_time via RPC..."),
