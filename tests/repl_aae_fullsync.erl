@@ -87,10 +87,10 @@ simple_test() ->
     LeaderB = get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    Endpint = repl_util:get_endpoint(LeaderB),
+    Endpoint = repl_util:get_endpoint(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, Endpint, "B"),
+    connect_cluster(LeaderA, Endpoint, "B"),
 
     %% Write keys prior to fullsync.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -168,17 +168,17 @@ dual_test() ->
     LeaderC = get_leader(CFirst),
 
     lager:info("Finding connection manager ports."),
-    AEndpint = repl_util:get_endpoint(LeaderA),
-    BEndpint = repl_util:get_endpoint(LeaderB),
-    CEndpint = repl_util:get_endpoint(LeaderC),
+    AEndpoint = repl_util:get_endpoint(LeaderA),
+    BEndpoint = repl_util:get_endpoint(LeaderB),
+    CEndpoint = repl_util:get_endpoint(LeaderC),
 
     lager:info("Connecting all clusters into fully connected topology."),
-    connect_cluster(LeaderA, BEndpint, "B"),
-    connect_cluster(LeaderA, CEndpint, "C"),
-    connect_cluster(LeaderB, AEndpint, "A"),
-    connect_cluster(LeaderB, CEndpint, "C"),
-    connect_cluster(LeaderC, AEndpint, "A"),
-    connect_cluster(LeaderC, BEndpint, "B"),
+    connect_cluster(LeaderA, BEndpoint, "B"),
+    connect_cluster(LeaderA, CEndpoint, "C"),
+    connect_cluster(LeaderB, AEndpoint, "A"),
+    connect_cluster(LeaderB, CEndpoint, "C"),
+    connect_cluster(LeaderC, AEndpoint, "A"),
+    connect_cluster(LeaderC, BEndpoint, "B"),
 
     %% Write keys to cluster A, verify B and C do not have them.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -263,14 +263,14 @@ bidirectional_test() ->
     LeaderB = get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    AEndpint = repl_util:get_endpoint(LeaderA),
-    BEndpint = repl_util:get_endpoint(LeaderB),
+    AEndpoint = repl_util:get_endpoint(LeaderA),
+    BEndpoint = repl_util:get_endpoint(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BEndpint, "B"),
+    connect_cluster(LeaderA, BEndpoint, "B"),
 
     lager:info("Connecting cluster B to A"),
-    connect_cluster(LeaderB, AEndpint, "A"),
+    connect_cluster(LeaderB, AEndpoint, "A"),
 
     %% Write keys to cluster A, verify B does not have them.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -348,10 +348,10 @@ difference_test() ->
     LeaderB = get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    BEndpint = repl_util:get_endpoint(LeaderB),
+    BEndpoint = repl_util:get_endpoint(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BEndpint, "B"),
+    connect_cluster(LeaderA, BEndpoint, "B"),
 
     %% Get PBC connections.
     APBC = rt:pbc(LeaderA),
@@ -455,10 +455,10 @@ deadlock_test() ->
     LeaderB = get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    Endpint = repl_util:get_endpoint(LeaderB),
+    Endpoint = repl_util:get_endpoint(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, Endpint, "B"),
+    connect_cluster(LeaderA, Endpoint, "B"),
 
     %% Add intercept for delayed comparison of hashtrees.
     Intercept = {riak_kv_index_hashtree, [{{compare, 4}, delayed_compare}]},
