@@ -24,7 +24,7 @@
 -export([main/2]).
 -export([add_deps/1]).
 
-add_deps(Path) ->
+add_deps(Path) ->er
     {ok, Deps} = file:list_dir(Path),
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
     ok.
@@ -33,6 +33,7 @@ cli_options() ->
 %% Option Name, Short Code, Long Code, Argument Spec, Help Message
 [
  {help,               $h, "help",     undefined,  "Print this usage page"},
+ {base,               $b, "base",     string,     "base path of riak_test"},
  {config,             $c, "conf",     string,     "specifies the project configuration"},
  {tests,              $t, "tests",    string,     "specifies which tests to run"},
  {suites,             $s, "suites",   string,     "which suites to run"},
@@ -57,7 +58,7 @@ run_help([]) -> true;
 run_help(ParsedArgs) ->
     lists:member(help, ParsedArgs).
 
-main(Args, BasePath) ->
+main(Args) ->
     case filelib:is_dir("./ebin") of
         true ->
             code:add_patha("./ebin");
@@ -169,7 +170,7 @@ main(Args, BasePath) ->
 
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
-    add_deps(BasePath++"/deps"),
+    add_deps(proplists:get_value(base, ParsedArgs, "")++"/deps"),
 
     [add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
     ENode = rt_config:get(rt_nodename, 'riak_test@127.0.0.1'),
