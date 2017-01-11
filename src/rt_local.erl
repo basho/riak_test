@@ -34,7 +34,8 @@
 %% @doc Return the home directory of the riak_test script.
 -spec home_dir() -> file:filename().
 home_dir() ->
-    filename:dirname(filename:absname(escript:script_name())).
+    "/home/vagrant/riak_test/"
+    %filename:dirname(filename:absname(escript:script_name())).
 
 %% @doc Wrap 'which' to give a good output if something is not installed
 which(Command) ->
