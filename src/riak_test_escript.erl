@@ -188,7 +188,7 @@ main(Args) ->
 
     Teardown = not proplists:get_value(keep, ParsedArgs, false),
     maybe_teardown(Teardown, TestResults, Coverage, Verbose),
-    ok.
+    TestResults.
 
 maybe_teardown(false, TestResults, Coverage, Verbose) ->
     print_summary(TestResults, Coverage, Verbose),
