@@ -186,7 +186,8 @@ main(Args) ->
     [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) || R <- TestResults],
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
-    Teardown = not proplists:get_value(keep, ParsedArgs, false),
+    %Teardown = not proplists:get_value(keep, ParsedArgs, false),
+    Teardown = true,
     maybe_teardown(Teardown, TestResults, Coverage, Verbose),
     TestResults.
 
@@ -448,7 +449,8 @@ so_kill_riak_maybe() ->
     io:format("~n~nSo, we find ourselves in a tricky situation here. ~n"),
     io:format("You've run a single test, and it has failed.~n"),
     io:format("Would you like to leave Riak running in order to debug?~n"),
-    Input = io:get_chars("[Y/n] ", 1),
+    %Input = io:get_chars("[Y/n] ", 1),
+    Input = "n",
     case Input of
         "n" -> rt:teardown();
         "N" -> rt:teardown();
