@@ -181,8 +181,6 @@ main(Args) ->
     erlang:set_cookie(node(), Cookie),
 
     TestResults = lists:filter(fun results_filter/1, [ run_test(Test, TestType, Outdir, TestMetaData, Report, HarnessArgs, length(Tests)) || {TestType, {Test, TestMetaData}} <- Tests]),
-    lager:info("Test Results ~p", [TestResults]),
-    lager:info("ParsedArgs ~p", [ParsedArgs]),
     [rt_cover:maybe_import_coverage(proplists:get_value(coverdata, R)) || R <- TestResults],
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
