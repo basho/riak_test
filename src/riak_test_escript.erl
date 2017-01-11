@@ -21,7 +21,7 @@
 %% @private
 -module(riak_test_escript).
 -include("rt.hrl").
--export([main/1]).
+-export([main/2]).
 -export([add_deps/1]).
 
 add_deps(Path) ->
