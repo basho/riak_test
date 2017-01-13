@@ -43,7 +43,7 @@
                    "d5d4150799084ce34a36afadfa7cc65df6f4638c"}},
        {s3_api_tests,".*",
                      {git,"git@github.com:basho/s3-api-tests.git",
-                          "ca76d60be7b6433ab231b7d7061aee803362bb85"},
+                          "9df8114b82b83d8b63d9ad967d12d221721d7638"},
                      [raw]},
        {ibrowse,".*",
                 {git,"https://github.com/basho/ibrowse.git",
