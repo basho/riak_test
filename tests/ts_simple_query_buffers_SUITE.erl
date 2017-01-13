@@ -77,15 +77,11 @@ all() ->
      %% check how error conditions are reported
      query_orderby_max_quanta_error,
      query_orderby_max_data_size_error,
-     %% check LIMIT and ORDER BY, not involving follow-up queries
-     query_orderby_inmem2ldb,
-     query_orderby_comprehensive,
      %% check transition of inmem->ldb during data collection
+     query_orderby_inmem2ldb,
+     %% check LIMIT and ORDER BY, in various combinations of columns and qualifiers
+     query_orderby_comprehensive,
      query_orderby_ldb_io_error
-     %% check that query buffers persist and do not pick up updates to
-     %% the mother table (and do, after expiry)
-     %% query_orderby_no_updates
-     %% query_orderby_expiring
     ].
 
 %%
@@ -168,8 +164,9 @@ init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 
 init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = get_qbuf_dir(Node),
-    modify_dir_access(take_away, QBufDir),
+    %% force immediate creation of ldb instance (otherwise taking away permission will not take effect)
+    C = rt:pbc(Node),
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_no}]}),
     Cfg;
 
 init_per_testcase(query_orderby_inmem2ldb, Cfg) ->
@@ -190,8 +187,7 @@ end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
 
 end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = get_qbuf_dir(Node),
-    modify_dir_access(give_back, QBufDir),
+    rt_intercept:clean(Node, riak_kv_qry_buffers),
     ok;
 
 end_per_testcase(query_orderby_inmem2ldb, _Cfg) ->
@@ -215,8 +211,13 @@ query_orderby_max_data_size_error(Cfg) ->
 
 query_orderby_ldb_io_error(Cfg) ->
     ct:print("Testing error reporting (IO error) ...", []),
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    QBufDir = get_qbuf_dir(Node),
+    modify_dir_access(take_away, QBufDir),
     Query = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
-    ok = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QBUF_INTERNAL_ERROR).
+    ok = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QBUF_INTERNAL_ERROR),
+    modify_dir_access(give_back, QBufDir),
+    ok.
 
 
 %%
@@ -430,4 +431,3 @@ modify_dir_access(give_back, QBufDir) ->
     ct:pal("restore access to ~s\n", [QBufDir]),
     ok = file:delete(QBufDir),
     ok = file:rename(QBufDir++".boo", QBufDir).
-
