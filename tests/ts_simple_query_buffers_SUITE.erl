@@ -107,19 +107,22 @@ query_orderby_comprehensive(Cfg) ->
                     [F || F <- FF, F /= undefined]
             end,
             OrderByBattery1)),
-    lists:foreach(
-      fun(Items) ->
-              Variants =
-                  make_ordby_item_variants(Items),
-              lists:foreach(
-                fun(Var) ->
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 1}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 2}, {offset, 4}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}])
-                end,
-                Variants)
-      end,
-      OrderByBattery2).
+    OrderByBattery3 =
+        lists:append([make_ordby_item_variants(Items) || Items <- OrderByBattery2]),
+    ExecuteF =
+        fun() ->
+                lists:foreach(
+                  fun(OrdByItems) ->
+                       check_sorted(C, ?TABLE, Data, [{order_by, OrdByItems}, {limit, 1}]),
+                       check_sorted(C, ?TABLE, Data, [{order_by, OrdByItems}, {limit, 2}, {offset, 4}]),
+                       check_sorted(C, ?TABLE, Data, [{order_by, OrdByItems}])
+                  end,
+                  OrderByBattery3)
+        end,
+    {ExecTime, ok} = timer:tc(ExecuteF),
+    TotalQueries = 3 * length(OrderByBattery3),
+    ct:pal("Executed ~b queries in ~.2f sec (~b msec per query)",
+           [TotalQueries, ExecTime / 1000 / 1000, round((ExecTime / 1000) / TotalQueries)]).
 
 all_different(XX) ->
     YY = [X || X <- XX, X /= undefined],
