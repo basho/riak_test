@@ -80,8 +80,9 @@ all() ->
      %% check transition of inmem->ldb during data collection
      query_orderby_inmem2ldb,
      %% check LIMIT and ORDER BY, in various combinations of columns and qualifiers
-     query_orderby_comprehensive,
-     query_orderby_ldb_io_error
+     query_orderby_comprehensive
+     %% query_orderby_ldb_io_error
+     %% with single-instance, always-open leveldb, the renaming trick doesn't work.
     ].
 
 %%
@@ -166,10 +167,6 @@ init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
     Cfg;
 
 init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
-    Node = hd(proplists:get_value(cluster, Cfg)),
-    %% force immediate creation of ldb instance (otherwise taking away permission will not take effect)
-    C = rt:pbc(Node),
-    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_no}]}),
     Cfg;
 
 init_per_testcase(query_orderby_inmem2ldb, Cfg) ->
@@ -188,9 +185,7 @@ end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
     ok = rpc:call(Node, riak_kv_qry_buffers, set_max_query_data_size, [5*1000*1000]),
     ok;
 
-end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
-    Node = hd(proplists:get_value(cluster, Cfg)),
-    rt_intercept:clean(Node, riak_kv_qry_buffers),
+end_per_testcase(query_orderby_ldb_io_error, _Cfg) ->
     ok;
 
 end_per_testcase(query_orderby_inmem2ldb, _Cfg) ->
@@ -215,11 +210,21 @@ query_orderby_max_data_size_error(Cfg) ->
 query_orderby_ldb_io_error(Cfg) ->
     ct:print("Testing error reporting (IO error) ...", []),
     Node = hd(proplists:get_value(cluster, Cfg)),
+
+    C = rt:pbc(Node),
+    %% force immediate creation of ldb instance (otherwise taking away permission will not take effect)
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_no}]}),
+
     QBufDir = get_qbuf_dir(Node),
     modify_dir_access(take_away, QBufDir),
+
     Query = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
-    ok = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QBUF_INTERNAL_ERROR),
+    Res = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QBUF_INTERNAL_ERROR),
+
     modify_dir_access(give_back, QBufDir),
+    rt_intercept:clean(Node, riak_kv_qry_buffers),
+
+    ok = Res,
     ok.
 
 
