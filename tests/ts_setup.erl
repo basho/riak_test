@@ -40,7 +40,7 @@ start_cluster(NumNodes) ->
 -spec start_cluster(NumNodes :: pos_integer(),
                     Config :: list(tuple())) -> list(node()).
 start_cluster(NumNodes, Config) ->
-    rt:set_backend(eleveldb),
+    rt:set_backend(multi),
     lager:info("Building cluster of ~p~n", [NumNodes]),
     rt:build_cluster(NumNodes, Config).
 

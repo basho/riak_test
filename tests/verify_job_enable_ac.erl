@@ -37,7 +37,7 @@
 
 confirm() ->
     lager:info("Deploying 1 node"),
-    rt:set_backend(eleveldb),
+    rt:set_backend(multi),
     [Node] = rt:build_cluster(1, ?CFG),
 
     HttpClient = rt:httpc(Node),

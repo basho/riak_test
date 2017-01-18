@@ -58,7 +58,7 @@ shell_init() ->
     State.
 
 build_cluster() ->
-    rt:set_backend(eleveldb),
+    rt:set_backend(multi),
     _Nodes  = rt:build_cluster(?CLUSTERSIZE, ?EMPTYCONFIG).
 
 run_commands([], _State, _ShouldIncrement) ->

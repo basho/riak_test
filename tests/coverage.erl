@@ -35,7 +35,7 @@
 confirm() ->
     inets:start(),
 
-    rt:set_backend(eleveldb),
+    rt:set_backend(multi),
     Nodes = rt:build_cluster(5),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
