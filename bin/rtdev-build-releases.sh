@@ -186,9 +186,10 @@ build()
     fi
 }
 
-build "riak-1.4.12" $R15B01 1.4.12 false
 build "riak-2.0.2" $R16B02 2.0.2
 build "riak-2.0.4" $R16B02 2.0.4
-build "riak-2.0.6" $R16B02 2.0.6
+build "riak-2.0.5" $R16B02 2.0.5
 build "riak-2.0.7" $R16B02 2.0.7
+build "riak-2.1.4" $R16B02 2.1.4
+build "riak-2.2.0" $R16B02 2.2.0
 echo

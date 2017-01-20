@@ -47,11 +47,11 @@ cd $RT_DEST_DIR
 echo " - Reinitializing git state"
 
 ## Some versions of git and/or OS require these fields
-git config --local user.name "Riak Test"
-git config --local user.email "dev@basho.com"
-git config --local core.autocrlf input
-git config --local core.safecrlf false
-git config --local core.filemode true
+#git config --local user.name "Riak Test"
+#git config --local user.email "dev@basho.com"
+#git config --local core.autocrlf input
+#git config --local core.safecrlf false
+#git config --local core.filemode true
 
 git add --all --force .
 git commit -a -m "riak_test init" --amend > /dev/null
