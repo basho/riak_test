@@ -158,7 +158,7 @@ rollup(N, FF, Acc) ->
 
 init_per_testcase(query_orderby_max_quanta_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    ok = rpc:call(Node, application, set_env, [riak_kv, max_query_quanta, ?RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA]),
+    ok = rpc:call(Node, application, set_env, [riak_kv, timeseries_query_max_quanta_span, ?RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA]),
     Cfg;
 
 init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
@@ -177,7 +177,7 @@ init_per_testcase(_, Cfg) ->
 
 end_per_testcase(query_orderby_max_quanta_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    ok = rpc:call(Node, application, set_env, [riak_kv, max_query_quanta, 1000]),
+    ok = rpc:call(Node, application, set_env, [riak_kv, timeseries_query_max_quanta_span, 1000]),
     ok;
 
 end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
