@@ -39,50 +39,34 @@ confirm() ->
 
     {ok, {_, [{AfterAlter}]}} = ts_ops:query(Cluster, ShowQry),
 
-    ExpectedBefore = "CREATE TABLE " ++ Table ++ " ("
-    "somechars VARCHAR NOT NULL,\n"
-    "somebool BOOLEAN NOT NULL,\n"
-    "sometime TIMESTAMP NOT NULL,\n"
-    "somefloat DOUBLE,\n"
-    "PRIMARY KEY ((somechars, somebool, QUANTUM(sometime, 1, 'h')),\n"
-    "somechars, somebool, sometime))\n"
-    "WITH (active = true,\n"
-    "allow_mult = false,\n"
-    "dvv_enabled = false,\n"
-    "dw = one,\n"
-    "last_write_wins = true,\n"
-    "n_val = 2,\n"
-    "notfound_ok = true,\n"
-    "postcommit = '',\n"
-    "pr = 0,\n"
-    "pw = 0,\n"
-    "r = one,\n"
-    "rw = one,\n"
-    "w = quorum)",
+    ExpectedBefore = expected_show(Table, 2),
+    ExpectedAfter = expected_show(Table, 4),
 
-    ExpectedAfter = "CREATE TABLE " ++ Table ++ " ("
-    "somechars VARCHAR NOT NULL,\n"
-    "somebool BOOLEAN NOT NULL,\n"
-    "sometime TIMESTAMP NOT NULL,\n"
-    "somefloat DOUBLE,\n"
-    "PRIMARY KEY ((somechars, somebool, QUANTUM(sometime, 1, 'h')),\n"
-    "somechars, somebool, sometime))\n"
-    "WITH (active = true,\n"
-    "allow_mult = false,\n"
-    "dvv_enabled = false,\n"
-    "dw = one,\n"
-    "last_write_wins = true,\n"
-    "n_val = 4,\n"
-    "notfound_ok = true,\n"
-    "postcommit = '',\n"
-    "pr = 0,\n"
-    "pw = 0,\n"
-    "r = one,\n"
-    "rw = one,\n"
-    "w = quorum)",
     ?assertEqual(ExpectedBefore, AfterCreate),
     ?assertEqual(ExpectedAfter, AfterAlter),
     pass.
+
+expected_show(Table, NVal) ->
+    "CREATE TABLE " ++ Table ++ " ("
+    "somechars VARCHAR NOT NULL,\n"
+    "somebool BOOLEAN NOT NULL,\n"
+    "sometime TIMESTAMP NOT NULL,\n"
+    "somefloat DOUBLE,\n"
+    "PRIMARY KEY ((somechars, somebool, QUANTUM(sometime, 1, 'h')),\n"
+    "somechars, somebool, sometime))\n"
+    "WITH (active = true,\n"
+    "allow_mult = false,\n"
+    "dvv_enabled = false,\n"
+    "dw = one,\n"
+    "last_write_wins = true,\n"
+    "n_val = " ++ integer_to_list(NVal) ++ ",\n"
+    "notfound_ok = true,\n"
+    "postcommit = '',\n"
+    "pr = 0,\n"
+    "pw = 0,\n"
+    "r = one,\n"
+    "rw = one,\n"
+    "w = quorum)".
 
 initialize(Table) ->
     DDL = "CREATE TABLE " ++ Table ++ " ("
