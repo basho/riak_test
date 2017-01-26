@@ -292,10 +292,33 @@ sort_by(Data, OrderBy) ->
                             F2 = element(C, R2),
                             if F1 == F2 ->
                                     undefined;  %% let fields of lower precedence decide
-                               F1 == [] andalso F2 /= [] ->
-                                    Nul == "nulls first";
-                               F1 /= [] andalso F2 == [] ->
-                                    Nul == "nulls last";
+
+                               (F1 /= []) and (F2 == []) ->
+                                    %% null < Value?
+                                    case {Nul, Dir} of
+                                        {"nulls first", "asc"} ->
+                                            false;
+                                        {"nulls first", "desc"} ->
+                                            true;
+                                        {"nulls last", "asc"} ->
+                                            true;
+                                        {"nulls last", "desc"} ->
+                                            false
+                                    end;
+
+                               (F1 == []) and (F2 /= []) ->
+                                    %% null > Value?
+                                    case {Nul, Dir} of
+                                        {"nulls first", "asc"} ->
+                                            true;
+                                        {"nulls first", "desc"} ->
+                                            false;
+                                        {"nulls last", "asc"} ->
+                                            false;
+                                        {"nulls last", "desc"} ->
+                                            true
+                                    end;
+
                                F1 < F2 ->
                                     (Dir == "asc");
                                F1 > F2 ->
