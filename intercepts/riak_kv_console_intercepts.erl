@@ -144,16 +144,6 @@ verify_console_reip(Val) ->
         _ -> ?FAIL
     end.
 
-verify_console_reformat_indexes(Val) ->
-   case Val of
-        ["--downgrade"] -> ?PASS;
-        ["5"] -> ?PASS;
-        ["5", "--downgrade"] -> ?PASS;
-        ["6", "7"] -> ?PASS;
-        ["6", "7", "--downgrade"] -> ?PASS;
-        _ -> ?FAIL
-    end.
-
 verify_console_reformat_objects(Val) ->
    case Val of
         ["true"] -> ?PASS;
