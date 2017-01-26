@@ -39,6 +39,7 @@
 -export([suite/0, init_per_suite/1, groups/0, all/0,
          init_per_testcase/2, end_per_testcase/2]).
 -export([query_orderby_comprehensive/1,
+         query_orderby_cleanup/1,
          query_orderby_inmem2ldb/1,
          %% query_orderby_no_updates/1,
          %% query_orderby_expiring/1,  %% re-enable when clients will (in 1.6) learn to make use of qbuf_id
@@ -79,6 +80,8 @@ all() ->
      query_orderby_max_data_size_error,
      %% check transition of inmem->ldb during data collection
      query_orderby_inmem2ldb,
+     %% check that no temp tables are left behind
+     query_orderby_cleanup,
      %% check LIMIT and ORDER BY, in various combinations of columns and qualifiers
      query_orderby_comprehensive
      %% query_orderby_ldb_io_error
@@ -151,6 +154,17 @@ rollup(N, FF, Acc) ->
     {R, T} = lists:split(N, FF),
     rollup(N, T, [R | Acc]).
 
+
+query_orderby_cleanup(Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    {ok, QbufExpiryMsec} = rpc:call(Node, application, get_env, [riak_kv, timeseries_query_buffers_expire_ms]),
+    QbufAbsPath = get_qbuf_dir(Node),
+    ct:print("Waiting ~b msec to check that all temp tables in ~s are gone ...", [QbufExpiryMsec, QbufAbsPath]),
+    timer:sleep(QbufExpiryMsec + 1000),
+    Leftovers = filelib:wildcard(
+                  filename:join([QbufAbsPath, "*"])),
+    ?assertEqual(Leftovers, []),
+    ok.
 
 %%
 %% 2. checking error conditions reporting
