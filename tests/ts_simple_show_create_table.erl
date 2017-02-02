@@ -28,20 +28,26 @@
 
 confirm() ->
     Table = "ShowCreateTable",
-    DDL = "CREATE TABLE " ++ Table ++ " ("
-    " somechars   VARCHAR   NOT NULL,"
-    " somebool    BOOLEAN   NOT NULL,"
-    " sometime    TIMESTAMP NOT NULL,"
-    " somefloat   DOUBLE,"
-    " PRIMARY KEY ((somechars, somebool, QUANTUM(sometime, 1, 'h')), "
-    " somechars, somebool, sometime)) "
-    " WITH (n_val=2)",
-    Qry = "SHOW CREATE TABLE " ++ Table,
-    Cluster = ts_setup:start_cluster(1),
-    ts_setup:create_bucket_type(Cluster, DDL, Table),
-    ts_setup:activate_bucket_type(Cluster, Table),
-    {ok, {_, [{Got}]}} = ts_ops:query(Cluster, Qry),
-    Expected = "CREATE TABLE " ++ Table ++ " ("
+    Cluster = initialize(Table),
+
+    ShowQry = "SHOW CREATE TABLE " ++ Table,
+    {ok, {_, [{AfterCreate}]}} = ts_ops:query(Cluster, ShowQry),
+
+    AlterQry = "ALTER TABLE " ++ Table ++
+        " WITH (n_val = 4)",
+    {ok, _} = ts_ops:query(Cluster, AlterQry),
+
+    {ok, {_, [{AfterAlter}]}} = ts_ops:query(Cluster, ShowQry),
+
+    ExpectedBefore = expected_show(Table, 2),
+    ExpectedAfter = expected_show(Table, 4),
+
+    ?assertEqual(ExpectedBefore, AfterCreate),
+    ?assertEqual(ExpectedAfter, AfterAlter),
+    pass.
+
+expected_show(Table, NVal) ->
+    "CREATE TABLE " ++ Table ++ " ("
     "somechars VARCHAR NOT NULL,\n"
     "somebool BOOLEAN NOT NULL,\n"
     "sometime TIMESTAMP NOT NULL,\n"
@@ -53,13 +59,25 @@ confirm() ->
     "dvv_enabled = false,\n"
     "dw = one,\n"
     "last_write_wins = true,\n"
-    "n_val = 2,\n"
+    "n_val = " ++ integer_to_list(NVal) ++ ",\n"
     "notfound_ok = true,\n"
     "postcommit = '',\n"
     "pr = 0,\n"
     "pw = 0,\n"
     "r = one,\n"
     "rw = one,\n"
-    "w = quorum)",
-    ?assertEqual(Expected, Got),
-    pass.
+    "w = quorum)".
+
+initialize(Table) ->
+    DDL = "CREATE TABLE " ++ Table ++ " ("
+    " somechars   VARCHAR   NOT NULL,"
+    " somebool    BOOLEAN   NOT NULL,"
+    " sometime    TIMESTAMP NOT NULL,"
+    " somefloat   DOUBLE,"
+    " PRIMARY KEY ((somechars, somebool, QUANTUM(sometime, 1, 'h')), "
+    " somechars, somebool, sometime)) "
+    " WITH (n_val=2)",
+    Cluster = ts_setup:start_cluster(1),
+    ts_setup:create_bucket_type(Cluster, DDL, Table),
+    ts_setup:activate_bucket_type(Cluster, Table),
+    Cluster.
