@@ -16,19 +16,20 @@
 %% specific language governing permissions and limitations
 %% under the License.
 %%
-%% -------------------------------------------------------------------
+%%-------------------------------------------------------------------
 
--define(TABLE, "t1").
--define(TIMEBASE, (5*1000*1000)).
--define(LIFESPAN, 500).
--define(LIFESPAN_EXTRA, 510).
--define(WHERE_FILTER_A, <<"A00001">>).
--define(WHERE_FILTER_B, <<"B">>).
--define(ORDBY_COLS, ["a", "b", "c", "d", "e", undefined]).
+-module(riak_kv_qry_buffers_intercepts).
+-compile(export_all).
+-include("intercept.hrl").
 
-%% error codes as defined in riak_kv_ts_svc.erl
--define(E_SELECT_RESULT_TOO_BIG, 1022).
--define(E_QBUF_CREATE_ERROR,     1023).
--define(E_QBUF_LDB_ERROR,        1024).
--define(E_QUANTA_LIMIT,          1025).
--define(E_QBUF_INTERNAL_ERROR,   1027).
+-define(M, riak_kv_qry_buffers_orig).
+
+%% @doc simulate memory shortage to force inmem->ldb transition
+can_afford_inmem_random(_) ->
+    random:uniform(10) > 5.
+
+can_afford_inmem_yes(_) ->
+    true.
+
+can_afford_inmem_no(_) ->
+    false.
