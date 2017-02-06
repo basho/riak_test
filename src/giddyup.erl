@@ -117,7 +117,12 @@ post_all_artifacts(TestResult, Base, Log, CoverageFile) ->
         WebHook <- get_webhooks()],
 
     %% Upload all the ct_logs as an HTML zip website
-    upload_zipfile(Base, ["ct_logs"], "ct_logs.html.zip"),
+    case filelib:is_dir("ct_logs") of
+        true ->
+            upload_zipfile(Base, ["ct_logs"], "ct_logs.html.zip");
+        _ ->
+            ok
+    end,
     ZipList4 = add_ct_logs_to_zip(ZipList3),
 
     %% Finally upload the collection of artifacts as a zip file
@@ -218,11 +223,17 @@ guess_ctype(FName) ->
         _ -> "binary/octet-stream"
     end.
 
+upload_zipfile(_Base, [], _ZipName) ->
+    ok;
 upload_zipfile(Base, FileList, ZipName) ->
     ZipFile = "/tmp/zip_file" ++ integer_to_list(erlang:phash2(make_ref())),
-    {ok, _} = zip:create(ZipFile, FileList, [{compress, all}]),
-    {ok, Contents} = file:read_file(ZipFile),
-    giddyup:post_artifact(Base, {ZipName, Contents}),
+    case zip:create(ZipFile, FileList, [{compress, all}]) of
+    {ok, _} ->
+        {ok, Contents} = file:read_file(ZipFile),
+        giddyup:post_artifact(Base, {ZipName, Contents});
+    {error, Error} ->
+        lager:error("Could not upload file: ~p because of ~p", [ZipFile, Error])
+    end,
     file:delete(ZipFile).
 
 %% Add everything in the ct_logs directory to the zip file
