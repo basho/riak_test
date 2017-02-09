@@ -39,6 +39,8 @@
 -export([suite/0, init_per_suite/1, groups/0, all/0,
          init_per_testcase/2, end_per_testcase/2]).
 -export([query_orderby_comprehensive/1,
+         query_orderby_cleanup/1,
+         query_orderby_inmem2ldb/1,
          %% query_orderby_no_updates/1,
          %% query_orderby_expiring/1,  %% re-enable when clients will (in 1.6) learn to make use of qbuf_id
          query_orderby_max_quanta_error/1,
@@ -49,7 +51,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("ts_qbuf_util.hrl").
 
--define(TABLE2, "t2").  %% used to check for expiry; not to interfere with t1
 -define(RIDICULOUSLY_SMALL_MAX_QUERY_DATA_SIZE, 100).
 -define(RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA, 3).
 
@@ -63,9 +64,7 @@ init_per_suite(Cfg) ->
     Data = ts_qbuf_util:make_data(),
     ExtraData = ts_qbuf_util:make_extra_data(),
     ok = ts_qbuf_util:create_table(C, ?TABLE),
-    ok = ts_qbuf_util:create_table(C, ?TABLE2),
     ok = ts_qbuf_util:insert_data(C, ?TABLE,  Data),
-    ok = ts_qbuf_util:insert_data(C, ?TABLE2, Data),
     [{cluster, Cluster},
      {data, Data},
      {extra_data, ExtraData}
@@ -76,16 +75,17 @@ groups() ->
 
 all() ->
     [
-     %% 3. check how error conditions are reported
+     %% check how error conditions are reported
      query_orderby_max_quanta_error,
      query_orderby_max_data_size_error,
-     query_orderby_ldb_io_error,
-     %% 2. check LIMIT and ORDER BY, not involving follow-up queries
+     %% check transition of inmem->ldb during data collection
+     query_orderby_inmem2ldb,
+     %% check that no temp tables are left behind
+     query_orderby_cleanup,
+     %% check LIMIT and ORDER BY, in various combinations of columns and qualifiers
      query_orderby_comprehensive
-     %% 1. check that query buffers persist and do not pick up updates to
-     %% the mother table (and do, after expiry)
-     %% query_orderby_no_updates
-     %% query_orderby_expiring
+     %% query_orderby_ldb_io_error
+     %% with single-instance, always-open leveldb, the renaming trick doesn't work.
     ].
 
 %%
@@ -111,19 +111,22 @@ query_orderby_comprehensive(Cfg) ->
                     [F || F <- FF, F /= undefined]
             end,
             OrderByBattery1)),
-    lists:foreach(
-      fun(Items) ->
-              Variants =
-                  make_ordby_item_variants(Items),
-              lists:foreach(
-                fun(Var) ->
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 1}]),
-                        check_sorted(C, ?TABLE, Data, [{order_by, Var}, {limit, 2}, {offset, 4}])
-                end,
-                Variants)
-      end,
-      OrderByBattery2).
+    OrderByBattery3 =
+        lists:append([make_ordby_item_variants(Items) || Items <- OrderByBattery2]),
+    ExecuteF =
+        fun() ->
+                lists:foreach(
+                  fun(OrdByItems) ->
+                       check_sorted(C, ?TABLE, Data, [{order_by, OrdByItems}, {limit, 1}]),
+                       check_sorted(C, ?TABLE, Data, [{order_by, OrdByItems}, {limit, 2}, {offset, 4}]),
+                       check_sorted(C, ?TABLE, Data, [{order_by, OrdByItems}])
+                  end,
+                  OrderByBattery3)
+        end,
+    {ExecTime, ok} = timer:tc(ExecuteF),
+    TotalQueries = 3 * length(OrderByBattery3),
+    ct:pal("Executed ~b queries in ~.2f sec (~b msec per query)",
+           [TotalQueries, ExecTime / 1000 / 1000, round((ExecTime / 1000) / TotalQueries)]).
 
 all_different(XX) ->
     YY = [X || X <- XX, X /= undefined],
@@ -152,13 +155,24 @@ rollup(N, FF, Acc) ->
     rollup(N, T, [R | Acc]).
 
 
+query_orderby_cleanup(Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    {ok, QbufExpiryMsec} = rpc:call(Node, application, get_env, [riak_kv, timeseries_query_buffers_expire_ms]),
+    QbufAbsPath = get_qbuf_dir(Node),
+    ct:print("Waiting ~b msec to check that all temp tables in ~s are gone ...", [QbufExpiryMsec, QbufAbsPath]),
+    timer:sleep(QbufExpiryMsec + 1000),
+    Leftovers = filelib:wildcard(
+                  filename:join([QbufAbsPath, "*"])),
+    ?assertEqual(Leftovers, []),
+    ok.
+
 %%
 %% 2. checking error conditions reporting
 %% --------------------------------------
 
 init_per_testcase(query_orderby_max_quanta_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    ok = rpc:call(Node, application, set_env, [riak_kv, max_query_quanta, ?RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA]),
+    ok = rpc:call(Node, application, set_env, [riak_kv, timeseries_query_max_quanta_span, ?RIDICULOUSLY_SMALL_MAX_QUERY_QUANTA]),
     Cfg;
 
 init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
@@ -167,9 +181,9 @@ init_per_testcase(query_orderby_max_data_size_error, Cfg) ->
     Cfg;
 
 init_per_testcase(query_orderby_ldb_io_error, Cfg) ->
-    Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
-    modify_dir_access(take_away, QBufDir),
+    Cfg;
+
+init_per_testcase(query_orderby_inmem2ldb, Cfg) ->
     Cfg;
 
 init_per_testcase(_, Cfg) ->
@@ -177,7 +191,7 @@ init_per_testcase(_, Cfg) ->
 
 end_per_testcase(query_orderby_max_quanta_error, Cfg) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
-    ok = rpc:call(Node, application, set_env, [riak_kv, max_query_quanta, 1000]),
+    ok = rpc:call(Node, application, set_env, [riak_kv, timeseries_query_max_quanta_span, 1000]),
     ok;
 
 end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
@@ -185,29 +199,110 @@ end_per_testcase(query_orderby_max_data_size_error, Cfg) ->
     ok = rpc:call(Node, riak_kv_qry_buffers, set_max_query_data_size, [5*1000*1000]),
     ok;
 
-end_per_testcase(query_orderby_ldb_io_error, Cfg) ->
-    Node = hd(proplists:get_value(cluster, Cfg)),
-    QBufDir = filename:join([rtdev:node_path(Node), "data/query_buffers"]),
-    modify_dir_access(give_back, QBufDir),
+end_per_testcase(query_orderby_ldb_io_error, _Cfg) ->
     ok;
+
+end_per_testcase(query_orderby_inmem2ldb, _Cfg) ->
+    ok;
+
 end_per_testcase(_, Cfg) ->
     Cfg.
 
 
 query_orderby_max_quanta_error(Cfg) ->
+    ct:print("Testing error reporting (max_query_quanta) ...", []),
     Query = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
     ok = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QUANTA_LIMIT).
 
 query_orderby_max_data_size_error(Cfg) ->
+    ct:print("Testing error reporting (max_query_data_size) ...", []),
     Query1 = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
     ok = ts_qbuf_util:ack_query_error(Cfg, Query1, ?E_SELECT_RESULT_TOO_BIG),
     Query2 = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}, {limit, 99999}]),
     ok = ts_qbuf_util:ack_query_error(Cfg, Query2, ?E_SELECT_RESULT_TOO_BIG).
 
 query_orderby_ldb_io_error(Cfg) ->
-    Query = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
-    ok = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QBUF_CREATE_ERROR).
+    ct:print("Testing error reporting (IO error) ...", []),
+    Node = hd(proplists:get_value(cluster, Cfg)),
 
+    C = rt:pbc(Node),
+    %% force immediate creation of ldb instance (otherwise taking away permission will not take effect)
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_no}]}),
+
+    QBufDir = get_qbuf_dir(Node),
+    modify_dir_access(take_away, QBufDir),
+
+    Query = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"d", undefined, undefined}]}]),
+    Res = ts_qbuf_util:ack_query_error(Cfg, Query, ?E_QBUF_INTERNAL_ERROR),
+
+    modify_dir_access(give_back, QBufDir),
+    rt_intercept:clean(Node, riak_kv_qry_buffers),
+
+    ok = Res,
+    ok.
+
+
+%%
+%% 4. checking transition from inmem to ldb during data collection
+%% --------------------------------------
+
+query_orderby_inmem2ldb(Cfg) ->
+    ct:print("Testing inmem vs ldb vs mixed code paths (3 x 100 queries) ...", []),
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    Data = proplists:get_value(data, Cfg),
+    C = rt:pbc(Node),
+
+    %% a hack to enable intercepts to load precooked modules. Without it,
+    %% CT harness runs the tests in a directory under ct_logs (for example,
+    %% riak_test/ct_logs/ct_run.riak_test@127.0.0.1.2016-12-23_20.35.46),
+    %% which confuses rt_intercept.
+    rpc:call(Node, code, add_patha, [filename:join([rt_local:home_dir(), "../../ebin"])]),
+    rt_intercept:load_code(Node),
+
+    Exec100F =
+        fun() ->
+                [begin
+                     F = fun() -> check_sorted(C, ?TABLE, Data, [{order_by, [{"c", undefined, undefined}]}]) end,
+                     {ExecTime, ok} = timer:tc(F),
+                     ExecTime
+                 end || _ <- lists:seq(1, 99)]
+        end,
+
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_random}]}),
+    ExecTimesRandom = Exec100F(),
+
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_yes}]}),
+    ExecTimesAllInmem = Exec100F(),
+
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_no}]}),
+    ExecTimesNoneInmem = Exec100F(),
+
+    ct:pal("Avg query exec times: All inmem: ~b msec\n"
+           "                     None inmem: ~b msec\n"
+           "                          Mixed: ~b msec\n",
+           [round(lists:sum(ExecTimesAllInmem)  / 100 / 1000),
+            round(lists:sum(ExecTimesNoneInmem) / 100 / 1000),
+            round(lists:sum(ExecTimesRandom)    / 100 / 1000)]),
+    rt_intercept:clean(Node, riak_kv_qry_buffers).
+
+load_intercept(Node, C, Intercept) ->
+    ok = rt_intercept:add(Node, Intercept),
+    %% when code changes underneath the riak_kv_qry_buffers
+    %% gen_server, it gets reinitialized. We need to probe it with a
+    %% dummy query until it becomes ready.
+    wait_until_qbuf_mgr_reinit(C).
+
+wait_until_qbuf_mgr_reinit(C) ->
+    ProbingQuery = ts_qbuf_util:full_query(?TABLE, [{order_by, [{"c", undefined, undefined}]}]),
+    case riakc_ts:query(C, ProbingQuery, [], undefined, []) of
+        {ok, _Data} ->
+            ok;
+        {error, {ErrCode, _NotReadyMessage}}
+          when ErrCode == ?E_QBUF_CREATE_ERROR;
+               ErrCode == ?E_QBUF_INTERNAL_ERROR ->
+            timer:sleep(100),
+            wait_until_qbuf_mgr_reinit(C)
+    end.
 
 %% Supporting functions
 %% ---------------------------
@@ -292,10 +387,33 @@ sort_by(Data, OrderBy) ->
                             F2 = element(C, R2),
                             if F1 == F2 ->
                                     undefined;  %% let fields of lower precedence decide
-                               F1 == [] andalso F2 /= [] ->
-                                    Nul == "nulls first";
-                               F1 /= [] andalso F2 == [] ->
-                                    Nul == "nulls last";
+
+                               (F1 /= []) and (F2 == []) ->
+                                    %% null < Value?
+                                    case {Nul, Dir} of
+                                        {"nulls first", "asc"} ->
+                                            false;
+                                        {"nulls first", "desc"} ->
+                                            true;
+                                        {"nulls last", "asc"} ->
+                                            true;
+                                        {"nulls last", "desc"} ->
+                                            false
+                                    end;
+
+                               (F1 == []) and (F2 /= []) ->
+                                    %% null > Value?
+                                    case {Nul, Dir} of
+                                        {"nulls first", "asc"} ->
+                                            true;
+                                        {"nulls first", "desc"} ->
+                                            false;
+                                        {"nulls last", "asc"} ->
+                                            false;
+                                        {"nulls last", "desc"} ->
+                                            true
+                                    end;
+
                                F1 < F2 ->
                                     (Dir == "asc");
                                F1 > F2 ->
@@ -340,8 +458,17 @@ col_no({[A|_], _, _}) ->
     A - $a + 1.
 
 
+get_qbuf_dir(Node) ->
+    {ok, QBufDir} = rpc:call(Node, application, get_env, [riak_kv, timeseries_query_buffers_root_path]),
+    case hd(QBufDir) of
+        $/ ->
+            QBufDir;
+        _ ->
+            filename:join([rtdev:node_path(Node), QBufDir])
+    end.
+
 modify_dir_access(take_away, QBufDir) ->
-    ct:pal("take away access to ~s\n", [QBufDir]),
+    ct:pal("take away access from ~s\n", [QBufDir]),
     ok = file:rename(QBufDir, QBufDir++".boo"),
     ok = file:write_file(QBufDir, "nothing here");
 
@@ -349,4 +476,3 @@ modify_dir_access(give_back, QBufDir) ->
     ct:pal("restore access to ~s\n", [QBufDir]),
     ok = file:delete(QBufDir),
     ok = file:rename(QBufDir++".boo", QBufDir).
-

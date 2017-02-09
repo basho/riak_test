@@ -31,3 +31,4 @@
 -define(E_QBUF_CREATE_ERROR,     1023).
 -define(E_QBUF_LDB_ERROR,        1024).
 -define(E_QUANTA_LIMIT,          1025).
+-define(E_QBUF_INTERNAL_ERROR,   1027).
