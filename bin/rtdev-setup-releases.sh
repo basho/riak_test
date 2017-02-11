@@ -39,14 +39,11 @@ cd $RT_DEST_DIR
 git init 
 
 ## Some versions of git and/or OS require these fields
-HAS_LOCAL=$(git config --local 2>&1 | grep unknown)
-if [ -z "$HAS_LOCAL" ]; then
-    git config --local user.name "Riak Test"
-    git config --local user.email "dev@basho.com"
-    git config --local core.autocrlf input
-    git config --local core.safecrlf false
-    git config --local core.filemode true
-fi
+git config --local user.name "Riak Test"
+git config --local user.email "dev@basho.com"
+git config --local core.autocrlf input
+git config --local core.safecrlf false
+git config --local core.filemode true
 
 ## this prevents priv/*.so files from being deleted by git clean -fd
 ## (the latter is executed in rtdev-current.sh):
@@ -54,5 +51,4 @@ echo "priv/" >.gitignore
 
 git add --all --force .
 git commit -a -m "riak_test init" > /dev/null
-
 echo " - Successfully completed initial git commit of $RT_DEST_DIR"
