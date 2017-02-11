@@ -23,6 +23,7 @@
 
 -export([suite/0, init_per_suite/1, groups/0, all/0]).
 -export([query_invdist_percentile/1,
+         query_invdist_percentile_backends/1,
          query_invdist_percentile_multiple/1,
          query_invdist_median/1,
          query_invdist_errors/1]).
@@ -51,6 +52,7 @@ all() ->
     [
      query_invdist_percentile,
      query_invdist_percentile_multiple,
+     query_invdist_percentile_backends,
      query_invdist_median,
      query_invdist_errors
     ].
@@ -68,6 +70,37 @@ query_invdist_percentile(Cfg) ->
                   ct:fail("")
       end,
       ["a", "b", "c", "d", "e"]).
+
+
+query_invdist_percentile_backends(Cfg) ->
+    Node = hd(proplists:get_value(cluster, Cfg)),
+    C = rt:pbc(Node),
+    Data = proplists:get_value(data, Cfg),
+
+    WorkF =
+        fun() ->
+                lists:foreach(
+                  fun(Col) ->
+                          check_column(C, Col, Data) orelse
+                              ct:fail("")
+                  end,
+                  ["a", "b", "c", "d", "e"])
+        end,
+
+    rpc:call(Node, code, add_patha, [filename:join([rt_local:home_dir(), "../../ebin"])]),
+    rt_intercept:load_code(Node),
+
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_yes}]}),
+    ct:log("all inmem", []),
+    WorkF(),
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_no}]}),
+    ct:log("all ldb", []),
+    WorkF(),
+    load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_random}]}),
+    ct:log("random", []),
+    WorkF(),
+    rt_intercept:clean(Node, riak_kv_qry_buffers),
+    ok.
 
 
 query_invdist_percentile_multiple(Cfg) ->
@@ -222,6 +255,27 @@ get_percentile([FChar|_], Pc, Data) ->
     FNo = 1 + (FChar - $a),
     Pos = lists:min([1 + round(Pc * length(Data)), length(Data)]),
     element(FNo, lists:nth(Pos, Data)).
+
+
+load_intercept(Node, C, Intercept) ->
+    ok = rt_intercept:add(Node, Intercept),
+    %% when code changes underneath the riak_kv_qry_buffers
+    %% gen_server, it gets reinitialized. We need to probe it with a
+    %% dummy query until it becomes ready.
+    rt_intercept:wait_until_loaded(Node),
+    wait_until_qbuf_mgr_reinit(C).
+
+wait_until_qbuf_mgr_reinit(C) ->
+    ProbingQuery = make_query("*", ""),
+    case riakc_ts:query(C, ProbingQuery, [], undefined, []) of
+        {ok, _Data} ->
+            ok;
+        {error, {ErrCode, _NotReadyMessage}}
+          when ErrCode == ?E_QBUF_CREATE_ERROR;
+               ErrCode == ?E_QBUF_INTERNAL_ERROR ->
+            timer:sleep(100),
+            wait_until_qbuf_mgr_reinit(C)
+    end.
 
 
 fmt(F, A) ->
