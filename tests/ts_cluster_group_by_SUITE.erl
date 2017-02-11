@@ -55,7 +55,7 @@ end_per_testcase(_TestCase, _Config) ->
 groups() ->
     [].
 
-all() -> 
+all() ->
     rt:grep_test_functions(?MODULE).
 
 client_pid(Ctx) ->
@@ -115,11 +115,3 @@ group_by_2_test(Ctx) ->
         {rt_ignore_columns, [{1,500.5},{2,500.5},{3,500.5}]},
         {ok,{Cols, lists:sort(Rows)}}
     ).
-
-
-
-
-
-
-
-
