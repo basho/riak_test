@@ -127,7 +127,7 @@ group_by_time_test(Ctx) ->
     ok = riakc_ts:put(client_pid(Ctx), <<"grouptab3">>,
         [{A} || A <- lists:seq(1,10000,2)]),
     Query =
-        "SELECT COUNT(*) FROM grouptab3 "
+        "SELECT time(a,1s), COUNT(*) FROM grouptab3 "
         "WHERE a >= 1 AND a <= 10000"
         "GROUP BY time(a,1s)",
     {ok, {Cols, Rows}} = run_query(Ctx, Query),
