@@ -1,3 +1,4 @@
+riak_test_bb_version: 'riak/2.0'
 docker_rt_riak_test_config:
   - version: current
     product_version: current
