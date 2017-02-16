@@ -28,6 +28,8 @@
          query_invdist_median/1,
          query_invdist_errors/1]).
 
+-export([percentile_disc/3, percentile_cont/3]).  %% make them 'used' for erlc
+
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("ts_qbuf_util.hrl").
@@ -107,11 +109,11 @@ query_invdist_percentile_multiple(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
     Data = proplists:get_value(data, Cfg),
     {Col1, Col2, Pc1, Pc2} = {"b", "b", 0.22, 0.77},
-    Query = make_query(fmt("percentile(~s, ~g), percentile(~s, ~g)", [Col1, Pc1, Col2, Pc2])),
+    Query = make_query(fmt("percentile_disc(~s, ~g), percentile_cont(~s, ~g)", [Col1, Pc1, Col2, Pc2])),
     {ok, {_Cols, [{Got1, Got2}]} = _Returned} =
         riakc_ts:query(C, Query, [], undefined, []),
-    {Need1, Need2} = {get_percentile(Col1, Pc1, order_by(Col1, Data)),
-                      get_percentile(Col2, Pc2, order_by(Col2, Data))},
+    {Need1, Need2} = {percentile_disc(Col1, Pc1, order_by(Col1, Data)),
+                      percentile_cont(Col2, Pc2, order_by(Col2, Data))},
     ct:log("Query \"~s\"", [Query]),
     case {Got1 == Need1, Got2 == Need2} of
         {true, true} ->
@@ -124,7 +126,7 @@ query_invdist_median(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
     lists:foreach(
       fun(Col) ->
-              Query = make_query(fmt("percentile(~s, 0.5), median(~s)", [Col, Col])),
+              Query = make_query(fmt("percentile_disc(~s, 0.5), median(~s)", [Col, Col])),
               {ok, {_Cols, [{Got1, Got2}]} = _Returned} =
                   riakc_ts:query(C, Query, [], undefined, []),
               ct:log("Query \"~s\"", [Query]),
@@ -145,29 +147,29 @@ query_invdist_errors(Cfg) ->
                  ok,
                  ts_qbuf_util:ack_query_error(Cfg, Qry, ?E_SUBMIT, ErrPat))
       end,
-      [{"percentile(nxcol, 0.2)", [],
+      [{"percentile_disc(nxcol, 0.2)", [],
         "Unknown column \"nxcol\""},
        {"median(a), b", [],
         "Inverse distribution functions cannot be used with other columns in SELECT clause"},
-       {"percentile(1)", [],
-        "Function PERCENTILE/1 called with 1 argument"},
-       {"percentile(a, 1.2)", [],
-        "Invalid argument 2 in call to function PERCENTILE"},
-       {"percentile(a, 0.1), percentile(b, 0.2)", [],
+       {"percentile_disc(1)", [],
+        "Function PERCENTILE_DISC/1 called with 1 argument"},
+       {"percentile_disc(a, 1.2)", [],
+        "Invalid argument 2 in call to function PERCENTILE_DISC"},
+       {"percentile_disc(a, 0.1), percentile_disc(b, 0.2)", [],
         "Multiple inverse distribution functions must all have the same column argument"},
-       {"percentile(a, 1+c)", [],
-        "Function 'PERCENTILE' called with arguments of the wrong type"},
-       {"percentile(a, 1.1+c)", [],
+       {"percentile_disc(a, 1+c)", [],
+        "Function 'PERCENTILE_DISC' called with arguments of the wrong type"},
+       {"percentile_disc(a, 1.1+c)", [],
         "Non-const expression passed as parameter for inverse distribution function"},
-       {"percentile(a, 1.1/0)", [],
+       {"percentile_disc(a, 1.1/0)", [],
         "Invalid expression passed as parameter for inverse distribution function"},
-       {"percentile(a, 0.3), avg(b)", [],
+       {"percentile_disc(a, 0.3), avg(b)", [],
         "Inverse distribution functions cannot be used with GROUP BY clause or aggregating window functions"},
-       {"percentile(a, 0.1)", "group by a",
+       {"percentile_disc(a, 0.1)", "group by a",
         "Inverse distribution functions cannot be used with GROUP BY clause or aggregating window functions"},
-       {"percentile(a, 0.1)", "order by a",
+       {"percentile_disc(a, 0.1)", "order by a",
         "Inverse distribution functions cannot be used with any of ORDER BY, LIMIT or OFFSET clauses"},
-       {"percentile(a, 0.1)", "limit 1",
+       {"percentile_disc(a, 0.1)", "limit 1",
         "Inverse distribution functions cannot be used with any of ORDER BY, LIMIT or OFFSET clauses"}]).
 
 
@@ -221,13 +223,23 @@ make_query(Select, Extra) ->
 
 check_column(C, Col, Data) ->
     SortedData = order_by(Col, Data),
+    Combos =
+        [{PercentileVariety, Parm, Parm_s} ||
+            {Parm, Parm_s} <- [{0.24, "0.24"},
+                               {0.11, "0.11"},
+                               {0.0, "0.0"},
+                               {0.8, "0.8*1"},
+                               {1.0, "1/1.0"},
+                               {0.36, "(3.6/10)"},
+                               {0.40, "0.5 - 1 * 0.1"}],
+            PercentileVariety <- [percentile_cont, percentile_disc]],
     ok == lists:foreach(
-            fun({Pc, Pc_s}) ->
-                    Query = make_query(fmt("percentile(~s, ~s)", [Col, Pc_s])),
+            fun({PercentileFun, Pc, Pc_s}) ->
+                    Query = make_query(fmt("~s(~s, ~s)", [PercentileFun, Col, Pc_s])),
+                    ct:log("Query \"~s\"", [Query]),
                     {ok, {_Cols, [{Got}]} = _Returned} =
                         riakc_ts:query(C, Query, [], undefined, []),
-                    Need = get_percentile(Col, Pc, SortedData),
-                    ct:log("Query \"~s\"", [Query]),
+                    Need = apply(?MODULE, PercentileFun, [Col, Pc, SortedData]),
                     case Got == Need of
                         true ->
                             ok;
@@ -235,13 +247,7 @@ check_column(C, Col, Data) ->
                             ct:fail("Got ~p, Need ~p\n", [Got, Need])
                     end
             end,
-            [{0.24, "0.24"},
-             {0.11, "0.11"},
-             {0.0, "0.0"},
-             {0.8, "0.8*1"},
-             {1.0, "1/1.0"},
-             {0.35, "(3.5/10)"},
-             {0.3, "0.4-(1*0.1)"}]).
+            Combos).
 
 order_by([FChar|_], Data) ->
     FNo = 1 + (FChar - $a),
@@ -251,11 +257,33 @@ order_by([FChar|_], Data) ->
       end,
       Data).
 
-get_percentile([FChar|_], Pc, Data) ->
+percentile_disc([FChar|_], Pc, Data_) ->
     FNo = 1 + (FChar - $a),
-    Pos = lists:min([1 + round(Pc * length(Data)), length(Data)]),
-    element(FNo, lists:nth(Pos, Data)).
+    Data = [D || D <- Data_, element(FNo, D) /= []],
+    RN = (1 + (Pc * (length(Data) - 1))),
+    Row = lists:nth(trunc(RN), Data),
+    element(FNo, Row).
 
+percentile_cont([FChar|_], Pc, Data_) ->
+    FNo = 1 + (FChar - $a),
+    Data = [D || D <- Data_, element(FNo, D) /= []],
+    RN = (1 + (Pc * (length(Data) - 1))),
+    {LoRN, HiRN} = {trunc(RN), ceil(RN)},
+    case LoRN == HiRN of
+        true ->
+            element(FNo, lists:nth(LoRN, Data));
+        false ->
+            LoVal = element(FNo, lists:nth(LoRN, Data)),
+            HiVal = element(FNo, lists:nth(HiRN, Data)),
+            (HiRN - RN) * LoVal + (RN - LoRN) * HiVal
+    end.
+
+ceil(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true -> T;
+        false -> T + 1
+    end.
 
 load_intercept(Node, C, Intercept) ->
     ok = rt_intercept:add(Node, Intercept),
