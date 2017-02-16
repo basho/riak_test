@@ -26,6 +26,7 @@
          query_invdist_percentile_backends/1,
          query_invdist_percentile_multiple/1,
          query_invdist_median/1,
+         query_invdist_mode/1,
          query_invdist_errors/1]).
 
 -export([percentile_disc/3, percentile_cont/3]).  %% make them 'used' for erlc
@@ -56,6 +57,7 @@ all() ->
      query_invdist_percentile_multiple,
      query_invdist_percentile_backends,
      query_invdist_median,
+     query_invdist_mode,
      query_invdist_errors
     ].
 
@@ -93,13 +95,13 @@ query_invdist_percentile_backends(Cfg) ->
     rt_intercept:load_code(Node),
 
     load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_yes}]}),
-    ct:log("all inmem", []),
+    ct:log("----------- all inmem", []),
     WorkF(),
     load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_no}]}),
-    ct:log("all ldb", []),
+    ct:log("----------- all ldb", []),
     WorkF(),
     load_intercept(Node, C, {riak_kv_qry_buffers, [{{can_afford_inmem, 1}, can_afford_inmem_random}]}),
-    ct:log("random", []),
+    ct:log("----------- random", []),
     WorkF(),
     rt_intercept:clean(Node, riak_kv_qry_buffers),
     ok.
@@ -110,7 +112,7 @@ query_invdist_percentile_multiple(Cfg) ->
     Data = proplists:get_value(data, Cfg),
     {Col1, Col2, Pc1, Pc2} = {"b", "b", 0.22, 0.77},
     Query = make_query(fmt("percentile_disc(~s, ~g), percentile_cont(~s, ~g)", [Col1, Pc1, Col2, Pc2])),
-    {ok, {_Cols, [{Got1, Got2}]} = _Returned} =
+    {ok, {_Cols, [{Got1, Got2}]}} =
         riakc_ts:query(C, Query, [], undefined, []),
     {Need1, Need2} = {percentile_disc(Col1, Pc1, order_by(Col1, Data)),
                       percentile_cont(Col2, Pc2, order_by(Col2, Data))},
@@ -119,25 +121,48 @@ query_invdist_percentile_multiple(Cfg) ->
         {true, true} ->
             ok;
         _ ->
-            ct:fail("Got {~p, ~p}, Need {~p, ~p}\n", [Got1, Got2, Need1, Need2])
+            ct:fail("PERCENTILE_DISC vs _CONT: Got {~p, ~p}, Need {~p, ~p}\n", [Got1, Got2, Need1, Need2])
     end.
+
 
 query_invdist_median(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
     lists:foreach(
       fun(Col) ->
               Query = make_query(fmt("percentile_disc(~s, 0.5), median(~s)", [Col, Col])),
-              {ok, {_Cols, [{Got1, Got2}]} = _Returned} =
+              {ok, {_Cols, [{Got1, Got2}]}} =
                   riakc_ts:query(C, Query, [], undefined, []),
               ct:log("Query \"~s\"", [Query]),
               case Got1 == Got2 of
                   true ->
                       ok;
                   _ ->
-                      ct:fail("Got {~p, ~p}, Need equal\n", [Got1, Got2])
+                      ct:fail("MEDIAN: Got {~p, ~p}, Need equal\n", [Got1, Got2])
               end
       end,
       ["a", "b", "c", "d", "e"]).
+
+
+query_invdist_mode(Cfg) ->
+    C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
+    Data = proplists:get_value(data, Cfg),
+    lists:foreach(
+      fun(Col) ->
+              SortedData = order_by(Col, Data),
+              Query = make_query(fmt("mode(~s)", [Col])),
+              {ok, {_Cols, [{Got}]}} =
+                  riakc_ts:query(C, Query, [], undefined, []),
+              ct:log("Query \"~s\"", [Query]),
+              Need = mode(Col, SortedData),
+              case Got == Need of
+                  true ->
+                      ok;
+                  _ ->
+                      ct:fail("MODE: Got ~p, Need ~p\n", [Got, Need])
+              end
+      end,
+      ["a", "b", "c", "d", "e"]).
+
 
 query_invdist_errors(Cfg) ->
     lists:foreach(
@@ -171,6 +196,64 @@ query_invdist_errors(Cfg) ->
         "Inverse distribution functions cannot be used with any of ORDER BY, LIMIT or OFFSET clauses"},
        {"percentile_disc(a, 0.1)", "limit 1",
         "Inverse distribution functions cannot be used with any of ORDER BY, LIMIT or OFFSET clauses"}]).
+
+
+%% tested functions implememnted independently
+%% -------------------------------
+
+percentile_disc(F, Pc, Data_) ->
+    Col = remove_nulls(F, Data_),
+    RN = (1 + (Pc * (length(Col) - 1))),
+    lists:nth(trunc(RN), Col).
+
+percentile_cont(F, Pc, Data_) ->
+    Col = remove_nulls(F, Data_),
+    RN = (1 + (Pc * (length(Col) - 1))),
+    {LoRN, HiRN} = {trunc(RN), ceil(RN)},
+    case LoRN == HiRN of
+        true ->
+            lists:nth(LoRN, Col);
+        false ->
+            LoVal = lists:nth(LoRN, Col),
+            HiVal = lists:nth(HiRN, Col),
+            (HiRN - RN) * LoVal + (RN - LoRN) * HiVal
+    end.
+
+ceil(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true -> T;
+        false -> T + 1
+    end.
+
+mode(F, Data_) ->
+    Col = remove_nulls(F, Data_),
+    Min = lists:nth(1, Col),
+    largest_bin(Min, Col).
+
+remove_nulls([FChar|_], Data_) ->
+    FNo = 1 + (FChar - $a),
+    [element(FNo, D) || D <- Data_, element(FNo, D) /= []].
+
+largest_bin(X1, Data) ->
+    largest_bin_({X1, 1, X1, 1}, 2, Data).
+
+largest_bin_({LargestV, _, _, _}, Pos, Data) when Pos > length(Data) ->
+    LargestV;
+largest_bin_({LargestV, LargestC, CurrentV, CurrentC}, Pos, Data) ->
+    case lists:nth(Pos, Data) of
+        V when V == CurrentV ->
+            largest_bin_({LargestV, LargestC,
+                          CurrentV, CurrentC + 1}, Pos + 1, Data);
+        V when V > CurrentV,
+               CurrentC > LargestC ->
+            largest_bin_({CurrentV, CurrentC,  %% now these be largest
+                          V, 1}, Pos + 1, Data);
+        V when V > CurrentV,
+               CurrentC =< LargestC ->
+            largest_bin_({LargestV, LargestC,  %% keep largest, reset current
+                          V, 1}, Pos + 1, Data)
+    end.
 
 
 %% supporting functions
@@ -237,7 +320,7 @@ check_column(C, Col, Data) ->
             fun({PercentileFun, Pc, Pc_s}) ->
                     Query = make_query(fmt("~s(~s, ~s)", [PercentileFun, Col, Pc_s])),
                     ct:log("Query \"~s\"", [Query]),
-                    {ok, {_Cols, [{Got}]} = _Returned} =
+                    {ok, {_Cols, [{Got}]}} =
                         riakc_ts:query(C, Query, [], undefined, []),
                     Need = apply(?MODULE, PercentileFun, [Col, Pc, SortedData]),
                     case Got == Need of
@@ -257,33 +340,8 @@ order_by([FChar|_], Data) ->
       end,
       Data).
 
-percentile_disc([FChar|_], Pc, Data_) ->
-    FNo = 1 + (FChar - $a),
-    Data = [D || D <- Data_, element(FNo, D) /= []],
-    RN = (1 + (Pc * (length(Data) - 1))),
-    Row = lists:nth(trunc(RN), Data),
-    element(FNo, Row).
 
-percentile_cont([FChar|_], Pc, Data_) ->
-    FNo = 1 + (FChar - $a),
-    Data = [D || D <- Data_, element(FNo, D) /= []],
-    RN = (1 + (Pc * (length(Data) - 1))),
-    {LoRN, HiRN} = {trunc(RN), ceil(RN)},
-    case LoRN == HiRN of
-        true ->
-            element(FNo, lists:nth(LoRN, Data));
-        false ->
-            LoVal = element(FNo, lists:nth(LoRN, Data)),
-            HiVal = element(FNo, lists:nth(HiRN, Data)),
-            (HiRN - RN) * LoVal + (RN - LoRN) * HiVal
-    end.
-
-ceil(X) ->
-    T = trunc(X),
-    case X - T == 0 of
-        true -> T;
-        false -> T + 1
-    end.
+%% intercepts
 
 load_intercept(Node, C, Intercept) ->
     ok = rt_intercept:add(Node, Intercept),
