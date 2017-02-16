@@ -40,7 +40,7 @@
                      "6c67dc58251e1a1c29b2e0c444b1e9c9aa2d4a24"}},
        {riakc,".*",
               {git,"https://github.com/basho/riak-erlang-client",
-                   "82ae32bd28090ab911b5c25d2be690c7d2a3e027"}},
+                   "8ae580b98446b0e0a2303c2101ab43830ead7717"}},
        {s3_api_tests,".*",
                      {git,"git@github.com:basho/s3-api-tests.git",
                           "ae6d2f1a12e5d78558ec053052da5c01772e0301"},
