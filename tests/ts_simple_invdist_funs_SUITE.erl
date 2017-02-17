@@ -22,7 +22,8 @@
 -module(ts_simple_invdist_funs_SUITE).
 
 -export([suite/0, init_per_suite/1, groups/0, all/0]).
--export([query_invdist_percentile/1,
+-export([query_invdist_selftest/1,
+         query_invdist_percentile/1,
          query_invdist_percentile_backends/1,
          query_invdist_percentile_multiple/1,
          query_invdist_median/1,
@@ -53,6 +54,7 @@ groups() ->
 
 all() ->
     [
+     query_invdist_selftest,
      query_invdist_percentile,
      query_invdist_percentile_multiple,
      query_invdist_percentile_backends,
@@ -64,6 +66,22 @@ all() ->
 
 %% test cases
 %% -------------------------------
+
+query_invdist_selftest(_Cfg) ->
+    Data =
+        [{X} || X <- lists:sort(pseudo_random_data())],
+    {GotDisc, GotCont} =
+        lists:unzip(
+          [{round(100 * percentile_disc("a", Pc/100, Data)),
+            round(100 * percentile_cont("a", Pc/100, Data))} || Pc <- lists:seq(1, 97)]),
+    {NeedDisc, NeedCont} =
+        lists:unzip(
+          [{round(X * 100), round(Y * 100)} || {X, Y} <- externally_verified_percentiles()]),
+    io:format("~p ~p\n", [length(GotDisc), length(NeedDisc)]),
+    ?assertEqual(GotDisc, NeedDisc),
+    ?assertEqual(GotCont, NeedCont).
+
+
 
 query_invdist_percentile(Cfg) ->
     C = rt:pbc(hd(proplists:get_value(cluster, Cfg))),
@@ -366,3 +384,115 @@ wait_until_qbuf_mgr_reinit(C) ->
 
 fmt(F, A) ->
     lists:flatten(io_lib:format(F, A)).
+
+pseudo_random_data() ->
+    [float(X) || X <- [1,2,3,4,5,7,0,11,-4,2,2,19,3,11,17,4,9]].
+
+externally_verified_percentiles() ->
+    %% these are generated with this script:
+    %% #!/bin/env python
+    %% import numpy as np
+    %% a = np.array([1,2,3,4,5,7,0,11,-4,2,2,19,3,11,17,4,9])
+    %% for p in range(1,99):
+    %%     disc = np.percentile(a, p, interpolation='lower')
+    %%     cont = np.percentile(a, p, interpolation='linear')
+    %%     print("{0:.3f}, {1:.3f},".format(disc, cont))
+
+    [{-4.000, -3.360},
+     {-4.000, -2.720},
+     {-4.000, -2.080},
+     {-4.000, -1.440},
+     {-4.000, -0.800},
+     {-4.000, -0.160},
+     {0.000, 0.120},
+     {0.000, 0.280},
+     {0.000, 0.440},
+     {0.000, 0.600},
+     {0.000, 0.760},
+     {0.000, 0.920},
+     {1.000, 1.080},
+     {1.000, 1.240},
+     {1.000, 1.400},
+     {1.000, 1.560},
+     {1.000, 1.720},
+     {1.000, 1.880},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.000},
+     {2.000, 2.120},
+     {2.000, 2.280},
+     {2.000, 2.440},
+     {2.000, 2.600},
+     {2.000, 2.760},
+     {2.000, 2.920},
+     {3.000, 3.000},
+     {3.000, 3.000},
+     {3.000, 3.000},
+     {3.000, 3.000},
+     {3.000, 3.000},
+     {3.000, 3.000},
+     {3.000, 3.040},
+     {3.000, 3.200},
+     {3.000, 3.360},
+     {3.000, 3.520},
+     {3.000, 3.680},
+     {3.000, 3.840},
+     {4.000, 4.000},
+     {4.000, 4.000},
+     {4.000, 4.000},
+     {4.000, 4.000},
+     {4.000, 4.000},
+     {4.000, 4.000},
+     {4.000, 4.000},
+     {4.000, 4.120},
+     {4.000, 4.280},
+     {4.000, 4.440},
+     {4.000, 4.600},
+     {4.000, 4.760},
+     {4.000, 4.920},
+     {5.000, 5.160},
+     {5.000, 5.480},
+     {5.000, 5.800},
+     {5.000, 6.120},
+     {5.000, 6.440},
+     {5.000, 6.760},
+     {7.000, 7.080},
+     {7.000, 7.400},
+     {7.000, 7.720},
+     {7.000, 8.040},
+     {7.000, 8.360},
+     {7.000, 8.680},
+     {9.000, 9.000},
+     {9.000, 9.320},
+     {9.000, 9.640},
+     {9.000, 9.960},
+     {9.000, 10.280},
+     {9.000, 10.600},
+     {9.000, 10.920},
+     {11.000, 11.000},
+     {11.000, 11.000},
+     {11.000, 11.000},
+     {11.000, 11.000},
+     {11.000, 11.000},
+     {11.000, 11.000},
+     {11.000, 11.480},
+     {11.000, 12.440},
+     {11.000, 13.400},
+     {11.000, 14.360},
+     {11.000, 15.320},
+     {11.000, 16.280},
+     {17.000, 17.080},
+     {17.000, 17.400},
+     {17.000, 17.720},
+     {17.000, 18.040}
+    ].
