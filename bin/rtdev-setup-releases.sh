@@ -38,12 +38,13 @@ fi
 cd $RT_DEST_DIR
 git init 
 
-## Some versions of git and/or OS require these fields
-git config --local user.name "Riak Test"
-git config --local user.email "dev@basho.com"
-git config --local core.autocrlf input
-git config --local core.safecrlf false
-git config --local core.filemode true
+if [ -z "$(git config --list 2>&1 | grep unknown)" ]; then
+    git config --local user.name "Riak Test"
+    git config --local user.email "dev@basho.com"
+    git config --local core.autocrlf input
+    git config --local core.safecrlf false
+    git config --local core.filemode true
+fi
 
 ## this prevents priv/*.so files from being deleted by git clean -fd
 ## (the latter is executed in rtdev-current.sh):
