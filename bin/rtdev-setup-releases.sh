@@ -35,16 +35,19 @@ else
     echo "No devdirs found. Not copying any releases."
 fi
 
-cd $RT_DEST_DIR
-git init 
+cd "$RT_DEST_DIR"
+git init
 
-if [ -z "$(git config --list 2>&1 | grep unknown)" ]; then
-    git config --local user.name "Riak Test"
-    git config --local user.email "dev@basho.com"
-    git config --local core.autocrlf input
-    git config --local core.safecrlf false
-    git config --local core.filemode true
-fi
+# Set the path to the root of the working tree. This prevents git to
+# ascend the directory tree (and possibly mess with other
+# repositories). That is, changes we are going to make with `git
+# config` will only affect the rt repo we have just created.
+GIT_WORK_TREE="$RT_DEST_DIR"
+git config user.name "Riak Test"
+git config user.email "dev@basho.com"
+git config core.autocrlf input
+git config core.safecrlf false
+git config core.filemode true
 
 ## this prevents priv/*.so files from being deleted by git clean -fd
 ## (the latter is executed in rtdev-current.sh):
