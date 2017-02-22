@@ -44,7 +44,9 @@
     ]},
     {riak_s3_api, [
         {lifecycle_hook_url, ?WEBHOOK_URL},
-        {lifecycle_sweep_interval, 1}
+        {lifecycle_sweep_interval, 1},
+        %% Make objects "expire" instantly, as soon as a sweep happens:
+        {debug_lifecycle_expiration_bypass, true}
     ]}
 ]).
 -define(NUM_NODES, 1).
