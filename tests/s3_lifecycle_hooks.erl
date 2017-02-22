@@ -35,9 +35,12 @@
         {handoff_concurrency, 10},
         {vnode_management_timer, 1000}
     ]},
+    {riak_kv, [
+        {sweep_tick, 1000}
+    ]},
     {riak_s3_api, [
-        {lifecycle_hook_url, "http://localhost:8765/lifecycle_hook"}
-        %% TODO Add magic incantations for lifecycle sweeper
+        {lifecycle_hook_url, "http://localhost:8765/lifecycle_hook"},
+        {lifecycle_sweep_interval, 1}
     ]}
 ]).
 -define(NUM_NODES, 1).
