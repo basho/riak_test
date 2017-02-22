@@ -29,6 +29,10 @@
 
 -define(BUCKET_TYPE, <<"s3_lifecycle_hooks">>).
 
+-define(WEBHOOK_PATH, "/lifecycle_hook").
+-define(WEBHOOK_PORT, 8765).
+-define(WEBHOOK_URL, "http://localhost:" ++ integer_to_list(?WEBHOOK_PORT) ++ ?WEBHOOK_PATH).
+
 -define(CONFIG, [
     {riak_core, [
         {ring_creation_size, 8},
@@ -39,7 +43,7 @@
         {sweep_tick, 1000}
     ]},
     {riak_s3_api, [
-        {lifecycle_hook_url, "http://localhost:8765/lifecycle_hook"},
+        {lifecycle_hook_url, ?WEBHOOK_URL},
         {lifecycle_sweep_interval, 1}
     ]}
 ]).
@@ -60,7 +64,11 @@ confirm() ->
 
     Bucket = rpc:call(Node, riak_s3_bucket, to_riak_bucket, [?BUCKET_TYPE]),
     lager:info("Bucket: ~p", [Bucket]),
-    %%
+
+    %% Other misc setup:
+    lager:info("Starting mock lifecycle webhook server", []),
+    start_webhook_server(),
+
     %% Populate an S3 "object" TODO refactor as needed -- maybe lots of puts?
     %%
     Client = rt:pbc(Node),
@@ -69,13 +77,25 @@ confirm() ->
             Bucket, <<"test_key">>, <<"test_value">>
         )
     ),
+
+    %% TODO Force a sweep of our object's partition:
+
     %%
-    %% confirm webhook has been called TODO
+    %% confirm webhook has been called
     %%
-
-
-
-
-
+    receive
+        {got_http_req, Req} ->
+            lager:info("got request ~p ~p", [Req:get(method), Req:get(path)])
+    after
+        60000 ->
+            lager:info("failed to get response", [])
+    end,
 
     pass.
+
+start_webhook_server() ->
+    TestPid = self(),
+    Loop = fun(Req) ->
+                   TestPid ! {got_http_req, Req}
+           end,
+    mochiweb_http:start([{name, ?MODULE}, {loop, Loop}, {port, ?WEBHOOK_PORT}]).
