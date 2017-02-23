@@ -29,6 +29,7 @@
 -export([confirm/0]).
 
 -define(BUCKET_TYPE, <<"s3_lifecycle_hooks">>).
+-define(OBJECT_KEY, <<"lifecycle_test_key">>).
 
 -define(WEBHOOK_PATH, "/lifecycle_hook").
 -define(WEBHOOK_PORT, 8765).
@@ -81,7 +82,7 @@ confirm() ->
     Client = rt:pbc(Node),
     _Ret = riakc_pb_socket:put(
         Client, riakc_obj:new(
-            Bucket, <<"test_key">>, <<"test_value">>
+            Bucket, ?OBJECT_KEY, <<"test_value">>
         )
     ),
 
@@ -111,6 +112,7 @@ verify_webhook_request_parameters(Req) ->
     ?assertEqual(?WEBHOOK_PATH, Req:get(path)).
 
 verify_webhook_request_body(BodyBin) ->
-    Body = mochijson2:decode(BodyBin),
-    lager:info("Got body ~p", [Body]),
+    {struct, Body} = mochijson2:decode(BodyBin),
+    ?assertEqual({<<"bucket_name">>, ?BUCKET_TYPE}, lists:keyfind(<<"bucket_name">>, 1, Body)),
+    ?assertEqual({<<"object_name">>, ?OBJECT_KEY}, lists:keyfind(<<"object_name">>, 1, Body)),
     true.
