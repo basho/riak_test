@@ -19,6 +19,7 @@
 %% -------------------------------------------------------------------
 
 -module(s3_lifecycle_hooks).
+-include_lib("eunit/include/eunit.hrl").
 
 %%
 %% This test uses some standard Riak APIs to create what the S3 web facade
@@ -85,19 +86,41 @@ confirm() ->
     %%
     %% confirm webhook has been called
     %%
-    receive
-        {got_http_req, Req} ->
-            lager:info("got request ~p ~p", [Req:get(method), Req:get(path)])
-    after
-        60000 ->
-            lager:info("failed to get response", [])
-    end,
+    lager:info("Waiting for lifecycle webhook to be executed", []),
+    ?assertEqual(ok, rt:wait_until(fun check_for_webhook_request/0)),
 
     pass.
 
 start_webhook_server() ->
     TestPid = self(),
     Loop = fun(Req) ->
-                   TestPid ! {got_http_req, Req}
+                   %% Beware, recv_body will fail if we call it outside this request
+                   %% handler process, because mochiweb secretly stores stuff
+                   %% in the process dictionary. The failure is also silent and
+                   %% mysterious, due to mochiweb_request calling `exit(normal)`
+                   %% in several places instead of crashing or properly handling
+                   %% the error... o_O
+                   Body = Req:recv_body(),
+                   Req:respond({200, [], []}),
+                   TestPid ! {got_http_req, Req, Body}
            end,
     mochiweb_http:start([{name, ?MODULE}, {loop, Loop}, {port, ?WEBHOOK_PORT}]).
+
+check_for_webhook_request() ->
+    receive
+        {got_http_req, Req, Body} ->
+            verify_webhook_request_parameters(Req),
+            verify_webhook_request_body(Body)
+    after
+        0 ->
+            false
+    end.
+
+verify_webhook_request_parameters(Req) ->
+    ?assertEqual('PUT', Req:get(method)),
+    ?assertEqual(?WEBHOOK_PATH, Req:get(path)).
+
+verify_webhook_request_body(BodyBin) ->
+    Body = mochijson2:decode(BodyBin),
+    lager:info("Got body ~p", [Body]),
+    true.
