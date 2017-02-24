@@ -3,7 +3,7 @@ docker_rt_riak_test_config:
     product_version: current
     product: "riak_ts{% if ee == 'true' %}_ee{% endif %}"
   - version: previous
-    product_version: 1.5.1
+    product_version: 1.5.2
     product: "riak_ts{% if ee == 'true' %}_ee{% endif %}"
   - version: legacy
     product_version: 1.4.1
