@@ -36,6 +36,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("ts_qbuf_util.hrl").
 
+-define(TABLE_A, "table_with_regular_keys").
+-define(TABLE_D, "table_with_descending_keys").
 
 suite() ->
     [{timetrap, {minutes, 5}}].
@@ -44,8 +46,10 @@ init_per_suite(Cfg) ->
     Cluster = ts_setup:start_cluster(1),
     C = rt:pbc(hd(Cluster)),
     Data = make_data(),
-    ok = create_table(C, ?TABLE),
-    ok = insert_data(C, ?TABLE, Data),
+    ok = create_table(C, ?TABLE_A),
+    ok = create_table_desc(C, ?TABLE_D),
+    ok = insert_data(C, ?TABLE_A, Data),
+    ok = insert_data(C, ?TABLE_D, Data),
     [{cluster, Cluster},
      {data, Data} | Cfg].
 
@@ -185,7 +189,7 @@ query_invdist_mode(Cfg) ->
 query_invdist_errors(Cfg) ->
     lists:foreach(
       fun({Select, Extra, ErrPat}) ->
-              Qry = make_query(Select, Extra),
+              Qry = make_query(?TABLE_A, Select, Extra),
               ?assertEqual(
                  ok,
                  ts_qbuf_util:ack_query_error(Cfg, Qry, ?E_SUBMIT, ErrPat))
@@ -289,6 +293,18 @@ create table " ++ Table ++ "
     {ok, {[], []}} = riakc_ts:query(Client, DDL),
     ok.
 
+create_table_desc(Client, Table) ->
+    DDL = "
+create table " ++ Table ++ "
+(a timestamp not null,
+ b double,
+ c sint64,
+ d sint64,
+ e sint64,
+ primary key ((quantum(a, 10, h)), a desc))",
+    {ok, {[], []}} = riakc_ts:query(Client, DDL),
+    ok.
+
 data_generator(I) ->
     {?TIMEBASE + (I + 1) * 1000,
      100 * math:cos(float(I) / 10 * math:pi()),
@@ -313,10 +329,12 @@ insert_data(C, Table, Data) ->
     end.
 
 make_query(Select) ->
-    make_query(Select, "").
-make_query(Select, Extra) ->
+    make_query(?TABLE_A, Select, "").
+make_query(Table, Select) ->
+    make_query(Table, Select, "").
+make_query(Table, Select, Extra) ->
     fmt("select ~s from ~s where a >= ~b and a <= ~b~s",
-        [Select, ?TABLE,
+        [Select, Table,
          ?TIMEBASE, ?TIMEBASE * 1000,
          [" " ++ Extra || Extra /= []]]).
 
@@ -334,19 +352,23 @@ check_column(C, Col, Data) ->
                                {0.36, "(3.6/10)"},
                                {0.40, "0.5 - 1 * 0.1"}],
             PercentileVariety <- [percentile_cont, percentile_disc]],
+    Checker =
+        fun(Q, Need) ->
+                ct:log("Query \"~s\"", [Q]),
+                {ok, {_Cols, [{Got}]}} =
+                    riakc_ts:query(C, Q, [], undefined, []),
+                case Got == Need of
+                    true ->
+                        ok;
+                    false ->
+                        ct:fail("Got ~p, Need ~p\n", [Got, Need])
+                end
+        end,
     ok == lists:foreach(
             fun({PercentileFun, Pc, Pc_s}) ->
-                    Query = make_query(fmt("~s(~s, ~s)", [PercentileFun, Col, Pc_s])),
-                    ct:log("Query \"~s\"", [Query]),
-                    {ok, {_Cols, [{Got}]}} =
-                        riakc_ts:query(C, Query, [], undefined, []),
                     Need = apply(?MODULE, PercentileFun, [Col, Pc, SortedData]),
-                    case Got == Need of
-                        true ->
-                            ok;
-                        false ->
-                            ct:fail("Got ~p, Need ~p\n", [Got, Need])
-                    end
+                    ok = Checker(make_query(?TABLE_A, fmt("~s(~s, ~s)", [PercentileFun, Col, Pc_s])), Need),
+                    ok = Checker(make_query(?TABLE_D, fmt("~s(~s, ~s)", [PercentileFun, Col, Pc_s])), Need)
             end,
             Combos).
 
@@ -370,7 +392,7 @@ load_intercept(Node, C, Intercept) ->
     wait_until_qbuf_mgr_reinit(C).
 
 wait_until_qbuf_mgr_reinit(C) ->
-    ProbingQuery = make_query("*", ""),
+    ProbingQuery = make_query("*"),
     case riakc_ts:query(C, ProbingQuery, [], undefined, []) of
         {ok, _Data} ->
             ok;
