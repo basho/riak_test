@@ -55,7 +55,7 @@ end_per_testcase(_TestCase, _Config) ->
 groups() ->
     [].
 
-all() -> 
+all() ->
     rt:grep_test_functions(?MODULE).
 
 client_pid(Ctx) ->
@@ -116,10 +116,22 @@ group_by_2_test(Ctx) ->
         {ok,{Cols, lists:sort(Rows)}}
     ).
 
-
-
-
-
-
-
-
+group_by_time_test(Ctx) ->
+    ?assertMatch(
+        {ok, _},
+        riakc_ts:query(client_pid(Ctx),
+            "CREATE TABLE grouptab3 ("
+            "a TIMESTAMP NOT NULL, "
+            "PRIMARY KEY ((quantum(a,1,s)), a))"
+    )),
+    ok = riakc_ts:put(client_pid(Ctx), <<"grouptab3">>,
+        [{A} || A <- lists:seq(1,10000,2)]),
+    Query =
+        "SELECT time(a,1s), COUNT(*) FROM grouptab3 "
+        "WHERE a >= 1 AND a <= 10000"
+        "GROUP BY time(a,1s)",
+    {ok, {Cols, Rows}} = run_query(Ctx, Query),
+    ts_data:assert_row_sets(
+        {rt_ignore_columns, [{N*1000,500} || N <- lists:seq(0,9)]},
+        {ok,{Cols, lists:sort(Rows)}}
+    ).
