@@ -581,13 +581,21 @@ wait_until_active_table(TargetNode, PrevClientNode, Table, N) ->
 make_msg(Format, Payload) ->
     list_to_binary(fmt(Format, Payload)).
 
+%% We need to comment out those settings which appear in version
+%% 1.x. For version 1.x-1 to work with riak.conf initially created in
+%% 1.x, the offending settings need to be deleted.  We do it here, by
+%% commenting them out.
+
+%% riak.conf created under 1.6 cannot be read by 1.5 because of new keys:
+%%   riak_kv.query.timeseries.qbuf_inmem_max,
+%%
 %% riak.conf created under 1.5 cannot be read by 1.4 because of new keys:
 %%   riak_kv.query.timeseries.max_returned_data_size,
 %%   riak_kv.query.timeseries.qbuf_soft_watermark,
 %%   riak_kv.query.timeseries.qbuf_hard_watermark,
 %%   riak_kv.query.timeseries.qbuf_expire_ms,
 %%   riak_kv.query.timeseries.qbuf_incomplete_release_ms
-%% let's comment them out?
+%%
 convert_riak_conf_to_previous(Config) ->
     DatafPath = ?CFG(new_data_dir, Config),
     RiakConfPath = filename:join(DatafPath, "../etc/riak.conf"),
@@ -595,15 +603,7 @@ convert_riak_conf_to_previous(Config) ->
     Content9 =
         re:replace(
           Content0,
-          <<"(^riak_kv.query.timeseries.max_returned_data_size"
-            %% this key exists in 1.4, but has a cap of 256, whereas
-            %% 1.5 has no upper limit
-            "|^riak_kv.query.timeseries.max_running_fsms"
-            "|^riak_kv.query.timeseries.max_quanta_span"
-            "|^riak_kv.query.timeseries.qbuf_soft_watermark"
-            "|^riak_kv.query.timeseries.qbuf_hard_watermark"
-            "|^riak_kv.query.timeseries.qbuf_expire_ms"
-            "|^riak_kv.query.timeseries.qbuf_incomplete_release_ms)">>,
+          <<"^riak_kv.query.timeseries.qbuf_inmem_max">>,
           <<"#\\1">>, [global, multiline, {return, binary}]),
     ok = file:write_file(RiakConfPath, Content9).
 
