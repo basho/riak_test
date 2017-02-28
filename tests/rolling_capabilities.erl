@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.
+%% Copyright (c) 2012-2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -23,6 +23,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     TestMetaData = riak_test_runner:metadata(),
     Count = 4,
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),

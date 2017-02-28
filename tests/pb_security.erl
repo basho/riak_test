@@ -11,6 +11,9 @@
 -define(assertDenied(Op), ?assertMatch({error, <<"Permission",_/binary>>}, Op)).
 
 confirm() ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     application:start(crypto),
     application:start(asn1),
     application:start(public_key),

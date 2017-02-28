@@ -8,6 +8,9 @@
 -define(NUM_KEYS, 1000).
 
 confirm() ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     %% test requires allow_mult=false b/c of rt:systest_read
     [Node] = rt:build_cluster(1),
     rt:wait_until_pingable(Node),
