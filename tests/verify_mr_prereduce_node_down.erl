@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -42,6 +42,9 @@
 
 %% @doc riak_test callback
 confirm() ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     NodeCount = 4,
     lager:info("Build ~b-node cluster", [NodeCount]),
     [Primary,ToKill|_] = rt:build_cluster(NodeCount),

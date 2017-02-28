@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Basho Technologies, Inc.
+%% Copyright (c) 2016-2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -47,6 +47,9 @@
 %% ===================================================================
 
 confirm() ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     Configs = [
         {current, {cuttlefish,
             ?COMMON_CONFIG ++ config(?TEST_OPS, Bool, [])}}

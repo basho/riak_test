@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.
+%% Copyright (c) 2013-2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -81,6 +81,9 @@ default_config(#config{
         {riak_api, [{pb_backlog, 1024}]}].
 
 confirm() ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     [Node1 | _] = Nodes = setup(),
 
     ok = create_bucket_type(Nodes, ?NORMAL_TYPE, [{n_val, 3}]),
