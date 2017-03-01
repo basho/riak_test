@@ -47,10 +47,11 @@
 -define(CFG,
         [{riak_kv,
           [
+           {sweep_tick, 3000},
            % Speedy AAE configuration
            {anti_entropy, {on, []}},
            {anti_entropy_build_limit, {100, 1000}},
-           {anti_entropy_concurrency, 100},
+           {anti_entropy_concurrency, 5},
            {anti_entropy_expire, 24 * 60 * 60 * 1000}, % Not for now!
            {anti_entropy_tick, 500},
            {aae_throttle_limits, ?AAE_THROTTLE_LIMITS}

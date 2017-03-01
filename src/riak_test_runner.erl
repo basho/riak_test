@@ -20,9 +20,9 @@
 
 %% @doc riak_test_runner runs a riak_test module's run/0 function.
 -module(riak_test_runner).
--export([confirm/4, metadata/0, metadata/1, function_name/1]).
+-export([confirm/5, metadata/0, metadata/1, function_name/1]).
 %% Need to export to use with `spawn_link'.
--export([return_to_exit/3]).
+-export([return_to_exit/3, run_common_test/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -spec(metadata() -> [{atom(), term()}]).
@@ -39,10 +39,12 @@ metadata(Pid) ->
         {metadata, TestMeta} -> TestMeta
     end.
 
--spec(confirm(integer(), atom(), [{atom(), term()}], list()) -> [tuple()]).
+-spec(confirm(integer(), atom(), riak_test | common_test, [{atom(), term()}], list()) -> [tuple()]).
 %% @doc Runs a module's run/0 function after setting up a log capturing backend for lager.
 %%      It then cleans up that backend and returns the logs as part of the return proplist.
-confirm(TestModule, Outdir, TestMetaData, HarnessArgs) ->
+confirm(TestModule, TestType, Outdir, TestMetaData, HarnessArgs) 
+  when TestType =:= riak_test   orelse
+       TestType =:= common_test ->
     start_lager_backend(TestModule, Outdir),
     rt:setup_harness(TestModule, HarnessArgs),
     BackendExtras = case proplists:get_value(multi_config, TestMetaData) of
@@ -54,7 +56,7 @@ confirm(TestModule, Outdir, TestMetaData, HarnessArgs) ->
     {Status, Reason} = case check_prereqs(Mod) of
         true ->
             lager:notice("Running Test ~s", [TestModule]),
-            execute(TestModule, {Mod, Fun}, TestMetaData);
+            execute(TestModule, TestType, {Mod, Fun}, TestMetaData);
         not_present ->
             {fail, test_does_not_exist};
         _ ->
@@ -88,7 +90,7 @@ stop_lager_backend() ->
     gen_event:delete_handler(lager_event, riak_test_lager_backend, []).
 
 %% does some group_leader swapping, in the style of EUnit.
-execute(TestModule, {Mod, Fun}, TestMetaData) ->
+execute(TestModule, TestType, {Mod, Fun}, TestMetaData) ->
     process_flag(trap_exit, true),
     OldGroupLeader = group_leader(),
     NewGroupLeader = riak_test_group_leader:new_group_leader(self()),
@@ -97,7 +99,10 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     {0, UName} = rt:cmd("uname -a"),
     lager:info("Test Runner `uname -a` : ~s", [UName]),
 
-    Pid = spawn_link(?MODULE, return_to_exit, [Mod, Fun, []]),
+    Pid = case TestType of
+              riak_test   -> spawn_link(?MODULE, return_to_exit, [Mod, Fun, []]);
+              common_test -> spawn_link(?MODULE, run_common_test, [TestModule])
+   end,
     Ref = case rt_config:get(test_timeout, undefined) of
         Timeout when is_integer(Timeout) ->
             erlang:send_after(Timeout, self(), test_took_too_long);
@@ -115,13 +120,45 @@ execute(TestModule, {Mod, Fun}, TestMetaData) ->
     riak_test_group_leader:tidy_up(OldGroupLeader),
     case Status of
         fail ->
-            ErrorHeader = "================ " ++ atom_to_list(TestModule) ++ " failure stack trace =====================",
+            ErrorHeader = "================ " ++ atom_to_list(TestModule) ++ 
+                " failure stack trace =====================",
             ErrorFooter = [ $= || _X <- lists:seq(1,length(ErrorHeader))],
             Error = io_lib:format("~n~s~n~p~n~s~n", [ErrorHeader, Reason, ErrorFooter]),
             lager:error(Error);
         _ -> meh
     end,
     {Status, Reason}.
+
+run_common_test(TestModule) ->
+    ct:install([{config, ["config_node.ctc",
+                          "config_user.ctc"]}]),
+    TestDir = "tests",
+    LogDir = "ct_logs",
+    %% nonce file name required to get a directory
+    ok = filelib:ensure_dir(LogDir ++ "/nonce.txt"),
+    Opts = [
+            {auto_compile, false},
+            {dir,          TestDir},
+            {suite,        TestModule},
+            {logdir,       LogDir},
+            {include,      [
+                            "include",
+                            "deps/*/ebin",
+                            "deps/*/include"
+                           ]}
+           ],
+    case ct:run_test(Opts) of
+        {Pass, 0, {UserSkip, 0}} -> 
+            ct:print(default, info,"Common Test: all passed ~p skipped ~p at the users request~n", [Pass, UserSkip]),
+            'pass all the tests';
+        {Pass, Fail, {UserSkip, AutoSkip}} ->
+            ct:print(default, info,"Common Test: passed ~p failed ~p common test skipped ~p skipped at the users request ~p~n", 
+                      [Pass, Fail, UserSkip, AutoSkip]),
+            exit('tests failing');
+        Other ->
+            ct:print(default, info,"Common test failed with ~p~n", [Other]),
+            exit('tests failing')
+    end.
 
 function_name(TestModule) ->
     TMString = atom_to_list(TestModule),

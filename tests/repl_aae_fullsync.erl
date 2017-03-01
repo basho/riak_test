@@ -6,6 +6,7 @@
 
 -module(repl_aae_fullsync).
 -behavior(riak_test).
+-compile([export_all]).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -27,7 +28,8 @@
         {riak_kv,
             [
              %% Specify fast building of AAE trees
-             {anti_entropy, {on, []}},
+             {sweep_tick, 10000},
+             {anti_entropy, {on, [debug]}},
              {anti_entropy_build_limit, {100, 1000}},
              {anti_entropy_concurrency, 100}
             ]
@@ -51,6 +53,8 @@ confirm() ->
     pass.
 
 simple_test() ->
+    lager:info("Starting simple_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
@@ -83,10 +87,10 @@ simple_test() ->
     LeaderB = get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    BPort = get_port(LeaderB),
+    Endpoint = repl_util:get_endpoint(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
+    connect_cluster(LeaderA, Endpoint, "B"),
 
     %% Write keys prior to fullsync.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -123,6 +127,8 @@ simple_test() ->
     pass.
 
 dual_test() ->
+    lager:info("Starting dual_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(infinity), [riak_kv, riak_repl]),
 
@@ -162,17 +168,17 @@ dual_test() ->
     LeaderC = get_leader(CFirst),
 
     lager:info("Finding connection manager ports."),
-    APort = get_port(LeaderA),
-    BPort = get_port(LeaderB),
-    CPort = get_port(LeaderC),
+    AEndpoint = repl_util:get_endpoint(LeaderA),
+    BEndpoint = repl_util:get_endpoint(LeaderB),
+    CEndpoint = repl_util:get_endpoint(LeaderC),
 
     lager:info("Connecting all clusters into fully connected topology."),
-    connect_cluster(LeaderA, BPort, "B"),
-    connect_cluster(LeaderA, CPort, "C"),
-    connect_cluster(LeaderB, APort, "A"),
-    connect_cluster(LeaderB, CPort, "C"),
-    connect_cluster(LeaderC, APort, "A"),
-    connect_cluster(LeaderC, BPort, "B"),
+    connect_cluster(LeaderA, BEndpoint, "B"),
+    connect_cluster(LeaderA, CEndpoint, "C"),
+    connect_cluster(LeaderB, AEndpoint, "A"),
+    connect_cluster(LeaderB, CEndpoint, "C"),
+    connect_cluster(LeaderC, AEndpoint, "A"),
+    connect_cluster(LeaderC, BEndpoint, "B"),
 
     %% Write keys to cluster A, verify B and C do not have them.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -223,6 +229,8 @@ dual_test() ->
     pass.
 
 bidirectional_test() ->
+    lager:info("Starting bidirectional_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
@@ -255,14 +263,14 @@ bidirectional_test() ->
     LeaderB = get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    APort = get_port(LeaderA),
-    BPort = get_port(LeaderB),
+    AEndpoint = repl_util:get_endpoint(LeaderA),
+    BEndpoint = repl_util:get_endpoint(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
+    connect_cluster(LeaderA, BEndpoint, "B"),
 
     lager:info("Connecting cluster B to A"),
-    connect_cluster(LeaderB, APort, "A"),
+    connect_cluster(LeaderB, AEndpoint, "A"),
 
     %% Write keys to cluster A, verify B does not have them.
     write_to_cluster(AFirst, 1, ?NUM_KEYS),
@@ -306,6 +314,8 @@ bidirectional_test() ->
     pass.
 
 difference_test() ->
+    lager:info("Starting difference_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
@@ -338,10 +348,10 @@ difference_test() ->
     LeaderB = get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    BPort = get_port(LeaderB),
+    BEndpoint = repl_util:get_endpoint(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
+    connect_cluster(LeaderA, BEndpoint, "B"),
 
     %% Get PBC connections.
     APBC = rt:pbc(LeaderA),
@@ -411,6 +421,8 @@ difference_test() ->
     pass.
 
 deadlock_test() ->
+    lager:info("Starting deadlock_test"),
+
     %% Deploy 6 nodes.
     Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
 
@@ -443,10 +455,10 @@ deadlock_test() ->
     LeaderB = get_leader(BFirst),
 
     lager:info("Finding connection manager ports."),
-    BPort = get_port(LeaderB),
+    Endpoint = repl_util:get_endpoint(LeaderB),
 
     lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
+    connect_cluster(LeaderA, Endpoint, "B"),
 
     %% Add intercept for delayed comparison of hashtrees.
     Intercept = {riak_kv_index_hashtree, [{{compare, 4}, delayed_compare}]},
@@ -603,25 +615,16 @@ validate_intercepted_fullsync(InterceptTarget,
     %% Wait until AAE trees are compueted on the rebooted node.
     rt:wait_until_aae_trees_built([InterceptTarget]).
 
-%% @doc Given a node, find the port that the cluster manager is
-%%      listening on.
-get_port(Node) ->
-    {ok, {_IP, Port}} = rpc:call(Node,
-                                 application,
-                                 get_env,
-                                 [riak_core, cluster_mgr]),
-    Port.
-
 %% @doc Given a node, find out who the current replication leader in its
 %%      cluster is.
 get_leader(Node) ->
     rpc:call(Node, riak_core_cluster_mgr, get_leader, []).
 
 %% @doc Connect two clusters using a given name.
-connect_cluster(Source, Port, Name) ->
-    lager:info("Connecting ~p to ~p for cluster ~p.",
-               [Source, Port, Name]),
-    repl_util:connect_cluster(Source, "127.0.0.1", Port),
+connect_cluster(Source, {Ip, Port}, Name) ->
+    lager:info("Connecting ~p to ~p:~p for cluster ~p.",
+               [Source, Ip, Port, Name]),
+    repl_util:connect_cluster(Source, Ip, Port),
     ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
 
 %% @doc Write a series of keys and ensure they are all written.

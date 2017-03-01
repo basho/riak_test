@@ -356,6 +356,30 @@ you add them via one of the methods listed previously.
 
     {load_intercepts, false}
 
+### Adding Tracing to Nodes Under Test
+
+Erlang Tracing can be added to test suites to trace function calls on
+nodes under test. By default, trace calls will not execute without the
+`riak_test` tracing command line argument
+
+```shell
+--trace
+```
+
+To add tracing to target nodes, make a call to the `rt_redbug:trace/2`
+function. `Nodes` is a single node name or a list of node names that the
+trace should be applied to. The second argument is a string or list of
+string traces using the redbug syntax.  An arity three function is also
+exported that takes options as defined in the redbug docs.
+
+```erlang
+rt_redbug:trace(Nodes, ["module:function"])
+```
+
+Tracing is output to the terminal and `test.log` file. More documentation on
+redbug can be found
+[here](https://github.com/massemanet/eper/blob/master/doc/redbug.txt).
+
 #### Config
 
 Here is how you would add the `dropped_put` intercept via the config.
