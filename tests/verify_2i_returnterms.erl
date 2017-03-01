@@ -25,6 +25,8 @@
                                stream_pb/3, http_query/3]).
 -define(BUCKET, <<"2ibucket">>).
 -define(FOO, <<"foo">>).
+-define(BAZ, <<"baz">>).
+-define(BAT, <<"bat">>).
 -define(Q_OPTS, [{return_terms, true}]).
 
 confirm() ->
@@ -38,14 +40,19 @@ confirm() ->
 
     [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],
     [put_an_object(PBPid, int_to_key(N), N, ?FOO) || N <- lists:seq(101, 200)],
+    put_an_object(PBPid, int_to_key(201), 201, ?BAZ),
+    put_an_object(PBPid, int_to_key(202), 202, ?BAT),
 
     %% Bucket, key, and index_eq queries should ignore `return_terms'
-    ExpectedKeys = lists:sort([int_to_key(N) || N <- lists:seq(0, 200)]),
+    ExpectedKeys = lists:sort([int_to_key(N) || N <- lists:seq(0, 202)]),
     assertEqual(RiakHttp, PBPid, ExpectedKeys, {<<"$key">>, int_to_key(0), int_to_key(999)}, ?Q_OPTS, keys),
     assertEqual(RiakHttp, PBPid, ExpectedKeys, { <<"$bucket">>, ?BUCKET}, ?Q_OPTS, keys),
 
     ExpectedFooKeys = lists:sort([int_to_key(N) || N <- lists:seq(101, 200)]),
     assertEqual(RiakHttp, PBPid, ExpectedFooKeys, {<<"field1_bin">>, ?FOO}, ?Q_OPTS, keys),
+
+    assertEqual(RiakHttp, PBPid, [int_to_key(201)], {<<"field1_bin">>, ?BAZ}, ?Q_OPTS, keys),
+    assertEqual(RiakHttp, PBPid, [int_to_key(201)], {<<"field2_int">>, 201}, ?Q_OPTS, keys),
 
     ExpectedRangeResults = lists:sort([{list_to_binary(integer_to_list(N)), int_to_key(N)} || N <- lists:seq(1, 100)]),
     assertEqual(RiakHttp, PBPid, ExpectedRangeResults, {<<"field2_int">>, "1", "100"}, ?Q_OPTS, results),

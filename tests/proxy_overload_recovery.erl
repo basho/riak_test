@@ -236,7 +236,6 @@ prepare_next(S, RT, [ThresholdSeed]) ->
     {_RequestInterval, _Interval, Threshold} = get_params(ThresholdSeed),
     S#tstate{rt = RT, threshold = Threshold}.
 
-
 %%
 %% Suspend the vnode so it cannot process messages and builds
 %% up the vnode message queue
