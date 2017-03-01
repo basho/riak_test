@@ -277,16 +277,23 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 -type interfaces() :: [interface()].
 -type conn_info() :: [{node(), interfaces()}].
 
+
+%% @doc Retrieve available connection information for different interfaces
+%% NOTE: This function returns an ordered list, starting with HTTP, for
+%% a reason (other tests assume this to be the case). If you change it,
+%% please maintain the ordering or, if it must be broken for some reason
+%% (e.g. HTTP is no longer first in the list) please check for usages of
+%% this function and make them more robust (hint - this returns and `orddict')
 -spec connection_info(node() | [node()]) -> interfaces() | conn_info().
 connection_info(Node) when is_atom(Node) ->
     {ok, [HTTP_Info0]} = get_http_conn_info(Node),
     HTTP_Info = [{http, HTTP_Info0}],
-    {ok, [PB_Info0]} = get_pb_conn_info(Node),
-    PB_Info = [{pb, PB_Info0}],
     HTTPS_Info = case get_https_conn_info(Node) of
         undefined -> [];
         {ok, [{HTTPS_IP, HTTPS_Port}]} -> [{https, {HTTPS_IP, HTTPS_Port}}]
     end,
+    {ok, [PB_Info0]} = get_pb_conn_info(Node),
+    PB_Info = [{pb, PB_Info0}],
     S3_Info = case get_s3_conn_info(Node) of
         undefined -> [];
         %% Tests actually depend on the connection
