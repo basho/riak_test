@@ -23,7 +23,9 @@
 
 -export([
          ack_query_error/3,
+         ack_query_error/4,
          base_query/1,
+         base_query/2,
          create_table/2,
          full_query/2,
          insert_data/3,
@@ -80,8 +82,10 @@ insert_data(C, Table, Data) ->
 %% Form queries
 
 base_query(Table) ->
-    fmt("select * from ~s where a = '~s' and b = '~s' and c >= ~b and c <= ~b",
-        [Table,
+    base_query(Table, "*").
+base_query(Table, Select) ->
+    fmt("select ~s from ~s where a = '~s' and b = '~s' and c >= ~b and c <= ~b",
+        [Select, Table,
          binary_to_list(?WHERE_FILTER_A),
          binary_to_list(?WHERE_FILTER_B),
          ?TIMEBASE, ?TIMEBASE + ?LIFESPAN_EXTRA * 1000]).
@@ -108,18 +112,26 @@ make_orderby_with_qualifiers(F) ->
 
 
 ack_query_error(Cfg, Query, ErrCode) ->
+    ack_query_error(Cfg, Query, ErrCode, <<".*">>).
+
+ack_query_error(Cfg, Query, ExpErrCode, ExpErrMsgPat) ->
     Node = hd(proplists:get_value(cluster, Cfg)),
     C = rt:pbc(Node),
     Res = riakc_ts:query(C, Query, [], undefined, []),
     case Res of
-        {error, {ErrCode, ErrMsg}} ->
-            io:format("reported error ~s", [ErrMsg]),
-            ok;
+        {error, {ExpErrCode, GotErrMsg}} ->
+            case re:run(GotErrMsg, ExpErrMsgPat, []) of
+                {match, _} ->
+                    ok;
+                nomatch ->
+                    ct:pal("Query: ~s\nWrong reported error: ~s\n", [Query, GotErrMsg]),
+                    fail
+            end;
         {error, OtherReason} ->
-            io:format("error not correctly reported: got ~p instead", [OtherReason]),
+            ct:pal("Query: ~s\nError not correctly reported: got ~p instead\n", [Query, OtherReason]),
             fail;
         NonError ->
-            io:format("error not detected: got ~p instead", [NonError]),
+            ct:pal("Query: ~s\nError not detected: got ~p instead\n", [Query, NonError]),
             fail
     end.
 

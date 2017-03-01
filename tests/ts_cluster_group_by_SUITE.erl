@@ -55,7 +55,7 @@ end_per_testcase(_TestCase, _Config) ->
 groups() ->
     [].
 
-all() -> 
+all() ->
     rt:grep_test_functions(?MODULE).
 
 client_pid(Ctx) ->
@@ -135,8 +135,3 @@ group_by_time_test(Ctx) ->
         {rt_ignore_columns, [{N*1000,500} || N <- lists:seq(0,9)]},
         {ok,{Cols, lists:sort(Rows)}}
     ).
-
-
-
-
-

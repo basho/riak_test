@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012-2013 Basho Technologies, Inc.
+%% Copyright (c) 2012-2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -25,6 +25,9 @@
 %% 1.4 {riak_kv, handoff_data_encoding} -> [encode_raw, encode_zlib]
 %% 1.3 {riak_kv, anti_entropy} -> [disabled, enabled_v1]
 confirm() ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     lager:info("Deploying mixed set of nodes"),
     Legacy = case lists:member(legacy, rt:versions()) of
         true -> legacy;
