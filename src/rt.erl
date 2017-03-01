@@ -279,17 +279,20 @@ rpc_get_env(Node, [{App,Var}|Others]) ->
 
 -spec connection_info(node() | [node()]) -> interfaces() | conn_info().
 connection_info(Node) when is_atom(Node) ->
-    {ok, [PB_Info]} = get_pb_conn_info(Node),
-    {ok, [HTTP_Info]} = get_http_conn_info(Node),
-    Info0 = [{pb, PB_Info}, {http, HTTP_Info}],
-    Info1 = case get_https_conn_info(Node) of
-        undefined -> Info0;
-        {ok, [{HTTPS_IP, HTTPS_Port}]} -> [{https, {HTTPS_IP, HTTPS_Port}} | Info0]
+    {ok, [HTTP_Info0]} = get_http_conn_info(Node),
+    HTTP_Info = [{http, HTTP_Info0}],
+    {ok, [PB_Info0]} = get_pb_conn_info(Node),
+    PB_Info = [{pb, PB_Info0}],
+    HTTPS_Info = case get_https_conn_info(Node) of
+        undefined -> [];
+        {ok, [{HTTPS_IP, HTTPS_Port}]} -> [{https, {HTTPS_IP, HTTPS_Port}}]
     end,
-    case get_s3_conn_info(Node) of
-        undefined -> Info1;
-        {ok, [{S3_IP, S3_Port}]} -> [{s3, {S3_IP, S3_Port}} | Info1]
-    end;
+    S3_Info = case get_s3_conn_info(Node) of
+        undefined -> [];
+        %% Tests actually depend on the connection
+        {ok, [{S3_IP, S3_Port}]} -> [{s3, {S3_IP, S3_Port}}]
+    end,
+    HTTP_Info ++ HTTPS_Info ++ PB_Info ++ S3_Info;
 connection_info(Nodes) when is_list(Nodes) ->
     [ {Node, connection_info(Node)} || Node <- Nodes].
 
