@@ -9,10 +9,15 @@
 -behaviour(riak_test).
 -export([confirm/0]).
 
--define(CONFIG, [{riak_kv, [{storage_backend, riak_kv_eleveldb_backend}]}]).
+-define(CONFIG,
+        [{riak_core, [{handoff_concurrency, 10},
+                      {vnode_management_timer, 1000}]},
+         {riak_kv, [{storage_backend, riak_kv_eleveldb_backend}]}]).
 -define(CLUSTER_SIZE, 5).
 -define(PHOTOS_PREFIX, <<"photos/2017/">>).
--define(MONTHS, [<<"January">>, <<"February">>, <<"March">>, <<"April">>]).
+-define(MONTHS, [<<"January">>, <<"February">>, <<"March">>, <<"April">>,
+                 <<"May">>, <<"June">>, <<"July">>, <<"August">>,
+                 <<"September">>, <<"October">>, <<"November">>, <<"December">>]).
 
 -record(group_keys_result, {
           keys = [] :: list(),
@@ -33,7 +38,8 @@ confirm() ->
 %% EQC generators
 %% ====================================================================
 gen_max_keys() ->
-    choose(1, length(all_keys())).
+    NumKeys = length(all_keys()),
+    choose(erlang:max(1, NumKeys div 10), NumKeys).
 
 %% ====================================================================
 %% EQC Properties
@@ -42,14 +48,19 @@ gen_max_keys() ->
 quickcheck(Property) ->
     ?assert(eqc:quickcheck(eqc:numtests(500, Property))).
 
+forall_buckets_and_max_keys(Property) ->
+    ?FORALL(Bucket, oneof(buckets()),
+            collect(Bucket,
+                    ?FORALL(MaxKeys, gen_max_keys(),
+                            collect(MaxKeys, Property(Bucket, MaxKeys))))).
+
 prop_group_keys_basic(Cluster) ->
     Expected = #group_keys_result{keys = lists:sort(all_keys())},
-    ?FORALL(Bucket, oneof(buckets()),
-            ?FORALL(MaxKeys, gen_max_keys(),
-                    Expected == collect_group_keys(
-                                  Cluster,
-                                  Bucket,
-                                  make_group_params([{max_keys, MaxKeys}])))).
+    forall_buckets_and_max_keys(
+      fun(Bucket, MaxKeys) ->
+              GroupParams = make_group_params([{max_keys, MaxKeys}]),
+              Expected == collect_group_keys(Cluster, Bucket, GroupParams)
+      end).
 
 prop_group_keys_prefix(Cluster) ->
     Prefix = ?PHOTOS_PREFIX,
@@ -60,12 +71,11 @@ prop_group_keys_prefix(Cluster) ->
                                                  end,
                                                  all_keys()))
                  },
-    ?FORALL(Bucket, oneof(buckets()),
-            ?FORALL(MaxKeys, gen_max_keys(),
-                    begin
-                        GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
-                        Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
-                    end)).
+    forall_buckets_and_max_keys(
+      fun(Bucket, MaxKeys) ->
+              GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
+              Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
+      end).
 
 prop_group_keys_delimiter(Cluster) ->
     Delimiter = <<"/">>,
@@ -74,12 +84,11 @@ prop_group_keys_delimiter(Cluster) ->
                   keys = [<<"sample.jpg">>],
                   common_prefixes = [<<"photos/">>]
                  },
-    ?FORALL(Bucket, oneof(buckets()),
-            ?FORALL(MaxKeys, gen_max_keys(),
-                    begin
-                        GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
-                        Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
-                    end)).
+    forall_buckets_and_max_keys(
+      fun(Bucket, MaxKeys) ->
+              GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
+              Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
+      end).
 
 prop_group_keys_prefix_delimiter(Cluster) ->
     Prefix = ?PHOTOS_PREFIX,
@@ -91,12 +100,11 @@ prop_group_keys_prefix_delimiter(Cluster) ->
                   common_prefixes = lists:sort([<<?PHOTOS_PREFIX/binary, Month/binary, "/">>
                                                 || Month <- ?MONTHS])
                  },
-    ?FORALL(Bucket, oneof(buckets()),
-            ?FORALL(MaxKeys, gen_max_keys(),
-                    begin
-                        GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
-                        Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
-                    end)).
+    forall_buckets_and_max_keys(
+      fun(Bucket, MaxKeys) ->
+              GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
+              Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
+      end).
 
 %% ====================================================================
 %% Helpers
@@ -127,8 +135,8 @@ all_keys() ->
     [<<"sample.jpg">>,
      <<?PHOTOS_PREFIX/binary, "Index.html">>,
      <<?PHOTOS_PREFIX/binary, "index.html">>] ++
-    [<<?PHOTOS_PREFIX/binary, Month/binary, "/sample", N, ".jpg">>
-     || Month <- ?MONTHS, N <- [$1, $2, $3, $4, $5]].
+    [<<?PHOTOS_PREFIX/binary, Month/binary, "/sample", N/binary, ".jpg">>
+     || Month <- ?MONTHS, N <- lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 99))].
 
 put_objects(Cluster) ->
     lists:foreach(fun({BucketType, _}) ->
