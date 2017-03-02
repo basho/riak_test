@@ -20,6 +20,7 @@
          start_and_wait_until_fullsync_complete/2,
          start_and_wait_until_fullsync_complete/3,
          start_and_wait_until_fullsync_complete/4,
+         connect_cluster/2,
          connect_cluster/3,
          disconnect_cluster/2,
          wait_for_connection/2,
@@ -43,6 +44,7 @@
          connect_cluster_by_name/3,
          connect_cluster_by_name/4,
          get_port/1,
+         get_endpoint/1,
          get_leader/1,
          write_to_cluster/4,
          write_to_cluster/5,
@@ -50,7 +52,8 @@
          read_from_cluster/6,
          check_fullsync/3,
          validate_completed_fullsync/6,
-         validate_intercepted_fullsync/5
+         validate_intercepted_fullsync/5,
+         confirm_missing/5
         ]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -214,6 +217,11 @@ wait_for_x(Node, Fun) ->
     %% systest_read call.
     0.
 
+confirm_missing(Node, Start, End, Bucket, R) ->
+    Reads = rt:systest_read(Node, Start, End, Bucket, R, <<>>, true),
+    Expected = [{N,{error,notfound}} || N <- lists:seq(Start, End)],
+    lists:sort(Reads) == lists:sort(Expected).
+
 get_fs_coord_status_item(Node, SinkName, ItemName) ->
     Status = rpc:call(Node, riak_repl_console, status, [quiet]),
     FS_CoordProps = proplists:get_value(fullsync_coordinator, Status),
@@ -229,7 +237,9 @@ start_and_wait_until_fullsync_complete(Node, Cluster) ->
 start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid) ->
     start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, 20).
 
-start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries) ->
+start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries) when is_atom(Node) ->
+    start_and_wait_until_fullsync_complete([Node], Cluster, NotifyPid, Retries);
+start_and_wait_until_fullsync_complete([Node|_] = Nodes, Cluster, NotifyPid, Retries) ->
     Status0 = rpc:call(Node, riak_repl_console, status, [quiet]),
     Count0 = proplists:get_value(server_fullsyncs, Status0),
     Count = fullsync_count(Count0, Status0, Cluster),
@@ -246,7 +256,7 @@ start_and_wait_until_fullsync_complete(Node, Cluster, NotifyPid, Retries) ->
     %% Send message to process and notify fullsync has began.
     fullsync_notify(NotifyPid),
 
-    case rt:wait_until(make_fullsync_wait_fun(Node, Count), 100, 1000) of
+    case rt:wait_until(make_fullsync_wait_fun(Nodes, Count), 100, 1000) of
         ok ->
             ok;
         _  when Retries > 0 ->
@@ -275,21 +285,29 @@ fullsync_notify(NotifyPid) when is_pid(NotifyPid) ->
 fullsync_notify(_) ->
     ok.
 
-make_fullsync_wait_fun(Node, Count) ->
+make_fullsync_wait_fun(Cluster, Count) when is_list(Cluster) ->
     fun() ->
-            Status = rpc:call(Node, riak_repl_console, status, [quiet]),
-            case Status of
-                {badrpc, _} ->
-                    false;
+        make_fullsync_wait_fun2(Cluster, Count)
+    end.
+
+make_fullsync_wait_fun2([], _) ->
+    false;
+make_fullsync_wait_fun2([Node|Tail], Count) when is_atom(Node) ->
+    Status = rpc:call(Node, riak_repl_console, status, [quiet]),
+    case Status of
+        {badrpc, _} ->
+            false;
+        _ ->
+            case proplists:get_value(server_fullsyncs, Status) of
+                C when C >= Count ->
+                    true;
                 _ ->
-                    case proplists:get_value(server_fullsyncs, Status) of
-                        C when C >= Count ->
-                            true;
-                        _ ->
-                            false
-                    end
+                    make_fullsync_wait_fun2(Tail, Count)
             end
     end.
+
+connect_cluster(Node, {IP, Port}) ->
+    connect_cluster(Node, IP, Port).
 
 connect_cluster(Node, IP, Port) ->
     Res = rpc:call(Node, riak_repl_console, connect,
@@ -527,19 +545,25 @@ connect_cluster_by_name(Source, Port, Name) ->
 
 %% @doc Connect two clusters using a given name.
 connect_cluster_by_name(Source, Destination, Port, Name) ->
-    lager:info("Connecting ~p to ~p for cluster ~p.",
-               [Source, Port, Name]),
+    lager:info("Connecting ~p to ~p:~p for cluster ~p.",
+               [Source, Destination, Port, Name]),
     repl_util:connect_cluster(Source, Destination, Port),
     ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
 
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.
 get_port(Node) ->
-    {ok, {_IP, Port}} = rpc:call(Node,
-                                 application,
-                                 get_env,
-                                 [riak_core, cluster_mgr]),
+    {_IP, Port} = get_endpoint(Node),
     Port.
+
+%% @doc Given a node, find the port that the cluster manager is
+%%      listening on.
+get_endpoint(Node) ->
+    {ok, {IP, Port}} = rpc:call(Node,
+                                application,
+                                get_env,
+                                [riak_core, cluster_mgr]),
+    {IP, Port}.
 
 %% @doc Given a node, find out who the current replication leader in its
 %%      cluster is.

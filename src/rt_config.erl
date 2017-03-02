@@ -23,6 +23,7 @@
 -export([
          get/1,
          get/2,
+         get_all/0,
          config_or_os_env/1,
          config_or_os_env/2,
          get_os_env/1,
@@ -91,6 +92,9 @@ get(Key, Default) ->
         [] -> Default;
         Value -> Value
     end.
+
+get_all() ->
+    application:get_all_env(riak_test).
 
 -spec config_or_os_env(atom()) -> term().
 config_or_os_env(Config) ->

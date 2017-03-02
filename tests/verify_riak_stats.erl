@@ -399,7 +399,16 @@ get_and_update(Pid, map) ->
           || I <- lists:seq(1, 10) ].
 
 all_stats(Node) ->
-    common_stats() ++ product_stats(rt:product(Node)).
+    common_stats() ++ product_stats(rt:product(Node)) ++ maybe_ts_stats(binary:match(rtdev:get_version(current),<<"ts">>)).
+
+maybe_ts_stats(nomatch) ->
+    [];
+
+maybe_ts_stats(_) ->
+    [
+        <<"riak_ql_version">>,
+        <<"riak_shell_version">>
+    ].
 
 common_stats() ->
     [
@@ -887,6 +896,10 @@ common_stats() ->
         <<"vnode_set_update_time_mean">>,
         <<"vnode_set_update_time_median">>,
         <<"vnode_set_update_total">>,
+        <<"vnode_reap_tombstone">>,
+        <<"vnode_reap_tombstone_total">>,
+        <<"vnode_reap_object_ttl_expired">>,
+        <<"vnode_reap_object_ttl_expired_total">>,
         <<"webmachine_version">>,
         <<"write_once_merge">>,
         <<"write_once_put_objsize_100">>,
