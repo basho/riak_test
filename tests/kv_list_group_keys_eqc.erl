@@ -181,7 +181,7 @@ collect_group_keys(Cluster, Bucket, GroupParams, Acc) ->
 list_group_keys(Cluster, Bucket, GroupParams) ->
     Node = rt:select_random(Cluster),
     {ok, Client} = riak:client_connect(Node),
-    {ok, Response} = Client:list_group_keys(Bucket, GroupParams, infinity),
+    {ok, Response} = Client:list_group_keys(Bucket, GroupParams, 5000),
     Response.
 
 accumulate_group_keys(GroupKeysResponse, Acc) ->
