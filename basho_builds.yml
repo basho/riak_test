@@ -8,4 +8,12 @@ docker_rt_riak_test_config:
   - version: legacy
     product_version: 2.1.4
     product: riak_ee
-
+  - version: 2.0.2
+    product_version: 2.0.2
+    product: riak_ee
+  - version: 2.0.4
+    product_version: 2.0.4
+    product: riak_ee
+  - version: 2.0.5
+    product_version: 2.0.5
+    product: riak_ee
