@@ -1,6 +1,6 @@
 % -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2015-2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -39,6 +39,9 @@ confirm() ->
     run_tests(?PVAL_P1, ?PVAL_P2).
 
 run_tests(PvalP1, PvalP2) ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     Data = make_data(PvalP1, PvalP2),
     io:format("Data to be written:\n~p\n...\n~p\n", [hd(Data), lists:last(Data)]),
 

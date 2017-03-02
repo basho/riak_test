@@ -26,6 +26,9 @@
 %% riak_test callback
 %% ====================================================================
 confirm() ->
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     ?assert(eqc:quickcheck(eqc:numtests(?NUM_TESTS, ?MODULE:prop_test()))),
     pass.
 %% ====================================================================

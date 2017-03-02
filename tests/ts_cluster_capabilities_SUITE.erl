@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Basho Technologies, Inc.
+%% Copyright (c) 2016-2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -30,19 +30,13 @@
 %%--------------------------------------------------------------------
 
 -define(TS_VERSION_CURRENT, "current").
-
-%% git checkout riak_ts-1.3.1 && make locked-deps
--define(TS_VERSION_1_3, riak_ts_1_3_1).
-
 -define(SQL_SELECT_CAP, {riak_kv, sql_select_version}).
 
 suite() ->
     [{timetrap,{minutes,10}}].
 
 init_per_suite(Config) ->
-    Versions = rt:find_version_by_name(["riak_ts-1.3.1", "riak_ts_ee-1.3.1"]),
-    Vsn131 = maybe_missing_1_3_1(Versions),
-    [{?TS_VERSION_1_3, Vsn131} | Config].
+    Config.
 
 end_per_suite(_Config) ->
     ok.
@@ -143,21 +137,19 @@ capability_not_specified_on_one_node_test(_Ctx) ->
 %% Riak TS Capability Tests
 %%--------------------------------------------------------------------
 
-sql_select_upgrade_a_node_from_1_3_test(Config) ->
-    Vsn131 = ?config(?TS_VERSION_1_3, Config),
+sql_select_upgrade_a_node_from_legacy_test(_Ctx) ->
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([Vsn131, Vsn131, Vsn131]),
+        rt:deploy_nodes([legacy, legacy, legacy]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     ok = rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
     ok = rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
-    ok = rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v1),
+    ok = rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v2),
     ok.
 
-sql_select_join_with_all_nodes_upgraded_test(Config) ->
-    Vsn131 = ?config(?TS_VERSION_1_3, Config),
+sql_select_join_with_all_nodes_upgraded_test(_Ctx) ->
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([Vsn131, Vsn131, Vsn131]),
+        rt:deploy_nodes([legacy, legacy, legacy]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
@@ -168,18 +160,14 @@ sql_select_join_with_all_nodes_upgraded_test(Config) ->
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v3),
     ok.
 
-%% This test passed for 1.4.0, expecting v1 where commented, but fails for 1.5.0 due to code change. We set it to expect
-%% v3 until future changes are made. After 1.5.0 if this test will fail if new code is introduced to handle capability
-%% communication. https://bashoeng.atlassian.net/browse/RTS-1415
-sql_select_downgrade_a_node_test(Config) ->
-    Vsn131 = ?config(?TS_VERSION_1_3, Config),
+sql_select_downgrade_a_node_test(_Ctx) ->
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([Vsn131, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
+        rt:deploy_nodes([legacy, ?TS_VERSION_CURRENT, ?TS_VERSION_CURRENT]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     % rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v3),
-    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v1),
-    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v1),
+    rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v2),
+    rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v2),
     rt:upgrade(Node_A, ?TS_VERSION_CURRENT),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     rt:wait_until_capability(Node_A, ?SQL_SELECT_CAP, v3),
@@ -189,8 +177,8 @@ sql_select_downgrade_a_node_test(Config) ->
     %% pending changes to how capabilities are communicated around the ring, this
     %% section will expect v2. Once capabilities are changed in a future version of riak
     %% (or if testing 1.4.0 as current)
-    %% the expected version should go back to v1.
-    rt:upgrade(Node_A, Vsn131),
+    %% the expected version should go back to v2.
+    rt:upgrade(Node_A, legacy),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     rt:wait_until_capability(Node_B, ?SQL_SELECT_CAP, v3),
     rt:wait_until_capability(Node_C, ?SQL_SELECT_CAP, v3),
@@ -200,10 +188,9 @@ sql_select_downgrade_a_node_test(Config) ->
 %% Perform queries in mixed version cluster
 %%--------------------------------------------------------------------
 
-query_in_mixed_version_cluster_test(Config) ->
-    Vsn131 = ?config(?TS_VERSION_1_3, Config),
+query_in_mixed_version_cluster_test(_Ctx) ->
     [Node_A, Node_B, Node_C] =
-        rt:deploy_nodes([?TS_VERSION_CURRENT, Vsn131, ?TS_VERSION_CURRENT]),
+        rt:deploy_nodes([?TS_VERSION_CURRENT, previous, ?TS_VERSION_CURRENT]),
     ok = rt:join_cluster([Node_A,Node_B,Node_C]),
     rt:wait_until_ring_converged([Node_A,Node_B,Node_C]),
     Table = "grouptab1",
@@ -220,7 +207,7 @@ query_in_mixed_version_cluster_test(Config) ->
         [{1,1,B*C} || B <- lists:seq(1,10), C <- lists:seq(1000,5000,1000)]),
     ExpectedResultSet = [{N} || N <- lists:seq(1000,5000,1000)],
     %%
-    %% Test that the current version can query version 1.3
+    %% Test that the current version can query older version
     %%
     Query =
         "SELECT c FROM grouptab1 "
@@ -232,7 +219,7 @@ query_in_mixed_version_cluster_test(Config) ->
         {ok,{Cols, Rows}}
     ),
     %%
-    %% Test that the 1.3 can query the current version
+    %% Test that the previous can query the current version
     %%
     {ok, {Cols, Rows}} = run_query(rt:pbc(Node_B), Query),
     ts_data:assert_row_sets(
@@ -240,9 +227,3 @@ query_in_mixed_version_cluster_test(Config) ->
         {ok,{Cols, Rows}}
     ).
 
-%% If 1.3.1 is not found, use a meaningful atom to prompt the error message
-%% rtdev:check_version/1
-maybe_missing_1_3_1([]) ->
-    missing_version_ts_1_3_1;
-maybe_missing_1_3_1([Vsn]) ->
-    Vsn.
