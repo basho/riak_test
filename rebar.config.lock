@@ -31,7 +31,7 @@
                      "6c67dc58251e1a1c29b2e0c444b1e9c9aa2d4a24"}},
        {riakc,".*",
               {git,"https://github.com/basho/riak-erlang-client",
-                   "87958bdf1926d752fb1319b6788330176f6dd591"}},
+                   "fb96f889da1e74a69920f1f91be6fa3d8bd22705"}},
        {ibrowse,".*",
                 {git,"https://github.com/basho/ibrowse.git",
                      "b28542d1e326ba44bcfaf7fd6d3c7f8761d20f08"}},
