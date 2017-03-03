@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Basho Technologies, Inc.
+%% Copyright (c) 2016, 2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -40,8 +40,8 @@ make_scenarios() ->
                    need_query_node_transition = NeedQueryNodeTransition,
                    need_pre_cluster_mixed     = NeedPreClusterMixed,
                    need_post_cluster_mixed    = NeedPostClusterMixed,
-                   ensure_full_caps     = [{{riak_kv, sql_select_version}, v3}, {{riak_kv, riak_ql_ddl_rec_version}, v2}, {{riak_kv, decode_query_results_at_vnode}, true}],
-                   ensure_degraded_caps = [{{riak_kv, sql_select_version}, v2}, {{riak_kv, riak_ql_ddl_rec_version}, v1}, {{riak_kv, decode_query_results_at_vnode}, false}],
+                   ensure_full_caps     = ts_updown_util:caps_to_ensure(full),
+                   ensure_degraded_caps = ts_updown_util:caps_to_ensure(degraded),
                    convert_config_to_previous = fun ts_updown_util:convert_riak_conf_to_previous/1}
          || TableNodeVsn            <- [previous, current],
             QueryNodeVsn            <- [previous, current],
@@ -50,6 +50,7 @@ make_scenarios() ->
             NeedPreClusterMixed     <- [true, false],
             NeedPostClusterMixed    <- [true, false]],
     [add_tests(X) || X <- BaseScenarios].
+
 
 %% This test will not use config invariants
 %% see ts_cluster_updowngrade_select_aggregation_SUITE.erl for an example
