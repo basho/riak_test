@@ -588,7 +588,7 @@ get_riak_release_in_slot(VsnSlot) ->
         unknown ->
             ct:fail("Failed to determine riak version in '~s' slot", [VsnSlot]);
         Known ->
-            case re:run(Known, "riak_ts-(\\d+)\.(\\d+)\.(\\d+)", [{capture, all_but_first, list}]) of
+            case re:run(Known, "riak_ts-(\\d+)\\.(\\d+)\\.(\\d+)", [{capture, all_but_first, list}]) of
                 {match, [V1, V2, V3]} ->
                     {list_to_integer(V1),
                      list_to_integer(V2),
