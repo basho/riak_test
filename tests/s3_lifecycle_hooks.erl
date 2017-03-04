@@ -55,10 +55,16 @@
 
 confirm() ->
     %%
+    %% Start our webhook
+    %%
+    lager:info("Starting mock lifecycle webhook server..."),
+    ok = webhook_server:start_link(?WEBHOOK_PORT),
+    %%
     %% Build the cluster
     %%
     Cluster = rt:build_cluster(?NUM_NODES, ?CONFIG),
     Node = lists:nth(random:uniform(length((Cluster))), Cluster),
+    rt:wait_for_service(Node, [riak_kv]),
     %%
     %% Create a mock S3 "bucket" (aka Riak bucket type) with
     %%
@@ -68,12 +74,10 @@ confirm() ->
     Bucket = rpc:call(Node, riak_s3_bucket, to_riak_bucket, [?BUCKET_TYPE]),
     lager:info("Bucket: ~p", [Bucket]),
 
-    %% Other misc setup:
-    lager:info("Starting mock lifecycle webhook server", []),
-    start_webhook_server(),
 
     %% Populate an S3 "object" TODO refactor as needed -- maybe lots of puts?
     %%
+    lager:info("Writing an object to the S3 bucket..."),
     Client = rt:pbc(Node),
     _Ret = riakc_pb_socket:put(
         Client, riakc_obj:new(
@@ -86,34 +90,20 @@ confirm() ->
     %%
     %% confirm webhook has been called
     %%
-    lager:info("Waiting for lifecycle webhook to be executed", []),
+    lager:info("Waiting for lifecycle webhook to be executed..."),
     ?assertEqual(ok, rt:wait_until(fun check_for_webhook_request/0)),
 
     pass.
 
-start_webhook_server() ->
-    TestPid = self(),
-    Loop = fun(Req) ->
-                   %% Beware, recv_body will fail if we call it outside this request
-                   %% handler process, because mochiweb secretly stores stuff
-                   %% in the process dictionary. The failure is also silent and
-                   %% mysterious, due to mochiweb_request calling `exit(normal)`
-                   %% in several places instead of crashing or properly handling
-                   %% the error... o_O
-                   Body = Req:recv_body(),
-                   Req:respond({200, [], []}),
-                   TestPid ! {got_http_req, Req, Body}
-           end,
-    mochiweb_http:start([{name, ?MODULE}, {loop, Loop}, {port, ?WEBHOOK_PORT}]).
-
 check_for_webhook_request() ->
-    receive
+    case webhook_server:get_next() of
+        empty ->
+            lager:info("No entry received yet."),
+            false;
         {got_http_req, Req, Body} ->
             verify_webhook_request_parameters(Req),
-            verify_webhook_request_body(Body)
-    after
-        0 ->
-            false
+            verify_webhook_request_body(Body),
+            true
     end.
 
 verify_webhook_request_parameters(Req) ->
