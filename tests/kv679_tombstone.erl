@@ -144,8 +144,11 @@ write_key({_, Client}, Val, Opts) when is_binary(Val) ->
              end,
     riakc_pb_socket:put(Client, Object, Opts).
 
-read_key({_, Client}) ->
-    riakc_pb_socket:get(Client, ?BUCKET, ?KEY, []).
+read_key({_, Client}, Opts) ->
+    riakc_pb_socket:get(Client, ?BUCKET, ?KEY, Opts).
+
+read_key(C) ->
+    read_key(C, []).
 
 delete_key({_, Client}) ->
     riakc_pb_socket:delete(Client, ?BUCKET, ?KEY),
