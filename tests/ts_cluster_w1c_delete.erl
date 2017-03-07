@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -18,7 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 
--module(ts_verify_w1c_delete).
+-module(ts_cluster_w1c_delete).
 
 -behavior(riak_test).
 
@@ -118,10 +118,10 @@ verify_ts_sql_delete_key(Bucket) ->
 
     [Family, Series, Time] = PartList,
     Query = 
-	"delete from " ++ Bucket ++ " where " ++
-	" myfamily='"  ++ binary_to_list(Family) ++ "' and " ++
-	" myseries='"  ++ binary_to_list(Series) ++ "' and " ++
-	" time="       ++ integer_to_list(Time),
+        "delete from " ++ Bucket ++ " where " ++
+        " myfamily='"  ++ binary_to_list(Family) ++ "' and " ++
+        " myseries='"  ++ binary_to_list(Series) ++ "' and " ++
+        " time="       ++ integer_to_list(Time),
 
     %% Delete the key via SQL query, and verify that it is gone
 
