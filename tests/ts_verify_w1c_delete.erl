@@ -129,7 +129,7 @@ verify_ts_sql_delete_key(Bucket) ->
     {ok, {[], []}} = riakc_ts:get(C, Bucket, PartList, []).
 
 %% ------------------------------------------------------------
-%% Put a KV key into the write-once bucket and verify that is can be
+%% Put a KV key into the write-once bucket and verify that it can be
 %% read back
 %% ------------------------------------------------------------
 
