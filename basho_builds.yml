@@ -1,16 +1,13 @@
 docker_rt_riak_test_config:
   - version: current
     product_version: current
-    product: "riak{% if ee == 'true' %}_ee{% endif %}"
+    product: "riak_ts{% if ee == 'true' %}_ee{% endif %}"
   - version: previous
-    product_version: 2.2.0
-    product: "riak{% if ee == 'true' %}_ee{% endif %}"
+    product_version: 1.5.2
+    product: "riak_ts{% if ee == 'true' %}_ee{% endif %}"
   - version: legacy
-    product_version: 2.0.8
-    product: "riak{% if ee == 'true' %}_ee{% endif %}"
-  - VERSION: lts
-    product_version: 2.0.8
-    product: "riak{% if ee == 'true' %}_ee{% endif %}"
+    product_version: 1.4.1
+    product: "riak_ts{% if ee == 'true' %}_ee{% endif %}"
   - version: 2.0.2
     product_version: 2.0.2
     product: "riak{% if ee == 'true' %}_ee{% endif %}"
