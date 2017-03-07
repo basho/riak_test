@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Basho Technologies, Inc.
+%% Copyright (c) 2016, 2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -50,6 +50,7 @@
 -module(ts_updown_util).
 
 -export([
+         caps_to_ensure/1,
          convert_riak_conf_to_previous/1,
          maybe_shutdown_client_node/1,
          setup/1,
@@ -581,31 +582,87 @@ wait_until_active_table(TargetNode, PrevClientNode, Table, N) ->
 make_msg(Format, Payload) ->
     list_to_binary(fmt(Format, Payload)).
 
-%% riak.conf created under 1.5 cannot be read by 1.4 because of new keys:
-%%   riak_kv.query.timeseries.max_returned_data_size,
-%%   riak_kv.query.timeseries.qbuf_soft_watermark,
-%%   riak_kv.query.timeseries.qbuf_hard_watermark,
-%%   riak_kv.query.timeseries.qbuf_expire_ms,
-%%   riak_kv.query.timeseries.qbuf_incomplete_release_ms
-%% let's comment them out?
+
+get_riak_release_in_slot(VsnSlot) ->
+    case rtdev:get_version(VsnSlot) of
+        unknown ->
+            ct:fail("Failed to determine riak version in '~s' slot", [VsnSlot]);
+        Known ->
+            case re:run(Known, "riak_ts-(\\d+)\\.(\\d+)\\.(\\d+)", [{capture, all_but_first, list}]) of
+                {match, [V1, V2, V3]} ->
+                    {list_to_integer(V1),
+                     list_to_integer(V2),
+                     list_to_integer(V3)};
+                nomatch ->
+                    ct:fail("Failed to parse riak version in '~s' slot", [VsnSlot])
+            end
+    end.
+
+%% ---------------------------------
+
+%% Dealing with case-by-case upgrade particulars, such as:
+%%
+%% * newly introduced keys in riak.conf that need to be deleted on
+%%   downgrade;
+%%
+%% * capabilities that need to be ensured before running the tests
+%%   (arguments to `wait_until_capability`).
+
+%% We need to comment out those settings which appear in version
+%% 1.x. For version 1.x-1 to work with riak.conf initially created in
+%% 1.x, the offending settings need to be deleted.  We do it here, by
+%% commenting them out.
+
 convert_riak_conf_to_previous(Config) ->
     DatafPath = ?CFG(new_data_dir, Config),
     RiakConfPath = filename:join(DatafPath, "../etc/riak.conf"),
-    {ok, Content0} = file:read_file(RiakConfPath),
-    Content9 =
-        re:replace(
-          Content0,
-          <<"(^riak_kv.query.timeseries.max_returned_data_size"
-            %% this key exists in 1.4, but has a cap of 256, whereas
-            %% 1.5 has no upper limit
-            "|^riak_kv.query.timeseries.max_running_fsms"
-            "|^riak_kv.query.timeseries.max_quanta_span"
-            "|^riak_kv.query.timeseries.qbuf_soft_watermark"
-            "|^riak_kv.query.timeseries.qbuf_hard_watermark"
-            "|^riak_kv.query.timeseries.qbuf_expire_ms"
-            "|^riak_kv.query.timeseries.qbuf_incomplete_release_ms)">>,
-          <<"#\\1">>, [global, multiline, {return, binary}]),
-    ok = file:write_file(RiakConfPath, Content9).
+    {ok, Contents0} = file:read_file(RiakConfPath),
+    Contents9 =
+        lists:foldl(
+          fun(KeyToDelete, Contents) ->
+                  re:replace(Contents, ["^", KeyToDelete], "#\\1",
+                             [global, multiline, {return, list}])
+          end,
+          Contents0,
+          get_riak_conf_new_keys()),
+    ok = file:write_file(RiakConfPath, Contents9).
+
+%% When a new release is cut, register newly introduced keys here:
+get_riak_conf_new_keys() ->
+    %% the current version may have not been tagged yet, so look at
+    %% previous version
+    case get_riak_release_in_slot(previous) of
+        {1, 5, _} ->
+            ["riak_kv.query.timeseries.qbuf_inmem_max"];
+        {1, 4, _} ->
+            ["riak_kv.query.timeseries.max_returned_data_size",
+             "riak_kv.query.timeseries.qbuf_soft_watermark",
+             "riak_kv.query.timeseries.qbuf_hard_watermark",
+             "riak_kv.query.timeseries.qbuf_expire_ms",
+             "riak_kv.query.timeseries.qbuf_incomplete_release_ms"]
+    end.
+
+%% Wait for these capabilities to settle at these versions at the end
+%% of upgrade/downgrade:
+caps_to_ensure(full) ->
+    case get_riak_release_in_slot(previous) of
+        {1, 5, _} ->
+            [];  %% no new caps in 1.6 since 1.5
+        {1, 4, _} ->
+            [{{riak_kv, sql_select_version}, v3},
+             {{riak_kv, riak_ql_ddl_rec_version}, v2},
+             {{riak_kv, decode_query_results_at_vnode}, true}]
+    end;
+caps_to_ensure(degraded) ->
+    case get_riak_release_in_slot(previous) of
+        {1, 5, _} ->
+            [];  %% no new caps in 1.6 since 1.5
+        {1, 4, _} ->
+            [{{riak_kv, sql_select_version}, v2},
+             {{riak_kv, riak_ql_ddl_rec_version}, v1},
+             {{riak_kv, decode_query_results_at_vnode}, false}]
+    end.
+
 
 %% Keep the old convert_riak_conf_to_previous functions around, for
 %% reference and occasional test rerun

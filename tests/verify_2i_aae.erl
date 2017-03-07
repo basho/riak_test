@@ -33,10 +33,12 @@
 confirm() ->
     [Node1] = rt:build_cluster(1,
                                [{riak_kv,
-                                 [{anti_entropy, {off, []}},
+                                 [{sweep_tick, 500},
+                                  {sweep_concurrency, 100},
+                                  {anti_entropy, {off, []}},
                                   {anti_entropy_build_limit, {100, 500}},
                                   {anti_entropy_concurrency, 100},
-                                  {anti_entropy_tick, 200}]}]),
+                                  {anti_entropy_tick, 2000}]}]),
     rt_intercept:load_code(Node1),
     rt_intercept:add(Node1,
                      {riak_object,
@@ -111,21 +113,20 @@ do_tree_rebuild(Node) ->
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {0, 5000}])),
-    %% Make any tree expire on tick.
+    %% Make any tree expire.
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_expire,
                                                            1])),
-    %% Wait for a good number of ticks.
-    timer:sleep(5000),
-    %% Make sure things stop expiring on tick
-    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
-                                                           anti_entropy_expire,
-                                                           7 * 24 * 60 * 60 * 1000])),
+
     %% And let the manager start allowing builds again.
     ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
                                                            anti_entropy_build_limit,
                                                            {100, 1000}])),
     rt:wait_until_aae_trees_built([Node]),
+    %% Make sure things stop expiring now when all trees are rebuilt.
+    ?assertEqual(ok, rpc:call(Node, application, set_env, [riak_kv,
+                                                           anti_entropy_expire,
+                                                           7 * 24 * 60 * 60 * 1000])),
     ok.
 
 %% Write objects without a 2i index. Test that running 2i repair will generate
@@ -149,11 +150,7 @@ check_lost_indexes(Node1, PBC, NumItems) ->
 
 check_kill_repair(Node1) ->
     lager:info("Test that killing 2i repair works as desired"),
-    spawn(fun() ->
-                  timer:sleep(1500),
-                  rt:admin(Node1, ["repair-2i", "kill"])
-          end),
-    ExitStatus = run_2i_repair(Node1),
+    ExitStatus = run_2i_repair(Node1, true),
     case ExitStatus of
         normal ->
             lager:info("Shucks. Repair finished before we could kill it");
@@ -164,13 +161,21 @@ check_kill_repair(Node1) ->
                        "trigger another repair immediately")
     end,
     pass.
-
 run_2i_repair(Node1) ->
+    run_2i_repair(Node1, false).
+
+run_2i_repair(Node1, Kill) ->
     lager:info("Run 2i AAE repair"),
     ?assertMatch({ok, _}, rt:admin(Node1, ["repair-2i"])),
     RepairPid = rpc:call(Node1, erlang, whereis, [riak_kv_2i_aae]),
     lager:info("Wait for repair process to finish"),
     Mon = monitor(process, RepairPid),
+    case Kill of
+        true ->
+            rt:admin(Node1, ["repair-2i", "kill"]);
+        _ ->
+            ok
+    end,
     MaxWaitTime = rt_config:get(rt_max_wait_time),
     receive
         {'DOWN', Mon, _, _, Status} ->

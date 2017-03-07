@@ -20,6 +20,7 @@
          start_and_wait_until_fullsync_complete/2,
          start_and_wait_until_fullsync_complete/3,
          start_and_wait_until_fullsync_complete/4,
+         connect_cluster/2,
          connect_cluster/3,
          disconnect_cluster/2,
          wait_for_connection/2,
@@ -43,6 +44,7 @@
          connect_cluster_by_name/3,
          connect_cluster_by_name/4,
          get_port/1,
+         get_endpoint/1,
          get_leader/1,
          write_to_cluster/4,
          write_to_cluster/5,
@@ -304,6 +306,9 @@ make_fullsync_wait_fun2([Node|Tail], Count) when is_atom(Node) ->
             end
     end.
 
+connect_cluster(Node, {IP, Port}) ->
+    connect_cluster(Node, IP, Port).
+
 connect_cluster(Node, IP, Port) ->
     Res = rpc:call(Node, riak_repl_console, connect,
         [[IP, integer_to_list(Port)]]),
@@ -540,19 +545,25 @@ connect_cluster_by_name(Source, Port, Name) ->
 
 %% @doc Connect two clusters using a given name.
 connect_cluster_by_name(Source, Destination, Port, Name) ->
-    lager:info("Connecting ~p to ~p for cluster ~p.",
-               [Source, Port, Name]),
+    lager:info("Connecting ~p to ~p:~p for cluster ~p.",
+               [Source, Destination, Port, Name]),
     repl_util:connect_cluster(Source, Destination, Port),
     ?assertEqual(ok, repl_util:wait_for_connection(Source, Name)).
 
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.
 get_port(Node) ->
-    {ok, {_IP, Port}} = rpc:call(Node,
-                                 application,
-                                 get_env,
-                                 [riak_core, cluster_mgr]),
+    {_IP, Port} = get_endpoint(Node),
     Port.
+
+%% @doc Given a node, find the port that the cluster manager is
+%%      listening on.
+get_endpoint(Node) ->
+    {ok, {IP, Port}} = rpc:call(Node,
+                                application,
+                                get_env,
+                                [riak_core, cluster_mgr]),
+    {IP, Port}.
 
 %% @doc Given a node, find out who the current replication leader in its
 %%      cluster is.
