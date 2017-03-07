@@ -30,6 +30,7 @@
 
 -define(BUCKET_TYPE, <<"s3_lifecycle_hooks">>).
 -define(OBJECT_KEY, <<"lifecycle_test_key">>).
+-define(OBJECT_OWNER, <<"Nick Marino">>).
 
 -define(WEBHOOK_PATH, "/lifecycle_hook").
 -define(WEBHOOK_PORT, 8765).
@@ -79,14 +80,16 @@ confirm() ->
     %% Populate an S3 "object" TODO refactor as needed -- maybe lots of puts?
     %%
     lager:info("Writing an object to the S3 bucket..."),
-    Client = rt:pbc(Node),
-    _Ret = riakc_pb_socket:put(
-        Client, riakc_obj:new(
-            Bucket, ?OBJECT_KEY, <<"test_value">>
-        )
-    ),
+    %% We have to use the internal client here, since the standard clients won't
+    %% let us write arbitrary keys to the object metadata...
+    {ok, Client} = rpc:call(Node, riak, local_client, []),
+    Obj0 = riak_object:new(Bucket, ?OBJECT_KEY, <<"test_value">>),
+    MD0 = riak_object:get_update_metadata(Obj0),
+    MD = dict:store(<<"X-Riak-S3-Owner">>, ?OBJECT_OWNER, MD0),
+    Obj = riak_object:update_metadata(Obj0, MD),
+    _Ret = Client:put(Obj),
 
-    %% TODO Force a sweep of our object's partition:
+    %% TODO Force a sweep of our object's partition, just to speed up the test a bit?
 
     %%
     %% confirm webhook has been called
@@ -115,4 +118,6 @@ verify_webhook_request_body(BodyBin) ->
     {struct, Body} = mochijson2:decode(BodyBin),
     ?assertEqual({<<"bucket_name">>, ?BUCKET_TYPE}, lists:keyfind(<<"bucket_name">>, 1, Body)),
     ?assertEqual({<<"object_name">>, ?OBJECT_KEY}, lists:keyfind(<<"object_name">>, 1, Body)),
+    ?assertEqual({<<"object_owner_id">>, ?OBJECT_OWNER},
+                  lists:keyfind(<<"object_owner_id">>, 1, Body)),
     true.
