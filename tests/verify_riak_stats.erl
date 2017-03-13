@@ -169,32 +169,32 @@ get_console_stats(Node) ->
     %% Temporary workaround: use os:cmd/1 when in 'rtdev' (needs some cheats
     %% in order to find the right path etc.)
     try
-	Stats =
-	    case rt_config:get(rt_harness) of
-		rtdev ->
-		    N = rtdev:node_id(Node),
-		    Path = rtdev:relpath(rtdev:node_version(N)),
-		    Cmd = rtdev:riak_admin_cmd(Path, N, ["status"]),
-		    lager:info("Cmd = ~p~n", [Cmd]),
-		    os:cmd(Cmd);
-		_ ->
-		    rt:admin(Node, "status")
-	    end,
-	[S || {_,_} = S <-
-		  [list_to_tuple(re:split(L, " : ", []))
-		   || L <- tl(tl(string:tokens(Stats, "\n")))]]
+    Stats =
+        case rt_config:get(rt_harness) of
+        rtdev ->
+            N = rtdev:node_id(Node),
+            Path = rtdev:relpath(rtdev:node_version(N)),
+            Cmd = rtdev:riak_admin_cmd(Path, N, ["status"]),
+            lager:info("Cmd = ~p~n", [lists:flatten(Cmd)]),
+            os:cmd(Cmd);
+        _ ->
+            rt:admin(Node, "status")
+        end,
+    [S || {_,_} = S <-
+          [list_to_tuple(re:split(L, " : ", []))
+           || L <- tl(tl(string:tokens(Stats, "\n")))]]
     catch
-	error:Reason ->
-	    lager:info("riak-admin status ERROR: ~p~n~p~n",
-		       [Reason, erlang:get_stacktrace()]),
-	    []
+    error:Reason ->
+        lager:info("riak-admin status ERROR: ~p~n~p~n",
+               [Reason, erlang:get_stacktrace()]),
+        []
     end.
 
 compare_http_and_console_stats(Stats1, Stats2) ->
     OnlyInHttp = [S || {K,_} = S <- Stats1,
-		       not lists:keymember(K, 1, Stats2)],
+               not lists:keymember(K, 1, Stats2)],
     OnlyInAdmin = [S || {K,_} = S <- Stats2,
-			not lists:keymember(K, 1, Stats1)],
+            not lists:keymember(K, 1, Stats1)],
     maybe_log_stats_keys(OnlyInHttp, "Keys missing from riak-admin"),
     maybe_log_stats_keys(OnlyInAdmin, "Keys missing from HTTP"),
     ?assertEqual([], OnlyInHttp),
@@ -402,7 +402,14 @@ all_stats(Node) ->
     common_stats() ++ product_stats(rt:product(Node)) ++ maybe_ts_stats(binary:match(rtdev:get_version(current),<<"ts">>)).
 
 maybe_ts_stats(nomatch) ->
-    [];
+    [
+        <<"chronos_version">>,
+        <<"gproc_version">>,
+        <<"vnode_reap_object_ttl_expired">>,
+        <<"vnode_reap_object_ttl_expired_total">>,
+        <<"vnode_reap_tombstone">>,
+        <<"vnode_reap_tombstone_total">>
+    ];
 
 maybe_ts_stats(_) ->
     [
@@ -415,7 +422,6 @@ common_stats() ->
         <<"asn1_version">>,
         <<"basho_stats_version">>,
         <<"bitcask_version">>,
-        <<"chronos_version">>,
         <<"clique_version">>,
         <<"cluster_info_version">>,
         <<"compiler_version">>,
@@ -469,7 +475,6 @@ common_stats() ->
         <<"fuse_version">>,
         <<"goldrush_version">>,
         <<"gossip_received">>,
-        <<"gproc_version">>,
         <<"handoff_timeouts">>,
         <<"hll_bytes">>,
         <<"hll_bytes_mean">>,
@@ -898,10 +903,6 @@ common_stats() ->
         <<"vnode_set_update_time_mean">>,
         <<"vnode_set_update_time_median">>,
         <<"vnode_set_update_total">>,
-        <<"vnode_reap_tombstone">>,
-        <<"vnode_reap_tombstone_total">>,
-        <<"vnode_reap_object_ttl_expired">>,
-        <<"vnode_reap_object_ttl_expired_total">>,
         <<"webmachine_version">>,
         <<"write_once_merge">>,
         <<"write_once_put_objsize_100">>,
