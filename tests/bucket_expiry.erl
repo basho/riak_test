@@ -33,6 +33,9 @@
 
 -define(BUCKET(TYPE), {TYPE, <<"bucket">>}).
 
+%% Despite the fact that the bucket properties are configured with a 1
+%% minute TTL, we will occasionally sleep for 2 minutes in this test
+%% because the expiry calculated at the top of the minute.
 -define(BUCKET_PROPS, "{\\\"props\\\":{\\\"default_time_to_live\\\":\\\"1m\\\"}}").
 
 -define(MUTUAL_CONF, [
@@ -61,7 +64,7 @@ confirm() ->
     %%
     Node1 = lists:nth(random:uniform(length((Nodes))), Nodes),
     lager:info("Using ~p for client", [Node1]),
-    %% Create the set type
+
     lager:info("Create a set bucket type"),
     rt:create_and_activate_bucket_type(Node1, ?SET_TYPE, [{datatype, set}]),
     rt:wait_until_bucket_type_status(?SET_TYPE, active, Nodes),
@@ -96,7 +99,8 @@ confirm() ->
     lager:info("Populated all bucket types with values 1->100"),
 
     %% Force leveldb to compact, to record existing keys as
-    %% non-expiring. This restart cycle may not always be necessary
+    %% non-expiring. This restart cycle may eventually be make
+    %% obsolete
     lager:info("Restart cluster to force leveldb compaction"),
     [ rt:stop_and_wait(Node) || Node <- Nodes ],
     [ rt:start_and_wait(Node) || Node <- Nodes ],
@@ -109,7 +113,6 @@ confirm() ->
     lists:foreach(fun(N) -> rt:update_app_config(N, ?TTL_CONF) end,
                   Nodes),
 
-%%    timer:sleep(2 * 60 * 1000),
     lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
                   Nodes),
 
@@ -139,6 +142,8 @@ confirm() ->
     rt:admin(UpdateNode2, ["bucket-type", "update", binary_to_list(?W1C_TYPE), ?BUCKET_PROPS]),
     rt:admin(UpdateNode2, ["bucket-type", "update", binary_to_list(?STD_TYPE), ?BUCKET_PROPS]),
 
+    %% The backend caches bucket expiry data for 5 minutes. Flush it
+    %% to make certain it will recognize the change
     lists:foreach(fun(N) -> rpc:call(N, eleveldb, property_cache_flush, []) end,
                   Nodes),
 
@@ -229,7 +234,6 @@ verify_put(Node, Bucket, Key, Value, Options, ExpectedValue) ->
 %%     binary_to_integer(riakc_obj:get_value(Val)).
 
 verify_get(Client, Bucket, Key, ExpectedValue) ->
-    lager:info("Checking ~p/~p", [Bucket, Key]),
     Response = riakc_pb_socket:get(Client, Bucket, Key, [{notfound_ok, false}]),
     ?assertMatch({ok, _}, Response),
     {ok, Val} = Response,
