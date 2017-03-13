@@ -323,13 +323,13 @@ prop_failure_replication_test([AFirst|_] = ANodes, [BFirst|_] = BNodes, LeaderA,
 
     log_to_nodes(ANodes++BNodes, "Write data to Cluster A, verify no replication to Cluster B via realtime because DDL comparison failed"),
     lager:info("Writing 100 keys to Cluster A-LeaderNode: ~p", [LeaderA]),
-    ?assertEqual(ok, put_records(AFirst, Table, 202, 301)),
+    ?assertEqual(ok, put_records(AFirst, Table, 2202, 2301)),
 
     lager:info("Pausing 2 seconds"),
     timer:sleep(2000),
 
     lager:info("Verifying none of the new records are on B"),
-    ?assertEqual(0, ts_num_records_present(BFirst, 202, 301, Table)),
+    ?assertEqual(0, ts_num_records_present(BFirst, 2202, 2301, Table)),
 
     disconnect_clusters(ANodes, LeaderA, "B").
 
