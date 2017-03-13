@@ -287,10 +287,9 @@ delete_data_existing_row_test(Cfg) ->
 
 
 delete_data_nonexisting_row_test(Cfg) ->
-    {ok, "404", Headers, Body } = delete("bob", "q1", base64:encode_to_string("w1"), 500, Cfg),
-    "text/plain" = content_type(Headers),
-    "Key not found"
-        = Body.
+    {ok, "200", Headers, Body } = delete("bob", "q1", base64:encode_to_string("w1"), 500, Cfg),
+    "application/json" = content_type(Headers),
+    ?assertEqual("{\"success\":true}", Body).
 
 delete_data_nonexisting_table_test(Cfg) ->
     {ok, "404", Headers, Body } = delete("bill", "q1", base64:encode_to_string("w1"), 20, Cfg),
