@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2015 Basho Technologies, Inc.
+%% Copyright (c) 2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -18,19 +18,18 @@
 %%
 %%-------------------------------------------------------------------
 
--module(riak_kv_put_fsm_intercepts).
+-module(random_intercepts).
 -compile(export_all).
 -include("intercept.hrl").
+-define(M, random_orig).
 
--define(M, riak_kv_put_fsm_orig).
+last_for_uniform_s(3, Seed) ->
+    ?I_INFO("Returning 3 for uniform_s", []),
+    {3, Seed};
+last_for_uniform_s(Length, Seed) ->
+    ?M:uniform_s_orig(Length, Seed).
+
+unstick_random() ->
+    code:unstick_dir(code:lib_dir(stdlib) ++ "/ebin").
 
 
-%% @doc simulate slow puts by adding delay to the prepare state.
-slow_prepare(Atom, State) ->  
-    timer:sleep(1000),
-    ?M:prepare_orig(Atom, State).
-
-really_slow_failed_start_link(_From, _Obj, _PutOptions) ->
-    ?I_INFO("Slowing down riak_kv_put_fsm:start_link", []),
-    timer:sleep(10000),
-    ok.
