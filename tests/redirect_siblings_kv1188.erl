@@ -6,6 +6,10 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
+-define(NUM_NODES, 5).
+-define(N_VAL, 3).
+-define(COORDINATOR_TIMEOUT, 100). %% in milliseconds
+
 confirm() ->
     %% It is possible for a slow node to create siblings on put when a the coordinator
     %% times out and the next node selected to coordinate is a fallback - in that case,
@@ -20,36 +24,49 @@ confirm() ->
     %% See https://github.com/basho/riak_kv/issues/1188 for more detail
 
     %% Build a 5-node cluster to make sure we don't have overlap in coverage
-    Nodes = rt:build_cluster(5),
+    Nodes = rt:build_cluster(?NUM_NODES, [{riak_core, [{handoff_concurrency, 11}]}]),
+    rt:wait_until_transfers_complete(Nodes),
     %% Install intercepts
     lists:foreach(fun(Node) ->
         rpc:call(Node, random_intercepts, unstick_random, []),
+        ok = rpc:call(Node, application, set_env, [riak_kv, put_coordinator_failure_timeout, ?COORDINATOR_TIMEOUT]),
+        TimeoutVal = rpc:call(Node, app_helper, get_env, [riak_kv, put_coordinator_failure_timeout]),
+        lager:info("Timeout for node ~p is ~p", [Node, TimeoutVal]),
         rt_intercept:add(Node, {random, [{{uniform_s, 2}, last_for_uniform_s}]})
         end, Nodes),
     Bucket = <<"SibBucket">>,
     Key = <<"SibKey">>,
-    NVal = 3,
-    {ok, PL} = rt:get_primary_preflist(hd(Nodes), Bucket, Key, NVal),
-    PrefListNodes = get_nodes_from_preflist(PL),
+    %% While the n_val is set to 3 for the bucket below, we are going to pretend
+    %% that it's ?NUM_NODES so we can get a complete list of nodes in the order
+    %% in which Riak thinks they will be applied to a preflist
+    {ok, PL} = rt:get_primary_preflist(hd(Nodes), Bucket, Key, ?NUM_NODES),
+    lager:info("Complete PL: ~p", [PL]),
+    {PrimaryNodes, FallbackNodes} = split_preflist(PL, ?N_VAL),
+    lager:info("Primary, Fallback: ~p , ~p", [PrimaryNodes, FallbackNodes]),
     %% Because we always choose the last node in the preflist due to the intercept above,
     %% make the last node in the primary preflist slow to induce the issue.
-    DeadNode = lists:nth(3, PrefListNodes),
+    DeadNode = lists:nth(?N_VAL, PrimaryNodes),
+    lager:info("DeadNode: ~p", [DeadNode]),
     %% Install slow failed startlink in dead node
     rt_intercept:add(DeadNode, {riak_kv_put_fsm, [{{start_link, 3}, really_slow_failed_start_link}]}),
-    %% Pick a node _not_ in the preflist to make sure we redirect the request
-    NonPlNode = get_non_preflist_node(Nodes, PrefListNodes),
+    %% Pick the last node _not_ in the primary preflist to make sure we redirect the request
+    NonPlNode = lists:last(FallbackNodes),
+    lager:info("NonPLNode: ~p", [NonPlNode]),
     Client = rt:pbc(NonPlNode),
-    rt:pbc_set_bucket_prop(Client, Bucket, [{allow_mult, true}]),
+    ok = rt:pbc_set_bucket_prop(Client, Bucket,
+                                [{allow_mult, true},
+                                 {n_val, ?N_VAL},
+                                 {dvv_enabled, true}]),
     lager:info("Putting object", []),
-    riakc_pb_socket:put(Client, riakc_obj:new(Bucket, Key, <<"value">>)),
+    ok = riakc_pb_socket:put(Client, riakc_obj:new(Bucket, Key, <<"value">>)),
+    lager:info("Waiting for put FSMs to finish", []),
+    timer:sleep(?COORDINATOR_TIMEOUT*(?NUM_NODES*3)),
     lager:info("Get object and check for siblings", []),
     {ok, Obj} = riakc_pb_socket:get(Client, Bucket, Key),
     lager:info("Obj : ~p", [Obj]),
     ?assertEqual(1, length(riakc_obj:get_contents(Obj))),
     pass.
 
-get_nodes_from_preflist(PrefList) ->
-    lists:map(fun({{_Idx, Node}, _PrimaryOrFallback} ) -> Node end, PrefList).
-
-get_non_preflist_node(Nodes, PrefListNodes) ->
-    lists:last(Nodes -- PrefListNodes).
+split_preflist(PrefList, NVal) ->
+    Nodes = [ Node || {{_Idx, Node}, primary} <- PrefList],
+    lists:split(NVal, Nodes).
