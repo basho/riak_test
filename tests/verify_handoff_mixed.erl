@@ -71,13 +71,15 @@ confirm() ->
     ok = rt:wait_until_all_members(Nodes),
     ok = rt:wait_until_ring_converged(Nodes),
 
-    %% the calls to ..._no_pending_changes and ..._transfers_complete
-    %% speed up the timing of handoff such that it will happen before
-    %% capability renegotiation if we don't wait here - this is still
-    %% technically race-prone, but negotiation usually happens *much*
-    %% sooner than handoff at normal timing
+    %% handoff won't start immediately - before trying to speed it up,
+    %% make sure it's going to use the negotiated old-version request
     lager:info("Wait for fold_req_version == ~p", [OldFold]),
     ok = rt:wait_until_capability(Current, ?FOLD_CAPABILITY, OldFold),
+
+    %% speed up the rate of handoff now that the capability has been
+    %% renegotiated
+    ok = rpc:call(Current, application, set_env,
+                  [riak_core, vnode_management_timer, 1000]),
 
     %% this will timeout if wrong fix is in place
     %% (riak_kv_vnode would infinite-loop v1 fold requests)
