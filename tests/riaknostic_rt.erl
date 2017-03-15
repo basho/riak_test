@@ -22,18 +22,10 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-%% Change when a new release comes out.
--define(RIAKNOSTIC_URL, "https://github.com/basho/riaknostic/downloads/riaknostic-1.0.2.tar.gz").
-
-%% REQUIRES (sh, curl, tar)
-
 confirm() ->
     %% Build a small cluster
     [Node1, _Node2] = rt:build_cluster(2, []),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
-
-    %% Install riaknostic for Riak versions below 1.3.0
-    riaknostic_bootstrap(Node1),
 
     %% Run through all tests on Node1
     check_riaknostic_execute(Node1),
@@ -44,26 +36,6 @@ confirm() ->
     %% Done!
     lager:info("Test riaknostic: PASS"),
     pass.
-
-riaknostic_bootstrap(Node) ->
-    lager:info("Check if riaknostic is installed"),
-    {ok, RiaknosticOut1} = rt:admin(Node, ["diag"]),
-    riaknostic_install((rt:str(RiaknosticOut1, "is not present!")), Node).
-
-%% riaknostic is already installed, move along
-riaknostic_install(false, _Node) ->
-    ok;
-
-%% install riaknostic
-riaknostic_install(true, Node) ->
-    %% Install
-    lager:info("Installing Riaknostic"),
-    {ok, LibDir} = rpc:call(Node, application, get_env, [riak_core, platform_lib_dir]),
-    Cmd = io_lib:format("sh -c \"cd ~s && curl -O -L ~s && tar xzf ~s\"",
-                        [LibDir, ?RIAKNOSTIC_URL, filename:basename(?RIAKNOSTIC_URL)]),
-    lager:info("Running command: ~s", [Cmd]),
-    lager:debug("~p~n", [rpc:call(Node, os, cmd, [Cmd])]),
-    ok.
 
 %% Check that riaknostic executes
 check_riaknostic_execute(Node) ->
