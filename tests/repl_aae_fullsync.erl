@@ -29,6 +29,7 @@
             [
              %% Specify fast building of AAE trees
              {sweep_tick, 10000},
+             {force_hashtree_upgrade, true},
              {anti_entropy, {on, [debug]}},
              {anti_entropy_build_limit, {100, 1000}},
              {anti_entropy_concurrency, 100}
