@@ -47,7 +47,8 @@
 -define(CFG,
         [{riak_kv,
           [
-           {sweep_tick, 3000},
+           {sweep_tick, 1023},
+           {sweep_concurrency, 8},
            % Speedy AAE configuration
            {anti_entropy, {on, []}},
            {anti_entropy_build_limit, {100, 1000}},
@@ -136,7 +137,7 @@ verify_aae(Nodes) ->
 
 start_tree_rebuilds(Nodes) ->
     rpc:multicall(Nodes, application, set_env, [riak_kv, anti_entropy_expire,
-                                                15 * 1000]).
+                                                30 * 1000]).
 
 acc_preflists(Pl, PlCounts) ->
     lists:foldl(fun(Idx, D) ->
