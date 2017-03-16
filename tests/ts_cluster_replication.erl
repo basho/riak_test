@@ -354,6 +354,7 @@ connect_clusters([AFirst|_] = ANodes, [BFirst|_] = BNodes,
 disconnect_clusters(SourceNodes, SourceLeader, RemoteClusterName) ->
     lager:info("Disconnect the 2 clusters"),
     repl_util:disable_realtime(SourceLeader, RemoteClusterName),
+    repl_util:disable_fullsync(SourceLeader, RemoteClusterName),
     rt:wait_until_ring_converged(SourceNodes),
     repl_util:disconnect_cluster(SourceLeader, RemoteClusterName),
     repl_util:wait_until_no_connection(SourceLeader),
