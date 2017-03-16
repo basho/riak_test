@@ -53,6 +53,8 @@
 %%      works with enteprise Riak.
 %%
 confirm() ->
+    application:set_env(riakc, allow_listing, true),
+
     lager:info("Deploying nodes"),
     %% Initially the cluster will not have TTL enabled. This means any
     %% data written at first should never expire.
