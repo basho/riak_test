@@ -469,7 +469,6 @@ common_stats() ->
         <<"fuse_version">>,
         <<"goldrush_version">>,
         <<"gossip_received">>,
-        <<"gproc_version">>,
         <<"handoff_timeouts">>,
         <<"hll_bytes">>,
         <<"hll_bytes_mean">>,
