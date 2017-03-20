@@ -92,10 +92,7 @@ confirm() ->
 
     %% Write key twice at remaining, coordinating primary
     kv679_tombstone:write_key(CoordClient, [<<"bob">>, <<"jim">>]),
-
     kv679_tombstone2:dump_clock(CoordClient),
-
-
     lager:info("Clock at 2 fallbacks"),
 
     %% Kill the fallbacks before they can handoff
@@ -106,21 +103,16 @@ confirm() ->
 
     %% Bring back the primaries and do some more writes
     [rt:start_and_wait(P) || P <- OtherPrimaries],
-
     lager:info("started primaries back up"),
-
     rt:wait_until(fun() ->
                           NewPL = kv679_tombstone:get_preflist(CoordNode),
                           NewPL == PL
                   end),
-
     kv679_tombstone:write_key(CoordClient, [<<"jon">>, <<"joe">>]),
-
     kv679_tombstone2:dump_clock(CoordClient),
 
     %% Kill those primaries with their frontier clocks
     [rt:brutal_kill(P) || P <- OtherPrimaries],
-
     lager:info("killed primaries again"),
 
     %% delete the local data at the coordinator Key
@@ -128,9 +120,7 @@ confirm() ->
 
     %% Start up those fallbacks
     [rt:start_and_wait(F) || F <- Fallbacks],
-
     lager:info("restart fallbacks"),
-
     %% Wait for the fallback prefist
     rt:wait_until(fun() ->
                           NewPL = kv679_tombstone:get_preflist(CoordNode),
@@ -139,38 +129,24 @@ confirm() ->
 
     %% Read the key, read repair will mean that the data deleted vnode
     %% will have an old clock (gone back in time!)
-
     await_read_repair(CoordClient),
-
     kv679_tombstone2:dump_clock(CoordClient),
 
     %% write a new value, this _should_ be a sibling of what is on
     %% crashed primaries
-
-    lager:info("writing anne value", []),
-
-    %% @TODO why is this write calling put new object??
-
     kv679_tombstone:write_key(CoordClient, <<"anne">>),
-
-    lager:info("dumping new vclock"),
-
     kv679_tombstone2:dump_clock(CoordClient),
 
     %% Time to start up those primaries, let handoff happen, and see
     %% what happened to that last write
-
     [rt:start_and_wait(P) || P <- OtherPrimaries],
-
     lager:info("restart primaries _again_"),
-
      rt:wait_until(fun() ->
                           NewPL = kv679_tombstone:get_preflist(CoordNode),
                           NewPL == PL
                   end),
 
     lager:info("wait for handoffs"),
-
     [begin
          rpc:call(FB, riak_core_vnode_manager, force_handoffs, []),
          rt:wait_until_transfers_complete([FB])
@@ -179,16 +155,13 @@ confirm() ->
     lager:info("final get"),
 
     Res = kv679_tombstone:read_key(CoordClient),
-
     ?assertMatch({ok, _}, Res),
     {ok, O} = Res,
 
     %% A nice riak would have somehow managed to make a sibling of the
     %% last write
     ?assertEqual([<<"anne">>, <<"joe">>], riakc_obj:get_values(O)),
-
     lager:info("Final Object ~p~n", [O]),
-
     pass.
 
 primary_and_fallback_counts(PL) ->

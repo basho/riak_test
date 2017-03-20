@@ -128,9 +128,12 @@ confirm() ->
 
 
 perfect_preflist(PL) ->
-    %% N=3 primaries, each on a unique node
+    perfect_preflist(PL, 3).
+
+perfect_preflist(PL, NVal) ->
+    %% N=NVal primaries, each on a unique node
     length(lists:usort([Node || {{_Idx, Node}, Type} <- PL,
-                                Type == primary])) == 3.
+                                Type == primary])) == NVal.
 
 get_coord_client_and_patsy(Clients, PL) ->
     {CoordNode, _}=CoordClient=kv679_tombstone:coordinating_client(Clients, PL),
