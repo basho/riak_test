@@ -72,7 +72,7 @@ prop_group_keys_prefix(Cluster) ->
                  },
     forall_buckets_and_max_keys(
       fun(Bucket, MaxKeys) ->
-              GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
+              GroupParams1 = riak_kv_group_list:set_max_keys(GroupParams, MaxKeys),
               Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
       end).
 
@@ -85,7 +85,7 @@ prop_group_keys_delimiter(Cluster) ->
                  },
     forall_buckets_and_max_keys(
       fun(Bucket, MaxKeys) ->
-              GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
+              GroupParams1 = riak_kv_group_list:set_max_keys(GroupParams, MaxKeys),
               Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
       end).
 
@@ -101,7 +101,7 @@ prop_group_keys_prefix_delimiter(Cluster) ->
                  },
     forall_buckets_and_max_keys(
       fun(Bucket, MaxKeys) ->
-              GroupParams1 = riak_kv_group_keys:set_max_keys(GroupParams, MaxKeys),
+              GroupParams1 = riak_kv_group_list:set_max_keys(GroupParams, MaxKeys),
               Expected == collect_group_keys(Cluster, Bucket, GroupParams1)
       end).
 
@@ -156,7 +156,7 @@ put_object(Client, Bucket, Key) ->
     ok = Client:put(Obj).
 
 make_group_params(PropList) ->
-    riak_kv_group_keys:to_group_params(PropList).
+    riak_kv_group_list:to_group_params(PropList).
 
 is_prefix(B1, B2) when is_binary(B1), is_binary(B2) ->
     binary:longest_common_prefix([B1, B2]) == size(B1);
@@ -167,9 +167,9 @@ collect_group_keys(Cluster, Bucket, GroupParams) ->
     collect_group_keys(Cluster, Bucket, GroupParams, #group_keys_result{}).
 
 collect_group_keys(Cluster, Bucket, GroupParams, Acc) ->
-    Response = list_group_keys(Cluster, Bucket, GroupParams),
+    Response = list_group(Cluster, Bucket, GroupParams),
     NewAcc = accumulate_group_keys(Response, Acc),
-    case riak_kv_group_keys_response:get_next_continuation_token(Response) of
+    case riak_kv_group_list_response:get_next_continuation_token(Response) of
         undefined ->
             NewAcc;
         ContinuationToken ->
@@ -177,21 +177,21 @@ collect_group_keys(Cluster, Bucket, GroupParams, Acc) ->
             collect_group_keys(Cluster, Bucket, NewGroupParams, NewAcc)
     end.
 
-list_group_keys(Cluster, Bucket, GroupParams) ->
+list_group(Cluster, Bucket, GroupParams) ->
     Node = rt:select_random(Cluster),
     {ok, Client} = riak:client_connect(Node),
-    {ok, Response} = Client:list_group_keys(Bucket, GroupParams, 5000),
+    {ok, Response} = Client:list_group(Bucket, GroupParams, 5000),
     Response.
 
 accumulate_group_keys(GroupKeysResponse, Acc) ->
-    Metadatas = riak_kv_group_keys_response:get_metadatas(GroupKeysResponse),
-    CommonPrefixes = riak_kv_group_keys_response:get_common_prefixes(GroupKeysResponse),
+    Metadatas = riak_kv_group_list_response:get_metadatas(GroupKeysResponse),
+    CommonPrefixes = riak_kv_group_list_response:get_common_prefixes(GroupKeysResponse),
     Acc#group_keys_result{
       keys = Acc#group_keys_result.keys ++ [Key || {Key, _Meta} <- Metadatas],
       common_prefixes = Acc#group_keys_result.common_prefixes ++ CommonPrefixes
      }.
 
 set_continuation_token(GroupParams, ContinuationToken) ->
-    riak_kv_group_keys:set_continuation_token(GroupParams, ContinuationToken).
+    riak_kv_group_list:set_continuation_token(GroupParams, ContinuationToken).
 
 -endif. % EQC
