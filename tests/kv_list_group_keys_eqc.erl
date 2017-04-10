@@ -31,7 +31,6 @@ confirm() ->
     quickcheck(?MODULE:prop_group_keys_prefix(Cluster)),
     quickcheck(?MODULE:prop_group_keys_delimiter(Cluster)),
     quickcheck(?MODULE:prop_group_keys_prefix_delimiter(Cluster)),
-    rt:clean_cluster(Cluster),
     pass.
 
 %% ====================================================================
