@@ -415,6 +415,7 @@ common_stats() ->
         <<"asn1_version">>,
         <<"basho_stats_version">>,
         <<"bitcask_version">>,
+        <<"chronos_version">>,
         <<"clique_version">>,
         <<"cluster_info_version">>,
         <<"compiler_version">>,

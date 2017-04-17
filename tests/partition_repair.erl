@@ -169,7 +169,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
 
     lager:info("Verify ~p on ~p is fully repaired", [Partition, Node]),
     Data2 = get_data(Service, {Partition, Node}),
-    {Verified, NotFound} = dict:fold(verify(Service, Data2), {0, []}, Stash),
+    {Verified, NotFound} = dict:fold(verify(Node, Service, Data2), {0, []}, Stash),
     case NotFound of
         [] -> ok;
         _ ->
@@ -188,7 +188,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     {ok, [StashB]} = file:consult(StashPathB),
     ExpectToVerifyB = dict:size(StashB),
     BeforeData = get_data(Service, B),
-    {VerifiedB, NotFoundB} = dict:fold(verify(Service, BeforeData), {0, []}, StashB),
+    {VerifiedB, NotFoundB} = dict:fold(verify(Node, Service, BeforeData), {0, []}, StashB),
     case NotFoundB of
         [] -> ok;
         _ ->
@@ -203,7 +203,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     {ok, [StashA]} = file:consult(StashPathA),
     ExpectToVerifyA = dict:size(StashA),
     AfterData = get_data(Service, A),
-    {VerifiedA, NotFoundA} = dict:fold(verify(Service, AfterData), {0, []}, StashA),
+    {VerifiedA, NotFoundA} = dict:fold(verify(Node, Service, AfterData), {0, []}, StashA),
     case NotFoundA of
         [] -> ok;
         _ ->
@@ -214,19 +214,23 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     ?assertEqual(ExpectToVerifyA, VerifiedA).
 
 
-verify(riak_kv, DataAfterRepair) ->
+verify(Node, riak_kv, DataAfterRepair) ->
     fun(BKey, StashedValue, {Verified, NotFound}) ->
             StashedData={BKey, StashedValue},
             case dict:find(BKey, DataAfterRepair) of
                 error -> {Verified, [StashedData|NotFound]};
                 {ok, Value} ->
-                    if Value == StashedValue -> {Verified+1, NotFound};
-                       true -> {Verified, [StashedData|NotFound]}
+                    %% NOTE: since kv679 fixes, the binary values may
+                    %% not be equal where a new epoch-actor-entry has
+                    %% been added to the repaired value in the vnode
+                    case gte(Node, Value, StashedValue, BKey) of
+                        true -> {Verified+1, NotFound};
+                        false -> {Verified, [StashedData|NotFound]}
                     end
             end
     end;
 
-verify(riak_search, PostingsAfterRepair) ->
+verify(_Node, riak_search, PostingsAfterRepair) ->
     fun(IFT, StashedPostings, {Verified, NotFound}) ->
             StashedPosting={IFT, StashedPostings},
             case dict:find(IFT, PostingsAfterRepair) of
@@ -240,6 +244,22 @@ verify(riak_search, PostingsAfterRepair) ->
                     end
             end
     end.
+
+%% @private gte checks that `Value' is _at least_ `StashedValue'. With
+%% the changes for kv679 when a vnode receives a write of a key that
+%% contains the vnode's id as an entry in the version vector, it adds
+%% a new actor-epoch-entry to the version vector to guard against data
+%% loss from repeated events (remember a VV history is supposed to be
+%% unique!) This function then must deserialise the stashed and vnode
+%% data and check that they are equal, or if not, the only difference
+%% is an extra epoch actor in the vnode value's vclock.
+gte(Node, Value, StashedData, {B, K}) ->
+    VnodeObject = riak_object:from_binary(B, K, Value),
+    StashedObject = riak_object:from_binary(B, K, StashedData),
+    %% NOTE: we need a ring and all that jazz for bucket props, needed
+    %% by merge, so use an RPC to merge on a riak node.
+    Merged = rpc:call(Node, riak_object, syntactic_merge, [VnodeObject, StashedObject]),
+    riak_object:equal(VnodeObject, Merged).
 
 is_true(X) ->
     X == true.

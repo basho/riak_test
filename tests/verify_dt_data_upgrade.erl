@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Basho Technologies, Inc.
+%% Copyright (c) 2016-2017 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -47,7 +47,7 @@
 
 confirm() ->
     TestMetaData = riak_test_runner:metadata(),
-    OldVsn = proplists:get_value(upgrade_version, TestMetaData, lts),
+    OldVsn = proplists:get_value(upgrade_version, TestMetaData, legacy),
 
     NumNodes = 4,
     Vsns = [{OldVsn, ?CONFIG} || _ <- lists:seq(1, NumNodes)],
@@ -116,7 +116,7 @@ confirm() ->
     ?assertEqual(FetchSet2, FetchSet3),
 
     %% Downgrade All Nodes and Compare
-    downgrade(Nodes, lts),
+    downgrade(Nodes, legacy),
 
     %% Create PB connection.
     Pid3 = rt:pbc(rt:select_random(Nodes)),

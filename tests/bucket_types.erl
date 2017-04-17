@@ -8,6 +8,10 @@
 confirm() ->
     application:start(inets),
     lager:info("Deploy some nodes"),
+
+    %% Allow listing of buckets and keys for testing
+    application:set_env(riakc, allow_listing, true),
+
     Nodes = rt:build_cluster(4, [], [
                                      {riak_core, [{default_bucket_props,
                                                    [

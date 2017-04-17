@@ -27,6 +27,7 @@
 -define(ORDBY_COLS, ["a", "b", "c", "d", "e", undefined]).
 
 %% error codes as defined in riak_kv_ts_svc.erl
+-define(E_SUBMIT,                1001).
 -define(E_SELECT_RESULT_TOO_BIG, 1022).
 -define(E_QBUF_CREATE_ERROR,     1023).
 -define(E_QBUF_LDB_ERROR,        1024).
