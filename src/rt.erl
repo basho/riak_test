@@ -71,6 +71,8 @@
          get_deps/0,
          get_ip/1,
          get_node_logs/0,
+         get_preflist/3,
+         get_preflist/4,
          get_replica/5,
          get_retry_settings/0,
          get_ring/1,
@@ -1080,6 +1082,16 @@ partitions_for_node(Node) ->
 get_ring(Node) ->
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
     Ring.
+
+%% @doc Get the preflist for a Node, Bucket and Key.
+get_preflist(Node, Bucket, Key) ->
+    get_preflist(Node, Bucket, Key, 3).
+
+get_preflist(Node, Bucket, Key, NVal) ->
+    Chash = rpc:call(Node, riak_core_util, chash_key, [{Bucket, Key}]),
+    UpNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
+    PL = rpc:call(Node, riak_core_apl, get_apl_ann, [Chash, NVal, UpNodes]),
+PL.
 
 assert_nodes_agree_about_ownership(Nodes) ->
     ?assertEqual(ok, wait_until_ring_converged(Nodes)),
