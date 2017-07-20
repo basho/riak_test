@@ -96,6 +96,8 @@ confirm() ->
     Others = [Node || {{_Idx, Node}, _Type} <- PL2, Node /= FirstNode],
     rt:stop_and_wait(lists:last(Others)),
     wait_for_new_preflist(FirstNode, PL2),
+    PL3 = rt:get_preflist(FirstNode, ?BUCKET, ?KEY),
+    lager:info("Preflist ~p~n", [PL3]),
 
     lager:info("Attempting to write key"),
     %% Write key and confirm error pd=3 unsatisfied
