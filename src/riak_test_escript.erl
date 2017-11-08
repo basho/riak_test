@@ -43,6 +43,7 @@ cli_options() ->
  {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
  {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
+ {batch,       undefined, "batch",    undefined,  "running a batch, always teardown, even on failure"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
  {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
 ].
@@ -182,15 +183,16 @@ main(Args) ->
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
     Teardown = not proplists:get_value(keep, ParsedArgs, false),
-    maybe_teardown(Teardown, TestResults, Coverage, Verbose),
+    Batch = lists:member(batch, ParsedArgs),
+    maybe_teardown(Teardown, TestResults, Coverage, Verbose, Batch),
     ok.
 
-maybe_teardown(false, TestResults, Coverage, Verbose) ->
+maybe_teardown(false, TestResults, Coverage, Verbose, _Batch) ->
     print_summary(TestResults, Coverage, Verbose),
     lager:info("Keeping cluster running as requested");
-maybe_teardown(true, TestResults, Coverage, Verbose) ->
-    case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
-        {1, fail} ->
+maybe_teardown(true, TestResults, Coverage, Verbose, Batch) ->
+    case {length(TestResults), proplists:get_value(status, hd(TestResults)), Batch} of
+        {1, fail, false} ->
             print_summary(TestResults, Coverage, Verbose),
             so_kill_riak_maybe();
         _ ->
