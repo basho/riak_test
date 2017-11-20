@@ -1207,9 +1207,10 @@ product(Node) ->
 
     HasRiakCS = proplists:is_defined(riak_cs, Applications),
     HasRiakEE = proplists:is_defined(riak_repl, Applications),
+    HasRiakJMX = proplists:is_defined(riak_jmx, Applications),
     HasRiak = proplists:is_defined(riak_kv, Applications),
     if HasRiakCS -> riak_cs;
-       HasRiakEE -> riak_ee;
+       HasRiakEE andalso HasRiakJMX -> riak_ee;
        HasRiak -> riak;
        true -> unknown
     end.
