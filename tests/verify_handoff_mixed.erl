@@ -42,9 +42,6 @@
 -define(KV_BUCKET, <<"vhm_kv">>).
 -define(KV_COUNT, 1000).
 
--define(SEARCH_BUCKET, <<"vhm_search">>).
--define(SEARCH_COUNT, 1000).
-
 -define(PIPE_COUNT, 100).
 
 -define(FOLD_CAPABILITY, {riak_core,fold_req_version}).
@@ -54,10 +51,9 @@ confirm() ->
     UpgradeVsn = proplists:get_value(upgrade_version,
                                      riak_test_runner:metadata(),
                                      previous),
-    SearchEnabled = [{riak_search, [{enabled, true}]}],
-    Versions = [{current, SearchEnabled},
-                {UpgradeVsn, SearchEnabled}],
-    Services = [riak_kv, riak_search, riak_pipe],
+    Versions = [{current, []},
+                {UpgradeVsn, []}],
+    Services = [riak_kv, riak_pipe],
     [Current, Old] = Nodes = rt:deploy_nodes(Versions, Services),
 
     prepare_vnodes(Current),
@@ -95,7 +91,6 @@ confirm() ->
 %% handoff when we join the other node
 prepare_vnodes(Node) ->
     prepare_kv_vnodes(Node),
-    prepare_search_vnodes(Node),
     prepare_pipe_vnodes(Node).
 
 prepare_kv_vnodes(Node) ->
@@ -107,20 +102,6 @@ prepare_kv_vnodes(Node) ->
               ok = riakc_pb_socket:put(C, riakc_obj:new(?KV_BUCKET, KV, KV))
       end,
       [ list_to_binary(integer_to_list(N)) || N <- lists:seq(1, ?KV_COUNT) ]),
-    riakc_pb_socket:stop(C).
-
-prepare_search_vnodes(Node) ->
-    lager:info("Peparing Search vnodes with keys 1000-~b in bucket ~s",
-               [1000+?SEARCH_COUNT, ?SEARCH_BUCKET]),
-    rt:enable_search_hook(Node, ?SEARCH_BUCKET),
-    C = rt:pbc(Node),
-    lists:foreach(
-      fun(KV) ->
-              O = riakc_obj:new(?SEARCH_BUCKET, KV, KV, "text/plain"),
-              ok = riakc_pb_socket:put(C, O)
-      end,
-      [ list_to_binary(integer_to_list(N))
-        || N <- lists:seq(1000, 1000+?SEARCH_COUNT) ]),
     riakc_pb_socket:stop(C).
 
 prepare_pipe_vnodes(Node) ->
@@ -143,7 +124,6 @@ check_logs() ->
 
     %% make sure all of our apps completed some handoff
     ExpectedApps = lists:sort([riak_kv_vnode,
-                               riak_search_vnode,
                                riak_pipe_vnode]),
     FoundApps = lists:sort([ A || {A, _} <- AppCounts ]),
     ?assertEqual(ExpectedApps, FoundApps),
