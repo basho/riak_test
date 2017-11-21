@@ -17,16 +17,11 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc Verify that "search" MapReduce inputs come from Yokozuna or
-%% Riak Search, as the Riak node is configured.
-%%
-%% Without the switch code in place in Riak, this test's failure is
-%% confusing: it will fail saying that riak_search was enabled, and it
-%% got riak_search mapred results, but it expected not to. This is
-%% because the first test also enables yokozuna without explicitly
-%% selecting one or the other. The test expects Riak to return an
-%% error, but without the switch code in place, Riak happily returns
-%% what it has always returned: riak_search mapred results.
+%% @doc Verify that "search" MapReduce inputs come from Yokozuna.
+%% Prior to riak-2.2.5 there were two search providers, riak_search (a
+%% legacy/deprecated product) and yokozuna (solr.) riak_search was
+%% finally removed for riak-2.2.5, but this test remains, purely to
+%% test mapreduce with yz input.
 -module(mapred_search_switch).
 -behavior(riak_test).
 -export([
@@ -42,12 +37,9 @@
 
 -record(env, {
           nodes,     % nodes running
-          rs_bucket, % bucket configured for riak_search
-          rs_keyuqs, % keys and their unique data for riak_search
-          rs_common, % common data for all keys for riak_search
           yz_bucket, % \
-          yz_keyuqs, % +- ditto, yokozuna bucket 1
-          yz_common, % /
+          yz_keyuqs, % +- keys and their unique data for yz
+          yz_common, % / common data for all keys for yz_search
           yz_index   % YZ index separate from bucket name
          }).
 
@@ -55,27 +47,19 @@ confirm() ->
     Env = setup_test_env(),
 
     [ confirm_config(Env,
-                     [{riak_search, [{enabled, RS}]},
-                      {yokozuna, [{enabled, YZ}]},
+                     [{yokozuna, [{enabled, YZ}]},
                       {riak_kv, [{?PROVIDER_KEY, P}]}])
-      || RS <- [true, false],
-         YZ <- [true, false],
-         P <- [riak_search, yokozuna, undefined] ],
+      || YZ <- [true, false],
+         P <- [yokozuna, undefined] ],
     pass.
 
 setup_test_env() ->
     %% must enable both RS and YZ at startup to get test data indexed;
     %% nothing extra would be tested by using multiple nodes, so just
     %% deploy one to make the test run faster
-    Nodes = rt:deploy_nodes(1, [{riak_search, [{enabled, true}]},
-                                {yokozuna, [{enabled, true}]}]),
+    Nodes = rt:deploy_nodes(1, [{yokozuna, [{enabled, true}]}]),
     ok = rt:wait_until_nodes_ready(Nodes),
-    ok = rt:wait_for_cluster_service(Nodes, riak_search),
     ok = rt:wait_for_cluster_service(Nodes, yokozuna),
-
-    {RSBucket, RSKeyAndUniques, RSCommon} = generate_test_data(<<"rs">>),
-    setup_rs_bucket(Nodes, RSBucket),
-    load_test_data(Nodes, RSBucket, RSKeyAndUniques, RSCommon),
 
     {YZBucket, YZKeyAndUniques, YZCommon} = generate_test_data(<<"yz">>),
     YZIndex = generate_string(),
@@ -91,9 +75,6 @@ setup_test_env() ->
     timer:sleep(YZSleep_ms),
 
     #env{ nodes=Nodes,
-          rs_bucket=RSBucket,
-          rs_keyuqs=RSKeyAndUniques,
-          rs_common=RSCommon,
           yz_bucket=YZBucket,
           yz_keyuqs=YZKeyAndUniques,
           yz_common=YZCommon,
@@ -115,9 +96,6 @@ set_config(Nodes, App, K, V) ->
         end).
 
 confirm_config(#env{nodes=Nodes,
-                    rs_bucket=RSBucket,
-                    rs_keyuqs=RSKeyAndUniques,
-                    rs_common=RSCommon,
                     yz_bucket=YZBucket,
                     yz_keyuqs=YZKeyAndUniques,
                     yz_index=YZIndex}=Env,
@@ -125,20 +103,13 @@ confirm_config(#env{nodes=Nodes,
     lager:info("Running Config: ~p", [Config]),
     set_config(Env, Config),
 
-    RSBResults = run_bucket_mr(Nodes, RSBucket, RSCommon),
     YZBResults = run_bucket_mr(Nodes, YZIndex, <<"*:*">>),
 
-    lager:info("RS Bucket Results: ~p", [RSBResults]),
     lager:info("YZ Bucket Results: ~p", [YZBResults]),
 
-    ?assertEqual(expected_riak_search(Config),
-                 got_riak_search(RSBResults, RSBucket,
-                                 RSKeyAndUniques)),
     ?assertEqual(expected_yokozuna(Config),
                  got_yokozuna(YZBResults, YZBucket, YZKeyAndUniques)),
-    %% asking YZ to MR a bucket it hasn't indexed results in error
-    ?assertEqual(expected_yokozuna(Config) or expected_error(Config),
-                 got_error(RSBResults)),
+
     ?assertEqual(expected_error(Config),
                  got_error(YZBResults)).
 
@@ -158,12 +129,6 @@ generate_test_data(System) ->
       || {Key, Unique} <- KeyAndUniques ],
 
     {Bucket, KeyAndUniques, Common}.
-
-%% setup riak_search hook
-setup_rs_bucket([Node|_], Bucket) ->
-    lager:info("Setting up riak_search hook"),
-    C = rt:httpc(Node),
-    ok = rhc:set_bucket(C, Bucket, [{search, true}]).
 
 %% setup yokozuna hook/index - bucket name == index name
 setup_yz_bucket([Node|_], Bucket, Index) ->
@@ -212,22 +177,12 @@ load_test_data([Node|_], Bucket, KeyAndUniques, Common) ->
       end
       || {Key, Unique} <- KeyAndUniques ].
 
-expected_riak_search(Config) ->
-    is_enabled(Config, riak_search)
-        %% if yokozuna is also enabled, riak_search is the default
-        and ( (not is_enabled(Config, yokozuna))
-              or (yokozuna =/= provider(Config)) ).
-
 expected_yokozuna(Config) ->
-    is_enabled(Config, yokozuna)
-        %% if riak_search is also enabled, must explicitly pick yokozuna
-        and ( (not is_enabled(Config, riak_search))
-              or (yokozuna == provider(Config)) ).
+    is_enabled(Config, yokozuna).
 
 expected_error(Config) ->
     %% must have at least one system on to get results
-    not ( is_enabled(Config, yokozuna)
-          or is_enabled(Config, riak_search) ).
+    not is_enabled(Config, yokozuna).
 
 is_enabled(Config, App) ->
     true == kvc:path([App, enabled], Config).
@@ -236,25 +191,6 @@ provider(Config) ->
     case kvc:path([riak_kv, ?PROVIDER_KEY], Config) of
         [] -> undefined;
         Provider -> Provider
-    end.
-
-%% We only check that we got at least one match, and that any matches
-%% we did get are expected, and of the RS format. We don't check that
-%% all known keys are present in the result because we're not
-%% interested in whether RS is working with full correctness.
-got_riak_search(Results, Bucket, KeyAndUniques) ->
-    case Results of
-        {ok, [{0, Matches}]} when Matches /= [] ->
-            IsRS = fun({{B, K},{struct,Props}}) when B == Bucket ->
-                           lists:keymember(K, 1, KeyAndUniques) and
-                               lists:keymember(p, 1, Props) and
-                               lists:keymember(score, 1, Props);
-                      (_) ->
-                           false
-                   end,
-            lists:all(IsRS, Matches);
-        _ ->
-            false
     end.
 
 %% similar to got_riak_search - just check that we got at least one
