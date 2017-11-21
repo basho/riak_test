@@ -15,9 +15,10 @@ confirm() ->
     Backend = proplists:get_value(backend, TestMetaData),
     lager:info("Running with backend (this better be Bitcask!) ~p", [Backend]),
     ?assertEqual({backend, bitcask}, {backend, Backend}),
-    OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
+    OldVsn = proplists:get_value(upgrade_version, TestMetaData, legacy),
     % Configure for fast merge checks
-    Config = [{riak_kv, [{bitcask_merge_check_interval, 2000}]},
+    Config = [{riak_kv, [{bitcask_merge_check_interval, 1000}]},
+              {riak_core, [{ring_creation_size, 128}]},
               {bitcask, [{max_file_size, 100}]}],
     Nodes = rt:build_cluster([{OldVsn, Config}]),
     verify_bitcask_tombstone2_upgrade(Nodes),
@@ -29,6 +30,8 @@ verify_bitcask_tombstone2_upgrade(Nodes) ->
     write_some_data(Nodes),
     lager:info("Collect the list of bitcask files created"),
     BitcaskFiles = list_bitcask_files(Nodes),
+    NodeFiles = [[ {Node, Idx, F} || {Idx, F} <- Files, F /= []] || {Node, Files} <- BitcaskFiles],
+    lager:info("files are ~p", [NodeFiles]),
     lager:info("Now update the node to the current version"),
     [rt:upgrade(Node, current) || Node <- Nodes],
     lager:info("And wait until all the old files have been merged, the version upgrade finished"),
@@ -69,15 +72,15 @@ upgrade_complete(Node, PartitionFiles) ->
               || {IdxDir, Files} <- PartitionFiles]).
 
 upgrade_complete(Node, IdxDir, Files) ->
-    % Check we have version.txt, no upgrade.txt, no merge.txt
+    %% Check we have version.txt, no upgrade.txt, no merge.txt
     MergeFile = filename:join(IdxDir, "merge.txt"),
     UpgradeFile = filename:join(IdxDir, "upgrade.txt"),
     VsnFile = filename:join(IdxDir, "version.txt"),
+
     file_exists(Node, VsnFile) andalso
         not file_exists(Node, UpgradeFile) andalso
         not file_exists(Node, MergeFile) andalso
-        all(false,
-            [file_exists(Node, filename:join(IdxDir, F)) || F <- Files]).
+        tombstones_merged(Node, IdxDir, Files).
 
 file_exists(Node, Path) ->
     case rpc:call(Node, filelib, is_regular, [Path]) of
@@ -89,3 +92,21 @@ file_exists(Node, Path) ->
 
 all(Val, L) ->
     lists:all(fun(E) -> E == Val end, L).
+
+tombstones_merged(Node, IdxDir, Files) ->
+    %% this is less efficient (code and typing/reading) but at least
+    %% we get some _reason_ for waiting/failure rather than a silently
+    %% hung test
+
+    lists:foldl(fun(File, Acc) ->
+                        Fname = filename:join(IdxDir, File),
+                        case file_exists(Node, Fname) of
+                            false ->
+                                Acc;
+                            true ->
+                                lager:debug("~p unmerged", [{Node, Fname}]),
+                                false
+                        end
+                end,
+                true,
+                Files).
