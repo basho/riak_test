@@ -92,8 +92,25 @@ set_allow_mult_true(Nodes, Bucket) ->
 
 %% Counter API
 get_counter(Client, Key) ->
+    rt:wait_until(not_404(Client, Key)),
     {ok, Val} = rhc:counter_val(Client, ?BUCKET, Key),
     Val.
+
+%% returns a fun for rt:wait_until/1. It would be great of
+%% rt:wait_until had a flavour that returned a value.
+not_404(Client, Key) ->
+    fun() ->
+            Res = rhc:counter_val(Client, ?BUCKET, Key),
+            case Res of
+                %% NOTE: only 404, any other error is unexpected to
+                %% resolve itself
+                {error,{ok,"404",
+                        _Headers,
+                        <<"not found\n">>}} ->
+                    false;
+                _ -> true
+            end
+    end.
 
 increment_counter(Client, Key) ->
     increment_counter(Client, Key, 1).
