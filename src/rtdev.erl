@@ -170,6 +170,7 @@ upgrade(Node, NewVersion, Config, UpgradeCallback) ->
     Params = [
         {old_data_dir, io_lib:format("~s/dev/dev~b/data", [OldPath, N])},
         {new_data_dir, io_lib:format("~s/dev/dev~b/data", [NewPath, N])},
+        {new_conf_dir, io_lib:format("~s/dev/dev~b/etc",  [NewPath, N])},
         {old_version, Version},
         {new_version, NewVersion}
     ],
