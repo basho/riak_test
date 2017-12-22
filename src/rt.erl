@@ -229,7 +229,7 @@ str(String, Substr) ->
 -spec set_conf(atom(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
     ?HARNESS:set_conf(all, NameValuePairs);
-set_conf(Node, NameValuePairs) ->
+set_conf(Node, NameValuePairs) when is_atom(Node) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_conf(Node, NameValuePairs),
@@ -238,7 +238,7 @@ set_conf(Node, NameValuePairs) ->
 -spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
 set_advanced_conf(all, NameValuePairs) ->
     ?HARNESS:set_advanced_conf(all, NameValuePairs);
-set_advanced_conf(Node, NameValuePairs) ->
+set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_advanced_conf(Node, NameValuePairs),

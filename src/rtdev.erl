@@ -203,7 +203,8 @@ set_conf(Node, NameValuePairs) when is_atom(Node) ->
     append_to_conf_file(get_riak_conf(Node), NameValuePairs),
     ok;
 set_conf(DevPath, NameValuePairs) ->
-    [append_to_conf_file(RiakConf, NameValuePairs) || RiakConf <- all_the_files(DevPath, "etc/riak.conf")],
+    [append_to_conf_file(RiakConf, NameValuePairs)
+     || RiakConf <- all_the_files(DevPath, "etc/riak.conf")],
     ok.
 
 set_advanced_conf(all, NameValuePairs) ->
@@ -211,7 +212,7 @@ set_advanced_conf(all, NameValuePairs) ->
     [ set_advanced_conf(DevPath, NameValuePairs) || DevPath <- devpaths()],
     ok;
 set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
-    append_to_conf_file(get_advanced_riak_conf(Node), NameValuePairs),
+    update_app_config_file(get_advanced_riak_conf(Node), NameValuePairs),
     ok;
 set_advanced_conf(DevPath, NameValuePairs) ->
     AdvancedConfs = case all_the_files(DevPath, "etc/advanced.config") of
@@ -254,7 +255,8 @@ get_advanced_riak_conf(Node) ->
 
 append_to_conf_file(File, NameValuePairs) ->
     Settings = lists:flatten(
-        [io_lib:format("~n~s = ~s~n", [Name, Value]) || {Name, Value} <- NameValuePairs]),
+                 [io_lib:format("~n~s = ~s~n", [Name, rt_util:to_list(Value)])
+                  || {Name, Value} <- NameValuePairs]),
     file:write_file(File, Settings, [append]).
 
 all_the_files(DevPath, File) ->
