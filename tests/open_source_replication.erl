@@ -4,6 +4,8 @@
 -compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(BUCKET2i, <<"2ibucket">>).
+
 %%%
 %%% What This Test Does
 %%%
@@ -39,6 +41,8 @@ confirm() ->
     %% two clusters
     %% * no replication on either of them (old open source)
 
+    rt:set_backend(eleveldb),
+
     [ANodes, BNodes] = rt:build_clusters([{3, previous, []}, {3, previous, []}]),
 
     AllNodes = ANodes ++ BNodes,
@@ -56,6 +60,7 @@ confirm() ->
 
     rt:log_to_nodes(AllNodes, "Write data to A while both are in old state (no repl)"),
     ok = run_simple_write_test(AFirst, BFirst, no_repl),
+    ok = run_2i_write_test(AFirst, BFirst, no_repl),
 
     %% in the second test protocol we upgrade the first cluster and write to it
     %% there is still no replication
@@ -67,6 +72,7 @@ confirm() ->
     [ok = UpgradeNodeFn(X) || X <- ANodes],
     rt:log_to_nodes(AllNodes, "Write data to A after the first cluster has been updated but the second is in old state (no repl)"),
     ok = run_simple_write_test(AFirst, BFirst, no_repl),
+    ok = run_2i_write_test(AFirst, BFirst, no_repl),
 
     %% in the third test protocol we upgrade the second cluster and when we write to
     %% the first there is still no replication because its not enabled
@@ -74,6 +80,7 @@ confirm() ->
     [ok = UpgradeNodeFn(X) || X <- BNodes],
     rt:log_to_nodes(AllNodes, "Write data to A after both clusters have been updated (no repl)"),
     ok = run_simple_write_test(AFirst, BFirst, no_repl),
+    ok = run_2i_write_test(AFirst, BFirst, no_repl),
 
     %% in the fourth test protocol we enable replication on both clusters
     %% then when we write to A we can read from B
@@ -124,7 +131,160 @@ confirm() ->
     lager:info("About to go into replication2:replication/3"),
     fin = replication2:replication(ANodes, BNodes, false),
 
+    %% final test set of 2i
+    lager:info("running replicated 2i tests"),
+    ok = run_2i_write_test(AFirst, BFirst, repl),
+
     pass.
+
+run_2i_write_test(WriteClusterNode, ReadClusterNode, no_repl) ->
+    PBC1 = rt:pbc(WriteClusterNode),
+    PBC2 = rt:pbc(ReadClusterNode),
+
+    Offset = make_timestamp(),
+
+    [put_an_object(PBC1, Offset, N) || N <- lists:seq(0, 20)],
+
+    K = fun secondary_index_tests:int_to_key/1,
+
+    %% check that these things exist on one cluster only
+    
+    assertExactQuery([{pb, PBC1}], [K(5 + Offset)], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(5 + Offset)),
+    assertExactQuery([{pb, PBC2}], [], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(5 + Offset)),
+    assertExactQuery([{pb, PBC1}], [K(5 + Offset)], <<"field2_int">>, 5 + Offset),
+    assertExactQuery([{pb, PBC2}], [], <<"field2_int">>, 5 + Offset),
+    assertExactQuery([{pb, PBC1}], [K(N + Offset) || N <- lists:seq(5, 9)],
+                     <<"field3_int">>, 5 + Offset),
+    assertExactQuery([{pb, PBC2}], [], <<"field3_int">>, 5 + Offset),
+    assertRangeQuery([{pb, PBC1}], [K(N + Offset) || N <- lists:seq(10, 18)],
+                     <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(10 + Offset),
+                     secondary_index_tests:int_to_field1_bin(18 + Offset)),
+    assertRangeQuery([{pb, PBC2}], [], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(10 + Offset),
+                     secondary_index_tests:int_to_field1_bin(18 + Offset)),
+    assertRangeQuery([{pb, PBC1}], [K(N + Offset) || N <- lists:seq(10, 19)],
+                     <<"field2_int">>, 10 + Offset, 19 + Offset),
+    assertRangeQuery([{pb, PBC2}], [], <<"field2_int">>, 10 + Offset, 19 + Offset),
+    assertRangeQuery([{pb, PBC1}], [K(N + Offset) || N <- lists:seq(10, 17)],
+                     <<"$key">>,
+                     secondary_index_tests:int_to_key(10 + Offset),
+                     secondary_index_tests:int_to_key(17 + Offset)),
+    assertRangeQuery([{pb, PBC2}], [], <<"$key">>,
+                     secondary_index_tests:int_to_key(10 + Offset),
+                     secondary_index_tests:int_to_key(17 + Offset)),
+
+    %% delete objects test the write cluster only
+    lager:info("Delete an object, verify deletion..."),
+    ToDel = [
+             secondary_index_tests:int_to_key(5 + Offset),
+             secondary_index_tests:int_to_key(11 + Offset)
+            ],
+    [?assertMatch(ok, riakc_pb_socket:delete(PBC1, ?BUCKET2i, KD)) || KD <- ToDel],
+    lager:info("Make sure the tombstone is reaped..."),
+    ?assertMatch(ok, rt:wait_until(fun() ->
+                                           rt:pbc_really_deleted(PBC1, ?BUCKET2i, ToDel)
+                                   end)),
+
+    assertExactQuery([{pb, PBC1}], [], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(5 + Offset)),
+    assertExactQuery([{pb, PBC1}], [], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(5 + Offset)),
+    assertExactQuery([{pb, PBC1}], [], <<"field2_int">>, 5 + Offset),
+
+    %% now run some tests checking both clusters again
+
+    assertExactQuery([{pb, PBC1}], [K(N + Offset) || N <- lists:seq(6, 9)],
+                     <<"field3_int">>, 5 + Offset),
+    assertExactQuery([{pb, PBC2}], [], <<"field3_int">>, 5 + Offset),
+    assertRangeQuery([{pb, PBC1}], [K(N + Offset) || N <- lists:seq(10, 18), N /= 11],
+                     <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(10 + Offset),
+                     secondary_index_tests:int_to_field1_bin(18 + Offset)),
+    assertRangeQuery([{pb, PBC2}], [], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(10 + Offset),
+                     secondary_index_tests:int_to_field1_bin(18 + Offset)),
+    assertRangeQuery([{pb, PBC1}], [K(N + Offset) || N <- lists:seq(10, 19), N /= 11],
+                     <<"field2_int">>, 10 + Offset, 19 + Offset),
+    assertRangeQuery([{pb, PBC2}], [], <<"field2_int">>, 10 + Offset, 19 + Offset),
+    assertRangeQuery([{pb, PBC1}], [K(N + Offset) || N <- lists:seq(10, 17), N /= 11],
+                     <<"$key">>,
+                     secondary_index_tests:int_to_key(10 + Offset),
+                     secondary_index_tests:int_to_key(17 + Offset)),
+    assertRangeQuery([{pb, PBC2}], [], <<"$key">>,
+                     secondary_index_tests:int_to_key(10 + Offset),
+                     secondary_index_tests:int_to_key(17 + Offset)),
+
+    ok;
+run_2i_write_test(WriteClusterNode, ReadClusterNode, repl) ->
+    PBC1 = rt:pbc(WriteClusterNode),
+    PBC2 = rt:pbc(ReadClusterNode),
+
+    Offset = make_timestamp(),
+
+    %% write to write cluster
+    [put_an_object(PBC1, Offset, N) || N <- lists:seq(0, 20)],
+
+    K = fun secondary_index_tests:int_to_key/1,
+
+    %% check you can read from the read cluster
+
+    assertExactQuery([{pb, PBC2}], [K(5 + Offset)], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(5 + Offset)),
+    assertExactQuery([{pb, PBC2}], [K(5 + Offset)], <<"field2_int">>, 5 + Offset),
+    assertExactQuery([{pb, PBC2}], [K(N + Offset) || N <- lists:seq(5, 9)],
+                     <<"field3_int">>, 5 + Offset),
+    assertRangeQuery([{pb, PBC2}], [K(N + Offset) || N <- lists:seq(10, 18)],
+                     <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(10 + Offset),
+                     secondary_index_tests:int_to_field1_bin(18 + Offset)),
+    assertRangeQuery([{pb, PBC2}], [K(N + Offset) || N <- lists:seq(10, 19)],
+                     <<"field2_int">>, 10 + Offset, 19 + Offset),
+    assertRangeQuery([{pb, PBC2}], [K(N + Offset) || N <- lists:seq(10, 17)],
+                     <<"$key">>,
+                     secondary_index_tests:int_to_key(10 + Offset),
+                     secondary_index_tests:int_to_key(17 + Offset)),
+
+    lager:info("Delete an object, verify deletion..."),
+    ToDel = [
+             secondary_index_tests:int_to_key(5 + Offset),
+             secondary_index_tests:int_to_key(11 + Offset)
+            ],
+    [?assertMatch(ok, riakc_pb_socket:delete(PBC1, ?BUCKET2i, KD)) || KD <- ToDel],
+    lager:info("Make sure the tombstone is reaped..."),
+    ?assertMatch(ok, rt:wait_until(fun() ->
+                                           rt:pbc_really_deleted(PBC1, ?BUCKET2i, ToDel)
+                                   end)),
+
+    assertExactQuery([{pb, PBC2}], [], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(5 + Offset)),
+    assertExactQuery([{pb, PBC2}], [], <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(5 + Offset)),
+    assertExactQuery([{pb, PBC2}], [], <<"field2_int">>, 5 + Offset),
+
+    assertExactQuery([{pb, PBC2}], [K(N + Offset) || N <- lists:seq(6, 9)],
+                     <<"field3_int">>, 5 + Offset),
+    assertRangeQuery([{pb, PBC2}], [K(N + Offset) || N <- lists:seq(10, 18), N /= 11],
+                     <<"field1_bin">>,
+                     secondary_index_tests:int_to_field1_bin(10 + Offset),
+                     secondary_index_tests:int_to_field1_bin(18 + Offset)),
+    assertRangeQuery([{pb, PBC2}], [K(N + Offset) || N <- lists:seq(10, 19), N /= 11],
+                     <<"field2_int">>, 10 + Offset, 19 + Offset),
+    assertRangeQuery([{pb, PBC2}], [K(N + Offset) || N <- lists:seq(10, 17), N /= 11],
+                     <<"$key">>,
+                     secondary_index_tests:int_to_key(10 + Offset),
+                     secondary_index_tests:int_to_key(17 + Offset)),
+
+    ok.
+
+assertExactQuery(C, K, F, V) ->
+    lager:info("Expecting ~p Index ~p Value ~p", [K, F, V]),
+    secondary_index_tests:assertExactQuery(C, K, F, V, {false, false}).
+
+assertRangeQuery(C, K, F, V1, V2) ->
+    secondary_index_tests:assertRangeQuery(C, K, F, V1, V2, undefined, {false, false}).
 
 run_simple_write_test(WriteClusterNode, ReadClusterNode, no_repl) ->
     TestHash = erlang:md5(term_to_binary(os:timestamp())),
@@ -158,3 +318,19 @@ wait_for_reads(Node, Start, End, Bucket, R) ->
               end,
     SuccessfulReads = lists:dropwhile(DropFun, Reads),
     length(SuccessfulReads).
+
+%% general 2i utility
+put_an_object(Pid, Offset, N) ->
+    Key = secondary_index_tests:int_to_key(N + Offset),
+    Data = list_to_binary(io_lib:format("data~p", [N])),
+    BinIndex = secondary_index_tests:int_to_field1_bin(N + Offset),
+    Indexes = [{"field1_bin", BinIndex},
+               {"field2_int", N + Offset},
+               % every 5 items indexed together
+               {"field3_int", N - (N rem 5) +Offset}
+              ],
+    secondary_index_tests:put_an_object(Pid, Key, Data, Indexes).
+
+make_timestamp() ->
+    {_Mega, Sec, Milli} = os:timestamp(),
+    1000 * Sec + Milli.
