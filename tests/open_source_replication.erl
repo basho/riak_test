@@ -59,26 +59,37 @@ confirm() ->
     BFirst = hd(BNodes),
 
     rt:log_to_nodes(AllNodes, "Write data to A while both are in old state (no repl)"),
+    lager:info("Write data to A while both are in old state (no repl)"),
+
     ok = run_simple_write_test(AFirst, BFirst, no_repl),
     ok = run_2i_write_test(AFirst, BFirst, no_repl),
 
     %% in the second test protocol we upgrade the first cluster and write to it
     %% there is still no replication
+    lager:info("upgrade cluster A"),
 
     UpgradeNodeFn = fun(Node) ->
-                        ok = rt:upgrade(Node, current),
-                        ok = rt:wait_for_service(Node, riak_kv)
-                end,
+                            lager:info("Upgrading ~p", [Node]),
+                            ok = rt:upgrade(Node, current),
+                            ok = rt:wait_for_service(Node, riak_kv)
+                    end,
     [ok = UpgradeNodeFn(X) || X <- ANodes],
+
     rt:log_to_nodes(AllNodes, "Write data to A after the first cluster has been updated but the second is in old state (no repl)"),
+    lager:info("Write data to A after the first cluster has been updated but the second is in old state (no repl)"),
+
     ok = run_simple_write_test(AFirst, BFirst, no_repl),
     ok = run_2i_write_test(AFirst, BFirst, no_repl),
 
     %% in the third test protocol we upgrade the second cluster and when we write to
     %% the first there is still no replication because its not enabled
 
+    lager:info("upgrade cluster B"),
+
     [ok = UpgradeNodeFn(X) || X <- BNodes],
     rt:log_to_nodes(AllNodes, "Write data to A after both clusters have been updated (no repl)"),
+    lager:info( "Write data to A after both clusters have been updated (no repl)"),
+
     ok = run_simple_write_test(AFirst, BFirst, no_repl),
     ok = run_2i_write_test(AFirst, BFirst, no_repl),
 
@@ -308,10 +319,6 @@ run_simple_write_test(WriteClusterNode, ReadClusterNode, repl) ->
     ok.
 
 wait_for_reads(Node, Start, End, Bucket, R) ->
-    rt:wait_until(Node,
-        fun(_) ->
-                rt:systest_read(Node, Start, End, Bucket, R) == []
-        end),
     Reads = rt:systest_read(Node, Start, End, Bucket, R),
     DropFun = fun({_, {error, notfound}}) -> true;
                  (_)                      -> false

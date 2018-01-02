@@ -775,7 +775,7 @@ wait_for_service(Node, Services) when is_list(Services) ->
                     {badrpc, Error} ->
                         {badrpc, Error};
                     CurrServices when is_list(CurrServices) ->
-                        lager:info("Waiting for services ~p: current services: ~p", [Services, CurrServices]),
+                        lager:info("Waiting for services ~p: on node ~p. Current services: ~p", [Services, Node, CurrServices]),
                         lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
                     Res ->
                         Res
