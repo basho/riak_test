@@ -255,7 +255,7 @@ get_advanced_riak_conf(Node) ->
 
 append_to_conf_file(File, NameValuePairs) ->
     Settings = lists:flatten(
-                 [io_lib:format("~n~s = ~s~n", [Name, rt_util:to_list(Value)])
+                 [io_lib:format("~n~s = ~s~n", [Name, Value])
                   || {Name, Value} <- NameValuePairs]),
     file:write_file(File, Settings, [append]).
 
