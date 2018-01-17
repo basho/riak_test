@@ -82,6 +82,7 @@
          httpc/1,
          httpc_read/3,
          httpc_write/4,
+         httpc_write/5,
          is_mixed_cluster/1,
          is_pingable/1,
          join/2,
@@ -102,6 +103,7 @@
          pbc_read_check/5,
          pbc_set_bucket_prop/3,
          pbc_write/4,
+         pbc_write/6,
          pbc_put_dir/3,
          pbc_put_file/4,
          pbc_really_deleted/3,
@@ -1571,6 +1573,12 @@ pbc_write(Pid, Bucket, Key, Value, CT) ->
     Object = riakc_obj:new(Bucket, Key, Value, CT),
     riakc_pb_socket:put(Pid, Object).
 
+%% @doc does a write via the erlang protobuf client plus content-type
+-spec pbc_write(pid(), binary(), binary(), binary(), list(), list()) -> atom().
+pbc_write(Pid, Bucket, Key, Value, CT, Opts) ->
+    Object = riakc_obj:new(Bucket, Key, Value, CT),
+    riakc_pb_socket:put(Pid, Object, Opts).
+
 %% @doc sets a bucket property/properties via the erlang protobuf client
 -spec pbc_set_bucket_prop(pid(), binary(), [proplists:property()]) -> atom().
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
@@ -1648,6 +1656,12 @@ httpc_read(C, Bucket, Key) ->
 httpc_write(C, Bucket, Key, Value) ->
     Object = riakc_obj:new(Bucket, Key, Value),
     rhc:put(C, Object).
+
+%% @doc does a write via the http erlang client.
+-spec httpc_write(term(), binary(), binary(), binary(), list()) -> atom().
+httpc_write(C, Bucket, Key, Value, Opts) ->
+    Object = riakc_obj:new(Bucket, Key, Value),
+    rhc:put(C, Object, Opts).
 
 %%%===================================================================
 %%% Command Line Functions
