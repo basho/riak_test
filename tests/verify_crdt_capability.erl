@@ -69,7 +69,8 @@ confirm() ->
                                                         riak_dt_orswot,
                                                         riak_dt_map,
                                                         pncounter,
-                                                        riak_kv_hll])),
+                                                        riak_kv_hll,
+                                                        riak_dt_gset])),
     ?assertMatch(ok, rhc:counter_incr(PrevHttp, ?BUCKET, ?KEY, 1)),
     ?assertMatch({ok, 5}, rhc:counter_val(PrevHttp, ?BUCKET, ?KEY)),
 
