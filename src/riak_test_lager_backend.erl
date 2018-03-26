@@ -184,9 +184,10 @@ log_test_() ->
                         lager:debug("Here's another message"),
                         {ok, Logs} = gen_event:delete_handler(lager_event, riak_test_lager_backend, []),
                         ?assertEqual(2, length(Logs)),
-                        ?debugFmt("~p~n", [re:split(lists:nth(1, Logs), " ", [{return, list}, {parts, 3}])]),
-                        ?assertMatch([_, "[info]", "Here's a message\r\n"], re:split(lists:nth(1, Logs), " ", [{return, list}, {parts, 3}])),
-                        ?assertMatch([_, "[debug]", "Here's another message\r\n"], re:split(lists:nth(2, Logs), " ", [{return, list}, {parts, 3}]))
+                        ?assertMatch( {match,_} ,
+                                re:run( lists:nth(1, Logs), "Here's a message")),
+                        ?assertMatch( {match,_} ,
+                                re:run( lists:nth(2, Logs), "Here's another message"))
                 end
             }
         ]
