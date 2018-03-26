@@ -2249,11 +2249,11 @@ verify_product(Applications, ExpectedApplication) ->
 product_test_() ->
     {foreach,
      fun() -> ok end,
-     [verify_product([riak_cs], riak_cs),
+     [
+      verify_product([riak_cs], riak_cs),
       verify_product([riak_repl, riak_kv, riak_cs], riak_cs),
-      verify_product([riak_repl], riak_ee),
-      verify_product([riak_repl, riak_kv], riak_ee),
-      verify_product([riak_kv], riak),
-      verify_product([kernel], unknown)]}.
+      verify_product([riak_repl,riak_kv], riak),
+      verify_product([kernel], unknown)
+     ]}.
 
 -endif.
