@@ -1,0 +1,13 @@
+ensemble_basic
+ensemble_basic2
+ensemble_basic3
+ensemble_basic4
+ensemble_byzantine
+ensemble_interleave
+ensemble_remove_node
+ensemble_remove_node2
+ensemble_ring_changes
+ensemble_start_without_aae
+ensemble_sync
+ensemble_util
+ensemble_vnode_crash
