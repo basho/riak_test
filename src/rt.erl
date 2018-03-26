@@ -1213,18 +1213,17 @@ join_cluster(Nodes) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
     ok.
 
--type products() :: riak | riak_ee | riak_cs | unknown.
+-type products() :: riak | riak_cs | unknown.
 
 -spec product(node()) -> products().
 product(Node) ->
     Applications = rpc:call(Node, application, which_applications, []),
 
     HasRiakCS = proplists:is_defined(riak_cs, Applications),
-    HasRiakEE = proplists:is_defined(riak_repl, Applications),
-    HasRiakJMX = proplists:is_defined(riak_jmx, Applications),
+    HasRepl = proplists:is_defined(riak_repl, Applications),
     HasRiak = proplists:is_defined(riak_kv, Applications),
     if HasRiakCS -> riak_cs;
-       HasRiakEE andalso HasRiakJMX -> riak_ee;
+       HasRiak andalso HasRepl -> riak;
        HasRiak -> riak;
        true -> unknown
     end.
@@ -2275,11 +2274,12 @@ verify_product(Applications, ExpectedApplication) ->
 product_test_() ->
     {foreach,
      fun() -> ok end,
-     [verify_product([riak_cs], riak_cs),
-      verify_product([riak_repl, riak_kv, riak_cs], riak_cs),
-      verify_product([riak_repl], riak_ee),
-      verify_product([riak_repl, riak_kv], riak_ee),
-      verify_product([riak_kv], riak),
-      verify_product([kernel], unknown)]}.
+     [
+  verify_product([riak_cs], riak_cs),
+  verify_product([riak_repl, riak_kv, riak_cs], riak_cs),
+  verify_product([riak_repl, riak_kv], riak),
+  verify_product([riak_kv], riak),
+  verify_product([kernel], unknown)
+     ]}.
 
 -endif.
