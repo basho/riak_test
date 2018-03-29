@@ -38,15 +38,22 @@
           {fullsync_on_connect, false},
           {fullsync_interval, disabled},
           {max_fssource_soft_retries, 10},
+	  %% override default so test does not timeout
+          {fssource_retry_wait, 0},
           {max_fssource_retries, Retries}
          ]}
         ]).
 
 confirm() ->
+    lager:notice("difference test"),
     difference_test(),
+    lager:notice("deadlock test"),
     deadlock_test(),
+    lager:notice("simple test"),
     simple_test(),
+    lager:notice("bidirectional test"),
     bidirectional_test(),
+    lager:notice("dual test"),
     dual_test(),
     pass.
 
