@@ -41,3 +41,4 @@ coverage_participation
 node_confirms_upgrade
 verify_kv1356
 verify_put_opt_node_confirms
+open_source_replication
