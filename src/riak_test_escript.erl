@@ -45,7 +45,8 @@ cli_options() ->
  {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
  {batch,       undefined, "batch",    undefined,  "running a batch, always teardown, even on failure"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
- {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
+ {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"},
+ {apply_traces,undefined, "trace",    undefined,  "Apply traces to the target node, defined in the SUITEs"}
 ].
 
 print_help() ->
@@ -211,6 +212,9 @@ parse_command_line_tests(ParsedArgs) ->
                    [] -> [undefined];
                    UpgradeList -> UpgradeList
                end,
+
+    rt_redbug:set_tracing_applied(proplists:is_defined(apply_traces, ParsedArgs)),
+
     %% Parse Command Line Tests
     {CodePaths, SpecificTests} =
         lists:foldl(fun extract_test_names/2,
