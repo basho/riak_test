@@ -15,7 +15,7 @@ fi
 if [ "$1" != "2i" ]; then
     BACKEND=${2:-bitcask}
 else
-    BACKEND=eleveldb
+    BACKEND=${2:-leveled}
 fi
 
 LOG=$1-$(date +"%FT%H%M")-$BACKEND

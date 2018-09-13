@@ -277,7 +277,9 @@ base_dir_for_backend(undefined) ->
 base_dir_for_backend(bitcask) ->
     "bitcask";
 base_dir_for_backend(eleveldb) ->
-    "leveldb".
+    "leveldb";
+base_dir_for_backend(leveled) ->
+    "leveled".
 
 restart_vnode(Node, Service, Partition) ->
     VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),

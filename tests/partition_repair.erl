@@ -267,4 +267,6 @@ backend_mod_dir(undefined) ->
 backend_mod_dir(bitcask) ->
     {riak_kv_bitcask_backend, "bitcask"};
 backend_mod_dir(eleveldb) ->
-    {riak_kv_eleveldb_backend, "leveldb"}.
+    {riak_kv_eleveldb_backend, "leveldb"};
+backend_mod_dir(leveled) ->
+    {riak_kv_leveled_backed, "leveled"}.

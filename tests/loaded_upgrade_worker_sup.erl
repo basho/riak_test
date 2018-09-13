@@ -52,7 +52,7 @@ init([Name, Node, Backend, Vsn, ReportPid]) ->
         || FunName <- [list_keys_tester, kv_tester]],
 
     ChildSpecs = case Backend of
-        eleveldb ->
+        LevelIsh when LevelIsh == eleveldb orelse LevelIsh == leveled ->
             [?CHILD(Name, twoi_tester, Node, Vsn, ReportPid) | ChildSpecs1];
         _ -> ChildSpecs1
     end,

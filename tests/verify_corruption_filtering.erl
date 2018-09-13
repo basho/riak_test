@@ -49,6 +49,8 @@ confirm() ->
     case rt_config:get(rt_backend, undefined) of 
         riak_kv_eleveldb_backend ->
             load_level_intercepts(Nodes);
+        riak_kv_leveled_backend ->
+	    load_leveled_intercepts(Nodes);
         _ ->
             load_bitcask_intercepts(Nodes)
     end,
@@ -107,6 +109,19 @@ load_level_intercepts(Nodes) ->
                                  corrupting_handle_handoff_data}]})
      end 
      || Node <- Nodes].
+
+load_leveled_intercepts(Nodes) ->
+    [begin
+         rt_intercept:add(Node, {riak_kv_leveled_backend,
+                                 [{{get, 3}, corrupting_get}]}),
+         rt_intercept:add(Node, {riak_kv_leveled_backend,
+                                 [{{put, 5}, corrupting_put}]}),
+         rt_intercept:add(Node, {riak_kv_vnode,
+                                 [{{handle_handoff_data, 2}, 
+                                 corrupting_handle_handoff_data}]})
+     end 
+     || Node <- Nodes].
+
 
 load_bitcask_intercepts(Nodes) ->
     [begin

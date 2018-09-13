@@ -1805,6 +1805,7 @@ get_backends() ->
         [riak_kv_bitcask_backend] -> bitcask;
         [riak_kv_eleveldb_backend] -> eleveldb;
         [riak_kv_memory_backend] -> memory;
+	[riak_kv_leveled_backend] -> leveled;
         [Other] -> Other;
         MoreThanOne -> MoreThanOne
     end.
