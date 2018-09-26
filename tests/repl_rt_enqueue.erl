@@ -52,6 +52,7 @@ confirm() ->
     Nodes = rt:deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
     {ANodes, BNodes} = lists:split(3, Nodes),
 
+    _KeyRange = {First, Last} = {1, 20},
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
@@ -80,58 +81,75 @@ confirm() ->
 
     {ok, CA} = riak:client_connect(AFirst),
     {ok, CB} = riak:client_connect(BFirst),
+    PBCA = rt:pbc(AFirst),
 
-    %% write to A
-    Obj = riak_object:new(?TEST_BUCKET, ?KEY(1), ?VAL(1)),
-    WriteRes = CA:put(Obj, [{w, 2}]),
-    ?assertEqual(ok, WriteRes),
+    %% write a bunch of keys to A
+    WriteRes = rt:systest_write(AFirst, First, Last, ?TEST_BUCKET, 2),
+    ?assertEqual([], WriteRes),
 
-    %% verify you cannot read from B
-    BReadRes = CB:get(?TEST_BUCKET, ?KEY(1), []),
-    ?assertEqual({error, notfound}, BReadRes),
+    %% All are on A, right?
+    AReadRes = rt:systest_read(AFirst, First, Last, ?TEST_BUCKET, 2),
+    ?assertEqual([], AReadRes),
 
-    %% and again
-    Obj2 = riak_object:new(?TEST_BUCKET, ?KEY(2), ?VAL(2)),
-    WriteRes2 = CA:put(Obj2, [{w, 2}]),
-    ?assertEqual(ok, WriteRes2),
-    BReadRes2 = CB:get(?TEST_BUCKET, ?KEY(2), []),
-    ?assertEqual({error, notfound}, BReadRes2),
+    %% None are on B, right?
+    BReadRes = rt:systest_read(BFirst, First, Last, ?TEST_BUCKET, 2),
+    assertAllNotFound(BReadRes, First, Last),
+
+    %% check that error notfound if you touch a notfound key
+    RTERes1 = riakc_pb_socket:rt_enqueue(PBCA, ?TEST_BUCKET, ?KEY((Last*2))),
+    ?assertEqual({error,<<"notfound">>}, RTERes1),
+
+    %% check for error no repl, since it's not ON yet
+    RTERes2 = riakc_pb_socket:rt_enqueue(PBCA, ?TEST_BUCKET, ?KEY(First)),
+    ?assertEqual({error,<<"realtime_not_enabled">>}, RTERes2),
 
     %% enable realtime
     enable_rt(AFirst, ANodes),
 
     %% write new key to A
-    Obj3 = riak_object:new(?TEST_BUCKET, ?KEY(3), ?VAL(3)),
+    Obj3 = riak_object:new(?TEST_BUCKET, ?KEY((Last+1)), ?VAL((Last+1))),
     WriteRes3 = CA:put(Obj3, [{w, 2}]),
     ?assertEqual(ok, WriteRes3),
 
-    %% verify you can read from B, but still not the original Key
+    %% verify you can read from B now
     ReplRead =
         rt:wait_until(fun() ->
-                              {BReadRes3, _} = CB:get(?TEST_BUCKET, ?KEY(3), [{r, 3}]),
+                              {BReadRes3, _} = CB:get(?TEST_BUCKET, ?KEY((Last+1)), [{r, 3}]),
                               lager:info("waiting for 'realtime repl' to repl"),
                               BReadRes3 == ok
                       end, 10, 200),
     ?assertEqual(ok, ReplRead),
 
-    BReReadRes1 = CB:get(?TEST_BUCKET, ?KEY(1), []),
+    BReReadRes1 = CB:get(?TEST_BUCKET, ?KEY(First), []),
     ?assertEqual({error, notfound}, BReReadRes1),
 
-    %% touch the original key
-    EnqRes = CA:rt_enqueue(?TEST_BUCKET, ?KEY(1), []),
+    %% touch an original key
+    EnqRes = CA:rt_enqueue(?TEST_BUCKET, ?KEY(First), []),
     ?assertEqual(ok, EnqRes),
 
-    %% verify read original from B
+    %% verify read touched from B
     TouchRead =
-    rt:wait_until(fun() ->
-                          {BReReadResPresent, _} = CB:get(?TEST_BUCKET, ?KEY(1), []),
-                          lager:info("waiting for touch to repl"),
-                          BReReadResPresent == ok
-                  end, 10, 200),
+        rt:wait_until(fun() ->
+                              {BReReadResPresent, _} = CB:get(?TEST_BUCKET, ?KEY(First), []),
+                              lager:info("waiting for touch to repl"),
+                              BReReadResPresent == ok
+                      end, 10, 200),
     ?assertEqual(ok, TouchRead),
 
-    %% But still not object 2, neither repl'd nor touched
-    BReReadRes4 = CB:get(?TEST_BUCKET, ?KEY(2), []),
+    %% touch an original key with the PB client
+    PBEnqRes = riakc_pb_socket:rt_enqueue(PBCA, ?TEST_BUCKET, ?KEY((First+1)), [{r, 3}]),
+    ?assertEqual(ok, PBEnqRes),
+
+    TouchRead2 =
+        rt:wait_until(fun() ->
+                              {BReReadResPresent, _} = CB:get(?TEST_BUCKET, ?KEY((First+1)), []),
+                              lager:info("waiting for touch to repl"),
+                              BReReadResPresent == ok
+                      end, 10, 200),
+    ?assertEqual(ok, TouchRead2),
+
+    %% But still not object 3, neither repl'd nor touched
+    BReReadRes4 = CB:get(?TEST_BUCKET, ?KEY((First+2)), []),
     ?assertEqual({error, notfound}, BReReadRes4),
 
     pass.
@@ -149,3 +167,8 @@ enable_rt(LeaderA, ANodes) ->
     lager:info("Enabling RT replication: ~p ~p.", [LeaderA, ANodes]),
     repl_util:enable_realtime(LeaderA, "B"),
     repl_util:start_realtime(LeaderA, "B").
+
+assertAllNotFound(RTSysTestReadRes, Start, End) ->
+    {Keys, Vals}  = lists:unzip(RTSysTestReadRes),
+    ?assertEqual(lists:seq(End, Start, -1), Keys),
+    ?assert(lists:all(fun(E) -> {error, notfound} == E end, Vals)).
