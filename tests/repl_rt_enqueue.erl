@@ -82,6 +82,7 @@ confirm() ->
     {ok, CA} = riak:client_connect(AFirst),
     {ok, CB} = riak:client_connect(BFirst),
     PBCA = rt:pbc(AFirst),
+    HTTPCA = rt:httpc(AFirst),
 
     %% write a bunch of keys to A
     WriteRes = rt:systest_write(AFirst, First, Last, ?TEST_BUCKET, 2),
@@ -137,7 +138,7 @@ confirm() ->
     ?assertEqual(ok, TouchRead),
 
     %% touch an original key with the PB client
-    PBEnqRes = riakc_pb_socket:rt_enqueue(PBCA, ?TEST_BUCKET, ?KEY((First+1)), [{r, 3}]),
+    PBEnqRes = riakc_pb_socket:rt_enqueue(PBCA, ?TEST_BUCKET, ?KEY((First+1)), [{r, 2}]),
     ?assertEqual(ok, PBEnqRes),
 
     TouchRead2 =
@@ -147,6 +148,18 @@ confirm() ->
                               BReReadResPresent == ok
                       end, 10, 200),
     ?assertEqual(ok, TouchRead2),
+
+    %% touch an original key with the HTTP client
+    HTTPEnqRes = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY((First+9))),
+    ?assertEqual(ok, HTTPEnqRes),
+
+    TouchRead3 =
+        rt:wait_until(fun() ->
+                              {BReReadResPresent, _} = CB:get(?TEST_BUCKET, ?KEY((First+9)), []),
+                              lager:info("waiting for touch to repl"),
+                              BReReadResPresent == ok
+                      end, 10, 200),
+    ?assertEqual(ok, TouchRead3),
 
     %% But still not object 3, neither repl'd nor touched
     BReReadRes4 = CB:get(?TEST_BUCKET, ?KEY((First+2)), []),
