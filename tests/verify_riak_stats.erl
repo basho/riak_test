@@ -126,18 +126,6 @@ confirm() ->
                        <<"node_put_fsm_time_99">>,
                        <<"node_put_fsm_time_100">>]),
 
-    case HeadSupport of
-        % Head request timing stats also expected if backend uses HEADs
-        true ->
-            verify_nz(Stats2, [<<"node_head_fsm_time_mean">>,
-                                <<"node_head_fsm_time_median">>,
-                                <<"node_head_fsm_time_95">>,
-                                <<"node_head_fsm_time_99">>,
-                                <<"node_head_fsm_time_100">>]);
-        false ->
-            ok
-    end,
-
     lager:info("Make PBC Connection"),
     Pid = rt:pbc(Node1),
 
