@@ -89,11 +89,14 @@ confirm() ->
                     {<<"node_puts">>, 5},
                     {<<"node_gets_total">>, 10},
                     {<<"node_puts_total">>, 5},
-                    {<<"vnode_gets">>, 10},
-                    {<<"vnode_heads">>, 20},
+                    {<<"vnode_gets">>, 5}, 
+                        % The five PUTS will require only HEADs
+                    {<<"vnode_heads">>, 30},
+                        % There is no reduction in the count of HEADs
+                        % as HEADS before GETs
                     {<<"vnode_puts">>, 15},
-                    {<<"vnode_gets_total">>, 10},
-                    {<<"vnode_heads_total">>, 20},
+                    {<<"vnode_gets_total">>, 5},
+                    {<<"vnode_heads_total">>, 30},
                     {<<"vnode_puts_total">>, 15}];
             false ->
                 [{<<"node_gets">>, 10},
