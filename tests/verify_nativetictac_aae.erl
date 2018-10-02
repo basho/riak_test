@@ -52,7 +52,7 @@
            {tictacaae_active, active},
            {tictacaae_rebuildwait, 4},
            {tictacaae_rebuilddelay, 3600},
-           {tictacaae_exchangetick, 1000}, % 10 seconds
+           {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
            {tictacaae_rebuildtick, 3600000} % don't tick for an hour!
           ]},
          {riak_core,
@@ -69,7 +69,7 @@
            {tictacaae_rebuildwait, 0},
            {tictacaae_rebuilddelay, 60},
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
-           {tictacaae_rebuildtick, 15 * 1000} % 
+           {tictacaae_rebuildtick, 60 * 1000} % Check for rebuilds!
           ]},
          {riak_core,
           [
