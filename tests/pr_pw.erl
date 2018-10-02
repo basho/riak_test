@@ -146,7 +146,7 @@ make_intercepts_tab(Node, Partition) ->
                 public, set, {heir, SupPid, {}}]]),
     true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_get_partitions,
                 [Partition]}]),
-    true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_headpartitions,
+    true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_head_partitions,
                 [Partition]}]),
     true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_put_partitions,
                 [Partition]}]).
