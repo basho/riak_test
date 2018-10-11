@@ -35,6 +35,7 @@
 -define(KEY_ONE, ?KEY(1)).
 -define(KEY_TWO, ?KEY(2)).
 -define(VAL(I), ?KEY(I)).
+-define(TEST_BUCKET_TYPE, <<"my-type">>).
 
 confirm() ->
     NumNodes = rt_config:get(num_nodes, 6),
@@ -51,8 +52,6 @@ confirm() ->
 
     Nodes = rt:deploy_nodes(NumNodes, Conf, [riak_kv, riak_repl]),
     {ANodes, BNodes} = lists:split(3, Nodes),
-
-    _KeyRange = {First, Last} = {1, 20},
 
     lager:info("ANodes: ~p", [ANodes]),
     lager:info("BNodes: ~p", [BNodes]),
@@ -77,92 +76,91 @@ confirm() ->
     lager:info("Naming B"),
     repl_util:name_cluster(BFirst, "B"),
 
+    %% create bucket types on both cluster
+    %% http://docs.basho.com/riak/kv/2.2.3/using/cluster-operations/v3-multi-datacenter/#buckets-and-bucket-types-in-replication
+    create_bucket_type(ANodes, BNodes),
+
     connect_clusters(AFirst, BFirst),
+
+    run_test_for_buckets([{?TEST_BUCKET_TYPE, ?TEST_BUCKET}, ?TEST_BUCKET], ANodes, BNodes).
+
+run_test_for_buckets(Buckets, ANodes, BNodes) ->
+    KeyRange = {First, Last} = {1, 20},
+
+    AFirst = hd(ANodes),
+    BFirst = hd(BNodes),
 
     {ok, CA} = riak:client_connect(AFirst),
     {ok, CB} = riak:client_connect(BFirst),
     HTTPCA = rt:httpc(AFirst),
 
-    %% write a bunch of keys to A
-    WriteRes = rt:systest_write(AFirst, First, Last, ?TEST_BUCKET, 2),
-    ?assertEqual([], WriteRes),
-
-    %% All are on A, right?
-    AReadRes = rt:systest_read(AFirst, First, Last, ?TEST_BUCKET, 2),
-    ?assertEqual([], AReadRes),
-
-    %% None are on B, right?
-    BReadRes = rt:systest_read(BFirst, First, Last, ?TEST_BUCKET, 2),
-    assertAllNotFound(BReadRes, First, Last),
-
-    %% check that error notfound if you touch a notfound key
-    RTERes1 = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY((Last*2))),
-    ?assertEqual({error, notfound}, RTERes1),
-
-    %% check for error no repl, since it's not ON yet
-    RTERes2 = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY(First)),
-    ?assertEqual({error, realtime_not_enabled}, RTERes2),
+    set_up_data(Buckets, KeyRange, AFirst, BFirst, HTTPCA),
 
     %% enable realtime
     enable_rt(AFirst, ANodes),
 
-    %% write new key to A
-    Obj3 = riak_object:new(?TEST_BUCKET, ?KEY((Last+1)), ?VAL((Last+1))),
-    WriteRes3 = CA:put(Obj3, [{w, 2}]),
-    ?assertEqual(ok, WriteRes3),
+    %% DO the test, for each bucket(type)
+    [
+     begin
+         lager:info("RTE tests for ~p", [Bucket]),
+         %% write new key to A
+         Obj3 = riak_object:new(Bucket, ?KEY((Last+1)), ?VAL((Last+1))),
+         WriteRes3 = CA:put(Obj3, [{w, 2}]),
+         ?assertEqual(ok, WriteRes3),
 
-    %% verify you can read from B now
-    ReplRead =
-        rt:wait_until(fun() ->
-                              {BReadRes3, _} = CB:get(?TEST_BUCKET, ?KEY((Last+1)), [{r, 3}]),
-                              lager:info("waiting for 'realtime repl' to repl"),
-                              BReadRes3 == ok
-                      end, 10, 200),
-    ?assertEqual(ok, ReplRead),
+         %% verify you can read from B now
+         ReplRead =
+             rt:wait_until(fun() ->
+                                   {BReadRes3, _} = CB:get(Bucket, ?KEY((Last+1)), [{r, 3}]),
+                                   lager:info("waiting for 'realtime repl' to repl"),
+                                   BReadRes3 == ok
+                           end, 10, 200),
+         ?assertEqual(ok, ReplRead),
 
-    BReReadRes1 = CB:get(?TEST_BUCKET, ?KEY(First), []),
-    ?assertEqual({error, notfound}, BReReadRes1),
+         BReReadRes1 = CB:get(Bucket, ?KEY(First), []),
+         ?assertEqual({error, notfound}, BReReadRes1),
 
-    %% touch an original key
-    EnqRes = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY(First), []),
-    ?assertEqual(ok, EnqRes),
+         %% touch an original key
+         EnqRes = rhc:rt_enqueue(HTTPCA, Bucket, ?KEY(First), []),
+         ?assertEqual(ok, EnqRes),
 
-    %% verify read touched from B
-    TouchRead =
-        rt:wait_until(fun() ->
-                              {BReReadResPresent, _} = CB:get(?TEST_BUCKET, ?KEY(First), []),
-                              lager:info("waiting for touch to repl"),
-                              BReReadResPresent == ok
-                      end, 10, 200),
-    ?assertEqual(ok, TouchRead),
+         %% verify read touched from B
+         TouchRead =
+             rt:wait_until(fun() ->
+                                   {BReReadResPresent, _} = CB:get(Bucket, ?KEY(First), []),
+                                   lager:info("waiting for touch to repl"),
+                                   BReReadResPresent == ok
+                           end, 10, 200),
+         ?assertEqual(ok, TouchRead),
 
-    %% touch an original key with the PB client
-    PBEnqRes = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY((First+1)), [{r, 2}]),
-    ?assertEqual(ok, PBEnqRes),
+         %% touch an original key with the PB client
+         PBEnqRes = rhc:rt_enqueue(HTTPCA, Bucket, ?KEY((First+1)), [{r, 2}]),
+         ?assertEqual(ok, PBEnqRes),
 
-    TouchRead2 =
-        rt:wait_until(fun() ->
-                              {BReReadResPresent, _} = CB:get(?TEST_BUCKET, ?KEY((First+1)), []),
-                              lager:info("waiting for touch to repl"),
-                              BReReadResPresent == ok
-                      end, 10, 200),
-    ?assertEqual(ok, TouchRead2),
+         TouchRead2 =
+             rt:wait_until(fun() ->
+                                   {BReReadResPresent, _} = CB:get(Bucket, ?KEY((First+1)), []),
+                                   lager:info("waiting for touch to repl"),
+                                   BReReadResPresent == ok
+                           end, 10, 200),
+         ?assertEqual(ok, TouchRead2),
 
-    %% touch an original key with the HTTP client
-    HTTPEnqRes = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY((First+9))),
-    ?assertEqual(ok, HTTPEnqRes),
+         %% touch an original key with the HTTP client
+         HTTPEnqRes = rhc:rt_enqueue(HTTPCA, Bucket, ?KEY((First+9))),
+         ?assertEqual(ok, HTTPEnqRes),
 
-    TouchRead3 =
-        rt:wait_until(fun() ->
-                              {BReReadResPresent, _} = CB:get(?TEST_BUCKET, ?KEY((First+9)), []),
-                              lager:info("waiting for touch to repl"),
-                              BReReadResPresent == ok
-                      end, 10, 200),
-    ?assertEqual(ok, TouchRead3),
+         TouchRead3 =
+             rt:wait_until(fun() ->
+                                   {BReReadResPresent, _} = CB:get(Bucket, ?KEY((First+9)), []),
+                                   lager:info("waiting for touch to repl"),
+                                   BReReadResPresent == ok
+                           end, 10, 200),
+         ?assertEqual(ok, TouchRead3),
 
-    %% But still not object 3, neither repl'd nor touched
-    BReReadRes4 = CB:get(?TEST_BUCKET, ?KEY((First+2)), []),
-    ?assertEqual({error, notfound}, BReReadRes4),
+         %% But still not object 3, neither repl'd nor touched
+         BReReadRes4 = CB:get(Bucket, ?KEY((First+2)), []),
+         ?assertEqual({error, notfound}, BReReadRes4)
+     end || Bucket <- Buckets],
 
     pass.
 
@@ -184,3 +182,48 @@ assertAllNotFound(RTSysTestReadRes, Start, End) ->
     {Keys, Vals}  = lists:unzip(RTSysTestReadRes),
     ?assertEqual(lists:seq(End, Start, -1), Keys),
     ?assert(lists:all(fun(E) -> {error, notfound} == E end, Vals)).
+
+
+create_bucket_type(ANodes, BNodes) ->
+    lager:info("creating bucket type ~p", [?TEST_BUCKET_TYPE]),
+    create_bucket_type(ANodes),
+    create_bucket_type(BNodes).
+    %% lager:info("stopping all nodes, for bucket fixups to do the magics"),
+    %% [rt:stop_and_wait(Node)  || Node <- ANodes ++ BNodes],
+    %% [rt:start_and_wait(Node) || Node <- ANodes ++ BNodes],
+    %% lager:info("re-startng all nodes, for bucket fixups to do the magics").
+
+create_bucket_type(Cluster) ->
+    %% NOTE: the riak-repl bucket fixups are _only_ run when the
+    %% node(s) starts up. How do we ensure that a new bucket type gets
+    %% repl enabled?
+    rt:create_activate_and_wait_for_bucket_type(Cluster,
+                                                ?TEST_BUCKET_TYPE,
+                                                [{n_val, 3}, {allow_mult, false},
+                                                 %% yup, new type
+                                                 %% needs repl adding
+                                                 {repl, realtime}]).
+
+set_up_data(Buckets, _KeyRange={First, Last}, AFirst, BFirst, HTTPCA) ->
+    [begin
+         lager:info("Setting up data for ~p", [Bucket]),
+         %% write a bunch of keys to A
+         WriteRes = rt:systest_write(AFirst, First, Last, Bucket, 2),
+         ?assertEqual([], WriteRes),
+
+         %% All are on A, right?
+         AReadRes = rt:systest_read(AFirst, First, Last, Bucket, 2),
+         ?assertEqual([], AReadRes),
+
+         %% None are on B, right?
+         BReadRes = rt:systest_read(BFirst, First, Last, Bucket, 2),
+         assertAllNotFound(BReadRes, First, Last),
+
+         %% check that error notfound if you touch a notfound key
+         RTERes1 = rhc:rt_enqueue(HTTPCA, Bucket, ?KEY((Last*2))),
+         ?assertEqual({error, notfound}, RTERes1),
+
+         %% check for error no repl, since it's not ON yet
+         RTERes2 = rhc:rt_enqueue(HTTPCA, Bucket, ?KEY(First)),
+         ?assertEqual({error, realtime_not_enabled}, RTERes2)
+     end || Bucket <- Buckets].
