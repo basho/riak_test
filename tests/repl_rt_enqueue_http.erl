@@ -25,7 +25,7 @@
 %% (dropped?) or to drive some external reconcilliation method (tictac
 %% aae difference?)
 
--module(repl_rt_enqueue).
+-module(repl_rt_enqueue_http).
 -behaviour(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
@@ -81,7 +81,6 @@ confirm() ->
 
     {ok, CA} = riak:client_connect(AFirst),
     {ok, CB} = riak:client_connect(BFirst),
-    PBCA = rt:pbc(AFirst),
     HTTPCA = rt:httpc(AFirst),
 
     %% write a bunch of keys to A
@@ -97,12 +96,12 @@ confirm() ->
     assertAllNotFound(BReadRes, First, Last),
 
     %% check that error notfound if you touch a notfound key
-    RTERes1 = riakc_pb_socket:rt_enqueue(PBCA, ?TEST_BUCKET, ?KEY((Last*2))),
-    ?assertEqual({error,<<"notfound">>}, RTERes1),
+    RTERes1 = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY((Last*2))),
+    ?assertEqual({error, notfound}, RTERes1),
 
     %% check for error no repl, since it's not ON yet
-    RTERes2 = riakc_pb_socket:rt_enqueue(PBCA, ?TEST_BUCKET, ?KEY(First)),
-    ?assertEqual({error,<<"realtime_not_enabled">>}, RTERes2),
+    RTERes2 = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY(First)),
+    ?assertEqual({error, realtime_not_enabled}, RTERes2),
 
     %% enable realtime
     enable_rt(AFirst, ANodes),
@@ -125,7 +124,7 @@ confirm() ->
     ?assertEqual({error, notfound}, BReReadRes1),
 
     %% touch an original key
-    EnqRes = CA:rt_enqueue(?TEST_BUCKET, ?KEY(First), []),
+    EnqRes = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY(First), []),
     ?assertEqual(ok, EnqRes),
 
     %% verify read touched from B
@@ -138,7 +137,7 @@ confirm() ->
     ?assertEqual(ok, TouchRead),
 
     %% touch an original key with the PB client
-    PBEnqRes = riakc_pb_socket:rt_enqueue(PBCA, ?TEST_BUCKET, ?KEY((First+1)), [{r, 2}]),
+    PBEnqRes = rhc:rt_enqueue(HTTPCA, ?TEST_BUCKET, ?KEY((First+1)), [{r, 2}]),
     ?assertEqual(ok, PBEnqRes),
 
     TouchRead2 =
