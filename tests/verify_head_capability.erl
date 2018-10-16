@@ -35,27 +35,90 @@ confirm() ->
     %% Upgrade nodes to current
     %% Do some GETS
     %% check that HEADs happen after cap is negotiated
-    [Prev1, Prev2, _Curr1, _Curr2] = rt:build_cluster([previous, previous, current, current]),
 
-    PrevPB = rt:pbc(Prev1),
+    %% Use redbug tracing to detect calls to riak_kv_vnode_head after
+    %% upgrade
+    rt_redbug:set_tracing_applied(true),
+
+    [Prev1, Prev2, _Curr1, _Curr2] = Nodes = rt:build_cluster([previous, previous, current, current]),
 
     Res = rt:systest_write(Prev1, 1, 50, ?BUCKET, 2),
 
     ?assertEqual([], Res),
+    {ok, CWD} = file:get_cwd(),
+    FnameBase = "rt_vhc",
+    FileBase = filename:join([CWD, FnameBase]),
 
+    PrevTrcFile = FileBase ++ "Before",
+    CurrTrcFile = FileBase ++ "After",
+
+    lager:info("STARTUNG TRACE"),
+
+    [redbug:start("riak_kv_vnode:head/3",
+                  default_trace_options() ++
+                      [{target, Node},
+                       {arity, true},
+                       {print_file, PrevTrcFile}]) || Node <- Nodes],
     ReadRes = rt:systest_read(Prev1, 1, 50, ?BUCKET, 2),
+
+    redbug:stop(),
+
+    assert_head_cnt(0, PrevTrcFile),
 
     ?assertEqual([], ReadRes),
 
-    riakc_pb_socket:stop(PrevPB),
+    lager:info("upgrade all to current"),
 
     rt:upgrade(Prev1, current),
     rt:upgrade(Prev2, current),
 
-    PrevPB2 = rt:pbc(Prev1),
-
     ?assertEqual(ok, rt:wait_until_capability(Prev1, {riak_kv, get_request_type}, head)),
 
-    riakc_pb_socket:stop(PrevPB2),
+    lager:info("TRACE AGAIN"),
 
+    [redbug:start("riak_kv_vnode:head/3",
+                  default_trace_options() ++
+                      [{target, Node},
+                       {arity, true}, {print_file, CurrTrcFile}]) || Node <- Nodes],
+
+    %%    rt_redbug:trace(Nodes, ["riak_kv_vnode:head/3"], [{arity, true}, {file, FileBase ++ "Curr"}]),
+    ReadRes2 = rt:systest_read(Prev1, 1, 50, ?BUCKET, 2),
+
+    redbug:stop(),
+
+    %% one per read (should we count the handle_commands instead?)
+    assert_head_cnt(50, CurrTrcFile),
+
+    ?assertEqual([], ReadRes2),
+
+    %% Delete trace files
+    [file:delete(F) || F <- [PrevTrcFile, CurrTrcFile]],
     pass.
+
+
+assert_head_cnt(ExpectedHeadCnt, File) ->
+    Actual = head_cnt(File),
+    ?assertEqual(ExpectedHeadCnt, Actual).
+
+head_cnt(File) ->
+    %% @TODO read the  and count the number of HEADs in it
+    lager:info("checking ~p", [File]),
+    {ok, FileData} = file:read_file(File),
+    count_matches(re:run(FileData, "{riak_kv_vnode,head,3}", [global])).
+
+count_matches(nomatch) ->
+    0;
+count_matches({match, Matches}) ->
+    length(Matches).
+
+
+default_trace_options() ->
+    [
+     %% give a nice long timeout so we get all messages (1 minute)
+     {time,(60*1000)},
+     %% raise the threshold for the number of traces that can be received by
+     %% redbug before tracing is suspended
+     {msgs, 1000},
+     %% print milliseconds
+     {print_msec, true}
+    ].
