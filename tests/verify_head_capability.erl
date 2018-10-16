@@ -69,8 +69,8 @@ confirm() ->
 
     lager:info("upgrade all to current"),
 
-    rt:upgrade(Prev1, current, fun replication2_upgrade:remove_jmx_from_conf/1),
-    rt:upgrade(Prev2, current, fun replication2_upgrade:remove_jmx_from_conf/1),
+    rt:upgrade(Prev1, current),
+    rt:upgrade(Prev2, current),
 
     ?assertEqual(ok, rt:wait_until_capability(Prev1, {riak_kv, get_request_type}, head)),
 

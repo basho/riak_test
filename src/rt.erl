@@ -397,6 +397,8 @@ stop_and_wait(Node) ->
     ?assertEqual(ok, wait_until_unpingable(Node)).
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
+upgrade(Node, current) ->
+    upgrade(Node, current, fun replication2_upgrade:remove_jmx_from_conf/1);
 upgrade(Node, NewVersion) ->
     upgrade(Node, NewVersion, fun no_op/1).
 
