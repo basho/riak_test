@@ -40,6 +40,9 @@ confirm() ->
     verify_dt_converge:create_bucket_types(Nodes, ?TYPES),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
     Stats1 = get_stats(Node1),
+    TestMetaData = riak_test_runner:metadata(),
+    KVBackend = proplists:get_value(backend, TestMetaData),
+    HeadSupport = has_head_support(KVBackend),
 
     lager:info("Verifying that all expected stats keys are present from the HTTP endpoint"),
     ok = verify_stats_keys_complete(Node1, Stats1),
@@ -79,15 +82,37 @@ confirm() ->
 
     Stats2 = get_stats(Node1),
 
+    ExpectedNodeStats = 
+        case HeadSupport of
+            true ->
+                [{<<"node_gets">>, 10},
+                    {<<"node_puts">>, 5},
+                    {<<"node_gets_total">>, 10},
+                    {<<"node_puts_total">>, 5},
+                    {<<"vnode_gets">>, 5}, 
+                        % The five PUTS will require only HEADs
+                    {<<"vnode_heads">>, 30},
+                        % There is no reduction in the count of HEADs
+                        % as HEADS before GETs
+                    {<<"vnode_puts">>, 15},
+                    {<<"vnode_gets_total">>, 5},
+                    {<<"vnode_heads_total">>, 30},
+                    {<<"vnode_puts_total">>, 15}];
+            false ->
+                [{<<"node_gets">>, 10},
+                    {<<"node_puts">>, 5},
+                    {<<"node_gets_total">>, 10},
+                    {<<"node_puts_total">>, 5},
+                    {<<"vnode_gets">>, 30},
+                    {<<"vnode_heads">>, 0},
+                    {<<"vnode_puts">>, 15},
+                    {<<"vnode_gets_total">>, 30},
+                    {<<"vnode_heads_total">>, 0},
+                    {<<"vnode_puts_total">>, 15}]
+        end,
+
     %% make sure the stats that were supposed to increment did
-    verify_inc(Stats1, Stats2, [{<<"node_gets">>, 10},
-                                {<<"node_puts">>, 5},
-                                {<<"node_gets_total">>, 10},
-                                {<<"node_puts_total">>, 5},
-                                {<<"vnode_gets">>, 30},
-                                {<<"vnode_puts">>, 15},
-                                {<<"vnode_gets_total">>, 30},
-                                {<<"vnode_puts_total">>, 15}]),
+    verify_inc(Stats1, Stats2, ExpectedNodeStats),
 
     %% verify that fsm times were tallied
     verify_nz(Stats2, [<<"node_get_fsm_time_mean">>,
@@ -100,7 +125,6 @@ confirm() ->
                        <<"node_put_fsm_time_95">>,
                        <<"node_put_fsm_time_99">>,
                        <<"node_put_fsm_time_100">>]),
-
 
     lager:info("Make PBC Connection"),
     Pid = rt:pbc(Node1),
@@ -152,6 +176,11 @@ verify_inc(Prev, Props, Keys) ->
 
 verify_nz(Props, Keys) ->
     [?assertNotEqual(proplists:get_value(Key,Props,0), 0) || Key <- Keys].
+
+has_head_support(leveled) ->
+    true;
+has_head_support(_Backend) ->
+    false.
 
 get_stats(Node) ->
     timer:sleep(10000),
@@ -408,6 +437,9 @@ common_stats() ->
         <<"bitcask_version">>,
         <<"clique_version">>,
         <<"cluster_info_version">>,
+        <<"clusteraae_fsm_create">>,
+        <<"clusteraae_fsm_create_error">>,
+        <<"clusteraae_fsm_active">>,
         <<"compiler_version">>,
         <<"connected_nodes">>,
         <<"consistent_get_objsize_100">>,
@@ -849,6 +881,13 @@ common_stats() ->
         <<"vnode_get_fsm_time_median">>,
         <<"vnode_gets">>,
         <<"vnode_gets_total">>,
+        <<"vnode_head_fsm_time_100">>,
+        <<"vnode_head_fsm_time_95">>,
+        <<"vnode_head_fsm_time_99">>,
+        <<"vnode_head_fsm_time_mean">>,
+        <<"vnode_head_fsm_time_median">>,
+        <<"vnode_heads">>,
+        <<"vnode_heads_total">>,
         <<"vnode_hll_update">>,
         <<"vnode_hll_update_time_100">>,
         <<"vnode_hll_update_time_95">>,

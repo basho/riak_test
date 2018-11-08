@@ -589,7 +589,15 @@ remote_vnode_gets_in_queue(Idx) ->
 %% tightly to the internal representation of get requests in riak_kv...can't
 %% really figure out a better way to do this, though.
 is_get_req({'$gen_event', {riak_vnode_req_v1, _, _, Req}}) ->
-    element(1, Req) =:= riak_kv_get_req_v1;
+    case element(1, Req) of 
+        riak_kv_get_req_v1 ->
+            true;
+        riak_kv_head_req_v1 ->
+            % May also now be a head request once we start testing 2.2.7
+            true;
+        _ ->
+            false
+    end;
 is_get_req(_) ->
     false.
 
