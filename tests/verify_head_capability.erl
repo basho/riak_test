@@ -52,10 +52,10 @@ confirm() ->
     PrevTrcFile = FileBase ++ "Before",
     CurrTrcFile = FileBase ++ "After",
 
-    lager:info("STARTUNG TRACE"),
+    lager:info("STARTING TRACE"),
 
     [redbug:start("riak_kv_vnode:head/3",
-                  default_trace_options() ++
+                  rt_redbug:default_trace_options() ++
                       [{target, Node},
                        {arity, true},
                        {print_file, PrevTrcFile}]) || Node <- Nodes],
@@ -77,11 +77,10 @@ confirm() ->
     lager:info("TRACE AGAIN"),
 
     [redbug:start("riak_kv_vnode:head/3",
-                  default_trace_options() ++
+                  rt_redbug:default_trace_options() ++
                       [{target, Node},
                        {arity, true}, {print_file, CurrTrcFile}]) || Node <- Nodes],
 
-    %%    rt_redbug:trace(Nodes, ["riak_kv_vnode:head/3"], [{arity, true}, {file, FileBase ++ "Curr"}]),
     ReadRes2 = rt:systest_read(Prev1, 1, 50, ?BUCKET, 2),
 
     redbug:stop(),
@@ -101,7 +100,6 @@ assert_head_cnt(ExpectedHeadCnt, File) ->
     ?assertEqual(ExpectedHeadCnt, Actual).
 
 head_cnt(File) ->
-    %% @TODO read the  and count the number of HEADs in it
     lager:info("checking ~p", [File]),
     {ok, FileData} = file:read_file(File),
     count_matches(re:run(FileData, "{riak_kv_vnode,head,3}", [global])).
@@ -110,15 +108,3 @@ count_matches(nomatch) ->
     0;
 count_matches({match, Matches}) ->
     length(Matches).
-
-
-default_trace_options() ->
-    [
-     %% give a nice long timeout so we get all messages (1 minute)
-     {time,(60*1000)},
-     %% raise the threshold for the number of traces that can be received by
-     %% redbug before tracing is suspended
-     {msgs, 1000},
-     %% print milliseconds
-     {print_msec, true}
-    ].
