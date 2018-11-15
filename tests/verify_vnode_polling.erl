@@ -21,6 +21,7 @@
 %%% see riak/1661 for details.
 %%% @end
 
+
 -module(verify_vnode_polling).
 -behavior(riak_test).
 -compile([export_all]).
@@ -49,28 +50,202 @@ confirm() ->
 
     Preflist = rt:get_preflist(Node1, ?BUCKET, ?KEY),
 
-    lager:info("Got preflist"),
     lager:info("Preflist ~p~n", [Preflist]),
 
-    %% make a client with a node _NOT_ on the preflist
-    PLNodes = sets:from_list([Node || {{_Idx, Node}, _Type} <- Preflist]),
-    NonPLNodes = sets:to_list(sets:subtract(sets:from_list(Nodes), PLNodes)),
+    %% NOTE: The order of these tests IS IMPORTANT, as there is no
+    %% facility currently to unload/disable intercepts once loaded.
+    test_disabled_mbox_check(Nodes, Preflist),
+    test_no_local_pl_forward(Nodes, Preflist),
+    test_local_coord(Preflist),
+    test_forward_on_local_softlimit(Preflist),
+    test_local_coord_all_loaded(Preflist),
+    test_forward_least_loaded(Nodes, Preflist),
+    test_mbox_poll_timeout(Nodes, Preflist),
+    pass.
 
-    lager:info("non pl nodes are ~p", [NonPLNodes]),
+%% @doc the case the client themselves disabled the mbox check
+test_disabled_mbox_check(Nodes, Preflist) ->
+    lager:info("test_disabled_mbox_check"),
+    {FSMNode, Client} = non_pl_client(Nodes, Preflist),
 
-    {ok, Client} = riak:client_connect(hd(NonPLNodes)),
-
-    lager:info("Attempting to write key to ~p", [hd(NonPLNodes)]),
-
-    %% Write key and confirm error pw=2 unsatisfied
     WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE, [{mbox_check, false}]),
-
-    lager:info("write result was ~p", [WriteRes]),
-
     ?assertEqual(ok, WriteRes),
 
-    pass.
+    Stats = get_all_nodes_stats(Nodes),
+    %% should be a normal good old fashioned coord_redirect stat bump
+    FSMNodeStats = proplists:get_value(FSMNode, Stats),
+    CoordRedirCnt = proplists:get_value(coord_redirs_total, FSMNodeStats),
+    ?assertEqual(1, CoordRedirCnt).
+
+%% @doc the base case where a non-pl node receives the put, and
+%% chooses the first unloaded vnode to respond as the coordinator to
+%% forward to
+test_no_local_pl_forward(Nodes, Preflist) ->
+    lager:info("test_no_local_pl_forward"),
+    {FSMNode, Client} = non_pl_client(Nodes, Preflist),
+
+    WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE),
+    ?assertEqual(ok, WriteRes),
+
+    Stats = get_all_nodes_stats(Nodes),
+    FSMNodeStats = proplists:get_value(FSMNode, Stats),
+
+    CoordRedirCnt = proplists:get_value(coord_redir_unloaded_total, FSMNodeStats),
+    ?assertEqual(1, CoordRedirCnt).
+
+%% @doc check that when a node is on the preflist, and is unloaded, it
+%% coords
+test_local_coord(Preflist) ->
+    lager:info("test_local_coord"),
+    PLNodes = [PLNode || {{_Idx, PLNode}, _Type} <-  Preflist],
+    {ok, Client} = riak:client_connect(hd(PLNodes)),
+
+    WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE),
+    ?assertEqual(ok, WriteRes),
+
+    Stats = get_all_nodes_stats(PLNodes),
+    %% should be a stat bump for local coord
+    CoordNodeStats = proplists:get_value(hd(PLNodes), Stats),
+    LocalCoordCnt = proplists:get_value(coord_local_unloaded_total, CoordNodeStats),
+    ?assertEqual(1, LocalCoordCnt),
+    [?assertEqual(0, proplists:get_value(coord_local_unloaded_total, NodeStats)) ||
+        {Node, NodeStats} <- Stats, Node /= hd(PLNodes)].
+
+
+%% @doc use an intercept to simulate a soft-limited local vnode, check
+%% that the put is forwarded
+test_forward_on_local_softlimit(Preflist) ->
+    lager:info("test_forward_on_local_softlimit"),
+    PLNodes = [PLNode || {{_Idx, PLNode}, _Type} <-  Preflist],
+    HDNode = hd(PLNodes),
+    {ok, Client} = riak:client_connect(HDNode),
+
+    ok = rt_intercept:add(HDNode,
+                          {riak_core_vnode_proxy,
+                           [
+                            {{soft_load_mailbox_check, 2}, soft_load_mbox}
+                           ]}),
+
+    lager:info("interecept added"),
+    {{Idx, Node}, _} = hd(Preflist),
+    kill_proxy(Idx, Node),
+
+    WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE),
+    ?assertEqual(ok, WriteRes),
+
+    Stats = get_all_nodes_stats(PLNodes),
+    %% %% with the local soft-limit, should be a bump in the stat
+    %% `coord_redir_loaded_local'
+    CoordNodeStats = proplists:get_value(hd(PLNodes), Stats),
+    LocalLoadedForwardCnt = proplists:get_value(coord_redir_loaded_local_total, CoordNodeStats),
+    SoftloadedCnt = proplists:get_value(soft_loaded_vnode_mbox_total, CoordNodeStats),
+    ?assertEqual(1, LocalLoadedForwardCnt),
+    ?assertEqual(1, SoftloadedCnt).
+
+%% @doc tests that when all nodes are softloaded, the local
+%% coordinates (and increments the correct stat). Now all nodes in the
+%% PL have the intercept loaded.
+test_local_coord_all_loaded(Preflist) ->
+    lager:info("test_local_coord_all_loaded"),
+    PLNodes = [PLNode || {{_Idx, PLNode}, _Type} <-  Preflist],
+    HDNode = hd(PLNodes),
+    {ok, Client} = riak:client_connect(HDNode),
+
+    [ok, ok, ok] = [rt_intercept:add(Node,
+                                     {riak_core_vnode_proxy,
+                                      [
+                                       {{soft_load_mailbox_check, 2}, soft_load_mbox}
+                                      ]}) || Node <- PLNodes],
+
+    lager:info("interecept added to whole preflist"),
+    [kill_proxy(Idx, Node) || {{Idx, Node}, _Type} <- Preflist],
+
+    WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE),
+    ?assertEqual(ok, WriteRes),
+
+    Stats = get_all_nodes_stats(PLNodes),
+    %% with all mboxen loaded, there should be a bump in the stat
+    %% `coord_local_soft_loaded'
+    CoordNodeStats = proplists:get_value(hd(PLNodes), Stats),
+    LocalSoftloadedCoord = proplists:get_value(coord_local_soft_loaded_total, CoordNodeStats),
+    SoftloadedCnt = proplists:get_value(soft_loaded_vnode_mbox_total, CoordNodeStats),
+    ?assertEqual(1, LocalSoftloadedCoord),
+    %% NOE: 4 because we have to take account of previous test, we
+    %% don't/can't reset stats between runs.
+    ?assertEqual(4, SoftloadedCnt).
+
+%% @doc the same case as above (all loaded) except we land in a
+%% non-coordinating node (NOTE: all pl nodes have intercept added already!)
+test_forward_least_loaded(Nodes, Preflist) ->
+    lager:info("test_forward_least_loaded"),
+    {FSMNode, Client} = non_pl_client(Nodes, Preflist),
+
+    WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE),
+    ?assertEqual(ok, WriteRes),
+
+    Stats = get_all_nodes_stats(Nodes),
+    FSMNodeStats = proplists:get_value(FSMNode, Stats),
+
+    %% a random vnode is forwarded (so not really _least_ loaded)
+    CoordRedirLeastLoaded = proplists:get_value(coord_redir_least_loaded_total, FSMNodeStats),
+    ?assertEqual(1, CoordRedirLeastLoaded).
+
+%% @doc the case the that no vnode mbox replies within the timeout,
+%% and so a random node is forwarded to
+test_mbox_poll_timeout(Nodes, Preflist) ->
+    lager:info("test_mbox_poll_timeout"),
+    {FSMNode, Client} = non_pl_client(Nodes, Preflist),
+    PLNodes = [PLNode || {{_Idx, PLNode}, _Type} <-  Preflist],
+
+    [ok, ok, ok] = [rt_intercept:add(Node,
+                                     {riak_core_vnode_proxy,
+                                      [
+                                       {{soft_load_mailbox_check, 2}, timout_mbox_check}
+                                      ]}) || Node <- PLNodes],
+
+    lager:info("interecept re-added to whole preflist"),
+    [kill_proxy(Idx, Node) || {{Idx, Node}, _Type} <- Preflist],
+
+    WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE),
+    ?assertEqual(ok, WriteRes),
+
+    Stats = get_all_nodes_stats(Nodes),
+    FSMNodeStats = proplists:get_value(FSMNode, Stats),
+
+    lager:info("coord node stats ~p", [FSMNodeStats]),
+
+    %% there was a timeout waiting for soft-load replies
+    MboxTimeoutCnt = proplists:get_value(vnode_mbox_check_timeout_total, FSMNodeStats),
+    %% a random vnode is forwarded (so not really _least_ loaded)
+    CoordRedirLeastLoaded = proplists:get_value(coord_redir_least_loaded_total, FSMNodeStats),
+    %% NOTE: includes previous test update to stats
+    ?assertEqual(2, CoordRedirLeastLoaded),
+    ?assertEqual(1, MboxTimeoutCnt).
+
+client_write(Client, Bucket, Key, Value) ->
+    client_write(Client, Bucket, Key, Value, []).
 
 client_write(Client, Bucket, Key, Value, Opts) ->
     Obj = riak_object:new(Bucket, Key, Value),
     Client:put(Obj, Opts).
+
+get_all_nodes_stats(Nodes) ->
+    [{Nd, rpc:call(Nd, riak_kv_stat, get_stats, [])} || Nd <- Nodes].
+
+%% @private we have to force the proxy to reload/restart to get the
+%% intercept code, so kill it, ugly, sorry, but at the same time,
+%% WOW, what other language enables this?
+kill_proxy(Idx, Node) ->
+    {ProxyName, Node} = rpc:call(Node, riak_core_vnode_proxy, reg_name, [riak_kv_vnode, Idx, Node]),
+    ProxyPid = rpc:call(Node, erlang, whereis, [ProxyName]),
+    true = rpc:call(Node, erlang, exit, [ProxyPid, kill]).
+
+non_pl_client(Nodes, Preflist) ->
+    %% make a client with a node _NOT_ on the preflist
+    PLNodes = sets:from_list([Node || {{_Idx, Node}, _Type} <- Preflist]),
+    NonPLNodes = sets:to_list(sets:subtract(sets:from_list(Nodes), PLNodes)),
+
+    FSMNode = hd(NonPLNodes),
+
+    {ok, Client} = riak:client_connect(FSMNode),
+    {FSMNode, Client}.
