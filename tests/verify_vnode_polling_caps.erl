@@ -44,54 +44,94 @@ confirm() ->
 
     lager:info("Preflist ~p~n", [Preflist]),
 
-    test_no_mbox_check(Nodes, Preflist),
+    ExpectedStatAcc =
+        lists:foldl(fun(Node, Acc) ->
+                            test_no_mbox_check(Nodes, Preflist, Node, Acc)
+                    end,
+                    new_expected_stat_acc(),
+                    Nodes),
 
     lager:info("upgrade all to current"),
 
     rt:upgrade(Prev1, current),
     rt:upgrade(Prev2, current),
+    %% upgrade restarts, and restarts clear stats
+    ExpectedStatAcc2 = clear_stats(Prev1, ExpectedStatAcc),
+    ExpectedStatAcc3 = clear_stats(Prev2, ExpectedStatAcc2),
 
     [?assertEqual(ok, rt:wait_until_capability(Node, {riak_kv, put_soft_limit}, true)) || Node <- Nodes],
-    test_mbox_check(Nodes, Preflist),
+
+    lists:foldl(fun(Node, Acc) ->
+                        test_mbox_check(Nodes, Preflist, Node, Acc)
+                end,
+                ExpectedStatAcc3,
+                Nodes),
 
     pass.
 
-%% @doc the case the client themselves disabled the mbox check
-test_no_mbox_check(Nodes, Preflist) ->
-    lager:info("test_no_mbox_check"),
-    {FSMNode, Client} = non_pl_client(Nodes, Preflist),
+%% @doc in a mixed cluster state, there should be no soft-limits
+test_no_mbox_check(Nodes, Preflist, TargetNode, ExpectedStatAcc0) ->
+    lager:info("test_no_mbox_check ~p", [TargetNode]),
+
+    {ok, Client} = riak:client_connect(TargetNode),
 
     WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE),
     ?assertEqual(ok, WriteRes),
 
     Stats = get_all_nodes_stats(Nodes),
-    %% should be a normal good old fashioned coord_redirect stat bump
-    FSMNodeStats = proplists:get_value(FSMNode, Stats),
-    CoordRedirCnt = proplists:get_value(coord_redirs_total, FSMNodeStats),
-    ?assertEqual(1, CoordRedirCnt),
-    %% if undefined then zero
-    CoordMboxRedirCnt = proplists:get_value(coord_redir_unloaded_total, FSMNodeStats, 0),
-    ?assertEqual(0, CoordMboxRedirCnt).
+    TargetNodeStats = proplists:get_value(TargetNode, Stats),
 
-%% @doc the base case where a non-pl node receives the put, and
-%% chooses the first unloaded vnode to respond as the coordinator to
-%% forward to
-test_mbox_check(Nodes, Preflist) ->
-    lager:info("test_mbox_check"),
-    {FSMNode, Client} = non_pl_client(Nodes, Preflist),
+    case node_on_preflist(TargetNode, Preflist) of
+        false ->
+            %% should be a normal good old fashioned coord_redirect stat bump
+            {ExpectedCoodRedirCnt, NewAcc} = increment_expected({TargetNode, coord_redirs_total}, ExpectedStatAcc0),
+            CoordRedirCnt = proplists:get_value(coord_redirs_total, TargetNodeStats),
+            ?assertEqual(ExpectedCoodRedirCnt, CoordRedirCnt),
+            %% if undefined then zero
+            ExpectedCoordMboxRedirCnt = get_expected({TargetNode, coord_redir_unloaded_total}, NewAcc),
+            CoordMboxRedirCnt = proplists:get_value(coord_redir_unloaded_total, TargetNodeStats, 0),
+            ?assertEqual(ExpectedCoordMboxRedirCnt, CoordMboxRedirCnt),
+            NewAcc;
+        true ->
+            %% no stat for local coord put to check
+            ExpectedCoordRedirCnt= get_expected({TargetNode, coord_redirs_total}, ExpectedStatAcc0),
+            CoordRedirCnt = proplists:get_value(coord_redirs_total, TargetNodeStats),
+            ?assertEqual(ExpectedCoordRedirCnt, CoordRedirCnt),
+            ExpectedLocalCoordCnt = get_expected({TargetNode, coord_local_unloaded_total}, ExpectedStatAcc0),
+            LocalCoordCnt = proplists:get_value(coord_local_unloaded_total, TargetNodeStats, 0),
+            ?assertEqual(ExpectedLocalCoordCnt, LocalCoordCnt),
+            ExpectedStatAcc0
+    end.
 
+%% @doc when all nodes are upgraded they should agree on the
+%% capability, and soft-limits should be used
+test_mbox_check(Nodes, Preflist, TargetNode, ExpectedStatAcc0) ->
+    lager:info("test_mbox_check ~p", [TargetNode]),
+
+    {ok, Client} = riak:client_connect(TargetNode),
     WriteRes = client_write(Client, ?BUCKET, ?KEY, ?VALUE),
     ?assertEqual(ok, WriteRes),
 
     Stats = get_all_nodes_stats(Nodes),
-    FSMNodeStats = proplists:get_value(FSMNode, Stats),
+    TargetNodeStats = proplists:get_value(TargetNode, Stats),
 
-    CoordMboxRedirCnt = proplists:get_value(coord_redir_unloaded_total, FSMNodeStats),
-    ?assertEqual(1, CoordMboxRedirCnt),
-
-    %% i.e. unchanged from above (therefore different code path!)
-    CoordRedirCnt = proplists:get_value(coord_redirs_total, FSMNodeStats),
-    ?assertEqual(1, CoordRedirCnt).
+    case node_on_preflist(TargetNode, Preflist) of
+        false ->
+            {ExpectedCoodMboxRedirCnt, NewAcc} = increment_expected({TargetNode, coord_redir_unloaded_total}, ExpectedStatAcc0),
+            CoordMboxRedirCnt = proplists:get_value(coord_redir_unloaded_total, TargetNodeStats),
+            ?assertEqual(ExpectedCoodMboxRedirCnt, CoordMboxRedirCnt),
+            %% i.e. unchanged from above (therefore different code path!)
+            ExpectedCoordRedirCnt= get_expected({TargetNode, coord_redirs_total}, ExpectedStatAcc0),
+            CoordRedirCnt = proplists:get_value(coord_redirs_total, TargetNodeStats),
+            ?assertEqual(ExpectedCoordRedirCnt, CoordRedirCnt),
+            NewAcc;
+        true ->
+            %% i.e. stat MUST exist
+            {ExpectedLocalCoordCnt, NewAcc} = increment_expected({TargetNode, coord_local_unloaded_total}, ExpectedStatAcc0),
+            LocalCoordCnt = proplists:get_value(coord_local_unloaded_total, TargetNodeStats),
+            ?assertEqual(ExpectedLocalCoordCnt, LocalCoordCnt),
+            NewAcc
+    end.
 
 client_write(Client, Bucket, Key, Value) ->
     client_write(Client, Bucket, Key, Value, []).
@@ -103,12 +143,31 @@ client_write(Client, Bucket, Key, Value, Opts) ->
 get_all_nodes_stats(Nodes) ->
     [{Nd, rpc:call(Nd, riak_kv_stat, get_stats, [])} || Nd <- Nodes].
 
-non_pl_client(Nodes, Preflist) ->
-    %% make a client with a node _NOT_ on the preflist
-    PLNodes = sets:from_list([Node || {{_Idx, Node}, _Type} <- Preflist]),
-    NonPLNodes = sets:to_list(sets:subtract(sets:from_list(Nodes), PLNodes)),
+node_on_preflist(Node, Preflist) ->
+    [PLNode || {{_Idx, PLNode}, _Type} <- Preflist,
+               PLNode == Node] == [Node].
 
-    FSMNode = hd(NonPLNodes),
+new_expected_stat_acc() ->
+    orddict:new().
 
-    {ok, Client} = riak:client_connect(FSMNode),
-    {FSMNode, Client}.
+increment_expected(StatName, Acc) ->
+    Acc2 = orddict:update_counter(StatName, 1, Acc),
+    {orddict:fetch(StatName, Acc2), Acc2}.
+
+get_expected(StatName, Acc) ->
+    case orddict:find(StatName, Acc) of
+        error ->
+            0;
+        {ok, Cnt} ->
+            Cnt
+    end.
+
+%% @private stats are lost when a node restarts, and a node restarts
+%% when it is upgraded, so clear the expected stats for `Node'
+clear_stats(Node, StatAcc) ->
+    orddict:filter(fun({N, _Stat}, _Val) when Node == N ->
+                           false;
+                      (_Key, _Val) ->
+                           true
+                   end,
+                   StatAcc).
