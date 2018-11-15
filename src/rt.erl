@@ -1120,7 +1120,7 @@ get_preflist(Node, Bucket, Key, NVal) ->
     Chash = rpc:call(Node, riak_core_util, chash_key, [{Bucket, Key}]),
     UpNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
     PL = rpc:call(Node, riak_core_apl, get_apl_ann, [Chash, NVal, UpNodes]),
-PL.
+    PL.
 
 assert_nodes_agree_about_ownership(Nodes) ->
     ?assertEqual(ok, wait_until_ring_converged(Nodes)),
