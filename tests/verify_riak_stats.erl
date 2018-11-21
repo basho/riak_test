@@ -164,6 +164,14 @@ confirm() ->
          lager:info("~s: ~p (expected non-zero)", [S, proplists:get_value(S, Stats6)]),
          verify_nz(Stats6, [S])
      end || S <- datatype_stats() ],
+
+    _ = do_pools(Node1),
+
+    Stats7 = get_stats(Node1),
+    lager:info("Verifying pool stats are incremented"),
+
+    verify_inc(Stats6, Stats7, inc_by_one(dscp_stats())),
+
     pass.
 
 verify_inc(Prev, Props, Keys) ->
@@ -951,7 +959,7 @@ common_stats() ->
         <<"write_once_puts_total">>,
         <<"xmerl_version">>,
         <<"yokozuna_version">>
-    ].
+    ] ++ pool_stats().
 
 product_stats(riak_ee) ->
     [
@@ -965,3 +973,38 @@ product_stats(riak_ee) ->
     ];
 product_stats(riak) ->
     [].
+
+pool_stats() ->
+    dscp_stats() ++
+        [<<"node_worker_pool_node_worker_pool_total">>,
+         <<"node_worker_pool_unregistered_total">>,
+         <<"vnode_worker_pool_total">>].
+
+dscp_stats() ->
+    [<<"node_worker_pool_af1_pool_total">>,
+     <<"node_worker_pool_af2_pool_total">>,
+     <<"node_worker_pool_af3_pool_total">>,
+     <<"node_worker_pool_af4_pool_total">>,
+     <<"node_worker_pool_be_pool_total">>].
+
+do_pools(Node) ->
+    do_pools(Node, rpc:call(Node, riak_core_node_worker_pool, dscp_pools, [])).
+
+do_pools(_Node, []) ->
+    ok;
+do_pools(Node, [Pool | Pools]) ->
+    do_pool(Node, Pool),
+    do_pools(Node, Pools).
+
+do_pool(Node, Pool) ->
+    WorkFun = fun() -> ok end,
+    FinishFun = fun(ok) -> ok end,
+    Work = {fold, WorkFun, FinishFun},
+    Res = rpc:call(Node, riak_core_node_worker_pool, handle_work, [Pool, Work, undefined]),
+    lager:info("Pool ~p returned ~p", [Pool, Res]).
+
+inc_by_one(StatNames) ->
+    inc_by(StatNames, 1).
+
+inc_by(StatNames, Amt) ->
+    [{StatName, Amt} || StatName <- StatNames].
