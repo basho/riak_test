@@ -63,7 +63,7 @@ confirm() ->
 verify_aae_fold(Nodes) ->
     
     {ok, CH} = riak:client_connect(hd(Nodes)),
-    {ok, CT} = riak:client_connect(tl(Nodes)),
+    {ok, CT} = riak:client_connect(lists:last(Nodes)),
 
     {ok, RH0} = riak_clinet:aae_fold([{merge_root_nval, ?N_VAL}], CH),
     {ok, RT0} = riak_clinet:aae_fold([{merge_root_nval, ?N_VAL}], CT),
