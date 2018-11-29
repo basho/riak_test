@@ -26,7 +26,6 @@ verify_conditional_postcommit
 verify_corruption_filtering
 verify_down
 verify_handoff
-verify_handoff_mixed
 verify_kv_health_check
 verify_listkeys
 verify_object_limits
