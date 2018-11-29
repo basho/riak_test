@@ -50,6 +50,9 @@
            % Speedy AAE configuration
            {anti_entropy, {off, []}},
            {tictacaae_active, active},
+           {tictacaae_parallelstore, leveled_ko},
+                % if backend not leveled will use parallel key-ordered
+                % store
            {tictacaae_rebuildwait, 4},
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
@@ -66,6 +69,9 @@
            % Speedy AAE configuration
            {anti_entropy, {off, []}},
            {tictacaae_active, active},
+           {tictacaae_parallelstore, leveled_ko},
+                % if backend not leveled will use parallel key-ordered
+                % store
            {tictacaae_rebuildwait, 0},
            {tictacaae_rebuilddelay, 60},
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
@@ -97,7 +103,7 @@ verify_aae_norebuild(Nodes) ->
 
     % Recovery without tree rebuilds
 
-    % Test recovery from to few replicas written
+    % Test recovery from too few replicas written
     KV1 = test_data(1, 1000),
     test_less_than_n_writes(Node1, KV1),
 
@@ -110,7 +116,7 @@ verify_aae_rebuild(Nodes) ->
     lager:info("Tictac AAE tests with rebuilding trees"),
     Node1 = hd(Nodes),
 
-    % Test recovery from to few replicas written
+    % Test recovery from too few replicas written
     KV1 = test_data(1, 1000),
     test_less_than_n_writes(Node1, KV1),
 
@@ -280,7 +286,11 @@ wipe_out_aae_data(Node, Partition) ->
     ok.
 
 base_dir_for_backend(leveled) ->
-    "leveled".
+    "leveled";
+base_dir_for_backend(bitcask) ->
+    "bitcask";
+base_dir_for_backend(eleveldb) ->
+    "leveledb".
 
 restart_vnode(Node, Service, Partition) ->
     VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),
