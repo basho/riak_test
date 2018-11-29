@@ -1,7 +1,7 @@
 coverage_participation
 kv679_dataloss
-kv679_dataloss_fb.erl
-kv679_dataloss_fb2.erl
+kv679_dataloss_fb
+kv679_dataloss_fb2
 kv679_tombstone
 kv679_tombstone2
 kv679_uid
