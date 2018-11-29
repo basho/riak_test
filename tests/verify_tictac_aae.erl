@@ -36,7 +36,7 @@
 %% Also, a sanity check is done to make sure AAE repairs go away eventually
 %% if there is no activity.  That was an actual early AAE bug.
 
--module(verify_nativetictac_aae).
+-module(verify_tictac_aae).
 -export([confirm/0, verify_aae_norebuild/1, verify_aae_rebuild/1, test_single_partition_loss/3]).
 -include_lib("eunit/include/eunit.hrl").
 
