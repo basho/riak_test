@@ -53,6 +53,7 @@
 -define(NUM_KEYS_PERNODE, 10000).
 -define(BUCKET, <<"test_bucket">>).
 -define(N_VAL, 3).
+-define(DELTA_COUNT, 10).
 
 confirm() ->
     Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
@@ -65,32 +66,82 @@ verify_aae_fold(Nodes) ->
     {ok, CH} = riak:client_connect(hd(Nodes)),
     {ok, CT} = riak:client_connect(lists:last(Nodes)),
 
+    lager:info("Fold for empty root"),
     {ok, RH0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
     {ok, RT0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CT),
 
     KeyLoadFun = 
         fun(Node, KeyCount) ->
-            KVs = test_data(KeyCount + 1, KeyCount + ?NUM_KEYS_PERNODE),
+            KVs = test_data(KeyCount + 1,
+                                KeyCount + ?NUM_KEYS_PERNODE,
+                                list_to_binary("U1")),
             ok = write_data(Node, KVs),
             KeyCount + ?NUM_KEYS_PERNODE
         end,
 
     lists:foldl(KeyLoadFun, 1, Nodes),
+    lager:info("Loaded ~w objects", [?NUM_KEYS_PERNODE * length(Nodes)]),
 
+    lager:info("Fold for busy root"),
     {ok, RH1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
     {ok, RT1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CT),
     
     ?assertMatch(true, RH1 == RT1),
     ?assertMatch(true, RH0 == RT0),
-    ?assertMatch(false, RH0 == RH1).
+    ?assertMatch(false, RH0 == RH1),
+    
+    lager:info("Make ~w changes", [?DELTA_COUNT]),
+    Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary("U2")),
+    ok = write_data(hd(Nodes), Changes2),
+    {ok, RH2} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
+    DirtyBranches2 = aae_exchange:compare_roots(RH1, RH2),
+
+    lager:info("Found ~w branch deltas", [length(DirtyBranches2)]),
+    ?assertMatch(true, length(DirtyBranches2) > 0),
+    ?assertMatch(true, length(DirtyBranches2) =< ?DELTA_COUNT),
+
+    {ok, BH2} =
+        riak_client:aae_fold({merge_branch_nval, ?N_VAL, DirtyBranches2}, CH),
+
+    lager:info("Make ~w changes to same keys", [?DELTA_COUNT]),
+    Changes3 = test_data(1, ?DELTA_COUNT, list_to_binary("U3")),
+    ok = write_data(hd(Nodes), Changes3),
+    {ok, RH3} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
+    DirtyBranches3 = aae_exchange:compare_roots(RH2, RH3),
+
+    lager:info("Found ~w branch deltas", [length(DirtyBranches3)]),
+    ?assertMatch(true, DirtyBranches2 == DirtyBranches3),
+
+    {ok, BH3} =
+        riak_client:aae_fold({merge_branch_nval, ?N_VAL, DirtyBranches3}, CH),
+    
+    DirtySegments1 = aae_exchange:compare_branches(BH2, BH3),
+    lager:info("Found ~w mismatched segments", [length(DirtySegments1)]),
+    ?assertMatch(true, length(DirtySegments1) > 0),
+    ?assertMatch(true, length(DirtySegments1) =< ?DELTA_COUNT),
+
+    {ok, KCL1} =
+        riak_client:aae_fold({fetch_clocks, ?N_VAL, DirtySegments1}, CH),
+
+    lager:info("Found ~w mismatched keys", [length(KCL1)]),
+    ?assertMatch(true, length(KCL1) >= ?DELTA_COUNT),
+    KCL2 = lists:map(fun({B, K, VC}) -> {{B, K}, VC} end, KCL1),
+
+    MatchFun = 
+        fun(I) ->
+            ?assertMatch(true,
+                            {?BUCKET, to_key(I)} ==
+                                lists:keyfind({?BUCKET, to_key(I)}, 1, KCL2))
+        end,
+    lists:foreach(MatchFun, lists:seq(1, ?DELTA_COUNT)).
 
 
 to_key(N) ->
     list_to_binary(io_lib:format("K~4..0B", [N])).
 
-test_data(Start, End) ->
+test_data(Start, End, V) ->
     Keys = [to_key(N) || N <- lists:seq(Start, End)],
-    [{K, K} || K <- Keys].
+    [{K, <<K/binary, V/binary>>} || K <- Keys].
 
 write_data(Node, KVs) ->
     write_data(Node, KVs, []).
