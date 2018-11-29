@@ -65,8 +65,8 @@ verify_aae_fold(Nodes) ->
     {ok, CH} = riak:client_connect(hd(Nodes)),
     {ok, CT} = riak:client_connect(lists:last(Nodes)),
 
-    {ok, RH0} = riak_clinet:aae_fold({merge_root_nval, ?N_VAL}, CH),
-    {ok, RT0} = riak_clinet:aae_fold({merge_root_nval, ?N_VAL}, CT),
+    {ok, RH0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
+    {ok, RT0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CT),
 
     KeyLoadFun = 
         fun(Node, KeyCount) ->
@@ -77,8 +77,8 @@ verify_aae_fold(Nodes) ->
 
     lists:foldl(KeyLoadFun, 1, Nodes),
 
-    {ok, RH1} = riak_clinet:aae_fold({merge_root_nval, ?N_VAL}, CH),
-    {ok, RT1} = riak_clinet:aae_fold({merge_root_nval, ?N_VAL}, CT),
+    {ok, RH1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
+    {ok, RT1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CT),
     
     ?assertMatch(true, RH1 == RT1),
     ?assertMatch(true, RH0 == RT0),
