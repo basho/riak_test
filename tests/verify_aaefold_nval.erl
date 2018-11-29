@@ -70,8 +70,8 @@ verify_aae_fold(Nodes) ->
 
     KeyLoadFun = 
         fun(Node, KeyCount) ->
-            KV = test_data(KeyCount + 1, KeyCount + ?NUM_KEYS_PERNODE),
-            ok = write_data(KV, Node),
+            KVs = test_data(KeyCount + 1, KeyCount + ?NUM_KEYS_PERNODE),
+            ok = write_data(Node, KVs),
             KeyCount + ?NUM_KEYS_PERNODE
         end,
 
