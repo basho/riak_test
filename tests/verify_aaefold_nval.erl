@@ -135,7 +135,16 @@ verify_aae_fold(Nodes) ->
             InFetchClocks = lists:keyfind({?BUCKET, K}, 1, KCL2),
             ?assertMatch(true, {?BUCKET, K} == element(1, InFetchClocks))
         end,
-    lists:foreach(MatchFun, lists:seq(1, ?DELTA_COUNT)).
+    lists:foreach(MatchFun, lists:seq(1, ?DELTA_COUNT)),
+    
+    lager:info("Stopping a node - query results should be unchanged"),
+    rt:stop_and_wait(hd(tl(Nodes))),
+    {ok, BH4} =
+        riak_client:aae_fold({merge_branch_nval, ?N_VAL, DirtyBranches3}, CH),
+    ?assertMatch(true, BH3 == BH4),
+    {ok, KCL2} =
+        riak_client:aae_fold({fetch_clocks_nval, ?N_VAL, DirtySegments1}, CH),
+    ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)).
 
 
 to_key(N) ->
