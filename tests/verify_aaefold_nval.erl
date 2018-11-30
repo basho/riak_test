@@ -17,7 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc Verification of AAE fold base don n_val (with cached trees)
+%% @doc Verification of AAE fold based on n_val (with cached trees)
 %%
 %% Confirm that trees are returned that vary along with the data in the
 %% store
@@ -124,6 +124,7 @@ verify_aae_fold(Nodes) ->
         riak_client:aae_fold({fetch_clocks, ?N_VAL, DirtySegments1}, CH),
 
     lager:info("Found ~w mismatched keys", [length(KCL1)]),
+    
     ?assertMatch(true, length(KCL1) >= ?DELTA_COUNT),
     KCL2 = lists:map(fun({B, K, VC}) -> {{B, K}, VC} end, KCL1),
 
