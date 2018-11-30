@@ -86,6 +86,8 @@ confirm() ->
                                                  {vnode_inactivity_timeout, 1000}]}]},
             {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]}],
 
+    KVBackend = proplists:get_value(backend, riak_test_runner:metadata()),
+
     Nodes = rt:build_cluster(5, Conf),
     Clients =  kv679_tombstone:create_pb_clients(Nodes),
     {_, TempPBC} = hd(Clients),
@@ -167,7 +169,7 @@ confirm() ->
     %% set up a local read error on Primary 1 (this is any disk error,
     %% delete the datadir, an intercept for a local crc failure or
     %% deserialisation error)
-    rt_intercept:add(CoordNode, {riak_kv_bitcask_backend, [{{get, 3}, always_corrupt_get}]}),
+    add_intercept(CoordNode, KVBackend),
 
     %% heal the partition, remember the Partition 1 fallbacks aren't
     %% handing off yet (we killed them, but it could be any delay in
@@ -184,7 +186,7 @@ confirm() ->
     %% the only way I could ensure that the handoff had occured before
     %% cleaning out the intercept. A sleep also worked.
     kv679_tombstone2:dump_clock(CoordClient),
-    rt_intercept:clean(CoordNode, riak_kv_bitcask_backend),
+    clean_intercept(CoordNode, KVBackend),
     kv679_tombstone2:dump_clock(CoordClient),
 
     %% restart fallback one and wait for it to handoff
@@ -247,3 +249,26 @@ confirm() ->
 different_nodes(PL) ->
     Nodes = [Node || {{_, Node}, _} <- PL],
     length(lists:usort(Nodes)) == length(PL).
+
+
+add_intercept(Node, undefined) ->
+    add_intercept(Node, bitcask);
+add_intercept(Node, bitcask) ->
+    rt_intercept:add(Node, {riak_kv_bitcask_backend,
+                            [{{get, 3}, always_corrupt_get}]});
+add_intercept(Node, leveled) ->
+    rt_intercept:add(Node, {riak_kv_leveled_backend,
+                            [{{get, 3}, always_corrupt_get}]});
+add_intercept(Node, eleveldb) ->
+    rt_intercept:add(Node, {riak_kv_eleveldb_backend,
+                            [{{get, 3}, always_corrupt_get}]}).
+
+
+clean_intercept(Node, undefined) ->
+    clean_intercept(Node, bitcask);
+clean_intercept(Node, bitcask) ->
+    rt_intercept:clean(Node, riak_kv_bitcask_backend);
+clean_intercept(Node, leveled) ->
+    rt_interecpt:clean(Node, riak_kv_leveled_backend);
+clean_intercept(Node, eleveldb) ->
+    rt_intercept:clean(Node, riak_kv_eleveldb_backend).
