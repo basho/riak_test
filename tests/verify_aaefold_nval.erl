@@ -128,11 +128,12 @@ verify_aae_fold(Nodes) ->
     ?assertMatch(true, length(KCL1) >= ?DELTA_COUNT),
     KCL2 = lists:map(fun({B, K, VC}) -> {{B, K}, VC} end, KCL1),
 
+    lager:info("Checking all mismatched keys in result"),
     MatchFun = 
         fun(I) ->
-            ?assertMatch(true,
-                            {?BUCKET, to_key(I)} ==
-                                lists:keyfind({?BUCKET, to_key(I)}, 1, KCL2))
+            K = to_key(I),
+            InFetchClocks = lists:keyfind({?BUCKET, K}, 1, KCL2),
+            ?assertMatch(true, {?BUCKET, K} == element(1, InFetchClocks))
         end,
     lists:foreach(MatchFun, lists:seq(1, ?DELTA_COUNT)).
 
