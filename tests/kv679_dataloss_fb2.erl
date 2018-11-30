@@ -269,6 +269,6 @@ clean_intercept(Node, undefined) ->
 clean_intercept(Node, bitcask) ->
     rt_intercept:clean(Node, riak_kv_bitcask_backend);
 clean_intercept(Node, leveled) ->
-    rt_interecpt:clean(Node, riak_kv_leveled_backend);
+    rt_intercept:clean(Node, riak_kv_leveled_backend);
 clean_intercept(Node, eleveldb) ->
     rt_intercept:clean(Node, riak_kv_eleveldb_backend).
