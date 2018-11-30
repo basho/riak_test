@@ -6,8 +6,7 @@
   {applications, [
                   kernel,
                   stdlib,
-                  lager,
-                  kv_index_tictactree
+                  lager
                  ]},
   {env, [
     {platform, undefined},

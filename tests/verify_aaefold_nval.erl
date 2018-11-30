@@ -121,10 +121,10 @@ verify_aae_fold(Nodes) ->
     ?assertMatch(true, length(DirtySegments1) =< ?DELTA_COUNT),
 
     {ok, KCL1} =
-        riak_client:aae_fold({fetch_clocks, ?N_VAL, DirtySegments1}, CH),
+        riak_client:aae_fold({fetch_clocks_nval, ?N_VAL, DirtySegments1}, CH),
 
     lager:info("Found ~w mismatched keys", [length(KCL1)]),
-    
+
     ?assertMatch(true, length(KCL1) >= ?DELTA_COUNT),
     KCL2 = lists:map(fun({B, K, VC}) -> {{B, K}, VC} end, KCL1),
 
