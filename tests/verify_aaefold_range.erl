@@ -17,22 +17,22 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc Verification of AAE fold based on n_val (with cached trees)
+%% @doc Verification of AAE fold based on range (dynamic fold-based trees)
 %%
 %% Confirm that trees are returned that vary along with the data in the
 %% store
 
--module(verify_aaefold_nval).
+-module(verify_aaefold_range).
 -export([confirm/0, verify_aae_fold/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
 % to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 8).
--define(REBUILD_TICK, 30 * 1000).
 -define(CFG_NOREBUILD,
         [{riak_kv,
           [
+           % Speedy AAE configuration
            {anti_entropy, {off, []}},
            {tictacaae_active, active},
            {tictacaae_parallelstore, leveled_ko},
@@ -48,25 +48,7 @@
            {ring_creation_size, ?DEFAULT_RING_SIZE}
           ]}]
        ).
--define(CFG_REBUILD,
-        [{riak_kv,
-          [
-           % Speedy AAE configuration
-           {anti_entropy, {off, []}},
-           {tictacaae_active, active},
-           {tictacaae_parallelstore, leveled_ko},
-                % if backend not leveled will use parallel key-ordered
-                % store
-           {tictacaae_rebuildwait, 0},
-           {tictacaae_rebuilddelay, 60},
-           {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
-           {tictacaae_rebuildtick, ?REBUILD_TICK} % Check for rebuilds!
-          ]},
-         {riak_core,
-          [
-           {ring_creation_size, ?DEFAULT_RING_SIZE}
-          ]}]
-       ).
+
 -define(NUM_NODES, 3).
 -define(NUM_KEYS_PERNODE, 10000).
 -define(BUCKET, <<"test_bucket">>).
@@ -76,10 +58,6 @@
 confirm() ->
     Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
     ok = verify_aae_fold(Nodes0),
-    Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
-    lager:info("Sleeping for rebuild tick - testing with rebuilds ongoing"),
-    timer:sleep(?REBUILD_TICK),
-    ok = verify_aae_fold(Nodes1),
     pass.
 
 
@@ -88,9 +66,10 @@ verify_aae_fold(Nodes) ->
     {ok, CH} = riak:client_connect(hd(Nodes)),
     {ok, CT} = riak:client_connect(lists:last(Nodes)),
 
-    lager:info("Fold for empty root"),
-    {ok, RH0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
-    {ok, RT0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CT),
+    lager:info("Fold for empty tree range"),
+    TreeQuery = {?BUCKET, all, small, all, all, pre_hash},
+    {ok, RH0} = riak_client:aae_fold(TreeQuery, CH),
+    {ok, RT0} = riak_client:aae_fold(TreeQuery, CT),
 
     KeyLoadFun = 
         fun(Node, KeyCount) ->
@@ -104,46 +83,34 @@ verify_aae_fold(Nodes) ->
     lists:foldl(KeyLoadFun, 1, Nodes),
     lager:info("Loaded ~w objects", [?NUM_KEYS_PERNODE * length(Nodes)]),
 
-    lager:info("Fold for busy root"),
-    {ok, RH1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
-    {ok, RT1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CT),
+    lager:info("Fold for busy tree"),
+    {ok, RH1} = riak_client:aae_fold(TreeQuery, CH),
+    {ok, RT1} = riak_client:aae_fold(TreeQuery, CT),
     
     ?assertMatch(true, RH1 == RT1),
     ?assertMatch(true, RH0 == RT0),
     ?assertMatch(false, RH0 == RH1),
+
+    ?assertMatch(true, [] == aae_exchange:compare_trees(RH1, RT1)),
     
     lager:info("Make ~w changes", [?DELTA_COUNT]),
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary("U2")),
     ok = write_data(hd(Nodes), Changes2),
-    {ok, RH2} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
-    DirtyBranches2 = aae_exchange:compare_roots(RH1, RH2),
 
-    lager:info("Found ~w branch deltas", [length(DirtyBranches2)]),
-    ?assertMatch(true, length(DirtyBranches2) > 0),
-    ?assertMatch(true, length(DirtyBranches2) =< ?DELTA_COUNT),
+    {ok, RH2} = riak_client:aae_fold(TreeQuery, CH),
+    DirtySegments1 = aae_exchange:compare_trees(RH1, RH2),
 
-    {ok, BH2} =
-        riak_client:aae_fold({merge_branch_nval, ?N_VAL, DirtyBranches2}, CH),
-
-    lager:info("Make ~w changes to same keys", [?DELTA_COUNT]),
-    Changes3 = test_data(1, ?DELTA_COUNT, list_to_binary("U3")),
-    ok = write_data(hd(Nodes), Changes3),
-    {ok, RH3} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
-    DirtyBranches3 = aae_exchange:compare_roots(RH2, RH3),
-
-    lager:info("Found ~w branch deltas", [length(DirtyBranches3)]),
-    ?assertMatch(true, DirtyBranches2 == DirtyBranches3),
-
-    {ok, BH3} =
-        riak_client:aae_fold({merge_branch_nval, ?N_VAL, DirtyBranches3}, CH),
-    
-    DirtySegments1 = aae_exchange:compare_branches(BH2, BH3),
     lager:info("Found ~w mismatched segments", [length(DirtySegments1)]),
     ?assertMatch(true, length(DirtySegments1) > 0),
     ?assertMatch(true, length(DirtySegments1) =< ?DELTA_COUNT),
 
-    {ok, KCL1} =
-        riak_client:aae_fold({fetch_clocks_nval, ?N_VAL, DirtySegments1}, CH),
+    FetchClocksQuery =
+        {fetch_clocks_range,
+            ?BUCKET, all,
+            {segments, DirtySegments1, small},
+            all},
+
+    {ok, KCL1} = riak_client:aae_fold(FetchClocksQuery, CH),
 
     lager:info("Found ~w mismatched keys", [length(KCL1)]),
 
@@ -161,11 +128,8 @@ verify_aae_fold(Nodes) ->
     
     lager:info("Stopping a node - query results should be unchanged"),
     rt:stop_and_wait(hd(tl(Nodes))),
-    {ok, BH4} =
-        riak_client:aae_fold({merge_branch_nval, ?N_VAL, DirtyBranches3}, CH),
-    ?assertMatch(true, BH3 == BH4),
-    {ok, KCL2} =
-        riak_client:aae_fold({fetch_clocks_nval, ?N_VAL, DirtySegments1}, CH),
+    
+    {ok, KCL2} = riak_client:aae_fold(FetchClocksQuery, CH),
     ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)).
 
 
