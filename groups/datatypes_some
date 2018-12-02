@@ -1,0 +1,5 @@
+riak667_mixed
+riak667_safe
+verify_counter_capability
+verify_crdt_capability
+verify_dt_upgrade
