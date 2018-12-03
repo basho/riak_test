@@ -86,10 +86,10 @@ test_by_backend(CapableBackend, Nodes) ->
     {ok, C} = riak:client_connect(hd(Nodes)),
 
     lager:info("Backup to self to fail"),
-    {ok, true} = riak_client:hot_backup("./data/", ?N_VAL, ?N_VAL, C),
+    {ok, false} = riak_client:hotbackup("./data/", ?N_VAL, ?N_VAL, C),
 
     lager:info("Backup all nodes to succeed"),
-    {ok, true} = riak_client:hot_backup("./data/backup/", ?N_VAL, ?N_VAL, C),
+    {ok, true} = riak_client:hotbackup("./data/backup/", ?N_VAL, ?N_VAL, C),
     
     lager:info("Change some keys"),
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary(?VAL_FLAG2)),
@@ -113,7 +113,7 @@ test_by_backend(CapableBackend, Nodes) ->
 not_supported_test(Nodes) ->
     {ok, C} = riak:client_connect(hd(Nodes)),
     lager:info("Backup all nodes to fail"),
-    {ok, false} = riak_client:hot_backup("./data/backup/", ?N_VAL, ?N_VAL, C).
+    {ok, false} = riak_client:hotbackup("./data/backup/", ?N_VAL, ?N_VAL, C).
 
 
 
