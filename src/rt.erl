@@ -51,6 +51,7 @@
          clean_cluster/1,
          clean_data_dir/1,
          clean_data_dir/2,
+         restore_data_dir/3,
          cmd/1,
          cmd/2,
          connection_info/1,
@@ -1283,6 +1284,12 @@ clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
     clean_data_dir([Nodes], SubDir);
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
     ?HARNESS:clean_data_dir(Nodes, SubDir).
+
+restore_data_dir(Nodes, BackendFldr, BackupFldr) when not is_list(Nodes) ->
+    restore_data_dir([Nodes], BackendFldr, BackupFldr);
+restore_data_dir(Nodes, BackendFldr, BackupFldr) ->
+    ?HARNESS:restore_data_dir(Nodes, BackendFldr, BackupFldr).
+
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
