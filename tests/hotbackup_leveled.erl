@@ -36,7 +36,7 @@
 -define(DELTA_COUNT, 10).
 -define(VAL_FLAG1, "U1").
 -define(VAL_FLAG2, "U2").
--define(CFG_NOREBUILD,
+-define(CFG_NOAAE,
         [{riak_kv,
           [
            {anti_entropy, {off, []}},
