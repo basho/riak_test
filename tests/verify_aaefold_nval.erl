@@ -76,6 +76,8 @@
 confirm() ->
     Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
     ok = verify_aae_fold(Nodes0),
+    rt:clean_cluster(Nodes0),
+
     Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
     lager:info("Sleeping for rebuild tick - testing with rebuilds ongoing"),
     timer:sleep(?REBUILD_TICK),
@@ -92,6 +94,7 @@ verify_aae_fold(Nodes) ->
     {ok, RH0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
     {ok, RT0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CT),
 
+    lager:info("Commencing object load"),
     KeyLoadFun = 
         fun(Node, KeyCount) ->
             KVs = test_data(KeyCount + 1,
@@ -166,7 +169,10 @@ verify_aae_fold(Nodes) ->
     ?assertMatch(true, BH3 == BH4),
     {ok, KCL2} =
         riak_client:aae_fold({fetch_clocks_nval, ?N_VAL, DirtySegments1}, CH),
-    ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)).
+    ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)),
+    
+    % Need to re-start or clean will fail
+    rt:start_and_wait(hd(tl(Nodes))).
 
 
 to_key(N) ->

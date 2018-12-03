@@ -67,10 +67,11 @@ verify_aae_fold(Nodes) ->
     {ok, CT} = riak:client_connect(lists:last(Nodes)),
 
     lager:info("Fold for empty tree range"),
-    TreeQuery = {?BUCKET, all, small, all, all, pre_hash},
+    TreeQuery = {merge_tree_range, ?BUCKET, all, small, all, all, pre_hash},
     {ok, RH0} = riak_client:aae_fold(TreeQuery, CH),
     {ok, RT0} = riak_client:aae_fold(TreeQuery, CT),
 
+    lager:info("Commencing object load"),
     KeyLoadFun = 
         fun(Node, KeyCount) ->
             KVs = test_data(KeyCount + 1,
