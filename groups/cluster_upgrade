@@ -19,6 +19,5 @@ verify_kv1356
 verify_handoff_mixed
 verify_head_capability
 verify_membackend
-verify_no_writes_on_read
 verify_riak_object_reformat
 verify_vclock_encoding_upgrade
