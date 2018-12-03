@@ -1,0 +1,2 @@
+verify_bitcask_tombstone2_upgrade
+verify_no_writes_on_read
