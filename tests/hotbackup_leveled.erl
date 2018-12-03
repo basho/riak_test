@@ -28,7 +28,7 @@
 
 % I would hope this would come from the testing framework some day
 % to use the test in small and large scenarios.
--define(RING, 32).
+-define(DEFAULT_RING_SIZE, 32).
 -define(NUM_NODES, 5).
 -define(NUM_KEYS_PERNODE, 5000).
 -define(BUCKET, <<"test_bucket">>).
@@ -36,22 +36,22 @@
 -define(DELTA_COUNT, 10).
 -define(VAL_FLAG1, "U1").
 -define(VAL_FLAG2, "U2").
--define(HARNESS, (rt_config:get(rt_harness))).
--define(CFG, [
-            {riak_kv, [{anti_entropy, {off, []}}]},
-            {riak_core, [{default_bucket_props, [
-                                                 {n_val, ?N_VAL},
-                                                 {allow_mult, true},
-                                                 {dvv_enabled, true},
-                                                 {ring_creation_size, ?RING}
-                                                ]}]}]).
-
+-define(CFG_NOREBUILD,
+        [{riak_kv,
+          [
+           {anti_entropy, {off, []}},
+           {tictacaae_active, passive}
+          ]},
+         {riak_core,
+          [
+           {ring_creation_size, ?DEFAULT_RING_SIZE}
+          ]}]
+       ).
 
 confirm() ->
-    Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG),
+    Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOAAE),
     ok = hot_backup(Nodes0),
     pass.
-
 
 hot_backup(Nodes) ->
     
