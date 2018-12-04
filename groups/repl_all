@@ -21,6 +21,7 @@ replication
 replication_ssl
 replication_stats
 repl_rt_cascading_rtq
+repl_rt_enqueue_http
 repl_rt_heartbeat
 repl_rt_overload
 repl_rt_pending

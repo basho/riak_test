@@ -4,8 +4,6 @@ open_source_replication
 repl_bucket_types
 replication_upgrade
 replication2_upgrade
-riak667_mixed
-riak667_safe
 rolling_capabilities
 rt_cascading_new_to_old
 rt_cascading_mixed_clusters
