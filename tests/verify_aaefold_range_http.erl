@@ -112,12 +112,6 @@ verify_aae_fold(Nodes) ->
     lager:info("Found ~w mismatched segments", [length(DirtySegments1)]),
     ?assertMatch(N when N >= ?DELTA_COUNT, length(DirtySegments1)),
 
-    %% FetchClocksQuery =
-    %%     {fetch_clocks_range,
-    %%         ?BUCKET, all,
-    %%         {segments, DirtySegments1, small},
-    %%         all},
-
     {ok, {keysclocks, KCL1}} = rhc:aae_range_clocks(HttpCH, ?BUCKET, all, {DirtySegments1, small}, all),
 
     lager:info("Found ~w mismatched keys", [length(KCL1)]),
