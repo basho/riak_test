@@ -396,6 +396,17 @@ rm_dir(Dir) ->
     ?assertCmd("rm -rf " ++ Dir),
     ?assertEqual(false, filelib:is_dir(Dir)).
 
+restore_data_dir(Nodes, BackendFldr, BackupFldr) when is_list(Nodes) ->
+    RestoreNodeFun =
+        fun(Node) ->
+            Backend = node_path(Node) ++ "/" ++ BackendFldr,
+            Backup = node_path(Node) ++ "/" ++ BackupFldr,
+            lager:info("Restoring Node ~s from ~s", [Backend, Backup]),
+            ?assertCmd("mkdir -p " ++ Backend),
+            ?assertCmd("cp -R " ++ Backup ++ " " ++ Backend)
+        end,
+    lists:foreach(RestoreNodeFun, Nodes).
+
 add_default_node_config(Nodes) ->
     case rt_config:get(rt_default_config, undefined) of
         undefined -> ok;
