@@ -57,11 +57,11 @@ hot_backup(Nodes) ->
     
     KeyLoadFun = 
         fun(Node, KeyCount) ->
-            KVs = test_data(KeyCount + 1,
+            KVs = test_data(KeyCount,
                                 KeyCount + ?NUM_KEYS_PERNODE,
                                 list_to_binary(?VAL_FLAG1)),
             ok = write_data(Node, KVs),
-            KeyCount + ?NUM_KEYS_PERNODE
+            KeyCount + ?NUM_KEYS_PERNODE + 1
         end,
 
     KeyCount= ?NUM_KEYS_PERNODE * length(Nodes),
@@ -143,12 +143,20 @@ write_data(Node, KVs, Opts) ->
     ok.
 
 check_objects(Node, KCStart, KCEnd, VFlag) ->
+    V = list_to_binary(VFlag),
     PBC = rt:pbc(Node),
     CheckFun = 
         fun(K) ->
             Key = to_key(K),
-            {ok, Value} = riakc_pb_socket:get(PBC, ?BUCKET, Key, []),
-            ?assertMatch(Value, <<K/binary, VFlag/binary>>)
+            ReturnedValue = 
+                case riakc_pb_socket:get(PBC, ?BUCKET, Key, []) of
+                    {ok, Obj} ->
+                        riakc_obj:get_value(Obj);
+                    {error, notfound} ->
+                        lager:error("Search for Key ~w not found", [K]),
+                        notfound
+                end,
+            ?assertMatch(ReturnedValue, <<Key/binary, V/binary>>)
         end,
     lists:foreach(CheckFun, lists:seq(KCStart, KCEnd)),
     true.
