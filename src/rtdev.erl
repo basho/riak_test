@@ -399,8 +399,8 @@ rm_dir(Dir) ->
 restore_data_dir(Nodes, BackendFldr, BackupFldr) when is_list(Nodes) ->
     RestoreNodeFun =
         fun(Node) ->
-            Backend = node_path(Node) ++ "/" ++ BackendFldr,
-            Backup = node_path(Node) ++ "/" ++ BackupFldr,
+            Backend = node_path(Node) ++ "/data/" ++ BackendFldr,
+            Backup = node_path(Node) ++ "/data/" ++ BackupFldr,
             lager:info("Restoring Node ~s from ~s", [Backend, Backup]),
             ?assertCmd("mkdir -p " ++ Backend),
             ?assertCmd("cp -R " ++ Backup ++ " " ++ Backend)
