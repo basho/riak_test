@@ -68,7 +68,7 @@ hot_backup(Nodes) ->
     lists:foldl(KeyLoadFun, 1, Nodes),
     lager:info("Loaded ~w objects", [KeyCount]),
 
-    check_objects(hd(Nodes), KeyCount, ?VAL_FLAG1),
+    check_objects(hd(Nodes), 1, KeyCount, ?VAL_FLAG1),
 
     KVBackend = proplists:get_value(backend, riak_test_runner:metadata()),
     test_by_backend(KVBackend, Nodes).
@@ -86,7 +86,7 @@ test_by_backend(CapableBackend, Nodes) ->
     {ok, C} = riak:client_connect(hd(Nodes)),
 
     lager:info("Backup to self to fail"),
-    {ok, false} = riak_client:hotbackup("./data/", ?N_VAL, ?N_VAL, C),
+    {ok, false} = riak_client:hotbackup("./data/leveled/", ?N_VAL, ?N_VAL, C),
 
     lager:info("Backup all nodes to succeed"),
     {ok, true} = riak_client:hotbackup("./data/backup/", ?N_VAL, ?N_VAL, C),
@@ -94,18 +94,18 @@ test_by_backend(CapableBackend, Nodes) ->
     lager:info("Change some keys"),
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary(?VAL_FLAG2)),
     ok = write_data(hd(Nodes), Changes2),
-    check_objects(hd(Nodes), ?DELTA_COUNT, ?VAL_FLAG2),
+    check_objects(hd(Nodes), 1, ?DELTA_COUNT, ?VAL_FLAG2),
 
     lager:info("Stop the primary cluster and start from backup"),
     lists:foreach(fun rt:stop_and_wait/1, Nodes),
+    rt:clean_data_dir(Nodes, backend_dir()),
+    rt:restore_data_dir(Nodes, backend_dir(), "./data/backup/"),
+    lists:foreach(fun rt:start_and_wait/1, Nodes),
 
     lager:info("Confirm changed objects are unchanged"),
-    
-    rt:clean_data_dir(Nodes, backend_dir()),
-    rt:restore_datadir(Nodes, backend_dir(), "./data/backup"),
-    
-    lists:foreach(fun rt:start_and_wait/1, Nodes),
-    check_objects(hd(Nodes), KeyCount, ?VAL_FLAG1),
+    check_objects(hd(Nodes), 1, ?DELTA_COUNT, ?VAL_FLAG1),
+    lager:info("Confirm unchanged objects are unchanged"),
+    check_objects(hd(Nodes), ?DELTA_COUNT + 1, KeyCount, ?VAL_FLAG1),
     ok.
 
 
@@ -113,8 +113,8 @@ test_by_backend(CapableBackend, Nodes) ->
 not_supported_test(Nodes) ->
     {ok, C} = riak:client_connect(hd(Nodes)),
     lager:info("Backup all nodes to fail"),
-    {ok, false} = riak_client:hotbackup("./data/backup/", ?N_VAL, ?N_VAL, C).
-
+    {ok, false} = riak_client:hotbackup("./data/backup/", ?N_VAL, ?N_VAL, C),
+    ok.
 
 
 to_key(N) ->
@@ -142,7 +142,15 @@ write_data(Node, KVs, Opts) ->
     riakc_pb_socket:stop(PB),
     ok.
 
-check_objects(_Node, _KC, _VFlag) ->
+check_objects(Node, KCStart, KCEnd, VFlag) ->
+    PBC = rt:pbc(Node),
+    CheckFun = 
+        fun(K) ->
+            Key = to_key(K),
+            {ok, Value} = riakc_pb_socket:get(PBC, ?BUCKET, Key, []),
+            ?assertMatch(Value, <<K/binary, VFlag/binary>>)
+        end,
+    lists:foreach(CheckFun, lists:seq(KCStart, KCEnd)),
     true.
 
 backend_dir() ->
