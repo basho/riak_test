@@ -403,7 +403,7 @@ restore_data_dir(Nodes, BackendFldr, BackupFldr) when is_list(Nodes) ->
             Backup = node_path(Node) ++ "/data/" ++ BackupFldr,
             lager:info("Restoring Node ~s from ~s", [Backend, Backup]),
             ?assertCmd("mkdir -p " ++ Backend),
-            ?assertCmd("cp -R " ++ Backup ++ " " ++ Backend)
+            ?assertCmd("cp -R " ++ Backup ++ "/* " ++ Backend)
         end,
     lists:foreach(RestoreNodeFun, Nodes).
 

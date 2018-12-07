@@ -81,6 +81,9 @@ test_by_backend(bitcask, Nodes) ->
 test_by_backend(eleveldb, Nodes) ->
     not_supported_test(Nodes);
 test_by_backend(CapableBackend, Nodes) ->
+    lager:info("Clean backup folder if present"),
+    rt:clean_data_dir(Nodes, "backup"),
+
     KeyCount= ?NUM_KEYS_PERNODE * length(Nodes),
     lager:info("Testing capable backend ~w", [CapableBackend]),
     {ok, C} = riak:client_connect(hd(Nodes)),
@@ -99,13 +102,15 @@ test_by_backend(CapableBackend, Nodes) ->
     lager:info("Stop the primary cluster and start from backup"),
     lists:foreach(fun rt:stop_and_wait/1, Nodes),
     rt:clean_data_dir(Nodes, backend_dir()),
-    rt:restore_data_dir(Nodes, backend_dir(), "./data/backup/"),
+    rt:restore_data_dir(Nodes, backend_dir(), "backup/"),
     lists:foreach(fun rt:start_and_wait/1, Nodes),
+
+    timer:sleep(5000), % clumsy for now - not sure what to wait until though
 
     lager:info("Confirm changed objects are unchanged"),
     check_objects(hd(Nodes), 1, ?DELTA_COUNT, ?VAL_FLAG1),
-    lager:info("Confirm unchanged objects are unchanged"),
-    check_objects(hd(Nodes), ?DELTA_COUNT + 1, KeyCount, ?VAL_FLAG1),
+    lager:info("Confirm last 1K unchanged objects are unchanged"),
+    check_objects(hd(Nodes), KeyCount - 5000, KeyCount, ?VAL_FLAG1),
     ok.
 
 
@@ -146,19 +151,23 @@ check_objects(Node, KCStart, KCEnd, VFlag) ->
     V = list_to_binary(VFlag),
     PBC = rt:pbc(Node),
     CheckFun = 
-        fun(K) ->
+        fun(K, Acc) ->
             Key = to_key(K),
-            ReturnedValue = 
-                case riakc_pb_socket:get(PBC, ?BUCKET, Key, []) of
-                    {ok, Obj} ->
-                        riakc_obj:get_value(Obj);
-                    {error, notfound} ->
-                        lager:error("Search for Key ~w not found", [K]),
-                        notfound
-                end,
-            ?assertMatch(ReturnedValue, <<Key/binary, V/binary>>)
+            case riakc_pb_socket:get(PBC, ?BUCKET, Key, []) of
+                {ok, Obj} ->
+                    RetValue = riakc_obj:get_value(Obj),
+                    ?assertMatch(RetValue, <<Key/binary, V/binary>>),
+                    Acc;
+                {error, notfound} ->
+                    lager:error("Search for Key ~w not found", [K]),
+                    timer:sleep(5000),
+                    [K|Acc]
+            end
         end,
-    lists:foreach(CheckFun, lists:seq(KCStart, KCEnd)),
+    MissedKeys = lists:foldl(CheckFun, [], lists:seq(KCStart, KCEnd)),
+    StillMissedKeys = lists:foldl(CheckFun, [], MissedKeys),
+    ?assertMatch([], StillMissedKeys),
+    riakc_pb_socket:stop(PBC),
     true.
 
 backend_dir() ->
