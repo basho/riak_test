@@ -87,10 +87,10 @@ test_by_backend(eleveldb, Nodes, _Fc) ->
 test_by_backend(CapableBackend, Nodes, FullCoverage) ->
     lager:info("Clean backup folder if present"),
     rt:clean_data_dir(Nodes, "backup"),
-    CoverNumber =
+    {CoverNumber, RVal} =
         case FullCoverage of
-            true -> ?N_VAL;
-            false -> 1
+            true -> {?N_VAL, 2};
+            false -> {1, 1}
         end,
 
     KeyCount= ?NUM_KEYS_PERNODE * length(Nodes),
@@ -119,9 +119,9 @@ test_by_backend(CapableBackend, Nodes, FullCoverage) ->
     rt:wait_for_cluster_service(Nodes, riak_kv),
 
     lager:info("Confirm changed objects are unchanged"),
-    check_objects(hd(Nodes), 1, ?DELTA_COUNT, ?VAL_FLAG1),
+    check_objects(hd(Nodes), 1, ?DELTA_COUNT, ?VAL_FLAG1, RVal),
     lager:info("Confirm last 5K unchanged objects are unchanged"),
-    check_objects(hd(Nodes), KeyCount - 5000, KeyCount, ?VAL_FLAG1),
+    check_objects(hd(Nodes), KeyCount - 5000, KeyCount, ?VAL_FLAG1, RVal),
     ok.
 
 
@@ -158,10 +158,14 @@ write_data(Node, KVs, Opts) ->
     riakc_pb_socket:stop(PB),
     ok.
 
+
 check_objects(Node, KCStart, KCEnd, VFlag) ->
+    check_objects(Node, KCStart, KCEnd, VFlag, 2).
+
+check_objects(Node, KCStart, KCEnd, VFlag, RVal) ->
     V = list_to_binary(VFlag),
     PBC = rt:pbc(Node),
-    Opts = [{notfound_ok, false}],
+    Opts = [{notfound_ok, false}, {r, RVal}],
     CheckFun = 
         fun(K, Acc) ->
             Key = to_key(K),
