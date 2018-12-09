@@ -1,4 +1,5 @@
 coverage_participation
+hotbackup_leveled
 kv679_dataloss
 kv679_dataloss_fb
 kv679_tombstone
@@ -17,6 +18,7 @@ rt_basic_test
 sibling_explosion
 verify_aae
 verify_aaefold_nval
+verify_aaefold_range
 verify_api_timeouts
 verify_asis_put
 verify_busy_dist_port
