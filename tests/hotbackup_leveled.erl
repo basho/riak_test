@@ -81,6 +81,13 @@ test_by_backend(bitcask, Nodes) ->
 test_by_backend(eleveldb, Nodes) ->
     not_supported_test(Nodes);
 test_by_backend(CapableBackend, Nodes) ->
+    ok = test_capable_backend(CapableBackend, Nodes, true),
+    rt:clean_cluster(Nodes),
+    Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOAAE),
+    ok = test_capable_backend(CapableBackend, Nodes0, false),
+    ok.
+
+test_capable_backend(CapableBackend, Nodes, All) ->
     lager:info("Clean backup folder if present"),
     rt:clean_data_dir(Nodes, "backup"),
 
@@ -91,8 +98,16 @@ test_by_backend(CapableBackend, Nodes) ->
     lager:info("Backup to self to fail"),
     {ok, false} = riak_client:hotbackup("./data/leveled/", ?N_VAL, ?N_VAL, C),
 
-    lager:info("Backup all nodes to succeed"),
-    {ok, true} = riak_client:hotbackup("./data/backup/", ?N_VAL, ?N_VAL, C),
+    case All of
+        true ->
+            lager:info("Backup all nodes to succeed - full coverage backup"),
+            {ok, true} =
+                riak_client:hotbackup("./data/backup/", ?N_VAL, ?N_VAL, C);
+        false ->
+            lager:info("Backup all nodes to succeed - min coverage backup"),
+            {ok, true} =
+                riak_client:hotbackup("./data/backup/", ?N_VAL, 1, C)
+    end,
     
     lager:info("Change some keys"),
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary(?VAL_FLAG2)),
@@ -105,7 +120,8 @@ test_by_backend(CapableBackend, Nodes) ->
     rt:restore_data_dir(Nodes, backend_dir(), "backup/"),
     lists:foreach(fun rt:start_and_wait/1, Nodes),
 
-    timer:sleep(5000), % clumsy for now - not sure what to wait until though
+    lager:info("Waiting for cluster to reform"),
+    timer:sleep(30000),
 
     lager:info("Confirm changed objects are unchanged"),
     check_objects(hd(Nodes), 1, ?DELTA_COUNT, ?VAL_FLAG1),
@@ -150,10 +166,11 @@ write_data(Node, KVs, Opts) ->
 check_objects(Node, KCStart, KCEnd, VFlag) ->
     V = list_to_binary(VFlag),
     PBC = rt:pbc(Node),
+    Opts = [{notfound_ok, false}],
     CheckFun = 
         fun(K, Acc) ->
             Key = to_key(K),
-            case riakc_pb_socket:get(PBC, ?BUCKET, Key, []) of
+            case riakc_pb_socket:get(PBC, ?BUCKET, Key, Opts) of
                 {ok, Obj} ->
                     RetValue = riakc_obj:get_value(Obj),
                     ?assertMatch(RetValue, <<Key/binary, V/binary>>),
