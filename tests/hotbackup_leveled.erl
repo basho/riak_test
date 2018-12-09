@@ -23,7 +23,7 @@
 %% returned as expeceted
 
 -module(hotbackup_leveled).
--export([confirm/0, hot_backup/1]).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
@@ -50,10 +50,14 @@
 
 confirm() ->
     Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOAAE),
-    ok = hot_backup(Nodes0),
+    ok = hot_backup(Nodes0, true),
+    ok = rt:clean_cluster(Nodes0),
+
+    Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_NOAAE),
+    ok = hot_backup(Nodes1, false),
     pass.
 
-hot_backup(Nodes) ->
+hot_backup(Nodes, FullCoverage) ->
     
     KeyLoadFun = 
         fun(Node, KeyCount) ->
@@ -71,28 +75,35 @@ hot_backup(Nodes) ->
     check_objects(hd(Nodes), 1, KeyCount, ?VAL_FLAG1),
 
     KVBackend = proplists:get_value(backend, riak_test_runner:metadata()),
-    test_by_backend(KVBackend, Nodes).
+    test_by_backend(KVBackend, Nodes, FullCoverage).
 
 
-test_by_backend(undefined, Nodes) ->
-    test_by_backend(bitcask, Nodes);
-test_by_backend(bitcask, Nodes) ->
+test_by_backend(undefined, Nodes, FullCoverage) ->
+    test_by_backend(bitcask, Nodes, FullCoverage);
+test_by_backend(bitcask, Nodes, _FC) ->
     not_supported_test(Nodes);
-test_by_backend(eleveldb, Nodes) ->
+test_by_backend(eleveldb, Nodes, _Fc) ->
     not_supported_test(Nodes);
-test_by_backend(CapableBackend, Nodes) ->
+test_by_backend(CapableBackend, Nodes, FullCoverage) ->
     lager:info("Clean backup folder if present"),
     rt:clean_data_dir(Nodes, "backup"),
+    CoverNumber =
+        case FullCoverage of
+            true -> ?N_VAL;
+            false -> 1
+        end,
 
     KeyCount= ?NUM_KEYS_PERNODE * length(Nodes),
     lager:info("Testing capable backend ~w", [CapableBackend]),
     {ok, C} = riak:client_connect(hd(Nodes)),
 
     lager:info("Backup to self to fail"),
-    {ok, false} = riak_client:hotbackup("./data/leveled/", ?N_VAL, ?N_VAL, C),
+    {ok, false} =
+        riak_client:hotbackup("./data/leveled/", ?N_VAL, CoverNumber, C),
 
     lager:info("Backup all nodes to succeed"),
-    {ok, true} = riak_client:hotbackup("./data/backup/", ?N_VAL, ?N_VAL, C),
+    {ok, true} =
+        riak_client:hotbackup("./data/backup/", ?N_VAL, CoverNumber, C),
     
     lager:info("Change some keys"),
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary(?VAL_FLAG2)),
@@ -105,11 +116,11 @@ test_by_backend(CapableBackend, Nodes) ->
     rt:restore_data_dir(Nodes, backend_dir(), "backup/"),
     lists:foreach(fun rt:start_and_wait/1, Nodes),
 
-    timer:sleep(5000), % clumsy for now - not sure what to wait until though
+    rt:wait_for_cluster_service(Nodes, riak_kv),
 
     lager:info("Confirm changed objects are unchanged"),
     check_objects(hd(Nodes), 1, ?DELTA_COUNT, ?VAL_FLAG1),
-    lager:info("Confirm last 1K unchanged objects are unchanged"),
+    lager:info("Confirm last 5K unchanged objects are unchanged"),
     check_objects(hd(Nodes), KeyCount - 5000, KeyCount, ?VAL_FLAG1),
     ok.
 
@@ -150,23 +161,22 @@ write_data(Node, KVs, Opts) ->
 check_objects(Node, KCStart, KCEnd, VFlag) ->
     V = list_to_binary(VFlag),
     PBC = rt:pbc(Node),
+    Opts = [{notfound_ok, false}],
     CheckFun = 
         fun(K, Acc) ->
             Key = to_key(K),
-            case riakc_pb_socket:get(PBC, ?BUCKET, Key, []) of
+            case riakc_pb_socket:get(PBC, ?BUCKET, Key, Opts) of
                 {ok, Obj} ->
                     RetValue = riakc_obj:get_value(Obj),
                     ?assertMatch(RetValue, <<Key/binary, V/binary>>),
                     Acc;
                 {error, notfound} ->
                     lager:error("Search for Key ~w not found", [K]),
-                    timer:sleep(5000),
                     [K|Acc]
             end
         end,
     MissedKeys = lists:foldl(CheckFun, [], lists:seq(KCStart, KCEnd)),
-    StillMissedKeys = lists:foldl(CheckFun, [], MissedKeys),
-    ?assertMatch([], StillMissedKeys),
+    ?assertMatch([], MissedKeys),
     riakc_pb_socket:stop(PBC),
     true.
 
