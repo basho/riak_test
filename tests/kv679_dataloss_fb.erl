@@ -156,15 +156,32 @@ confirm() ->
 
     lager:info("final get"),
 
-    Res = kv679_tombstone:read_key(CoordClient),
-    ?assertMatch({ok, _}, Res),
-    {ok, O} = Res,
+    FetchFun = 
+        fun() ->
+            Res = kv679_tombstone:read_key(CoordClient),
+            ?assertMatch({ok, _}, Res),
+            {ok, O} = Res,
+            lager:info("Final Object ~p~n", [O]),
+            riakc_obj:get_values(O)
+        end,
 
     %% A nice riak would have somehow managed to make a sibling of the
-    %% last write
-    ?assertEqual([<<"anne">>, <<"joe">>], riakc_obj:get_values(O)),
-    lager:info("Final Object ~p~n", [O]),
+    %% last write - eventually
+    test_until_siblings(10, FetchFun),
     pass.
+
+
+test_until_siblings(0, FetchFun) ->
+    ?assertEqual([<<"anne">>, <<"joe">>], FetchFun());
+test_until_siblings(LoopCount, FetchFun) ->
+    case length(FetchFun()) of 
+        1 ->
+            timer:sleep(1000),
+            test_until_siblings(LoopCount - 1, FetchFun);
+        2 ->
+            test_until_siblings(0, FetchFun)
+    end.
+
 
 primary_and_fallback_counts(PL) ->
     lists:foldl(fun({{_, _}, primary}, {P, F}) ->
