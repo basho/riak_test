@@ -55,7 +55,9 @@ confirm() ->
                                                  {vnode_management_timer, 1000},
                                                  {handoff_concurrency, 100},
                                                  {vnode_inactivity_timeout, 1000}]}]},
-            {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]}],
+            {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]},
+            {leveled, [{sync_strategy, riak_sync}]},
+            {leveldb, [{sync_on_write, on}]}],
 
     %% Such nodes 'cos I want a perfect preflist when 2 primaries are
     %% down.  i.e. I want to kill the fallbacks before they can

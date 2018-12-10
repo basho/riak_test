@@ -84,7 +84,9 @@ confirm() ->
                                                  {vnode_management_timer, 1000},
                                                  {handoff_concurrency, 100},
                                                  {vnode_inactivity_timeout, 1000}]}]},
-            {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]}],
+            {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]},
+            {leveled, [{sync_strategy, riak_sync}]},
+            {leveldb, [{sync_on_write, on}]}],
 
     KVBackend = proplists:get_value(backend, riak_test_runner:metadata()),
 
