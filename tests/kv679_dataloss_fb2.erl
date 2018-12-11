@@ -33,7 +33,7 @@
 %% handoff from f1->p2 clock at p2 [{p1, 1}, {p2, 1}]
 %% read repair from p2 -> p1, clock at p1 [{p1, 1}, {p2, 1}]
 %% write on p1 replicate to p2, clock at [{p1, 2}, {p2, 1}] at p1, p2
-%% handoff f2->p2, merge causes last write to be lost since entry {p1, 3} > {p1, 2}
+%% handoff f2->p2, merge causes last write to be lost since entry {p1, 2} >= {p1, 2}
 %% read repair p2->p1 and the acked write is silently lost forever.
 %%%
 %%%
