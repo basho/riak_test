@@ -135,7 +135,7 @@ convert_to_atom_list_test() ->
     ?assertEqual(undefined, convert_to_atom_list(undefined)),
     ?assertEqual([memory], convert_to_atom_list(memory)),
     ?assertEqual([memory], convert_to_atom_list("memory")),
-    ?assertEqual([bitcask, eleveldb, memory], lists:sort(convert_to_atom_list("memory, bitcask,eleveldb"))),
-    ?assertEqual([bitcask, eleveldb, memory], lists:sort(convert_to_atom_list('memory, bitcask,eleveldb'))).
+    ?assertEqual([bitcask, eleveldb, leveled, memory], lists:sort(convert_to_atom_list("memory, bitcask,eleveldb, leveled"))),
+    ?assertEqual([bitcask, eleveldb, leveled, memory], lists:sort(convert_to_atom_list('memory, bitcask,eleveldb, leveled'))).
 
 -endif.

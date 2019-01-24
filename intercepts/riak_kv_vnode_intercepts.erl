@@ -104,6 +104,26 @@ drop_do_get(Sender, BKey, ReqId, State) ->
             end
     end.
 
+%% @doc Simulate dropped heads/network partitions byresponding with
+%%      noreply during head requests.
+drop_do_head(Sender, BKey, ReqId, State) ->
+    Partition = element(2,State),
+    case ets:lookup(intercepts_tab, drop_do_head_partitions) of
+        [] ->
+            ?M:do_head_orig(Sender, BKey, ReqId, State);
+        [{drop_do_head_partitions, Partitions}] ->
+            case lists:member(Partition, Partitions) of
+                true ->
+                    %% ?I_INFO("Dropping get for ~p on ~p", [BKey, Partition]),
+                    lager:log(info, self(), "dropping head request for ~p",
+                        [Partition]),
+                    {noreply, State};
+                false ->
+                    ?M:do_head_orig(Sender, BKey, ReqId, State)
+            end
+    end.
+
+
 %% @doc Simulate dropped puts/network partitions byresponding with
 %%      noreply during put requests.
 drop_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->

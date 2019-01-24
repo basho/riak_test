@@ -1,8 +1,6 @@
 secondary_index_tests
 verify_2i_aae
 verify_2i_limit
-verify_2i_mixed_cluster
 verify_2i_returnterms
 verify_2i_stream
 verify_2i_timeout
-verify_2i_eqc

@@ -295,7 +295,9 @@ backend_dir(undefined) ->
 backend_dir(bitcask) ->
     "bitcask";
 backend_dir(eleveldb) ->
-    "leveldb".
+    "leveldb";
+backend_dir(leveled) ->
+    "leveled".
 
 get_preflist(Node, Bucket, Key, NVal) ->
     DocIdx = rpc:call(Node, riak_core_util, chash_std_keyfun, [{Bucket, Key}]),

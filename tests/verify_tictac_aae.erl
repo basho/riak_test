@@ -36,24 +36,46 @@
 %% Also, a sanity check is done to make sure AAE repairs go away eventually
 %% if there is no activity.  That was an actual early AAE bug.
 
--module(verify_aae).
--export([confirm/0, verify_aae/1, test_single_partition_loss/3]).
+-module(verify_tictac_aae).
+-export([confirm/0, verify_aae_norebuild/1, verify_aae_rebuild/1, test_single_partition_loss/3]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
 % to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 8).
 -define(AAE_THROTTLE_LIMITS, [{-1, 0}, {100, 10}]).
--define(CFG,
+-define(CFG_NOREBUILD,
         [{riak_kv,
           [
            % Speedy AAE configuration
-           {anti_entropy, {on, []}},
-           {anti_entropy_build_limit, {100, 1000}},
-           {anti_entropy_concurrency, 100},
-           {anti_entropy_expire, 24 * 60 * 60 * 1000}, % Not for now!
-           {anti_entropy_tick, 500},
-           {aae_throttle_limits, ?AAE_THROTTLE_LIMITS}
+           {anti_entropy, {off, []}},
+           {tictacaae_active, active},
+           {tictacaae_parallelstore, leveled_ko},
+                % if backend not leveled will use parallel key-ordered
+                % store
+           {tictacaae_rebuildwait, 4},
+           {tictacaae_rebuilddelay, 3600},
+           {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
+           {tictacaae_rebuildtick, 3600000} % don't tick for an hour!
+          ]},
+         {riak_core,
+          [
+           {ring_creation_size, ?DEFAULT_RING_SIZE}
+          ]}]
+       ).
+-define(CFG_REBUILD,
+        [{riak_kv,
+          [
+           % Speedy AAE configuration
+           {anti_entropy, {off, []}},
+           {tictacaae_active, active},
+           {tictacaae_parallelstore, leveled_ko},
+                % if backend not leveled will use parallel key-ordered
+                % store
+           {tictacaae_rebuildwait, 0},
+           {tictacaae_rebuilddelay, 60},
+           {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
+           {tictacaae_rebuildtick, 60 * 1000} % Check for rebuilds!
           ]},
          {riak_core,
           [
@@ -66,44 +88,41 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    Nodes = rt:build_cluster(?NUM_NODES, ?CFG),
-    verify_throttle_config(Nodes),
-    verify_aae(Nodes),
+    Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    ok = verify_aae_norebuild(Nodes0),
+    rt:clean_cluster(Nodes0),
+
+    Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
+    ok = verify_aae_rebuild(Nodes1),
     pass.
 
-verify_throttle_config(Nodes) ->
-    lists:foreach(
-      fun(Node) ->
-              ?assert(rpc:call(Node,
-                               riak_kv_entropy_manager,
-                               is_aae_throttle_enabled,
-                               [])),
-              ?assertMatch(?AAE_THROTTLE_LIMITS,
-                           rpc:call(Node,
-                                    riak_kv_entropy_manager,
-                                    get_aae_throttle_limits,
-                                    []))
-      end,
-      Nodes).
 
-verify_aae(Nodes) ->
+verify_aae_norebuild(Nodes) ->
+    lager:info("Tictac AAE tests without rebuilding trees"),
     Node1 = hd(Nodes),
 
-    % Verify that AAE eventually upgrades to version 0(or already has)
-    wait_until_hashtree_upgrade(Nodes), 
-    
     % Recovery without tree rebuilds
 
-    % Test recovery from to few replicas written
+    % Test recovery from too few replicas written
     KV1 = test_data(1, 1000),
     test_less_than_n_writes(Node1, KV1),
 
     % Test recovery when replicas are different
     KV2 = [{K, <<V/binary, "a">>} || {K, V} <- KV1],
     test_less_than_n_mods(Node1, KV2),
+    ok.
 
-    lager:info("Run similar tests now with tree rebuilds enabled"),
-    start_tree_rebuilds(Nodes),
+verify_aae_rebuild(Nodes) ->
+    lager:info("Tictac AAE tests with rebuilding trees"),
+    Node1 = hd(Nodes),
+
+    % Test recovery from too few replicas written
+    KV1 = test_data(1, 1000),
+    test_less_than_n_writes(Node1, KV1),
+
+    % Test recovery when replicas are different
+    KV2 = [{K, <<V/binary, "a">>} || {K, V} <- KV1],
+    test_less_than_n_mods(Node1, KV2),
 
     % Test recovery from too few replicas written
     KV3 = test_data(1001, 2000),
@@ -127,15 +146,9 @@ verify_aae(Nodes) ->
     % Test recovery from losing both AAE and KV data
     test_total_partition_loss(NNuke, PNuke, KV5),
 
-    % Make sure AAE repairs die down.
-    wait_until_no_aae_repairs(Nodes),
-
     lager:info("Finished verifying AAE magic"),
     ok.
 
-start_tree_rebuilds(Nodes) ->
-    rpc:multicall(Nodes, application, set_env, [riak_kv, anti_entropy_expire,
-                                                15 * 1000]).
 
 acc_preflists(Pl, PlCounts) ->
     lists:foldl(fun(Idx, D) ->
@@ -269,17 +282,15 @@ wipe_out_partition(Node, Partition) ->
 
 wipe_out_aae_data(Node, Partition) ->
     lager:info("Wiping out AAE data for partition ~p in node ~p", [Partition, Node]),
-    rt:clean_data_dir(Node, "anti_entropy/"++integer_to_list(Partition)),
+    rt:clean_data_dir(Node, "tictac_aae/"++integer_to_list(Partition)),
     ok.
 
-base_dir_for_backend(undefined) ->
-    base_dir_for_backend(bitcask);
+base_dir_for_backend(leveled) ->
+    "leveled";
 base_dir_for_backend(bitcask) ->
     "bitcask";
 base_dir_for_backend(eleveldb) ->
-    "leveldb";
-base_dir_for_backend(leveled) ->
-    "leveled".
+    "leveledb".
 
 restart_vnode(Node, Service, Partition) ->
     VNodeName = list_to_atom(atom_to_list(Service) ++ "_vnode"),
@@ -307,45 +318,4 @@ dir_for_partition(Partition) ->
     BaseDir = base_dir_for_backend(KVBackend),
     filename:join([BaseDir, integer_to_list(Partition)]).
 
-% @doc True if the AAE stats report zero data repairs for last exchange
-% across the board.
-wait_until_no_aae_repairs(Nodes) ->
-    lager:info("Verifying AAE repairs go away without activity"),
-    rt:wait_until(fun() -> no_aae_repairs(Nodes) end).
 
-no_aae_repairs(Nodes) when is_list(Nodes) ->
-    MaxCount = max_aae_repairs(Nodes),
-    lager:info("Max AAE repair count across the board is ~p", [MaxCount]),
-    MaxCount == 0.
-
-max_aae_repairs(Nodes) when is_list(Nodes) ->
-    MaxCount = lists:max([max_aae_repairs(Node) || Node <- Nodes]),
-    MaxCount;
-max_aae_repairs(Node) when is_atom(Node) ->
-    Info = rpc:call(Node, riak_kv_entropy_info, compute_exchange_info, []),
-    LastCounts = [Last || {_, _, _, {Last, _, _, _}} <- Info],
-    MaxCount = lists:max(LastCounts),
-    MaxCount.
-
-wait_until_hashtree_upgrade(Nodes) ->
-    lager:info("Verifying AAE hashtrees eventually all upgrade to version 0"),
-    rt:wait_until(fun() -> all_hashtrees_upgraded(Nodes) end).
-
-all_hashtrees_upgraded(Nodes) when is_list(Nodes) ->
-    [Check|_] = lists:usort([all_hashtrees_upgraded(Node) || Node <- Nodes]),
-    Check;
-
-all_hashtrees_upgraded(Node) when is_atom(Node) ->
-    case rpc:call(Node, riak_kv_entropy_manager, get_version, []) of
-        0 ->
-            Trees = rpc:call(Node, riak_kv_entropy_manager, get_trees_version, []),
-            case [Idx || {Idx, undefined} <- Trees] of
-                [] ->
-                    true;
-                _ ->
-                    false
-            end;
-        _ ->
-            false
-     end.
-    

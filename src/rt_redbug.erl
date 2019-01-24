@@ -29,6 +29,7 @@
 -export([set_tracing_applied/1]).
 -export([stop/1]).
 -export([trace/2, trace/3]).
+-export([default_trace_options/0]).
 
 set_tracing_applied(TracingApplied) when is_boolean(TracingApplied) ->
     

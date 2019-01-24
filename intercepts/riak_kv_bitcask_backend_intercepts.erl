@@ -48,3 +48,11 @@ corrupting_get(Bucket, Key, ModState) ->
             
 corrupt_binary(O) ->
     crypto:rand_bytes(byte_size(O)).
+
+always_corrupt_get(Bucket, Key, ModState) ->
+    case ?M:get_orig(Bucket, Key, ModState) of
+        {ok, BinVal0, UpdModState} ->
+            BinVal = corrupt_binary(BinVal0),
+            {ok, BinVal, UpdModState};
+        Else -> Else
+    end.

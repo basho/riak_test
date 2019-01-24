@@ -40,7 +40,7 @@ cli_options() ->
  {skip,               $x, "skip",     string,     "list of tests to skip in a directory"},
  {verbose,            $v, "verbose",  undefined,  "verbose output"},
  {outdir,             $o, "outdir",   string,     "output directory"},
- {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
+ {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb | leveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
  {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
  {batch,       undefined, "batch",    undefined,  "running a batch, always teardown, even on failure"},

@@ -51,6 +51,7 @@
          clean_cluster/1,
          clean_data_dir/1,
          clean_data_dir/2,
+         restore_data_dir/3,
          cmd/1,
          cmd/2,
          connection_info/1,
@@ -397,6 +398,8 @@ stop_and_wait(Node) ->
     ?assertEqual(ok, wait_until_unpingable(Node)).
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
+upgrade(Node, current) ->
+    upgrade(Node, current, fun replication2_upgrade:remove_jmx_from_conf/1);
 upgrade(Node, NewVersion) ->
     upgrade(Node, NewVersion, fun no_op/1).
 
@@ -555,6 +558,20 @@ heal({_NewCookie, OldCookie, P1, P2}) ->
     wait_until_connected(Cluster),
     {_GN, []} = rpc:sbcast(Cluster, riak_core_node_watcher, broadcast),
     ok.
+
+%% @doc heal the partition created by call to partition/2, but if some
+%% node in P1 is down, just skip it, rather than failing. Returns {ok,
+%% list(node())} where the list is those nodes down and therefore not
+%% healed/reconnected.
+heal_upnodes({_NewCookie, OldCookie, P1, P2}) ->
+    %% set OldCookie on UP P1 Nodes
+    Res = [{N, rpc:call(N, erlang, set_cookie, [N, OldCookie])} || N <- P1],
+    UpForReconnect = [N || {N, true} <- Res],
+    DownForReconnect = [N || {N, RPC} <- Res, RPC /= true],
+    Cluster = UpForReconnect ++ P2,
+    wait_until_connected(Cluster),
+    {_GN, []} = rpc:sbcast(Cluster, riak_core_node_watcher, broadcast),
+    {ok, DownForReconnect}.
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd) ->
@@ -769,6 +786,17 @@ wait_until_transfers_complete([Node0|_]) ->
                 {DownNodes, Transfers} = rpc:call(Node, riak_core_status, transfers, []),
                 lager:info("DownNodes: ~p Transfers: ~p", [DownNodes, Transfers]),
                 DownNodes =:= [] andalso Transfers =:= []
+        end,
+    ?assertEqual(ok, wait_until(Node0, F)),
+    ok.
+
+%% @doc Waits until hinted handoffs from `Node0' are complete
+wait_until_node_handoffs_complete(Node0) ->
+    lager:info("Wait until Node's transfers complete ~p", [Node0]),
+    F = fun(Node) ->
+                Handoffs = rpc:call(Node, riak_core_handoff_manager, status, [{direction, outbound}]),
+                lager:info("Handoffs: ~p", [Handoffs]),
+                Handoffs =:= []
         end,
     ?assertEqual(ok, wait_until(Node0, F)),
     ok.
@@ -1093,7 +1121,7 @@ get_preflist(Node, Bucket, Key, NVal) ->
     Chash = rpc:call(Node, riak_core_util, chash_key, [{Bucket, Key}]),
     UpNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
     PL = rpc:call(Node, riak_core_apl, get_apl_ann, [Chash, NVal, UpNodes]),
-PL.
+    PL.
 
 assert_nodes_agree_about_ownership(Nodes) ->
     ?assertEqual(ok, wait_until_ring_converged(Nodes)),
@@ -1256,6 +1284,12 @@ clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
     clean_data_dir([Nodes], SubDir);
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
     ?HARNESS:clean_data_dir(Nodes, SubDir).
+
+restore_data_dir(Nodes, BackendFldr, BackupFldr) when not is_list(Nodes) ->
+    restore_data_dir([Nodes], BackendFldr, BackupFldr);
+restore_data_dir(Nodes, BackendFldr, BackupFldr) ->
+    ?HARNESS:restore_data_dir(Nodes, BackendFldr, BackupFldr).
+
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
@@ -1758,6 +1792,8 @@ set_backend(Backend) ->
     set_backend(Backend, []).
 
 -spec set_backend(atom(), [{atom(), term()}]) -> atom()|[atom()].
+set_backend(leveled, _) ->
+    set_backend(riak_kv_leveled_backend);		     
 set_backend(bitcask, _) ->
     set_backend(riak_kv_bitcask_backend);
 set_backend(eleveldb, _) ->
@@ -1766,7 +1802,10 @@ set_backend(memory, _) ->
     set_backend(riak_kv_memory_backend);
 set_backend(multi, Extras) ->
     set_backend(riak_kv_multi_backend, Extras);
-set_backend(Backend, _) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
+set_backend(Backend, _) when Backend == riak_kv_bitcask_backend;
+		             Backend == riak_kv_eleveldb_backend;
+			     Backend == riak_kv_memory_backend;
+			     Backend == riak_kv_leveled_backend ->
     lager:info("rt:set_backend(~p)", [Backend]),
     update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
     get_backends();
@@ -1800,6 +1839,7 @@ get_backends() ->
         [riak_kv_bitcask_backend] -> bitcask;
         [riak_kv_eleveldb_backend] -> eleveldb;
         [riak_kv_memory_backend] -> memory;
+	[riak_kv_leveled_backend] -> leveled;
         [Other] -> Other;
         MoreThanOne -> MoreThanOne
     end.
