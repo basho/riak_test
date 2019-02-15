@@ -51,6 +51,7 @@
          clean_cluster/1,
          clean_data_dir/1,
          clean_data_dir/2,
+         restore_data_dir/3,
          cmd/1,
          cmd/2,
          connection_info/1,
@@ -71,6 +72,8 @@
          get_deps/0,
          get_ip/1,
          get_node_logs/0,
+         get_preflist/3,
+         get_preflist/4,
          get_replica/5,
          get_retry_settings/0,
          get_ring/1,
@@ -82,6 +85,7 @@
          httpc/1,
          httpc_read/3,
          httpc_write/4,
+         httpc_write/5,
          is_mixed_cluster/1,
          is_pingable/1,
          join/2,
@@ -102,6 +106,7 @@
          pbc_read_check/5,
          pbc_set_bucket_prop/3,
          pbc_write/4,
+         pbc_write/6,
          pbc_put_dir/3,
          pbc_put_file/4,
          pbc_really_deleted/3,
@@ -229,7 +234,7 @@ str(String, Substr) ->
 -spec set_conf(atom(), [{string(), string()}]) -> ok.
 set_conf(all, NameValuePairs) ->
     ?HARNESS:set_conf(all, NameValuePairs);
-set_conf(Node, NameValuePairs) ->
+set_conf(Node, NameValuePairs) when is_atom(Node) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_conf(Node, NameValuePairs),
@@ -238,7 +243,7 @@ set_conf(Node, NameValuePairs) ->
 -spec set_advanced_conf(atom(), [{string(), string()}]) -> ok.
 set_advanced_conf(all, NameValuePairs) ->
     ?HARNESS:set_advanced_conf(all, NameValuePairs);
-set_advanced_conf(Node, NameValuePairs) ->
+set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
     stop(Node),
     ?assertEqual(ok, rt:wait_until_unpingable(Node)),
     ?HARNESS:set_advanced_conf(Node, NameValuePairs),
@@ -393,6 +398,8 @@ stop_and_wait(Node) ->
     ?assertEqual(ok, wait_until_unpingable(Node)).
 
 %% @doc Upgrade a Riak `Node' to the specified `NewVersion'.
+upgrade(Node, current) ->
+    upgrade(Node, current, fun replication2_upgrade:remove_jmx_from_conf/1);
 upgrade(Node, NewVersion) ->
     upgrade(Node, NewVersion, fun no_op/1).
 
@@ -551,6 +558,20 @@ heal({_NewCookie, OldCookie, P1, P2}) ->
     wait_until_connected(Cluster),
     {_GN, []} = rpc:sbcast(Cluster, riak_core_node_watcher, broadcast),
     ok.
+
+%% @doc heal the partition created by call to partition/2, but if some
+%% node in P1 is down, just skip it, rather than failing. Returns {ok,
+%% list(node())} where the list is those nodes down and therefore not
+%% healed/reconnected.
+heal_upnodes({_NewCookie, OldCookie, P1, P2}) ->
+    %% set OldCookie on UP P1 Nodes
+    Res = [{N, rpc:call(N, erlang, set_cookie, [N, OldCookie])} || N <- P1],
+    UpForReconnect = [N || {N, true} <- Res],
+    DownForReconnect = [N || {N, RPC} <- Res, RPC /= true],
+    Cluster = UpForReconnect ++ P2,
+    wait_until_connected(Cluster),
+    {_GN, []} = rpc:sbcast(Cluster, riak_core_node_watcher, broadcast),
+    {ok, DownForReconnect}.
 
 %% @doc Spawn `Cmd' on the machine running the test harness
 spawn_cmd(Cmd) ->
@@ -769,13 +790,24 @@ wait_until_transfers_complete([Node0|_]) ->
     ?assertEqual(ok, wait_until(Node0, F)),
     ok.
 
+%% @doc Waits until hinted handoffs from `Node0' are complete
+wait_until_node_handoffs_complete(Node0) ->
+    lager:info("Wait until Node's transfers complete ~p", [Node0]),
+    F = fun(Node) ->
+                Handoffs = rpc:call(Node, riak_core_handoff_manager, status, [{direction, outbound}]),
+                lager:info("Handoffs: ~p", [Handoffs]),
+                Handoffs =:= []
+        end,
+    ?assertEqual(ok, wait_until(Node0, F)),
+    ok.
+
 wait_for_service(Node, Services) when is_list(Services) ->
     F = fun(N) ->
                 case rpc:call(N, riak_core_node_watcher, services, [N]) of
                     {badrpc, Error} ->
                         {badrpc, Error};
                     CurrServices when is_list(CurrServices) ->
-                        lager:info("Waiting for services ~p: current services: ~p", [Services, CurrServices]),
+                        lager:info("Waiting for services ~p: on node ~p. Current services: ~p", [Services, Node, CurrServices]),
                         lists:all(fun(Service) -> lists:member(Service, CurrServices) end, Services);
                     Res ->
                         Res
@@ -1081,6 +1113,16 @@ get_ring(Node) ->
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
     Ring.
 
+%% @doc Get the preflist for a Node, Bucket and Key.
+get_preflist(Node, Bucket, Key) ->
+    get_preflist(Node, Bucket, Key, 3).
+
+get_preflist(Node, Bucket, Key, NVal) ->
+    Chash = rpc:call(Node, riak_core_util, chash_key, [{Bucket, Key}]),
+    UpNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
+    PL = rpc:call(Node, riak_core_apl, get_apl_ann, [Chash, NVal, UpNodes]),
+    PL.
+
 assert_nodes_agree_about_ownership(Nodes) ->
     ?assertEqual(ok, wait_until_ring_converged(Nodes)),
     ?assertEqual(ok, wait_until_all_members(Nodes)),
@@ -1199,17 +1241,17 @@ join_cluster(Nodes) ->
     ?assertEqual(ok, wait_until_no_pending_changes(Nodes)),
     ok.
 
--type products() :: riak | riak_ee | riak_cs | unknown.
+-type products() :: riak | riak_cs | unknown.
 
 -spec product(node()) -> products().
 product(Node) ->
     Applications = rpc:call(Node, application, which_applications, []),
 
     HasRiakCS = proplists:is_defined(riak_cs, Applications),
-    HasRiakEE = proplists:is_defined(riak_repl, Applications),
+    HasRepl = proplists:is_defined(riak_repl, Applications),
     HasRiak = proplists:is_defined(riak_kv, Applications),
     if HasRiakCS -> riak_cs;
-       HasRiakEE -> riak_ee;
+       HasRiak andalso HasRepl -> riak;
        HasRiak -> riak;
        true -> unknown
     end.
@@ -1242,6 +1284,12 @@ clean_data_dir(Nodes, SubDir) when not is_list(Nodes) ->
     clean_data_dir([Nodes], SubDir);
 clean_data_dir(Nodes, SubDir) when is_list(Nodes) ->
     ?HARNESS:clean_data_dir(Nodes, SubDir).
+
+restore_data_dir(Nodes, BackendFldr, BackupFldr) when not is_list(Nodes) ->
+    restore_data_dir([Nodes], BackendFldr, BackupFldr);
+restore_data_dir(Nodes, BackendFldr, BackupFldr) ->
+    ?HARNESS:restore_data_dir(Nodes, BackendFldr, BackupFldr).
+
 
 %% @doc Shutdown every node, this is for after a test run is complete.
 teardown() ->
@@ -1570,6 +1618,12 @@ pbc_write(Pid, Bucket, Key, Value, CT) ->
     Object = riakc_obj:new(Bucket, Key, Value, CT),
     riakc_pb_socket:put(Pid, Object).
 
+%% @doc does a write via the erlang protobuf client plus content-type
+-spec pbc_write(pid(), binary(), binary(), binary(), list(), list()) -> atom().
+pbc_write(Pid, Bucket, Key, Value, CT, Opts) ->
+    Object = riakc_obj:new(Bucket, Key, Value, CT),
+    riakc_pb_socket:put(Pid, Object, Opts).
+
 %% @doc sets a bucket property/properties via the erlang protobuf client
 -spec pbc_set_bucket_prop(pid(), binary(), [proplists:property()]) -> atom().
 pbc_set_bucket_prop(Pid, Bucket, PropList) ->
@@ -1647,6 +1701,12 @@ httpc_read(C, Bucket, Key) ->
 httpc_write(C, Bucket, Key, Value) ->
     Object = riakc_obj:new(Bucket, Key, Value),
     rhc:put(C, Object).
+
+%% @doc does a write via the http erlang client.
+-spec httpc_write(term(), binary(), binary(), binary(), list()) -> atom().
+httpc_write(C, Bucket, Key, Value, Opts) ->
+    Object = riakc_obj:new(Bucket, Key, Value),
+    rhc:put(C, Object, Opts).
 
 %%%===================================================================
 %%% Command Line Functions
@@ -1732,6 +1792,8 @@ set_backend(Backend) ->
     set_backend(Backend, []).
 
 -spec set_backend(atom(), [{atom(), term()}]) -> atom()|[atom()].
+set_backend(leveled, _) ->
+    set_backend(riak_kv_leveled_backend);		     
 set_backend(bitcask, _) ->
     set_backend(riak_kv_bitcask_backend);
 set_backend(eleveldb, _) ->
@@ -1740,7 +1802,10 @@ set_backend(memory, _) ->
     set_backend(riak_kv_memory_backend);
 set_backend(multi, Extras) ->
     set_backend(riak_kv_multi_backend, Extras);
-set_backend(Backend, _) when Backend == riak_kv_bitcask_backend; Backend == riak_kv_eleveldb_backend; Backend == riak_kv_memory_backend ->
+set_backend(Backend, _) when Backend == riak_kv_bitcask_backend;
+		             Backend == riak_kv_eleveldb_backend;
+			     Backend == riak_kv_memory_backend;
+			     Backend == riak_kv_leveled_backend ->
     lager:info("rt:set_backend(~p)", [Backend]),
     update_app_config(all, [{riak_kv, [{storage_backend, Backend}]}]),
     get_backends();
@@ -1774,6 +1839,7 @@ get_backends() ->
         [riak_kv_bitcask_backend] -> bitcask;
         [riak_kv_eleveldb_backend] -> eleveldb;
         [riak_kv_memory_backend] -> memory;
+	[riak_kv_leveled_backend] -> leveled;
         [Other] -> Other;
         MoreThanOne -> MoreThanOne
     end.
@@ -2248,11 +2314,12 @@ verify_product(Applications, ExpectedApplication) ->
 product_test_() ->
     {foreach,
      fun() -> ok end,
-     [verify_product([riak_cs], riak_cs),
-      verify_product([riak_repl, riak_kv, riak_cs], riak_cs),
-      verify_product([riak_repl], riak_ee),
-      verify_product([riak_repl, riak_kv], riak_ee),
-      verify_product([riak_kv], riak),
-      verify_product([kernel], unknown)]}.
+     [
+  verify_product([riak_cs], riak_cs),
+  verify_product([riak_repl, riak_kv, riak_cs], riak_cs),
+  verify_product([riak_repl, riak_kv], riak),
+  verify_product([riak_kv], riak),
+  verify_product([kernel], unknown)
+     ]}.
 
 -endif.

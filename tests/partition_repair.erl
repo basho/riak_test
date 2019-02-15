@@ -41,7 +41,6 @@ confirm() ->
     Bucket = <<"scotts_spam">>,
 
     lager:info("Build a cluster"),
-    lager:info("riak_search enabled: true"),
     lager:info("ring_creation_size: ~p", [RingSize]),
     lager:info("n_val: ~p", [NVal]),
     lager:info("num nodes: ~p", [NumNodes]),
@@ -54,10 +53,6 @@ confirm() ->
               {handoff_manager_timeout, 1000},
               {vnode_management_timer, 1000},
               {handoff_concurrency, HOConcurrency}
-             ]},
-            {riak_search,
-             [
-              {enabled, true}
              ]},
             %% @TODO This is only to test whether the test failure happens
             %% without AAE. The AAE errors found in the logs could be unrelated
@@ -78,12 +73,8 @@ confirm() ->
         undefined ->
             ok;
         _ ->
-            lager:info("Set n_val to ~p", [NVal]),
-            set_search_schema_nval(Bucket, NVal)
+            lager:info("Set n_val to ~p", [NVal])
     end,
-
-    lager:info("Enable search hook"),
-    rt:enable_search_hook(hd(Nodes), Bucket),
 
     lager:info("Insert Scott's spam emails"),
     Pbc = rt:pbc(hd(Nodes)),
@@ -100,9 +91,6 @@ confirm() ->
 
     lager:info("Stash KV data for each partition"),
     [stash_data(riak_kv, Owner) || Owner <- Owners],
-
-    lager:info("Emulate data loss for riak_search, repair, verify correct data"),
-    [kill_repair_verify(Owner, "merge_index", riak_search) || Owner <- Owners],
 
     %% TODO: parameterize backend
     lager:info("Emulate data loss for riak_kv, repair, verify correct data"),
@@ -138,19 +126,13 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
                   end),
 
     lager:info("Verify data is missing"),
-    ?assertEqual(0, count_data(Service, {Partition, Node})),
+    ?assertEqual(0, count_data({Partition, Node})),
 
     %% repair the partition, ignore return for now
     lager:info("Invoking repair for ~p on ~p", [Partition, Node]),
     %% TODO: Don't ignore return, check version of Riak and if greater
     %% or equal to 1.x then expect OK.
-    Return =
-        case Service of
-            riak_kv ->
-                rpc:call(Node, riak_kv_vnode, repair, [Partition]);
-            riak_search ->
-                rpc:call(Node, riak_search_vnode, repair, [Partition])
-        end,
+    Return = rpc:call(Node, riak_kv_vnode, repair, [Partition]),
 
     %% Kill sending vnode to verify HO sender is killed
     %% {ok, [{KPart, KNode}|_]} = Return,
@@ -165,11 +147,12 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
 
     lager:info("return value of repair_index ~p", [Return]),
     lager:info("Wait for repair to finish"),
-    wait_for_repair(Service, {Partition, Node}, 30),
+    wait_for_repair({Partition, Node}, 30),
 
     lager:info("Verify ~p on ~p is fully repaired", [Partition, Node]),
-    Data2 = get_data(Service, {Partition, Node}),
-    {Verified, NotFound} = dict:fold(verify(Service, Data2), {0, []}, Stash),
+    Data2 = get_data({Partition, Node}),
+    {Verified, NotFound} = dict:fold(verify(Node, Service, Data2), {0, []}, Stash),
+
     case NotFound of
         [] -> ok;
         _ ->
@@ -187,8 +170,9 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     StashPathB = stash_path(Service, BeforeP),
     {ok, [StashB]} = file:consult(StashPathB),
     ExpectToVerifyB = dict:size(StashB),
-    BeforeData = get_data(Service, B),
-    {VerifiedB, NotFoundB} = dict:fold(verify(Service, BeforeData), {0, []}, StashB),
+    BeforeData = get_data(B),
+    {VerifiedB, NotFoundB} = dict:fold(verify(Node, Service, BeforeData), {0, []}, StashB),
+
     case NotFoundB of
         [] -> ok;
         _ ->
@@ -202,8 +186,10 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     StashPathA = stash_path(Service, AfterP),
     {ok, [StashA]} = file:consult(StashPathA),
     ExpectToVerifyA = dict:size(StashA),
-    AfterData = get_data(Service, A),
-    {VerifiedA, NotFoundA} = dict:fold(verify(Service, AfterData), {0, []}, StashA),
+
+    AfterData = get_data(A),
+    {VerifiedA, NotFoundA} = dict:fold(verify(Node, Service, AfterData), {0, []}, StashA),
+
     case NotFoundA of
         [] -> ok;
         _ ->
@@ -214,53 +200,50 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     ?assertEqual(ExpectToVerifyA, VerifiedA).
 
 
-verify(riak_kv, DataAfterRepair) ->
+verify(Node, riak_kv, DataAfterRepair) ->
     fun(BKey, StashedValue, {Verified, NotFound}) ->
             StashedData={BKey, StashedValue},
             case dict:find(BKey, DataAfterRepair) of
                 error -> {Verified, [StashedData|NotFound]};
                 {ok, Value} ->
-                    if Value == StashedValue -> {Verified+1, NotFound};
-                       true -> {Verified, [StashedData|NotFound]}
-                    end
-            end
-    end;
-
-verify(riak_search, PostingsAfterRepair) ->
-    fun(IFT, StashedPostings, {Verified, NotFound}) ->
-            StashedPosting={IFT, StashedPostings},
-            case dict:find(IFT, PostingsAfterRepair) of
-                error -> {Verified, [StashedPosting|NotFound]};
-                {ok, RepairedPostings} ->
-                    case lists:all(fun is_true/1,
-                                   [lists:member(P, RepairedPostings)
-                                    || P <- StashedPostings]) of
+                    %% NOTE: since kv679 fixes, the binary values may
+                    %% not be equal where a new epoch-actor-entry has
+                    %% been added to the repaired value in the vnode
+                    case gte(Node, Value, StashedValue, BKey) of
                         true -> {Verified+1, NotFound};
-                        false -> {Verified, [StashedPosting|NotFound]}
+                        false -> {Verified, [StashedData|NotFound]}
                     end
             end
     end.
 
+%% @private gte checks that `Value' is _at least_ `StashedValue'. With
+%% the changes for kv679 when a vnode receives a write of a key that
+%% contains the vnode's id as an entry in the version vector, it adds
+%% a new actor-epoch-entry to the version vector to guard against data
+%% loss from repeated events (remember a VV history is supposed to be
+%% unique!) This function then must deserialise the stashed and vnode
+%% data and check that they are equal, or if not, the only difference
+%% is an extra epoch actor in the vnode value's vclock.
+gte(Node, Value, StashedData, {B, K}) ->
+    VnodeObject = riak_object:from_binary(B, K, Value),
+    StashedObject = riak_object:from_binary(B, K, StashedData),
+    %% NOTE: we need a ring and all that jazz for bucket props, needed
+    %% by merge, so use an RPC to merge on a riak node.
+    Merged = rpc:call(Node, riak_object, syntactic_merge, [VnodeObject, StashedObject]),
+    riak_object:equal(VnodeObject, Merged).
+
 is_true(X) ->
     X == true.
 
-count_data(Service, {Partition, Node}) ->
-    dict:size(get_data(Service, {Partition, Node})).
+count_data({Partition, Node}) ->
+    dict:size(get_data({Partition, Node})).
 
-get_data(Service, {Partition, Node}) ->
-    VMaster =
-        case Service of
-            riak_kv -> riak_kv_vnode_master;
-            riak_search -> riak_search_vnode_master
-        end,
+get_data({Partition, Node}) ->
+    VMaster = riak_kv_vnode_master,
+
     %% TODO: add compile time support for riak_test
-    Req =
-        case Service of
-            riak_kv ->
-                {riak_core_fold_req_v1, fun stash_kv/3, dict:new()};
-            riak_search ->
-                {riak_core_fold_req_v1, fun stash_search/3, dict:new()}
-        end,
+    Req = {riak_core_fold_req_v1, fun stash_kv/3, dict:new()},
+
     Data = riak_core_vnode_master:sync_command({Partition, Node},
                                                Req,
                                                VMaster,
@@ -271,14 +254,11 @@ stash_data(Service, {Partition, Node}) ->
     File = stash_path(Service, Partition),
     ?assertEqual(ok, filelib:ensure_dir(File)),
     lager:info("Stashing ~p/~p at ~p to ~p", [Service, Partition, Node, File]),
-    Postings = get_data(Service, {Partition, Node}),
+    Postings = get_data({Partition, Node}),
     ?assertEqual(ok, file:write_file(File, io_lib:format("~p.", [Postings]))).
 
 stash_kv(Key, Value, Stash) ->
     dict:store(Key, Value, Stash).
-
-stash_search({_I,{_F,_T}}=K, _Postings=V, Stash) ->
-    dict:append_list(K, V, Stash).
 
 base_stash_path() ->
     rt_config:get(rt_scratch_dir) ++ "/dev/data_stash/".
@@ -289,21 +269,15 @@ stash_path(Service, Partition) ->
 file_list(Dir) ->
     filelib:wildcard(Dir ++ "/*").
 
-wait_for_repair(_, _, 0) ->
+wait_for_repair(_, 0) ->
     throw(wait_for_repair_max_tries);
-wait_for_repair(Service, {Partition, Node}, Tries) ->
-    Reply =
-        case Service of
-            riak_kv ->
-                rpc:call(Node, riak_kv_vnode, repair_status, [Partition]);
-            riak_search ->
-                rpc:call(Node, riak_search_vnode, repair_status, [Partition])
-        end,
+wait_for_repair({Partition, Node}, Tries) ->
+    Reply = rpc:call(Node, riak_kv_vnode, repair_status, [Partition]),
     case Reply of
         not_found -> ok;
         in_progress ->
             timer:sleep(timer:seconds(1)),
-            wait_for_repair(Service, {Partition, Node}, Tries - 1)
+            wait_for_repair({Partition, Node}, Tries - 1)
     end.
 
 data_path(Node, Suffix, Partition) ->
@@ -317,28 +291,6 @@ backend_mod_dir(undefined) ->
 backend_mod_dir(bitcask) ->
     {riak_kv_bitcask_backend, "bitcask"};
 backend_mod_dir(eleveldb) ->
-    {riak_kv_eleveldb_backend, "leveldb"}.
-
-
--spec set_search_schema_nval(binary(), pos_integer()) -> ok.
-set_search_schema_nval(Bucket, NVal) ->
-    %% TODO: Search currently offers no easy way to pragmatically
-    %% change a schema and save it.  This is because the external and
-    %% internal formats of the schema are different.  The parser reads
-    %% the external format and an internal representation is created
-    %% which is then stored/access via `riak_search_config'.  Rather
-    %% than allowing the internal format to be modified and set you
-    %% must send the update in the external format.
-    BucketStr = binary_to_list(Bucket),
-    SearchCmd = ?FMT("~s/dev/dev1/bin/search-cmd", [rt_config:get('rtdev_path.current')]),
-    GetSchema = ?FMT("~s show-schema ~s > current-schema",
-                     [SearchCmd, BucketStr]),
-    ModifyNVal = ?FMT("sed -E 's/n_val, [0-9]+/n_val, ~s/' "
-                      "current-schema > new-schema",
-                      [NVal]),
-    SetSchema = ?FMT("~s set-schema ~s new-schema", [SearchCmd, BucketStr]),
-    ClearCache = ?FMT("~s clear-schema-cache", [SearchCmd]),
-    ?assertCmd(GetSchema),
-    ?assertCmd(ModifyNVal),
-    ?assertCmd(SetSchema),
-    ?assertCmd(ClearCache).
+    {riak_kv_eleveldb_backend, "leveldb"};
+backend_mod_dir(leveled) ->
+    {riak_kv_leveled_backed, "leveled"}.

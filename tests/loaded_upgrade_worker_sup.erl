@@ -28,7 +28,7 @@
 -export([assert_equal/2]).
 
 -export([list_keys_tester/5, kv_tester/5, mapred_tester/5,
-         twoi_tester/5, search_tester/5, tester_start_link/4]).
+         twoi_tester/5, tester_start_link/4]).
 
 -export([init/1]).
 -export([start_link/5]).
@@ -45,14 +45,14 @@ start_link(Name, Node, Backend, Vsn, ReportPid) ->
     supervisor:start_link(?MODULE, [Name, Node, Backend, Vsn, ReportPid]).
 
 init([Name, Node, Backend, Vsn, ReportPid]) ->
-    rt:wait_for_service(Node, [riak_search,riak_kv,riak_pipe]),
+    rt:wait_for_service(Node, [riak_kv,riak_pipe]),
 
     ChildSpecs1 = [
         ?CHILD(Name, FunName, Node, Vsn, ReportPid)
-        || FunName <- [list_keys_tester, kv_tester, search_tester]],
+        || FunName <- [list_keys_tester, kv_tester]],
 
     ChildSpecs = case Backend of
-        eleveldb ->
+        LevelIsh when LevelIsh == eleveldb orelse LevelIsh == leveled ->
             [?CHILD(Name, twoi_tester, Node, Vsn, ReportPid) | ChildSpecs1];
         _ -> ChildSpecs1
     end,
@@ -183,51 +183,6 @@ twoi_tester(Node, Count, Pid, Vsn, ReportPid) ->
     end,
     twoi_tester(Node, Count + 1, PBC, Vsn, ReportPid).
 
-search_tester(Node, Count, Pid, Vsn, ReportPid) ->
-    PBC = pb_pid_recycler(Pid, Node),
-    {Term, Size} = search_check(Count),
-    case riakc_pb_socket:search(PBC, loaded_upgrade:bucket(search), Term) of
-        {ok, Result} ->
-            case Size == Result#search_results.num_found of
-                true -> ok;
-                _ ->
-                    lager:warning("Bad search result: ~p Expected: ~p", [Result#search_results.num_found, Size]),
-                    ReportPid ! {search, Node, bad_result}
-            end;
-        {error, disconnected} ->
-            %% oh well, reconnect
-            ok;
-
-        {error, <<"Error processing incoming message: throw:{timeout,range_loop}:[{riak_search_backend", _/binary>>} ->
-            case rt:is_mixed_cluster(Node) of
-                true ->
-                    ok;
-                _ ->
-                    ReportPid ! {search, Node, {timeout, range_loop}}
-            end;
-
-        {error,<<"Error processing incoming message: error:{case_clause,", _/binary>>} ->
-            %% although it doesn't say so, this is the infamous badfun
-            case rt:is_mixed_cluster(Node) of
-                true ->
-                    ok;
-                _ ->
-                    ReportPid ! {search, Node, {error, badfun}}
-            end;
-        Unexpected ->
-            ReportPid ! {search, Node, Unexpected}
-    end,
-    search_tester(Node, Count + 1, PBC, Vsn, ReportPid).
-
-search_check(Count) ->
-    case Count rem 6 of
-        0 -> { <<"mx.example.net">>, 187};
-        1 -> { <<"ZiaSun">>, 1};
-        2 -> { <<"headaches">>, 4};
-        3 -> { <<"YALSP">>, 3};
-        4 -> { <<"mister">>, 0};
-        5 -> { <<"prohibiting">>, 5}
-    end.
 
 assert_equal(Expected, Actual) ->
     case Expected -- Actual of

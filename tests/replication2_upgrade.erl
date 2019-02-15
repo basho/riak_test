@@ -1,7 +1,7 @@
 %% Test cluster version migration with BNW replication as "new" version
 -module(replication2_upgrade).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, remove_jmx_from_conf/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
@@ -74,7 +74,7 @@ confirm() ->
     ok = lists:foreach(fun(Node) ->
                                lager:info("Upgrade node: ~p", [Node]),
                                rt:log_to_nodes(Nodes, "Upgrade node: ~p", [Node]),
-                               rt:upgrade(Node, current),
+                               rt:upgrade(Node, current, fun ?MODULE:remove_jmx_from_conf/1),
                                %% The upgrade did a wait for pingable
                                rt:wait_for_service(Node, [riak_kv, riak_pipe, riak_repl]),
                                [rt:wait_until_ring_converged(N) || N <- [ANodes, BNodes]],
@@ -103,3 +103,16 @@ confirm() ->
                                replication2:replication(ANodes, BNodes, true)
                        end, NodeUpgrades),
     pass.
+
+%% @doc when going from riak_ee to OS riak + repl (>=2.2.5) there are
+%% riak.conf elements that must be removed, as the applications no
+%% longer exist. This is a cfish issue really, see
+%% https://github.com/basho/cuttlefish/issues/176
+remove_jmx_from_conf(Params) ->
+    NewConfPath = proplists:get_value(new_conf_dir, Params),
+    SedCmd = "sed -i.bak '/^jmx/d'",
+    File = filename:join(NewConfPath, "riak.conf"),
+    Cmd = io_lib:format("~s ~s", [SedCmd, File]),
+    lager:info("Removing jmx with cmd ~p", [Cmd]),
+    Res = os:cmd(Cmd),
+    lager:info("jmx cmd res = ~p", [Res]).

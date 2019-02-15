@@ -137,15 +137,19 @@ write_key({_, Client}, Val, Opts) when is_binary(Val) ->
     Object = case riakc_pb_socket:get(Client, ?BUCKET, ?KEY, []) of
                  {ok, O1} ->
                      lager:info("writing existing!"),
-                     riakc_obj:update_value(O1, Val);
+                     O2 = riakc_obj:update_metadata(O1, dict:new()),
+                     riakc_obj:update_value(O2, Val);
                  _ ->
                      lager:info("writing new!"),
                      riakc_obj:new(?BUCKET, ?KEY, Val)
              end,
     riakc_pb_socket:put(Client, Object, Opts).
 
-read_key({_, Client}) ->
-    riakc_pb_socket:get(Client, ?BUCKET, ?KEY, []).
+read_key({_, Client}, Opts) ->
+    riakc_pb_socket:get(Client, ?BUCKET, ?KEY, Opts).
+
+read_key(C) ->
+    read_key(C, []).
 
 delete_key({_, Client}) ->
     riakc_pb_socket:delete(Client, ?BUCKET, ?KEY),
@@ -179,9 +183,12 @@ start_node(Node, Preflist) ->
     wait_for_new_pl(Preflist, Node).
 
 get_preflist(Node) ->
+    get_preflist(Node, 3).
+
+get_preflist(Node, NVal) ->
     Chash = rpc:call(Node, riak_core_util, chash_key, [{?BUCKET, ?KEY}]),
     UpNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
-    PL = rpc:call(Node, riak_core_apl, get_apl_ann, [Chash, 3, UpNodes]),
+    PL = rpc:call(Node, riak_core_apl, get_apl_ann, [Chash, NVal, UpNodes]),
     PL.
 
 kill_primary(Preflist) ->

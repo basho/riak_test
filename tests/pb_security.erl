@@ -60,10 +60,7 @@ confirm() ->
                     {cacertfile, filename:join([CertDir, "site3.basho.com/cacerts.pem"])}
                     ]},
                 {job_accept_class, undefined}
-                ]},
-            {riak_search, [
-                           {enabled, true}
-                          ]}
+                ]}
            ],
 
     MD = riak_test_runner:metadata(),
@@ -755,10 +752,6 @@ group_test(Node, Port, CertDir) ->
     ?assertMatch({error, notfound}, (riakc_pb_socket:get(PB, {<<"mytype2">>,
                                                               <<"hello">>},
                                                           <<"world">>))),
-
-    lager:info("riak search should not be running with security enabled"),
-    ?assertMatch({error, <<"Riak Search 1.0 is deprecated", _/binary>>},
-                           riakc_pb_socket:search(PB, <<"index">>, <<"foo:bar">>)),
 
     riakc_pb_socket:stop(PB),
     pass.

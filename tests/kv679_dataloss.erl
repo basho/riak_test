@@ -133,7 +133,9 @@ delete_datadir({{Idx, Node}, Type}) ->
 backend_name_from_mod(riak_kv_bitcask_backend) ->
     bitcask;
 backend_name_from_mod(riak_kv_eleveldb_backend) ->
-    eleveldb.
+    eleveldb;
+backend_name_from_mod(riak_kv_leveled_backend) ->
+    leveled.
 
 del_dir(Dir) ->
    lists:foreach(fun(D) ->

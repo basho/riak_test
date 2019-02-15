@@ -1,0 +1,9 @@
+mapred_basic_compat
+mapred_buffer_prereduce
+mapred_dead_pipe
+mapred_javascript
+mapred_http_errors
+mapred_notfound_failover
+mapred_search_switch
+mapred_verify_rt
+verify_mr_prereduce_node_down

@@ -53,9 +53,10 @@ confirm() ->
     {{Index, Node}, _} = lists:last(Preflist2),
     make_intercepts_tab(Node, Index),
     rt_intercept:add(Node, {riak_kv_vnode,  [{{do_get,4}, drop_do_get},
-                {{do_put, 7}, drop_do_put}]}),
-    lager:info("disabling do_get for index ~p on ~p", [Index, Node]),
-    rt:log_to_nodes(Nodes, "disabling do_get for index ~p on ~p", [Index, Node]),
+                                                {{do_head, 4}, drop_do_head},
+                                                {{do_put, 7}, drop_do_put}]}),
+    lager:info("disabling do_get and do_head for index ~p on ~p", [Index, Node]),
+    rt:log_to_nodes(Nodes, "disabling do_get and do_head for index ~p on ~p", [Index, Node]),
     timer:sleep(100),
 
     %% one vnode will never return, so we get timeouts
@@ -87,9 +88,10 @@ confirm() ->
     {{Index2, Node2}, _} = lists:nth(2, Preflist2),
     make_intercepts_tab(Node2, Index2),
     rt_intercept:add(Node2, {riak_kv_vnode,  [{{do_get,4}, drop_do_get},
-                {{do_put, 7}, drop_do_put}]}),
-    lager:info("disabling do_get for index ~p on ~p", [Index2, Node2]),
-    rt:log_to_nodes(Nodes, "disabling do_get for index ~p on ~p", [Index2, Node2]),
+                                                {{do_head, 4}, drop_do_head},
+                                                {{do_put, 7}, drop_do_put}]}),
+    lager:info("disabling do_get, do_put and do_head for index ~p on ~p", [Index2, Node2]),
+    rt:log_to_nodes(Nodes, "disabling do_get, do_put and do_head for index ~p on ~p", [Index2, Node2]),
     timer:sleep(100),
 
     %% can't even meet quorum now
@@ -143,6 +145,8 @@ make_intercepts_tab(Node, Partition) ->
     intercepts_tab = rpc:call(Node, ets, new, [intercepts_tab, [named_table,
                 public, set, {heir, SupPid, {}}]]),
     true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_get_partitions,
+                [Partition]}]),
+    true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_head_partitions,
                 [Partition]}]),
     true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_put_partitions,
                 [Partition]}]).

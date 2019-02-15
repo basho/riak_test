@@ -40,11 +40,13 @@ cli_options() ->
  {skip,               $x, "skip",     string,     "list of tests to skip in a directory"},
  {verbose,            $v, "verbose",  undefined,  "verbose output"},
  {outdir,             $o, "outdir",   string,     "output directory"},
- {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb]"},
+ {backend,            $b, "backend",  atom,       "backend to test [memory | bitcask | eleveldb | leveldb]"},
  {upgrade_version,    $u, "upgrade",  atom,       "which version to upgrade from [ previous | legacy ]"},
  {keep,        undefined, "keep",     boolean,    "do not teardown cluster"},
+ {batch,       undefined, "batch",    undefined,  "running a batch, always teardown, even on failure"},
  {report,             $r, "report",   string,     "you're reporting an official test run, provide platform info (e.g. ubuntu-1204-64)\nUse 'config' if you want to pull from ~/.riak_test.config"},
- {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"}
+ {file,               $F, "file",     string,     "use the specified file instead of ~/.riak_test.config"},
+ {apply_traces,undefined, "trace",    undefined,  "Apply traces to the target node, defined in the SUITEs"}
 ].
 
 print_help() ->
@@ -182,15 +184,16 @@ main(Args) ->
     Coverage = rt_cover:maybe_write_coverage(all, CoverDir),
 
     Teardown = not proplists:get_value(keep, ParsedArgs, false),
-    maybe_teardown(Teardown, TestResults, Coverage, Verbose),
+    Batch = lists:member(batch, ParsedArgs),
+    maybe_teardown(Teardown, TestResults, Coverage, Verbose, Batch),
     ok.
 
-maybe_teardown(false, TestResults, Coverage, Verbose) ->
+maybe_teardown(false, TestResults, Coverage, Verbose, _Batch) ->
     print_summary(TestResults, Coverage, Verbose),
     lager:info("Keeping cluster running as requested");
-maybe_teardown(true, TestResults, Coverage, Verbose) ->
-    case {length(TestResults), proplists:get_value(status, hd(TestResults))} of
-        {1, fail} ->
+maybe_teardown(true, TestResults, Coverage, Verbose, Batch) ->
+    case {length(TestResults), proplists:get_value(status, hd(TestResults)), Batch} of
+        {1, fail, false} ->
             print_summary(TestResults, Coverage, Verbose),
             so_kill_riak_maybe();
         _ ->
@@ -209,6 +212,9 @@ parse_command_line_tests(ParsedArgs) ->
                    [] -> [undefined];
                    UpgradeList -> UpgradeList
                end,
+
+    rt_redbug:set_tracing_applied(proplists:is_defined(apply_traces, ParsedArgs)),
+
     %% Parse Command Line Tests
     {CodePaths, SpecificTests} =
         lists:foldl(fun extract_test_names/2,

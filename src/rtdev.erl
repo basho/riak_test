@@ -170,6 +170,7 @@ upgrade(Node, NewVersion, Config, UpgradeCallback) ->
     Params = [
         {old_data_dir, io_lib:format("~s/dev/dev~b/data", [OldPath, N])},
         {new_data_dir, io_lib:format("~s/dev/dev~b/data", [NewPath, N])},
+        {new_conf_dir, io_lib:format("~s/dev/dev~b/etc",  [NewPath, N])},
         {old_version, Version},
         {new_version, NewVersion}
     ],
@@ -202,7 +203,8 @@ set_conf(Node, NameValuePairs) when is_atom(Node) ->
     append_to_conf_file(get_riak_conf(Node), NameValuePairs),
     ok;
 set_conf(DevPath, NameValuePairs) ->
-    [append_to_conf_file(RiakConf, NameValuePairs) || RiakConf <- all_the_files(DevPath, "etc/riak.conf")],
+    [append_to_conf_file(RiakConf, NameValuePairs)
+     || RiakConf <- all_the_files(DevPath, "etc/riak.conf")],
     ok.
 
 set_advanced_conf(all, NameValuePairs) ->
@@ -210,7 +212,7 @@ set_advanced_conf(all, NameValuePairs) ->
     [ set_advanced_conf(DevPath, NameValuePairs) || DevPath <- devpaths()],
     ok;
 set_advanced_conf(Node, NameValuePairs) when is_atom(Node) ->
-    append_to_conf_file(get_advanced_riak_conf(Node), NameValuePairs),
+    update_app_config_file(get_advanced_riak_conf(Node), NameValuePairs),
     ok;
 set_advanced_conf(DevPath, NameValuePairs) ->
     AdvancedConfs = case all_the_files(DevPath, "etc/advanced.config") of
@@ -253,7 +255,8 @@ get_advanced_riak_conf(Node) ->
 
 append_to_conf_file(File, NameValuePairs) ->
     Settings = lists:flatten(
-        [io_lib:format("~n~s = ~s~n", [Name, Value]) || {Name, Value} <- NameValuePairs]),
+                 [io_lib:format("~n~s = ~s~n", [Name, Value])
+                  || {Name, Value} <- NameValuePairs]),
     file:write_file(File, Settings, [append]).
 
 all_the_files(DevPath, File) ->
@@ -392,6 +395,17 @@ rm_dir(Dir) ->
     lager:info("Removing directory ~s", [Dir]),
     ?assertCmd("rm -rf " ++ Dir),
     ?assertEqual(false, filelib:is_dir(Dir)).
+
+restore_data_dir(Nodes, BackendFldr, BackupFldr) when is_list(Nodes) ->
+    RestoreNodeFun =
+        fun(Node) ->
+            Backend = node_path(Node) ++ "/data/" ++ BackendFldr,
+            Backup = node_path(Node) ++ "/data/" ++ BackupFldr,
+            lager:info("Restoring Node ~s from ~s", [Backend, Backup]),
+            ?assertCmd("mkdir -p " ++ Backend),
+            ?assertCmd("cp -R " ++ Backup ++ "/* " ++ Backend)
+        end,
+    lists:foreach(RestoreNodeFun, Nodes).
 
 add_default_node_config(Nodes) ->
     case rt_config:get(rt_default_config, undefined) of

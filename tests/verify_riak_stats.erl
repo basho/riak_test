@@ -40,6 +40,9 @@ confirm() ->
     verify_dt_converge:create_bucket_types(Nodes, ?TYPES),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node1])),
     Stats1 = get_stats(Node1),
+    TestMetaData = riak_test_runner:metadata(),
+    KVBackend = proplists:get_value(backend, TestMetaData),
+    HeadSupport = has_head_support(KVBackend),
 
     lager:info("Verifying that all expected stats keys are present from the HTTP endpoint"),
     ok = verify_stats_keys_complete(Node1, Stats1),
@@ -79,15 +82,37 @@ confirm() ->
 
     Stats2 = get_stats(Node1),
 
+    ExpectedNodeStats = 
+        case HeadSupport of
+            true ->
+                [{<<"node_gets">>, 10},
+                    {<<"node_puts">>, 5},
+                    {<<"node_gets_total">>, 10},
+                    {<<"node_puts_total">>, 5},
+                    {<<"vnode_gets">>, 5}, 
+                        % The five PUTS will require only HEADs
+                    {<<"vnode_heads">>, 30},
+                        % There is no reduction in the count of HEADs
+                        % as HEADS before GETs
+                    {<<"vnode_puts">>, 15},
+                    {<<"vnode_gets_total">>, 5},
+                    {<<"vnode_heads_total">>, 30},
+                    {<<"vnode_puts_total">>, 15}];
+            false ->
+                [{<<"node_gets">>, 10},
+                    {<<"node_puts">>, 5},
+                    {<<"node_gets_total">>, 10},
+                    {<<"node_puts_total">>, 5},
+                    {<<"vnode_gets">>, 30},
+                    {<<"vnode_heads">>, 0},
+                    {<<"vnode_puts">>, 15},
+                    {<<"vnode_gets_total">>, 30},
+                    {<<"vnode_heads_total">>, 0},
+                    {<<"vnode_puts_total">>, 15}]
+        end,
+
     %% make sure the stats that were supposed to increment did
-    verify_inc(Stats1, Stats2, [{<<"node_gets">>, 10},
-                                {<<"node_puts">>, 5},
-                                {<<"node_gets_total">>, 10},
-                                {<<"node_puts_total">>, 5},
-                                {<<"vnode_gets">>, 30},
-                                {<<"vnode_puts">>, 15},
-                                {<<"vnode_gets_total">>, 30},
-                                {<<"vnode_puts_total">>, 15}]),
+    verify_inc(Stats1, Stats2, ExpectedNodeStats),
 
     %% verify that fsm times were tallied
     verify_nz(Stats2, [<<"node_get_fsm_time_mean">>,
@@ -100,7 +125,6 @@ confirm() ->
                        <<"node_put_fsm_time_95">>,
                        <<"node_put_fsm_time_99">>,
                        <<"node_put_fsm_time_100">>]),
-
 
     lager:info("Make PBC Connection"),
     Pid = rt:pbc(Node1),
@@ -140,6 +164,14 @@ confirm() ->
          lager:info("~s: ~p (expected non-zero)", [S, proplists:get_value(S, Stats6)]),
          verify_nz(Stats6, [S])
      end || S <- datatype_stats() ],
+
+    _ = do_pools(Node1),
+
+    Stats7 = get_stats(Node1),
+    lager:info("Verifying pool stats are incremented"),
+
+    verify_inc(Stats6, Stats7, inc_by_one(dscp_stats())),
+
     pass.
 
 verify_inc(Prev, Props, Keys) ->
@@ -152,6 +184,11 @@ verify_inc(Prev, Props, Keys) ->
 
 verify_nz(Props, Keys) ->
     [?assertNotEqual(proplists:get_value(Key,Props,0), 0) || Key <- Keys].
+
+has_head_support(leveled) ->
+    true;
+has_head_support(_Backend) ->
+    false.
 
 get_stats(Node) ->
     timer:sleep(10000),
@@ -408,6 +445,9 @@ common_stats() ->
         <<"bitcask_version">>,
         <<"clique_version">>,
         <<"cluster_info_version">>,
+        <<"clusteraae_fsm_create">>,
+        <<"clusteraae_fsm_create_error">>,
+        <<"clusteraae_fsm_active">>,
         <<"compiler_version">>,
         <<"connected_nodes">>,
         <<"consistent_get_objsize_100">>,
@@ -439,6 +479,13 @@ common_stats() ->
         <<"converge_delay_mean">>,
         <<"converge_delay_min">>,
         <<"coord_redirs_total">>,
+        <<"coord_redir_least_loaded_total">>,
+        <<"coord_local_unloaded_total">>,
+        <<"coord_local_soft_loaded_total">>,
+        <<"vnode_mbox_check_timeout_total">>,
+        <<"coord_redir_unloaded_total">>,
+        <<"coord_redir_loaded_local_total">>,
+        <<"soft_loaded_vnode_mbox_total">>,
         <<"counter_actor_counts_100">>,
         <<"counter_actor_counts_95">>,
         <<"counter_actor_counts_99">>,
@@ -451,6 +498,7 @@ common_stats() ->
         <<"crypto_version">>,
         <<"disk">>,
         <<"dropped_vnode_requests_total">>,
+        <<"ebloom_version">>,
         <<"eleveldb_version">>,
         <<"erlang_js_version">>,
         <<"erlydtl_version">>,
@@ -498,7 +546,6 @@ common_stats() ->
         <<"memory_processes_used">>,
         <<"memory_system">>,
         <<"memory_total">>,
-        <<"merge_index_version">>,
         <<"mochiweb_version">>,
         <<"node_get_fsm_active">>,
         <<"node_get_fsm_active_60s">>,
@@ -687,6 +734,7 @@ common_stats() ->
         <<"precommit_fail">>,
         <<"protobuffs_version">>,
         <<"public_key_version">>,
+        <<"ranch_version">>,
         <<"read_repairs">>,
         <<"read_repairs_counter">>,
         <<"read_repairs_counter_total">>,
@@ -730,7 +778,7 @@ common_stats() ->
         <<"riak_pipe_vnodeq_min">>,
         <<"riak_pipe_vnodeq_total">>,
         <<"riak_pipe_vnodes_running">>,
-        <<"riak_search_version">>,
+        <<"riak_repl_version">>,
         <<"riak_sysmon_version">>,
         <<"ring_creation_size">>,
         <<"ring_members">>,
@@ -848,6 +896,13 @@ common_stats() ->
         <<"vnode_get_fsm_time_median">>,
         <<"vnode_gets">>,
         <<"vnode_gets_total">>,
+        <<"vnode_head_fsm_time_100">>,
+        <<"vnode_head_fsm_time_95">>,
+        <<"vnode_head_fsm_time_99">>,
+        <<"vnode_head_fsm_time_mean">>,
+        <<"vnode_head_fsm_time_median">>,
+        <<"vnode_heads">>,
+        <<"vnode_heads_total">>,
         <<"vnode_hll_update">>,
         <<"vnode_hll_update_time_100">>,
         <<"vnode_hll_update_time_95">>,
@@ -904,7 +959,7 @@ common_stats() ->
         <<"write_once_puts_total">>,
         <<"xmerl_version">>,
         <<"yokozuna_version">>
-    ].
+    ] ++ pool_stats().
 
 product_stats(riak_ee) ->
     [
@@ -918,3 +973,38 @@ product_stats(riak_ee) ->
     ];
 product_stats(riak) ->
     [].
+
+pool_stats() ->
+    dscp_stats() ++
+        [<<"node_worker_pool_node_worker_pool_total">>,
+         <<"node_worker_pool_unregistered_total">>,
+         <<"vnode_worker_pool_total">>].
+
+dscp_stats() ->
+    [<<"node_worker_pool_af1_pool_total">>,
+     <<"node_worker_pool_af2_pool_total">>,
+     <<"node_worker_pool_af3_pool_total">>,
+     <<"node_worker_pool_af4_pool_total">>,
+     <<"node_worker_pool_be_pool_total">>].
+
+do_pools(Node) ->
+    do_pools(Node, rpc:call(Node, riak_core_node_worker_pool, dscp_pools, [])).
+
+do_pools(_Node, []) ->
+    ok;
+do_pools(Node, [Pool | Pools]) ->
+    do_pool(Node, Pool),
+    do_pools(Node, Pools).
+
+do_pool(Node, Pool) ->
+    WorkFun = fun() -> ok end,
+    FinishFun = fun(ok) -> ok end,
+    Work = {fold, WorkFun, FinishFun},
+    Res = rpc:call(Node, riak_core_node_worker_pool, handle_work, [Pool, Work, undefined]),
+    lager:info("Pool ~p returned ~p", [Pool, Res]).
+
+inc_by_one(StatNames) ->
+    inc_by(StatNames, 1).
+
+inc_by(StatNames, Amt) ->
+    [{StatName, Amt} || StatName <- StatNames].

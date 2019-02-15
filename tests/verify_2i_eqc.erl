@@ -115,7 +115,7 @@ confirm() ->
     TestingTime = rt_config:get(eqc_testing_time, 120),
     lager:info("Will run in cluster of size ~p for ~p seconds.",
                [Size, TestingTime]),
-    rt:set_backend(eleveldb),
+
     Nodes = rt:build_cluster(Size),
     ?assert(eqc:quickcheck(
               eqc:testing_time(TestingTime, ?MODULE:prop_test(Nodes)))),
