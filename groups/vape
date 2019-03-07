@@ -1,0 +1,12 @@
+basic_command_line
+cluster_meta_basic
+coverage_participation
+mapred_basic_compat
+pr_pw
+rt_basic_test
+verify_2i_returnterms
+verify_riak_stats
+verify_staged_clustering
+verify_tictac_aae
+verify_vclock
+verify_handoff
