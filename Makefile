@@ -10,8 +10,8 @@ PLT = $(HOME)/.riak-test_dialyzer_plt
 REBAR=./rebar3
 
 all: deps compile
-	$(REBAR) skip_deps=true escriptize
-	SMOKE_TEST=1 $(REBAR) skip_deps=true escriptize
+	$(REBAR) escriptize
+	SMOKE_TEST=1 $(REBAR) escriptize
 
 deps:
 	$(if $(HEAD_REVISION),$(warning "Warning: you have checked out a tag ($(HEAD_REVISION)) and should use the locked-deps target"))
@@ -30,11 +30,11 @@ distclean: clean
 	@rm -rf riak_test deps
 
 quickbuild:
-	$(REBAR) skip_deps=true compile
+	$(REBAR) compile
 	$(REBAR) escriptize
 
 ##################
 # Dialyzer targets
 ##################
 
-include tools.mk
+# include tools.mk
