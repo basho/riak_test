@@ -29,7 +29,7 @@
          %% riak_test api
          confirm/0
         ]).
--compile([export_all]). %% because we run tests as ?MODULE:T(Nodes)
+-compile([export_all, nowarn_export_all]). %% because we run tests as ?MODULE:T(Nodes)
 -include_lib("eunit/include/eunit.hrl").
 
 -define(INTS_BUCKET, <<"foonum">>).
@@ -46,7 +46,7 @@ confirm() ->
     Nodes = rt:build_cluster(3),
 
     load_test_data(Nodes),
-    
+
     [ begin
           lager:info("Running test ~p", [T]),
           ?MODULE:T(Nodes)
@@ -122,7 +122,7 @@ js_notfound([Node|_]) ->
                          undefined}],
                        [{struct,[{<<"mapred_test_pass">>,1}]}]]},
                  rpcmr(Node, [?NOTFOUND_BKEY], Spec)).
-    
+
 keydata([Node|_]) ->
     UnMap = <<"function(O, KD) {
                   R = {b:O.bucket, k:O.key};

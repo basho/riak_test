@@ -18,7 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 -module(partition_repair).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 -behavior(riak_test).
@@ -115,7 +115,7 @@ kill_repair_verify({Partition, Node}, DataSuffix, Service) ->
     {ok, Pid} = rpc:call(Node, riak_core_vnode_manager, get_vnode_pid,
                          [Partition, VNodeName]),
     ?assert(rpc:call(Node, erlang, exit, [Pid, kill_for_test])),
-    
+
     %% We used to wait for the old pid to die here, but there is a delay between
     %% the vnode process dying and a new one being registered with the vnode
     %% manager. If we don't wait for the manager to return a new vnode pid, it's

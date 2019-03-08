@@ -18,7 +18,7 @@
 %%-------------------------------------------------------------------
 
 -module(riak_core_vnode_proxy_intercepts).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include("intercept.hrl").
 -define(M, riak_core_vnode_proxy_orig).
 

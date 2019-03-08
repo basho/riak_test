@@ -43,7 +43,7 @@
 %% The model data would look like this:
 %%
 %% keys = [10, 20]
-%% indexes = 
+%% indexes =
 %%   [
 %%     {{bin, "i1"}, [
 %%                      {<<"a">>, [10]},
@@ -52,7 +52,7 @@
 %%     {{int, "i1"}, [
 %%                      {1, [10, 20]}
 %%                   ]}
-%%   ]       
+%%   ]
 %%
 %% All lists in the indexes field are sorted and manipulated using orddict.
 %% The indexes data structure is an orddict that maps a typed field to
@@ -62,7 +62,7 @@
 %%
 %% -------------------------------------------------------------------
 -module(verify_2i_eqc).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -ifdef(EQC).
 -include_lib("riakc/include/riakc.hrl").
@@ -110,7 +110,7 @@
 confirm() ->
     %% Set up monotonic bucket name generator.
     init_bucket_counter(),
-    Size = random:uniform(?MAX_CLUSTER_SIZE),
+    Size = rand:uniform(?MAX_CLUSTER_SIZE),
     %% Run for 2 minutes by default.
     TestingTime = rt_config:get(eqc_testing_time, 120),
     lager:info("Will run in cluster of size ~p for ~p seconds.",
@@ -144,7 +144,7 @@ prop_test(Nodes) ->
                       %% Record stats on what commands were generated on
                       %% successful runs. This is printed after the test
                       %% finishes.
-                      aggregate(zip(state_names(H),command_names(Cmds)), 
+                      aggregate(zip(state_names(H),command_names(Cmds)),
                           equals(Res, ok))
                  end))).
 
@@ -223,7 +223,7 @@ gen_key_list() ->
 gen_key_field_terms() ->
     non_empty(list({gen_key(), gen_field(), gen_term()})).
 
-%% Produces, with equal likelihood, either no page size, a smallish one or 
+%% Produces, with equal likelihood, either no page size, a smallish one or
 %% a largish one.
 gen_page_size() ->
     oneof([undefined, gen_small_page_size(), gen_large_page_size()]).
@@ -370,7 +370,7 @@ next_state_data(_, _, S, _, _) ->
 %% No precondition checks. Among other things, that means that shrinking may
 %% end up issuing deletes to keys that do not exist, which is harmless.
 %% Any indexing, deleting or querying command can be issued at any point
-%% in the sequence. 
+%% in the sequence.
 precondition(_From, _To, _S, {call, _, _, _}) ->
     true.
 
@@ -430,7 +430,7 @@ tx_delete_one(Clients, ClientId, Bucket, IntKey) ->
                [IntKey, Bucket, ClientId]),
     delete_key(Client, Bucket, IntKey),
     ok.
-    
+
 tx_query_range(Clients, ClientId, Query) ->
     Client = get_client(ClientId, Clients),
     Keys = lists:sort(query_range(Client, Query, [])),

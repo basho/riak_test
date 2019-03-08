@@ -28,7 +28,7 @@
          %% riak_test api
          confirm/0
         ]).
--compile([export_all]). %% because we run tests as ?MODULE:T(Nodes)
+-compile([export_all, nowarn_export_all]). %% because we run tests as ?MODULE:T(Nodes)
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 

@@ -29,7 +29,7 @@
          %% riak_test api
          confirm/0
         ]).
--compile([export_all]). %% because we call ?MODULE:Testname
+-compile([export_all, nowarn_export_all]). %% because we call ?MODULE:Testname
 -include_lib("eunit/include/eunit.hrl").
 -include("rt_pipe.hrl").
 

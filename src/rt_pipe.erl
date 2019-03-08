@@ -1,7 +1,7 @@
 %% @doc Utilities for riak_pipe tests.
 -module(rt_pipe).
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 %% local copy of riak_pipe.hrl
 -include("rt_pipe.hrl").
@@ -54,7 +54,7 @@ crash_fitting(Fitting) ->
 crash_fitting(#fitting{pid=Pid}, Fun) ->
     crash_fitting(Pid, Fun);
 crash_fitting(Pid, Fun) when is_pid(Pid) ->
-    (catch gen_fsm:sync_send_all_state_event(Pid, {test_crash, Fun})).
+    (catch gen_fsm_compat:sync_send_all_state_event(Pid, {test_crash, Fun})).
 
 %% @doc usually used with the riak_pipe_w_xform fitting: at each
 %% fitting, the xform worker will decrement the count by one.  If the
@@ -86,7 +86,7 @@ self_sink() ->
 assert_no_zombies(Nodes) ->
     lager:info("Verify no zombie pipe processes"),
     ?assertEqual([], zombies(Nodes)).
-    
+
 %% @doc Find transient pipe processes sticking around. Should be run
 %% after tests complete.
 zombies(Nodes) ->

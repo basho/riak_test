@@ -57,7 +57,7 @@
 
 -module(kv679_dataloss_fb2).
 -behavior(riak_test).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 -export([confirm/0]).
 -import(kv679_dataloss_fb, [primary_and_fallback_counts/1]).
 

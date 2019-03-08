@@ -1,7 +1,7 @@
 -module(verify_membackend).
 %% -export([confirm/0]).
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -9,7 +9,7 @@
 
 confirm() ->
     Tests = [ttl, max_memory, combo],
-    [Res1, Res2] = 
+    [Res1, Res2] =
         [begin
              lager:info("testing mode ~p", [Mode]),
              put(mode, Mode),
@@ -52,11 +52,11 @@ max_memory(Mode) ->
 
 combo(Mode) ->
     Conf = mkconf(combo, Mode),
-    
+
     [NodeA, NodeB] = rt:deploy_nodes(2, Conf),
 
     ?assertEqual(ok, check_leave_and_expiry(NodeA, NodeB)),
- 
+
     %% Make sure that expiry is updating used_memory correctly
     Pid = get_remote_vnode_pid(NodeA),
     {0, _} = get_used_space(Pid),
@@ -85,14 +85,14 @@ check_leave_and_expiry(NodeA, NodeB) ->
     rt:wait_until_unpingable(NodeB),
 
     ?assertEqual([], rt:systest_read(NodeA, 1, 100, ?BUCKET, 2)),
-    
+
     lager:info("waiting for keys to expire"),
     timer:sleep(timer:seconds(210)),
-    
+
     _ = rt:systest_read(NodeA, 1, 100, ?BUCKET, 2),
     timer:sleep(timer:seconds(5)),
     Res = rt:systest_read(NodeA, 1, 100, ?BUCKET, 2),
-    
+
     ?assertEqual(100, length(Res)),
     ok.
 
@@ -116,7 +116,7 @@ check_eviction(Node) ->
         false ->
             ?assertEqual(Res, memory_reclamation_issue)
     end,
-     
+
     {ok, C} = riak:client_connect(Node),
 
     [begin
@@ -128,17 +128,17 @@ check_eviction(Node) ->
     %% make sure all deletes propagate?
     timer:sleep(timer:seconds(10)),
     ok.
-    
+
 check_put_delete(Node) ->
     lager:info("checking that used mem is reclaimed on delete"),
     Pid = get_remote_vnode_pid(Node),
-    
+
     {MemBaseline, PutSize, Key} = put_until_changed(Pid, Node, 1000),
 
     {ok, C} = riak:client_connect(Node),
 
     ok = C:delete(?BUCKET, <<Key:32/integer>>),
-    
+
     timer:sleep(timer:seconds(5)),
 
     {Mem, _PutSize} = get_used_space(Pid),
@@ -157,14 +157,14 @@ check_put_delete(Node) ->
 check_put_consistent(Node) ->
     lager:info("checking that used mem doesn't change on re-put"),
     Pid = get_remote_vnode_pid(Node),
-    
+
     {MemBaseline, _PutSize, Key} = put_until_changed(Pid, Node, 1000),
 
     {ok, C} = riak:client_connect(Node),
 
     %% Write a slightly larger object than before
     ok = C:put(riak_object:new(?BUCKET, <<Key:32/integer>>, <<0:8192>>)),
-    
+
     {ok, _} = C:get(?BUCKET, <<Key:32/integer>>),
 
     timer:sleep(timer:seconds(2)),
@@ -199,14 +199,14 @@ put_until_changed(Pid, Node, Key) ->
     end.
 
 mkconf(Test, Mode) ->
-    MembConfig = 
+    MembConfig =
         case Test of
             ttl ->
                 [{ttl, 200}];
             max_memory ->
                 [{max_memory, 1}];
-            combo -> 
-                [{max_memory, 1}, 
+            combo ->
+                [{max_memory, 1},
                  {ttl, 200}]
         end,
     case Mode of
@@ -234,7 +234,7 @@ mkconf(Test, Mode) ->
                         {anti_entropy, {off, []}},
                         {delete_mode, immediate},
                         {multi_backend_default, <<"memb">>},
-                        {multi_backend, 
+                        {multi_backend,
                          [
                           {<<"memb">>, riak_kv_memory_backend,
                            MembConfig}
@@ -246,7 +246,7 @@ mkconf(Test, Mode) ->
     end.
 
 get_remote_vnode_pid(Node) ->
-    [{_,_,VNode}|_] = rpc:call(Node, riak_core_vnode_manager, 
+    [{_,_,VNode}|_] = rpc:call(Node, riak_core_vnode_manager,
                                all_vnodes, [riak_kv_vnode]),
     VNode.
 

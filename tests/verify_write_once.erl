@@ -52,7 +52,7 @@ confirm() ->
     %%
     %% Select a random node, and use it to create an immutable bucket
     %%
-    Node = lists:nth(random:uniform(length((Cluster1))), Cluster1),
+    Node = lists:nth(rand:uniform(length((Cluster1))), Cluster1),
     rt:create_and_activate_bucket_type(Node, ?BUCKET_TYPE, [{write_once, true}]),
     rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Cluster1),
     lager:info("Created ~p bucket type on ~p", [?BUCKET_TYPE, Node]),

@@ -38,7 +38,7 @@
 
 -module(kv679_dataloss_fb).
 -behavior(riak_test).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 -export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -156,7 +156,7 @@ confirm() ->
 
     lager:info("final get"),
 
-    FetchFun = 
+    FetchFun =
         fun() ->
             Res = kv679_tombstone:read_key(CoordClient),
             ?assertMatch({ok, _}, Res),
@@ -174,7 +174,7 @@ confirm() ->
 test_until_siblings(0, FetchFun) ->
     ?assertEqual([<<"anne">>, <<"joe">>], FetchFun());
 test_until_siblings(LoopCount, FetchFun) ->
-    case length(FetchFun()) of 
+    case length(FetchFun()) of
         1 ->
             timer:sleep(1000),
             test_until_siblings(LoopCount - 1, FetchFun);

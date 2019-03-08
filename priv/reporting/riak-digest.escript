@@ -15,9 +15,9 @@ read_file(File, Owner) ->
     Owner ! Out.
 
 main(_) ->
-    Start = now(),
+    Start = os:timestamp(),
     Timer = fun(Slogan) ->
-                    T = trunc(timer:now_diff(now(), Start)/1000),
+                    T = trunc(timer:now_diff(os:timestamp(), Start)/1000),
                     io:format("~p ~p ~n", [Slogan, T])
             end,
 

@@ -29,7 +29,7 @@
          %% riak_test api
          confirm/0
         ]).
--compile([export_all]). %% because we run ?MODULE:PrepareFun later
+-compile([export_all, nowarn_export_all]). %% because we run ?MODULE:PrepareFun later
 -include_lib("eunit/include/eunit.hrl").
 -include("rt_pipe.hrl").
 
@@ -47,7 +47,7 @@ confirm() ->
     rt:load_modules_on_nodes([?MODULE], Nodes),
 
     load_test_data(Nodes),
-    
+
     [ begin
           lager:info("Running test ~p", [T]),
           run_test(Nodes, T)

@@ -20,7 +20,7 @@
 
 %% Intercepts functions for the riak_test in ../tests/repl_rt_heartbeat.erl
 -module(riak_repl2_rtsink_conn_intercepts).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include("intercept.hrl").
 
 %% @doc Forward the heartbeat messages from the rt source by

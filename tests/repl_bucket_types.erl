@@ -6,7 +6,7 @@
 -module(repl_bucket_types).
 -behaviour(riak_test).
 -export([confirm/0]).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(ENSURE_READ_ITERATIONS, 5).

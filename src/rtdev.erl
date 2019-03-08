@@ -20,7 +20,7 @@
 
 %% @private
 -module(rtdev).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(DEVS(N), lists:concat(["dev", N, "@127.0.0.1"])).

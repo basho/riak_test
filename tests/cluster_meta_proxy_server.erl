@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(cluster_meta_proxy_server).
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -behaviour(gen_server).
 

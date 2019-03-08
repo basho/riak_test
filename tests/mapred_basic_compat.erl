@@ -33,7 +33,7 @@
          inputs_gen_seq/3,
          inputs_gen_bkeys_1/3
         ]).
--compile([export_all]). %% because we call ?MODULE:TestName
+-compile([export_all, nowarn_export_all]). %% because we call ?MODULE:TestName
 -include_lib("eunit/include/eunit.hrl").
 
 -define(INTS_BUCKET, <<"foonum">>).
@@ -51,7 +51,7 @@ confirm() ->
 
     load_test_data(Nodes),
     rt:load_modules_on_nodes([?MODULE], Nodes),
-    
+
     [ begin
           lager:info("Running test ~p", [T]),
           ?MODULE:T(Nodes)
@@ -78,7 +78,7 @@ load_test_data([Node|_]) ->
     %% creates foonum/1..5 - this is what populates ?INTS_BUCKET
     lager:info("Filling INTS_BUCKET (~s)", [?INTS_BUCKET]),
     ok = rpc:call(Node, riak_kv_mrc_pipe, example_setup, []),
-    
+
     lager:info("Adding Link object"),
     Obj = riakc_obj:new(?LINK_BUCKET,
                         <<"yo">>,
@@ -178,7 +178,7 @@ error_not_found_propagation([Node|_]) ->
 %% @doc A map phase outputting a 4 tuple can feed objects to another map phase
 map_output_with_btype([Node|_]) ->
     %% Translates from regular bucket to bucket type one
-    Inputs = ?INTS_BUCKET, 
+    Inputs = ?INTS_BUCKET,
     Spec = [{map, {jsanon, <<"function(o){return[[o.bucket,o.key,null,\"mytype\"]];}">>}, undefined, false},
             {map, {modfun, riak_kv_mapreduce, map_object_value}, undefined, false},
             {reduce, {modfun, riak_kv_mapreduce, reduce_string_to_integer}, undefined, false},

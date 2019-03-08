@@ -138,7 +138,7 @@ verify_tail_worker_crash([RN|_]) ->
     %% first worker decrements & passes on 99
     %% second worker decrements & passes on 98
     ?assertMatch([{_, 98}], Res),
-    
+
     %% second input is 1
     %% first worker decrements & passes on 0
     %% second worker decrements & explodes
@@ -201,17 +201,17 @@ middle_fitting_normal(Pipe) ->
 
     %% send fitting bogus messages - fitting should ignore because
     %% they're not known
-    gen_fsm:send_event(hd(FittingPids), bogus_message),
+    gen_fsm_compat:send_event(hd(FittingPids), bogus_message),
     {error, unknown} =
-        gen_fsm:sync_send_event(hd(FittingPids), bogus_message),
-    gen_fsm:sync_send_all_state_event(hd(FittingPids), bogus_message),
+        gen_fsm_compat:sync_send_event(hd(FittingPids), bogus_message),
+    gen_fsm_compat:sync_send_all_state_event(hd(FittingPids), bogus_message),
     hd(FittingPids) ! bogus_message,
 
     %% send bogus done message - fitting should ignore it because
     %% 'asdf' is not a working vnode pid
     [{_, Head}|_] = Pipe#pipe.fittings,
     MyRef = Head#fitting.ref,
-    ok = gen_fsm:sync_send_event(hd(FittingPids), {done, MyRef, asdf}),
+    ok = gen_fsm_compat:sync_send_event(hd(FittingPids), {done, MyRef, asdf}),
 
     %% kill fittings in the middle
     Third = lists:nth(3, FittingPids),
@@ -413,7 +413,7 @@ verify_worker_limit_multiple([RN|_]) ->
 
 verify_under_worker_limit_one([RN|_]) ->
     lager:info("Verify that many workers + many fittings still under limit"),
-    
+
     %% 20 * Ring size > worker limit, if indeed the worker
     %% limit were enforced per node instead of per vnode.
     PipeLen = 20,
@@ -463,7 +463,7 @@ verify_queue_limit(RN, Retries) when Retries > 0 ->
     Full = length(rt_pipe:extract_queue_full(Trace)),
     NoLongerFull = length(rt_pipe:extract_unblocking(Trace)),
     ?assertEqual(Full, NoLongerFull),
-    
+
     case Full of
         [] ->
             lager:info("Queues were never full; Retries left: ~b",

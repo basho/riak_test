@@ -21,7 +21,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -behavior(riak_test).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -export([confirm/0]).
 
 -define(PING_FAILURE_OUTPUT, "Node did not respond to ping!").

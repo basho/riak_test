@@ -27,7 +27,7 @@
 -include("rt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -export([
          admin/2,
          admin/3,
@@ -66,7 +66,6 @@
          deploy_clusters/1,
          down/2,
          enable_search_hook/2,
-         ensure_random_seeded/0,
          expect_in_log/2,
          get_call_count/2,
          get_deps/0,
@@ -212,7 +211,7 @@ priv_dir() ->
             lager:debug("riak_test dependency priv_dir detected, using that..."),
             DepPrivDir;
         _ ->
-            ?assertEqual({true, bad_priv_dir}, {false, bad_priv_dir})
+            error(bad_priv_dir)
     end,
 
     lager:info("priv dir: ~p -> ~p", [code:priv_dir(riak_test), PrivDir]),
@@ -602,18 +601,18 @@ cmd(Cmd, Opts) ->
 -spec stream_cmd(string()) -> {integer(), string()}.
 stream_cmd(Cmd) ->
     Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr_to_stdout, exit_status]),
-    stream_cmd_loop(Port, "", "", now()).
+    stream_cmd_loop(Port, "", "", os:timestamp()).
 
 %% @doc same as rt:stream_cmd/1, but with options, like open_port/2
 -spec stream_cmd(string(), string()) -> {integer(), string()}.
 stream_cmd(Cmd, Opts) ->
     Port = open_port({spawn, binary_to_list(iolist_to_binary(Cmd))}, [stream, stderr_to_stdout, exit_status] ++ Opts),
-    stream_cmd_loop(Port, "", "", now()).
+    stream_cmd_loop(Port, "", "", os:timestamp()).
 
 stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs}) ->
     receive
         {Port, {data, Data}} ->
-            {_, Now, _} = now(),
+            {_, Now, _} = os:timestamp(),
             NewNewLineBuffer = case Now > Secs of
                 true ->
                     lager:info(NewLineBuffer),
@@ -628,7 +627,7 @@ stream_cmd_loop(Port, Buffer, NewLineBuffer, Time={_MegaSecs, Secs, _MicroSecs})
                     [ lager:info(Token) || Token <- Tokens ],
                     stream_cmd_loop(Port, Buffer ++ NewNewLineBuffer ++ Data, "", Time);
                 _ ->
-                    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, now())
+                    stream_cmd_loop(Port, Buffer, NewNewLineBuffer ++ Data, os:timestamp())
             end;
         {Port, {exit_status, Status}} ->
             catch port_close(Port),
@@ -1793,7 +1792,7 @@ set_backend(Backend) ->
 
 -spec set_backend(atom(), [{atom(), term()}]) -> atom()|[atom()].
 set_backend(leveled, _) ->
-    set_backend(riak_kv_leveled_backend);		     
+    set_backend(riak_kv_leveled_backend);
 set_backend(bitcask, _) ->
     set_backend(riak_kv_bitcask_backend);
 set_backend(eleveldb, _) ->
@@ -2163,32 +2162,14 @@ random_sublist(List, N) ->
     [ E || {_,E} <- List3].
 
 -spec random_uniform() -> float().
-%% @doc Like random:uniform/0, but always seeded with quality entropy.
+%% @doc Like rand:uniform/0
 random_uniform() ->
-    ok = ensure_random_seeded(),
-    random:uniform().
+    rand:uniform().
 
 -spec random_uniform(Range :: pos_integer()) -> pos_integer().
-%% @doc Like random:uniform/1, but always seeded with quality entropy.
+%% @doc Like rand:uniform/1
 random_uniform(Range) ->
-    ok = ensure_random_seeded(),
-    random:uniform(Range).
-
--spec ensure_random_seeded() -> ok.
-%% @doc Ensures that the random module's PRNG is seeded with the good stuff.
-ensure_random_seeded() ->
-    Key = {?MODULE, random_seeded},
-    case erlang:get(Key) of
-        true ->
-            ok;
-        _ ->
-            % crypto:rand_bytes/1 is deprecated in OTP-19
-            <<A:32/integer, B:32/integer, C:32/integer>>
-                = crypto:strong_rand_bytes(12),
-            random:seed(A, B, C),
-            erlang:put(Key, true),
-            ok
-    end.
+    rand:uniform(Range).
 
 %% @doc Recusively delete files in a directory.
 -spec del_dir(string()) -> strings().

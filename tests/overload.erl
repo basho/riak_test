@@ -18,7 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 -module(overload).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 -cover_modules([riak_kv_vnode,
@@ -115,8 +115,7 @@ confirm() ->
     pass.
 
 generate_key() ->
-    random:seed(erlang:now()),
-    N = random:uniform(500),
+    N = rand:uniform(500),
 
     Part1 = <<"overload_test_key_">>,
     Part2 = integer_to_binary(N),
@@ -589,7 +588,7 @@ remote_vnode_gets_in_queue(Idx) ->
 %% tightly to the internal representation of get requests in riak_kv...can't
 %% really figure out a better way to do this, though.
 is_get_req({'$gen_event', {riak_vnode_req_v1, _, _, Req}}) ->
-    case element(1, Req) of 
+    case element(1, Req) of
         riak_kv_get_req_v1 ->
             true;
         riak_kv_head_req_v1 ->

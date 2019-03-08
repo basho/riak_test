@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 -module(vnode_util).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 load(Nodes) ->
     rt:load_modules_on_nodes([?MODULE], Nodes),

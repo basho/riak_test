@@ -88,7 +88,7 @@ verify_fsm([RN|_]) ->
     ?assertEqual({eoi, [{fs, {sync, 1}}], []}, Result).
 
 %% @doc purposefully disable acking one output, to trigger the timeout
-%% on the gen_fsm:sync_send_event
+%% on the gen_fsm_compat:sync_send_event
 verify_fsm_timeout([RN|_]) ->
     lager:info("Verify sink fsm timeout"),
     PipeRef = make_ref(),

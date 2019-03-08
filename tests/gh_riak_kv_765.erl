@@ -30,7 +30,7 @@
 %% !!! DO NOT ADD TO GIDDYUP
 
 -module(gh_riak_kv_765).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
@@ -87,9 +87,9 @@ check_throttle_and_expiration() ->
     pass.
 
 time_build(Node) ->
-    T0 = erlang:now(),
+    T0 = os:timestamp(),
     rt:wait_until_aae_trees_built([Node]),
-    Duration = timer:now_diff(erlang:now(), T0),
+    Duration = timer:now_diff(os:timestamp(), T0),
     lager:info("Build took ~b us", [Duration]),
     Duration.
 
@@ -111,7 +111,7 @@ disable_aae(Node) ->
     rpc:call(Node, riak_kv_entropy_manager, disable, []).
 
 expire_tree(Node, Partition) ->
-    Now = erlang:now(),
+    Now = os:timestamp(),
     {ok, Tree} = rpc:call(Node, riak_kv_vnode, hashtree_pid, [Partition]),
     rpc:call(Node, riak_kv_index_hashtree, expire, [Tree]),
     rt:wait_until(Node,

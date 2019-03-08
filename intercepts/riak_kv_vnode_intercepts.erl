@@ -19,7 +19,7 @@
 %%-------------------------------------------------------------------
 
 -module(riak_kv_vnode_intercepts).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include("intercept.hrl").
 
 %% shamelessly copied from riak_kv_vnode.hrl
@@ -56,8 +56,7 @@ wrong_node(_Partition) ->
 
 %% @doc Make all KV vnode coverage commands take abnormally long.
 slow_handle_coverage(Req, Filter, Sender, State) ->
-    random:seed(erlang:now()),
-    Rand = random:uniform(5000),
+    Rand = rand:uniform(5000),
     error_logger:info_msg("coverage sleeping ~p", [Rand]),
     timer:sleep(Rand),
     ?M:handle_coverage_orig(Req, Filter, Sender, State).
@@ -170,7 +169,7 @@ error_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
 
 corrupting_handle_handoff_data(BinObj0, State) ->
     BinObj =
-        case random:uniform(20) of
+        case rand:uniform(20) of
             10 ->
                 corrupt_binary(BinObj0);
             _ -> BinObj0
@@ -178,7 +177,7 @@ corrupting_handle_handoff_data(BinObj0, State) ->
     ?M:handle_handoff_data_orig(BinObj, State).
 
 corrupt_binary(O) ->
-    crypto:rand_bytes(byte_size(O)).
+    crypto:strong_rand_bytes(byte_size(O)).
 
 put_as_readrepair(Preflist, BKey, Obj, ReqId, StartTime, Options) ->
     ?M:put_orig(Preflist, BKey, Obj, ReqId, StartTime, [rr | Options]).

@@ -3,8 +3,8 @@
 %%% @doc
 %%% riak_test for pw vs node_confirms behaviour.
 %%%
-%%% when using w=3, pw=2 in the attempt to prevent data loss by writing 
-%%% primary nodes only to ensure the write goes to more than one physical 
+%%% when using w=3, pw=2 in the attempt to prevent data loss by writing
+%%% primary nodes only to ensure the write goes to more than one physical
 %%% node, one ends up rejecting writes in the case of more than one node
 %%% going down.
 %%% node_confirms solves this issue by writing to both primary and
@@ -13,14 +13,14 @@
 %%% This test demonstrates that of writing to a bucket with pw=2 when 2 nodes
 %%% from the preflist are down will be rejected, whereas the same situation with
 %%% node_confirms=2 returns a successful write.
-%%% Finally, it demonstrates that write to a bucket with a node_confirms value 
+%%% Finally, it demonstrates that write to a bucket with a node_confirms value
 %%% that cannot be met will be rejected.
 %%%
 %%% @end
 
 -module(node_confirms_vs_pw).
 -behavior(riak_test).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 -export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -40,7 +40,7 @@ confirm() ->
             {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]}],
 
     [Node1|_] = rt:build_cluster(5, Conf),
-    
+
     % Get preflist, we need to find two primary nodes to stop for this bucket/key
     PL = rt:get_preflist(Node1, ?BUCKET, ?KEY),
     lager:info("Got preflist"),
@@ -103,7 +103,7 @@ confirm() ->
     %% Write key and confirm error node_confirms=3 unsatisfied
     ?assertMatch({error, {ok,"503",_,<<"node_confirms-value unsatisfied: 2/3\n">>}},
                  rt:httpc_write(Client, ?BUCKET, ?KEY, <<"12345">>)),
-    
+
     pass.
 
 

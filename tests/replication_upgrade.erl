@@ -38,7 +38,7 @@ confirm() ->
                     [[],[],[]], Nodes));
         "random" ->
             %% halfass randomization
-            lists:sort(fun(_, _) -> random:uniform(100) < 50 end, Nodes);
+            lists:sort(fun(_, _) -> rand:uniform(100) < 50 end, Nodes);
         Other ->
             lager:error("Invalid upgrade ordering ~p", [Other]),
             erlang:exit()
