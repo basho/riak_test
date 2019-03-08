@@ -1,6 +1,6 @@
 -module(replication2_pg).
 -export([confirm/0]).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 

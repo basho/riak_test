@@ -19,14 +19,14 @@
 %%-------------------------------------------------------------------
 
 -module(riak_kv_leveled_backend_intercepts).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include("intercept.hrl").
 
 -define(M, riak_kv_leveled_backend_orig).
 
 corrupting_put(Bucket, Key, IndexSpecs, Val0, ModState) ->
     Val =
-        case random:uniform(20) of
+        case rand:uniform(20) of
             10 ->
                 corrupt_binary(Val0);
             _ -> Val0
@@ -37,7 +37,7 @@ corrupting_get(Bucket, Key, ModState) ->
     case ?M:get_orig(Bucket, Key, ModState) of
         {ok, BinVal0, UpdModState} ->
             BinVal =
-                case random:uniform(20) of
+                case rand:uniform(20) of
                     10 ->
                         corrupt_binary(BinVal0);
                     _ -> BinVal0
@@ -47,7 +47,7 @@ corrupting_get(Bucket, Key, ModState) ->
     end.
 
 corrupt_binary(O) ->
-    crypto:rand_bytes(byte_size(O)).
+    crypto:strong_rand_bytes(byte_size(O)).
 
 always_corrupt_get(Bucket, Key, ModState) ->
     case ?M:get_orig(Bucket, Key, ModState) of

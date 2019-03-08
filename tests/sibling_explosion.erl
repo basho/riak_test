@@ -1,7 +1,7 @@
 -module(sibling_explosion).
 -include_lib("eunit/include/eunit.hrl").
 -export([confirm/0]).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -define(B, <<"b">>).
 -define(K, <<"k">>).

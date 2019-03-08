@@ -17,7 +17,7 @@
 
 -module(coverage_participation).
 -behavior(riak_test).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 -export([confirm/0]).
 
 -include_lib("eunit/include/eunit.hrl").

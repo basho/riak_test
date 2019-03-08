@@ -19,7 +19,7 @@
 %%-------------------------------------------------------------------
 
 -module(riak_repl_aae_source_intercepts).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include("intercept.hrl").
 
 -define(M, riak_repl_aae_source_orig).

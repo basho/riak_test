@@ -1,5 +1,5 @@
 -module('2iperf').
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(HARNESS, (rt_config:get(rt_harness))).
@@ -29,7 +29,7 @@ confirm() ->
         %%   [{get, 3}, {update, 1}]
         %%  ),
 
-    TwoIConfig = 
+    TwoIConfig =
 	rt_bench:config(
 	  max,
 	  rt_config:get(perf_duration),

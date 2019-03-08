@@ -22,7 +22,7 @@
 %% Pre/post commit hooks for testing
 %%
 -module(hooks).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 precommit_nop(Obj) ->
     Obj.

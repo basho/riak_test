@@ -21,11 +21,11 @@
 %% -------------------------------------------------------------------
 
 -module(cause_bdp).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 spam_nodes(TargetNodes) ->
         [[spawn(?MODULE, spam, [N]) || _ <- lists:seq(1,1000*200)] || N <- TargetNodes].
 
 spam(Node) ->
-    timer:sleep(random:uniform(100)),
+    timer:sleep(rand:uniform(100)),
     catch rpc:call(Node, erlang, whereis, [rex]).

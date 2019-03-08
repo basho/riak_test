@@ -25,9 +25,6 @@
 
 confirm() ->
     rt:set_conf(all, [{"ring_size", "128"}]),
-    Seed = erlang:now(),
-    lager:info("SEED: ~p", [Seed]),
-    random:seed(Seed),
 %    run([10,20,40], 10, 50, 10).
     run([5], 1, 5, 1),
     pass.
@@ -106,7 +103,7 @@ run_rounds(Round, StableRound, SendFun, ConsistentFun, [SenderNode | _]=UpNodes,
     run_rounds(Round - 1, StableRound - 1, SendFun, ConsistentFun, UpNodes, DownNodes).
 
 fail_node(Round, OtherNodes) ->
-    Failed = lists:nth(random:uniform(length(OtherNodes)), OtherNodes),
+    Failed = lists:nth(rand:uniform(length(OtherNodes)), OtherNodes),
     lager:info("round: ~p (unstable): shutting down ~p", [Round, Failed]),
     rt:stop(Failed),
     {Failed, lists:delete(Failed, OtherNodes)}.

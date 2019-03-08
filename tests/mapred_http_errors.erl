@@ -27,7 +27,7 @@
          %% used on riak node
          map_never_notfound/3
         ]).
--compile([export_all]). %% because we call ?MODULE:TestName
+-compile([export_all, nowarn_export_all]). %% because we call ?MODULE:TestName
 -include_lib("eunit/include/eunit.hrl").
 
 %% @doc this map function always bails with a function clause error on
@@ -39,7 +39,7 @@ confirm() ->
     Nodes = rt:build_cluster(1),
 
     rt:load_modules_on_nodes([?MODULE], Nodes),
-    
+
     [ begin
           lager:info("Running test ~p", [T]),
           ?MODULE:T(Nodes)

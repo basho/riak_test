@@ -1,28 +1,28 @@
 %%
 %% %CopyrightBegin%
-%% 
+%%
 %% Copyright Ericsson AB 2007-2012. All Rights Reserved.
-%% 
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 
 -module(make_certs).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -export([all/1, all/2, rootCA/2, intermediateCA/3, endusers/3, enduser/3, revoke/3, gencrl/2, verify/3]).
 
--record(dn, {commonName, 
+-record(dn, {commonName,
 	     organizationalUnitName = "Basho Engineering",
 	     organizationName = "Basho",
 	     localityName = "Cambridge, MA",
@@ -46,7 +46,7 @@ all(DataDir, PrivDir) ->
     endusers(PrivDir, "erlangCA", ["localhost"]),
     endusers(PrivDir, "revokedCA", ["blunderbuss"]),
     endusers(PrivDir, "bashoCA", ["scuttlebutt"]),
-    %% Create keycert files 
+    %% Create keycert files
     SDir = filename:join([PrivDir, "server"]),
     SC = filename:join([SDir, "cert.pem"]),
     SK = filename:join([SDir, "key.pem"]),
@@ -95,8 +95,8 @@ intermediateCA(Root, CA, ParentCA) ->
     DN = #dn{commonName = CA},
     CnfFile = filename:join([CARoot, "req.cnf"]),
     file:write_file(CnfFile, req_cnf(DN)),
-    KeyFile = filename:join([CARoot, "private", "key.pem"]), 
-    ReqFile =  filename:join([CARoot, "req.pem"]), 
+    KeyFile = filename:join([CARoot, "private", "key.pem"]),
+    ReqFile =  filename:join([CARoot, "req.pem"]),
     create_req(Root, CnfFile, KeyFile, ReqFile),
     CertFile = filename:join([CARoot, "cert.pem"]),
     sign_req(Root, ParentCA, "ca_cert", ReqFile, CertFile),
@@ -124,8 +124,8 @@ enduser(Root, CA, User, DirName) ->
     CnfFile = filename:join([UsrRoot, "req.cnf"]),
     DN = #dn{commonName = User},
     file:write_file(CnfFile, req_cnf(DN)),
-    KeyFile = filename:join([UsrRoot, "key.pem"]), 
-    ReqFile =  filename:join([UsrRoot, "req.pem"]), 
+    KeyFile = filename:join([UsrRoot, "key.pem"]),
+    ReqFile =  filename:join([UsrRoot, "req.pem"]),
     create_req(Root, CnfFile, KeyFile, ReqFile),
     %create_req(Root, CnfFile, KeyFile, ReqFile),
     CertFileAllUsage =  filename:join([UsrRoot, "cert.pem"]),
@@ -143,7 +143,7 @@ revoke(Root, CA, User) ->
 	   " -revoke ", UsrCert,
 	   " -crl_reason keyCompromise",
 	   " -config ", CACnfFile],
-    Env = [{"ROOTDIR", filename:absname(Root)}], 
+    Env = [{"ROOTDIR", filename:absname(Root)}],
     cmd(Cmd, Env),
     gencrl(Root, CA).
 
@@ -155,7 +155,7 @@ gencrl(Root, CA) ->
 	   " -crlhours 24",
 	   " -out ", CACRLFile,
 	   " -config ", CACnfFile],
-    Env = [{"ROOTDIR", filename:absname(Root)}], 
+    Env = [{"ROOTDIR", filename:absname(Root)}],
     cmd(Cmd, Env).
 
 verify(Root, CA, User) ->
@@ -177,39 +177,39 @@ create_self_signed_cert(Root, CAName, Cnf) ->
     CARoot = filename:join([Root, CAName]),
     CnfFile = filename:join([CARoot, "req.cnf"]),
     file:write_file(CnfFile, Cnf),
-    KeyFile = filename:join([CARoot, "private", "key.pem"]), 
-    CertFile = filename:join([CARoot, "cert.pem"]), 
+    KeyFile = filename:join([CARoot, "private", "key.pem"]),
+    CertFile = filename:join([CARoot, "cert.pem"]),
     Cmd = [?OpenSSLCmd, " req"
 	   " -new"
 	   " -x509"
 	   " -config ", CnfFile,
 	   " -keyout ", KeyFile,
 	   " -outform PEM",
-	   " -out ", CertFile], 
-    Env = [{"ROOTDIR", filename:absname(Root)}],  
+	   " -out ", CertFile],
+    Env = [{"ROOTDIR", filename:absname(Root)}],
     cmd(Cmd, Env).
 
 create_self_signed_ecc_cert(Root, CAName, Cnf) ->
     CARoot = filename:join([Root, CAName]),
     CnfFile = filename:join([CARoot, "req.cnf"]),
     file:write_file(CnfFile, Cnf),
-    KeyFile = filename:join([CARoot, "private", "key.pem"]), 
-    CertFile = filename:join([CARoot, "cert.pem"]), 
+    KeyFile = filename:join([CARoot, "private", "key.pem"]),
+    CertFile = filename:join([CARoot, "cert.pem"]),
     Cmd = [?OpenSSLCmd, " ecparam"
 	   " -out ", KeyFile,
 	   " -name secp521r1 ",
 	   %" -name sect283k1 ",
 	   " -genkey "],
-    Env = [{"ROOTDIR", filename:absname(Root)}], 
+    Env = [{"ROOTDIR", filename:absname(Root)}],
     cmd(Cmd, Env),
 
     Cmd2 = [?OpenSSLCmd, " req"
 	   " -new"
 	   " -x509"
 	   " -config ", CnfFile,
-	   " -key ", KeyFile, 
+	   " -key ", KeyFile,
 		 " -outform PEM ",
-	   " -out ", CertFile], 
+	   " -out ", CertFile],
     cmd(Cmd2, Env).
 
 create_ca_dir(Root, CAName, Cnf) ->
@@ -228,9 +228,9 @@ create_req(Root, CnfFile, KeyFile, ReqFile) ->
 	   " -new"
 	   " -config ", CnfFile,
 	   " -outform PEM ",
-	   " -keyout ", KeyFile, 
-	   " -out ", ReqFile], 
-    Env = [{"ROOTDIR", filename:absname(Root)}], 
+	   " -keyout ", KeyFile,
+	   " -out ", ReqFile],
+    Env = [{"ROOTDIR", filename:absname(Root)}],
     cmd(Cmd, Env).
     %fix_key_file(KeyFile).
 
@@ -240,7 +240,7 @@ create_ecc_req(Root, CnfFile, KeyFile, ReqFile) ->
 	   " -name secp521r1 ",
 	   %" -name sect283k1 ",
 	   " -genkey "],
-    Env = [{"ROOTDIR", filename:absname(Root)}], 
+    Env = [{"ROOTDIR", filename:absname(Root)}],
     cmd(Cmd, Env),
     Cmd2 = [?OpenSSLCmd, " req"
 	   " -new ",
@@ -257,17 +257,17 @@ sign_req(Root, CA, CertType, ReqFile, CertFile) ->
     Cmd = [?OpenSSLCmd, " ca"
 	   " -batch"
 	   " -notext"
-	   " -config ", CACnfFile, 
+	   " -config ", CACnfFile,
 	   " -extensions ", CertType,
-	   " -in ", ReqFile, 
+	   " -in ", ReqFile,
 	   " -out ", CertFile],
-    Env = [{"ROOTDIR", filename:absname(Root)}], 
+    Env = [{"ROOTDIR", filename:absname(Root)}],
     cmd(Cmd, Env).
-    
+
 %%
 %%  Misc
 %%
-    
+
 create_dirs(Root, Dirs) ->
     lists:foreach(fun(Dir) ->
 			  file:make_dir(filename:join([Root, Dir])) end,
@@ -290,12 +290,12 @@ remove_rnd(Dir) ->
 
 cmd(Cmd, Env) ->
     FCmd = lists:flatten(Cmd),
-    Port = open_port({spawn, FCmd}, [stream, eof, exit_status, stderr_to_stdout, 
+    Port = open_port({spawn, FCmd}, [stream, eof, exit_status, stderr_to_stdout,
 				    {env, Env}]),
     eval_cmd(Port, FCmd).
 
 eval_cmd(Port, Cmd) ->
-    receive 
+    receive
 	{Port, {data, _}} ->
 	    eval_cmd(Port, Cmd);
 	{Port, eof} ->
@@ -310,7 +310,7 @@ eval_cmd(Port, Cmd) ->
     end.
 
 %%
-%% Contents of configuration files 
+%% Contents of configuration files
 %%
 
 req_cnf(DN) ->
@@ -337,7 +337,7 @@ req_cnf(DN) ->
      "[name]\n"
      "commonName		= ", DN#dn.commonName, "\n"
      "organizationalUnitName	= ", DN#dn.organizationalUnitName, "\n"
-     "organizationName	        = ", DN#dn.organizationName, "\n" 
+     "organizationName	        = ", DN#dn.organizationName, "\n"
      "localityName		= ", DN#dn.localityName, "\n"
      "countryName		= ", DN#dn.countryName, "\n"
      "emailAddress		= ", DN#dn.emailAddress, "\n"

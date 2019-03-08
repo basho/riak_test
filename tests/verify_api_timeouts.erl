@@ -1,6 +1,6 @@
 
 -module(verify_api_timeouts).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET, <<"listkeys_bucket">>).
@@ -115,7 +115,7 @@ confirm() ->
                          lists:sort(L2)),
             lager:info("Both Values"),
             ok;
-        V2 -> ?assertEqual({object_value, <<"get2get2get2get2get\n">>}, 
+        V2 -> ?assertEqual({object_value, <<"get2get2get2get2get\n">>},
                            {object_value, V2})
     end,
 

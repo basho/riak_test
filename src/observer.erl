@@ -1,5 +1,5 @@
 -module(observer).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -record(history, {network,
                   disk,
@@ -485,7 +485,7 @@ load_modules_on_nodes(Modules, Nodes) ->
     [case code:get_object_code(Module) of
          {Module, Bin, File} ->
              %% rpc:multicall(Nodes, code, purge, [Module]),
-             {Ret, []} = rpc:multicall(Nodes, code, 
+             {Ret, []} = rpc:multicall(Nodes, code,
 				       load_binary, [Module, File, Bin]),
 	     [{module, observer}] = lists:usort(Ret);
          error ->

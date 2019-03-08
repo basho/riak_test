@@ -59,7 +59,7 @@ confirm() ->
     pass.
 
 make_common() ->
-    list_to_binary(io_lib:format("~p", [now()])).
+    list_to_binary(io_lib:format("~p", [os:timestamp()])).
 
 write_stuff(Nodes, Start, End, Bucket, W, Common) ->
     Nd = lists:nth(length(Nodes), Nodes),

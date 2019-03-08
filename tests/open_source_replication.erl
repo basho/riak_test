@@ -1,7 +1,7 @@
 -module(open_source_replication).
 -behavior(riak_test).
 -export([confirm/0]).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(BUCKET2i, <<"2ibucket">>).
@@ -159,7 +159,7 @@ run_2i_write_test(WriteClusterNode, ReadClusterNode, no_repl) ->
     K = fun secondary_index_tests:int_to_key/1,
 
     %% check that these things exist on one cluster only
-    
+
     assertExactQuery([{pb, PBC1}], [K(5 + Offset)], <<"field1_bin">>,
                      secondary_index_tests:int_to_field1_bin(5 + Offset)),
     assertExactQuery([{pb, PBC2}], [], <<"field1_bin">>,

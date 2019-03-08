@@ -34,7 +34,7 @@
 %% also monitoring the vnode. During handoff, the vnode that should
 %% respond to the sender will change, but the monitoring does not,
 %% currently. This is a bug.
-%% 
+%%
 %% The testing strategy is to block workers while filling their queues
 %% to the point they begin blocking, then add a node to the cluster
 %% and watch their handoff progress. The slightly tricky point is that
@@ -43,11 +43,11 @@
 %% archive), but we don't want them to process so many inputs that
 %% they consume their blocking queues before handing off.
 
-%% Please Note: Under rare circumstances, this test may fail with a 
-%% "{badmatch,{error,[{vnode_down,noproc}]}}' error. This is not a 
-%% failure of this test but rather a side effect of a race condition 
+%% Please Note: Under rare circumstances, this test may fail with a
+%% "{badmatch,{error,[{vnode_down,noproc}]}}' error. This is not a
+%% failure of this test but rather a side effect of a race condition
 %% in riak_core_vnode_proxy. It manifests due to the fact that the
-%% test is attempting to send a command to a vnode that is in fact 
+%% test is attempting to send a command to a vnode that is in fact
 %% down, however monitor only works by issuing a command and getting
 %% a PID. In some instances, get_vnode_pid fails because vnode shutdown
 %% is queued up in the mailbox before monitor node. Unfortunately, the
@@ -59,7 +59,7 @@
 -export([
          %% riak_test's entry
          confirm/0,
-         
+
          %% test machinery
          runner_wait/1,
          queue_filler/3
@@ -232,6 +232,6 @@ shuffle([E]) ->
     [E];
 shuffle(List) ->
     Max = length(List),
-    Keyed = [{random:uniform(Max), E} || E <- List],
+    Keyed = [{rand:uniform(Max), E} || E <- List],
     Sorted = lists:sort(Keyed),
     [N || {_, N} <- Sorted].

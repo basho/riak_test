@@ -20,7 +20,7 @@
 
 %% Intercepts functions for the riak_test in ../tests/repl_rt_heartbeat.erl
 -module(riak_repl2_rtq_intercepts).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -include("intercept.hrl").
 
 -define(M, riak_repl2_rtq_orig).
@@ -29,11 +29,11 @@
 slow_trim_q(State) ->
     %% ?I_INFO("slow_trim_q"),
 
-    %% This hideousness is necessary in order to have this intercept sleep only 
+    %% This hideousness is necessary in order to have this intercept sleep only
     %% on the first iteration. With hope, it causes the message queue of the
     %% RTQ to spike enough to initiate overload handling, then subsequently
     %% allows the queue to drain, overload to flip off, and the writes to complete.
-    case get(hosed) of 
+    case get(hosed) of
     	undefined ->
     	    put(hosed, true);
     	true ->

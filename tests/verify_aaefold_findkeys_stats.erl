@@ -171,7 +171,7 @@ write_siblings(Node) ->
                              end,
                              orddict:new(),
                              [to_key(N) || N <- lists:seq(1, 100)]),
-    Bytes = crypto:rand_bytes(10),
+    Bytes = crypto:strong_rand_bytes(10),
     ExpectedSibs = write_siblings(100, PB, Bytes, InitialAcc),
     riakc_pb_socket:stop(PB),
     ExpectedSibs.

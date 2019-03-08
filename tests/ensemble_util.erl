@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 -module(ensemble_util).
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -define(DEFAULT_RING_SIZE, 16).
 
