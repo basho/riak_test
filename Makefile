@@ -7,50 +7,34 @@ APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
 	observer wx gs
 PLT = $(HOME)/.riak-test_dialyzer_plt
 
+REBAR=./rebar3
+
 all: deps compile
-	./rebar skip_deps=true escriptize
-	SMOKE_TEST=1 ./rebar skip_deps=true escriptize
+	$(REBAR) skip_deps=true escriptize
+	SMOKE_TEST=1 $(REBAR) skip_deps=true escriptize
 
 deps:
 	$(if $(HEAD_REVISION),$(warning "Warning: you have checked out a tag ($(HEAD_REVISION)) and should use the locked-deps target"))
-	./rebar get-deps
+	$(REBAR) get-deps
 
 docsclean:
 	@rm -rf doc/*.png doc/*.html doc/*.css edoc-info
 
 compile: deps
-	./rebar compile
+	$(REBAR) compile
 
 clean:
-	@./rebar clean
+	@$(REBAR) clean
 
 distclean: clean
 	@rm -rf riak_test deps
 
 quickbuild:
-	./rebar skip_deps=true compile
-	./rebar escriptize
-
-##
-## Lock Targets
-##
-##  see https://github.com/seth/rebar_lock_deps_plugin
-lock: deps compile
-	./rebar lock-deps
-
-locked-all: locked-deps compile
-
-locked-deps:
-	@echo "Using rebar.config.lock file to fetch dependencies"
-	./rebar -C rebar.config.lock get-deps
+	$(REBAR) skip_deps=true compile
+	$(REBAR) escriptize
 
 ##################
 # Dialyzer targets
 ##################
-
-# Legacy target left for compatibility with any existing automation
-# scripts ...
-clean_plt:
-	cleanplt
 
 include tools.mk
