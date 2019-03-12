@@ -28,6 +28,15 @@
 -define(Q_OPTS, [{return_terms, true}]).
 -define(BUFFER_SIZE_CONF, [{webmachine, [{recbuf, 12288}]}]).
 
+%% Prior to Riak 2.1 HTTP headers could be of arbitrary size, and hence index 
+%% entries.  In 2.1 a change to mochiweb constarined http headers to be only as
+%% big as the receive buffer (default 8KB).
+%%
+%% From 2.9, this constraint still exists, but the receve buffer is now
+%% configurable.  This is a test of that behaviour (and also a change to the
+%% HTTP API to return 431 to indicate that a header too large, rather than
+%% returning a non-specific error in this case.
+
 confirm() ->
     inets:start(),
 

@@ -20,9 +20,17 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-%% We've got a separate test for capability negotiation and other mechanisms, so the test here is fairly
-%% straightforward: get a list of different versions of nodes and join them into a cluster, making sure that
-%% each time our data has been replicated:
+%% We unexpectedly saw in basho_bench testing in an environment where we
+%% were testing handoffs, examples of the error logging for a match between
+%% a binary value and a CRDT.  This was related to a sibling being present
+%% without a dot on the metadata.
+%%
+%% This may have been as a result of at some time failing to have dvv_enabled
+%% on the bucket being tested.
+%%
+%% To make sure this is not a real issue, this test mixes values that overlap
+%% with the CRDT tag, generating siblings, and handoffs.
+
 confirm() ->
     Items    = 50, %% How many test items in each group to write/verify?
     run_test(Items, 4),
