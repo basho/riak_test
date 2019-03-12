@@ -50,18 +50,22 @@ run_test(Items, NTestNodes) ->
     lager:info("Initialise bucket type."),
     CRDT_Tag = <<69:8/integer>>,
     Other_Tag = <<255:8/integer>>,
-    B1 = {<<"type">>, <<"B1">>},
+    BProps = [{allow_mult, true}, {last_write_wins, false},
+                {node_confirms, 1}, {dvv_enabled, true}],
+    B1 = {<<"type1">>, <<"B1">>},
     B2 = <<"B2">>,
-    rt:create_and_activate_bucket_type(RootNode, <<"type">>, []),
+    {ok, C} = riak:client_connect(RootNode),
+    ok = riak_client:set_bucket(B2, BProps, C),
+    ok = rt:create_and_activate_bucket_type(RootNode, <<"type1">>, BProps),
 
     lager:info("Populating initial data."),
-    R1 = systest_write_binary(RootNode, 1, Items, B1, 3, CRDT_Tag),
-    R2 = systest_write_binary(RootNode, Items + 1, Items * 2, B2, 3, CRDT_Tag),
-    R3 = systest_write_binary(RootNode, Items * 2 + 1, Items * 3, B1, 3, Other_Tag),
+    R1A = systest_write_binary(RootNode, 1, Items, B1, 3, CRDT_Tag),
+    R2A = systest_write_binary(RootNode, Items + 1, Items * 2, B2, 3, CRDT_Tag),
+    R3A = systest_write_binary(RootNode, Items * 2 + 1, Items * 3, B1, 3, CRDT_Tag),
 
-    ?assertEqual([], R1),
-    ?assertEqual([], R2),
-    ?assertEqual([], R3),
+    ?assertEqual([], R1A),
+    ?assertEqual([], R2A),
+    ?assertEqual([], R3A),
 
     lager:info("Waiting for service on second node."),
     rt:wait_for_service(FirstJoin, riak_kv),
@@ -75,16 +79,16 @@ run_test(Items, NTestNodes) ->
     lager:info("Validating data - no siblings"),
     systest_read_binary(FirstJoin, 1, Items, B1, 3, CRDT_Tag, false),
     systest_read_binary(FirstJoin, Items + 1, Items * 2, B2, 3, CRDT_Tag, false),
-    systest_read_binary(FirstJoin, Items * 2 + 1, Items * 3, B1, 1, Other_Tag, false),
+    systest_read_binary(FirstJoin, Items * 2 + 1, Items * 3, B1, 1, CRDT_Tag, false),
     
     lager:info("Populating sibling data"),
-    R1S = systest_write_binary(RootNode, 1, Items, B1, 3, Other_Tag),
-    R2S = systest_write_binary(RootNode, Items + 1, Items * 2, B2, 3, Other_Tag),
-    R3S = systest_write_binary(RootNode, Items * 2 + 1, Items * 3, B1, 3, CRDT_Tag),
+    R1B = systest_write_binary(RootNode, 1, Items, B1, 3, Other_Tag),
+    R2B = systest_write_binary(RootNode, Items + 1, Items * 2, B2, 3, Other_Tag),
+    R3B = systest_write_binary(RootNode, Items * 2 + 1, Items * 3, B1, 3, Other_Tag),
 
-    ?assertEqual([], R1S),
-    ?assertEqual([], R2S),
-    ?assertEqual([], R3S),
+    ?assertEqual([], R1B),
+    ?assertEqual([], R2B),
+    ?assertEqual([], R3B),
 
     lager:info("Waiting for service on third node."),
     rt:wait_for_service(SecondJoin, riak_kv),
@@ -98,7 +102,16 @@ run_test(Items, NTestNodes) ->
     lager:info("Validating data - siblings"),
     systest_read_binary(SecondJoin, 1, Items, B1, 3, CRDT_Tag, true),
     systest_read_binary(SecondJoin, Items + 1, Items * 2, B2, 3, CRDT_Tag, true),
-    systest_read_binary(SecondJoin, Items * 2 + 1, Items * 3, B1, 1, Other_Tag, true),
+    systest_read_binary(SecondJoin, Items * 2 + 1, Items * 3, B1, 1, CRDT_Tag, true),
+
+    lager:info("Populating more sibling data"),
+    R1C = systest_write_binary(RootNode, 1, Items, B1, 3, CRDT_Tag),
+    R2C = systest_write_binary(RootNode, Items + 1, Items * 2, B2, 3, CRDT_Tag),
+    R3C = systest_write_binary(RootNode, Items * 2 + 1, Items * 3, B1, 3, CRDT_Tag),
+
+    ?assertEqual([], R1C),
+    ?assertEqual([], R2C),
+    ?assertEqual([], R3C),
 
     lager:info("Waiting for service on final node."),
     rt:wait_for_service(LastJoin, riak_kv),
@@ -112,7 +125,7 @@ run_test(Items, NTestNodes) ->
     lager:info("Validating data - siblings"),
     systest_read_binary(LastJoin, 1, Items, B1, 3, CRDT_Tag, true),
     systest_read_binary(LastJoin, Items + 1, Items * 2, B2, 3, CRDT_Tag, true),
-    systest_read_binary(LastJoin, Items * 2 + 1, Items * 3, B1, 1, Other_Tag, true),
+    systest_read_binary(LastJoin, Items * 2 + 1, Items * 3, B1, 1, CRDT_Tag, true),
 
 
     %% Prepare for the next call to our test (we aren't polite about it, it's faster that way):
@@ -200,9 +213,7 @@ check_value(Obj, ExpectSiblings, N, CommonValBin) ->
                 Contents = riak_object:get_contents(Obj),
                 HaveDotFun =
                     fun({MD, V}, Acc) ->
-                        lager:info("Seeking dot in key ~w", [N]),
                         {ok, _DV} = dict:find(<<"dot">>, MD),
-                        lager:info("Found dot for key ~w", [N]),
                         LastMod = dict:fetch(<<"X-Riak-Last-Modified">>, MD),
                         [{LastMod, V}|Acc]
                     end,
