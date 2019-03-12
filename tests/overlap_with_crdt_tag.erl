@@ -29,7 +29,8 @@
 %% on the bucket being tested.
 %%
 %% To make sure this is not a real issue, this test mixes values that overlap
-%% with the CRDT tag, generating siblings, and handoffs.
+%% with the CRDT tag, generating siblings, and handoffs.  Nothing untoward
+%% should occur
 
 confirm() ->
     Items    = 50, %% How many test items in each group to write/verify?

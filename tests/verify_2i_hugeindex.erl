@@ -32,10 +32,10 @@
 %% entries.  In 2.1 a change to mochiweb constarined http headers to be only as
 %% big as the receive buffer (default 8KB).
 %%
-%% From 2.9, this constraint still exists, but the receve buffer is now
+%% From 2.9, this constraint still exists, but the receive buffer is now
 %% configurable.  This is a test of that behaviour (and also a change to the
 %% HTTP API to return 431 to indicate that a header too large, rather than
-%% returning a non-specific error in this case.
+%% returning a non-specific error in this case).
 
 confirm() ->
     inets:start(),
