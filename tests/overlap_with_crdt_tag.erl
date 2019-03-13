@@ -36,15 +36,11 @@ confirm() ->
     Items    = 50, %% How many test items in each group to write/verify?
     run_test(Items, 4),
 
-    lager:info("Test verify_handoff passed."),
+    lager:info("Test overlap_with_crdt_tag passed."),
     pass.
 
 run_test(Items, NTestNodes) ->
     lager:info("Testing handoff (items ~p, nodes: ~p)", [Items, NTestNodes]),
-
-    %% This resets nodes, cleans up stale directories, etc.:
-    lager:info("Cleaning up..."),
-    rt:setup_harness(dummy, dummy),
 
     lager:info("Spinning up test nodes"),
     [RootNode, FirstJoin, SecondJoin, LastJoin] = Nodes = 
