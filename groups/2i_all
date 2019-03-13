@@ -1,4 +1,5 @@
 secondary_index_tests
+verify_2i_handoff
 verify_2i_hugeindex
 verify_2i_limit
 verify_2i_returnterms
