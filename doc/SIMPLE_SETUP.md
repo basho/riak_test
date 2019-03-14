@@ -48,7 +48,7 @@ make test
 Also within yokozuna make the yokozuna bench test scripts (which are called within some of the yokozuna tests)
 
 ```
-cd~/test_sw/yokozuna/misc/bench
+cd ~/test_sw/yokozuna/misc/bench
 ../../rebar get-deps
 ../../rebar compile
 ```
