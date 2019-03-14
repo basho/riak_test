@@ -14,7 +14,7 @@ You need to decide on destinations for the following:
 
 - A location for the riak_test software itself, where the tests will be built and test scripts will be run and logs will be stored (e.g. "~/riak_test")
 
-There will also need to be a test configuration file (".riak_test_config"), which must be in the root of the home directory of the user running tests.
+There will also need to be a test configuration file (".riak_test.config"), which must be in the root of the home directory of the user running tests.
 
 ## Clone Repos
 
@@ -76,7 +76,7 @@ This script will make `~/rt/riak` the path to setup releases.  If this is to be 
 
 ## Setup initial test Configuration
 
-Create a `~/.riak_test_config` file with the following sample configuration:
+Create a `~/.riak_test.config` file with the following sample configuration:
 
 ```
 {default, [
