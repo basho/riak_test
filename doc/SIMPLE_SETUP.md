@@ -8,7 +8,7 @@ You need to decide on destinations for the following:
 
 - A runtime for Riak instances running tests (e.g. "~/rt/riak")
 
-- A destination to install yokozuna tests should you wish to run yokozuna tests (e.g. "~/test_sw/yokozuna") and basho_bench (e.g. "~/test_sw/basho_bench")
+- A destination to install yokozuna tests should you wish to run yokozuna tests (e.g. "\~/test_sw/yokozuna") and basho_bench (e.g. "\~/test_sw/basho_bench")
 
 - A destination in which to build riak releases to be tested (e.g. "~/test_build/riak")
 
@@ -43,6 +43,14 @@ git clone https://github.com/basho/yokozuna
 cd yokozuna
 git checkout develop-2.9
 make test
+```
+
+Also within yokozuna make the yokozuna bench test scripts (which are called within some of the yokozuna tests)
+
+```
+cd~/test_sw/yokozuna/misc/bench
+../../rebar get-deps
+../../rebar compile
 ```
 
 Clone basho_bench into your test software location, checkout the test branch you intend to use, and make i.e.:
@@ -88,7 +96,8 @@ Create a `~/.riak_test_config` file with the following sample configuration:
     {rtdev_path, [{root,     "~/rt/riak"},
                   {current,  "~/rt/riak/current"},
                   {previous, "~/rt/riak/previous"},
-                  {legacy, "~/rt/riak/riak-2.0.5"}
+                  {legacy, "~/rt/riak/riak-2.0.5"},
+                  {"2.0.5", "~/rt/riak/riak-2.0.5"}
                  ]}.
 ]}.
 ```
@@ -97,7 +106,7 @@ The `spam_dir` will need to point at the location of the riak_test software.  At
 
 The platform shout be set to `osx-64` or `linux`.
 
-When testing yokozuna using the `group.sh` script, the yokozuna riak_tests are not copied as part of the initialisation of the script and so need to be found through setting the path in `test_paths`.
+When testing yokozuna using the `group.sh` script, the yokozuna riak_tests are not copied as part of the initialisation of the script and so need to be found through setting the path in `test_paths`.  There are three yokozuna tests that require a specific reference to the "2.0.5" build, hence the last line in the `rtdev_path` list.
 
 ## Build each Test version
 
