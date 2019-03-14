@@ -7,6 +7,7 @@ kv679_tombstone
 kv679_tombstone2
 kv679_uid
 node_confirms_vs_pw
+overlap_with_crdt_tag
 overload
 partition_repair
 pb_cipher_suites
@@ -28,6 +29,8 @@ verify_conditional_postcommit
 verify_corruption_filtering
 verify_down
 verify_handoff
+verify_handoff_raw
+verify_handoff_zlib
 verify_kv_health_check
 verify_listkeys
 verify_object_limits
@@ -37,3 +40,5 @@ verify_stats_removal
 verify_tick_change
 verify_tictac_aae
 verify_vclock
+verify_vclock_raw
+verify_vclock_zlib
