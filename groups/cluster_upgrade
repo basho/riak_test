@@ -14,7 +14,6 @@ verify_crdt_capability
 verify_dt_upgrade
 verify_handoff_mixed
 verify_head_capability
-verify_kv1356
 verify_membackend
 verify_riak_object_reformat
 verify_vclock_encoding_upgrade
