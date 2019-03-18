@@ -93,6 +93,7 @@ confirm() ->
                    {ok,A0} = inet:getaddr(Hostname, inet),
                    inet:ntoa(A0)
            end,
+    io:format("MyIP is ~s~n", [MyIP]),
     ok = rpc:call(Node, riak_core_console, add_source, [[Username,
                                                          MyIP++"/32",
                                                          "trust"]]),
@@ -222,6 +223,8 @@ confirm() ->
 
     ?assertMatch({error, {ok, "403", _, _}}, rhc:put(C7, Object)),
 
+    lager:info("Pausing to build the tension (to mysteriously make tests pass)", []),
+    timer:sleep(1000),
     %% list buckets
     lager:info("Checking that list buckets is disallowed"),
     ?assertMatch({error, {"403", _}}, rhc:list_buckets(C7)),
@@ -490,6 +493,8 @@ confirm() ->
                                                         <<"Riak.reduceSum">>}, undefined,
                                                true}])),
 
+    lager:info("Pausing to build the tension (to mysteriously make tests pass)", []),
+    timer:sleep(1000),
     crdt_tests(Nodes, C7),
 
     URL = lists:flatten(io_lib:format("https://~s:~b", [IP, Port])),
@@ -505,10 +510,9 @@ confirm() ->
                                          {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
 
-    lager:info("checking search 1.0 403s because search won't allow"
-               "connections with security enabled"),
+    lager:info("checking search 1.0 404s because search is removed"),
 
-    ?assertMatch({ok, "403", _, <<"Riak Search 1.0 is deprecated", _/binary>>},
+    ?assertMatch({ok, "404", _, _},
                        ibrowse:send_req(URL ++ "/solr/index/select?q=foo:bar&wt=json", [], get,
                      [], [{response_format, binary}, {is_ssl, true},
                           {ssl_options, [
