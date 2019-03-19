@@ -42,6 +42,7 @@ cd ~/test_sw
 git clone https://github.com/basho/yokozuna
 cd yokozuna
 git checkout develop-2.9
+make all
 make test
 ```
 
@@ -133,6 +134,14 @@ make devclean; make devrel
 Each time you change a branch for testing, re-run the `make devclean; make devrel` and the `rtdev-install.sh` script.
 
 If you intend to test cluster upgrade tests that include replication, then you will need to use the enterprise release of Riak for nay release prior to `2.2.5`.
+
+## Install JDK
+
+To test yokozuna, it will be necessary to install a JDK.  The install instructions on Yokozuna github recommend "Java 1.6 or later, Oracle 7u25 is recommended".  Tests should run successfully if the retired [Java 7 is used](https://java.com/en/download/faq/java_7.xml), but please be aware of the security implications of running this software.
+
+## Redbug support
+
+tba - further work required to get redbug tests working.
 
 ## Run Tests
 
