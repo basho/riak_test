@@ -219,7 +219,7 @@ pb_connection_info(Port, Config) ->
     {ok, PB} = riakc_pb_socket:start("127.0.0.1", Port, Config),
     ?assertEqual(pong, riakc_pb_socket:ping(PB)),
 
-    ConnInfo = ssl:connection_info(pb_get_socket(PB)),
+    ConnInfo = ssl:connection_information(pb_get_socket(PB)),
 
     riakc_pb_socket:stop(PB),
     ConnInfo.

@@ -179,7 +179,7 @@ run_2i_repair(Node1) ->
     after
         MaxWaitTime ->
             lager:error("Timed out (~pms) waiting for 2i AAE repair process", [MaxWaitTime]),
-            ?assertEqual(aae_2i_repair_complete, aae_2i_repair_timeout)
+            ?assert(false, {aae_2i_repair_complete,aae_2i_repair_timeout})
     end.
 
 set_skip_index_specs(Node, Val) ->

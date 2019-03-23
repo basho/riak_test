@@ -128,7 +128,7 @@ test_supervision() ->
     case net_adm:ping(Node) of
         pang ->
             lager:error("riak_jmx crash able to crash riak node"),
-            ?assertEqual("riak_jmx crash able to crash riak node", true);
+            ?assert(false, "riak_jmx crash able to crash riak node");
         _ ->
             yay
     end,
@@ -186,7 +186,7 @@ test_application_stop() ->
     case net_adm:ping(Node) of
         pang ->
             lager:error("riak_jmx stop takes down riak node"),
-            ?assertEqual("riak_jmx stop takes down riak node", true);
+            ?assert(false, "riak_jmx stop takes down riak node");
         _ ->
             yay
     end,
