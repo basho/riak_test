@@ -94,13 +94,13 @@ upgrade_recv_loop(EndTime) ->
         _ ->
             receive
                 {mapred, Node, bad_result} ->
-                    ?assertEqual(true, {mapred, Node, bad_result});
+                    ?assert(false, {mapred, Node, bad_result});
                 {kv, Node, not_equal} ->
-                    ?assertEqual(true, {kv, Node, bad_result});
+                    ?assert(false, {kv, Node, bad_result});
                 {kv, Node, {notfound, Key}} ->
-                    ?assertEqual(true, {kv, Node, {notfound, Key}});
+                    ?assert(false, {kv, Node, {notfound, Key}});
                 {listkeys, Node, not_equal} ->
-                    ?assertEqual(true, {listkeys, Node, not_equal});
+                    ?assert(false, {listkeys, Node, not_equal});
                 Msg ->
                     lager:debug("Received Mesg ~p", [Msg]),
                     upgrade_recv_loop(EndTime)

@@ -220,7 +220,7 @@ verify_data(Node, KeyValues) ->
             lager:info("Data is now correct. Yay!");
         fail ->
             lager:error("AAE failed to fix data"),
-            ?assertEqual(aae_fixed_data, aae_failed_to_fix_data)
+            ?assert(false, aae_failed_to_fix_data)
     end,
     riakc_pb_socket:stop(PB),
     ok.

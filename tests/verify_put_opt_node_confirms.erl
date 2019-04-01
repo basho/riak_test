@@ -229,4 +229,4 @@ new_bucket(Bucket) when is_binary(Bucket) ->
 
 %% string like random bytes
 random_char() ->
-    <<(crypto:rand_uniform(65, 90))>>.
+    <<(rand:uniform(65, 90))>>.
