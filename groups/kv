@@ -1,7 +1,7 @@
 loaded_upgrade
 riak727
 verify_riak_object_reformat
-overload
+overload_protection
 riak_rex
 verify_riak_stats
 partition_repair
