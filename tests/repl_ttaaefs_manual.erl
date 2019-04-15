@@ -33,7 +33,8 @@
            {tictacaae_rebuildwait, 4},
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 120 * 1000},
-           {tictacaae_rebuildtick, 3600000} % don't tick for an hour!
+           {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+           {delete_mode, keep}
           ]}
         ]).
 
@@ -55,6 +56,8 @@ confirm() ->
     rt:wait_until_ring_converged(ClusterA),
     rt:wait_until_ring_converged(ClusterB),
     rt:wait_until_ring_converged(ClusterC),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
+                    ClusterA ++ ClusterB ++ ClusterC),
 
     lager:info("Test empty clusters don't show any differences"),
     {http, {IPA, PortA}} = lists:keyfind(http, 1, rt:connection_info(NodeA)),
@@ -129,6 +132,23 @@ confirm() ->
                     lists:seq(1, 5)),
     read_from_cluster(NodeC, 1, 1100, 0),
 
+    lager:info("Test replicating tombstones"),
+    delete_from_cluster(NodeA, 901, 1000),
+    read_from_cluster(NodeA, 901, 1000, 100),
+    lager:info("Confirm that replicating back doesn't remove tombstones ..."),
+    lager:info("... But it will see differences"),
+    {clock_compare, 100} =
+        fullsync_check(NodeC, {IPC, PortC}, {IPA, PortA}, 3, 1),
+    read_from_cluster(NodeA, 901, 1000, 100),
+    lager:info("Confirm that replicating forward does migrate tombstones"),
+    {clock_compare, 100} =
+        fullsync_check(NodeA, {IPA, PortA}, {IPB, PortB}, 1, 1),
+    read_from_cluster(NodeB, 901, 1000, 100),
+    read_from_cluster(NodeC, 901, 1000, 0),
+    {clock_compare, 100} =
+        fullsync_check(NodeA, {IPA, PortA}, {IPC, PortC}, 1, 3),
+    read_from_cluster(NodeC, 901, 1000, 100),
+
     pass.
 
 
@@ -146,7 +166,6 @@ write_to_cluster(Node, Start, End) ->
     lager:info("Writing ~p keys to node ~p.", [End - Start + 1, Node]),
     lager:warning("Note that only utf-8 keys are used"),
     CommonValBin = <<"CommonValueToWriteForAllObjects">>,
-    rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
@@ -168,12 +187,33 @@ write_to_cluster(Node, Start, End) ->
     lager:warning("~p errors while writing: ~p", [length(Errors), Errors]),
     ?assertEqual([], Errors).
 
+delete_from_cluster(Node, Start, End) ->
+    lager:info("Deleting ~p keys from node ~p.", [End - Start + 1, Node]),
+    lager:warning("Note that only utf-8 keys are used"),
+    {ok, C} = riak:client_connect(Node),
+    F = 
+        fun(N, Acc) ->
+            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
+            try C:delete(?TEST_BUCKET, Key) of
+                ok ->
+                    Acc;
+                Other ->
+                    [{N, Other} | Acc]
+            catch
+                What:Why ->
+                    [{N, {What, Why}} | Acc]
+            end
+        end,
+    Errors = lists:foldl(F, [], lists:seq(Start, End)),
+    lager:warning("~p errors while deleting: ~p", [length(Errors), Errors]),
+    ?assertEqual([], Errors).
+
+
 %% @doc Read from cluster a series of keys, asserting a certain number
 %%      of errors.
 read_from_cluster(Node, Start, End, Errors) ->
     lager:info("Reading ~p keys from node ~p.", [End - Start + 1, Node]),
     CommonValBin = <<"CommonValueToWriteForAllObjects">>,
-    rt:wait_for_service(Node, riak_kv),
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
