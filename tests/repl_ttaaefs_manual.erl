@@ -133,10 +133,11 @@ confirm() ->
 
 
 fullsync_check(SrcNode, {SrcIP, SrcPort}, {SinkIP, SinkPort}, SrcNVal, SinkNVal) ->
-    _ = rpc:call(SrcNode, riak_client, ttaaefs_pause, []),
-    ok = rpc:call(SrcNode, riak_client, ttaaefs_setsource, [http, SrcIP, SrcPort]),
-    ok = rpc:call(SrcNode, riak_client, ttaaefs_setsink, [http, SinkIP, SinkPort]),
-    ok = rpc:call(SrcNode, riak_client, ttaaefs_setallsync, [SrcNVal, SinkNVal]),
+    ModRef = riak_kv_ttaaefs_manager,
+    _ = rpc:call(SrcNode, ModRef, pause, [ModRef]),
+    ok = rpc:call(SrcNode, ModRef, set_source, [ModRef, http, SrcIP, SrcPort]),
+    ok = rpc:call(SrcNode, ModRef, set_sink, [ModRef, http, SinkIP, SinkPort]),
+    ok = rpc:call(SrcNode, ModRef, set_allsync, [ModRef, SrcNVal, SinkNVal]),
     rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]).
 
 
