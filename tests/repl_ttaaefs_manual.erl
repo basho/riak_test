@@ -58,6 +58,8 @@ confirm() ->
     rt:wait_until_ring_converged(ClusterC),
     lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
                     ClusterA ++ ClusterB ++ ClusterC),
+    
+    ok = setup_replqueues(ClusterA ++ ClusterB ++ ClusterC),
 
     lager:info("Test empty clusters don't show any differences"),
     {http, {IPA, PortA}} = lists:keyfind(http, 1, rt:connection_info(NodeA)),
@@ -156,11 +158,18 @@ confirm() ->
     {root_compare, 0} =
         fullsync_check({NodeC, IPC, PortC, 3}, {NodeA, IPA, PortA, 1}),
 
-    lager:info("Compare the bucket - dynamic AAe not base don cached trees"),
+    lager:info("Compare the bucket - dynamic AAE not based on cached trees"),
 
 
     pass.
 
+
+setup_replqueues([]) ->
+    ok;
+setup_replqueues([HeadNode|Others]) ->
+    true = rpc:call(HeadNode, riak_kv_replrtq_src, register_rtq,
+                    [riak_kv_replrtq_src, q1_ttaaefs, any]),
+    setup_replqueues(Others).
 
 fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
                 {SinkNode, SinkIP, SinkPort, SinkNVal}) ->
@@ -170,19 +179,25 @@ fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
     ok = rpc:call(SrcNode, ModRef, set_sink, [ModRef, http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [ModRef, SrcNVal, SinkNVal]),
     AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
-    drain_queue(riak_client:new(SrcNode), riak_client:new(SinkNode)),
+    {ok, SrcC} = riak:client_connect(SrcNode),
+    {ok, SnkC} = riak:client_connect(SinkNode),
+    N = drain_queue(SrcC, SnkC),
+    lager:info("Drained queue and pushed ~w objects", [N]),
     AAEResult.
 
 drain_queue(SrcClient, SnkClient) ->
+    drain_queue(SrcClient, SnkClient, 0).
+
+drain_queue(SrcClient, SnkClient, N) ->
     case riak_client:fetch(q1_ttaaefs, [], SrcClient) of
         {ok, queue_empty} ->
-            ok;
+            N;
         {ok, {deleted, _TombClock, RObj}} ->
             ok = riak_client:push(RObj, true, [], SnkClient),
-            drain_queue(SrcClient, SnkClient);
+            drain_queue(SrcClient, SnkClient, N + 1);
         {ok, RObj} ->
             ok = riak_client:push(RObj, false, [], SnkClient),
-            drain_queue(SrcClient, SnkClient)
+            drain_queue(SrcClient, SnkClient, N + 1)
     end.
 
 %% @doc Write a series of keys and ensure they are all written.
