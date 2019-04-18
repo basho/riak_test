@@ -67,11 +67,11 @@ confirm() ->
                 [IPA, PortA, IPB, PortB, IPC, PortC]),
     
     {root_compare, 0}
-        = fullsync_check(NodeA, {IPA, PortA}, {IPB, PortB}, 1, 1),
+        = fullsync_check({NodeA, IPA, PortA, 1}, {NodeB, IPB, PortB, 1}),
     {root_compare, 0}
-        = fullsync_check(NodeB, {IPB, PortB}, {IPC, PortC}, 1, 3),
+        = fullsync_check({NodeB, IPB, PortB, 1}, {NodeC, IPC, PortC, 3}),
     {root_compare, 0}
-        = fullsync_check(NodeC, {IPC, PortC}, {IPA, PortA}, 3, 1),
+        = fullsync_check({NodeC, IPC, PortC, 3}, {NodeA, IPA, PortA, 1}),
 
     lager:info("Test 100 key difference and resolve"),
     % Write keys to cluster A, verify B and C do not have them.
@@ -79,19 +79,19 @@ confirm() ->
     read_from_cluster(NodeB, 1, 100, 100),
     read_from_cluster(NodeC, 1, 100, 100),
     {clock_compare, 100}
-        = fullsync_check(NodeA, {IPA, PortA}, {IPB, PortB}, 1, 1),
+        = fullsync_check({NodeA, IPA, PortA, 1}, {NodeB, IPB, PortB, 1}),
     {clock_compare, 100}
-        = fullsync_check(NodeB, {IPB, PortB}, {IPC, PortC}, 1, 3),
+        = fullsync_check({NodeB, IPB, PortB, 1}, {NodeC, IPC, PortC, 3}),
     % Now node 3 should align with node 1 
     {root_compare, 0}
-        = fullsync_check(NodeC, {IPC, PortC}, {IPA, PortA}, 3, 1),
+        = fullsync_check({NodeC, IPC, PortC, 3}, {NodeA, IPA, PortA, 1}),
     read_from_cluster(NodeA, 1, 100, 0),
     read_from_cluster(NodeB, 1, 100, 0),
     read_from_cluster(NodeC, 1, 100, 0),
     {root_compare, 0}
-        = fullsync_check(NodeA, {IPA, PortA}, {IPB, PortB}, 1, 1),
+        = fullsync_check({NodeA, IPA, PortA, 1}, {NodeB, IPB, PortB, 1}),
     {root_compare, 0}
-        = fullsync_check(NodeB, {IPB, PortB}, {IPC, PortC}, 1, 3),
+        = fullsync_check({NodeB, IPB, PortB, 1}, {NodeC, IPC, PortC, 3}),
 
     lager:info("Test 1000 key difference and resolve"),
     write_to_cluster(NodeA, 101, 1100),
@@ -99,36 +99,36 @@ confirm() ->
     read_from_cluster(NodeC, 101, 1100, 1000),
 
     {clock_compare, N1}
-        = fullsync_check(NodeA, {IPA, PortA}, {IPB, PortB}, 1, 1),
+        = fullsync_check({NodeA, IPA, PortA, 1}, {NodeB, IPB, PortB, 1}),
     lager:info("First comparison found ~w differences", [N1]),
     ?assertEqual(true, N1 > 100),
     ?assertEqual(true, N1 < 1000),
 
     lager:info("Further eight loops should complete repair"),
     LoopRepairFun =
-        fun(Node, Source, Sink, SrcNVal, SinkNVal) ->
+        fun(SrcInfo, SnkInfo) ->
             fun(_I) ->
-                fullsync_check(Node, Source, Sink, SrcNVal, SinkNVal)
+                fullsync_check(SrcInfo, SnkInfo)
             end
         end,
-    lists:foreach(LoopRepairFun(NodeA, {IPA, PortA}, {IPB, PortB}, 1, 1),
+    lists:foreach(LoopRepairFun({NodeA, IPA, PortA, 1}, {NodeB, IPB, PortB, 1}),
                     lists:seq(1, 8)),
     {root_compare, 0} =
-        fullsync_check(NodeA, {IPA, PortA}, {IPB, PortB}, 1, 1),
+        fullsync_check({NodeA, IPA, PortA, 1}, {NodeB, IPB, PortB, 1}),
     {root_compare, 0} =
-        fullsync_check(NodeB, {IPB, PortB}, {IPA, PortA}, 1, 1),
+        fullsync_check({NodeB, IPB, PortB, 1}, {NodeA, IPA, PortA, 1}),
     lager:info("NodeA and NodeB has been re-sync'd"),
     read_from_cluster(NodeB, 1, 1100, 0),
 
     lager:info("Repairing in the wrong direction doesn't repair"),
     {clock_compare, 128} =
-        fullsync_check(NodeC, {IPC, PortC}, {IPB, PortB}, 3, 1),
+        fullsync_check({NodeC, IPC, PortC, 3}, {NodeB, IPB, PortB, 1}),
     read_from_cluster(NodeC, 101, 1100, 1000),
 
     lager:info("Complete repair from different clusters"),
-    lists:foreach(LoopRepairFun(NodeA, {IPA, PortA}, {IPC, PortC}, 1, 3),
+    lists:foreach(LoopRepairFun({NodeA, IPA, PortA, 1}, {NodeC, IPC, PortC, 3}),
                     lists:seq(1, 5)),
-    lists:foreach(LoopRepairFun(NodeB, {IPB, PortB}, {IPC, PortC}, 1, 3),
+    lists:foreach(LoopRepairFun({NodeB, IPB, PortB, 1}, {NodeC, IPC, PortC, 3}),
                     lists:seq(1, 5)),
     read_from_cluster(NodeC, 1, 1100, 0),
 
@@ -138,28 +138,52 @@ confirm() ->
     lager:info("Confirm that replicating back doesn't remove tombstones ..."),
     lager:info("... But it will see differences"),
     {clock_compare, 100} =
-        fullsync_check(NodeC, {IPC, PortC}, {IPA, PortA}, 3, 1),
+        fullsync_check({NodeC, IPC, PortC, 3}, {NodeA, IPA, PortA, 1}),
     read_from_cluster(NodeA, 901, 1000, 100),
     lager:info("Confirm that replicating forward does migrate tombstones"),
     {clock_compare, 100} =
-        fullsync_check(NodeA, {IPA, PortA}, {IPB, PortB}, 1, 1),
+        fullsync_check({NodeA, IPA, PortA, 1}, {NodeB, IPB, PortB, 1}),
     read_from_cluster(NodeB, 901, 1000, 100),
     read_from_cluster(NodeC, 901, 1000, 0),
     {clock_compare, 100} =
-        fullsync_check(NodeA, {IPA, PortA}, {IPC, PortC}, 1, 3),
+        fullsync_check({NodeA, IPA, PortA, 1}, {NodeC, IPC, PortC, 3}),
     read_from_cluster(NodeC, 901, 1000, 100),
+
+    {root_compare, 0} =
+        fullsync_check({NodeA, IPA, PortA, 1}, {NodeB, IPB, PortB, 1}),
+    {root_compare, 0} =
+        fullsync_check({NodeB, IPB, PortB, 1}, {NodeC, IPC, PortC, 3}),
+    {root_compare, 0} =
+        fullsync_check({NodeC, IPC, PortC, 3}, {NodeA, IPA, PortA, 1}),
+
+    lager:info("Compare the bucket - dynamic AAe not base don cached trees"),
+
 
     pass.
 
 
-fullsync_check(SrcNode, {SrcIP, SrcPort}, {SinkIP, SinkPort}, SrcNVal, SinkNVal) ->
+fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
+                {SinkNode, SinkIP, SinkPort, SinkNVal}) ->
     ModRef = riak_kv_ttaaefs_manager,
     _ = rpc:call(SrcNode, ModRef, pause, [ModRef]),
     ok = rpc:call(SrcNode, ModRef, set_source, [ModRef, http, SrcIP, SrcPort]),
     ok = rpc:call(SrcNode, ModRef, set_sink, [ModRef, http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [ModRef, SrcNVal, SinkNVal]),
-    rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]).
+    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    drain_queue(riak_client:new(SrcNode), riak_client:new(SinkNode)),
+    AAEResult.
 
+drain_queue(SrcClient, SnkClient) ->
+    case riak_client:fetch(q1_ttaaefs, [], SrcClient) of
+        {ok, queue_empty} ->
+            ok;
+        {ok, {deleted, _TombClock, RObj}} ->
+            ok = riak_client:push(RObj, true, [], SnkClient),
+            drain_queue(SrcClient, SnkClient);
+        {ok, RObj} ->
+            ok = riak_client:push(RObj, false, [], SnkClient),
+            drain_queue(SrcClient, SnkClient)
+    end.
 
 %% @doc Write a series of keys and ensure they are all written.
 write_to_cluster(Node, Start, End) ->
