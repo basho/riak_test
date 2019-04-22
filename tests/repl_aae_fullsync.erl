@@ -45,89 +45,16 @@
         ]).
 
 confirm() ->
-    lager:notice("difference test"),
+    lager:notice("~nTEST: difference test~n"),
     difference_test(),
-    lager:notice("deadlock test"),
+    lager:notice("~nTEST: deadlock test~n"),
     deadlock_test(),
-    lager:notice("simple test"),
-    simple_test(),
-    lager:notice("bidirectional test"),
+    lager:notice("~nTEST: bidirectional test~n"),
     bidirectional_test(),
-    lager:notice("dual test"),
+    lager:notice("~nTEST: dual test~n"),
     dual_test(),
     pass.
 
-simple_test() ->
-    %% Deploy 6 nodes.
-    Nodes = rt:deploy_nodes(6, ?CONF(5), [riak_kv, riak_repl]),
-
-    %% Break up the 6 nodes into three clustes.
-    {ANodes, BNodes} = lists:split(3, Nodes),
-
-    lager:info("ANodes: ~p", [ANodes]),
-    lager:info("BNodes: ~p", [BNodes]),
-
-    lager:info("Building two clusters."),
-    [repl_util:make_cluster(N) || N <- [ANodes, BNodes]],
-
-    AFirst = hd(ANodes),
-    BFirst = hd(BNodes),
-
-    lager:info("Naming clusters."),
-    repl_util:name_cluster(AFirst, "A"),
-    repl_util:name_cluster(BFirst, "B"),
-
-    lager:info("Waiting for convergence."),
-    rt:wait_until_ring_converged(ANodes),
-    rt:wait_until_ring_converged(BNodes),
-
-    lager:info("Waiting for transfers to complete."),
-    rt:wait_until_transfers_complete(ANodes),
-    rt:wait_until_transfers_complete(BNodes),
-
-    lager:info("Get leaders."),
-    LeaderA = get_leader(AFirst),
-    LeaderB = get_leader(BFirst),
-
-    lager:info("Finding connection manager ports."),
-    BPort = get_port(LeaderB),
-
-    lager:info("Connecting cluster A to B"),
-    connect_cluster(LeaderA, BPort, "B"),
-
-    %% Write keys prior to fullsync.
-    write_to_cluster(AFirst, 1, ?NUM_KEYS),
-
-    %% Read keys prior to fullsync.
-    read_from_cluster(BFirst, 1, ?NUM_KEYS, ?NUM_KEYS),
-
-    %% Wait for trees to compute.
-    rt:wait_until_aae_trees_built(ANodes),
-    rt:wait_until_aae_trees_built(BNodes),
-
-    lager:info("Test fullsync from cluster A leader ~p to cluster B",
-               [LeaderA]),
-    repl_util:enable_fullsync(LeaderA, "B"),
-    rt:wait_until_ring_converged(ANodes),
-
-    TargetA = hd(ANodes -- [LeaderA]),
-    TargetB = hd(BNodes),
-
-    %% Flush AAE trees to disk.
-    perform_sacrifice(AFirst),
-
-    %% Validate replication from A -> B is fault-tolerant regardless of
-    %% errors occurring on the source or destination.
-    validate_intercepted_fullsync(TargetA, LeaderA, "B"),
-    validate_intercepted_fullsync(TargetB, LeaderA, "B"),
-
-    %% Verify data is replicated from A -> B successfully once the
-    %% intercepts are removed.
-    validate_completed_fullsync(LeaderA, BFirst, "B", 1, ?NUM_KEYS),
-
-    rt:clean_cluster(Nodes),
-
-    pass.
 
 dual_test() ->
     %% Deploy 6 nodes.
@@ -533,82 +460,6 @@ check_fullsync(Node, Cluster, ExpectedFailures) ->
 
     ok.
 
-%% @doc Validate fullsync handles errors for all possible intercept
-%%      combinations.
-validate_intercepted_fullsync(InterceptTarget,
-                              ReplicationLeader,
-                              ReplicationCluster) ->
-    NumIndicies = length(rpc:call(InterceptTarget,
-                                  riak_core_ring,
-                                  my_indices,
-                                  [rt:get_ring(InterceptTarget)])),
-    lager:info("~p owns ~p indices",
-               [InterceptTarget, NumIndicies]),
-
-    %% Before enabling fullsync, ensure trees on one source node return
-    %% not_built to defer fullsync process.
-    validate_intercepted_fullsync(InterceptTarget,
-                                  {riak_kv_index_hashtree,
-                                   [{{get_lock, 4}, not_built}]},
-                                  ReplicationLeader,
-                                  ReplicationCluster,
-                                  NumIndicies),
-
-    %% Before enabling fullsync, ensure trees on one source node return
-    %% already_locked to defer fullsync process.
-    validate_intercepted_fullsync(InterceptTarget,
-                                  {riak_kv_index_hashtree,
-                                   [{{get_lock, 4}, already_locked}]},
-                                  ReplicationLeader,
-                                  ReplicationCluster,
-                                  NumIndicies),
-
-    %% Before enabling fullsync, ensure trees on one source node return
-    %% bad_version to defer fullsync process.
-    validate_intercepted_fullsync(InterceptTarget,
-                                  {riak_kv_index_hashtree,
-                                   [{{get_lock, 4}, bad_version}]},
-                                  ReplicationLeader,
-                                  ReplicationCluster,
-                                  NumIndicies),
-
-    %% Emulate in progress ownership transfers.
-    validate_intercepted_fullsync(InterceptTarget,
-                                  {riak_kv_vnode,
-                                   [{{hashtree_pid, 1}, wrong_node}]},
-                                  ReplicationLeader,
-                                  ReplicationCluster,
-                                  NumIndicies).
-
-%% @doc Add an intercept on a target node to simulate a given failure
-%%      mode, and then enable fullsync replication and verify completes
-%%      a full cycle.  Subsequently reboot the node.
-validate_intercepted_fullsync(InterceptTarget,
-                              Intercept,
-                              ReplicationLeader,
-                              ReplicationCluster,
-                              NumIndicies) ->
-    lager:info("Validating intercept ~p on ~p.",
-               [Intercept, InterceptTarget]),
-
-    %% Add intercept.
-    ok = rt_intercept:add(InterceptTarget, Intercept),
-
-    %% Verify fullsync.
-    ok = check_fullsync(ReplicationLeader,
-                        ReplicationCluster,
-                        NumIndicies),
-
-    %% Reboot node.
-    rt:stop_and_wait(InterceptTarget),
-    rt:start_and_wait(InterceptTarget),
-
-    %% Wait for riak_kv and riak_repl to initialize.
-    rt:wait_for_service(InterceptTarget, riak_kv),
-    rt:wait_for_service(InterceptTarget, riak_repl),
-
-    %% Wait until AAE trees are compueted on the rebooted node.
-    rt:wait_until_aae_trees_built([InterceptTarget]).
 
 %% @doc Given a node, find the port that the cluster manager is
 %%      listening on.

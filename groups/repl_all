@@ -3,6 +3,7 @@ repl_aae_fullsync
 repl_aae_fullsync_bench
 repl_aae_fullsync_bt
 repl_aae_fullsync_custom_n
+repl_aae_fullsync_blocked
 repl_cancel_fullsync
 repl_consistent_object_filter
 repl_handoff_deadlock_aae
