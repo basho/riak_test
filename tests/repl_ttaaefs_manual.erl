@@ -179,9 +179,10 @@ fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
     ok = rpc:call(SrcNode, ModRef, set_sink, [ModRef, http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [ModRef, SrcNVal, SinkNVal]),
     AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
-    {ok, SrcC} = riak:client_connect(SrcNode),
+    % {ok, SrcC} = riak:client_connect(SrcNode),
+    SrcHTTPC = rt:httpc(SrcNode),
     {ok, SnkC} = riak:client_connect(SinkNode),
-    N = drain_queue(SrcC, SnkC),
+    N = drain_queue(SrcHTTPC, SnkC),
     lager:info("Drained queue and pushed ~w objects", [N]),
     AAEResult.
 
@@ -189,7 +190,7 @@ drain_queue(SrcClient, SnkClient) ->
     drain_queue(SrcClient, SnkClient, 0).
 
 drain_queue(SrcClient, SnkClient, N) ->
-    case riak_client:fetch(q1_ttaaefs, [], SrcClient) of
+    case rhc:fetch(SrcClient, q1_ttaaefs) of
         {ok, queue_empty} ->
             N;
         {ok, {deleted, _TombClock, RObj}} ->
