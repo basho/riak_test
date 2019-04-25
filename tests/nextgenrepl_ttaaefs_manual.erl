@@ -4,7 +4,7 @@
 %% fullsync over all partitions, and verifies the missing keys were
 %% replicated to the sink cluster.
 
--module(repl_ttaaefs_manual).
+-module(nextgenrepl_ttaaefs_manual).
 -behavior(riak_test).
 -export([confirm/0]).
 -export([test_repl_between_clusters/5]).

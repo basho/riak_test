@@ -4,7 +4,7 @@
 %% fullsync over all partitions, and verifies the missing keys were
 %% replicated to the sink cluster.
 
--module(repl_ttaaefs_semiauto).
+-module(nextgenrepl_ttaaefs_semiauto).
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
@@ -89,10 +89,8 @@ setup_replqueues([HeadNode|Others]) ->
 
 fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
                 {SinkNode, SinkIP, SinkPort, SinkNVal}) ->
-    {http, {IPSrc, PortSrc}} =
-        lists:keyfind(http, 1, rt:connection_info(SrcNode)),
     ok = rpc:call(SinkNode, riak_kv_replrtq_snk,
-                    add_snkqueue, [q1_ttaaefs, [{1, 0, IPSrc, PortSrc}], 8]),
+                    add_snkqueue, [q1_ttaaefs, [{1, 0, SrcIP, SrcPort}], 8]),
 
     ModRef = riak_kv_ttaaefs_manager,
     _ = rpc:call(SrcNode, ModRef, pause, [ModRef]),
