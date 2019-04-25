@@ -7,7 +7,6 @@
 -module(nextgenrepl_rtq_stdobj).
 -behavior(riak_test).
 -export([confirm/0]).
--export([test_rtqrepl_between_clusters/4]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
@@ -19,6 +18,11 @@
 -define(C_NVAL, 2).
 
 -define(SNK_WORKERS, 4).
+-define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
+-define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
+
+-define(REPL_SLEEP, 512). 
+    % May need to wait for 2 x the 256ms max sleep time of a snk worker
 
 -define(CONFIG(RingSize, NVal), [
         {riak_core,
@@ -65,10 +69,9 @@ confirm() ->
                     ClusterA ++ ClusterB ++ ClusterC),
     
     lager:info("Ready for test."),
-    test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC,
-                                    fun fullsync_check/2).
+    test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC).
 
-test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, FullSyncFun) ->
+test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     
     setup_srcreplqueues(ClusterA, [cluster_b, cluster_c], any),
     setup_srcreplqueues(ClusterB, [cluster_a, cluster_c], any),
@@ -91,50 +94,117 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, FullSyncFun) ->
     lager:info("Cluster A ~s ~w Cluster B ~s ~w Cluster C ~s ~w",
                 [IPA, PortA, IPB, PortB, IPC, PortC]),
     
-    {root_compare, 0}
-        = FullSyncFun({NodeA, IPA, PortA, ?A_NVAL},
-                        {NodeB, IPB, PortB, ?B_NVAL}),
-    {root_compare, 0}
-        = FullSyncFun({NodeB, IPB, PortB, ?B_NVAL},
-                        {NodeC, IPC, PortC, ?C_NVAL}),
-    {root_compare, 0}
-        = FullSyncFun({NodeC, IPC, PortC, ?C_NVAL},
-                        {NodeA, IPA, PortA, ?A_NVAL}),
+    true = check_all_insync({NodeA, IPA, PortA},
+                            {NodeB, IPB, PortB},
+                            {NodeC, IPC, PortC}),
 
     lager:info("Test 1000 key difference and resolve"),
     % Write keys to cluster A, verify B and C do have them.
-    write_to_cluster(NodeA, 1, 1000),
-    read_from_cluster(NodeB, 1, 1000, 0),
-    read_from_cluster(NodeC, 1, 1000, 0),
-    {root_compare, 0}
-        = FullSyncFun({NodeA, IPA, PortA, ?A_NVAL},
-                        {NodeB, IPB, PortB, ?B_NVAL}),
-    {root_compare, 0}
-        = FullSyncFun({NodeB, IPB, PortB, ?B_NVAL},
-                        {NodeC, IPC, PortC, ?C_NVAL}),
-    {root_compare, 0}
-        = FullSyncFun({NodeC, IPC, PortC, ?C_NVAL},
-                        {NodeA, IPA, PortA, ?A_NVAL}),
+    write_to_cluster(NodeA, 1, 1000, new_obj),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeB, 1, 1000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeC, 1, 1000, ?COMMMON_VAL_INIT, 0),
+    true = check_all_insync({NodeA, IPA, PortA},
+                            {NodeB, IPB, PortB},
+                            {NodeC, IPC, PortC}),
     
     lager:info("Test replicating tombstones"),
     delete_from_cluster(NodeA, 901, 1000),
-    read_from_cluster(NodeA, 901, 1000, 100),
-    read_from_cluster(NodeB, 901, 1000, 100),
-    read_from_cluster(NodeC, 901, 1000, 100),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeA, 901, 1000, ?COMMMON_VAL_INIT, 100),
+    read_from_cluster(NodeB, 901, 1000, ?COMMMON_VAL_INIT, 100),
+    read_from_cluster(NodeC, 901, 1000, ?COMMMON_VAL_INIT, 100),
+    true = check_all_insync({NodeA, IPA, PortA},
+                            {NodeB, IPB, PortB},
+                            {NodeC, IPC, PortC}),
 
-    {root_compare, 0}
-        = FullSyncFun({NodeA, IPA, PortA, ?A_NVAL},
-                        {NodeB, IPB, PortB, ?B_NVAL}),
-    {root_compare, 0}
-        = FullSyncFun({NodeB, IPB, PortB, ?B_NVAL},
-                        {NodeC, IPC, PortC, ?C_NVAL}),
-    {root_compare, 0}
-        = FullSyncFun({NodeC, IPC, PortC, ?C_NVAL},
-                        {NodeA, IPA, PortA, ?A_NVAL}),
+    lager:info("Test replicating modified objects"),
+    write_to_cluster(NodeB, 1, 100, ?COMMMON_VAL_MOD),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeA, 1, 100, ?COMMMON_VAL_MOD, 0),
+    read_from_cluster(NodeC, 1, 100, ?COMMMON_VAL_MOD, 0),
+    read_from_cluster(NodeA, 101, 900, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeC, 101, 900, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeA, 901, 1000, ?COMMMON_VAL_INIT, 100),
+    read_from_cluster(NodeC, 901, 1000, ?COMMMON_VAL_INIT, 100),
+    true = check_all_insync({NodeA, IPA, PortA},
+                            {NodeB, IPB, PortB},
+                            {NodeC, IPC, PortC}),
+    
+    lager:info("Suspend a queue at source and confirm replication stops ..."),
+    lager:info("... but continues from unsuspended queues"),
+    ok = action_on_srcqueue(ClusterC, cluster_a, suspend_rtq),
+    write_to_cluster(NodeC, 1001, 2000, new_obj),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeB, 1001, 2000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeA, 1001, 2000, ?COMMMON_VAL_INIT, 1000),
+    ok = action_on_srcqueue(ClusterC, cluster_a, resume_rtq),
+    lager:info("Resuming the queue changes nothing ..."),
+    lager:info("... But new PUTs will now replicate"),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeB, 1001, 2000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeA, 1001, 2000, ?COMMMON_VAL_INIT, 1000),
+    write_to_cluster(NodeC, 1101, 2000, ?COMMMON_VAL_MOD),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeA, 1001, 1100, ?COMMMON_VAL_INIT, 100),
+    read_from_cluster(NodeA, 1101, 2000, ?COMMMON_VAL_MOD, 0),
+        % errors down to 100
+    lager:info("Full sync from another cluster will resolve"),
+    {clock_compare, 100} =
+        fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
+                        {NodeA, IPA, PortA, ?A_NVAL},
+                        cluster_a),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeA, 1001, 1100, ?COMMMON_VAL_INIT, 0, true),
+    read_from_cluster(NodeA, 1101, 2000, ?COMMMON_VAL_MOD, 0),
+    true = check_all_insync({NodeA, IPA, PortA},
+                            {NodeB, IPB, PortB},
+                            {NodeC, IPC, PortC}),
+
+    lager:info("Suspend working on a queue from sink and confirm ..."),
+    lager:info("... replication stops but continues from unsuspended sinks"),
+    ok = action_on_snkqueue(ClusterA, cluster_a, suspend_snkqueue),
+    write_to_cluster(NodeC, 2001, 3000, new_obj),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeB, 2001, 3000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeA, 2001, 3000, ?COMMMON_VAL_INIT, 1000),
+    ok = action_on_snkqueue(ClusterA, cluster_a, resume_snkqueue),
+    lager:info("Resuming the queue prompts recovery ..."),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeB, 2001, 3000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeA, 2001, 3000, ?COMMMON_VAL_INIT, 0),
 
     pass.
 
 
+action_on_srcqueue([], _SnkClusterName, _Action) ->
+    ok;
+action_on_srcqueue([SrcNode|Rest], SnkClusterName, Action) ->
+    ok = rpc:call(SrcNode, riak_kv_replrtq_src, Action, [SnkClusterName]),
+    action_on_srcqueue(Rest, SnkClusterName, Action).
+
+action_on_snkqueue([], _SnkClusterName, _Action) ->
+    ok;
+action_on_snkqueue([SnkNode|Rest], SnkClusterName, Action) ->
+    ok = rpc:call(SnkNode, riak_kv_replrtq_snk, Action, [SnkClusterName]),
+    action_on_snkqueue(Rest, SnkClusterName, Action).
+
+check_all_insync({NodeA, IPA, PortA},
+                    {NodeB, IPB, PortB},
+                    {NodeC, IPC, PortC}) ->
+    {root_compare, 0}
+        = fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
+                            {NodeB, IPB, PortB, ?B_NVAL},
+                            cluster_a),
+    {root_compare, 0}
+        = fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
+                            {NodeC, IPC, PortC, ?C_NVAL},
+                            cluster_c),
+    {root_compare, 0}
+        = fullsync_check({NodeC, IPC, PortC, ?C_NVAL},
+                            {NodeA, IPA, PortA, ?A_NVAL},
+                            cluster_a),
+    true.
 
 setup_srcreplqueues([], _SinkClusters, _Filter) ->
     ok;
@@ -150,35 +220,32 @@ setup_srcreplqueues([SrcNode|Rest], SinkClusters, Filter) ->
     setup_srcreplqueues(Rest, SinkClusters, Filter).
 
 
-setup_snkreplworkers([], _SnkNodes, _SnkName) ->
-    ok;
-setup_snkreplworkers([{http, {IP, Port}}|Rest], SnkNodes, SnkName) ->
+setup_snkreplworkers(SrcCluster, SnkNodes, SnkName) ->
+    PeerMap =
+        fun(Node, Acc) ->
+            {http, {IP, Port}} =
+                lists:keyfind(http, 1, rt:connection_info(Node)),
+            {{Acc, 0, IP, Port}, Acc + 1}
+        end,
+    {PeerList, _} = lists:mapfoldl(PeerMap, 1, SrcCluster),
     SetupSnkFun = 
         fun(Node) ->
             ok = rpc:call(Node,
                             riak_kv_replrtq_snk,
                             add_snkqueue,
-                            [SnkName, [{1, 0, IP, Port}], ?SNK_WORKERS])
+                            [SnkName, PeerList, ?SNK_WORKERS])
         end,
-    lists:foreach(SetupSnkFun, SnkNodes),
-    setup_snkreplworkers(Rest, SnkNodes, SnkName);
-setup_snkreplworkers(SrcCluster, SnkNodes, SnkName) ->
-    ConnMapFun = 
-        fun(Node) ->
-            lists:keyfind(http, 1, rt:connection_info(Node))
-        end,
-    setup_snkreplworkers(lists:map(ConnMapFun, SrcCluster),
-                            SnkNodes,
-                            SnkName).
-
+    lists:foreach(SetupSnkFun, SnkNodes).
 
 
 fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
-                {_SinkNode, SinkIP, SinkPort, SinkNVal}) ->
+                {_SinkNode, SinkIP, SinkPort, SinkNVal},
+                SnkClusterName) ->
     ModRef = riak_kv_ttaaefs_manager,
     _ = rpc:call(SrcNode, ModRef, pause, []),
     ok = rpc:call(SrcNode, ModRef, set_source, [http, SrcIP, SrcPort]),
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
+    ok = rpc:call(SrcNode, ModRef, set_queuename, [SnkClusterName]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
     AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
 
@@ -188,17 +255,25 @@ fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
     AAEResult.
 
 %% @doc Write a series of keys and ensure they are all written.
-write_to_cluster(Node, Start, End) ->
+write_to_cluster(Node, Start, End, CommonValBin) ->
     lager:info("Writing ~p keys to node ~p.", [End - Start + 1, Node]),
     lager:warning("Note that only utf-8 keys are used"),
-    CommonValBin = <<"CommonValueToWriteForAllObjects">>,
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
             Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
-            Obj = riak_object:new(?TEST_BUCKET,
-                                    Key,
-                                    <<N:32/integer, CommonValBin/binary>>),
+            Obj = 
+                case CommonValBin of
+                    new_obj ->
+                        CVB = ?COMMMON_VAL_INIT,
+                        riak_object:new(?TEST_BUCKET,
+                                        Key,
+                                        <<N:32/integer, CVB/binary>>);
+                    UpdateBin ->
+                        UPDV = <<N:32/integer, UpdateBin/binary>>,
+                        {ok, PrevObj} = C:get(?TEST_BUCKET, Key),
+                        riak_object:update_value(PrevObj, UPDV)
+                end,
             try C:put(Obj) of
                 ok ->
                     Acc;
@@ -237,9 +312,11 @@ delete_from_cluster(Node, Start, End) ->
 
 %% @doc Read from cluster a series of keys, asserting a certain number
 %%      of errors.
-read_from_cluster(Node, Start, End, Errors) ->
+read_from_cluster(Node, Start, End, CommonValBin, Errors) ->
+    read_from_cluster(Node, Start, End, CommonValBin, Errors, false).
+
+read_from_cluster(Node, Start, End, CommonValBin, Errors, LogErrors) ->
     lager:info("Reading ~p keys from node ~p.", [End - Start + 1, Node]),
-    CommonValBin = <<"CommonValueToWriteForAllObjects">>,
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
@@ -251,10 +328,10 @@ read_from_cluster(Node, Start, End, Errors) ->
                         ExpectedVal ->
                             Acc;
                         UnexpectedVal ->
-                            [{wrong_value, UnexpectedVal}|Acc]
+                            [{wrong_value, Key, UnexpectedVal}|Acc]
                     end;
                 {error, Error} ->
-                    [{fetch_error, Error}|Acc]
+                    [{fetch_error, Error, Key}|Acc]
             end
         end,
     ErrorsFound = lists:foldl(F, [], lists:seq(Start, End)),
@@ -263,5 +340,15 @@ read_from_cluster(Node, Start, End, Errors) ->
             lager:info("Errors Found in read_from_cluster ~w",
                         [length(ErrorsFound)]);
         _ ->
+            case LogErrors of
+                true ->
+                    LogFun = 
+                        fun(Error) ->
+                            lager:info("Read error ~w", [Error])
+                        end,
+                    lists:foreach(LogFun, ErrorsFound);
+                false ->
+                    ok
+            end,
             ?assertEqual(Errors, length(ErrorsFound))
     end.
