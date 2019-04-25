@@ -176,10 +176,10 @@ setup_snkreplworkers(SrcCluster, SnkNodes, SnkName) ->
 fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
                 {_SinkNode, SinkIP, SinkPort, SinkNVal}) ->
     ModRef = riak_kv_ttaaefs_manager,
-    _ = rpc:call(SrcNode, ModRef, pause, [ModRef]),
-    ok = rpc:call(SrcNode, ModRef, set_source, [ModRef, http, SrcIP, SrcPort]),
-    ok = rpc:call(SrcNode, ModRef, set_sink, [ModRef, http, SinkIP, SinkPort]),
-    ok = rpc:call(SrcNode, ModRef, set_allsync, [ModRef, SrcNVal, SinkNVal]),
+    _ = rpc:call(SrcNode, ModRef, pause, []),
+    ok = rpc:call(SrcNode, ModRef, set_source, [http, SrcIP, SrcPort]),
+    ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
+    ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
     AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
 
     % lager:info("Sleeping to await queue drain."),
