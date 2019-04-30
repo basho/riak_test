@@ -7,7 +7,11 @@
 -module(nextgenrepl_ttaaefs_manual).
 -behavior(riak_test).
 -export([confirm/0]).
--export([test_repl_between_clusters/5]).
+-export([test_repl_between_clusters/5,
+            write_to_cluster/6,
+            read_from_cluster/6,
+            delete_from_cluster/4,
+            key/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
@@ -243,18 +247,30 @@ drain_queue(SrcClient, SnkClient, N) ->
             drain_queue(SrcClient, SnkClient, N + 1)
     end.
 
+
 %% @doc Write a series of keys and ensure they are all written.
 write_to_cluster(Node, Start, End) ->
+    CommonValBin = <<"CommonValueToWriteForAllObjects">>,
+    write_to_cluster(Node, Start, End, ?TEST_BUCKET, true, CommonValBin).
+
+write_to_cluster(Node, Start, End, Bucket, NewObj, CVB) ->
     lager:info("Writing ~p keys to node ~p.", [End - Start + 1, Node]),
     lager:warning("Note that only utf-8 keys are used"),
-    CommonValBin = <<"CommonValueToWriteForAllObjects">>,
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
-            Obj = riak_object:new(?TEST_BUCKET,
-                                    Key,
-                                    <<N:32/integer, CommonValBin/binary>>),
+            Key = key(N),
+            Obj = 
+                case NewObj of
+                    true ->
+                        riak_object:new(Bucket,
+                                        Key,
+                                        <<N:32/integer, CVB/binary>>);
+                    false ->
+                        UPDV = <<N:32/integer, CVB/binary>>,
+                        {ok, PrevObj} = C:get(Bucket, Key),
+                        riak_object:update_value(PrevObj, UPDV)
+                end,
             try C:put(Obj) of
                 ok ->
                     Acc;
@@ -270,13 +286,15 @@ write_to_cluster(Node, Start, End) ->
     ?assertEqual([], Errors).
 
 delete_from_cluster(Node, Start, End) ->
+    delete_from_cluster(Node, Start, End, ?TEST_BUCKET).
+
+delete_from_cluster(Node, Start, End, Bucket) ->
     lager:info("Deleting ~p keys from node ~p.", [End - Start + 1, Node]),
-    lager:warning("Note that only utf-8 keys are used"),
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
-            try C:delete(?TEST_BUCKET, Key) of
+            Key = key(N),
+            try C:delete(Bucket, Key) of
                 ok ->
                     Acc;
                 Other ->
@@ -294,13 +312,16 @@ delete_from_cluster(Node, Start, End) ->
 %% @doc Read from cluster a series of keys, asserting a certain number
 %%      of errors.
 read_from_cluster(Node, Start, End, Errors) ->
-    lager:info("Reading ~p keys from node ~p.", [End - Start + 1, Node]),
     CommonValBin = <<"CommonValueToWriteForAllObjects">>,
+    read_from_cluster(Node, Start, End, Errors, ?TEST_BUCKET, CommonValBin).
+
+read_from_cluster(Node, Start, End, Errors, Bucket, CommonValBin) ->
+    lager:info("Reading ~p keys from node ~p.", [End - Start + 1, Node]),
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
-            case  C:get(?TEST_BUCKET, Key) of
+            Key = key(N),
+            case  C:get(Bucket, Key) of
                 {ok, Obj} ->
                     ExpectedVal = <<N:32/integer, CommonValBin/binary>>,
                     case riak_object:get_value(Obj) of
@@ -317,7 +338,11 @@ read_from_cluster(Node, Start, End, Errors) ->
     case Errors of
         undefined ->
             lager:info("Errors Found in read_from_cluster ~w",
-                        [length(ErrorsFound)]);
+                        [length(ErrorsFound)]),
+            length(ErrorsFound);
         _ ->
             ?assertEqual(Errors, length(ErrorsFound))
     end.
+
+key(N) ->
+    list_to_binary(io_lib:format("~8..0B~n", [N])).
