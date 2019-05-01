@@ -7,15 +7,16 @@
 -module(nextgenrepl_rtq_stdobj).
 -behavior(riak_test).
 -export([confirm/0]).
+-export([fullsync_check/3]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
--define(A_RING, 8).
+-define(A_RING, 16).
 -define(B_RING, 32).
--define(C_RING, 16).
--define(A_NVAL, 1).
--define(B_NVAL, 3).
--define(C_NVAL, 2).
+-define(C_RING, 8).
+-define(A_NVAL, 4).
+-define(B_NVAL, 2).
+-define(C_NVAL, 1).
 
 -define(SNK_WORKERS, 4).
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
@@ -23,6 +24,7 @@
 
 -define(REPL_SLEEP, 512). 
     % May need to wait for 2 x the 256ms max sleep time of a snk worker
+-define(WAIT_LOOPS, 12).
 
 -define(CONFIG(RingSize, NVal), [
         {riak_core,
@@ -173,6 +175,74 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     timer:sleep(?REPL_SLEEP),
     read_from_cluster(NodeB, 2001, 3000, ?COMMMON_VAL_INIT, 0),
     read_from_cluster(NodeA, 2001, 3000, ?COMMMON_VAL_INIT, 0),
+
+    lager:info("Stop a node in source - and repl OK"),
+    NodeA0 = hd(tl(ClusterA)),
+    rt:stop_and_wait(NodeA0),
+    lager:info("Node stopped"),
+    write_to_cluster(NodeA, 3001, 4000, new_obj),
+    timer:sleep(?REPL_SLEEP),
+    {root_compare, 0} =
+        wait_for_outcome(?MODULE,
+                            fullsync_check,
+                            [{NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL}, 
+                                no_repair],
+                            {root_compare, 0},
+                            ?WAIT_LOOPS),
+
+    read_from_cluster(NodeB, 3001, 4000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeC, 3001, 4000, ?COMMMON_VAL_INIT, 0),
+
+    lager:info("Node restarting"),
+    rt:start_and_wait(NodeA0),
+    rt:wait_for_service(NodeA0, riak_kv),
+
+    {root_compare, 0} =
+        wait_for_outcome(?MODULE,
+                            fullsync_check,
+                            [{NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL}, 
+                                no_repair],
+                            {root_compare, 0},
+                            ?WAIT_LOOPS),
+    
+    lager:info("Stop a node in sink - and repl OK"),
+    rt:stop_and_wait(NodeA0),
+    lager:info("Node stopped"),
+    write_to_cluster(NodeB, 4001, 5000, new_obj),
+    {root_compare, 0} =
+        wait_for_outcome(?MODULE,
+                            fullsync_check,
+                            [{NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL}, 
+                                no_repair],
+                            {root_compare, 0},
+                            ?WAIT_LOOPS),
+
+    read_from_cluster(NodeA, 4001, 5000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeC, 4001, 5000, ?COMMMON_VAL_INIT, 0),
+    lager:info("Node restarting"),
+    rt:start_and_wait(NodeA0),
+    rt:wait_for_service(NodeA0, riak_kv),
+
+
+    lager:info("Kill a node in source - and repl OK"),
+    rt:brutal_kill(NodeA0),
+    lager:info("Node killed"),
+    timer:sleep(1000), % Cluster may settle after kill
+    write_to_cluster(NodeA, 5001, 6000, new_obj),
+    {root_compare, 0} =
+        wait_for_outcome(?MODULE,
+                            fullsync_check,
+                            [{NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL}, 
+                                no_repair],
+                            {root_compare, 0},
+                            ?WAIT_LOOPS),
+
+    read_from_cluster(NodeB, 5001, 6000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeC, 5001, 6000, ?COMMMON_VAL_INIT, 0),
 
     pass.
 
@@ -351,4 +421,21 @@ read_from_cluster(Node, Start, End, CommonValBin, Errors, LogErrors) ->
                     ok
             end,
             ?assertEqual(Errors, length(ErrorsFound))
+    end.
+
+
+wait_for_outcome(Module, Func, Args, ExpOutcome, Loops) ->
+    wait_for_outcome(Module, Func, Args, ExpOutcome, 0, Loops).
+
+wait_for_outcome(Module, Func, Args, _ExpOutcome, LoopCount, LoopCount) ->
+    apply(Module, Func, Args);
+wait_for_outcome(Module, Func, Args, ExpOutcome, LoopCount, MaxLoops) ->
+    case apply(Module, Func, Args) of
+        ExpOutcome ->
+            ExpOutcome;
+        NotRightYet ->
+            lager:info("~w not yet ~w ~w", [Func, ExpOutcome, NotRightYet]),
+            timer:sleep(LoopCount * 2000),
+            wait_for_outcome(Module, Func, Args, ExpOutcome,
+                                LoopCount + 1, MaxLoops)
     end.
