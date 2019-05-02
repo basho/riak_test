@@ -16,7 +16,7 @@
 -define(C_RING, 8).
 -define(A_NVAL, 4).
 -define(B_NVAL, 2).
--define(C_NVAL, 1).
+-define(C_NVAL, 3).
 
 -define(SNK_WORKERS, 4).
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
@@ -26,7 +26,7 @@
     % May need to wait for 2 x the 256ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
--define(CONFIG(RingSize, NVal), [
+-define(CONFIG(RingSize, NVal, ReplCache), [
         {riak_core,
             [
              {ring_creation_size, RingSize},
@@ -49,16 +49,17 @@
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep}
+           {delete_mode, keep},
+           {enable_repl_cache, ReplCache}
           ]}
         ]).
 
 confirm() ->
     [ClusterA, ClusterB, ClusterC] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, true)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, true)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, false)}]),
     rt:join_cluster(ClusterA),
     rt:join_cluster(ClusterB),
     rt:join_cluster(ClusterC),
@@ -181,7 +182,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     rt:stop_and_wait(NodeA0),
     lager:info("Node stopped"),
     write_to_cluster(NodeA, 3001, 4000, new_obj),
-    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeA, 3001, 4000, ?COMMMON_VAL_INIT, 0),
     {root_compare, 0} =
         wait_for_outcome(?MODULE,
                             fullsync_check,
@@ -231,7 +232,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     rt:brutal_kill(NodeA0),
     lager:info("Node killed"),
     timer:sleep(1000), % Cluster may settle after kill
-    write_to_cluster(NodeA, 5001, 6000, new_obj),
+    write_to_cluster(NodeA, 5001, 8000, new_obj),
     {root_compare, 0} =
         wait_for_outcome(?MODULE,
                             fullsync_check,
@@ -241,8 +242,23 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
                             {root_compare, 0},
                             ?WAIT_LOOPS),
 
-    read_from_cluster(NodeB, 5001, 6000, ?COMMMON_VAL_INIT, 0),
-    read_from_cluster(NodeC, 5001, 6000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeB, 5001, 8000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeC, 5001, 8000, ?COMMMON_VAL_INIT, 0),
+
+    lager:info("Confirm replication from cache-less cluster ..."),
+    lager:info(".. with node still killed in cluster A"),
+    write_to_cluster(NodeC, 8001, 10000, new_obj),
+    {root_compare, 0} =
+        wait_for_outcome(?MODULE,
+                            fullsync_check,
+                            [{NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeC, IPC, PortC, ?C_NVAL}, 
+                                no_repair],
+                            {root_compare, 0},
+                            ?WAIT_LOOPS),
+
+    read_from_cluster(NodeB, 8001, 10000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeA, 8001, 10000, ?COMMMON_VAL_INIT, 0),
 
     pass.
 
@@ -419,6 +435,12 @@ read_from_cluster(Node, Start, End, CommonValBin, Errors, LogErrors) ->
                     lists:foreach(LogFun, ErrorsFound);
                 false ->
                     ok
+            end,
+            case length(ErrorsFound) of
+                Errors ->
+                    ok;
+                _ ->
+                    lists:foreach(fun(E) -> lager:warning("Read error ~w", [E]) end, ErrorsFound)
             end,
             ?assertEqual(Errors, length(ErrorsFound))
     end.
