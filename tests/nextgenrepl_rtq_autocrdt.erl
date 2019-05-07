@@ -315,11 +315,8 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB) ->
                     ExpVal4),
     
     lager:info("Testing of full-sync - return in-sync"),
-    {http, {IPA, PortA}} = lists:keyfind(http, 1, rt:connection_info(NodeA)),
     {http, {IPB, PortB}} = lists:keyfind(http, 1, rt:connection_info(NodeB)),
     ModRef = riak_kv_ttaaefs_manager,
-    ok = rpc:call(NodeA, ModRef,
-                    set_source, [http, IPA, PortA]),
     ok = rpc:call(NodeA, ModRef, set_sink,
                     [http, IPB, PortB]),
     ok = rpc:call(NodeA, ModRef,

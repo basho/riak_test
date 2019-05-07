@@ -183,12 +183,11 @@ check_all_insync({NodeA, IPA, PortA},
                             cluster_a),
     true.
 
-fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
+fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
                 {_SinkNode, SinkIP, SinkPort, SinkNVal},
                 SnkClusterName) ->
     ModRef = riak_kv_ttaaefs_manager,
     _ = rpc:call(SrcNode, ModRef, pause, []),
-    ok = rpc:call(SrcNode, ModRef, set_source, [http, SrcIP, SrcPort]),
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_queuename, [SnkClusterName]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),

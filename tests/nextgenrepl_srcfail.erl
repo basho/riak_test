@@ -232,13 +232,12 @@ wait_for_outcome(Module, Func, Args, ExpOutcome, LoopCount, MaxLoops) ->
                                 LoopCount + 1, MaxLoops)
     end.
 
-fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
+fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
                 {_SinkNode, SinkIP, SinkPort, SinkNVal},
                 QueueName) ->
     ModRef = riak_kv_ttaaefs_manager,
     _ = rpc:call(SrcNode, ModRef, pause, []),
     ok = rpc:call(SrcNode, ModRef, set_queuename, [QueueName]),
-    ok = rpc:call(SrcNode, ModRef, set_source, [http, SrcIP, SrcPort]),
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
     rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]).
