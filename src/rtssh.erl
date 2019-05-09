@@ -348,7 +348,7 @@ riak_admin_cmd(Node, Args) ->
                           erlang:error(badarg)
                   end, Args),
     ArgStr = string:join(Quoted, " "),
-    node_path(Node) ++ "/bin/riak-admin " ++ ArgStr.
+    node_path(Node) ++ "/bin/riak admin " ++ ArgStr.
 
 load_hosts() ->
     {HostsIn, Aliases} = read_hosts_file("hosts"),

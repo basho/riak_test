@@ -1711,11 +1711,11 @@ httpc_write(C, Bucket, Key, Value, Opts) ->
 %%% Command Line Functions
 %%%===================================================================
 
-%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'
+%% @doc Call 'bin/riak admin' command on `Node' with arguments `Args'
 admin(Node, Args) ->
     admin(Node, Args, []).
 
-%% @doc Call 'bin/riak-admin' command on `Node' with arguments `Args'.
+%% @doc Call 'bin/riak admin' command on `Node' with arguments `Args'.
 %% The third parameter is a list of options. Valid options are:
 %%    * `return_exit_code' - Return the exit code along with the command output
 admin(Node, Args, Options) ->
@@ -1726,7 +1726,7 @@ riak(Node, Args) ->
     ?HARNESS:riak(Node, Args).
 
 
-%% @doc Call 'bin/riak-repl' command on `Node' with arguments `Args'
+%% @doc Call 'bin/riak repl' command on `Node' with arguments `Args'
 riak_repl(Node, Args) ->
     ?HARNESS:riak_repl(Node, Args).
 
