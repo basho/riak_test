@@ -5,8 +5,8 @@ mapred_basic_compat
 pr_pw
 rt_basic_test
 verify_2i_returnterms
+verify_handoff
 verify_riak_stats
 verify_staged_clustering
 verify_tictac_aae
 verify_vclock
-verify_handoff

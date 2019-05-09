@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(verify_handoff).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, run_test/4]).
 -include_lib("eunit/include/eunit.hrl").
 
 %% We've got a separate test for capability negotiation and other mechanisms, so the test here is fairly
@@ -29,20 +29,14 @@ confirm() ->
     NTestItems    = 1000,                                   %% How many test items to write/verify?
     NTestNodes    = 3,                                      %% How many nodes to spin up for tests?
     TestMode      = false,                                  %% Set to false for "production tests", true if too slow.
-    EncodingTypes = [default, encode_raw, encode_zlib],     %% Usually, you won't want to fiddle with these.
-
-    [run_test(TestMode, NTestItems, NTestNodes, EncodingType) ||
-        EncodingType <- EncodingTypes],
+    
+    run_test(TestMode, NTestItems, NTestNodes, default),
 
     lager:info("Test verify_handoff passed."),
     pass.
 
 run_test(TestMode, NTestItems, NTestNodes, Encoding) ->
     lager:info("Testing handoff (items ~p, encoding: ~p)", [NTestItems, Encoding]),
-
-    %% This resets nodes, cleans up stale directories, etc.:
-    lager:info("Cleaning up..."),
-    rt:setup_harness(dummy, dummy),
 
     lager:info("Spinning up test nodes"),
     [RootNode | TestNodes] = Nodes = deploy_test_nodes(TestMode, NTestNodes),

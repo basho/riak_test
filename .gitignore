@@ -9,8 +9,6 @@ search-corpus/spam.0
 erl_crash.dump
 *~
 #*#
-doc/
-!doc/overview.edoc
 *.jar
 coverage
 tags

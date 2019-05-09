@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(verify_vclock).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, run_test/3]).
 -include_lib("eunit/include/eunit.hrl").
 
 %% We've got a separate test for capability negotiation and other mechanisms, so the test here is fairly
@@ -28,9 +28,8 @@
 confirm() ->
     NTestItems    = 10,                                     %% How many test items to write/verify?
     TestMode      = false,                                  %% Set to false for "production tests", true if too slow.
-    EncodingTypes = [default, encode_raw, encode_zlib],     %% Usually, you won't want to fiddle with these.
-
-    lists:foreach(fun(EncodingType) -> run_test(TestMode, NTestItems, EncodingType) end, EncodingTypes),
+   
+    run_test(TestMode, NTestItems, default),
 
     lager:info("Test verify_vclock passed."),
     pass.
