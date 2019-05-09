@@ -52,7 +52,7 @@ riak_admin_cmd(Path, N, Args) ->
                   end, Args),
     ArgStr = string:join(Quoted, " "),
     ExecName = rt_config:get(exec_name, "riak"),
-    io_lib:format("~s/dev/dev~b/bin/~s-admin ~s", [Path, N, ExecName, ArgStr]).
+    io_lib:format("~s/dev/dev~b/bin/~s admin ~s", [Path, N, ExecName, ArgStr]).
 
 riak_debug_cmd(Path, N, Args) ->
     Quoted =
@@ -63,7 +63,7 @@ riak_debug_cmd(Path, N, Args) ->
                   end, Args),
     ArgStr = string:join(Quoted, " "),
     ExecName = rt_config:get(exec_name, "riak"),
-    lists:flatten(io_lib:format("~s/dev/dev~b/bin/~s-debug ~s", [Path, N, ExecName, ArgStr])).
+    lists:flatten(io_lib:format("~s/dev/dev~b/bin/~s debug ~s", [Path, N, ExecName, ArgStr])).
 
 run_git(Path, Cmd) ->
     lager:info("Running: ~s", [gitcmd(Path, Cmd)]),
