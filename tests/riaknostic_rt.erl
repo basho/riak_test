@@ -51,7 +51,7 @@ check_riaknostic_usage(Node) ->
     %% Check usage message
     lager:info("**  Run Riaknostic usage message"),
     {ok, RiaknosticOut} = rt:admin(Node, ["diag", "--help"]),
-    ?assert(rt:str(RiaknosticOut, "Usage: riak-admin")),
+    ?assert(rt:str(RiaknosticOut, "Usage: riak admin")),
     ok.
 
 %% Check that riaknostic gives a command listing

@@ -18,7 +18,7 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc Verifies the functionality of the riak-admin backup and restore
+%% @doc Verifies the functionality of the riak admin backup and restore
 %% commands.  Restore re-puts the data store by backup.  Notice that this does
 %% not mean the data is restored to what it was.  Newer data may prevail
 %% depending on the configuration (last write wins, vector clocks used, etc).

@@ -37,7 +37,7 @@ riakcmd(Path, N, Cmd) ->
     io_lib:format("~s/dev/dev~b/bin/~s ~s", [Path, N, ExecName, Cmd]).
 
 riakreplcmd(Path, N, Cmd) ->
-    io_lib:format("~s/dev/dev~b/bin/riak-repl ~s", [Path, N, Cmd]).
+    io_lib:format("~s/dev/dev~b/bin/riak repl ~s", [Path, N, Cmd]).
 
 gitcmd(Path, Cmd) ->
     io_lib:format("git --git-dir=\"~s/.git\" --work-tree=\"~s/\" ~s",

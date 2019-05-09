@@ -48,7 +48,7 @@ confirm() ->
     ok = verify_stats_keys_complete(Node1, Stats1),
 
     AdminStats1 = get_console_stats(Node1),
-    lager:info("Verifying that the stats keys in riak-admin status and HTTP match"),
+    lager:info("Verifying that the stats keys in riak admin status and HTTP match"),
     ok = compare_http_and_console_stats(Stats1, AdminStats1),
 
     %% make sure a set of stats have valid values
@@ -202,7 +202,7 @@ get_stats(Node) ->
 
 get_console_stats(Node) ->
     %% Problem: rt:admin(Node, Cmd) seems to drop parts of the output when
-    %% used for "riak-admin status" in 'rtdev'.
+    %% used for "riak admin status" in 'rtdev'.
     %% Temporary workaround: use os:cmd/1 when in 'rtdev' (needs some cheats
     %% in order to find the right path etc.)
     try
@@ -222,7 +222,7 @@ get_console_stats(Node) ->
 		   || L <- tl(tl(string:tokens(Stats, "\n")))]]
     catch
 	error:Reason ->
-	    lager:info("riak-admin status ERROR: ~p~n~p~n",
+	    lager:info("riak admin status ERROR: ~p~n~p~n",
 		       [Reason, erlang:get_stacktrace()]),
 	    []
     end.
@@ -232,7 +232,7 @@ compare_http_and_console_stats(Stats1, Stats2) ->
 		       not lists:keymember(K, 1, Stats2)],
     OnlyInAdmin = [S || {K,_} = S <- Stats2,
 			not lists:keymember(K, 1, Stats1)],
-    maybe_log_stats_keys(OnlyInHttp, "Keys missing from riak-admin"),
+    maybe_log_stats_keys(OnlyInHttp, "Keys missing from riak admin"),
     maybe_log_stats_keys(OnlyInAdmin, "Keys missing from HTTP"),
     ?assertEqual([], OnlyInHttp),
     ?assertEqual([], OnlyInAdmin),

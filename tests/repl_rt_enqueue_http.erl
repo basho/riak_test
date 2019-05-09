@@ -194,7 +194,7 @@ create_bucket_type(ANodes, BNodes) ->
     %% lager:info("re-startng all nodes, for bucket fixups to do the magics").
 
 create_bucket_type(Cluster) ->
-    %% NOTE: the riak-repl bucket fixups are _only_ run when the
+    %% NOTE: the riak repl bucket fixups are _only_ run when the
     %% node(s) starts up. How do we ensure that a new bucket type gets
     %% repl enabled?
     rt:create_activate_and_wait_for_bucket_type(Cluster,

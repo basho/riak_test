@@ -24,14 +24,14 @@
 
 -define(M, riak_repl_console_orig).
 
-%% Hello - if you mess with the riak-repl script, this test might help you
+%% Hello - if you mess with the riak repl script, this test might help you
 %% out. It intercepts (registered) calls to riak_repl_console and checks that
 %% parameters are received correctly. Tests using these intercepts will
 %% fail if ?PASS *isn't* returned.
 
 %% Please see ./tests/replication2_console_tests.erl for more information!
 
-%% these *strings* are passed back out as IO from the riak-repl shell script
+%% these *strings* are passed back out as IO from the riak repl shell script
 %% The IO from this script is used in asserts in
 %% replication2_console_tests.erl
 -define(PASS, io:format("pass", [])).

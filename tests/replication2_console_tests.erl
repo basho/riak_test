@@ -20,13 +20,13 @@
 -module(replication2_console_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-%% This test checks to see if the riak-repl *shell script*
+%% This test checks to see if the riak repl *shell script*
 %% communicates it's command line args to riak_repl_console
 %% correctly. This test needs to be exercised on all supported
 %% Riak platforms. This test helped fix a problem on Ubuntu
-%% where "riak-repl cascades" failed due to a shift error in
+%% where "riak repl cascades" failed due to a shift error in
 %% the script. Hopefully, this script will catch similar errors
-%% with future changes to riak-repl.
+%% with future changes to riak repl.
 %% Note, this test is more about verifying parameter *arity* in
 %% riak_repl_console than verifying all valid combinations
 %% of arguments for each
@@ -34,7 +34,7 @@
 %%
 %% test flow:
 %% riak_test -> riak_repl (shell script) -> intercept
-%%   a) if input received by riak-repl is correct,
+%%   a) if input received by riak repl is correct,
 %%      display "pass" to the console. Test will
 %%      pass via assert in check_cmd/2.
 %%   b) if input received by riap-repl is unexpected
@@ -47,7 +47,7 @@
 
 confirm() ->
     %% Deploy a node to test against
-    lager:info("Deploy node to test riak-repl command line"),
+    lager:info("Deploy node to test riak repl command line"),
     [Node] = rt:deploy_nodes(1, [], [riak_kv, riak_repl]),
     ?assertEqual(ok, rt:wait_until_nodes_ready([Node])),
     rt_intercept:add(Node,
@@ -117,7 +117,7 @@ confirm() ->
     pass.
 
 check_cmd(Node, Cmd) ->
-    lager:info("Testing riak-repl ~s on ~s", [Cmd, Node]),
+    lager:info("Testing riak repl ~s on ~s", [Cmd, Node]),
     {ok, Out} = rt:riak_repl(Node, [Cmd]),
     ?assertEqual("pass", Out).
 

@@ -139,7 +139,7 @@ attach_direct_down_test(Node) ->
     ok.
 
 status_up_test(Node) ->
-    lager:info("Test riak-admin status on ~s", [Node]),
+    lager:info("Test riak admin status on ~s", [Node]),
 
     {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     io:format("Result of status: ~s", [StatusOut]),
@@ -150,7 +150,7 @@ status_up_test(Node) ->
     ok.
 
 status_down_test(Node) ->
-    lager:info("Test riak-admin status while down"),
+    lager:info("Test riak admin status while down"),
     {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     ?assertEqual(1, ExitCode),
     ?assert(rt:str(StatusOut, ?PING_FAILURE_OUTPUT)),
