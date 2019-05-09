@@ -24,3 +24,4 @@ dialyzer_warnings
 riak_test.iml
 _build/
 rebar.lock
+*.beam

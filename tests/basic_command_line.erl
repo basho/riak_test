@@ -45,7 +45,6 @@ confirm() ->
     stop_test(Node),
     ping_down_test(Node),
     attach_down_test(Node),
-    attach_direct_down_test(Node),
     status_down_test(Node),
     console_test(Node),
     start_test(Node),
@@ -124,18 +123,12 @@ attach_down_test(Node) ->
     ok.
 
 attach_direct_up_test(Node) ->
-    lager:info("Testing riak attach-direct"),
+    lager:info("Testing riak attach - but in 3.0 now attach not attach_direct"),
 
-    rt:attach_direct(Node, [{expect, "\(^D to exit\)"},
+    rt:attach(Node, [{expect, "\(^D to exit\)"},
                             {send, "riak_core_ring_manager:get_my_ring()."},
                             {expect, "dict,"},
                             {send, [4]}]), %% 4 = Ctrl + D
-    ok.
-
-attach_direct_down_test(Node) ->
-    lager:info("Testing riak attach-direct while down"),
-    {ok, AttachOut} = rt:riak(Node, ["attach-direct"]),
-    ?assert(rt:str(AttachOut, ?PING_FAILURE_OUTPUT)),
     ok.
 
 status_up_test(Node) ->
