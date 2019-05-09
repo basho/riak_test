@@ -25,6 +25,7 @@
 -export([add_deps/1]).
 
 add_deps(Path) ->
+    io:format("Adding path ~s~n", [Path]),
     {ok, Deps} = file:list_dir(Path),
     [code:add_path(lists:append([Path, "/", Dep, "/ebin"])) || Dep <- Deps],
     ok.
@@ -169,12 +170,13 @@ main(Args) ->
     io:format("Tests to run: ~p~n", [Tests]),
     %% Two hard-coded deps...
     add_deps(rt:get_deps()),
-    add_deps("deps"),
+    add_deps("_build/test/lib/riak_test/tests"),
 
     [add_deps(Dep) || Dep <- rt_config:get(rt_deps, [])],
     ENode = rt_config:get(rt_nodename, 'riak_test@127.0.0.1'),
     Cookie = rt_config:get(rt_cookie, riak),
     CoverDir = rt_config:get(cover_output, "coverage"),
+    lager:info("ENode ~w Cookie ~w~n", [ENode, Cookie]),
     [] = os:cmd("epmd -daemon"),
     net_kernel:start([ENode]),
     erlang:set_cookie(node(), Cookie),

@@ -67,7 +67,7 @@ if [ -z "$CONFIG" ]; then
 fi
 
 if [ "$GROUP" != "yoko" ]; then
-    TEST_EBIN=ebin
+    TEST_EBIN=_build/test/lib/riak_test/tests
 else
     TEST_EBIN=~/yokozuna/riak_test/ebin
 fi
@@ -91,7 +91,7 @@ mkdir -p $BASE_DIR/results/$GROUP
 
 echo "Running tests"
 
-if [ -z "$BACKEND"]; then
+if [ -z "$BACKEND" ]; then
     BECMD=
 else
     BECMD="-b $BACKEND"
