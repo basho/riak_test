@@ -179,8 +179,11 @@ error_not_found_propagation([Node|_]) ->
 map_output_with_btype([Node|_]) ->
     %% Translates from regular bucket to bucket type one
     Inputs = ?INTS_BUCKET,
-    Spec = [{map, {jsanon, <<"function(o){return[[o.bucket,o.key,null,\"mytype\"]];}">>}, undefined, false},
-            {map, {modfun, riak_kv_mapreduce, map_object_value}, undefined, false},
+
+%%  Removed javascript test for map-reduce
+%%  {map, {jsanon, <<"function(o){return[[o.bucket,o.key,null,\"mytype\"]];}">>}, undefined, false},
+
+    Spec = [{map, {modfun, riak_kv_mapreduce, map_object_value}, undefined, false},
             {reduce, {modfun, riak_kv_mapreduce, reduce_string_to_integer}, undefined, false},
             {reduce, {modfun, riak_kv_mapreduce, reduce_sort}, undefined, true}
            ],
