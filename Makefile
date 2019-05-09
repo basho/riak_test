@@ -10,6 +10,7 @@ PLT = $(HOME)/.riak-test_dialyzer_plt
 REBAR=./rebar3
 
 all: deps compile
+	$(REBAR) as test compile
 	$(REBAR) escriptize
 	SMOKE_TEST=1 $(REBAR) escriptize
 
