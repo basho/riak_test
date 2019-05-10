@@ -24,8 +24,6 @@
 -compile([export_all, nowarn_export_all]).
 -export([confirm/0]).
 
--define(PING_FAILURE_OUTPUT, "Node did not respond to ping!").
-
 confirm() ->
 
     %% Deploy a node to test against
@@ -55,7 +53,7 @@ confirm() ->
 console_up_test(Node) ->
     lager:info("Node is already up, `riak console` should fail"),
     {ok, ConsoleFail} = rt:riak(Node, ["console"]),
-    ?assert(rt:str(ConsoleFail, "seems to be in use by another Erlang node")),
+    ?assert(rt:str(ConsoleFail, "Node is already running!")),
     ok.
 
 console_test(Node) ->
@@ -119,7 +117,7 @@ ping_down_test(Node) ->
 attach_down_test(Node) ->
     lager:info("Testing riak attach while down"),
     {ok, AttachOut} = rt:riak(Node, ["attach"]),
-    ?assert(rt:str(AttachOut, ?PING_FAILURE_OUTPUT)),
+    ?assert(rt:str(AttachOut, "Node is not running!")),
     ok.
 
 attach_direct_up_test(Node) ->
@@ -146,18 +144,18 @@ status_down_test(Node) ->
     lager:info("Test riak admin status while down"),
     {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     ?assertEqual(1, ExitCode),
-    ?assert(rt:str(StatusOut, ?PING_FAILURE_OUTPUT)),
+    ?assert(rt:str(StatusOut, "not responding to pings")),
     ok.
 
 getpid_up_test(Node) ->
-    lager:info("Test riak getpid on ~s", [Node]),
-    {ok, PidOut} = rt:riak(Node, ["getpid"]),
+    lager:info("Test riak get pid on ~s", [Node]),
+    {ok, PidOut} = rt:riak(Node, ["pid"]),
     ?assertNot(rt:str(PidOut, "")),
     ?assert(rt:str(PidOut, rpc:call(Node, os, getpid, []))),
     ok.
 
 getpid_down_test(Node) ->
     lager:info("Test riak getpid fails on ~s", [Node]),
-    {ok, PidOut} = rt:riak(Node, ["getpid"]),
-    ?assert(rt:str(PidOut, "Node is not running!")),
+    {ok, PidOut} = rt:riak(Node, ["pid"]),
+    ?assert(rt:str(PidOut, "not responding to pings")),
     ok.
