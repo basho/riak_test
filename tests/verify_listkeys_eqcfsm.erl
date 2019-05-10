@@ -1,5 +1,6 @@
 -module(verify_listkeys_eqcfsm).
 -compile(export_all).
+-compile(nowarn_export_all).
 
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").

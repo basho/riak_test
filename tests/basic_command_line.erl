@@ -55,7 +55,7 @@ confirm() ->
 console_up_test(Node) ->
     lager:info("Node is already up, `riak console` should fail"),
     {ok, ConsoleFail} = rt:riak(Node, ["console"]),
-    ?assert(rt:str(ConsoleFail, "Node is already running")),
+    ?assert(rt:str(ConsoleFail, "seems to be in use by another Erlang node")),
     ok.
 
 console_test(Node) ->
