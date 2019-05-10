@@ -33,8 +33,10 @@
 confirm() ->
     [Node] = rt:build_cluster(1),
 
+
+
     Connections = get_connections(Node),
-    Buckets = {druuid:v4_str(), druuid:v4_str()},
+    Buckets = {sortof_uuid(), sortof_uuid()},
 
     DefaultProps = default_props(),
     ValidProps = valid_props(),
@@ -56,6 +58,14 @@ confirm() ->
 
     close_connections(Connections),
     pass.
+
+sortof_uuid() ->
+    sortof_uuid(rand:uniform(1 bsl 48) - 1, 
+            rand:uniform(1 bsl 12) - 1, 
+            rand:uniform(1 bsl 32) - 1, 
+            rand:uniform(1 bsl 30) - 1).
+sortof_uuid(R1, R2, R3, R4) ->
+    base64:encode(<<R1:48, 4:4, R2:12, 2:2, R3:32, R4:30>>).
 
 get_connections(Node) ->
     {rt:httpc(Node), rt:pbc(Node)}.

@@ -1,5 +1,5 @@
 -module(verify_listkeys_eqcfsm).
--compile([export_all, nowarn_export_all]).
+-compile(export_all).
 
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
@@ -35,7 +35,15 @@ g_num_keys() ->
     choose(10, 1000).
 
 g_uuid() ->
-    noshrink(eqc_gen:bind(eqc_gen:bool(), fun(_) -> druuid:v4_str() end)).
+    noshrink(eqc_gen:bind(eqc_gen:bool(), fun(_) -> sortof_uuid() end)).
+
+sortof_uuid() ->
+    sortof_uuid(rand:uniform(1 bsl 48) - 1, 
+            rand:uniform(1 bsl 12) - 1, 
+            rand:uniform(1 bsl 32) - 1, 
+            rand:uniform(1 bsl 30) - 1).
+sortof_uuid(R1, R2, R3, R4) ->
+    base64:encode(<<R1:48, 4:4, R2:12, 2:2, R3:32, R4:30>>).
 
 g_bucket_type() ->
     oneof(bucket_types()).
@@ -64,13 +72,13 @@ prop_test() ->
                end,
                ?TRAPEXIT(
                   begin
-                      Nodes = setup_cluster(rand:uniform(?MAX_CLUSTER_SIZE)),
+                      Nodes = setup_cluster(random:uniform(?MAX_CLUSTER_SIZE)),
                       lager:info("======================== Will run commands with Nodes:~p:", [Nodes]),
                       [lager:info(" Command : ~p~n", [Cmd]) || Cmd <- Cmds],
                       {H, _S, Res} = run_commands(?MODULE, Cmds, [{nodelist, Nodes}]),
                       lager:info("======================== Ran commands"),
                       rt:clean_cluster(Nodes),
-                      aggregate(zip(state_names(H),command_names(Cmds)),
+                      aggregate(zip(state_names(H),command_names(Cmds)), 
                           equals(Res, ok))
                  end))).
 
@@ -89,7 +97,7 @@ preloading_data(S) ->
 
 verifying_data(S) ->
     [
-     {stopped, {call, ?MODULE, verify, [S#state.buckets,
+     {stopped, {call, ?MODULE, verify, [S#state.buckets, 
                                         S#state.nodes_up,
                                         S#state.key_filter]}}
     ].
@@ -103,11 +111,11 @@ stopped(_S) ->
 initial_state_data() ->
     #state{}.
 
-next_state_data(preloading_data, preloading_data, S, _, {call, _, preload_data,
+next_state_data(preloading_data, preloading_data, S, _, {call, _, preload_data, 
                     [{BucketType, _}, Bucket, Nodes, NumKeys, KeyFilter]}) ->
-    S#state{ buckets = orddict:update_counter({Bucket, BucketType}, NumKeys, S#state.buckets),
+    S#state{ buckets = orddict:update_counter({Bucket, BucketType}, NumKeys, S#state.buckets), 
              key_filter = KeyFilter,
-             nodes_up = Nodes
+             nodes_up = Nodes 
     };
 next_state_data(_From, _To, S, _R, _C) ->
     S.
@@ -117,7 +125,7 @@ next_state_data(_From, _To, S, _R, _C) ->
 %% ====================================================================
 weight(preloading_data,preloading_data,{call,verify_listkeys_eqcfsm,preload_data,[_,_,_,_,_]}) -> 80;
 weight(preloading_data,verifying_data,{call,verify_listkeys_eqcfsm,log_transition,[_]}) -> 10;
-weight(verifying_data,stopped,{call,verify_listkeys_eqcfsm,verify,[_,_,_]}) -> 10.
+weight(verifying_data,stopped,{call,verify_listkeys_eqcfsm,verify,[_,_,_]}) -> 10. 
 
 %% ====================================================================
 %% EQC FSM preconditions
@@ -139,8 +147,8 @@ postcondition(_From,_To,_S,{call,_,_,_},_Res) ->
 
 audit_keys_per_node(S, KeyDict) ->
     [ [ assert_equal(
-            expected_keys(orddict:fetch({Bucket, BucketType}, S#state.buckets),
-                          S#state.key_filter),
+            expected_keys(orddict:fetch({Bucket, BucketType}, S#state.buckets), 
+                          S#state.key_filter), 
             NodeKeyList)
         || NodeKeyList <- orddict:fetch({Bucket, BucketType}, KeyDict)  ]
      || {Bucket, BucketType} <- orddict:fetch_keys(S#state.buckets) ].
@@ -158,17 +166,17 @@ verify(undefined, _Nodes, _KeyFilter) ->
     lager:info("Nothing to compare.");
 verify(Buckets, Nodes,  KeyFilter) ->
     Keys = orddict:fold(fun({Bucket, BucketType}, _, Acc) ->
-                            ListVal = [ list_filter_sort(Node, {BucketType, Bucket}, KeyFilter)
+                            ListVal = [ list_filter_sort(Node, {BucketType, Bucket}, KeyFilter) 
                                         || Node <- Nodes ],
                             orddict:append({Bucket, BucketType}, hd(ListVal), Acc)
                         end,
                         orddict:new(),
                         Buckets),
     Keys.
-
+    
 log_transition(S) ->
     lager:debug("Buckets and key counts at transition:"),
-    orddict:fold(fun({Bucket, BucketType} = _Key, NumKeys, _Acc) ->
+    orddict:fold(fun({Bucket, BucketType} = _Key, NumKeys, _Acc) -> 
                      lager:debug("Bucket:~p, BucketType:~p, NumKeys:~p", [Bucket,BucketType,NumKeys])
                  end,
                  [],
@@ -193,7 +201,7 @@ assert_equal(Expected, Actual) ->
     case Expected -- Actual of
         [] ->
             ok;
-        Diff -> lager:info("Expected:~p~nActual:~p~nExpected -- Actual: ~p",
+        Diff -> lager:info("Expected:~p~nActual:~p~nExpected -- Actual: ~p", 
                             [length(Expected), length(Actual), length(Diff)])
     end,
     length(Actual) == length(Expected)
