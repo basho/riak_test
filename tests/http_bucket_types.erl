@@ -6,6 +6,25 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riakc/include/riakc.hrl").
 
+-define(SUMVALUE_MAPRED,
+            [{map,
+                {modfun, riak_kv_mapreduce, map_object_value},
+                undefined, false},
+            {reduce,
+                {modfun, riak_kv_mapreduce, reduce_string_to_integer},
+                undefined, false},
+            {reduce,
+                {modfun, riak_kv_mapreduce, reduce_sum},
+                undefined, true}]).
+
+-define(COUNT_MAPRED,
+            [{map,
+                {modfun, riak_kv_mapreduce, map_object_value},
+                undefined, false},
+            {reduce,
+                {modfun, riak_kv_mapreduce, reduce_count_inputs},
+                undefined, true}]).
+
 -define(WAIT(E), ?assertEqual(ok, rt:wait_until(fun() -> (E) end))).
 
 confirm() ->
@@ -294,12 +313,9 @@ confirm() ->
                                          {<<"bar">>, <<"3">>, <<"b">>, 7},
                                          {<<"baz">>, <<"4">>, <<"a">>, 4}]],
 
-    ?assertEqual({ok, [{1, [9]}]},
+    ?assertEqual({ok, [{2, [9]}]},
                  rhc:mapred_bucket(RHC, <<"MRbucket">>,
-                                   [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
-                                    {reduce, {jsfun,
-                                              <<"Riak.reduceSum">>},
-                                     undefined, true}])),
+                                   ?SUMVALUE_MAPRED)),
 
     [Store({<<"mytype">>, <<"MRbucket">>}, KV) || KV <- [
                                                          {<<"foo">>, <<"2">>, <<"a">>, 4},
@@ -307,29 +323,16 @@ confirm() ->
                                                          {<<"baz">>, <<"4">>, <<"a">>, 4},
                                                          {<<"bam">>, <<"5">>, <<"a">>, 3}]],
 
-    ?assertEqual({ok, [{1, [14]}]},
+    ?assertEqual({ok, [{2, [14]}]},
                  rhc:mapred_bucket(RHC, {<<"mytype">>, <<"MRbucket">>},
-                                   [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
-                                    {reduce, {jsfun,
-                                              <<"Riak.reduceSum">>},
-                                     undefined, true}])),
+                                   ?SUMVALUE_MAPRED)),
 
     ?assertEqual({ok, [{1, [3]}]},
                  rhc:mapred(RHC,
                             [{<<"MRbucket">>, <<"foo">>},
                              {<<"MRbucket">>, <<"bar">>},
                              {<<"MRbucket">>, <<"baz">>}],
-                            [{map, {jsanon, <<"function (v) { return [1]; }">>},
-                              undefined, false},
-                             {reduce, {jsanon,
-                                       <<"function(v) {
-                                                             total = v.reduce(
-                                                                         function(prev,curr,idx,array) {
-                                                                                   return prev+curr;
-                                                                                  }, 0);
-                                         return [total];
-                                         }">>},
-                                  undefined, true}])),
+                            ?COUNT_MAPRED)),
 
     ?assertEqual({ok, [{1, [4]}]},
                  rhc:mapred(RHC,
@@ -341,17 +344,7 @@ confirm() ->
                                   undefined},
                                  {{{<<"mytype">>, <<"MRbucket">>}, <<"bam">>},
                                  undefined}],
-                                [{map, {jsanon, <<"function (v) { return [1]; }">>},
-                                  undefined, false},
-                                 {reduce, {jsanon,
-                                           <<"function(v) {
-                                                             total = v.reduce(
-                                                               function(prev,curr,idx,array) {
-                                                                 return prev+curr;
-                                                               }, 0);
-                                                             return [total];
-                                                           }">>},
-                                  undefined, true}])),
+                                ?COUNT_MAPRED)),
 
     case HaveIndexes of
         false -> ok;
@@ -408,22 +401,16 @@ confirm() ->
     ok = rt:load_modules_on_nodes([?MODULE], Nodes),
 
     %% do a modfun mapred using the function from this module
-    ?assertEqual({ok, [{1, [2]}]},
+    ?assertEqual({ok, [{2, [2]}]},
                  rhc:mapred_bucket(RHC, {modfun, ?MODULE,
                                                     mapred_modfun, []},
-                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
-                                        {reduce, {jsfun,
-                                                  <<"Riak.reduceSum">>},
-                                         undefined, true}])),
+                                       ?SUMVALUE_MAPRED)),
 
     %% do a modfun mapred using the function from this module
-    ?assertEqual({ok, [{1, [5]}]},
+    ?assertEqual({ok, [{2, [5]}]},
                  rhc:mapred_bucket(RHC, {modfun, ?MODULE,
                                                     mapred_modfun_type, []},
-                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
-                                        {reduce, {jsfun,
-                                                  <<"Riak.reduceSum">>},
-                                         undefined, true}])),
+                                       ?SUMVALUE_MAPRED)),
     pass.
 
 mapred_modfun(Pipe, Args, _Timeout) ->
