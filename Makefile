@@ -13,6 +13,7 @@ all: deps compile
 	$(REBAR) as test compile
 	$(REBAR) escriptize
 	SMOKE_TEST=1 $(REBAR) escriptize
+	cp ./_build/test/lib/riak_test/tests/*.beam ./ebin
 
 deps:
 	$(if $(HEAD_REVISION),$(warning "Warning: you have checked out a tag ($(HEAD_REVISION)) and should use the locked-deps target"))
