@@ -98,7 +98,7 @@ confirm() ->
 
     lager:info("Checking that authentication is required"),
     %% invalid credentials should be invalid
-    ?assertEqual({error,{tcp,{tls_alert,"handshake failure"}}}, riakc_pb_socket:start("127.0.0.1", Port,
+    ?assertEqual({error, {tcp, <<"Authentication failed">>}}, riakc_pb_socket:start("127.0.0.1", Port,
                                       [{credentials, UsernameBin,
                                         "pass"}, {cacertfile,
                                                   filename:join([CertDir, "rootCA/cert.pem"])}])),
