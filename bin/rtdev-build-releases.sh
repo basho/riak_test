@@ -180,5 +180,5 @@ build()
 }
 
 #build "riak-2.2.8" $R16B02 riak-2.2.8
-build "riak-3.0" $R203 develop-3.0
+build "riak-3.0" $R203 develop-3.0-ns
 echo
