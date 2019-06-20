@@ -71,11 +71,11 @@ confirm() ->
 test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
                                 FullSyncFun,
                                 SetupReplFun) ->
-    repl_ttaaefs_manual:test_repl_between_clusters(ClusterA,
-                                                    ClusterB,
-                                                    ClusterC, 
-                                                    FullSyncFun,
-                                                    SetupReplFun).
+    nextgenrepl_ttaaefs_manual:test_repl_between_clusters(ClusterA,
+                                                            ClusterB,
+                                                            ClusterC, 
+                                                            FullSyncFun,
+                                                            SetupReplFun).
 
 setup_replqueues([]) ->
     ok;
