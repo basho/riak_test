@@ -59,15 +59,12 @@
           ]}
         ]).
 
--define(SNK_CONFIG(RTQ, AAEQ, PeerList), 
+-define(SNK_CONFIG(RTQ, PeerList), 
         [{riak_kv, 
             [{replrtq_enablesink, true},
-                {replrtq_sink1queue, RTQ},
-                {replrtq_sink1peers, PeerList},
-                {replrtq_sink1workers, ?SNK_WORKERS},
-                {replrtq_sink2queue, AAEQ},
-                {replrtq_sink2peers, PeerList},
-                {replrtq_sink2workers, ?SNK_WORKERS}]}]).
+                {replrtq_sinkqueue, RTQ},
+                {replrtq_sinkpeers, PeerList},
+                {replrtq_sinkworkers, ?SNK_WORKERS}]}]).
 
 confirm() ->
     ClusterASrcQ = "rtq_b:buckettype._maps|ttaaefs_b:block_rtq",
@@ -88,8 +85,8 @@ confirm() ->
         end,
     ClusterASnkPL = lists:foldl(FoldToPeerConfig, "", ClusterB),
     ClusterBSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA),
-    ClusterASNkCfg = ?SNK_CONFIG(rtq_a, ttaaefs_a, ClusterASnkPL),
-    ClusterBSNkCfg = ?SNK_CONFIG(rtq_b, ttaaefs_b, ClusterBSnkPL),
+    ClusterASNkCfg = ?SNK_CONFIG(rtq_a, ClusterASnkPL),
+    ClusterBSNkCfg = ?SNK_CONFIG(rtq_b, ClusterBSnkPL),
 
     lists:foreach(fun(N) -> rt:set_advanced_conf(N, ClusterASNkCfg) end,
                     ClusterA),
@@ -104,6 +101,9 @@ confirm() ->
     rt:wait_until_ring_converged(ClusterB),
     lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
                     ClusterA ++ ClusterB),
+    
+    setup_snkreplworkers(ClusterA, ClusterB, ttaaefs_b),
+    setup_snkreplworkers(ClusterB, ClusterA, ttaaefs_a),
     
     lager:info("Creating bucket types"),
     rt:create_and_activate_bucket_type(hd(ClusterA),
@@ -403,3 +403,20 @@ check_value(Client, CMod, Bucket, Key, DTMod, Expected, Options) ->
                                 false
                         end
                     end).
+
+setup_snkreplworkers(SrcCluster, SnkNodes, SnkName) ->
+    PeerMap =
+        fun(Node, Acc) ->
+            {http, {IP, Port}} =
+                lists:keyfind(http, 1, rt:connection_info(Node)),
+            {{Acc, 0, IP, Port}, Acc + 1}
+        end,
+    {PeerList, _} = lists:mapfoldl(PeerMap, 1, SrcCluster),
+    SetupSnkFun = 
+        fun(Node) ->
+            ok = rpc:call(Node,
+                            riak_kv_replrtq_snk,
+                            add_snkqueue,
+                            [SnkName, PeerList, ?SNK_WORKERS])
+        end,
+    lists:foreach(SetupSnkFun, SnkNodes).

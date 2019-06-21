@@ -58,9 +58,9 @@
 -define(SNK_CONFIG(ClusterName, PeerList), 
         [{riak_kv, 
             [{replrtq_enablesink, true},
-                {replrtq_sink1queue, ClusterName},
-                {replrtq_sink1peers, PeerList},
-                {replrtq_sink1workers, ?SNK_WORKERS}]}]).
+                {replrtq_sinkqueue, ClusterName},
+                {replrtq_sinkpeers, PeerList},
+                {replrtq_sinkworkers, ?SNK_WORKERS}]}]).
 
 confirm() ->
     ClusterASrcQ = "cluster_b:any|cluster_c:any",
