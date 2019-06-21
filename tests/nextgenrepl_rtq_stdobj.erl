@@ -18,7 +18,7 @@
 -define(B_NVAL, 2).
 -define(C_NVAL, 3).
 
--define(SNK_WORKERS, 4).
+-define(SNK_WORKERS, 8).
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
 
