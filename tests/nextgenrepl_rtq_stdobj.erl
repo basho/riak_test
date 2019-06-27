@@ -22,8 +22,8 @@
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
 
--define(REPL_SLEEP, 512). 
-    % May need to wait for 2 x the 256ms max sleep time of a snk worker
+-define(REPL_SLEEP, 2048). 
+    % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
 -define(CONFIG(RingSize, NVal, ReplCache), [
@@ -164,6 +164,9 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     lager:info("Suspend working on a queue from sink and confirm ..."),
     lager:info("... replication stops but continues from unsuspended sinks"),
     ok = action_on_snkqueue(ClusterA, cluster_a, suspend_snkqueue),
+    timer:sleep(?REPL_SLEEP),
+        % Sleep here as there may be established workers looping on an empty
+        % queue that may otherwise still replicate the first item
     write_to_cluster(NodeC, 2001, 3000, new_obj),
     timer:sleep(?REPL_SLEEP),
     read_from_cluster(NodeB, 2001, 3000, ?COMMMON_VAL_INIT, 0),

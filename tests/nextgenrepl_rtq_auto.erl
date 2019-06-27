@@ -22,8 +22,8 @@
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
 
--define(REPL_SLEEP, 512). 
-    % May need to wait for 2 x the 256ms max sleep time of a snk worker
+-define(REPL_SLEEP, 2048). 
+    % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
 -define(CONFIG(RingSize, NVal, SrcQueueDefns), [
