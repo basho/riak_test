@@ -72,6 +72,7 @@
             {ttaaefs_allcheck, 1500}, % check about once every 60s
             {ttaaefs_nocheck, 0},
             {ttaaefs_queuename, RemoteClusterName},
+            {ttaaefs_logrepairs, enabled},
             {replrtq_srcqueue, SrcQueueDefns},
 
             {replrtq_enablesink, true},
