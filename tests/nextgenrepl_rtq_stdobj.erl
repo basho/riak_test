@@ -146,31 +146,17 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     read_from_cluster(NodeA, 1001, 2000, ?COMMMON_VAL_INIT, 1000),
     write_to_cluster(NodeC, 1101, 2000, ?COMMMON_VAL_MOD),
     timer:sleep(?REPL_SLEEP),
-    {clock_compare, N0} =
-        fullsync_check({NodeC, IPC, PortC, ?C_NVAL},
-                        {NodeA, IPA, PortA, ?A_NVAL},
-                        cluster_a),
-    lager:info("~w writes required full-sync due to race", [N0 - 100]),
-    ?assertMatch(true, (N0 - 100) < 10),
-    ?assertMatch(true, N0 >= 100),
-        % As repl_cache is disabled on Cluster C, replication may be imperfect
-        % and subject to a race condition.  This should affect a small number
-        % of writes (o(1)).
-    timer:sleep(?REPL_SLEEP),
-        {_R1, N1} =
-        fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
-                        {NodeB, IPB, PortB, ?B_NVAL},
-                        cluster_b),
-    lager:info("~w writes required full-sync due to race", [N1]),
-    ?assertMatch(true, N1 < 10),
-    timer:sleep(?REPL_SLEEP),
-
-
-    read_from_cluster(NodeA, 1001, 1100, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeA, 1001, 1100, ?COMMMON_VAL_INIT, 100),
     read_from_cluster(NodeA, 1101, 2000, ?COMMMON_VAL_MOD, 0),
         % errors down to 100
-    read_from_cluster(NodeB, 1001, 1100, ?COMMMON_VAL_INIT, 0, true),
-    read_from_cluster(NodeB, 1101, 2000, ?COMMMON_VAL_MOD, 0),
+    lager:info("Full sync from another cluster will resolve"),
+    {clock_compare, 100} =
+        fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
+                        {NodeA, IPA, PortA, ?A_NVAL},
+                        cluster_a),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeA, 1001, 1100, ?COMMMON_VAL_INIT, 0, true),
+    read_from_cluster(NodeA, 1101, 2000, ?COMMMON_VAL_MOD, 0),
     true = check_all_insync({NodeA, IPA, PortA},
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC}),
@@ -183,20 +169,10 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
         % queue that may otherwise still replicate the first item
     write_to_cluster(NodeC, 2001, 3000, new_obj),
     timer:sleep(?REPL_SLEEP),
-    {_R2, N2} =
-        fullsync_check({NodeC, IPC, PortC, ?C_NVAL},
-                        {NodeB, IPB, PortB, ?B_NVAL},
-                        cluster_c),
-    lager:info("~w writes required full-sync due to race", [N2]),
-    ?assertMatch(true, N2 < 10),
-        % As repl_cache is disabled on Cluster C, replication may be imperfect
-        % and subject to a race condition.  This should affect a small number
-        % of writes (o(1)).
     read_from_cluster(NodeB, 2001, 3000, ?COMMMON_VAL_INIT, 0),
     read_from_cluster(NodeA, 2001, 3000, ?COMMMON_VAL_INIT, 1000),
     ok = action_on_snkqueue(ClusterA, cluster_a, resume_snkqueue),
     lager:info("Resuming the queue prompts recovery ..."),
-    lager:info("No need to full-sync as race cannot now occcur"),
     timer:sleep(?REPL_SLEEP),
     read_from_cluster(NodeB, 2001, 3000, ?COMMMON_VAL_INIT, 0),
     read_from_cluster(NodeA, 2001, 3000, ?COMMMON_VAL_INIT, 0),
@@ -356,7 +332,12 @@ fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_queuename, [SnkClusterName]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]).
+    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+
+    % lager:info("Sleeping to await queue drain."),
+    % timer:sleep(2000),
+    
+    AAEResult.
 
 %% @doc Write a series of keys and ensure they are all written.
 write_to_cluster(Node, Start, End, CommonValBin) ->
