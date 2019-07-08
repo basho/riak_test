@@ -123,8 +123,6 @@ confirm() ->
                                 ?TEST_BUCKET, {StrK, EndK}, all,
                                 cluster_c),
     ?assertEqual(900, KC2),
-    FunMod:read_from_cluster(NodeC, 1, 3000, 3000, ?TEST_BUCKET, ?VAL_INIT),
-    FunMod:read_from_cluster(NodeC, 3901, 5000, 1100, ?TEST_BUCKET, ?VAL_INIT),
     0 = 
         wait_for_outcome(FunMod,
                             read_from_cluster,
@@ -132,6 +130,8 @@ confirm() ->
                                 ?TEST_BUCKET, ?VAL_INIT],
                             0,
                             5),
+    FunMod:read_from_cluster(NodeC, 1, 3000, 3000, ?TEST_BUCKET, ?VAL_INIT),
+    FunMod:read_from_cluster(NodeC, 3901, 5000, 1100, ?TEST_BUCKET, ?VAL_INIT),
     
     lager:info("Replicate puts based on modified date range"),
     {MegaB4, SecsB4, _} = os:timestamp(),

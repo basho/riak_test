@@ -152,18 +152,15 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     lager:info("Real-time repl requires a mesh topology between clusters"),
     read_from_cluster(NodeC, 1, 1000, ?COMMMON_VAL_INIT, 1000),
 
-    lager:info("8 rounds of full-sync should replicate all"),
+    lager:info("Rounds of full-sync should replicate all, no more than 12"),
     FSCFun = 
-        fun(_X) ->
-            fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
-                            {NodeC, IPC, PortC, ?C_NVAL},
-                            cluster_c)
+        fun() ->
+            R = fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
+                                {NodeC, IPC, PortC, ?C_NVAL},
+                                cluster_c),
+            R == {root_compare, 0}
         end,
-    lists:foreach(FSCFun, lists:seq(1, 8)),
-    {root_compare, 0}
-        = fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
-                            {NodeC, IPC, PortC, ?C_NVAL},
-                            cluster_c),
+    ok = rt:wait_until(FSCFun, 12, ?REPL_SLEEP div 4),
     read_from_cluster(NodeC, 1, 900, ?COMMMON_VAL_INIT, 0),
     read_from_cluster(NodeC, 901, 1000, ?COMMMON_VAL_INIT, 100),
 
@@ -177,7 +174,7 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     read_from_cluster(NodeB, 1, 100, ?COMMMON_VAL_MOD, 0),
     read_from_cluster(NodeC, 1, 100, ?COMMMON_VAL_SIB, 0),
     read_sibsfrom_cluster(NodeA, 1, 100, [?COMMMON_VAL_MOD, ?COMMMON_VAL_SIB]),
-    lager:info("All other objects undistrubed"),
+    lager:info("All other objects undisturbed"),
     read_from_cluster(NodeA, 101, 900, ?COMMMON_VAL_INIT, 0),
     read_from_cluster(NodeA, 901, 1000, ?COMMMON_VAL_INIT, 100),
     read_from_cluster(NodeB, 101, 900, ?COMMMON_VAL_INIT, 0),
