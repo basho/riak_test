@@ -17,24 +17,9 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc Verification of Active Anti Entropy.
-%% The basic guarantee of AAE is this: Even without the read repairs that will
-%% happen when data is accessed, inconsistencies between the replicas of a
-%% KV object will be repaired eventually.  The test tries hard not to
-%% explicitly check for when the AAE trees are built or when exchanges are run
-%% in an effort to remain decoupled from the implementation.  Instead, it
-%% simply configures AAE to build/rebuild and run exchanges between the data
-%% partitions. It then performs direct vnode reads on all replicas and verify
-%% they eventually match.
-%%
-%% Data recovery after the following scenarios is tested:
-%%
-%% - Data for a partition completely disappears.
-%% - Less than N replicas are written
-%% - Less than N replicas are updated
-%%
-%% Also, a sanity check is done to make sure AAE repairs go away eventually
-%% if there is no activity.  That was an actual early AAE bug.
+%% @doc Verification of Active Anti Entropy during node down - with or without
+%% configuration to run AAE only between primary vnodes.
+
 
 -module(verify_tictacaae_nodedown).
 -export([confirm/0]).
