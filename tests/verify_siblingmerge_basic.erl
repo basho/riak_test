@@ -20,7 +20,7 @@
 %% @doc Verfication of sibling merges
 %% See - https://github.com/basho/riak_kv/issues/1707
 
--module(verify_siblingmerge_falseobject).
+-module(verify_siblingmerge_basic).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
