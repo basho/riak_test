@@ -37,6 +37,7 @@ verify_listkeys
 verify_object_limits
 verify_put_opt_node_confirms
 verify_riak_stats
+verify_siblingmerge_basic
 verify_stats_removal
 verify_tick_change
 verify_tictacaae_nodedown
