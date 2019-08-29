@@ -44,7 +44,7 @@
 % to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 8).
 -define(AAE_THROTTLE_LIMITS, [{-1, 0}, {100, 10}]).
--define(CFG_NOREBUILD,
+-define(CFG_NOREBUILD(PrimaryOnly),
         [{riak_kv,
           [
            % Speedy AAE configuration
@@ -56,7 +56,8 @@
            {tictacaae_rebuildwait, 4},
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
-           {tictacaae_rebuildtick, 3600000} % don't tick for an hour!
+           {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+           {tictacaae_primaryonly, PrimaryOnly}
           ]},
          {riak_core,
           [
@@ -88,12 +89,16 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(true)),
     ok = verify_aae_norebuild(Nodes0),
     rt:clean_cluster(Nodes0),
 
     Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
     ok = verify_aae_rebuild(Nodes1),
+    rt:clean_cluster(Nodes1),
+
+    Nodes2 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(false)),
+    ok = verify_aae_norebuild(Nodes2),
     pass.
 
 
