@@ -96,6 +96,10 @@ verify_token_reset(Cluster) ->
     ?assertMatch(true, Max3 =< Max0),
     ?assertMatch(true, Min3 >= Min0),
 
+    ok = rpc:call(hd(Cluster), riak_kv_util, reset_hashtree_tokens, [1234, 1234]),
+    {1234, 1234} =
+        rpc:call(hd(Cluster), riak_kv_util, report_hashtree_tokens, []),
+
     pass.
 
 
