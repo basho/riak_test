@@ -37,7 +37,8 @@
 %% if there is no activity.  That was an actual early AAE bug.
 
 -module(verify_aae).
--export([confirm/0, verify_aae/1, test_single_partition_loss/3]).
+-export([confirm/0, verify_aae/1]).
+-export([test_single_partition_loss/3, test_less_than_n_writes/2]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
