@@ -74,13 +74,57 @@ confirm() ->
             {2, ?CONFIG(?C_RING, ?C_NVAL, ClusterCSrcQ)}]),
     
     lager:info("Discover Peer IP/ports and restart with peer config"),
-    FoldToPeerConfig = 
+    FoldToPeerConfigHTTP = 
         fun(Node, Acc) ->
             {http, {IP, Port}} =
                 lists:keyfind(http, 1, rt:connection_info(Node)),
             Acc0 = case Acc of "" -> ""; _ -> Acc ++ "|" end,
             Acc0 ++ IP ++ ":" ++ integer_to_list(Port)
         end,
+    reset_peer_config(FoldToPeerConfigHTTP, ClusterA, ClusterB, ClusterC),
+    
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ClusterA),
+    rt:wait_until_ring_converged(ClusterB),
+    rt:wait_until_ring_converged(ClusterC),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
+                    ClusterA ++ ClusterB ++ ClusterC),
+    
+    lager:info("Ready for test - with http client for rtq."),
+    test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC),
+    
+    lager:info("Discover Peer IP/ports for pb and restart with peer config"),
+    FoldToPeerConfigPB = 
+        fun(Node, Acc) ->
+            {pb, {IP, Port}} =
+                lists:keyfind(pb, 1, rt:connection_info(Node)),
+            Acc0 = case Acc of "" -> ""; _ -> Acc ++ "|" end,
+            Acc0 ++ IP ++ ":" ++ integer_to_list(Port) ++ ":" ++ "pb"
+        end,
+
+    rt:clean_cluster(ClusterA),
+    rt:clean_cluster(ClusterB),
+    rt:clean_cluster(ClusterC),
+
+    [ClusterApb, ClusterBpb, ClusterCpb] =
+        rt:deploy_clusters([
+            {2, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, ClusterCSrcQ)}]),
+    reset_peer_config(FoldToPeerConfigPB, ClusterApb, ClusterBpb, ClusterCpb),
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ClusterApb),
+    rt:wait_until_ring_converged(ClusterBpb),
+    rt:wait_until_ring_converged(ClusterCpb),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
+                    ClusterApb ++ ClusterBpb ++ ClusterCpb),
+    
+    lager:info("Ready for test - with protocol buffers client for rtq."),
+    test_rtqrepl_between_clusters(ClusterApb, ClusterBpb, ClusterCpb),
+    pass.
+
+
+reset_peer_config(FoldToPeerConfig, ClusterA, ClusterB, ClusterC) ->
     ClusterASnkPL = lists:foldl(FoldToPeerConfig, "", ClusterB ++ ClusterC),
     ClusterBSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA ++ ClusterC),
     ClusterCSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA ++ ClusterB),
@@ -96,17 +140,8 @@ confirm() ->
 
     rt:join_cluster(ClusterA),
     rt:join_cluster(ClusterB),
-    rt:join_cluster(ClusterC),
-    
-    lager:info("Waiting for convergence."),
-    rt:wait_until_ring_converged(ClusterA),
-    rt:wait_until_ring_converged(ClusterB),
-    rt:wait_until_ring_converged(ClusterC),
-    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
-                    ClusterA ++ ClusterB ++ ClusterC),
-    
-    lager:info("Ready for test."),
-    test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC).
+    rt:join_cluster(ClusterC).
+
 
 test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
 
