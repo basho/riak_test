@@ -89,8 +89,10 @@ setup_replqueues([HeadNode|Others]) ->
 
 fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
                 {SinkNode, SinkIP, SinkPort, SinkNVal}) ->
-    ok = rpc:call(SinkNode, riak_kv_replrtq_snk,
-                    add_snkqueue, [q1_ttaaefs, [{1, 0, SrcIP, SrcPort}], 8]),
+    ok = rpc:call(SinkNode,
+                    riak_kv_replrtq_snk,
+                    add_snkqueue,
+                    [q1_ttaaefs, [{1, 0, SrcIP, SrcPort, http}], 8]),
 
     ModRef = riak_kv_ttaaefs_manager,
     _ = rpc:call(SrcNode, ModRef, pause, []),

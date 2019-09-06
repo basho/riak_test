@@ -248,7 +248,7 @@ setup_snkreplworkers(SrcCluster, SnkNodes, SnkName) ->
         fun(Node, Acc) ->
             {http, {IP, Port}} =
                 lists:keyfind(http, 1, rt:connection_info(Node)),
-            {{Acc, 0, IP, Port}, Acc + 1}
+            {{Acc, 0, IP, Port, http}, Acc + 1}
         end,
     {PeerList, _} = lists:mapfoldl(PeerMap, 1, SrcCluster),
     SetupSnkFun = 
