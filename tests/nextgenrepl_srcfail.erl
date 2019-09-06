@@ -53,13 +53,32 @@
 confirm() ->
     FunMod = nextgenrepl_ttaaefs_manual,
 
-    [ClusterA, ClusterB] =
+    [ClusterA1, ClusterB1] =
         rt:deploy_clusters([
             {5, ?CONFIG(?A_RING, ?A_NVAL)},
             {1, ?CONFIG(?B_RING, ?B_NVAL)}]),
-    rt:join_cluster(ClusterA),
-    rt:join_cluster(ClusterB),
+    rt:join_cluster(ClusterA1),
+    rt:join_cluster(ClusterB1),
+
+    lager:info("Testing with http protocol to be used by snk workers"),
+    pass = srcfail_test(ClusterA1, ClusterB1, http, FunMod),
     
+    rt:clean_cluster(ClusterA1),
+    rt:clean_cluster(ClusterB1),
+
+    [ClusterA2, ClusterB2] =
+        rt:deploy_clusters([
+            {5, ?CONFIG(?A_RING, ?A_NVAL)},
+            {1, ?CONFIG(?B_RING, ?B_NVAL)}]),
+    rt:join_cluster(ClusterA2),
+    rt:join_cluster(ClusterB2),
+
+    lager:info("Testing with pb protocol to be used by snk workers"),
+    srcfail_test(ClusterA2, ClusterB2, pb, FunMod).
+
+    
+
+srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
     lager:info("Waiting for convergence."),
     rt:wait_until_ring_converged(ClusterA),
     rt:wait_until_ring_converged(ClusterB),
@@ -83,7 +102,7 @@ confirm() ->
     {root_compare, 0} = fullsync_check(RefA, RefB, no_repair),
     {root_compare, 0} = fullsync_check(RefB, RefA, no_repair),
 
-    ok = setup_snkreplworkers(ClusterA, ClusterB, cluster_b),
+    ok = setup_snkreplworkers(ClusterA, ClusterB, cluster_b, Protocol),
 
     lager:info("Test 5000 key difference and resolve"),
     % Write keys to cluster A, verify B does not have them
@@ -183,6 +202,10 @@ confirm() ->
         wait_for_outcome(?MODULE, fullsync_check, [RefA, RefB, cluster_b],
                             {root_compare, 0}, ?WAIT_LOOPS),
 
+    lager:info("Success in testing failures"),
+    rt:start_and_wait(FailNode2),
+    rt:wait_for_service(FailNode2, riak_kv),
+    lager:info("Restarted node to assist in cleaning cluster for next test"),
     pass.
 
 
@@ -199,12 +222,12 @@ setup_replqueues([HeadNode|Others], ClusterList) ->
     lists:foreach(SetupQFun, ClusterList),
     setup_replqueues(Others, ClusterList).
 
-setup_snkreplworkers(SrcCluster, SnkNodes, SnkName) ->
+setup_snkreplworkers(SrcCluster, SnkNodes, SnkName, Protocol) ->
     PeerMap =
         fun(Node, Acc) ->
-            {http, {IP, Port}} =
-                lists:keyfind(http, 1, rt:connection_info(Node)),
-            {{Acc, 0, IP, Port, http}, Acc + 1}
+            {Protocol, {IP, Port}} =
+                lists:keyfind(Protocol, 1, rt:connection_info(Node)),
+            {{Acc, 0, IP, Port, Protocol}, Acc + 1}
         end,
     {PeerList, _} = lists:mapfoldl(PeerMap, 1, SrcCluster),
     SetupSnkFun = 
