@@ -119,6 +119,7 @@ delete_datadir({{Idx, Node}, Type}) ->
     Path = filename:join([rtdev:relpath(current),
                           "dev",
                           "dev"++ integer_to_list(rtdev:node_id(Node)),
+                          "riak",
                           DataRoot,
                           integer_to_list(Idx)]),
     lager:info("Path ~p~n", [Path]),
