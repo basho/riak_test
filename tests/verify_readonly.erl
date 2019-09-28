@@ -24,6 +24,7 @@
 
 -define(BUCKET, <<"B0">>).
 -define(POST_MULT, 100).
+-define(ITEMS, 1000).
 
 %% There has been a problem where a persisted backend (eleveldb) would not
 %% prompt a vnode crash if it could no longer write to the file.  Without
@@ -40,11 +41,13 @@
 %% memory backend
 
 confirm() ->
-    NTestItems    = 1000,   %% How many test items to write/verify?
-    NTestNodes    = 4,      %% How many nodes to spin up for tests?
+    NTestItems = ?ITEMS,   %% How many test items to write/verify?
+    NTestNodes = 4,      %% How many nodes to spin up for tests?
     lager:info("Spinning up test nodes"),
     Config = [{riak_core, [{ring_creation_size, 8}]},
-                {riak_kv, [{anti_entropy, {off, []}}]}],
+                {riak_kv, [{anti_entropy, {off, []}}]},
+                {bitcask, [{max_file_size, 1000000},
+                {leveled, [{journal_objectcount, 5000}]}]}],
     
     [RootNode | TestNodes] = rt:build_cluster(NTestNodes, Config),
     [FailNode | _RestNodes] = TestNodes,
