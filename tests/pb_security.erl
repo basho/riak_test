@@ -376,24 +376,24 @@ confirm() ->
     ?assertEqual([<<"counters">>, <<"hello">>], lists:sort(BList)),
 
     %% still need mapreduce permission
-    lager:info("Checking that full-bucket mapred is disallowed"),
-    ?assertMatch({error, <<"Permission", _/binary>>},
-                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
-                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
-                                        {reduce, {jsfun,
-                                                  <<"Riak.reduceSum">>},
-                                         undefined, true}])),
+%%    lager:info("Checking that full-bucket mapred is disallowed"),
+%%    ?assertMatch({error, <<"Permission", _/binary>>},
+%%                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
+%%                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
+%%                                        {reduce, {jsfun,
+%%                                                  <<"Riak.reduceSum">>},
+%%                                         undefined, true}])),
 
     lager:info("Granting mapreduce, checking that job succeeds"),
     ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.mapreduce", "on",
                                                     "default", "to", Username]]),
 
-    ?assertEqual({ok, [{1, [1]}]},
-                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
-                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
-                                        {reduce, {jsfun,
-                                                  <<"Riak.reduceSum">>},
-                                         undefined, true}])),
+%%    ?assertEqual({ok, [{1, [1]}]},
+%%                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
+%%                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
+%%                                        {reduce, {jsfun,
+%%                                                  <<"Riak.reduceSum">>},
+%%                                         undefined, true}])),
 
     lager:info("checking mapreduce with a whitelisted modfun works"),
     ?assertEqual({ok, [{1, [<<"1">>]}]},
@@ -482,12 +482,12 @@ confirm() ->
     ok = rpc:call(Node, riak_core_console, revoke, [["riak_kv.list_keys", "on",
                                                     "default", "hello", "from", Username]]),
 
-    ?assertMatch({error, <<"Permission", _/binary>>},
-                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
-                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
-                                        {reduce, {jsfun,
-                                                  <<"Riak.reduceSum">>},
-                                         undefined, true}])),
+%%    ?assertMatch({error, <<"Permission", _/binary>>},
+%%                 riakc_pb_socket:mapred_bucket(PB, <<"hello">>,
+%%                                       [{map, {jsfun, <<"Riak.mapValuesJson">>}, undefined, false},
+%%                                        {reduce, {jsfun,
+%%                                                  <<"Riak.reduceSum">>},
+%%                                         undefined, true}])),
 
     case HaveIndexes of
         false -> ok;

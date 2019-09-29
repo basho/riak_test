@@ -15,16 +15,15 @@
 # directories. If using kerl or whatever, modify to use kerl's activate logic.
 # Or, alternatively, just substitute the paths to the kerl install paths as
 # that should work too.
-
-: ${R15B01:=$HOME/erlang-R15B01}
-: ${R16B02:=$HOME/erlang-R16B02}
+: ${R16B02:=$HOME/.erlang_releases/R16B02-basho10-O2}
+: ${R203:=$HOME/.erlang_releases/20.3}
 
 # These are the default tags to use when building basho OTP releases.
 # Export different tags to get a different build. N.B. You will need to
 # remove the builds from kerl (e.g., kerl delete build $BUILDNAME) and
 # possibly remove the directories above.
-: ${R16_TAG:="OTP_R16B02_basho9"}
-: ${R15_TAG:="basho_OTP_R15B01p"}
+: ${R16_TAG:="OTP_R16B02_basho10"}
+: ${R203_TAG:="20.3"}
 
 # By default the Open Source version of Riak will be used, but for internal
 # testing you can override this variable to use `riak_ee` instead
@@ -81,13 +80,7 @@ kerl()
 
     echo " - Building Erlang $RELEASE (this could take a while)"
     # Use the Basho-patched version of Erlang 
-    if [ "$RELEASE" == "R15B01" ]; then
-        BUILD_CMD="./kerl build git git://github.com/basho/otp.git $R15_TAG $BUILDNAME"
-    elif [ "$RELEASE" == "R16B02" ]; then
-        BUILD_CMD="./kerl build git git://github.com/basho/otp.git $R16_TAG $BUILDNAME"
-    else
-        BUILD_CMD="./kerl build $RELEASE $BUILDNAME"
-    fi
+    BUILD_CMD="./kerl build $RELEASE $BUILDNAME"
     env "$KERL_ENV" "MAKE=$MAKE" $BUILD_CMD
     RES=$?
     if [ "$RES" -ne 0 ]; then
@@ -96,7 +89,7 @@ kerl()
     fi
 
     echo " - Installing $RELEASE into $HOME/$BUILDNAME"
-    ./kerl install $BUILDNAME "$HOME/$BUILDNAME" > /dev/null 2>&1
+    ./kerl install $BUILDNAME "$HOME/.erlang_releases_riak_test/$BUILDNAME" > /dev/null 2>&1
     RES=$?
     if [ "$RES" -ne 0 ]; then
         echo "[ERROR] Kerl install $BUILDNAME failed"
@@ -117,10 +110,10 @@ build()
 
     if [ -z "$RT_USE_EE" ]; then
         GITURL=$GITURL_RIAK
-        GITTAG=riak-$TAG
+        GITTAG=$TAG
     else
         GITURL=$GITURL_RIAK_EE
-        GITTAG=riak_ee-$TAG
+        GITTAG=$TAG
     fi
 
     echo "Getting sources from github"
@@ -145,13 +138,13 @@ build()
     then
         GITRES=1
         echo " - Cloning $GITURL"
-        git clone $GITDIR $SRCDIR
         GITRES=$?
         if [ $GITRES -eq 0 -a -n "$TAG" ]; then
-            cd $SRCDIR
+            cd $GITDIR
             git checkout $GITTAG
             GITRES=$?
             cd ..
+	    git clone $GITDIR $SRCDIR
         fi
     fi
 
@@ -167,9 +160,9 @@ build()
 
         if $LOCKED_DEPS
         then
-            CMD="make locked-deps devrel"
+            CMD="make devrel"
         else
-            CMD="make all devrel"
+            CMD="make devrel"
         fi
 
         $RUN $CMD
@@ -186,9 +179,6 @@ build()
     fi
 }
 
-build "riak-1.4.12" $R15B01 1.4.12 false
-build "riak-2.0.2" $R16B02 2.0.2
-build "riak-2.0.4" $R16B02 2.0.4
-build "riak-2.0.6" $R16B02 2.0.6
-build "riak-2.0.7" $R16B02 2.0.7
+#build "riak-2.2.8" $R16B02 riak-2.2.8
+build "riak-3.0" $R203 develop-3.0-ns
 echo

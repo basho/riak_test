@@ -148,7 +148,7 @@ riak_admin_tests(Node) ->
     check_admin_cmd(Node, "downgrade_objects true 1"),
     check_admin_cmd(Node, "downgrade_objects true"),
     check_admin_cmd(Node, "downgrade_objects true 1"),
-    check_admin_cmd(Node, "js-reload foo bar baz"),
+%%    check_admin_cmd(Node, "js-reload foo bar baz"),
     ok.
 
 confirm() ->
@@ -216,11 +216,11 @@ confirm() ->
                         {{bucket_type_list,1}, verify_console_bucket_type_list}
                       ]}),
 
-    rt_intercept:add(Node,
-                     {riak_kv_js_manager,
-                      [
-                        {{reload,1}, verify_console_reload}
-                      ]}),
+%%    rt_intercept:add(Node,
+%%                     {riak_kv_js_manager,
+%%                      [
+%%                        {{reload,1}, verify_console_reload}
+%%                      ]}),
 
     rt_intercept:wait_until_loaded(Node),
 

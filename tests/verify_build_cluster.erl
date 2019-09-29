@@ -45,11 +45,11 @@ confirm() ->
     lager:info("joining Node 2 to the cluster... It takes two to make a thing go right"),
     rt:join(Node2, Node1),
     wait_and_validate([Node1, Node2]),
-
+    
     lager:info("joining Node 3 to the cluster"),
     rt:join(Node3, Node1),
     wait_and_validate([Node1, Node2, Node3]),
-
+    
     lager:info("joining Node 4 to the cluster"),
     rt:join(Node4, Node1),
     wait_and_validate(Nodes),
@@ -104,4 +104,7 @@ wait_and_validate(RingNodes, UpNodes) ->
     [rt:wait_for_service(Node, riak_kv) || Node <- UpNodes],
     lager:info("Verify that you got much data... (this is how we do it)"),
     ?assertEqual([], rt:systest_read(hd(UpNodes), 0, 1000, <<"verify_build_cluster">>, 3)),
+    lager:info("Checking no pending changes still valid - no races"),
+    ?assertEqual(ok, rt:wait_until_no_pending_changes(UpNodes)),
     done.
+
