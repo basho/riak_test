@@ -38,7 +38,7 @@ confirm() ->
     lager:info("Overriding backend set in configuration"),
     lager:info("Multi backend with default settings (rt) to be used"),
 
-    {Bucket, HeadSupport} = get_bucket(),
+    {BackendRef, HeadSupport} = get_backendref(),
 
     rt:set_backend(riak_kv_multi_backend),
     [Node1] = rt:deploy_nodes(1, ?CONF),
@@ -46,8 +46,29 @@ confirm() ->
     Stats1 = get_stats(Node1),
     
     C = rt:httpc(Node1),
-    [rt:httpc_write(C, Bucket, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
-    [rt:httpc_read(C, Bucket, <<X>>) || X <- lists:seq(1, 5)],
+    PBC = rt:pbc(Node1),
+
+    lager:info("Setting up a bucket type to use backend and test"),
+    Type = <<"backend">>,
+    TypedBucket = <<"TB0">>,
+    UnTypedBucket = <<"B0">>,
+    BucketProps = [{backend, BackendRef}],
+    rt:create_and_activate_bucket_type(Node1, Type, BucketProps),
+    rt:wait_until_bucket_type_status(Type, active, [Node1]),
+    rt:wait_until_bucket_props([Node1], {Type, TypedBucket}, BucketProps),
+    rt:pbc_set_bucket_prop(PBC, UnTypedBucket, BucketProps),
+    rt:wait_until_bucket_props([Node1], UnTypedBucket, BucketProps),
+    lager:info("Backend now setup for typed and untyped"),
+
+    [rt:httpc_write(C, {Type, TypedBucket}, <<X>>, <<"sample_value">>)
+        || X <- lists:seq(1, 3)],
+    [rt:httpc_read(C, {Type, TypedBucket}, <<X>>)
+        || X <- lists:seq(1, 3)],
+    [rt:httpc_write(C, UnTypedBucket, <<X>>, <<"sample_value">>)
+        || X <- lists:seq(4, 5)],
+    [rt:httpc_read(C, UnTypedBucket, <<X>>)
+        || X <- lists:seq(4, 5)],
+    
 
     Stats2 = get_stats(Node1),
 
@@ -86,19 +107,20 @@ confirm() ->
     pass.
 
 
-get_bucket() ->
+get_backendref() ->
     Backend = proplists:get_value(backend, riak_test_runner:metadata()),
     lager:info("Running with backend ~p", [Backend]),
-    {get_bucket(Backend), Backend == leveled}.
+    {get_backendref(Backend), Backend == leveled}.
 
-get_bucket(eleveldb) ->
+get_backendref(eleveldb) ->
     <<"eleveldb1">>;
-get_bucket(bitcask) ->
+get_backendref(bitcask) ->
     <<"bitcask1">>;
-get_bucket(leveled) ->
+get_backendref(leveled) ->
     <<"leveled1">>;
-get_bucket(memory) ->
+get_backendref(memory) ->
     <<"memory1">>.
+
 
 verify_inc(Prev, Props, Keys) ->
     [begin
@@ -109,7 +131,7 @@ verify_inc(Prev, Props, Keys) ->
      end || {Key, Inc} <- Keys].
 
 get_stats(Node) ->
-    timer:sleep(10000),
+    timer:sleep(2000),
     lager:info("Retrieving stats from node ~s", [Node]),
     StatsCommand = io_lib:format("curl -s -S ~s/stats", [rt:http_url(Node)]),
     lager:debug("Retrieving stats using command ~s", [StatsCommand]),
