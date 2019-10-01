@@ -1823,12 +1823,14 @@ make_multi_backend_config(default) ->
      {multi_backend_default, <<"eleveldb1">>},
      {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
                       {<<"memory1">>, riak_kv_memory_backend, []},
-                      {<<"bitcask1">>, riak_kv_bitcask_backend, []}]}];
+                      {<<"bitcask1">>, riak_kv_bitcask_backend, []},
+                      {<<"leveled1">>, riak_kv_leveled_backend, []}]}];
 make_multi_backend_config(indexmix) ->
     [{storage_backend, riak_kv_multi_backend},
      {multi_backend_default, <<"eleveldb1">>},
      {multi_backend, [{<<"eleveldb1">>, riak_kv_eleveldb_backend, []},
-                      {<<"memory1">>, riak_kv_memory_backend, []}]}];
+                      {<<"memory1">>, riak_kv_memory_backend, []},
+                      {<<"leveled1">>, riak_kv_leveled_backend, []}]}];
 make_multi_backend_config(Other) ->
     lager:warning("rt:set_multi_backend doesn't recognize ~p as legit multi-backend config, using default", [Other]),
     make_multi_backend_config(default).
@@ -1839,7 +1841,7 @@ get_backends() ->
         [riak_kv_bitcask_backend] -> bitcask;
         [riak_kv_eleveldb_backend] -> eleveldb;
         [riak_kv_memory_backend] -> memory;
-	[riak_kv_leveled_backend] -> leveled;
+	    [riak_kv_leveled_backend] -> leveled;
         [Other] -> Other;
         MoreThanOne -> MoreThanOne
     end.
