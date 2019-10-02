@@ -66,12 +66,12 @@ confirm() ->
     ok = rpc:call(Node, riak_core_console, add_source, [["user", "127.0.0.1/32",
                                                     "password"]]),
 
-    CipherList = "AES128-SHA256:RC4-SHA",
+    CipherList = "AES256-SHA256:RC4-SHA",
     %% set a simple default cipher list, one good one a and one shitty one
     rpc:call(Node, riak_core_security, set_ciphers, [CipherList]),
     rpc:call(Node, application, set_env, [riak_api, honor_cipher_order, true]),
 
-    [AES128, RC4] = ParsedCiphers = [begin
+    [AES256, RC4] = ParsedCiphers = [begin
                 %% this includes the pseudo random function, which apparently
                 %% we don't want
                 SD = ssl_cipher:suite_definition(E),
@@ -84,9 +84,9 @@ confirm() ->
     
     lager:info("Parsed Ciphers ~w", [ParsedCiphers]),
 
-    lager:info("Check that the server's preference for ECDHE-RSA-AES128-SHA256"
+    lager:info("Check that the server's preference for ECDHE-RSA-AES256-SHA256"
                "is honored"),
-    ?assertEqual({ok, {'tlsv1.2', AES128}},
+    ?assertEqual({ok, {'tlsv1.2', AES256}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,
