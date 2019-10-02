@@ -68,21 +68,25 @@ confirm() ->
 
     CipherList = "AES256-SHA256:RC4-SHA",
     %% set a simple default cipher list, one good one a and one shitty one
-    rpc:call(Node, riak_core_security, set_ciphers,
-             [CipherList]),
+    rpc:call(Node, riak_core_security, set_ciphers, [CipherList]),
+    rpc:call(Node, application, set_env, [riak_api, honor_cipher_order, true]),
 
-    [AES, RC4] = ParsedCiphers = [begin
+    [AES256, RC4] = ParsedCiphers = [begin
                 %% this includes the pseudo random function, which apparently
                 %% we don't want
-                {A, B, C, _D} = ssl_cipher:suite_definition(E),
-                {A, B, C}
+                SD = ssl_cipher:suite_definition(E),
+                {maps:get(key_exchange, SD), 
+                    maps:get(cipher, SD),
+                    maps:get(mac, SD)}
             end ||
             E <- element(1,
                          riak_core_ssl_util:parse_ciphers(CipherList))],
+    
+    lager:info("Parsed Ciphers ~w", [ParsedCiphers]),
 
-    lager:info("Check that the server's preference for ECDHE-RSA-AES128-SHA256"
+    lager:info("Check that the server's preference for ECDHE-RSA-AES256-SHA256"
                "is honored"),
-    ?assertEqual({ok, {'tlsv1.2', AES}},
+    ?assertEqual({ok, {'tlsv1.2', AES256}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,
@@ -93,10 +97,9 @@ confirm() ->
                                     ])),
 
     lager:info("disabling honor_cipher_info"),
-    rpc:call(Node, application, set_env, [riak_api, honor_cipher_order,
-                                          false]),
+    rpc:call(Node, application, set_env, [riak_api, honor_cipher_order, false]),
 
-    lager:info("Check that the client's preference for RC4-SHA"
+    lager:info("Check that the client's preference for RC4"
                "is honored"),
     ?assertEqual({ok, {'tlsv1.2', RC4}},
                  pb_connection_info(Port,
@@ -109,7 +112,7 @@ confirm() ->
                                     ])),
 
     lager:info("check that connections trying to use tls 1.1 fail"),
-    ?assertError({badmatch, _},
+    ?assertMatch({error,{tcp,{tls_alert,"protocol version"}}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,
@@ -119,7 +122,7 @@ confirm() ->
                                     ])),
 
     lager:info("check that connections trying to use tls 1.0 fail"),
-    ?assertError({badmatch, _},
+    ?assertMatch({error,{tcp,{tls_alert,"protocol version"}}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,
@@ -128,7 +131,7 @@ confirm() ->
                                      {ssl_opts, [{versions, ['tlsv1']}]}
                                     ])),
     lager:info("check that connections trying to use ssl 3.0 fail"),
-    ?assertError({badmatch, _},
+    ?assertMatch({error,{tcp,{tls_alert,"protocol version"}}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,
@@ -142,7 +145,7 @@ confirm() ->
                                           [sslv3, tlsv1, 'tlsv1.1']]),
 
     lager:info("check that connections trying to use tls 1.2 fail"),
-    ?assertError({badmatch, _},
+    ?assertMatch({error,{tcp,{options,{'tls1.2',{versions,['tls1.2']}}}}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,
@@ -151,8 +154,8 @@ confirm() ->
                                      {ssl_opts, [{versions, ['tls1.2']}]}
                                     ])),
 
-    lager:info("check tls 1.1 works"),
-    ?assertMatch({ok, {'tlsv1.1', _}},
+    lager:info("check tls 1.1 fails - need to be on 1.2"),
+    ?assertMatch({error,{tcp,{tls_alert,"insufficient security"}}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,
@@ -161,8 +164,8 @@ confirm() ->
                                      {ssl_opts, [{versions, ['tlsv1.1']}]}
                                     ])),
 
-    lager:info("check tls 1.0 works"),
-    ?assertMatch({ok, {'tlsv1', _}},
+    lager:info("check tls 1.0 fails - need to be on 1.2"),
+    ?assertMatch({error,{tcp,{tls_alert,"insufficient security"}}},
                  pb_connection_info(Port,
                                     [{credentials, "user",
                                       "password"}, {cacertfile,
@@ -216,12 +219,18 @@ pb_get_socket(PB) ->
     element(6, sys:get_state(PB)).
 
 pb_connection_info(Port, Config) ->
-    {ok, PB} = riakc_pb_socket:start("127.0.0.1", Port, Config),
-    ?assertEqual(pong, riakc_pb_socket:ping(PB)),
+    case riakc_pb_socket:start("127.0.0.1", Port, Config) of
+        {ok, PB} ->
+            ?assertEqual(pong, riakc_pb_socket:ping(PB)),
+            {ok, ConnInfo} = ssl:connection_information(pb_get_socket(PB)),
+            {protocol, P} = lists:keyfind(protocol, 1, ConnInfo),
+            {cipher_suite, CS} = lists:keyfind(cipher_suite, 1, ConnInfo),
+            riakc_pb_socket:stop(PB),
+            {ok, {P, CS}};
+        Error ->
+            Error
+    end.
 
-    ConnInfo = ssl:connection_info(pb_get_socket(PB)),
-
-    riakc_pb_socket:stop(PB),
-    ConnInfo.
+    
 
 
