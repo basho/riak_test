@@ -520,6 +520,7 @@ common_stats() ->
         <<"hll_bytes_median">>,
         <<"hll_bytes_total">>,
         <<"hut_version">>,
+        <<"hyper_version">>,
         <<"ibrowse_version">>,
         <<"ignored_gossip_total">>,
         <<"index_fsm_active">>,
