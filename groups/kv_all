@@ -35,6 +35,7 @@ verify_handoff_raw
 verify_handoff_zlib
 verify_kv_health_check
 verify_listkeys
+verify_multibackend_head
 verify_object_limits
 verify_put_opt_node_confirms
 verify_riak_stats
