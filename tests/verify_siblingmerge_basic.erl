@@ -55,6 +55,7 @@ verify_siblingmerge(Cluster) ->
 
     lager:info("Testing allow_mult = true"),
     ok = set_bucket(Node1A, ?AMT_BUCKET, [{allow_mult, true}]),
+    timer:sleep(1000),
 
     ok = blind_write_data(Node1A, ?AMT_BUCKET, to_key(1), <<1:8/integer>>, []),
     ok = blind_write_data(Node2A, ?AMT_BUCKET, to_key(1), <<2:8/integer>>, []),
