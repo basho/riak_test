@@ -71,9 +71,8 @@ confirm() ->
     ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C1)),
 
     lager:info("Checking that unknown user demands reauth"),
-    C2 = rhc:create(IP, Port, "riak", [{is_ssl, true}, {credentials,
-                                                        "user",
-                                                        "pass"}]),
+    C2 = rhc:create(IP, Port, "riak", [{is_ssl, true},
+                                        {credentials, "user", "pass"}]),
     ?assertMatch({error, {ok, "401", _, _}}, rhc:ping(C2)),
 
     %% Store this in a variable so once Riak supports utf-8 usernames
@@ -139,6 +138,7 @@ confirm() ->
                                                ]),
 
     ?assertMatch({error,{conn_failed,{error,_}}}, rhc:ping(C6)),
+
 
     lager:info("verifying the peer certificate should work if the cert is valid"),
     %% verifying the peer certificate should work if the cert is valid
@@ -360,6 +360,9 @@ confirm() ->
                           <<"numberofpies">>, 5)),
 
     %% mapred tests
+    %% load this module on all the nodes
+    ok = rt:load_modules_on_nodes([?MODULE], Nodes),
+
     lager:info("Checking that full-bucket mapred is disallowed"),
     ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.put", "on",
                                                     "default", "MR", "to", Username]]),
@@ -374,11 +377,14 @@ confirm() ->
     ok = rhc:put(C7, riakc_obj:new(<<"MR">>, <<"pimms_cup">>, <<"8">>,
                            <<"text/plain">>)),
 
+
     ?assertMatch({error, {"403", _}},
-                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {jsfun,
-                                                     <<"Riak.mapValuesJson">>}, undefined, false},
-                                              {reduce, {jsfun,
-                                                        <<"Riak.reduceSum">>}, undefined,
+                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {modfun,
+                                                     riak_kv_mapreduce,
+                                                        map_object_value}, undefined, false},
+                                              {reduce, {modfun,
+                                                        riak_kv_mapreduce,
+                                                       reduce_set_union}, undefined,
                                                true}])),
 
     lager:info("Granting list-keys, asserting full-bucket mapred is still disallowed"),
@@ -386,26 +392,19 @@ confirm() ->
                                                     "default", "MR", "to", Username]]),
 
     ?assertMatch({error, {"403", _}},
-                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {jsfun,
-                                                     <<"Riak.mapValuesJson">>}, undefined, false},
-                                              {reduce, {jsfun,
-                                                        <<"Riak.reduceSum">>}, undefined,
+                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {modfun,
+                                                     riak_kv_mapreduce,
+                                                        map_object_value}, undefined, false},
+                                              {reduce, {modfun,
+                                                        riak_kv_mapreduce,
+                                                       reduce_set_union}, undefined,
                                                true}])),
 
     lager:info("Granting mapreduce, checking that job succeeds"),
     ok = rpc:call(Node, riak_core_console, grant, [["riak_kv.mapreduce", "on",
                                                     "default", "MR", "to", Username]]),
 
-    ?assertEqual({ok, [{1, [33]}]},
-                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {jsfun,
-                                                     <<"Riak.mapValuesJson">>}, undefined, false},
-                                              {reduce, {jsfun,
-                                                        <<"Riak.reduceSum">>}, undefined,
-                                               true}])),
-
-    %% load this module on all the nodes
-    ok = rt:load_modules_on_nodes([?MODULE], Nodes),
-
+    
     lager:info("checking erlang mapreduce works"),
     ?assertMatch({ok, [{1, _}]},
                  rhc:mapred_bucket(C7, <<"MR">>, [{map, {modfun,
@@ -487,10 +486,13 @@ confirm() ->
                                                     "default", "MR", "from", Username]]),
 
     ?assertMatch({error, {"403", _}},
-                 rhc:mapred_bucket(C7, <<"MR">>, [{map, {jsfun,
-                                                     <<"Riak.mapValuesJson">>}, undefined, false},
-                                              {reduce, {jsfun,
-                                                        <<"Riak.reduceSum">>}, undefined,
+                 rhc:mapred_bucket(C7, {modfun, ?MODULE, mapred_modfun_input,
+                                        []}, [{map, {modfun,
+                                                     riak_kv_mapreduce,
+                                                        map_object_value}, undefined, false},
+                                              {reduce, {modfun,
+                                                        riak_kv_mapreduce,
+                                                       reduce_set_union}, undefined,
                                                true}])),
 
     lager:info("Pausing to build the tension (to mysteriously make tests pass)", []),
@@ -520,6 +522,7 @@ confirm() ->
                                                                      "rootCA/cert.pem"])},
                                          {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
+
     pass.
 
 enable_ssl(Node) ->
