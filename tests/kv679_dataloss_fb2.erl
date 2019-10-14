@@ -134,6 +134,7 @@ confirm() ->
     [FB1] = [Node || {{_Idx, Node}, Type} <- FBPL,
                      Type == fallback],
     rt:brutal_kill(FB1),
+    rt:wait_until_unpingable(FB1),
 
     %% get a new preflist with a different fallback
     rt:wait_until(fun() ->
@@ -155,6 +156,7 @@ confirm() ->
     [FB2] = [Node || {{_Idx, Node}, Type} <- FBPL2,
                      Type == fallback],
     rt:brutal_kill(FB2),
+    rt:wait_until_unpingable(FB2),
 
     %% meanwhile, in the other partition, let's write some data
     P2PL = kv679_tombstone:get_preflist(hd(P2), ?NVAL),
