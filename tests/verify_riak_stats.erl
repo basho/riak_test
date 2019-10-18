@@ -766,6 +766,8 @@ common_stats() ->
         <<"rebalance_delay_max">>,
         <<"rebalance_delay_mean">>,
         <<"rebalance_delay_min">>,
+        <<"recon_version">>,
+        <<"redbug_version">>,
         <<"rejected_handoffs">>,
         <<"riak_api_version">>,
         <<"riak_auth_mods_version">>,

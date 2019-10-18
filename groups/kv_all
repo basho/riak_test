@@ -19,6 +19,7 @@ riak_rex
 rt_basic_test
 sibling_explosion
 verify_aae
+verify_aae_resettoken
 verify_aaefold_nval
 verify_aaefold_range
 verify_api_timeouts
@@ -33,11 +34,14 @@ verify_handoff_raw
 verify_handoff_zlib
 verify_kv_health_check
 verify_listkeys
+verify_multibackend_head
 verify_object_limits
 verify_put_opt_node_confirms
 verify_riak_stats
+verify_siblingmerge_basic
 verify_stats_removal
 verify_tick_change
+verify_tictacaae_nodedown
 verify_tictacrebuild_via_statsfold
 verify_tictac_aae
 verify_vclock

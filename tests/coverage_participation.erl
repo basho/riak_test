@@ -24,13 +24,14 @@
 
 -define(BUCKET, <<"bucket">>).
 -define(KEY, <<"key">>).
+-define(RING_SIZE, 32).
 
 confirm() ->
     Conf = [
             {riak_kv, [{anti_entropy, {off, []}}]},
             {riak_core, [{default_bucket_props, [{allow_mult, true},
                                                  {dvv_enabled, true},
-                                                 {ring_creation_size, 8},
+                                                 {ring_creation_size, ?RING_SIZE},
                                                  {vnode_management_timer, 1000},
                                                  {handoff_concurrency, 100},
                                                  {vnode_inactivity_timeout, 1000}]}]},
@@ -39,7 +40,7 @@ confirm() ->
             {riak_kv, [{anti_entropy, {off, []}}]},
             {riak_core, [{default_bucket_props, [{allow_mult, true},
                                                  {dvv_enabled, true},
-                                                 {ring_creation_size, 8},
+                                                 {ring_creation_size, ?RING_SIZE},
                                                  {vnode_management_timer, 1000},
                                                  {handoff_concurrency, 100},
                                                  {vnode_inactivity_timeout, 1000}
@@ -50,7 +51,7 @@ confirm() ->
             {riak_kv, [{anti_entropy, {off, []}}]},
             {riak_core, [{default_bucket_props, [{allow_mult, true},
                                                  {dvv_enabled, true},
-                                                 {ring_creation_size, 8},
+                                                 {ring_creation_size, ?RING_SIZE},
                                                  {vnode_management_timer, 1000},
                                                  {handoff_concurrency, 100},
                                                  {vnode_inactivity_timeout, 1000}
@@ -113,8 +114,12 @@ confirm() ->
     rt:wait_until_ring_converged(Nodes),
 
     lager:info("Check participate has been gossiped over the ring for Node5, and Node5 back in coverage."),
-    RingW5 = rt:get_ring(Node5),
-    ?assertEqual(true, riak_core_ring:get_member_meta(RingW5, Node5, participate_in_coverage)),
+    CheckBackInFun = 
+        fun(N) ->
+            RingN = rt:get_ring(N),
+            riak_core_ring:get_member_meta(RingN, Node5, participate_in_coverage)
+        end,
+    lists:foreach(fun(N0) -> rt:wait_until(N0, CheckBackInFun) end, Nodes),
 
     %% Get coverage plan
     lager:info("Check that Node5 is in coverage plan."),
