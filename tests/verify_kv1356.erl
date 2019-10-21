@@ -38,18 +38,29 @@
 -define(KEY, <<"k">>).
 -define(VALUE, <<"v">>).
 
-confirm() ->
-    Conf = [{eleveldb, [{data_root, "leveldb"},
+-define(HARNESS, (rt_config:get(rt_harness))).
+
+-define(ELEVELDB_CONF(Path),
+        [{eleveldb, [{data_root, "leveldb"},
                         {tiered_slow_level, 4},
-                        {tiered_fast_prefix, "/opt/riak/fast/"},
-                        {tiered_slow_prefix, "/opt/riak/slow/"}
-                       ]},
-            {riak_kv, [{handoff_concurrency, 100},
+                        {tiered_fast_prefix, Path ++ "/fast"},
+                        {tiered_slow_prefix, Path ++ "/slow"}
+                       ]}]).
+
+confirm() ->
+    Conf = [{riak_kv, [{handoff_concurrency, 100},
                        {storage_backend, riak_kv_eleveldb_backend}]},
             {riak_core, [ {ring_creation_size, 8},
                           {vnode_management_timer, 1000}]}],
     lager:info("Deploy a node"),
-    [Node] = rt:deploy_nodes(1, Conf),
+    [NodeInit] = rt:deploy_nodes(1, Conf),
+    Path = data_path(NodeInit),
+    rt:clean_cluster([NodeInit]),
+    ok = filelib:ensure_dir(Path ++ "/fast/leveldb/"),
+    ok = filelib:ensure_dir(Path ++ "/slow/leveldb/"),
+
+    [Node] = rt:deploy_nodes(1, ?ELEVELDB_CONF(Path) ++ Conf),
+
     Client = rt:pbc(Node, [{auto_reconnect, true}, {queue_if_disconnected, true}]),
     lager:info("write value"),
     ok = rt:pbc_write(Client, ?BUCKET, ?KEY, ?VALUE),
@@ -65,3 +76,6 @@ confirm() ->
 
 assertObjectValueEqual(Val, Obj) ->
     ?assertEqual(Val, riakc_obj:get_value(Obj)).
+
+data_path(Node) ->
+    ?HARNESS:node_path(Node) ++ "tiered_path".
