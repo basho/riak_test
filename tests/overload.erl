@@ -450,20 +450,19 @@ remote_suspend_and_overload() ->
                        lager:info("Suspending vnode pid: ~p~n", [Pid]),
                        erlang:suspend_process(Pid)
                    end || {riak_kv_vnode, _, Pid} <- Vnodes],
-                  ?MODULE:wait_for_input(Vnodes)
+                  wait_for_input(Vnodes)
           end).
 
 wait_for_input(Vnodes) ->
     receive
         {overload, From} ->
             lager:info("Overloading vnodes.", []),
-            [?MODULE:overload(Vnodes, Pid) ||
-                {riak_kv_vnode, _, Pid} <- Vnodes],
+            [overload(Vnodes, Pid) || {riak_kv_vnode, _, Pid} <- Vnodes],
             lager:info("Sending overloaded message back to test.", []),
             From ! {overloaded, self()},
             wait_for_input(Vnodes);
         {verify_overload, From} ->
-            OverloadCheck = ?MODULE:verify_overload(Vnodes),
+            OverloadCheck = verify_overload(Vnodes),
             From ! OverloadCheck,
             wait_for_input(Vnodes);
         resume ->
@@ -573,16 +572,9 @@ get_num_running_gen_fsm(Node) ->
 remote_vnode_gets_in_queue(Idx) ->
     {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Idx, riak_kv_vnode),
     {messages, AllMessages} = process_info(Pid, messages),
-
-    GetMessages = lists:foldl(fun(E, A) ->
-                                      case is_get_req(E) of
-                                          true -> A + 1;
-                                          false -> A
-                                      end
-                              end, 0, AllMessages),
-
-    lager:info("Get requests (~p): ~p", [Idx, GetMessages]),
-    GetMessages.
+    GetMessages = lists:filter(fun is_get_req/1, AllMessages),
+    lager:info("Get requests (~p): ~p", [Idx, length(GetMessages)]),
+    length(GetMessages).
 
 %% This is not the greatest thing ever, since we're coupling this test pretty
 %% tightly to the internal representation of get requests in riak_kv...can't
