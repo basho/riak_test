@@ -1,12 +1,13 @@
 {application, riak_test,
  [
-  {description, ""},
+  {description, "Testing Infrastructure for Riak"},
   {vsn, git},
   {registered, []},
   {applications, [
                   kernel,
                   stdlib,
-                  lager
+                  lager,
+                  mapred_verify
                  ]},
   {env, [
     {platform, undefined},
