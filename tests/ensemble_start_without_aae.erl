@@ -24,7 +24,7 @@
 
 confirm() ->
 
-    NumNodes = 5,
+    NumNodes = 6,
     NVal = 5,
 
     Config = ensemble_util:fast_config(NVal, false),

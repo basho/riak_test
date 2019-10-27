@@ -23,10 +23,10 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    NumNodes = 5,
+    NumNodes = 6,
     NVal = 5,
     Quorum = NVal div 2 + 1,
-    Config = ensemble_util:fast_config(NVal, 64),
+    Config = ensemble_util:fast_config(NVal, 32),
     lager:info("Building cluster and waiting for ensemble to stablize"),
     Nodes = ensemble_util:build_cluster(NumNodes, Config, NVal),
     vnode_util:load(Nodes),

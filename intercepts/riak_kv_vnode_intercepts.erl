@@ -184,3 +184,5 @@ put_as_readrepair(Preflist, BKey, Obj, ReqId, StartTime, Options) ->
 
 coord_put_as_readrepair(Preflist, BKey, Obj, ReqId, StartTime, Options) ->
     ?M:coord_put_orig(Preflist, BKey, Obj, ReqId, StartTime, [rr | Options]).
+
+never_ready_to_exit() -> false.
