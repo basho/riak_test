@@ -25,7 +25,7 @@
 -define(M, riak_kv_ensemble_backend_orig).
 
 confirm() ->
-    NumNodes = 5,
+    NumNodes = 6,
     NVal = 5,
     Config = ensemble_util:fast_config(NVal),
     lager:info("Building cluster and waiting for ensemble to stablize"),
@@ -49,7 +49,18 @@ confirm() ->
     PBC = rt:pbc(Node),
 
     lager:info("Writing ~p consistent keys", [1000]),
-    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    WriteFun =
+        fun(Key) ->
+            ok =
+                case rt:pbc_write(PBC, Bucket, Key, Key) of
+                    ok ->
+                        ok;
+                    E ->
+                        lager:info("Error ~w with Key ~p", [E, Key]),
+                        E
+                end
+        end,
+    lists:foreach(WriteFun, Keys),
 
     lager:info("Read keys to verify they exist"),
     [rt:pbc_read(PBC, Bucket, Key) || Key <- Keys],
@@ -59,22 +70,23 @@ confirm() ->
     %% proxy crashes for a given key
     lager:info("Adding Intercept for riak_kv_ensemble_backend:handle_down/4"),
     Self = self(),
-    rt_intercept:add(Node, {riak_kv_ensemble_backend, [{{handle_down, 4},
+    rt_intercept:add(Key1Node, {riak_kv_ensemble_backend, [{{handle_down, 4},
         {[Self],
         fun(Ref, Pid, Reason, State) ->
             Self ! {handle_down, Reason},
             ?M:maybe_async_update_orig(Ref, Pid, Reason, State)
         end}}]}),
 
-    {ok, VnodePid} =rpc:call(Key1Node, riak_core_vnode_manager, get_vnode_pid,
-        [Key1Idx, riak_kv_vnode]),
-    lager:info("Killing Vnode ~p for Key1 {~p, ~p}", [VnodePid, Key1Node,
-            Key1Idx]),
-    true = rpc:call(Key1Node, erlang, exit, [VnodePid, testkill]),
+    {ok, VnodePid} =
+        rpc:call(Key1Node, riak_core_vnode_manager, get_vnode_pid,
+                    [Key1Idx, riak_kv_vnode]),
+    
+    lager:info("Killing Vnode ~p for Key1 {~p, ~p}",
+                [VnodePid, Key1Node, Key1Idx]),
+    spawn(fun() -> kill_vnode(Key1Node, VnodePid) end),
 
     lager:info("Waiting to receive msg indicating downed vnode"),
-    Count = wait_for_all_handle_downs(0),
-    ?assert(Count > 0),
+    NVal = wait_for_all_handle_downs(0),
 
     lager:info("Wait for stable ensembles"),
     ensemble_util:wait_until_stable(Node, NVal),
@@ -85,12 +97,12 @@ confirm() ->
     Proxy = rpc:call(Key1Node, riak_core_vnode_proxy, reg_name, [riak_kv_vnode,
             Key1Idx]),
     ProxyPid = rpc:call(Key1Node, erlang, whereis, [Proxy]),
+    
     lager:info("Killing Vnode Proxy ~p", [Proxy]),
-    true = rpc:call(Key1Node, erlang, exit, [ProxyPid, testkill]),
+    spawn(fun() -> kill_vnode(Key1Node, ProxyPid) end),
 
     lager:info("Waiting to receive msg indicating downed vnode proxy:"),
-    Count2 = wait_for_all_handle_downs(0),
-    ?assert(Count2 > 0),
+    NVal = wait_for_all_handle_downs(0),
 
     lager:info("Wait for stable ensembles"),
     ensemble_util:wait_until_stable(Node, NVal),
@@ -106,3 +118,10 @@ wait_for_all_handle_downs(Count) ->
     after 5000 ->
             Count
     end.
+
+
+kill_vnode(Key1Node, Pid) ->
+    %% Make sure that monitor started
+    timer:sleep(1000),
+    lager:info("Actual kill happening"),
+    true = rpc:call(Key1Node, erlang, exit, [Pid, testkill]).
