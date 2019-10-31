@@ -61,8 +61,15 @@ load_code(Node, Globs) ->
 
 add_and_save(Node, Intercepts) ->
     CodePaths = rpc:call(Node, code, get_path, []),
-    [PatchesDir] = [P || P <- CodePaths, lists:suffix("basho-patches", P)],
-    add(Node, Intercepts, PatchesDir).
+    ok = 
+        case [P || P <- CodePaths, lists:suffix("basho-patches", P)] of
+            [PatchesDir] ->
+                add(Node, Intercepts, PatchesDir);
+            [] ->
+                lager:error("No basho-patches! Manually adding path"),
+                add(Node, Intercepts, "lib/basho-patches")
+        end,
+    ok.
 
 add(Node, Intercepts) ->
     add(Node, Intercepts, undefined).

@@ -29,7 +29,7 @@
 config() ->
     [{riak_core, [{default_bucket_props,
                   [
-                    {n_val, 5},
+                    {n_val, ?NVAL},
                     {allow_mult, true},
                     {dvv_enabled, true}
                   ]},
@@ -112,7 +112,9 @@ replace_node(Node, OldNode, NewNode) ->
     ok = rpc:call(Node, riak_core_claimant, replace, Nodes),
     rt:plan_and_commit(Node),
     rt:try_nodes_ready(Nodes, 3, 500),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
+    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    rt:wait_until_unpingable(OldNode),
+    ensemble_util:wait_until_stable(Node, ?NVAL).
 
 force_replace_node(Node, OldNode, NewNode) ->
     lager:info("Force Replacing ~p with ~p", [OldNode, NewNode]),
@@ -122,7 +124,9 @@ force_replace_node(Node, OldNode, NewNode) ->
     ok = rpc:call(Node, riak_core_claimant, force_replace, Nodes),
     rt:plan_and_commit(Node),
     rt:try_nodes_ready(Nodes, 3, 500),
-    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)).
+    ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
+    rt:wait_until_unpingable(OldNode),
+    ensemble_util:wait_until_stable(Node, ?NVAL).
 
 expand_cluster(OldNodes, NewNodes0) ->
     %% Always have 2 replacement nodes

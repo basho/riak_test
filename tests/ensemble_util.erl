@@ -64,17 +64,17 @@ fast_config(NVal, RingSize, EnableAAE) ->
              {allow_mult, true},
              {dvv_enabled, true}
           ]},
-          {vnode_management_timer, 1000},
+          {vnode_management_timer, 10000},
+          {target_n_val, max(4, NVal)},
           {ring_creation_size, RingSize},
           {enable_consensus, true}]}].
 
 config_aae(true) ->
     {riak_kv, [{anti_entropy_build_limit, {100, 1000}},
                {anti_entropy_concurrency, 100},
-               {anti_entropy_tick, 100},
+               {anti_entropy_tick, 1000},
                {anti_entropy, {on, []}},
-               {anti_entropy_timeout, 5000},
-	       {storage_backend, riak_kv_memory_backend}]};
+               {anti_entropy_timeout, 5000}]};
 config_aae(false) ->
     {riak_kv, [{anti_entropy, {off, []}}]}.
 
@@ -120,7 +120,9 @@ wait_until_stable(Node, Count) ->
     Ensembles = rpc:call(Node, riak_kv_ensembles, ensembles, []),
     wait_until_quorum(Node, root),
     [wait_until_quorum(Node, Ensemble) || Ensemble <- Ensembles],
+    lager:info("All ensembles have quorum"),
     [wait_until_quorum_count(Node, Ensemble, Count) || Ensemble <- Ensembles],
+    lager:info("All ensembles have quorum count ~w confirmed", [Count]),
     lager:info("....all stable"),
     ok.
 
@@ -131,7 +133,7 @@ wait_until_quorum(Node, Ensemble) ->
                     true ->
                         true;
                     false ->
-                        lager:info("Not ready: ~p", [Ensemble]),
+                        lager:info("Quorum not ready: ~p", [Ensemble]),
                         false
                 end
         end,

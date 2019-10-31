@@ -81,6 +81,8 @@ minority_vnodes(Vnodes, PartitionedNodes) ->
     [VN || {_, Node}=VN <- Vnodes, lists:member(Node, PartitionedNodes)].
 
 run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
+    lager:info("Scenario: ~p ~p ~p ~p ~p",
+                [NumKill, NumSuspend, NumValid, Name, Expect]),
     Node = hd(Nodes),
     Quorum = NVal div 2 + 1,
     Minority = NVal - Quorum,
@@ -94,9 +96,13 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
 
     {KillVN,    Valid2} = lists:split(NumKill,    Valid),
     {SuspendVN, Valid3} = lists:split(NumSuspend, Valid2),
-    {AfterVN,   _}      = lists:split(NumValid,   Valid3),
+    {AfterVN,   Valid4}      = lists:split(NumValid,   Valid3),
+    
+    lager:info(
+        "PL: ~p " ++
+        "Post-Partition: ~p Post-Kill: ~p Post-Suspend: ~p Post-Suspend2: ~p",
+            [PL, Valid, Valid2, Valid3, Valid4]),
 
-    io:format("PL: ~p~n", [PL]),
     PBC = rt:pbc(Node),
     Options = [{timeout, 2000}],
 
@@ -105,24 +111,44 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     wait_for_leader_tick_changes(Nodes),
     ensemble_util:wait_until_stable(Node, Quorum),
 
-    %% Write data while minority is partitioned
-    lager:info("Writing ~p consistent keys", [1000]),
-    [ok = rt:pbc_write(PBC, Bucket, Key, Key) || Key <- Keys],
+    lager:info("Writing ~p consistent keys whilst partitioned", [1000]),
+    WriteFun =
+        fun(Key) ->
+            ok =
+                case rt:pbc_write(PBC, Bucket, Key, Key) of
+                    ok ->
+                        ok;
+                    E ->
+                        lager:info("Error ~w with Key ~p", [E, Key]),
+                        E
+                end
+        end,
+    lists:foreach(WriteFun, Keys),
 
     lager:info("Read keys to verify they exist"),
     [rt:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys],
+
+    lager:info("Heal partition"),
     rt:heal(Part),
+    lager:info("Read keys to confirm they exist after heal"),
+    [rt:pbc_read(PBC, Bucket, Key, Options) || Key <- Keys],
 
     %% Suspend desired number of valid vnodes
+    lager:info("Suspend vnodes ~p", [SuspendVN]),
     S1 = [vnode_util:suspend_vnode(VNode, VIdx) || {VIdx, VNode} <- SuspendVN],
 
     %% Kill/corrupt desired number of valid vnodes
+    lager:info("Kill vnodes ~p", [KillVN]),
     [vnode_util:kill_vnode(VN) || VN <- KillVN],
+    lager:info("Rebuild AAE trees on vnodes ~p", [KillVN]),
     [vnode_util:rebuild_vnode(VN) || VN <- KillVN],
     rpc:multicall(Nodes, riak_kv_entropy_manager, set_mode, [automatic]),
     wait_for_leader_tick_changes(Nodes),
     ensemble_util:wait_until_stable(Node, Quorum),
 
+    lager:info("Sleep a minute to allow time for AAE"),
+    timer:sleep(60000),
+    
     lager:info("Disabling AAE"),
     rpc:multicall(Nodes, riak_kv_entropy_manager, disable, []),
     ensemble_util:wait_until_stable(Node, Quorum),
@@ -132,7 +158,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     wait_for_leader_tick_changes(Nodes),
     ensemble_util:wait_until_stable(Node, Quorum),
 
-    lager:info("Checking that key results match scenario"),
+    lager:info("Checking that key results match scenario - without AAE"),
     [rt:pbc_read_check(PBC, Bucket, Key, Expect, Options) || Key <- Keys],
 
     lager:info("Re-enabling AAE"),

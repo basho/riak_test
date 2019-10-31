@@ -24,7 +24,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 confirm() ->
-    NumNodes = 5,
+    NumNodes = 6,
     NVal = 5,
     Config = ensemble_util:fast_config(NVal),
     lager:info("Building cluster and waiting for ensemble to stablize"),

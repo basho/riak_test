@@ -25,18 +25,21 @@
 -define(M, riak_kv_ensemble_backend_orig).
 
 confirm() ->
-    NumNodes = 3,
-    NVal = 3,
+    NumNodes = 4,
+    NVal = 4,
     Config = ensemble_util:fast_config(NVal),
     lager:info("Building cluster and waiting for ensemble to stablize"),
     Nodes = ensemble_util:build_cluster(NumNodes, Config, NVal),
-    [Node, Node2, Node3] = Nodes,
+    [Node, Node2, Node3, Node4] = Nodes,
     ok = ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Store a value in the root ensemble"),
     {ok, _} = riak_ensemble_client:kput_once(Node, root, testerooni, 
         testvalue, 1000),
     lager:info("Read value from the root ensemble"),
     {ok, _} = riak_ensemble_client:kget(Node, root, testerooni, 1000),
+    Members4 = rpc:call(Node, riak_ensemble_manager, get_members, [root]),
+    lager:info("Members ~w", [Members4]),
+    ?assertEqual(4, length(Members4)),
 
     lager:info("Creating/activating 'strong' bucket type"),
     rt:create_and_activate_bucket_type(Node, <<"strong">>,
@@ -49,33 +52,34 @@ confirm() ->
     Val1 = rt:pbc_read(PBC, Bucket, Key),
     ?assertEqual(element(1, Val1), riakc_obj),
 
-    %% Don't allow node deletions in riak_ensemble. This should prevent the
-    %% nodes from ever exiting 
-    rt_intercept:add(Node, {riak_kv_ensemble_backend, [{{maybe_async_update, 2},
-        {[], 
-        fun(Changes, State) ->
-            Changes2 = lists:filter(fun({del, _}) -> false;
-                                       (_) -> true
-                                    end, Changes),
-            ?M:maybe_async_update_orig(Changes2, State)
-        end}}]}),
+    %% Pretends that local_ensembles still true so cannot exit
+    InterceptFun = 
+        fun(LeavingNode) ->
+            rt_intercept:add(LeavingNode,
+                                {riak_kv_vnode,
+                                    [{{ready_to_exit, 0},
+                                        never_ready_to_exit}]})
+        end,
+    lists:foreach(InterceptFun, [Node2, Node3, Node4]),
 
-    lager:info("Removing Nodes 2 and 3 from the cluster"),
+    lager:info("Removing Nodes 2, 3 and 4 from the cluster"),
     rt:leave(Node2),
     ok = ensemble_util:wait_until_stable(Node, NVal),
     rt:leave(Node3),
     ok = ensemble_util:wait_until_stable(Node, NVal),
-    Remaining = Nodes -- [Node2, Node3],
+    rt:leave(Node4),
+    ok = ensemble_util:wait_until_stable(Node, NVal),
+    Remaining = Nodes -- [Node2, Node3, Node4],
     rt:wait_until_nodes_agree_about_ownership(Remaining), 
 
-    %% TODO: How do we wait indefinitely for nodes to never exit here? A 30s
-    %% sleep?
-    timer:sleep(30000),
+    lager:info("Need to wait at least a minute to confirm no exit"),
+    timer:sleep(60000),
 
     %% Nodes should still be in leaving state
+    lager:info("Getting ring from node ~w", [Node]),
     {ok, Ring} = rpc:call(Node, riak_core_ring_manager, get_raw_ring, []),
     Leaving = lists:usort(riak_core_ring:members(Ring, [leaving])),
-    ?assertEqual(Leaving, [Node2, Node3]),
+    ?assertEqual(Leaving, [Node2, Node3, Node4]),
 
     %% We should still be able to read from k/v ensembles, but the nodes should
     %% never exit
@@ -86,20 +90,21 @@ confirm() ->
     ok = ensemble_util:wait_until_stable(Node, NVal),
     lager:info("Read value from the root ensemble"),
     {ok, _Obj} = riak_ensemble_client:kget(Node, root, testerooni, 1000),
-    Members3 = rpc:call(Node, riak_ensemble_manager, get_members, [root]),
-    ?assertEqual(3, length(Members3)),
+    Members4 = rpc:call(Node, riak_ensemble_manager, get_members, [root]),
+    lager:info("Members ~w", [Members4]),
+    ?assertEqual(4, length(Members4)),
     Cluster = rpc:call(Node, riak_ensemble_manager, cluster, []),
-    ?assertEqual(3, length(Cluster)),
+    lager:info("Cluster ~w", [Cluster]),
+    ?assertEqual(4, length(Cluster)),
 
-    lager:info("Removing intercept and waiting until nodes 2/3 shutdown"),
-    rt_intercept:add(Node, {riak_kv_ensemble_backend, [{{maybe_async_update, 2},
-        {[], 
-        fun(Changes, State) ->
-            ?M:maybe_async_update_orig(Changes, State)
-        end}}]}),
+    lager:info("Removing intercept and waiting until nodes shutdown"),
+    ok = rt_intercept:clean(Node2, riak_kv_vnode),
+    ok = rt_intercept:clean(Node3, riak_kv_vnode),
+    ok = rt_intercept:clean(Node4, riak_kv_vnode),
 
     ok = rt:wait_until_unpingable(Node2),
     ok = rt:wait_until_unpingable(Node3),
+    ok = rt:wait_until_unpingable(Node4),
     rpc:call(Node, riak_core_console, member_status, [[]]),
     rpc:call(Node, riak_core_console, ring_status, [[]]),
 
