@@ -19,7 +19,7 @@
 %% operational fold features
 
 -module(verify_aaefold_findkeys_stats).
--export([confirm/0, verify_aae_fold/1]).
+-export([confirm/0, verify_aae_fold/3]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
@@ -53,20 +53,38 @@
 -define(DELTA_COUNT, 10).
 
 confirm() ->
-    Nodes = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
-    ok = verify_aae_fold(Nodes),
-    ok = verify_stats(Nodes),
+    
+    lager:info("Testing AAE with HTTP Client"),
+
+    ModH = rhc,
+    NodesH = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    ClientH = rt:httpc(hd(NodesH)),
+
+    ok = verify_aae_fold(ModH, ClientH, NodesH),
+    ok = verify_stats(ModH, ClientH),
+
+    lager:info("Cleaning cluster for next test"),
+    ok = rt:clean_cluster(NodesH),
+
+    lager:info("Testing AAE with PB Client"),
+    ModP = riakc_pb_socket,
+    NodesP = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    ClientP = rt:pbc(hd(NodesP)),
+    
+    ok = verify_aae_fold(ModP, ClientP, NodesP),
+    ok = verify_stats(ModP, ClientP),
 
     pass.
 
 
-verify_aae_fold(Nodes) ->
+verify_aae_fold(Mod, Client, Nodes) ->
 
-    HttpCH = rt:httpc(hd(Nodes)),
     lager:info("Find Keys for no data "),
 
-    {ok, {keys, SiblingCnts}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {sibling_count, 1}),
-    {ok, {keys, ObjSize}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {object_size, 1}),
+    {ok, {keys, SiblingCnts}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {sibling_count, 1}),
+    {ok, {keys, ObjSize}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {object_size, 1}),
 
     ?assertEqual([], SiblingCnts),
     ?assertEqual([], ObjSize),
@@ -88,11 +106,13 @@ verify_aae_fold(Nodes) ->
     ExpectedSibs = write_siblings(hd(Nodes)),
 
     lager:info("Find keys with siblings"),
-    {ok, {keys, SiblingCnts2}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {sibling_count, 1}),
+    {ok, {keys, SiblingCnts2}} = 
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {sibling_count, 1}),
     %% can't account for the fixed overhead, so I ran the test and
     %% peeked, everything without a sibling is 142-143 bytes, so I set
     %% the bar at 200 bytes
-    {ok, {keys, ObjSize2}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {object_size, 200}),
+    {ok, {keys, ObjSize2}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {object_size, 200}),
 
     ?assertEqual(ExpectedSibs, SiblingCnts2),
     %% verify that all the keys are there, and that all the objects
@@ -105,25 +125,35 @@ verify_aae_fold(Nodes) ->
     Range = {Lo, Hi} = {to_key(50), to_key(69)},
     ExpectedSibsRange = [{K, C} || {K, C} <- ExpectedSibs, K >= Lo, K =< Hi],
 
-    {ok, {keys, SiblingCntsRange}} = rhc:aae_find_keys(HttpCH, ?BUCKET, Range , all, {sibling_count, 1}),
+    {ok, {keys, SiblingCntsRange}} = 
+        Mod:aae_find_keys(Client, ?BUCKET, Range , all, {sibling_count, 1}),
     ?assertEqual(ExpectedSibsRange, SiblingCntsRange),
 
-    %% only keys from 95-100 should be returned as over 200 bytes
-    {ok, {keys, ObjSizeRange}} = rhc:aae_find_keys(HttpCH, ?BUCKET, {to_key(95), to_key(105)}, all, {object_size, 200}),
+    lager:info("Only keys from 95-100 should be returned as over 200 bytes"),
+    {ok, {keys, ObjSizeRange}} =
+        Mod:aae_find_keys(Client, ?BUCKET, {to_key(95), to_key(105)}, all, {object_size, 200}),
     ExpectedKeysRange = [to_key(N) || N <- lists:seq(95, 100)],
     ?assertEqual(ExpectedKeysRange, [K || {K, _S} <- ObjSizeRange]),
 
-    {ok, {keys, ObjSizeBig}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {object_size, 500}),
-    ExpectedKeysBig = [to_key(N) || N <- lists:seq(1, 20)],
+    lager:info("Object size of 500 is 5 siblings => first 60 objects"),
+    {ok, {keys, ObjSizeBig}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {object_size, 500}),
+    ExpectedKeysBig = [to_key(N) || N <- lists:seq(1, 60)],
     ?assertEqual(ExpectedKeysBig, [K || {K, _S} <- ObjSizeBig]),
     [?assertMatch(S when S > 500, S) || {_K, S} <- ObjSizeBig],
 
+    lager:info("Another two siblings required to be 700 bytes"),
+    {ok, {keys, ObjSizeBigger}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {object_size, 700}),
+    ExpectedKeysBigger = [to_key(N) || N <- lists:seq(1, 40)],
+    ?assertEqual(ExpectedKeysBigger, [K || {K, _S} <- ObjSizeBigger]),
     ok.
 
-verify_stats(Nodes) ->
-    HttpCH = rt:httpc(hd(Nodes)),
+verify_stats(Mod, Client) ->
     lager:info("get stats"),
-    {ok, {stats, Stats}} = rhc:aae_object_stats(HttpCH, ?BUCKET, all, all),
+    {ok, {stats, Stats}} =
+        Mod:aae_object_stats(Client, ?BUCKET, all, all),
+    lager:info("Stats returned ~p", [Stats]),
     %% Erm, what do we know? They should have keys
     ?assertEqual(10000, proplists:get_value(<<"total_count">>, Stats)),
     %% at least 100 bytes per key
