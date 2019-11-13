@@ -184,7 +184,7 @@ verify_aae_fold(Nodes, Mod, CH, CT) ->
 
 
 to_key(N) ->
-    list_to_binary(io_lib:format("K~4..0B", [N])).
+    list_to_binary(io_lib:format("K~6..0B", [N])).
 
 test_data(Start, End, V) ->
     Keys = [to_key(N) || N <- lists:seq(Start, End)],
