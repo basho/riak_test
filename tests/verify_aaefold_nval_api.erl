@@ -22,8 +22,8 @@
 %% Confirm that trees are returned that vary along with the data in the
 %% store
 
--module(verify_aaefold_nval_http).
--export([confirm/0, verify_aae_fold/1]).
+-module(verify_aaefold_nval_api).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
@@ -74,25 +74,30 @@
 -define(DELTA_COUNT, 10).
 
 confirm() ->
+    lager:info("Testing without rebuilds - using http api"),
     Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
-    ok = verify_aae_fold(Nodes0),
+    ClientHeadHTTP = rt:httpc(hd(Nodes0)),
+    ClientTailHTTP = rt:httpc(lists:last(Nodes0)),
+    ok = verify_aae_fold(Nodes0, rhc, ClientHeadHTTP, ClientTailHTTP),
+
     rt:clean_cluster(Nodes0),
 
     Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
     lager:info("Sleeping for rebuild tick - testing with rebuilds ongoing"),
+    lager:info("Testing this time with PB API"),
     timer:sleep(?REBUILD_TICK),
-    ok = verify_aae_fold(Nodes1),
+    ClientHeadPB = rt:pbc(hd(Nodes1)),
+    ClientTailPB = rt:pbc(lists:last(Nodes1)),
+    ok = verify_aae_fold(Nodes1, riakc_pb_socket, ClientHeadPB, ClientTailPB),
+
     pass.
 
 
-verify_aae_fold(Nodes) ->
-
-    CH = rt:httpc(hd(Nodes)),
-    CT = rt:httpc(lists:last(Nodes)),
+verify_aae_fold(Nodes, Mod, CH, CT) ->
 
     lager:info("Fold for empty root"),
-    {ok, {root, RH0}} = rhc:aae_merge_root(CH, ?N_VAL),
-    {ok, {root, RT0}} = rhc:aae_merge_root(CT, ?N_VAL),
+    {ok, {root, RH0}} = Mod:aae_merge_root(CH, ?N_VAL),
+    {ok, {root, RT0}} = Mod:aae_merge_root(CT, ?N_VAL),
 
     lager:info("Commencing object load"),
     KeyLoadFun =
@@ -108,8 +113,8 @@ verify_aae_fold(Nodes) ->
     lager:info("Loaded ~w objects", [?NUM_KEYS_PERNODE * length(Nodes)]),
 
     lager:info("Fold for busy root"),
-    {ok, {root, RH1}} = rhc:aae_merge_root(CH, ?N_VAL),
-    {ok, {root, RT1}} = rhc:aae_merge_root(CT, ?N_VAL),
+    {ok, {root, RH1}} = Mod:aae_merge_root(CH, ?N_VAL),
+    {ok, {root, RT1}} = Mod:aae_merge_root(CT, ?N_VAL),
 
     ?assertMatch(true, RH1 == RT1),
     ?assertMatch(true, RH0 == RT0),
@@ -118,7 +123,7 @@ verify_aae_fold(Nodes) ->
     lager:info("Make ~w changes", [?DELTA_COUNT]),
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary("U2")),
     ok = write_data(hd(Nodes), Changes2),
-    {ok, {root, RH2}} = rhc:aae_merge_root(CH, ?N_VAL),
+    {ok, {root, RH2}} = Mod:aae_merge_root(CH, ?N_VAL),
 
     DirtyBranches2 = aae_exchange:compare_roots(RH1, RH2),
 
@@ -127,12 +132,12 @@ verify_aae_fold(Nodes) ->
     ?assertMatch(true, length(DirtyBranches2) =< ?DELTA_COUNT),
 
     {ok, {branches, BH2}} =
-        rhc:aae_merge_branches(CH, ?N_VAL, DirtyBranches2),
+        Mod:aae_merge_branches(CH, ?N_VAL, DirtyBranches2),
 
     lager:info("Make ~w changes to same keys", [?DELTA_COUNT]),
     Changes3 = test_data(1, ?DELTA_COUNT, list_to_binary("U3")),
     ok = write_data(hd(Nodes), Changes3),
-    {ok, {root, RH3}} = rhc:aae_merge_root(CH, ?N_VAL),
+    {ok, {root, RH3}} = Mod:aae_merge_root(CH, ?N_VAL),
 
     DirtyBranches3 = aae_exchange:compare_roots(RH2, RH3),
 
@@ -140,7 +145,7 @@ verify_aae_fold(Nodes) ->
     ?assertMatch(true, DirtyBranches2 == DirtyBranches3),
 
     {ok, {branches, BH3}} =
-        rhc:aae_merge_branches(CH, ?N_VAL, DirtyBranches3),
+        Mod:aae_merge_branches(CH, ?N_VAL, DirtyBranches3),
 
     DirtySegments1 = aae_exchange:compare_branches(BH2, BH3),
     lager:info("Found ~w mismatched segments", [length(DirtySegments1)]),
@@ -148,7 +153,7 @@ verify_aae_fold(Nodes) ->
     ?assertMatch(true, length(DirtySegments1) =< ?DELTA_COUNT),
 
     {ok, {keysclocks, KCL1}} =
-        rhc:aae_fetch_clocks(CH, ?N_VAL, DirtySegments1),
+        Mod:aae_fetch_clocks(CH, ?N_VAL, DirtySegments1),
 
     lager:info("Found ~w mismatched keys", [length(KCL1)]),
 
@@ -167,11 +172,11 @@ verify_aae_fold(Nodes) ->
     lager:info("Stopping a node - query results should be unchanged"),
     rt:stop_and_wait(hd(tl(Nodes))),
     {ok, {branches, BH4}} =
-        rhc:aae_merge_branches(CH, ?N_VAL, DirtyBranches3),
+        Mod:aae_merge_branches(CH, ?N_VAL, DirtyBranches3),
 
     ?assertMatch(true, BH3 == BH4),
     {ok, {keysclocks, KCL2}} =
-        rhc:aae_fetch_clocks(CH, ?N_VAL, DirtySegments1),
+        Mod:aae_fetch_clocks(CH, ?N_VAL, DirtySegments1),
     ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)),
 
     % Need to re-start or clean will fail
