@@ -24,8 +24,6 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-% I would hope this would come from the testing framework some day
-% to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 16).
 
 -define(NUM_NODES, 4).
