@@ -194,16 +194,7 @@ verify_aae_compare({ModH, ClientH}, {ModP, ClientP}, {TSA, TSB}) ->
     CompareFun =
         fun(Stats) ->
             fun({K, V}) ->
-                R = 
-                    case lists:keyfind(K, 1, Stats) of
-                        {K, V} ->
-                            true;
-                        false ->
-                            lager:info("Missing Key ~p - OK if empty list",
-                                        [K]),
-                            V == []
-                    end,
-                ?assertMatch(true, R)
+                ?assertMatch({K, V}, lists:keyfind(K, 1, Stats))
             end
         end,
     
@@ -213,6 +204,7 @@ verify_aae_compare({ModH, ClientH}, {ModP, ClientP}, {TSA, TSB}) ->
         ModP:aae_object_stats(ClientP, ?BUCKET, all, all),
     lager:info("Object stats ~p", [ObjectStatsH0]),
     lists:foreach(CompareFun(ObjectStatsP0), ObjectStatsH0),
+    lists:foreach(CompareFun(ObjectStatsH0), ObjectStatsP0),
 
     {ok, {stats, ObjectStatsH1}} =
         ModH:aae_object_stats(ClientH, 
@@ -227,6 +219,7 @@ verify_aae_compare({ModH, ClientH}, {ModP, ClientP}, {TSA, TSB}) ->
                                     to_key(?NUM_KEYS_PERBATCH div 2)},
                                 {TSA, TSB}),
     lists:foreach(CompareFun(ObjectStatsP1), ObjectStatsH1),
+    lists:foreach(CompareFun(ObjectStatsH1), ObjectStatsP1),
 
     ok.
 
