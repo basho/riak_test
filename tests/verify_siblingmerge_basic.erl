@@ -44,6 +44,7 @@
 
 confirm() ->
     C0 = rt:build_cluster(?NUM_NODES, ?CFG()),
+    ok = rt:wait_until_nodes_agree_about_ownership(C0),
     ok = verify_siblingmerge(C0),
     pass.
 
@@ -54,7 +55,9 @@ verify_siblingmerge(Cluster) ->
         select_two_different_primarynodes(Cluster, ?AMT_BUCKET, to_key(1)),
 
     lager:info("Testing allow_mult = true"),
-    ok = set_bucket(Node1A, ?AMT_BUCKET, [{allow_mult, true}]),
+    AMTopts = [{allow_mult, true}],
+    ok = set_bucket(Node1A, ?AMT_BUCKET, AMTopts),
+    ok = rt:wait_until_bucket_props(Cluster, ?AMT_BUCKET, AMTopts),
 
     ok = blind_write_data(Node1A, ?AMT_BUCKET, to_key(1), <<1:8/integer>>, []),
     ok = blind_write_data(Node2A, ?AMT_BUCKET, to_key(1), <<2:8/integer>>, []),

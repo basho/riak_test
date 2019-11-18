@@ -22,8 +22,8 @@
 %% Confirm that trees are returned that vary along with the data in the
 %% store
 
--module(verify_aaefold_range_http).
--export([confirm/0, verify_aae_fold/1]).
+-module(verify_aaefold_range_api).
+-export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
@@ -56,20 +56,33 @@
 -define(DELTA_COUNT, 10).
 
 confirm() ->
+    lager:info("Testing without rebuilds - using http api"),
     Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
-    ok = verify_aae_fold(Nodes0),
+    ClientHeadHTTP = rt:httpc(hd(Nodes0)),
+    ClientTailHTTP = rt:httpc(lists:last(Nodes0)),
+
+    ok = verify_aae_fold(Nodes0, rhc, ClientHeadHTTP, ClientTailHTTP),
+
+    rt:clean_cluster(Nodes0),
+    
+    lager:info("Testing without rebuilds - using pb api"),
+    Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    ClientHeadPB = rt:pbc(hd(Nodes1)),
+    ClientTailPB = rt:pbc(lists:last(Nodes1)),
+
+    ok = verify_aae_fold(Nodes1, riakc_pb_socket, ClientHeadPB, ClientTailPB),
+
     pass.
 
 
-verify_aae_fold(Nodes) ->
-
-    HttpCH = rt:httpc(hd(Nodes)),
-    HttpCT = rt:httpc(lists:last(Nodes)),
+verify_aae_fold(Nodes, Mod, CH, CT) ->
 
     lager:info("Fold for empty tree range"),
 
-    {ok, {tree, RH0Mochi}} = rhc:aae_range_tree(HttpCH, ?BUCKET, all, small, all, all, pre_hash),
-    {ok, {tree, RT0Mochi}} = rhc:aae_range_tree(HttpCT, ?BUCKET, all, small, all, all, pre_hash),
+    {ok, {tree, RH0Mochi}} =
+        Mod:aae_range_tree(CH, ?BUCKET, all, small, all, all, pre_hash),
+    {ok, {tree, RT0Mochi}} =
+        Mod:aae_range_tree(CT, ?BUCKET, all, small, all, all, pre_hash),
 
     RH0 = leveled_tictac:import_tree(RH0Mochi),
     RT0 = leveled_tictac:import_tree(RT0Mochi),
@@ -88,8 +101,10 @@ verify_aae_fold(Nodes) ->
     lager:info("Loaded ~w objects", [?NUM_KEYS_PERNODE * length(Nodes)]),
 
     lager:info("Fold for busy tree"),
-    {ok, {tree, RH1Mochi}} = rhc:aae_range_tree(HttpCH, ?BUCKET, all, small, all, all, pre_hash),
-    {ok, {tree, RT1Mochi}} = rhc:aae_range_tree(HttpCT, ?BUCKET, all, small, all, all, pre_hash),
+    {ok, {tree, RH1Mochi}} =
+        Mod:aae_range_tree(CH, ?BUCKET, all, small, all, all, pre_hash),
+    {ok, {tree, RT1Mochi}} =
+        Mod:aae_range_tree(CT, ?BUCKET, all, small, all, all, pre_hash),
 
     RH1 = leveled_tictac:import_tree(RH1Mochi),
     RT1 = leveled_tictac:import_tree(RT1Mochi),
@@ -104,7 +119,8 @@ verify_aae_fold(Nodes) ->
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary("U2")),
     ok = write_data(hd(Nodes), Changes2),
 
-    {ok, {tree, RH2Mochi}} = rhc:aae_range_tree(HttpCH, ?BUCKET, all, small, all, all, pre_hash),
+    {ok, {tree, RH2Mochi}} =
+        Mod:aae_range_tree(CH, ?BUCKET, all, small, all, all, pre_hash),
     RH2 = leveled_tictac:import_tree(RH2Mochi),
 
     DirtySegments1 = aae_exchange:compare_trees(RH1, RH2),
@@ -112,7 +128,8 @@ verify_aae_fold(Nodes) ->
     lager:info("Found ~w mismatched segments", [length(DirtySegments1)]),
     ?assertMatch(N when N >= ?DELTA_COUNT, length(DirtySegments1)),
 
-    {ok, {keysclocks, KCL1}} = rhc:aae_range_clocks(HttpCH, ?BUCKET, all, {DirtySegments1, small}, all),
+    {ok, {keysclocks, KCL1}} =
+        Mod:aae_range_clocks(CH, ?BUCKET, all, {DirtySegments1, small}, all),
 
     lager:info("Found ~w mismatched keys", [length(KCL1)]),
 
@@ -130,12 +147,15 @@ verify_aae_fold(Nodes) ->
     lager:info("Stopping a node - query results should be unchanged"),
     rt:stop_and_wait(hd(tl(Nodes))),
 
-    {ok, {keysclocks, KCL2}} = rhc:aae_range_clocks(HttpCH, ?BUCKET, all, {DirtySegments1, small}, all),
-    ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)).
+    {ok, {keysclocks, KCL2}} =
+        Mod:aae_range_clocks(CH, ?BUCKET, all, {DirtySegments1, small}, all),
+    ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)),
+    
+    rt:start(hd(tl(Nodes))).
 
 
 to_key(N) ->
-    list_to_binary(io_lib:format("K~4..0B", [N])).
+    list_to_binary(io_lib:format("K~6..0B", [N])).
 
 test_data(Start, End, V) ->
     Keys = [to_key(N) || N <- lists:seq(Start, End)],
