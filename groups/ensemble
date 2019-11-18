@@ -9,5 +9,4 @@ ensemble_remove_node2
 ensemble_ring_changes
 ensemble_start_without_aae
 ensemble_sync
-ensemble_util
 ensemble_vnode_crash
