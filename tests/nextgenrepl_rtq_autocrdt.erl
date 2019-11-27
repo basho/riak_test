@@ -70,18 +70,37 @@ confirm() ->
     ClusterASrcQ = "rtq_b:buckettype._maps|ttaaefs_b:block_rtq",
     ClusterBSrcQ = "rtq_a:buckettype._maps|ttaaefs_a:block_rtq",
 
-    [ClusterA, ClusterB] =
+    [ClusterAH, ClusterBH] =
         rt:deploy_clusters([
             {3, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
             {3, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)}]),
     
+    setup_clusters(http, ClusterAH, ClusterBH),
+    pass = test_rtqrepl_between_clusters(http, ClusterAH, ClusterBH),
+    
+    rt:clean_cluster(ClusterAH),
+    rt:clean_cluster(ClusterBH),
+
+    [ClusterAP, ClusterBP] =
+        rt:deploy_clusters([
+            {3, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
+            {3, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)}]),
+    
+    setup_clusters(pb, ClusterAP, ClusterBP),
+    pass = test_rtqrepl_between_clusters(pb, ClusterAP, ClusterBP),
+    pass.
+
+
+setup_clusters(Protocol, ClusterA, ClusterB) ->
+    lager:info("Setup test using protocol ~w", [Protocol]),
     lager:info("Discover Peer IP/ports and restart with peer config"),
     FoldToPeerConfig = 
         fun(Node, Acc) ->
-            {http, {IP, Port}} =
-                lists:keyfind(http, 1, rt:connection_info(Node)),
+            {Protocol, {IP, Port}} =
+                lists:keyfind(Protocol, 1, rt:connection_info(Node)),
             Acc0 = case Acc of "" -> ""; _ -> Acc ++ "|" end,
             Acc0 ++ IP ++ ":" ++ integer_to_list(Port)
+                ++ ":" ++ atom_to_list(Protocol)
         end,
     ClusterASnkPL = lists:foldl(FoldToPeerConfig, "", ClusterB),
     ClusterBSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA),
@@ -102,8 +121,8 @@ confirm() ->
     lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
                     ClusterA ++ ClusterB),
     
-    setup_snkreplworkers(ClusterA, ClusterB, ttaaefs_b),
-    setup_snkreplworkers(ClusterB, ClusterA, ttaaefs_a),
+    setup_snkreplworkers(Protocol, ClusterA, ClusterB, ttaaefs_b),
+    setup_snkreplworkers(Protocol, ClusterB, ClusterA, ttaaefs_a),
     
     lager:info("Creating bucket types"),
     rt:create_and_activate_bucket_type(hd(ClusterA),
@@ -113,10 +132,10 @@ confirm() ->
                                         <<"_maps">>, 
                                         [{datatype, map}, {allow_mult, true}]),
 
-    lager:info("Ready for test."),
-    test_rtqrepl_between_clusters(ClusterA, ClusterB).
+    lager:info("Ready for test.").
 
-test_rtqrepl_between_clusters(ClusterA, ClusterB) ->
+test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
+    lager:info("Replication test using protocol ~w", [Protocol]),
 
     NodeA = hd(ClusterA),
     NodeB = hd(ClusterB),
@@ -315,10 +334,11 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB) ->
                     ExpVal4),
     
     lager:info("Testing of full-sync - return in-sync"),
-    {http, {IPB, PortB}} = lists:keyfind(http, 1, rt:connection_info(NodeB)),
+    {Protocol, {IPB, PortB}} =
+        lists:keyfind(Protocol, 1, rt:connection_info(NodeB)),
     ModRef = riak_kv_ttaaefs_manager,
     ok = rpc:call(NodeA, ModRef, set_sink,
-                    [http, IPB, PortB]),
+                    [Protocol, IPB, PortB]),
     ok = rpc:call(NodeA, ModRef,
                     set_bucketsync, [[{<<"_maps">>, <<"test_map">>}]]),
     ok = rpc:call(NodeA, ModRef,
@@ -404,12 +424,12 @@ check_value(Client, CMod, Bucket, Key, DTMod, Expected, Options) ->
                         end
                     end).
 
-setup_snkreplworkers(SrcCluster, SnkNodes, SnkName) ->
+setup_snkreplworkers(Protocol, SrcCluster, SnkNodes, SnkName) ->
     PeerMap =
         fun(Node, Acc) ->
-            {http, {IP, Port}} =
-                lists:keyfind(http, 1, rt:connection_info(Node)),
-            {{Acc, 0, IP, Port, http}, Acc + 1}
+            {Protocol, {IP, Port}} =
+                lists:keyfind(Protocol, 1, rt:connection_info(Node)),
+            {{Acc, 0, IP, Port, Protocol}, Acc + 1}
         end,
     {PeerList, _} = lists:mapfoldl(PeerMap, 1, SrcCluster),
     SetupSnkFun = 

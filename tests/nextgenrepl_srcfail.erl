@@ -7,7 +7,7 @@
 -module(nextgenrepl_srcfail).
 -behavior(riak_test).
 -export([confirm/0]).
--export([fullsync_check/3]).
+-export([fullsync_check/4]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
@@ -93,14 +93,16 @@ srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
     NodeB = hd(ClusterB),
 
     lager:info("Test empty clusters don't show any differences"),
-    {http, {IPA, PortA}} = lists:keyfind(http, 1, rt:connection_info(NodeA)),
-    {http, {IPB, PortB}} = lists:keyfind(http, 1, rt:connection_info(NodeB)),
+    {Protocol, {IPA, PortA}} =
+        lists:keyfind(Protocol, 1, rt:connection_info(NodeA)),
+    {Protocol, {IPB, PortB}} =
+        lists:keyfind(Protocol, 1, rt:connection_info(NodeB)),
     
     RefA = {NodeA, IPA, PortA, ?A_NVAL},
     RefB = {NodeB, IPB, PortB, ?B_NVAL},
 
-    {root_compare, 0} = fullsync_check(RefA, RefB, no_repair),
-    {root_compare, 0} = fullsync_check(RefB, RefA, no_repair),
+    {root_compare, 0} = fullsync_check(RefA, RefB, no_repair, Protocol),
+    {root_compare, 0} = fullsync_check(RefB, RefA, no_repair, Protocol),
 
     ok = setup_snkreplworkers(ClusterA, ClusterB, cluster_b, Protocol),
 
@@ -109,14 +111,12 @@ srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
     FunMod:write_to_cluster(NodeA, 1, 5000, ?TEST_BUCKET, true, ?VAL_INIT),
     FunMod:read_from_cluster(NodeB, 1, 5000, 5000, ?TEST_BUCKET, ?VAL_INIT),
 
-    SrcHTTPCA = rhc:create(IPA, PortA, "riak", []),
-    _SrcHTTPCB = rhc:create(IPB, PortB, "riak", []),
-
     {ok, KC1} =
-        rhc:aae_range_replkeys(SrcHTTPCA, ?TEST_BUCKET, all, all, cluster_b),
+        range_repl(Protocol, IPA, PortA, ?TEST_BUCKET, all, all, cluster_b),
     ?assertEqual(5000, KC1),
     {root_compare, 0} =
-        wait_for_outcome(?MODULE, fullsync_check, [RefA, RefB, no_repair],
+        wait_for_outcome(?MODULE, fullsync_check,
+                            [RefA, RefB, no_repair, Protocol],
                             {root_compare, 0}, ?WAIT_LOOPS),
     FunMod:read_from_cluster(NodeB, 1, 5000, 0, ?TEST_BUCKET, ?VAL_INIT),
 
@@ -125,10 +125,9 @@ srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
 
     StrK = FunMod:key(3001),
     EndK = FunMod:key(3900),
-    {ok, KC2} =
-        rhc:aae_range_replkeys(SrcHTTPCA,
-                                ?TEST_BUCKET, {StrK, EndK}, all,
-                                cluster_b),
+    {ok, KC2} = range_repl(Protocol, IPA, PortA,
+                            ?TEST_BUCKET, {StrK, EndK}, all,
+                            cluster_b),
     ?assertEqual(900, KC2),
     FunMod:read_from_cluster(NodeB, 1, 3000, 3000, ?TEST_BUCKET, ?VAL_MOD),
     FunMod:read_from_cluster(NodeB, 3901, 5000, 1100, ?TEST_BUCKET, ?VAL_MOD),
@@ -144,12 +143,11 @@ srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
     FailNode1 = lists:nth(2, ClusterA),
     FailNode2 = lists:nth(3, ClusterA),
     rt:stop_and_wait(FailNode1),
-    {ok, KC3} =
-        rhc:aae_range_replkeys(SrcHTTPCA,
-                                ?TEST_BUCKET,
-                                {FunMod:key(3901), FunMod:key(5000)},
-                                all,
-                                cluster_b),
+    {ok, KC3} = range_repl(Protocol, IPA, PortA,
+                            ?TEST_BUCKET,
+                            {FunMod:key(3901), FunMod:key(5000)},
+                            all,
+                            cluster_b),
     ?assertEqual(1100, KC3),
     0 = 
         wait_for_outcome(FunMod,
@@ -159,11 +157,7 @@ srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
                             0,
                             ?WAIT_LOOPS),
     {ok, KC4} =
-        rhc:aae_range_replkeys(SrcHTTPCA,
-                                ?TEST_BUCKET,
-                                all,
-                                all,
-                                cluster_b),
+        range_repl(Protocol, IPA, PortA, ?TEST_BUCKET, all, all, cluster_b),
     ?assertEqual(5000, KC4),
     0 = 
         wait_for_outcome(FunMod,
@@ -174,14 +168,14 @@ srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
                             ?WAIT_LOOPS),
 
     lager:info("Validate everything is sync'd"),
-    {root_compare, 0} = fullsync_check(RefA, RefB, no_repair),
-    {root_compare, 0} = fullsync_check(RefB, RefA, no_repair),
+    {root_compare, 0} = fullsync_check(RefA, RefB, no_repair, Protocol),
+    {root_compare, 0} = fullsync_check(RefB, RefA, no_repair, Protocol),
 
     lager:info("Restart and check everything is in sync"),
     rt:start_and_wait(FailNode1),
     rt:wait_for_service(FailNode1, riak_kv),
-    {root_compare, 0} = fullsync_check(RefA, RefB, no_repair),
-    {root_compare, 0} = fullsync_check(RefB, RefA, no_repair),
+    {root_compare, 0} = fullsync_check(RefA, RefB, no_repair, Protocol),
+    {root_compare, 0} = fullsync_check(RefB, RefA, no_repair, Protocol),
 
 
     lager:info("Load additional keys - to replicate via AAE after stop"),
@@ -189,7 +183,8 @@ srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
     FunMod:read_from_cluster(NodeB, 5001, 6000, 1000, ?TEST_BUCKET, ?VAL_INIT),
     rt:stop_and_wait(FailNode1),
     {root_compare, 0} =
-        wait_for_outcome(?MODULE, fullsync_check, [RefA, RefB, cluster_b],
+        wait_for_outcome(?MODULE, fullsync_check,
+                            [RefA, RefB, cluster_b, Protocol],
                             {root_compare, 0}, ?WAIT_LOOPS),
     rt:start_and_wait(FailNode1),
     rt:wait_for_service(FailNode1, riak_kv),
@@ -199,7 +194,8 @@ srcfail_test(ClusterA, ClusterB, Protocol, FunMod) ->
     FunMod:read_from_cluster(NodeB, 6001, 7000, 1000, ?TEST_BUCKET, ?VAL_INIT),
     rt:brutal_kill(FailNode2),
     {root_compare, 0} =
-        wait_for_outcome(?MODULE, fullsync_check, [RefA, RefB, cluster_b],
+        wait_for_outcome(?MODULE, fullsync_check,
+                            [RefA, RefB, cluster_b, Protocol],
                             {root_compare, 0}, ?WAIT_LOOPS),
 
     lager:info("Success in testing failures"),
@@ -257,11 +253,18 @@ wait_for_outcome(Module, Func, Args, ExpOutcome, LoopCount, MaxLoops) ->
 
 fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
                 {_SinkNode, SinkIP, SinkPort, SinkNVal},
-                QueueName) ->
+                QueueName,
+                Protocol) ->
     ModRef = riak_kv_ttaaefs_manager,
     _ = rpc:call(SrcNode, ModRef, pause, []),
     ok = rpc:call(SrcNode, ModRef, set_queuename, [QueueName]),
-    ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
+    ok = rpc:call(SrcNode, ModRef, set_sink, [Protocol, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
     rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]).
 
+range_repl(http, IP, Port, B, KR, MR, QN) ->
+    RHC = rhc:create(IP, Port, "riak", []),
+    rhc:aae_range_replkeys(RHC, B, KR, MR, QN);
+range_repl(pb, IP, Port, B, KR, MR, QN) ->
+    {ok, Pid} = riakc_pb_socket:start(IP, Port),
+    riakc_pb_socket:aae_range_replkeys(Pid, B, KR, MR, QN).
