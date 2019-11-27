@@ -56,7 +56,8 @@
           ]}
         ]).
 
--define(TTAAE_CONFIG(PeerIP, PeerPort, LNval, RNval,
+-define(TTAAE_CONFIG(Protocol, PeerIP, PeerPort,
+                        LNval, RNval,
                         RemoteClusterName,
                         LocalClusterName,
                         PeerList,
@@ -68,7 +69,7 @@
             {ttaaefs_remotenval, RNval},
             {ttaaefs_peerip, PeerIP},
             {ttaaefs_peerport, PeerPort},
-            {ttaaefs_peerprotocol, http},
+            {ttaaefs_peerprotocol, Protocol},
             {ttaaefs_allcheck, 1500}, % check about once every 60s
             {ttaaefs_nocheck, 0},
             {ttaaefs_queuename, RemoteClusterName},
@@ -83,10 +84,12 @@
 ]).
 
 
-ttaae_config(AAEPeer, RemoteClusterName, LocalClusterName,
+ttaae_config(Protocol, AAEPeer, RemoteClusterName, LocalClusterName,
                 PeerList, LNval, RNval) ->
-    {http, {IP, Port}} = lists:keyfind(http, 1, rt:connection_info(AAEPeer)),
-    ?TTAAE_CONFIG(IP, Port, LNval, RNval,
+    {Protocol, {IP, Port}} =
+        lists:keyfind(Protocol, 1, rt:connection_info(AAEPeer)),
+    ?TTAAE_CONFIG(Protocol, IP, Port,
+                    LNval, RNval,
                     RemoteClusterName,
                     LocalClusterName,
                     PeerList,
@@ -94,11 +97,32 @@ ttaae_config(AAEPeer, RemoteClusterName, LocalClusterName,
 
 
 confirm() ->
-    [ClusterA, ClusterB, ClusterC] =
+    [ClusterAH, ClusterBH, ClusterCH] =
         rt:deploy_clusters([
             {2, ?CONFIG(?A_RING, ?A_NVAL)},
             {2, ?CONFIG(?B_RING, ?B_NVAL)},
             {2, ?CONFIG(?C_RING, ?C_NVAL)}]),
+
+    lager:info("Test run using HTTP protocol"),
+    test_repl(http, [ClusterAH, ClusterBH, ClusterCH]),
+    
+    rt:clean_cluster(ClusterAH),
+    rt:clean_cluster(ClusterBH),
+    rt:clean_cluster(ClusterCH),
+
+    [ClusterAP, ClusterBP, ClusterCP] =
+        rt:deploy_clusters([
+            {2, ?CONFIG(?A_RING, ?A_NVAL)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL)}]),
+    
+    lager:info("Test run using PB protocol"),
+    test_repl(pb, [ClusterAP, ClusterBP, ClusterCP]),
+    
+    pass.
+
+
+test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
 
     [NodeA1, NodeA2] = ClusterA,
     [NodeB1, NodeB2] = ClusterB,
@@ -115,17 +139,17 @@ confirm() ->
     ClusterBSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA ++ ClusterC),
     ClusterCSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA ++ ClusterB),
 
-    A1Cfg = ttaae_config(NodeB1, cluster_b, cluster_a, ClusterASnkPL,
+    A1Cfg = ttaae_config(Protocol, NodeB1, cluster_b, cluster_a, ClusterASnkPL,
                             ?A_NVAL, ?B_NVAL),
-    A2Cfg = ttaae_config(NodeC1, cluster_c, cluster_a, ClusterASnkPL,
+    A2Cfg = ttaae_config(Protocol, NodeC1, cluster_c, cluster_a, ClusterASnkPL,
                             ?A_NVAL, ?C_NVAL),
-    B1Cfg = ttaae_config(NodeA1, cluster_a, cluster_b, ClusterBSnkPL,
+    B1Cfg = ttaae_config(Protocol, NodeA1, cluster_a, cluster_b, ClusterBSnkPL,
                             ?B_NVAL, ?A_NVAL),
-    B2Cfg = ttaae_config(NodeC1, cluster_c, cluster_b, ClusterBSnkPL,
+    B2Cfg = ttaae_config(Protocol, NodeC1, cluster_c, cluster_b, ClusterBSnkPL,
                             ?B_NVAL, ?C_NVAL),
-    C1Cfg = ttaae_config(NodeB2, cluster_b, cluster_c, ClusterCSnkPL,
+    C1Cfg = ttaae_config(Protocol, NodeB2, cluster_b, cluster_c, ClusterCSnkPL,
                             ?C_NVAL, ?B_NVAL),
-    C2Cfg = ttaae_config(NodeA2, cluster_a, cluster_c, ClusterCSnkPL,
+    C2Cfg = ttaae_config(Protocol, NodeA2, cluster_a, cluster_c, ClusterCSnkPL,
                             ?C_NVAL, ?A_NVAL),
     rt:set_advanced_conf(NodeA1, A1Cfg),
     rt:set_advanced_conf(NodeA2, A2Cfg),
