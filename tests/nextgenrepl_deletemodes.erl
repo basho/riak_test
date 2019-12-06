@@ -19,7 +19,6 @@
 -define(C_NVAL, 2).
 
 -define(KEY_COUNT, 10000).
--define(REPL_SLEEP, 10000).
 -define(LOOP_COUNT, 10).
 
 -define(SNK_WORKERS, 4).
@@ -385,13 +384,21 @@ read_from_cluster(Node, Start, End, CommonValBin, Errors) ->
     end.
 
 length_find_tombs(Node, KR, MR) ->
-    {ok, L} = find_tombs(Node, KR, MR),
-    length(L).
+    {ok, L} = find_tombs(Node, KR, MR, return_count),
+    L.
 
 find_tombs(Node, KR, MR) ->
+    find_tombs(Node, KR, MR, return_keys).
+
+find_tombs(Node, KR, MR, ResultType) ->
     lager:info("Finding tombstones from node ~p.", [Node]),
     {ok, C} = riak:client_connect(Node),
-    riak_client:aae_fold({find_tombs, ?TEST_BUCKET, KR, all, MR}, C).
+    case ResultType of
+        return_keys ->
+            riak_client:aae_fold({find_tombs, ?TEST_BUCKET, KR, all, MR}, C);
+        return_count ->
+            riak_client:aae_fold({reap_tombs, ?TEST_BUCKET, KR, all, MR, count}, C)
+    end.
 
 
 wait_for_outcome(Module, Func, Args, ExpOutcome, Loops) ->
@@ -413,7 +420,15 @@ wait_for_outcome(Module, Func, Args, ExpOutcome, LoopCount, MaxLoops) ->
 write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2) ->
     lager:info("Write ~w objects into A and read from B and C", [?KEY_COUNT]),
     write_to_cluster(NodeA1, 1, ?KEY_COUNT, new_obj),
-    timer:sleep(max(?DELETE_DELAY, ?REPL_SLEEP)),
+    lager:info("Waiting to read sample"),
+    0 = 
+        wait_for_outcome(?MODULE,
+                            read_from_cluster,
+                            [NodeB1, ?KEY_COUNT - 31, ?KEY_COUNT,
+                                ?COMMMON_VAL_INIT, undefined],
+                            0,
+                            ?LOOP_COUNT),
+    lager:info("Waiting to read all"),
     0 = 
         wait_for_outcome(?MODULE,
                             read_from_cluster,
@@ -429,7 +444,15 @@ write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2) ->
     
     lager:info("Deleting ~w objects from B and read not_found from A and C", [?KEY_COUNT]),
     delete_from_cluster(NodeB2, 1, ?KEY_COUNT),
-    timer:sleep(max(?DELETE_DELAY, ?REPL_SLEEP)),
+    lager:info("Waiting for missing sample"),
+    32 =
+        wait_for_outcome(?MODULE,
+                        read_from_cluster,
+                        [NodeA2, ?KEY_COUNT - 31, ?KEY_COUNT,
+                            ?COMMMON_VAL_INIT, undefined],
+                        32,
+                        ?LOOP_COUNT),
+    lager:info("Waiting for all missing"),
     ?KEY_COUNT =
         wait_for_outcome(?MODULE,
                         read_from_cluster,
@@ -438,7 +461,8 @@ write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2) ->
                         ?LOOP_COUNT),
     ?KEY_COUNT =
         wait_for_outcome(?MODULE,
-                            read_from_cluster,
-                            [NodeC2, 1, ?KEY_COUNT, ?COMMMON_VAL_INIT, undefined],
-                            ?KEY_COUNT,
-                            ?LOOP_COUNT).
+                        read_from_cluster,
+                        [NodeC2, 1, ?KEY_COUNT, ?COMMMON_VAL_INIT, undefined],
+                        ?KEY_COUNT,
+                        ?LOOP_COUNT),
+    lager:info("Write and delete cylcle confirmed").
