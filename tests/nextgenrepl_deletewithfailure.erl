@@ -369,31 +369,27 @@ test_repl(Protocol, [ClusterA, ClusterB]) ->
     rt:start_and_wait(NodeA5),
     lager:info("Node 5 has re-started in Cluster A"),
 
-    timer:sleep(10000),
-    {ok, Phase3TombCountS1} =
-        wait_until_stable(?MODULE,
+    {ok, Phase1KeyCount} =
+        wait_for_outcome(?MODULE,
                             aae_fold,
                             [NodeA1,
                                 {reap_tombs,
                                     ?TEST_BUCKET, all, all, all,
                                     count}],
-                            undefined,
+                            {ok, Phase1KeyCount},
                             ?LOOP_COUNT),
-    {ok, Phase3KeyCountS1} =
-        wait_until_stable(?MODULE,
+        %% The keys deleted since phase 1 will now be tombstones
+    {ok, 0} =
+        wait_for_outcome(?MODULE,
                             aae_fold,
                             [NodeA1,
                                 {erase_keys,
                                     ?TEST_BUCKET, all, all, all,
                                     count}],
-                            undefined,
+                            {ok, 0},
                             ?LOOP_COUNT),
-    lager:info("After node restart - tombs ~w keys ~w",
-                [Phase3TombCountS1, Phase3KeyCountS1]),
-    ?assertMatch(0, Phase3KeyCountS1),
         %% All deletes eventually happen
-    ?assertMatch(Phase1KeyCount, Phase3TombCountS1),
-        %% The keys deleted since phase 1 will now be tombstones
+    
     {ok, KB3} = aae_fold(NodeB1,
                         {erase_keys,
                             ?TEST_BUCKET, all,
