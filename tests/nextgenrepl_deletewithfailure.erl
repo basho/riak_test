@@ -73,18 +73,30 @@ repl_config(RemoteCluster, LocalClusterName, PeerList) ->
 
 
 confirm() ->
-    [ClusterA, ClusterB] =
+    [ClusterAP, ClusterBP] =
         rt:deploy_clusters([
             {5, ?CONFIG(?A_RING, ?A_NVAL, keep)},
             {1, ?CONFIG(?B_RING, ?B_NVAL, immediate)}]),
 
-    lager:info("Test run using PB protocol an a mix of delete modes"),
-    test_repl(pb, [ClusterA, ClusterB]),
+    
+    test_repl(pb, [ClusterAP, ClusterBP]),
+
+    rt:clean_cluster(ClusterAP),
+    rt:clean_cluster(ClusterBP),
+
+    [ClusterAH, ClusterBH] =
+        rt:deploy_clusters([
+            {5, ?CONFIG(?A_RING, ?A_NVAL, keep)},
+            {1, ?CONFIG(?B_RING, ?B_NVAL, immediate)}]),
+
+    test_repl(http, [ClusterAH, ClusterBH]),
     
     pass.
 
 
 test_repl(Protocol, [ClusterA, ClusterB]) ->
+    lager:info("Test run using ~w protocol an a mix of delete modes",
+                [Protocol]),
 
     [NodeA1, NodeA2, NodeA3, NodeA4, NodeA5] = ClusterA,
     [NodeB1] = ClusterB,
@@ -447,7 +459,10 @@ aae_fold(Node, Protocol, Query) ->
         case Protocol of
             pb ->
                 Pid = rt:pbc(Node),
-                {Pid, riakc_pb_socket}
+                {Pid, riakc_pb_socket};
+            http ->
+                Rhc = rt:httpc(Node),
+                {Rhc, rhc}
         end,
     case Query of
         {erase_keys, B, KR, SF, MR, CM} ->
