@@ -25,13 +25,13 @@
 % I would hope this would come from the testing framework some day
 % to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 8).
--define(CFG_NOREBUILD,
+-define(CFG_NOREBUILD(ParallelStore),
         [{riak_kv,
           [
            % Speedy AAE configuration
            {anti_entropy, {off, []}},
            {tictacaae_active, active},
-           {tictacaae_parallelstore, leveled_ko},
+           {tictacaae_parallelstore, ParallelStore},
                 % if backend not leveled will use parallel key-ordered
                 % store
            {tictacaae_rebuildwait, 4},
@@ -53,17 +53,25 @@
 
 confirm() ->
 
-    lager:info("Testing AAE bucket list"),
-    C = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
-    ClientP = rt:pbc(hd(C)),
-    ClientH = rt:httpc(hd(C)),
-    
-    ok = verify_list_buckets({riakc_pb_socket, ClientP}, {rhc, ClientH}, C),
+    lager:info("Testing AAE bucket list - key-ordered parallel store"),
+    Cko = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(leveled_ko)),
+    ok = verify_list_buckets(Cko, ?NUM_KEYS),
+
+    rt:clean_cluster(Cko),
+
+    lager:info("Testing AAE bucket list - segment-ordered parallel store"),
+    lager:info("This is a repeat test if backend is leveled"),
+    Cso = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(leveled_so)),
+    lager:info("Testing with less keys as segment-ordered"),
+    ok = verify_list_buckets(Cso, ?NUM_KEYS div 10),
+
 
     pass.
 
-verify_list_buckets({ModP, ClientP}, {ModH, ClientH}, Nodes) ->
+verify_list_buckets(Nodes, KeyCount) ->
     [Node|_Rest] = Nodes,
+    {ModP, ClientP} = {riakc_pb_socket, rt:pbc(Node)},
+    {ModH, ClientH} = {rhc, rt:httpc(Node)},
     rt:create_and_activate_bucket_type(Node,
                                        <<"nval4">>,
                                        [{n_val, 4},
@@ -73,11 +81,11 @@ verify_list_buckets({ModP, ClientP}, {ModH, ClientH}, Nodes) ->
                                        [{n_val, 2},
                                             {allow_mult, false}]),
 
-    KVL1 = test_data(1, ?NUM_KEYS, <<"TestDataSet1">>),
-    KVL2 = test_data(1, ?NUM_KEYS, <<"TestDataSet2">>),
-    KVL3 = test_data(1, ?NUM_KEYS, <<"TestDataSet3">>),
-    KVL4 = test_data(1, ?NUM_KEYS, <<"TestDataSet4">>),
-    KVL5 = test_data(1, ?NUM_KEYS, <<"TestDataSet5">>),
+    KVL1 = test_data(1, KeyCount, <<"TestDataSet1">>),
+    KVL2 = test_data(1, KeyCount, <<"TestDataSet2">>),
+    KVL3 = test_data(1, KeyCount, <<"TestDataSet3">>),
+    KVL4 = test_data(1, KeyCount, <<"TestDataSet4">>),
+    KVL5 = test_data(1, KeyCount, <<"TestDataSet5">>),
 
     ok = write_data(<<"Bucket1">>, Node, KVL1, []),
     ok = write_data(<<"Bucket2">>, Node, KVL2, []),
