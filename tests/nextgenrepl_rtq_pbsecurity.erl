@@ -5,7 +5,7 @@
 -module(nextgenrepl_rtq_pbsecurity).
 -behavior(riak_test).
 -export([confirm/0]).
--export([fullsync_check/4]).
+-export([fullsync_check/4, simple_testsync/4]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
@@ -24,7 +24,7 @@
     % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
--define(CONFIG(RingSize, NVal, ReplCache, CertDir), [
+-define(CONFIG(RingSize, NVal, ReplCache, CertDir, User), [
         {riak_core,
             [
             {ring_creation_size, RingSize},
@@ -58,12 +58,12 @@
             {delete_mode, keep},
             {enable_repl_cache, ReplCache},
             {repl_cacert_filename,
-                filename:join([CertDir, "site4.basho.com/cacerts.pem"])},
+                filename:join([CertDir, User ++ "/cacerts.pem"])},
             {repl_cert_filename,
-                filename:join([CertDir, "site4.basho.com/cert.pem"])},
+                filename:join([CertDir, User ++ "/cert.pem"])},
             {repl_key_filename,
-                filename:join([CertDir, "site4.basho.com/key.pem"])},
-            {repl_username, "site4.basho.com"}
+                filename:join([CertDir, User ++ "/key.pem"])},
+            {repl_username, User}
           ]}
         ]).
 
@@ -85,11 +85,60 @@ confirm() ->
                         {modules, [mod_get]}],
                     stand_alone),
 
+    {ClusterA, ClusterB, ClusterC} = setup_cluster(CertDir, "site4.basho.com"),
+    lager:info("Creating a certificate-authenticated user"),
+    change_user(add_user, "site4.basho.com", ClusterA, ClusterB, ClusterC),
+    add_source("site4.basho.com", ClusterA, ClusterB, ClusterC),
+    change_user(add_user, "site5.basho.com", ClusterA, ClusterB, ClusterC),
+    add_source("site5.basho.com", ClusterA, ClusterB, ClusterC),
+
+    lager:info("Ready for test."),
+    test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir),
+    
+    lager:info("site5.basho.com has a revoked certificate - sync failure"),
+    {error, timeout} =
+        simple_testsync("site5.basho.com", CertDir, ClusterA, ClusterB),
+
+    lager:info("Remove site4.basho.com as a user - sync failure"),
+    change_user(del_user, "site4.basho.com", ClusterA, ClusterB, ClusterC),
+    {error, timeout} =
+        simple_testsync("site4.basho.com", CertDir, ClusterA, ClusterB),
+    
+    lager:info("Reimplement site4.basho.com as user - sync works"),
+    change_user(add_user, "site4.basho.com", ClusterA, ClusterB, ClusterC),
+    lager:info("Source is removed when user removed so re-add"),
+    add_source("site4.basho.com", ClusterA, ClusterB, ClusterC),
+    {root_compare, 0} =
+        wait_for_outcome(?MODULE,
+                            simple_testsync,
+                            ["site4.basho.com", CertDir, ClusterA, ClusterB],
+                            {root_compare, 0},
+                            ?WAIT_LOOPS),
+    
+    lager:info("Rebuild cluster with site5 for real-time repl"),
+    rt:clean_cluster(ClusterA),
+    rt:clean_cluster(ClusterB),
+    rt:clean_cluster(ClusterC),
+    {ClusterA, ClusterB, ClusterC} = setup_cluster(CertDir, "site5.basho.com"),
+    lager:info("Creating a certificate-authenticated user"),
+    change_user(add_user, "site4.basho.com", ClusterA, ClusterB, ClusterC),
+    add_source("site4.basho.com", ClusterA, ClusterB, ClusterC),
+    change_user(add_user, "site5.basho.com", ClusterA, ClusterB, ClusterC),
+    add_source("site5.basho.com", ClusterA, ClusterB, ClusterC),
+
+    lager:info("Ready for test."),
+    true = test_basic_repl_failure(hd(ClusterA), hd(ClusterB), hd(ClusterC)),
+
+    pass.
+
+
+setup_cluster(CertDir, User) ->
     [ClusterA, ClusterB, ClusterC] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, true, CertDir)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, true, CertDir)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, false, CertDir)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, true, CertDir, User)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, true, CertDir, User)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, false, CertDir, User)}
+        ]),
     rt:join_cluster(ClusterA),
     rt:join_cluster(ClusterB),
     rt:join_cluster(ClusterC),
@@ -103,39 +152,29 @@ confirm() ->
     ok = rpc:call(hd(ClusterA), riak_core_console, security_enable, [[]]),
     ok = rpc:call(hd(ClusterB), riak_core_console, security_enable, [[]]),
     ok = rpc:call(hd(ClusterC), riak_core_console, security_enable, [[]]),
-    lager:info("Creating a certificate-authenticated user"),
-    ok = rpc:call(hd(ClusterA),
-                    riak_core_console,
-                    add_user,
-                    [["site4.basho.com"]]),
-    ok = rpc:call(hd(ClusterA),
-                    riak_core_console,
-                    add_source,
-                    [["site4.basho.com", "127.0.0.1/32", "certificate"]]),
-    ok = rpc:call(hd(ClusterB),
-                    riak_core_console,
-                    add_user,
-                    [["site4.basho.com"]]),
-    ok = rpc:call(hd(ClusterB),
-                    riak_core_console,
-                    add_source,
-                    [["site4.basho.com", "127.0.0.1/32", "certificate"]]),
-    ok = rpc:call(hd(ClusterC),
-                    riak_core_console,
-                    add_user,
-                    [["site4.basho.com"]]),
-    ok = rpc:call(hd(ClusterC),
-                    riak_core_console,
-                    add_source,
-                    [["site4.basho.com", "127.0.0.1/32", "certificate"]]),
+    {ClusterA, ClusterB, ClusterC}.
 
-    lager:info("Ready for test."),
-    test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir).
-
+simple_testsync(User, CertDir, ClusterA, ClusterB) ->
+    SSLCredentials =
+        {filename:join([CertDir, User ++ "/cacerts.pem"]),
+            filename:join([CertDir, User ++ "/cert.pem"]),
+            filename:join([CertDir, User ++ "/key.pem"]),
+            User},
+    NodeA = hd(ClusterA),
+    NodeB = hd(ClusterB),
+    {pb, {IPA, PortA}} = lists:keyfind(pb, 1, rt:connection_info(NodeA)),
+    {pb, {IPB, PortB}} = lists:keyfind(pb, 1, rt:connection_info(NodeB)),
+    fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
+                            {NodeB, IPB, PortB, ?B_NVAL},
+                            cluster_a,
+                            SSLCredentials).
 
 test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
-
-    lager:info("Checking certificate authentication"),
+    SSLCredentials =
+        {filename:join([CertDir, "site4.basho.com/cacerts.pem"]),
+            filename:join([CertDir, "site4.basho.com/cert.pem"]),
+            filename:join([CertDir, "site4.basho.com/key.pem"]),
+            "site4.basho.com"},
     NodeA = hd(ClusterA),
     NodeB = hd(ClusterB),
     NodeC = hd(ClusterC),
@@ -173,7 +212,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
     true = check_all_insync({NodeA, IPA, PortA},
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC},
-                            CertDir),
+                            SSLCredentials),
 
     lager:info("Test 1000 key difference and resolve"),
     % Write keys to cluster A, verify B and C do have them.
@@ -184,7 +223,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
     true = check_all_insync({NodeA, IPA, PortA},
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC},
-                            CertDir),
+                            SSLCredentials),
     
     lager:info("Test replicating tombstones"),
     delete_from_cluster(NodeA, 901, 1000),
@@ -195,7 +234,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
     true = check_all_insync({NodeA, IPA, PortA},
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC},
-                            CertDir),
+                            SSLCredentials),
 
     lager:info("Test replicating modified objects"),
     write_to_cluster(NodeB, 1, 100, ?COMMMON_VAL_MOD),
@@ -209,7 +248,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
     true = check_all_insync({NodeA, IPA, PortA},
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC},
-                            CertDir),
+                            SSLCredentials),
     
     lager:info("Suspend a queue at source and confirm replication stops ..."),
     lager:info("... but continues from unsuspended queues"),
@@ -234,14 +273,14 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
         fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
                         {NodeA, IPA, PortA, ?A_NVAL},
                         cluster_a,
-                        CertDir),
+                        SSLCredentials),
     timer:sleep(?REPL_SLEEP),
     read_from_cluster(NodeA, 1001, 1100, ?COMMMON_VAL_INIT, 0, true),
     read_from_cluster(NodeA, 1101, 2000, ?COMMMON_VAL_MOD, 0),
     true = check_all_insync({NodeA, IPA, PortA},
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC},
-                            CertDir),
+                            SSLCredentials),
 
     lager:info("Suspend working on a queue from sink and confirm ..."),
     lager:info("... replication stops but continues from unsuspended sinks"),
@@ -271,7 +310,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
                             [{NodeA, IPA, PortA, ?A_NVAL},
                                 {NodeB, IPB, PortB, ?B_NVAL}, 
                                 no_repair,
-                                CertDir],
+                                SSLCredentials],
                             {root_compare, 0},
                             ?WAIT_LOOPS),
 
@@ -288,7 +327,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
                             [{NodeA, IPA, PortA, ?A_NVAL},
                                 {NodeB, IPB, PortB, ?B_NVAL}, 
                                 no_repair,
-                                CertDir],
+                                SSLCredentials],
                             {root_compare, 0},
                             ?WAIT_LOOPS),
     
@@ -302,7 +341,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
                             [{NodeA, IPA, PortA, ?A_NVAL},
                                 {NodeB, IPB, PortB, ?B_NVAL}, 
                                 no_repair,
-                                CertDir],
+                                SSLCredentials],
                             {root_compare, 0},
                             ?WAIT_LOOPS),
 
@@ -324,7 +363,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
                             [{NodeA, IPA, PortA, ?A_NVAL},
                                 {NodeB, IPB, PortB, ?B_NVAL}, 
                                 no_repair,
-                                CertDir],
+                                SSLCredentials],
                             {root_compare, 0},
                             ?WAIT_LOOPS),
 
@@ -340,12 +379,14 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
                             [{NodeA, IPA, PortA, ?A_NVAL},
                                 {NodeC, IPC, PortC, ?C_NVAL}, 
                                 no_repair,
-                                CertDir],
+                                SSLCredentials],
                             {root_compare, 0},
                             ?WAIT_LOOPS),
 
     read_from_cluster(NodeB, 8001, 10000, ?COMMMON_VAL_INIT, 0),
     read_from_cluster(NodeA, 8001, 10000, ?COMMMON_VAL_INIT, 0),
+
+    rt:start_and_wait(NodeA0),
 
     pass.
 
@@ -365,22 +406,22 @@ action_on_snkqueue([SnkNode|Rest], SnkClusterName, Action) ->
 check_all_insync({NodeA, IPA, PortA},
                     {NodeB, IPB, PortB},
                     {NodeC, IPC, PortC},
-                    CertDir) ->
+                    SSLCredentials) ->
     {root_compare, 0}
         = fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
                             {NodeB, IPB, PortB, ?B_NVAL},
                             cluster_a,
-                            CertDir),
+                            SSLCredentials),
     {root_compare, 0}
         = fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
                             {NodeC, IPC, PortC, ?C_NVAL},
                             cluster_c,
-                            CertDir),
+                            SSLCredentials),
     {root_compare, 0}
         = fullsync_check({NodeC, IPC, PortC, ?C_NVAL},
                             {NodeA, IPA, PortA, ?A_NVAL},
                             cluster_a,
-                            CertDir),
+                            SSLCredentials),
     true.
 
 setup_srcreplqueues([], _SinkClusters, _Filter) ->
@@ -418,13 +459,8 @@ setup_snkreplworkers(SrcCluster, SnkNodes, SnkName) ->
 fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
                 {_SinkNode, SinkIP, SinkPort, SinkNVal},
                 SnkClusterName,
-                CertDir) ->
+                SSLCredentials) ->
     ModRef = riak_kv_ttaaefs_manager,
-    SSLCredentials =
-        {filename:join([CertDir, "site4.basho.com/cacerts.pem"]),
-            filename:join([CertDir, "site4.basho.com/cert.pem"]),
-            filename:join([CertDir, "site4.basho.com/key.pem"]),
-            "site4.basho.com"},
     _ = rpc:call(SrcNode, ModRef, pause, []),
     ok = rpc:call(SrcNode, ModRef, set_sink, [pb, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_queuename, [SnkClusterName]),
@@ -558,3 +594,39 @@ wait_for_outcome(Module, Func, Args, ExpOutcome, LoopCount, MaxLoops) ->
             wait_for_outcome(Module, Func, Args, ExpOutcome,
                                 LoopCount + 1, MaxLoops)
     end.
+
+change_user(Action, User, ClusterA, ClusterB, ClusterC) ->
+    ok = rpc:call(hd(ClusterA),
+                    riak_core_console,
+                    Action,
+                    [[User]]),
+    ok = rpc:call(hd(ClusterB),
+                    riak_core_console,
+                    Action,
+                    [[User]]),
+    ok = rpc:call(hd(ClusterC),
+                    riak_core_console,
+                    Action,
+                    [[User]]).
+
+add_source(User, ClusterA, ClusterB, ClusterC) ->
+    ok = rpc:call(hd(ClusterA),
+                    riak_core_console,
+                    add_source,
+                    [[User, "127.0.0.1/32", "certificate"]]),
+    ok = rpc:call(hd(ClusterB),
+                    riak_core_console,
+                    add_source,
+                    [[User, "127.0.0.1/32", "certificate"]]),
+    ok = rpc:call(hd(ClusterC),
+                    riak_core_console,
+                    add_source,
+                    [[User, "127.0.0.1/32", "certificate"]]).
+
+test_basic_repl_failure(NodeA, NodeB, NodeC) ->
+    % Write keys to cluster A, verify B and C do NOT have them.
+    write_to_cluster(NodeA, 1, 1000, new_obj),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeB, 1, 1000, ?COMMMON_VAL_INIT, 1000),
+    read_from_cluster(NodeC, 1, 1000, ?COMMMON_VAL_INIT, 1000),
+    true.
