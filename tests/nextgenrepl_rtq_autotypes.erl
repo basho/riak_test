@@ -79,7 +79,7 @@ confirm() ->
             {http, {IP, Port}} =
                 lists:keyfind(http, 1, rt:connection_info(Node)),
             Acc0 = case Acc of "" -> ""; _ -> Acc ++ "|" end,
-            Acc0 ++ IP ++ ":" ++ integer_to_list(Port)
+            Acc0 ++ IP ++ ":" ++ integer_to_list(Port) ++ ":http"
         end,
     ClusterASnkPL = lists:foldl(FoldToPeerConfig, "", ClusterB ++ ClusterC),
     ClusterBSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA ++ ClusterC),
@@ -105,6 +105,25 @@ confirm() ->
     lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
                     ClusterA ++ ClusterB ++ ClusterC),
     
+
+    lager:info("Play around with sink worker counts"),
+    [NodeA|_RestA] = ClusterA,
+    not_found =
+        rpc:call(NodeA,
+                    riak_kv_replrtq_snk,
+                    set_workercount,
+                    [cluster_b, ?SNK_WORKERS + 1]),
+    ok =
+        rpc:call(NodeA,
+                    riak_kv_replrtq_snk,
+                    set_workercount,
+                    [cluster_a, ?SNK_WORKERS + 1]),
+    ok =
+        rpc:call(NodeA,
+                    riak_kv_replrtq_snk,
+                    set_workercount,
+                    [cluster_a, ?SNK_WORKERS]),
+
     lager:info("Creating bucket types 'type1' and 'type2'"),
     rt:create_and_activate_bucket_type(hd(ClusterA),
                                         <<"type1">>, [{magic, false}]),

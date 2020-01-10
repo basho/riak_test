@@ -133,7 +133,7 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
             {http, {IP, Port}} =
                 lists:keyfind(http, 1, rt:connection_info(Node)),
             Acc0 = case Acc of "" -> ""; _ -> Acc ++ "|" end,
-            Acc0 ++ IP ++ ":" ++ integer_to_list(Port)
+            Acc0 ++ IP ++ ":" ++ integer_to_list(Port) ++ ":http"
         end,
     ClusterASnkPL = lists:foldl(FoldToPeerConfig, "", ClusterB ++ ClusterC),
     ClusterBSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA ++ ClusterC),

@@ -79,7 +79,7 @@ confirm() ->
             {http, {IP, Port}} =
                 lists:keyfind(http, 1, rt:connection_info(Node)),
             Acc0 = case Acc of "" -> ""; _ -> Acc ++ "|" end,
-            Acc0 ++ IP ++ ":" ++ integer_to_list(Port)
+            Acc0 ++ IP ++ ":" ++ integer_to_list(Port) ++ ":http"
         end,
     reset_peer_config(FoldToPeerConfigHTTP, ClusterA, ClusterB, ClusterC),
     
