@@ -92,7 +92,16 @@ confirm() ->
                     ClusterA ++ ClusterB ++ ClusterC),
     
     lager:info("Ready for test - with http client for rtq."),
-    test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC),
+    pass =
+        test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC),
+    StatsA0 = get_stats(ClusterA),
+    StatsB0 = get_stats(ClusterB),
+    lager:info("ClusterA stats ~w", [StatsA0]),
+    lager:info("ClusterB stats ~w", [StatsB0]),
+    ?assertMatch(0, element(1, StatsB0)),
+    ?assertMatch(200, element(2, StatsB0)),
+    ?assertMatch(true, element(1, StatsA0) >= 100),
+    ?assertMatch(true, element(2, StatsB0) >= 0),
     
     lager:info("Discover Peer IP/ports for pb and restart with peer config"),
     FoldToPeerConfigPB = 
@@ -121,7 +130,12 @@ confirm() ->
                     ClusterApb ++ ClusterBpb ++ ClusterCpb),
     
     lager:info("Ready for test - with protocol buffers client for rtq."),
-    test_rtqrepl_between_clusters(ClusterApb, ClusterBpb, ClusterCpb),
+    pass =
+        test_rtqrepl_between_clusters(ClusterApb, ClusterBpb, ClusterCpb),
+    StatsA1 = get_stats(ClusterA),
+    StatsB1 = get_stats(ClusterB),
+    lager:info("ClusterA stats ~w", [StatsA1]),
+    lager:info("ClusterB stats ~w", [StatsB1]),
     pass.
 
 
@@ -193,7 +207,6 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     true = check_all_insync({NodeA, IPA, PortA},
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC}),
-
     pass.
 
 
@@ -333,3 +346,27 @@ read_from_cluster(Node, Start, End, CommonValBin, Errors, LogErrors) ->
             % end,
             ?assertEqual(Errors, length(ErrorsFound))
     end.
+
+
+get_stats(Cluster) ->
+    Stats = {0, 0, 0, 0, 0, 0},
+        % {prefetch, tofetch, nofetch, object, error, empty}
+    lists:foldl(fun(N, {PFAcc, TFAcc, NFAcc, FOAcc, FErAcc, FEmAcc}) -> 
+                        S = verify_riak_stats:get_stats(N),
+                        {<<"ngrfetch_prefetch_total">>, PFT} =
+                            lists:keyfind(<<"ngrfetch_prefetch_total">>, 1, S),
+                        {<<"ngrfetch_tofetch_total">>, TFT} =
+                            lists:keyfind(<<"ngrfetch_tofetch_total">>, 1, S),
+                        {<<"ngrfetch_nofetch_total">>, NFT} =
+                            lists:keyfind(<<"ngrfetch_nofetch_total">>, 1, S),
+                        {<<"ngrrepl_object_total">>, FOT} =
+                            lists:keyfind(<<"ngrrepl_object_total">>, 1, S),
+                        {<<"ngrrepl_error_total">>, FErT} =
+                            lists:keyfind(<<"ngrrepl_error_total">>, 1, S),
+                        {<<"ngrrepl_empty_total">>, FEmT} =
+                            lists:keyfind(<<"ngrrepl_empty_total">>, 1, S),
+                        {PFT + PFAcc, TFT + TFAcc, NFT + NFAcc,
+                            FOT + FOAcc, FErT + FErAcc, FEmAcc + FEmT}
+                    end,
+                    Stats,
+                    Cluster).
