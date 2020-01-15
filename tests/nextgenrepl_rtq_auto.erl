@@ -26,7 +26,7 @@
     % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
--define(CONFIG(RingSize, NVal, SrcQueueDefns), [
+-define(CONFIG(RingSize, NVal, ObjL, SrcQueueDefns), [
         {riak_core,
             [
              {ring_creation_size, RingSize},
@@ -40,18 +40,19 @@
         },
         {riak_kv,
           [
-           {anti_entropy, {off, []}},
-           {tictacaae_active, active},
-           {tictacaae_parallelstore, leveled_ko},
+            {anti_entropy, {off, []}},
+            {tictacaae_active, active},
+            {tictacaae_parallelstore, leveled_ko},
                 % if backend not leveled will use parallel key-ordered
                 % store
-           {tictacaae_rebuildwait, 4},
-           {tictacaae_rebuilddelay, 3600},
-           {tictacaae_exchangetick, 120 * 1000},
-           {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep},
-           {enable_repl_cache, true},
-           {replrtq_srcqueue, SrcQueueDefns}
+            {tictacaae_rebuildwait, 4},
+            {tictacaae_rebuilddelay, 3600},
+            {tictacaae_exchangetick, 120 * 1000},
+            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+            {delete_mode, keep},
+            {replrtq_enablesrc, true},
+            {replrtq_srcobjectlimit, ObjL},
+            {replrtq_srcqueue, SrcQueueDefns}
           ]}
         ]).
 
@@ -69,9 +70,9 @@ confirm() ->
 
     [ClusterA, ClusterB, ClusterC] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, ClusterCSrcQ)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, 100, ClusterASrcQ)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, 0, ClusterBSrcQ)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, 10, ClusterCSrcQ)}]),
     
     lager:info("Discover Peer IP/ports and restart with peer config"),
     FoldToPeerConfigHTTP = 
@@ -108,9 +109,9 @@ confirm() ->
 
     [ClusterApb, ClusterBpb, ClusterCpb] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, ClusterCSrcQ)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, 0, ClusterASrcQ)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, 10, ClusterBSrcQ)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, 100, ClusterCSrcQ)}]),
     reset_peer_config(FoldToPeerConfigPB, ClusterApb, ClusterBpb, ClusterCpb),
     lager:info("Waiting for convergence."),
     rt:wait_until_ring_converged(ClusterApb),

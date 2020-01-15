@@ -26,7 +26,7 @@
     % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
--define(CONFIG(RingSize, NVal, ReplCache), [
+-define(CONFIG(RingSize, NVal), [
         {riak_core,
             [
              {ring_creation_size, RingSize},
@@ -40,26 +40,26 @@
         },
         {riak_kv,
           [
-           {anti_entropy, {off, []}},
-           {tictacaae_active, active},
-           {tictacaae_parallelstore, leveled_ko},
+            {anti_entropy, {off, []}},
+            {tictacaae_active, active},
+            {tictacaae_parallelstore, leveled_ko},
                 % if backend not leveled will use parallel key-ordered
                 % store
-           {tictacaae_rebuildwait, 4},
-           {tictacaae_rebuilddelay, 3600},
-           {tictacaae_exchangetick, 120 * 1000},
-           {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep},
-           {enable_repl_cache, ReplCache}
+            {tictacaae_rebuildwait, 4},
+            {tictacaae_rebuilddelay, 3600},
+            {tictacaae_exchangetick, 120 * 1000},
+            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+            {replrtq_enablesrc, true},
+            {delete_mode, keep}
           ]}
         ]).
 
 confirm() ->
     [ClusterA, ClusterB, ClusterC] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, true)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, true)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, false)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL)}]),
     rt:join_cluster(ClusterA),
     rt:join_cluster(ClusterB),
     rt:join_cluster(ClusterC),

@@ -75,7 +75,7 @@
             {ttaaefs_queuename, RemoteClusterName},
             {ttaaefs_logrepairs, true},
             {replrtq_srcqueue, SrcQueueDefns},
-
+            {replrtq_enablesrc, true},
             {replrtq_enablesink, true},
             {replrtq_sinkqueue, LocalClusterName},
             {replrtq_sinkpeers, PeerList},

@@ -24,7 +24,7 @@
     % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
--define(CONFIG(RingSize, NVal, ReplCache, CertDir, User), [
+-define(CONFIG(RingSize, NVal, CertDir, User), [
         {riak_core,
             [
             {ring_creation_size, RingSize},
@@ -56,7 +56,7 @@
             {tictacaae_exchangetick, 120 * 1000},
             {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
             {delete_mode, keep},
-            {enable_repl_cache, ReplCache},
+            {replrtq_enablesrc, true},
             {repl_cacert_filename,
                 filename:join([CertDir, User ++ "/cacerts.pem"])},
             {repl_cert_filename,
@@ -135,9 +135,9 @@ confirm() ->
 setup_cluster(CertDir, User) ->
     [ClusterA, ClusterB, ClusterC] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, true, CertDir, User)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, true, CertDir, User)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, false, CertDir, User)}
+            {2, ?CONFIG(?A_RING, ?A_NVAL, CertDir, User)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, CertDir, User)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, CertDir, User)}
         ]),
     rt:join_cluster(ClusterA),
     rt:join_cluster(ClusterB),

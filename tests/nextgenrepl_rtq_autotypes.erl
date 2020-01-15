@@ -40,18 +40,18 @@
         },
         {riak_kv,
           [
-           {anti_entropy, {off, []}},
-           {tictacaae_active, active},
-           {tictacaae_parallelstore, leveled_ko},
+            {anti_entropy, {off, []}},
+            {tictacaae_active, active},
+            {tictacaae_parallelstore, leveled_ko},
                 % if backend not leveled will use parallel key-ordered
                 % store
-           {tictacaae_rebuildwait, 4},
-           {tictacaae_rebuilddelay, 3600},
-           {tictacaae_exchangetick, 120 * 1000},
-           {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep},
-           {enable_repl_cache, true},
-           {replrtq_srcqueue, SrcQueueDefns}
+            {tictacaae_rebuildwait, 4},
+            {tictacaae_rebuilddelay, 3600},
+            {tictacaae_exchangetick, 120 * 1000},
+            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+            {delete_mode, keep},
+            {replrtq_enablesrc, true},
+            {replrtq_srcqueue, SrcQueueDefns}
           ]}
         ]).
 
