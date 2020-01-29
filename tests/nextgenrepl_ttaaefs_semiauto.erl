@@ -80,10 +80,11 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
 setup_replqueues([]) ->
     ok;
 setup_replqueues([HeadNode|Others]) ->
-    true = rpc:call(HeadNode,
+    false = rpc:call(HeadNode,
                     riak_kv_replrtq_src,
                     register_rtq,
                     [q1_ttaaefs, block_rtq]),
+        % false indicates this queue is already defined by default
     setup_replqueues(Others).
 
 

@@ -61,6 +61,7 @@
         [
             {replrtq_srcqueue, SrcQueueDefns},
             {replrtq_enablesink, true},
+            {replrtq_enablesrc, true},
             {replrtq_sinkqueue, LocalClusterName},
             {replrtq_sinkpeers, PeerList},
             {replrtq_sinkworkers, ?SNK_WORKERS}

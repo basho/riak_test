@@ -54,7 +54,7 @@
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
            {delete_mode, keep},
-           {enable_repl_cache, true},
+           {replrtq_enablesrc, true},
            {replrtq_srcqueue, SrcQueueDefns}
           ]}
         ]).

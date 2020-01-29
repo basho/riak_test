@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(verify_riak_stats).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, get_stats/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(CTYPE, <<"counters">>).
@@ -547,6 +547,18 @@ common_stats() ->
         <<"memory_system">>,
         <<"memory_total">>,
         <<"mochiweb_version">>,
+        <<"ngrfetch_nofetch">>,
+        <<"ngrfetch_nofetch_total">>,
+        <<"ngrfetch_prefetch">>,
+        <<"ngrfetch_prefetch_total">>,
+        <<"ngrfetch_tofetch">>,
+        <<"ngrfetch_tofetch_total">>,
+        <<"ngrrepl_object">>,
+        <<"ngrrepl_object_total">>,
+        <<"ngrrepl_empty">>,
+        <<"ngrrepl_empty_total">>,
+        <<"ngrrepl_error">>,
+        <<"ngrrepl_error_total">>,
         <<"node_get_fsm_active">>,
         <<"node_get_fsm_active_60s">>,
         <<"node_get_fsm_counter_objsize_100">>,

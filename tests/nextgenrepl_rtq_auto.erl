@@ -26,7 +26,7 @@
     % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
--define(CONFIG(RingSize, NVal, SrcQueueDefns), [
+-define(CONFIG(RingSize, NVal, ObjL, SrcQueueDefns), [
         {riak_core,
             [
              {ring_creation_size, RingSize},
@@ -40,18 +40,19 @@
         },
         {riak_kv,
           [
-           {anti_entropy, {off, []}},
-           {tictacaae_active, active},
-           {tictacaae_parallelstore, leveled_ko},
+            {anti_entropy, {off, []}},
+            {tictacaae_active, active},
+            {tictacaae_parallelstore, leveled_ko},
                 % if backend not leveled will use parallel key-ordered
                 % store
-           {tictacaae_rebuildwait, 4},
-           {tictacaae_rebuilddelay, 3600},
-           {tictacaae_exchangetick, 120 * 1000},
-           {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep},
-           {enable_repl_cache, true},
-           {replrtq_srcqueue, SrcQueueDefns}
+            {tictacaae_rebuildwait, 4},
+            {tictacaae_rebuilddelay, 3600},
+            {tictacaae_exchangetick, 120 * 1000},
+            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+            {delete_mode, keep},
+            {replrtq_enablesrc, true},
+            {replrtq_srcobjectlimit, ObjL},
+            {replrtq_srcqueue, SrcQueueDefns}
           ]}
         ]).
 
@@ -69,9 +70,9 @@ confirm() ->
 
     [ClusterA, ClusterB, ClusterC] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, ClusterCSrcQ)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, 100, ClusterASrcQ)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, 0, ClusterBSrcQ)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, 10, ClusterCSrcQ)}]),
     
     lager:info("Discover Peer IP/ports and restart with peer config"),
     FoldToPeerConfigHTTP = 
@@ -91,7 +92,16 @@ confirm() ->
                     ClusterA ++ ClusterB ++ ClusterC),
     
     lager:info("Ready for test - with http client for rtq."),
-    test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC),
+    pass =
+        test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC),
+    StatsA0 = get_stats(ClusterA),
+    StatsB0 = get_stats(ClusterB),
+    lager:info("ClusterA stats ~w", [StatsA0]),
+    lager:info("ClusterB stats ~w", [StatsB0]),
+    ?assertMatch(0, element(1, StatsB0)),
+    ?assertMatch(200, element(2, StatsB0)),
+    ?assertMatch(true, element(1, StatsA0) >= 100),
+    ?assertMatch(true, element(2, StatsB0) >= 0),
     
     lager:info("Discover Peer IP/ports for pb and restart with peer config"),
     FoldToPeerConfigPB = 
@@ -108,9 +118,9 @@ confirm() ->
 
     [ClusterApb, ClusterBpb, ClusterCpb] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, ClusterCSrcQ)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, 0, ClusterASrcQ)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, 10, ClusterBSrcQ)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, 100, ClusterCSrcQ)}]),
     reset_peer_config(FoldToPeerConfigPB, ClusterApb, ClusterBpb, ClusterCpb),
     lager:info("Waiting for convergence."),
     rt:wait_until_ring_converged(ClusterApb),
@@ -120,7 +130,12 @@ confirm() ->
                     ClusterApb ++ ClusterBpb ++ ClusterCpb),
     
     lager:info("Ready for test - with protocol buffers client for rtq."),
-    test_rtqrepl_between_clusters(ClusterApb, ClusterBpb, ClusterCpb),
+    pass =
+        test_rtqrepl_between_clusters(ClusterApb, ClusterBpb, ClusterCpb),
+    StatsA1 = get_stats(ClusterA),
+    StatsB1 = get_stats(ClusterB),
+    lager:info("ClusterA stats ~w", [StatsA1]),
+    lager:info("ClusterB stats ~w", [StatsB1]),
     pass.
 
 
@@ -192,7 +207,6 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     true = check_all_insync({NodeA, IPA, PortA},
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC}),
-
     pass.
 
 
@@ -332,3 +346,27 @@ read_from_cluster(Node, Start, End, CommonValBin, Errors, LogErrors) ->
             % end,
             ?assertEqual(Errors, length(ErrorsFound))
     end.
+
+
+get_stats(Cluster) ->
+    Stats = {0, 0, 0, 0, 0, 0},
+        % {prefetch, tofetch, nofetch, object, error, empty}
+    lists:foldl(fun(N, {PFAcc, TFAcc, NFAcc, FOAcc, FErAcc, FEmAcc}) -> 
+                        S = verify_riak_stats:get_stats(N),
+                        {<<"ngrfetch_prefetch_total">>, PFT} =
+                            lists:keyfind(<<"ngrfetch_prefetch_total">>, 1, S),
+                        {<<"ngrfetch_tofetch_total">>, TFT} =
+                            lists:keyfind(<<"ngrfetch_tofetch_total">>, 1, S),
+                        {<<"ngrfetch_nofetch_total">>, NFT} =
+                            lists:keyfind(<<"ngrfetch_nofetch_total">>, 1, S),
+                        {<<"ngrrepl_object_total">>, FOT} =
+                            lists:keyfind(<<"ngrrepl_object_total">>, 1, S),
+                        {<<"ngrrepl_error_total">>, FErT} =
+                            lists:keyfind(<<"ngrrepl_error_total">>, 1, S),
+                        {<<"ngrrepl_empty_total">>, FEmT} =
+                            lists:keyfind(<<"ngrrepl_empty_total">>, 1, S),
+                        {PFT + PFAcc, TFT + TFAcc, NFT + NFAcc,
+                            FOT + FOAcc, FErT + FErAcc, FEmAcc + FEmT}
+                    end,
+                    Stats,
+                    Cluster).
