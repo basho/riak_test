@@ -894,6 +894,8 @@ common_stats() ->
         <<"sys_thread_pool_size">>,
         <<"sys_threads_enabled">>,
         <<"sys_wordsize">>,
+        <<"tictacaae_queue_microsec__max">>,
+        <<"tictacaae_queue_microsec_mean">>,
         <<"vnode_counter_update">>,
         <<"vnode_counter_update_time_100">>,
         <<"vnode_counter_update_time_95">>,
