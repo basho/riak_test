@@ -762,20 +762,44 @@ wait_until_status_ready(Node) ->
 -spec wait_until_no_pending_changes([node()]) -> ok | fail.
 wait_until_no_pending_changes(Nodes) ->
     lager:info("Wait until no pending changes on ~p", [Nodes]),
-    F = fun() ->
-                rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
-                {Rings, BadNodes} = rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
-                Changes = [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
-                case BadNodes =:= [] andalso length(Changes) =:= length(Nodes) andalso lists:all(fun(T) -> T end, Changes) of
-                    true -> true;
-                    false ->
-                        NodesWithChanges = [Node || {Node, false} <- lists:zip(Nodes -- BadNodes, Changes)],
-                        lager:info("Changes not yet complete, or bad nodes. BadNodes=~p, Nodes with Pending Changes=~p~n", [BadNodes, NodesWithChanges]),
-                        false
-                end
+    F = 
+        fun() ->
+            case no_pending_changes(Nodes) of
+                true ->
+                    lager:info("No pending changes - sleep then confirm"),
+                    % Some times there may be no pending changes, just because
+                    % changes haven't triggered yet
+                    timer:sleep(2000),
+                    no_pending_changes(Nodes);
+                false ->
+                    false
+            end
         end,
     ?assertEqual(ok, wait_until(F)),
     ok.
+
+-spec no_pending_changes([node()]) -> boolean().
+no_pending_changes(Nodes) ->
+    rpc:multicall(Nodes, riak_core_vnode_manager, force_handoffs, []),
+    {Rings, BadNodes} =
+        rpc:multicall(Nodes, riak_core_ring_manager, get_raw_ring, []),
+    Changes =
+        [ riak_core_ring:pending_changes(Ring) =:= [] || {ok, Ring} <- Rings ],
+    case BadNodes =:= [] andalso
+            length(Changes) =:= length(Nodes) andalso
+            lists:all(fun(T) -> T end, Changes) of
+        true ->
+            true;
+        false ->
+            NodesWithChanges =
+                [Node ||
+                    {Node, false} <- lists:zip(Nodes -- BadNodes, Changes)],
+            lager:info("Changes not yet complete, or bad nodes. "
+                        ++ 
+                        "BadNodes=~p, Nodes with Pending Changes=~p~n",
+                        [BadNodes, NodesWithChanges]),
+            false
+    end.
 
 %% @doc Waits until no transfers are in-flight or pending, checked by
 %% riak_core_status:transfers().

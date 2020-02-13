@@ -26,7 +26,7 @@
     % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
--define(CONFIG(RingSize, NVal, ObjL, SrcQueueDefns), [
+-define(CONFIG(RingSize, NVal, ObjL, SrcQueueDefns, WireCompress), [
         {riak_core,
             [
              {ring_creation_size, RingSize},
@@ -52,7 +52,8 @@
             {delete_mode, keep},
             {replrtq_enablesrc, true},
             {replrtq_srcobjectlimit, ObjL},
-            {replrtq_srcqueue, SrcQueueDefns}
+            {replrtq_srcqueue, SrcQueueDefns},
+            {replrtq_compressonwire, WireCompress}
           ]}
         ]).
 
@@ -70,9 +71,9 @@ confirm() ->
 
     [ClusterA, ClusterB, ClusterC] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, 100, ClusterASrcQ)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, 0, ClusterBSrcQ)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, 10, ClusterCSrcQ)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, 100, ClusterASrcQ, true)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, 0, ClusterBSrcQ, false)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, 10, ClusterCSrcQ, false)}]),
     
     lager:info("Discover Peer IP/ports and restart with peer config"),
     FoldToPeerConfigHTTP = 
@@ -118,9 +119,9 @@ confirm() ->
 
     [ClusterApb, ClusterBpb, ClusterCpb] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL, 0, ClusterASrcQ)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL, 10, ClusterBSrcQ)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, 100, ClusterCSrcQ)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, 0, ClusterASrcQ, false)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, 10, ClusterBSrcQ, true)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, 100, ClusterCSrcQ, true)}]),
     reset_peer_config(FoldToPeerConfigPB, ClusterApb, ClusterBpb, ClusterCpb),
     lager:info("Waiting for convergence."),
     rt:wait_until_ring_converged(ClusterApb),
