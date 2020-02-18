@@ -73,6 +73,9 @@ confirm() ->
     lager:info("Attempting to write key"),
     %% write key and confirm success
     ?assertMatch(ok, rt:httpc_write(Client, ?BUCKET, ?KEY, <<"12345">>)),
+    lager:info("Read back key with node_confirms = 2"),
+    {ok, ObjNC2} = rhc:get(Client, ?BUCKET, ?KEY),
+    ?assertMatch(<<"12345">>, riakc_obj:get_value(ObjNC2)),
 
     %% Negative tests
     %% Now write test for pw=0, node_confirms=4. Should fail, as node_confirms should not be greater than n_val (3)
@@ -94,15 +97,56 @@ confirm() ->
     rpc:call(FirstNode,riak_core_bucket, set_bucket, [?BUCKET, [{'pw', 0}, {'node_confirms', 3}]]),
     rt:wait_until_bucket_props([FirstNode],?BUCKET,[{'pw', 0}, {'node_confirms', 3}]),
     Others = [Node || {{_Idx, Node}, _Type} <- PL2, Node /= FirstNode],
-    rt:stop_and_wait(lists:last(Others)),
+    OtherFailedNode = lists:last(Others),
+    rt:stop_and_wait(OtherFailedNode),
     wait_for_new_preflist(FirstNode, PL2),
     PL3 = rt:get_preflist(FirstNode, ?BUCKET, ?KEY),
     lager:info("Preflist ~p~n", [PL3]),
 
+    %% How many nodes are up?
+    RemainingUpNodes = [UpNode2 || {{_Idx, UpNode2}, _Type} <- PL3],
+    UpNodeCount = length(lists:usort(RemainingUpNodes)),
+    {PriCount3, _FallCount3} = primary_and_fallback_counts(PL3),
+    lager:info("Left with ~w nodes ~w and ~w primary vnodes",
+                [UpNodeCount, RemainingUpNodes, PriCount3]),
+
     lager:info("Attempting to write key"),
     %% Write key and confirm error node_confirms=3 unsatisfied
     ?assertMatch({error, {ok,"503",_,<<"node_confirms-value unsatisfied: 2/3\n">>}},
-                 rt:httpc_write(Client, ?BUCKET, ?KEY, <<"12345">>)),
+                 rt:httpc_write(Client, ?BUCKET, ?KEY, <<"12346">>)),
+
+    lager:info("Setting pw and node_confirms to reflect current status"),
+    rpc:call(FirstNode,
+                riak_core_bucket, set_bucket,
+                [?BUCKET,
+                    [{'pw', PriCount3}, {'node_confirms', UpNodeCount}]]),
+    rt:wait_until_bucket_props([FirstNode],
+                                ?BUCKET,
+                                    [{'pw', PriCount3},
+                                        {'node_confirms', UpNodeCount}]),
+    
+    lager:info("Read back key"),
+    lager:info("Although previous put failed, it will have been co-ordinated"),
+    lager:info("We can expect to see siblings - both PUTs should be present"),
+    lager:info("Success occurs as enough nodes and primaries are up"),
+    {ok, ObjS2} = rhc:get(Client, ?BUCKET, ?KEY),
+    ?assertMatch([<<"12345">>, <<"12346">>],
+                    lists:usort(riakc_obj:get_values(ObjS2))),
+    lager:info("Incrementing node_confirms to cause failure"),
+    rpc:call(FirstNode,
+                riak_core_bucket, set_bucket,
+                [?BUCKET,
+                    [{'node_confirms', UpNodeCount + 1}]]),
+    rt:wait_until_bucket_props([FirstNode],
+                                ?BUCKET,
+                                    [{'node_confirms', UpNodeCount + 1}]),
+    {error, {ok, "500", _Headers, Error}} = rhc:get(Client, ?BUCKET, ?KEY),
+    lager:info("Error ~p now returned", [Error]),
+    ExpectedError =
+        list_to_binary(
+            io_lib:format("Error:\n{insufficient_nodes,~w,need,~w}\n",
+                            [UpNodeCount, UpNodeCount + 1])),
+    ?assertMatch(ExpectedError, Error),
     
     pass.
 
