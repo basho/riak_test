@@ -160,12 +160,12 @@ confirm() ->
     lager:info("Should be able to confirm with node_confirms=3 if notfound_ok"),
     lager:info("But if not notfound_ok, should not be able to read initially"),
     lager:info("And this state will be corrected by read repair"),
-    {C0, FailedNode} =
-        setup_notfound_test(Node1, <<"notfound_key1">>, false),
+    {C0, _PbC0, FailedNode0} =
+        setup_notfound_test(Node1, <<"notfound_key0">>, false),
 
     lager:info("Read should fail first time if notfound_ok is false"),
     {error, {ok, "500", _AltHeaders, AltError}} =
-        rhc:get(C0, ?BUCKET, <<"notfound_key1">>),
+        rhc:get(C0, ?BUCKET, <<"notfound_key0">>),
     lager:info("Error ~p now returned", [AltError]),
     AltExpectedError =
         list_to_binary(
@@ -175,7 +175,7 @@ confirm() ->
 
     CheckAfterRepair =
         fun() ->
-            case rhc:get(C0, ?BUCKET, <<"notfound_key1">>) of
+            case rhc:get(C0, ?BUCKET, <<"notfound_key0">>) of
                 {ok, ObjS5} ->
                     ?assertMatch(<<"ABCDE">>, riakc_obj:get_value(ObjS5)),
                     true;
@@ -187,16 +187,46 @@ confirm() ->
     rt:wait_until(CheckAfterRepair, 10, 1000),
 
     lager:info("Restart all nodes"),
-    lists:foreach(fun rt:start_and_wait/1, [FailedNode]),
+    lists:foreach(fun rt:start_and_wait/1, [FailedNode0]),
     lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Cluster),
     lists:foreach(fun rt:wait_until_node_handoffs_complete/1, Cluster),
 
-    {C1, _FailedNode} =
-        setup_notfound_test(Node1, <<"notfound_key2">>, true),
+    {C1, _PbC1, FailedNode1} =
+        setup_notfound_test(Node1, <<"notfound_key1">>, true),
 
-    lager:info("Read should succeed firts time if notfound_ok is true"),
-    {ok, ObjS5} = rhc:get(C1, ?BUCKET, <<"notfound_key2">>),
+    lager:info("Read should succeed first time if notfound_ok is true"),
+    {ok, ObjS5} = rhc:get(C1, ?BUCKET, <<"notfound_key1">>),
     ?assertMatch(<<"ABCDE">>, riakc_obj:get_value(ObjS5)),
+
+    lager:info("Restart all nodes"),
+    lists:foreach(fun rt:start_and_wait/1, [FailedNode1]),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Cluster),
+    lists:foreach(fun rt:wait_until_node_handoffs_complete/1, Cluster),
+
+    lager:info("Repeat test, this time overriding node_confirms using option"),
+    {C2, _PbC2, FailedNode2} =
+        setup_notfound_test(Node1, <<"notfound_key2">>, false),
+    
+    lager:info("Read should succeed first time if override node_confirms"),
+    {ok, ObjS6} =
+        rhc:get(C2, ?BUCKET, <<"notfound_key2">>, [{node_confirms, 1}]),
+    ?assertMatch(<<"ABCDE">>, riakc_obj:get_value(ObjS6)),
+
+    lager:info("Restart all nodes"),
+    lists:foreach(fun rt:start_and_wait/1, [FailedNode2]),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Cluster),
+    lists:foreach(fun rt:wait_until_node_handoffs_complete/1, Cluster),
+
+    lager:info("Repeat test, this time overriding in PB Client"),
+    {_C3, PbC3, _FailedNode3} =
+        setup_notfound_test(Node1, <<"notfound_key3">>, false),
+
+    {ok, ObjS7} =
+        riakc_pb_socket:get(PbC3,
+                            ?BUCKET,
+                            <<"notfound_key3">>,
+                            [{node_confirms, 1}]),
+    ?assertMatch(<<"ABCDE">>, riakc_obj:get_value(ObjS7)),
 
     pass.
 
@@ -206,9 +236,11 @@ setup_notfound_test(Node1, Key, NotFoundOK) ->
     AltPL1 = rt:get_preflist(Node1, ?BUCKET, Key),
     [PriA, _PriB, PriC] =
         [Node || {{_Idx, Node}, Type} <- AltPL1, Type == primary],
-    C0 = rt:httpc(PriA),
+    HttpC = rt:httpc(PriA),
+    PbC = rt:pbc(PriA),
+
     lager:info("Write new object in re-formed cluster"),
-    rt:httpc_write(C0, ?BUCKET, Key, <<"ABCDE">>),
+    rt:httpc_write(HttpC, ?BUCKET, Key, <<"ABCDE">>),
 
     lager:info("Stop a single primary"),
     rt:stop_and_wait(PriC),
@@ -231,7 +263,7 @@ setup_notfound_test(Node1, Key, NotFoundOK) ->
                                 [{'pw', 2},
                                 {'node_confirms', 3},
                                 {'notfound_ok', NotFoundOK}]),
-    {C0, PriC}.
+    {HttpC, PbC, PriC}.
 
 
 primary_and_fallback_counts(PL) ->
