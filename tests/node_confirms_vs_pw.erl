@@ -39,7 +39,7 @@ confirm() ->
                                                  {vnode_inactivity_timeout, 1000}]}]},
             {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]}],
 
-    [Node1|_] = rt:build_cluster(5, Conf),
+    [Node1|_] = Cluster = rt:build_cluster(5, Conf),
     
     % Get preflist, we need to find two primary nodes to stop for this bucket/key
     PL = rt:get_preflist(Node1, ?BUCKET, ?KEY),
@@ -73,6 +73,9 @@ confirm() ->
     lager:info("Attempting to write key"),
     %% write key and confirm success
     ?assertMatch(ok, rt:httpc_write(Client, ?BUCKET, ?KEY, <<"12345">>)),
+    lager:info("Read back key with node_confirms = 2"),
+    {ok, ObjNC2} = rhc:get(Client, ?BUCKET, ?KEY),
+    ?assertMatch(<<"12345">>, riakc_obj:get_value(ObjNC2)),
 
     %% Negative tests
     %% Now write test for pw=0, node_confirms=4. Should fail, as node_confirms should not be greater than n_val (3)
@@ -94,17 +97,173 @@ confirm() ->
     rpc:call(FirstNode,riak_core_bucket, set_bucket, [?BUCKET, [{'pw', 0}, {'node_confirms', 3}]]),
     rt:wait_until_bucket_props([FirstNode],?BUCKET,[{'pw', 0}, {'node_confirms', 3}]),
     Others = [Node || {{_Idx, Node}, _Type} <- PL2, Node /= FirstNode],
-    rt:stop_and_wait(lists:last(Others)),
+    OtherFailedNode = lists:last(Others),
+    rt:stop_and_wait(OtherFailedNode),
     wait_for_new_preflist(FirstNode, PL2),
     PL3 = rt:get_preflist(FirstNode, ?BUCKET, ?KEY),
     lager:info("Preflist ~p~n", [PL3]),
 
+    %% How many nodes are up?
+    RemainingUpNodes = [UpNode2 || {{_Idx, UpNode2}, _Type} <- PL3],
+    UpNodeCount = length(lists:usort(RemainingUpNodes)),
+    {PriCount3, _FallCount3} = primary_and_fallback_counts(PL3),
+    lager:info("Left with ~w nodes ~w and ~w primary vnodes",
+                [UpNodeCount, RemainingUpNodes, PriCount3]),
+
     lager:info("Attempting to write key"),
     %% Write key and confirm error node_confirms=3 unsatisfied
     ?assertMatch({error, {ok,"503",_,<<"node_confirms-value unsatisfied: 2/3\n">>}},
-                 rt:httpc_write(Client, ?BUCKET, ?KEY, <<"12345">>)),
+                 rt:httpc_write(Client, ?BUCKET, ?KEY, <<"12346">>)),
+
+    lager:info("Setting pw and node_confirms to reflect current status"),
+    rpc:call(FirstNode,
+                riak_core_bucket, set_bucket,
+                [?BUCKET,
+                    [{'pw', PriCount3}, {'node_confirms', UpNodeCount}]]),
+    rt:wait_until_bucket_props([FirstNode],
+                                ?BUCKET,
+                                    [{'pw', PriCount3},
+                                        {'node_confirms', UpNodeCount}]),
     
+    lager:info("Read back key"),
+    lager:info("Although previous put failed, it will have been co-ordinated"),
+    lager:info("We can expect to see siblings - both PUTs should be present"),
+    lager:info("Success occurs as enough nodes and primaries are up"),
+    {ok, ObjS2} = rhc:get(Client, ?BUCKET, ?KEY),
+    ?assertMatch([<<"12345">>, <<"12346">>],
+                    lists:usort(riakc_obj:get_values(ObjS2))),
+    lager:info("Incrementing node_confirms to cause failure"),
+    rpc:call(FirstNode,
+                riak_core_bucket, set_bucket,
+                [?BUCKET,
+                    [{'node_confirms', UpNodeCount + 1}]]),
+    rt:wait_until_bucket_props([FirstNode],
+                                ?BUCKET,
+                                    [{'node_confirms', UpNodeCount + 1}]),
+    {error, {ok, "500", _Headers, Error}} = rhc:get(Client, ?BUCKET, ?KEY),
+    lager:info("Error ~p now returned", [Error]),
+    ExpectedError =
+        list_to_binary(
+            io_lib:format("Error:\n{insufficient_nodes,~w,need,~w}\n",
+                            [UpNodeCount, UpNodeCount + 1])),
+    ?assertMatch(ExpectedError, Error),
+
+    lager:info("Restart all nodes"),
+    lists:foreach(fun rt:start_and_wait/1, [OtherFailedNode|OtherPrimaries]),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Cluster),
+    lists:foreach(fun rt:wait_until_node_handoffs_complete/1, Cluster),
+    {ok, ObjS3} = rhc:get(Client, ?BUCKET, ?KEY),
+    ?assertMatch([<<"12345">>, <<"12346">>],
+                    lists:usort(riakc_obj:get_values(ObjS3))),
+
+    lager:info("Test when setting notfound_ok and with one node down"),
+    lager:info("Should be able to confirm with node_confirms=3 if notfound_ok"),
+    lager:info("But if not notfound_ok, should not be able to read initially"),
+    lager:info("And this state will be corrected by read repair"),
+    {C0, _PbC0, FailedNode0} =
+        setup_notfound_test(Node1, <<"notfound_key0">>, false),
+
+    lager:info("Read should fail first time if notfound_ok is false"),
+    {error, {ok, "500", _AltHeaders, AltError}} =
+        rhc:get(C0, ?BUCKET, <<"notfound_key0">>),
+    lager:info("Error ~p now returned", [AltError]),
+    AltExpectedError =
+        list_to_binary(
+            io_lib:format("Error:\n{insufficient_nodes,~w,need,~w}\n",
+                            [2, 3])),
+    ?assertMatch(AltExpectedError, AltError),
+
+    CheckAfterRepair =
+        fun() ->
+            case rhc:get(C0, ?BUCKET, <<"notfound_key0">>) of
+                {ok, ObjS5} ->
+                    ?assertMatch(<<"ABCDE">>, riakc_obj:get_value(ObjS5)),
+                    true;
+                _ ->
+                    false
+            end
+        end,
+    lager:info("Because of read repair - read will soon succeed"),
+    rt:wait_until(CheckAfterRepair, 10, 1000),
+
+    lager:info("Restart all nodes"),
+    lists:foreach(fun rt:start_and_wait/1, [FailedNode0]),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Cluster),
+    lists:foreach(fun rt:wait_until_node_handoffs_complete/1, Cluster),
+
+    {C1, _PbC1, FailedNode1} =
+        setup_notfound_test(Node1, <<"notfound_key1">>, true),
+
+    lager:info("Read should succeed first time if notfound_ok is true"),
+    {ok, ObjS5} = rhc:get(C1, ?BUCKET, <<"notfound_key1">>),
+    ?assertMatch(<<"ABCDE">>, riakc_obj:get_value(ObjS5)),
+
+    lager:info("Restart all nodes"),
+    lists:foreach(fun rt:start_and_wait/1, [FailedNode1]),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Cluster),
+    lists:foreach(fun rt:wait_until_node_handoffs_complete/1, Cluster),
+
+    lager:info("Repeat test, this time overriding node_confirms using option"),
+    {C2, _PbC2, FailedNode2} =
+        setup_notfound_test(Node1, <<"notfound_key2">>, false),
+    
+    lager:info("Read should succeed first time if override node_confirms"),
+    {ok, ObjS6} =
+        rhc:get(C2, ?BUCKET, <<"notfound_key2">>, [{node_confirms, 1}]),
+    ?assertMatch(<<"ABCDE">>, riakc_obj:get_value(ObjS6)),
+
+    lager:info("Restart all nodes"),
+    lists:foreach(fun rt:start_and_wait/1, [FailedNode2]),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Cluster),
+    lists:foreach(fun rt:wait_until_node_handoffs_complete/1, Cluster),
+
+    lager:info("Repeat test, this time overriding in PB Client"),
+    {_C3, PbC3, _FailedNode3} =
+        setup_notfound_test(Node1, <<"notfound_key3">>, false),
+
+    {ok, ObjS7} =
+        riakc_pb_socket:get(PbC3,
+                            ?BUCKET,
+                            <<"notfound_key3">>,
+                            [{node_confirms, 1}]),
+    ?assertMatch(<<"ABCDE">>, riakc_obj:get_value(ObjS7)),
+
     pass.
+
+
+setup_notfound_test(Node1, Key, NotFoundOK) ->
+    lager:info("Testing with notfound_ok ~w", [NotFoundOK]),
+    AltPL1 = rt:get_preflist(Node1, ?BUCKET, Key),
+    [PriA, _PriB, PriC] =
+        [Node || {{_Idx, Node}, Type} <- AltPL1, Type == primary],
+    HttpC = rt:httpc(PriA),
+    PbC = rt:pbc(PriA),
+
+    lager:info("Write new object in re-formed cluster"),
+    rt:httpc_write(HttpC, ?BUCKET, Key, <<"ABCDE">>),
+
+    lager:info("Stop a single primary"),
+    rt:stop_and_wait(PriC),
+    lager:info("Target_n_val should be 4"),
+    lager:info("So new preflist should be on 3 nodes"),
+    AltPL2 = rt:get_preflist(PriA, ?BUCKET, Key),
+    ?assertMatch(3, length(
+                        lists:usort(
+                            lists:map(fun({{_Idx, AltN}, _Status}) -> AltN end,
+                                        AltPL2)))),
+    lager:info("Setting pw to 2 and node_confirms to 3"),
+    rpc:call(PriA,
+                riak_core_bucket, set_bucket,
+                [?BUCKET,
+                    [{'pw', 2},
+                        {'node_confirms', 3},
+                        {'notfound_ok', NotFoundOK}]]),
+    rt:wait_until_bucket_props([PriA],
+                                ?BUCKET,
+                                [{'pw', 2},
+                                {'node_confirms', 3},
+                                {'notfound_ok', NotFoundOK}]),
+    {HttpC, PbC, PriC}.
 
 
 primary_and_fallback_counts(PL) ->
