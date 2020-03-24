@@ -58,22 +58,41 @@
        ).
 
 confirm() ->
+
+    KVBackend = proplists:get_value(backend, riak_test_runner:metadata()),
+
     Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG(true, immediate)),
-    journal_reload(Nodes0, false),
+    true = data_load(Nodes0, KVBackend),
+    ok = test_by_backend(KVBackend, Nodes0, 3),
     ok = rt:clean_cluster(Nodes0),
 
     Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG(true, immediate)),
-    ok = journal_reload(Nodes1, true),
+    true = data_load(Nodes1, KVBackend),
+    ok = backend_compact(KVBackend, Nodes1),
+    ok = test_by_backend(KVBackend, Nodes1, 3),
     ok = rt:clean_cluster(Nodes1),
 
     Nodes2 = rt:build_cluster(?NUM_NODES, ?CFG(true, keep)),
-    ok = journal_reload(Nodes2, true),
+    true = data_load(Nodes2, KVBackend),
+    ok = backend_compact(KVBackend, Nodes2),
+    ok = test_by_backend(KVBackend, Nodes2, 3),
+    ok = rt:clean_cluster(Nodes2),
+
+    Nodes3 = rt:build_cluster(?NUM_NODES, ?CFG(false, immediate)),
+    true = data_load(Nodes3, KVBackend),
+    ok = backend_compact(KVBackend, Nodes3),
+    rt:update_app_config(hd(Nodes3), ?CFG(true, immediate)),
+    ok = backend_compact(KVBackend, Nodes3),
+    true = data_load(Nodes3, KVBackend),
+    ok = backend_compact(KVBackend, Nodes3),
+    ok = test_by_backend(KVBackend, Nodes3, 3),
+
+    true = bad_switchback(KVBackend, hd(Nodes3)),
 
     pass.
 
-journal_reload(Nodes, WithCompact) ->
-
-    KVBackend = proplists:get_value(backend, riak_test_runner:metadata()),
+data_load(Nodes, KVBackend) ->
+    
     KeyCount = key_count(KVBackend, Nodes),
     NumKeysPerNode = KeyCount div length(Nodes),
     
@@ -112,24 +131,45 @@ journal_reload(Nodes, WithCompact) ->
     lists:foldl(KeyLoadFun(?VAL_FLAG4), 1, Nodes),
     lager:info("Reloaded ~w objects", [KeyCount]),
 
-    check_objects(hd(Nodes), 1, KeyCount, ?VAL_FLAG4),
-
-    IndexMultiple = 3,
-    
-    test_by_backend(KVBackend, Nodes, WithCompact, IndexMultiple).
+    check_objects(hd(Nodes), 1, KeyCount, ?VAL_FLAG4).
 
 
-test_by_backend(undefined, Nodes, WithCompact, IndexMultiple) ->
-    test_by_backend(bitcask, Nodes, WithCompact, IndexMultiple);
-test_by_backend(bitcask, Nodes, _WC, _IM) ->
+bad_switchback(leveled, Node) ->
+    {ok, [{IP, Port}]} =
+        rpc:call(Node, application, get_env, [riak_api, http]),
+    P = spawn(fun() ->
+                    rt:update_app_config(Node, ?CFG(false, immediate))
+                end),
+    lager:info("Prompted config update - sleep then fail ping"),
+    timer:sleep(30000),
+    C0 = rhc:create(IP, Port, "riak", []),
+    {error, _Error} = rhc:ping(C0),
+    lager:info("Ping failed as tried to switch from reload to recalc"),
+    exit(P, kill);
+bad_switchback(_, _Node) ->
+    true.
+
+
+backend_compact(leveled, Nodes) ->
+    prompt_compactions(Nodes),
+    lager:info("Sleep for ~w seconds to wait for compaction",
+                [?COMPACTION_WAIT]),
+    timer:sleep(?COMPACTION_WAIT * 1000);
+backend_compact(_Backend, _Nodes) ->
+    ok.
+
+
+test_by_backend(undefined, Nodes, IndexMultiple) ->
+    test_by_backend(bitcask, Nodes, IndexMultiple);
+test_by_backend(bitcask, Nodes, _IM) ->
     not_supported_test(Nodes);
-test_by_backend(eleveldb, Nodes, _WC, IndexMultiple) ->
+test_by_backend(eleveldb, Nodes, IndexMultiple) ->
     KeyCount = key_count(eleveldb, Nodes),
     IndexEntries = check_index(hd(Nodes)),
     lager:info("Number of IndexEntries ~w~n", [IndexEntries]),
     true = IndexEntries == IndexMultiple * KeyCount,
     not_supported_test(Nodes);
-test_by_backend(CapableBackend, Nodes, WithCompact, IndexMultiple) ->
+test_by_backend(CapableBackend, Nodes, IndexMultiple) ->
 
     KeyCount= key_count(CapableBackend, Nodes),
     IndexEntries = check_index(hd(Nodes)),
@@ -138,16 +178,6 @@ test_by_backend(CapableBackend, Nodes, WithCompact, IndexMultiple) ->
 
     lager:info("Clean backup folder if present"),
     rt:clean_data_dir(Nodes, "backup"),
-
-    case WithCompact of
-        true ->
-            prompt_compactions(Nodes),
-            lager:info("Sleep for ~w seconds to wait for compaction",
-                        [?COMPACTION_WAIT]),
-            timer:sleep(?COMPACTION_WAIT * 1000);
-        false ->
-            ok
-    end,
 
     {CoverNumber, RVal} = {?N_VAL, 2},
 
