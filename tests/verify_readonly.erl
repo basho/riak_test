@@ -21,6 +21,7 @@
 -behavior(riak_test).
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
+-include("../src/stacktrace.hrl").
 
 -define(BUCKET, <<"B0">>).
 -define(POST_MULT, 100).
@@ -65,9 +66,10 @@ confirm() ->
         try run_test(NTestItems, RootNode, FailNode) of
             pass -> pass
         catch
-            _:Error -> 
-                lager:error("Test failure as caught error ~w",  [Error]),
-                lager:error("Failure has trace ~p", [erlang:get_stacktrace()]),
+            ?_exception_(_, Error, StackToken) -> 
+                lager:error("Test failure as caught error ~w", [Error]),
+                lager:error("Failure has trace ~p",
+                                [?_get_stacktrace_(StackToken)]),
                 error
         end,
     

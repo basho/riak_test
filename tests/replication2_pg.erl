@@ -182,7 +182,7 @@ test_basic_pg(Mode, SSL) ->
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
 
-    _FirstA = hd(ANodes),
+    _ = hd(ANodes),
     FirstB = hd(BNodes),
     FirstC = hd(CNodes),
     PidB = rt:pbc(FirstB),
@@ -286,9 +286,9 @@ test_12_pg(Mode, SSL) ->
     {Bucket, KeyB, ValueB} = make_test_object("b"),
 
     rt:log_to_nodes(AllNodes, "Test 1.2 proxy_get"),
-    _FirstA = hd(ANodes),
+    _ = hd(ANodes),
     FirstB = hd(BNodes),
-    _FirstC = hd(CNodes),
+    _ = hd(CNodes),
     case Mode of
         mode_repl12 ->
             ModeRes = rpc:call(FirstB, riak_repl_console, modes, [["mode_repl12"]]),
@@ -406,7 +406,7 @@ test_pg_proxy(SSL) ->
     %% before it actually does any work.
     FirstA = hd(ANodes),
     FirstB = hd(BNodes),
-    _FirstC = hd(CNodes),
+    _ = hd(CNodes),
     PidB = rt:pbc(FirstB),
     lager:info("Connected to cluster B"),
     {ok, PGResult} = riak_repl_pb_api:get(PidB,Bucket,KeyA,CidA),
@@ -453,7 +453,7 @@ test_cluster_mapping(SSL) ->
     {LeaderA, ANodes, BNodes, CNodes, _AllNodes} =
         setup_repl_clusters(Conf, SSL),
 
-    _FirstA = hd(ANodes),
+    _ = hd(ANodes),
     FirstB = hd(BNodes),
     FirstC = hd(CNodes),
     LeaderB = rpc:call(FirstB, riak_core_cluster_mgr, get_leader, []),
@@ -576,7 +576,7 @@ test_bidirectional_pg(SSL) ->
 
     FirstA = hd(ANodes),
     FirstB = hd(BNodes),
-    _FirstC = hd(CNodes),
+    _ = hd(CNodes),
 
     LeaderB = rpc:call(FirstB, riak_repl2_leader, leader_node, []),
 
@@ -677,7 +677,7 @@ test_multiple_sink_pg(SSL) ->
     rt:pbc_write(PidA, Bucket, KeyA, ValueA),
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
 
-    _FirstA = hd(ANodes),
+    _ = hd(ANodes),
     FirstB = hd(BNodes),
     FirstC = hd(CNodes),
 
@@ -730,7 +730,7 @@ test_mixed_pg(SSL) ->
     rt:pbc_write(PidA, Bucket, KeyB, ValueB),
     rt:pbc_write(PidA, Bucket, KeyC, ValueC),
 
-    _FirstA = hd(ANodes),
+    _ = hd(ANodes),
     FirstB = hd(BNodes),
     FirstC = hd(CNodes),
     rt:wait_until_ring_converged(ANodes),

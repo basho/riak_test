@@ -21,6 +21,7 @@
 -behavior(riak_test).
 -export([confirm/0, get_stats/1]).
 -include_lib("eunit/include/eunit.hrl").
+-include("../src/stacktrace.hrl").
 
 -define(CTYPE, <<"counters">>).
 -define(STYPE, <<"sets">>).
@@ -221,9 +222,9 @@ get_console_stats(Node) ->
 		  [list_to_tuple(re:split(L, " : ", []))
 		   || L <- tl(tl(string:tokens(Stats, "\n")))]]
     catch
-	error:Reason ->
-	    lager:info("riak admin status ERROR: ~p~n~p~n",
-		       [Reason, erlang:get_stacktrace()]),
+	    ?_exception_(Error, Reason, StackToken) ->
+	    lager:info("riak admin status ~p: ~p~n~p~n",
+		       [Error, Reason, ?_get_stacktrace_(StackToken)]),
 	    []
     end.
 

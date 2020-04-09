@@ -246,7 +246,7 @@ write_siblings(N, Client, SibSize, Acc) ->
     %% value into a single value, so make each sibling have a
     %% different value. I also _think_ that the object size is all the
     %% is siblings, so object will by sibs * size(bytes)
-    Bytes = crypto:rand_bytes(SibSize),
+    Bytes = crypto:strong_rand_bytes(SibSize),
     KVs = test_data(1, N, <<"sibling", N:32/integer, Bytes/binary>>),
     Acc2 = lists:foldl(fun({K, V}, InnerAcc) ->
                                O = riakc_obj:new(?BUCKET, K, V),

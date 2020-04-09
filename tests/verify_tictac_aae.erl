@@ -221,13 +221,14 @@ verify_data(Node, KeyValues) ->
     MaxTime = rt_config:get(rt_max_wait_time),
     Delay = 2000, % every two seconds until max time.
     Retry = MaxTime div Delay,
-    case rt:wait_until(CheckFun, Retry, Delay) of
-        ok ->
-            lager:info("Data is now correct. Yay!");
-        fail ->
-            lager:error("AAE failed to fix data"),
-            ?assertEqual(aae_fixed_data, aae_failed_to_fix_data)
-    end,
+    ok = 
+        case rt:wait_until(CheckFun, Retry, Delay) of
+            ok ->
+                lager:info("Data is now correct. Yay!");
+            fail ->
+                lager:error("AAE failed to fix data"),
+                aae_failed_to_fix_data
+        end,
     riakc_pb_socket:stop(PB),
     ok.
 
