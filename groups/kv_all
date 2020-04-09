@@ -1,6 +1,7 @@
 coverage_participation
 http_security
 hotbackup_leveled
+journalreload_leveled
 kv679_dataloss
 kv679_dataloss_fb
 kv679_dataloss_fb2
@@ -37,6 +38,7 @@ verify_listkeys
 verify_multibackend_head
 verify_object_limits
 verify_put_opt_node_confirms
+verify_readonly
 verify_riak_stats
 verify_siblingmerge_basic
 verify_stats_removal
