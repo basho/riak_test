@@ -1348,7 +1348,7 @@ systest_delete(Node, Start, End, Bucket, W) ->
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
                 Key = <<N:32/integer>>,
-                try C:delete(Bucket, Key, W) of
+                try riak_client:delete(Bucket, Key, W, C) of
                     ok ->
                         Acc;
                     Other ->
@@ -1374,7 +1374,7 @@ systest_verify_delete(Node, Start, End, Bucket, R) ->
     {ok, C} = riak:client_connect(Node),
     F = fun(N, Acc) ->
                 Key = <<N:32/integer>>,
-                try C:get(Bucket, Key, R) of
+                try riak_client:get(Bucket, Key, R, C) of
                     {error, notfound} ->
                         [];
                     Other ->
@@ -1410,7 +1410,7 @@ systest_write(Node, Start, End, Bucket, W, CommonValBin)
     F = fun(N, Acc) ->
                 Obj = riak_object:new(Bucket, <<N:32/integer>>,
                                       <<N:32/integer, CommonValBin/binary>>),
-                try C:put(Obj, W) of
+                try riak_client:put(Obj, W, C) of
                     ok ->
                         Acc;
                     Other ->
@@ -1455,7 +1455,7 @@ systest_read(Node, Start, End, Bucket, R, CommonValBin, SquashSiblings)
 
 systest_read_fold_fun(C, Bucket, R, CommonValBin, SquashSiblings) ->
     fun(N, Acc) ->
-            GetRes = C:get(Bucket, <<N:32/integer>>, R),
+            GetRes = riak_client:get(Bucket, <<N:32/integer>>, R, C),
             Val = object_value(GetRes, SquashSiblings),
             update_acc(value_matches(Val, N, CommonValBin), Val, N, Acc)
     end.
