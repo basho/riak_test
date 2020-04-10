@@ -32,13 +32,16 @@ confirm() ->
     end,
 
     Obj = riak_object:new(<<"foo">>, <<"bar">>, <<42:32/integer>>),
-    ?assertEqual(ok, C:put(Obj, [{pw, all}])),
-    ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
+    ?assertEqual(ok,
+                    riak_client:put(Obj, [{pw, all}], C)),
+    ?assertMatch({ok, _},
+                    riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
 
     %% check pr/pw can't be violated
-    ?assertEqual({error, {pw_val_violation, evil}}, C:put(Obj, [{pw, evil}])),
-    ?assertEqual({error, {pr_val_violation, evil}}, C:get(<<"foo">>, <<"bar">>,
-            [{pr, evil}])),
+    ?assertEqual({error, {pw_val_violation, evil}},
+                    riak_client:put(Obj, [{pw, evil}]), C),
+    ?assertEqual({error, {pr_val_violation, evil}},
+                    riak_client:get(<<"foo">>, <<"bar">>, [{pr, evil}], C)),
 
     ?assertMatch({ok, {{_, 400, _}, _, "pr query parameter must be"++_}},
         httpc:request(get, {UrlFun(<<"foo">>, <<"bar">>, <<"?pr=evil">>), []}, [], [])),
@@ -61,21 +64,24 @@ confirm() ->
 
     %% one vnode will never return, so we get timeouts
     ?assertEqual({error, timeout},
-        C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
-    ?assertEqual({error, timeout}, C:put(Obj, [{pw, all}])),
+        riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
+    ?assertEqual({error, timeout},
+        riak_client:put(Obj, [{pw, all}], C)),
 
     %% we can still meet quorum, though
-    ?assertEqual(ok, C:put(Obj, [{pw, quorum}])),
+    ?assertEqual(ok,
+                    riak_client:put(Obj, [{pw, quorum}], C)),
     ?assertMatch({ok, _},
-        C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
+                    riak_client:get(<<"foo">>, <<"bar">>, [{pr, quorum}], C)),
 
     rt:stop_and_wait(Node),
 
     %% there's now a fallback in the preflist, so PR/PW won't be satisfied
     %% anymore
     ?assertEqual({error, {pr_val_unsatisfied, 3, 2}},
-        C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
-    ?assertEqual({error, {pw_val_unsatisfied, 3, 2}}, C:put(Obj, [{pw, all}])),
+                    riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
+    ?assertEqual({error, {pw_val_unsatisfied, 3, 2}},
+                    riak_client:put(Obj, [{pw, all}], C)),
 
     ?assertMatch({ok, {{_, 503, _}, _, "PR-value unsatisfied: 2/3\n"}},
         httpc:request(get, {UrlFun(<<"foo">>, <<"bar">>, <<"?pr=all">>), []}, [], [])),
@@ -96,20 +102,24 @@ confirm() ->
 
     %% can't even meet quorum now
     ?assertEqual({error, timeout},
-        C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
-    ?assertEqual({error, timeout}, C:put(Obj, [{pw, quorum}])),
+                    riak_client:get(<<"foo">>, <<"bar">>, [{pr, quorum}], C)),
+    ?assertEqual({error, timeout}, 
+                    riak_client:put(Obj, [{pw, quorum}], C)),
 
     %% restart the node
     rt:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
 
     %% we can make quorum again
-    ?assertEqual(ok, C:put(Obj, [{pw, quorum}])),
-    ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, quorum}])),
+    ?assertEqual(ok,
+                    riak_client:put(Obj, [{pw, quorum}], C)),
+    ?assertMatch({ok, _},
+                    riak_client:get(<<"foo">>, <<"bar">>, [{pr, quorum}], C)),
     %% intercepts still in force on second node, so we'll get timeouts
     ?assertEqual({error, timeout},
-        C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
-    ?assertEqual({error, timeout}, C:put(Obj, [{pw, all}])),
+                    riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
+    ?assertEqual({error, timeout},
+                    riak_client:put(Obj, [{pw, all}], C)),
 
     %% reboot the node
     rt:stop_and_wait(Node2),
@@ -117,8 +127,10 @@ confirm() ->
     rt:wait_for_service(Node2, riak_kv),
 
     %% everything is happy again
-    ?assertEqual(ok, C:put(Obj, [{pw, all}])),
-    ?assertMatch({ok, _}, C:get(<<"foo">>, <<"bar">>, [{pr, all}])),
+    ?assertEqual(ok,
+                    riak_client:put(Obj, [{pw, all}], C)),
+    ?assertMatch({ok, _}, 
+                    riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
 
     %% make a vnode start to fail puts
     make_intercepts_tab(Node2, Index2),
@@ -129,8 +141,10 @@ confirm() ->
 
     %% there's now a failing vnode in the preflist, so PW/DW won't be satisfied
     %% anymore
-    ?assertEqual({error, {pw_val_unsatisfied, 3, 2}}, C:put(Obj, [{pw, all}])),
-    ?assertEqual({error, {dw_val_unsatisfied, 3, 2}}, C:put(Obj, [{dw, all}])),
+    ?assertEqual({error, {pw_val_unsatisfied, 3, 2}},
+                    riak_client:put(Obj, [{pw, all}], C)),
+    ?assertEqual({error, {dw_val_unsatisfied, 3, 2}},
+                    riak_client:put(Obj, [{dw, all}], C)),
 
     ?assertMatch({ok, {{_, 503, _}, _, "PW-value unsatisfied: 2/3\n"}},
         httpc:request(put, {UrlFun(<<"foo">>, <<"bar">>,
