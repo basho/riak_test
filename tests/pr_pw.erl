@@ -39,7 +39,7 @@ confirm() ->
 
     %% check pr/pw can't be violated
     ?assertEqual({error, {pw_val_violation, evil}},
-                    riak_client:put(Obj, [{pw, evil}]), C),
+                    riak_client:put(Obj, [{pw, evil}], C)),
     ?assertEqual({error, {pr_val_violation, evil}},
                     riak_client:get(<<"foo">>, <<"bar">>, [{pr, evil}], C)),
 
