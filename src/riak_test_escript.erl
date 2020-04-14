@@ -113,11 +113,17 @@ main(Args) ->
             notice
     end,
 
-    Formatter = {lager_default_formatter, [time," [",severity,"] ", pid, " ", message, "\n"]},
+    ConsoleFormatter = lager_default_formatter,
+    ConsoleFormatConfig = [time," [",severity,"] ", pid, " ", message, "\n"],
+    ConsoleBackend =
+        [{level, ConsoleLagerLevel},
+            {formatter, ConsoleFormatter},
+            {formatter_config, ConsoleFormatConfig}],
+    FileBackend = 
+        [{file, "log/test.log"}, {level, ConsoleLagerLevel}],
     application:set_env(lager, error_logger_hwm, 250), %% helpful for debugging
-    application:set_env(lager, handlers, [{lager_console_backend, [ConsoleLagerLevel, Formatter]},
-                                          {lager_file_backend, [{file, "log/test.log"},
-                                                                {level, ConsoleLagerLevel}]}]),
+    application:set_env(lager, handlers, [{lager_console_backend, ConsoleBackend},
+                                          {lager_file_backend, FileBackend}]),
     lager:start(),
 
     %% Report
