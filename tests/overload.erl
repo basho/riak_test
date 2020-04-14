@@ -377,7 +377,7 @@ read_until_success(Node) ->
     read_until_success(C, 0).
 
 read_until_success(C, Count) ->
-    case C:get(<<"dummy">>, <<"dummy">>) of
+    case riak_client:get(<<"dummy">>, <<"dummy">>, C) of
         {error, mailbox_overload} ->
             read_until_success(C, Count+1);
         _ ->

@@ -182,7 +182,7 @@ systest_write_binary(Node, Start, End, Bucket, W, CommonValBin)
                 Obj = riak_object:new(Bucket,
                                         <<N:32/integer>>,
                                         <<CommonValBin/binary, N:32/integer>>),
-                try C:put(Obj, W) of
+                try riak_client:put(Obj, W, C) of
                     ok ->
                         Acc;
                     Other ->
@@ -203,7 +203,7 @@ systest_read_binary(Node, Start, End, Bucket, R, CommonValBin, ExpectSiblings)
 
 systest_read_fold_fun(C, Bucket, R, CommonValBin, ExpectSiblings) ->
     fun(N) ->
-        {ok, RObj} = C:get(Bucket, <<N:32/integer>>, R),
+        {ok, RObj} = riak_client:get(Bucket, <<N:32/integer>>, R, C),
         check_value(RObj, ExpectSiblings, N, CommonValBin)
     end.
 

@@ -57,6 +57,7 @@ confirm() ->
     Path = filename:join([rtdev:relpath(current),
                           "dev",
                           "dev"++ integer_to_list(rtdev:node_id(FailNode)),
+                          "riak",
                           "data"]),
 
     % When running the test we cannot let it crash on failure - as then the
@@ -89,6 +90,7 @@ run_test(NTestItems, RootNode, FailNode) ->
     Path = filename:join([rtdev:relpath(current),
                           "dev",
                           "dev"++ integer_to_list(rtdev:node_id(FailNode)),
+                          "riak",
                           "data"]),
     S = io_lib:format("chmod -R u-w ~p",[Path]),
     lager:info("Running command ~s with output ~w", [S, os:cmd(S)]),

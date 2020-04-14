@@ -241,10 +241,10 @@ write_to_cluster(Node, Start, End, CommonValBin) ->
                                         <<N:32/integer, CVB/binary>>);
                     UpdateBin ->
                         UPDV = <<N:32/integer, UpdateBin/binary>>,
-                        {ok, PrevObj} = C:get(?TEST_BUCKET, Key),
+                        {ok, PrevObj} = riak_client:get(?TEST_BUCKET, Key, C),
                         riak_object:update_value(PrevObj, UPDV)
                 end,
-            try C:put(Obj) of
+            try ria_client:put(Obj, C) of
                 ok ->
                     Acc;
                 Other ->
@@ -265,7 +265,7 @@ delete_from_cluster(Node, Start, End) ->
     F = 
         fun(N, Acc) ->
             Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
-            try C:delete(?TEST_BUCKET, Key) of
+            try riak_client:delete(?TEST_BUCKET, Key, C) of
                 ok ->
                     Acc;
                 Other ->
@@ -287,7 +287,7 @@ read_from_cluster(Node, Start, End, CommonValBin, Errors) ->
     F = 
         fun(N, Acc) ->
             Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
-            case  C:get(?TEST_BUCKET, Key) of
+            case  C=riak_client:get(?TEST_BUCKET, Key, C) of
                 {ok, Obj} ->
                     ExpectedVal = <<N:32/integer, CommonValBin/binary>>,
                     case riak_object:get_value(Obj) of

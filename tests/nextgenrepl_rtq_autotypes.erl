@@ -234,10 +234,10 @@ write_to_cluster(Node, Start, End, CommonValBin, Bucket) ->
                                         <<N:32/integer, CVB/binary>>);
                     UpdateBin ->
                         UPDV = <<N:32/integer, UpdateBin/binary>>,
-                        {ok, PrevObj} = C:get(Bucket, Key),
+                        {ok, PrevObj} = riak_client:get(Bucket, Key, C),
                         riak_object:update_value(PrevObj, UPDV)
                 end,
-            try C:put(Obj) of
+            try riak_client:put(Obj, C) of
                 ok ->
                     Acc;
                 Other ->
@@ -251,28 +251,6 @@ write_to_cluster(Node, Start, End, CommonValBin, Bucket) ->
     lager:warning("~p errors while writing: ~p", [length(Errors), Errors]),
     ?assertEqual([], Errors).
 
-% delete_from_cluster(Node, Start, End, Bucket) ->
-%     lager:info("Deleting ~p keys from node ~p.", [End - Start + 1, Node]),
-%     lager:warning("Note that only utf-8 keys are used"),
-%     {ok, C} = riak:client_connect(Node),
-%     F = 
-%         fun(N, Acc) ->
-%             Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
-%             try C:delete(Bucket, Key) of
-%                 ok ->
-%                     Acc;
-%                 Other ->
-%                     [{N, Other} | Acc]
-%             catch
-%                 What:Why ->
-%                     [{N, {What, Why}} | Acc]
-%             end
-%         end,
-%     Errors = lists:foldl(F, [], lists:seq(Start, End)),
-%     lager:warning("~p errors while deleting: ~p", [length(Errors), Errors]),
-%     ?assertEqual([], Errors).
-
-
 %% @doc Read from cluster a series of keys, asserting a certain number
 %%      of errors.
 read_from_cluster(Node, Start, End, CommonValBin, Bucket, Errors) ->
@@ -284,7 +262,7 @@ read_from_cluster(Node, Start, End, CommonValBin, Bucket, Errors, LogErrors) ->
     F = 
         fun(N, Acc) ->
             Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
-            case  C:get(Bucket, Key) of
+            case  riak_client:get(Bucket, Key, C) of
                 {ok, Obj} ->
                     ExpectedVal = <<N:32/integer, CommonValBin/binary>>,
                     case riak_object:get_value(Obj) of

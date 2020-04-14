@@ -266,10 +266,10 @@ write_to_cluster(Node, Start, End, Bucket, NewObj, CVB) ->
                                         <<N:32/integer, CVB/binary>>);
                     false ->
                         UPDV = <<N:32/integer, CVB/binary>>,
-                        {ok, PrevObj} = C:get(Bucket, Key),
+                        {ok, PrevObj} = riak_client:get(Bucket, Key, C),
                         riak_object:update_value(PrevObj, UPDV)
                 end,
-            try C:put(Obj) of
+            try riak_client:put(Obj, C) of
                 ok ->
                     Acc;
                 Other ->
@@ -292,7 +292,7 @@ delete_from_cluster(Node, Start, End, Bucket) ->
     F = 
         fun(N, Acc) ->
             Key = key(N),
-            try C:delete(Bucket, Key) of
+            try riak_client:delete(Bucket, Key, C) of
                 ok ->
                     Acc;
                 Other ->
@@ -319,7 +319,7 @@ read_from_cluster(Node, Start, End, Errors, Bucket, CommonValBin) ->
     F = 
         fun(N, Acc) ->
             Key = key(N),
-            case  C:get(Bucket, Key) of
+            case  riak_client:get(Bucket, Key, C) of
                 {ok, Obj} ->
                     ExpectedVal = <<N:32/integer, CommonValBin/binary>>,
                     case riak_object:get_value(Obj) of
