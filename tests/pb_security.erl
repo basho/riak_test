@@ -95,15 +95,18 @@ confirm() ->
 
     lager:info("Checking SSL requires peer cert validation"),
     %% can't connect without specifying cacert to validate the server
-    ?assertMatch({error, _}, riakc_pb_socket:start("127.0.0.1", Port,
-                                                   [{credentials, UsernameBin,
-                                                     "pass"}])),
+    ?assertMatch({error, _},
+                    riakc_pb_socket:start("127.0.0.1",
+                                            Port,
+                                            [{credentials, UsernameBin, "pass"}])),
 
     lager:info("Checking that authentication is required"),
     %% invalid credentials should be invalid
-    ?assertEqual({error, {tcp, <<"Authentication failed">>}}, riakc_pb_socket:start("127.0.0.1", Port,
-                                      [{credentials, UsernameBin,
-                                        "pass"}, {cacertfile,
+    ?assertMatch({error, {tcp, <<"Authentication failed">>}},
+                    riakc_pb_socket:start("127.0.0.1",
+                                            Port,
+                                            [{credentials, UsernameBin, "pass"},
+                                                {cacertfile,
                                                   filename:join([CertDir, "rootCA/cert.pem"])}])),
 
     lager:info("Creating user"),
