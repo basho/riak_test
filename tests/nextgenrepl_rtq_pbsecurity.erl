@@ -355,7 +355,7 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC, CertDir) ->
     lager:info("Kill a node in source - and repl OK"),
     rt:brutal_kill(NodeA0),
     lager:info("Node killed"),
-    timer:sleep(1000), % Cluster may settle after kill
+    timer:sleep(2000), % Cluster may settle after kill
     write_to_cluster(NodeA, 5001, 8000, new_obj),
     {root_compare, 0} =
         wait_for_outcome(?MODULE,
