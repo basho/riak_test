@@ -1,9 +1,0 @@
-riak667_mixed
-riak667_safe
-verify_counter_capability
-verify_counter_converge
-verify_crdt_capability
-verify_dt_context
-verify_dt_converge
-verify_dt_upgrade
-verify_no_datatype_siblings

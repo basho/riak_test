@@ -1,8 +1,0 @@
-replication2
-replication2_console_tests
-replication2_fsschedule
-replication2_ssl
-replication2_connections
-replication2_dirty
-replication2_rt_sink_connection
-replication2_upgrade
