@@ -66,113 +66,102 @@ confirm() ->
     ok = rpc:call(Node, riak_core_console, add_source, [["user", "127.0.0.1/32",
                                                     "password"]]),
 
-    CipherList = "AES256-SHA256:RC4-SHA",
+    CipherList =
+        "ECDHE-RSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-AES256-SHA384",
+
+
     %% set a simple default cipher list, one good one a and one shitty one
     rpc:call(Node, riak_core_security, set_ciphers, [CipherList]),
     rpc:call(Node, application, set_env, [riak_api, honor_cipher_order, true]),
 
-    [AES256, RC4] = ParsedCiphers = [begin
-                %% this includes the pseudo random function, which apparently
-                %% we don't want
-                SD = ssl_cipher:suite_definition(E),
-                {maps:get(key_exchange, SD), 
-                    maps:get(cipher, SD),
-                    maps:get(mac, SD)}
-            end ||
-            E <- element(1,
-                         riak_core_ssl_util:parse_ciphers(CipherList))],
+    GoodCiphers = element(1, riak_core_ssl_util:parse_ciphers(CipherList)),
+    lager:info("Good ciphers: ~p", [GoodCiphers]),
+    [AES256, AES128, _ECDSA] = 
+        ParsedCiphers = 
+            lists:map(fun(PC) -> cipher_format(PC) end, GoodCiphers),
     
     lager:info("Parsed Ciphers ~w", [ParsedCiphers]),
 
-    lager:info("Check that the server's preference for ECDHE-RSA-AES256-SHA256"
-               "is honored"),
-    ?assertEqual({ok, {'tlsv1.2', AES256}},
-                 pb_connection_info(Port,
-                                    [{credentials, "user",
-                                      "password"}, {cacertfile,
-                                                    filename:join([CertDir,
-                                                                   "rootCA/cert.pem"])},
-                                     {ssl_opts, [{ciphers,
-                                                  lists:reverse(ParsedCiphers)}]}
-                                    ])),
-
-    lager:info("disabling honor_cipher_info"),
-    rpc:call(Node, application, set_env, [riak_api, honor_cipher_order, false]),
-
-    lager:info("Check that the client's preference for RC4"
-               "is honored"),
-    ?assertEqual({ok, {'tlsv1.2', RC4}},
-                 pb_connection_info(Port,
-                                    [{credentials, "user",
-                                      "password"}, {cacertfile,
-                                                    filename:join([CertDir,
-                                                                   "rootCA/cert.pem"])},
-                                     {ssl_opts, [{ciphers,
-                                                  lists:reverse(ParsedCiphers)}]}
-                                    ])),
+    lager:info("Check that the server's preference for ECDHE-RSA-AES256-SHA384"
+               " is honored"),
+    AES256T = convert_suite_to_tuple(AES256),
+    {ok, {'tlsv1.2', AES256R}} =
+        pb_connection_info(Port,
+                            [{credentials, "user", "password"},
+                            {cacertfile,
+                                filename:join([CertDir, "rootCA/cert.pem"])},
+                            {ssl_opts,
+                                [{ciphers, ParsedCiphers}]}
+                            ]),
+    lager:info("With cipher order - ~w", [AES256R]),
+    ?assertEqual(AES256T, {element(1, AES256R),
+                            element(2, AES256R),
+                            element(3, AES256R)}),
+    lager:info("Ignoring reversal of cipher order!!"),
+    {ok, {'tlsv1.2', AES256R}} =
+        pb_connection_info(Port,
+                            [{credentials, "user", "password"},
+                            {cacertfile,
+                                filename:join([CertDir, "rootCA/cert.pem"])},
+                            {ssl_opts,
+                                [{ciphers,
+                                    lists:reverse(ParsedCiphers)}]}
+                            ]),
+    
+    lager:info("Do we assume that cipher order is not honoured?"),
+    
+    SingleCipherProps =
+        [{credentials, "user", "password"},
+            {cacertfile, filename:join([CertDir, "rootCA/cert.pem"])},
+            {ssl_opts, [{ciphers, [AES128]}]}],
+    lager:info("Setting weak cipher now throws insufficient security"),
+    insufficient_check(Port, SingleCipherProps),
 
     lager:info("check that connections trying to use tls 1.1 fail"),
-    ?assertMatch({error,{tcp,{tls_alert,"protocol version"}}},
-                 pb_connection_info(Port,
-                                    [{credentials, "user",
-                                      "password"}, {cacertfile,
-                                                    filename:join([CertDir,
-                                                                   "rootCA/cert.pem"])},
-                                     {ssl_opts, [{versions, ['tlsv1.1']}]}
-                                    ])),
+    {error,{tcp,{tls_alert,ProtocolVersionError}}} =
+        pb_connection_info(Port,
+                            [{credentials, "user", "password"},
+                                {cacertfile,
+                                    filename:join([CertDir,
+                                                    "rootCA/cert.pem"])},
+                                {ssl_opts, [{versions, ['tlsv1.1']}]}
+                            ]),
 
     lager:info("check that connections trying to use tls 1.0 fail"),
-    ?assertMatch({error,{tcp,{tls_alert,"protocol version"}}},
-                 pb_connection_info(Port,
-                                    [{credentials, "user",
-                                      "password"}, {cacertfile,
-                                                    filename:join([CertDir,
-                                                                   "rootCA/cert.pem"])},
-                                     {ssl_opts, [{versions, ['tlsv1']}]}
-                                    ])),
+    {error,{tcp,{tls_alert,ProtocolVersionError}}} =
+        pb_connection_info(Port,
+                            [{credentials, "user", "password"},
+                                {cacertfile,
+                                    filename:join([CertDir,
+                                                    "rootCA/cert.pem"])},
+                                {ssl_opts, [{versions, ['tlsv1']}]}
+                            ]),
     lager:info("check that connections trying to use ssl 3.0 fail"),
-    ?assertMatch({error,{tcp,{tls_alert,"protocol version"}}},
-                 pb_connection_info(Port,
-                                    [{credentials, "user",
-                                      "password"}, {cacertfile,
-                                                    filename:join([CertDir,
-                                                                   "rootCA/cert.pem"])},
-                                     {ssl_opts, [{versions, ['sslv3']}]}
-                                    ])),
+    {error,{tcp,{tls_alert,ProtocolVersionError}}} =
+        pb_connection_info(Port,
+                            [{credentials, "user", "password"},
+                                {cacertfile,
+                                    filename:join([CertDir,
+                                                    "rootCA/cert.pem"])},
+                                    {ssl_opts, [{versions, ['sslv3']}]}
+                                    ]),
 
     lager:info("Enable ssl 3.0, tls 1.0 and tls 1.1 and disable tls 1.2"),
     rpc:call(Node, application, set_env, [riak_api, tls_protocols,
-                                          [sslv3, tlsv1, 'tlsv1.1']]),
+                                            [sslv3, tlsv1, 'tlsv1.1']]),
 
     lager:info("check that connections trying to use tls 1.2 fail"),
     ?assertMatch({error,{tcp,{options,{'tls1.2',{versions,['tls1.2']}}}}},
-                 pb_connection_info(Port,
+                    pb_connection_info(Port,
                                     [{credentials, "user",
-                                      "password"}, {cacertfile,
+                                        "password"}, {cacertfile,
                                                     filename:join([CertDir,
-                                                                   "rootCA/cert.pem"])},
-                                     {ssl_opts, [{versions, ['tls1.2']}]}
+                                                                    "rootCA/cert.pem"])},
+                                        {ssl_opts, [{versions, ['tls1.2']}]}
                                     ])),
 
-    lager:info("check tls 1.1 fails - need to be on 1.2"),
-    ?assertMatch({error,{tcp,{tls_alert,"insufficient security"}}},
-                 pb_connection_info(Port,
-                                    [{credentials, "user",
-                                      "password"}, {cacertfile,
-                                                    filename:join([CertDir,
-                                                                   "rootCA/cert.pem"])},
-                                     {ssl_opts, [{versions, ['tlsv1.1']}]}
-                                    ])),
-
-    lager:info("check tls 1.0 fails - need to be on 1.2"),
-    ?assertMatch({error,{tcp,{tls_alert,"insufficient security"}}},
-                 pb_connection_info(Port,
-                                    [{credentials, "user",
-                                      "password"}, {cacertfile,
-                                                    filename:join([CertDir,
-                                                                   "rootCA/cert.pem"])},
-                                     {ssl_opts, [{versions, ['tlsv1']}]}
-                                    ])),
+    lager:info("Re-enabling old protocols will work in OTP 22"),
+    check_with_reenabled_protools(Port, CertDir),
 
     lager:info("Reset tls protocols back to the default"),
     rpc:call(Node, application, set_env, [riak_api, tls_protocols,
@@ -211,6 +200,9 @@ confirm() ->
                                      ]),
     ?assertEqual(pong, riakc_pb_socket:ping(PB)),
     riakc_pb_socket:stop(PB),
+
+    ok = check_reasons(ProtocolVersionError),
+
     pass.
 
 pb_get_socket(PB) ->
@@ -226,11 +218,140 @@ pb_connection_info(Port, Config) ->
             {protocol, P} = lists:keyfind(protocol, 1, ConnInfo),
             {cipher_suite, CS} = lists:keyfind(cipher_suite, 1, ConnInfo),
             riakc_pb_socket:stop(PB),
-            {ok, {P, CS}};
+            {ok, {P, convert_suite_to_tuple(CS)}};
         Error ->
             Error
     end.
 
-    
+
+convert_suite_to_tuple(CS) when is_tuple(CS) ->
+    CS;
+convert_suite_to_tuple(CS) when is_map(CS) ->
+    {maps:get(key_exchange, CS), 
+        maps:get(cipher, CS),
+        maps:get(mac, CS)}.
 
 
+-ifdef(deprecated_22).
+
+cipher_format(Cipher) ->
+    Cipher.
+
+insufficient_check(Port, SingleCipherProps) ->
+    {error,
+        {tcp,
+            {tls_alert,
+                {insufficient_security, _ErrorMsg}}}} =
+        pb_connection_info(Port, SingleCipherProps).
+
+check_reasons({protocol_version,
+                "TLS client: In state hello received SERVER ALERT:"
+                " Fatal - Protocol Version\n "}) ->
+    ok;
+check_reasons(ProtocolVersionError) ->
+    lager:info("Unexpected error ~s", [ProtocolVersionError]),
+    error.
+
+check_with_reenabled_protools(Port, CertDir) ->
+    lager:info("Check tls 1.1 succeeds - OK as long as cipher good?"),
+    lager:info("Note that only 3-tuple returned for 1.1 - and sha not sha384"),
+    ?assertMatch({ok,{'tlsv1.1',{ecdhe_rsa,aes_256_cbc,sha}}},
+        pb_connection_info(Port,
+                            [{credentials, "user", "password"},
+                                {cacertfile,
+                                    filename:join([CertDir,
+                                                    "rootCA/cert.pem"])},
+                            {ssl_opts, [{versions, ['tlsv1.1']}]}
+                        ])),
+
+    lager:info("check tls 1.0 succeeds - OK as long as cipher is good?"),
+    ?assertMatch({ok,{'tlsv1',{ecdhe_rsa,aes_256_cbc,sha}}},
+        pb_connection_info(Port,
+                            [{credentials, "user", "password"},
+                                    {cacertfile,
+                                        filename:join([CertDir,
+                                                        "rootCA/cert.pem"])},
+                                {ssl_opts, [{versions, ['tlsv1']}]}
+                            ])).
+
+-else.
+
+
+    -ifdef(deprecated_21).
+
+        check_with_reenabled_protools(Port, CertDir) ->
+            lager:info("Cannot re-enable old protocols before OTP 22"),
+            ?assertMatch({error, {tcp, {tls_alert, {insufficient_security, _}}}},
+                pb_connection_info(Port,
+                                    [{credentials, "user", "password"},
+                                        {cacertfile,
+                                            filename:join([CertDir,
+                                                            "rootCA/cert.pem"])},
+                                    {ssl_opts, [{versions, ['tlsv1.1']}]}
+                                ])),
+
+            ?assertMatch({error, {tcp, {tls_alert, {insufficient_security, _}}}},
+                pb_connection_info(Port,
+                                    [{credentials, "user", "password"},
+                                            {cacertfile,
+                                                filename:join([CertDir,
+                                                                "rootCA/cert.pem"])},
+                                        {ssl_opts, [{versions, ['tlsv1']}]}
+                                    ])).
+
+        check_reasons({protocol_version,
+                        "received CLIENT ALERT: Fatal - Protocol Version"}) ->
+            ok;
+        check_reasons(ProtocolVersionError) ->
+            lager:info("Unexpected error ~s", [ProtocolVersionError]),
+            error.
+
+        insufficient_check(Port, SingleCipherProps) ->
+            {error,
+                {tcp,
+                    {tls_alert,
+                        {insufficient_security, _ErrorMsg}}}} =
+                pb_connection_info(Port, SingleCipherProps).
+        
+        cipher_format(Cipher) ->
+            ssl_cipher_format:suite_definition(Cipher).
+
+
+    -else.
+
+        check_reasons("protocol version") ->
+            ok;
+        check_reasons(ProtocolVersionError) ->
+            lager:info("Unexpected error ~s", [ProtocolVersionError]),
+            error.
+
+        check_with_reenabled_protools(Port, CertDir) ->
+            lager:info("Cannot re-enable old protocols before OTP 22"),
+            ?assertMatch({error, {tcp, {tls_alert,"insufficient security"}}},
+                pb_connection_info(Port,
+                                    [{credentials, "user", "password"},
+                                        {cacertfile,
+                                            filename:join([CertDir,
+                                                        "rootCA/cert.pem"])},
+                                    {ssl_opts, [{versions, ['tlsv1.1']}]}
+                                ])),
+
+            ?assertMatch({error, {tcp, {tls_alert,"insufficient security"}}},
+                pb_connection_info(Port,
+                                    [{credentials, "user", "password"},
+                                        {cacertfile,
+                                            filename:join([CertDir,
+                                                        "rootCA/cert.pem"])},
+                                        {ssl_opts, [{versions, ['tlsv1']}]}
+                                    ])).
+
+
+        insufficient_check(Port, SingleCipherProps) ->
+            {error, {tcp, {tls_alert,"insufficient security"}}} =
+                pb_connection_info(Port, SingleCipherProps).
+        
+        cipher_format(Cipher) ->
+            ssl_cipher:suite_definition(Cipher).
+
+    -endif.
+-endif.
