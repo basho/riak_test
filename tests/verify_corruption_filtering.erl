@@ -101,9 +101,8 @@ load_cluster(Node) ->
 load_level_intercepts(Nodes) ->
     [begin
          rt_intercept:add(Node, {riak_kv_eleveldb_backend,
-                                 [{{get, 3}, corrupting_get}]}),
-         rt_intercept:add(Node, {riak_kv_eleveldb_backend,
-                                 [{{put, 5}, corrupting_put}]}),
+                                 [{{get, 3}, corrupting_get},
+                                  {{put, 5}, corrupting_put}]}),
          rt_intercept:add(Node, {riak_kv_vnode,
                                  [{{handle_handoff_data, 2},
                                  corrupting_handle_handoff_data}]})
@@ -113,9 +112,8 @@ load_level_intercepts(Nodes) ->
 load_leveled_intercepts(Nodes) ->
     [begin
          rt_intercept:add(Node, {riak_kv_leveled_backend,
-                                 [{{get, 3}, corrupting_get}]}),
-         rt_intercept:add(Node, {riak_kv_leveled_backend,
-                                 [{{put, 5}, corrupting_put}]}),
+                                 [{{get, 3}, corrupting_get},
+                                  {{put, 5}, corrupting_put}]}),
          rt_intercept:add(Node, {riak_kv_vnode,
                                  [{{handle_handoff_data, 2},
                                  corrupting_handle_handoff_data}]})
@@ -126,9 +124,8 @@ load_leveled_intercepts(Nodes) ->
 load_bitcask_intercepts(Nodes) ->
     [begin
          rt_intercept:add(Node, {riak_kv_bitcask_backend,
-                                 [{{get, 3}, corrupting_get}]}),
-         rt_intercept:add(Node, {riak_kv_bitcask_backend,
-                                 [{{put, 5}, corrupting_put}]}),
+                                 [{{get, 3}, corrupting_get},
+                                  {{put, 5}, corrupting_put}]}),
          rt_intercept:add(Node, {riak_kv_vnode,
                                  [{{handle_handoff_data, 2},
                                    corrupting_handle_handoff_data}]})
