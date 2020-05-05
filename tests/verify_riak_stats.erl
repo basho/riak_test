@@ -508,7 +508,6 @@ common_stats() ->
         <<"exometer_core_version">>,
         <<"folsom_version">>,
         <<"fuse_version">>,
-        <<"gen_fsm_compat_version">>,
         <<"getopt_version">>,
         <<"goldrush_version">>,
         <<"gossip_received">>,

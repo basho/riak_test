@@ -1,6 +1,9 @@
 %% @doc Utilities for riak_pipe tests.
 -module(rt_pipe).
 
+-compile({nowarn_deprecated_function, 
+            [{gen_fsm, sync_send_all_state_event, 2}]}).
+
 -compile([export_all, nowarn_export_all]).
 
 %% local copy of riak_pipe.hrl
@@ -54,7 +57,7 @@ crash_fitting(Fitting) ->
 crash_fitting(#fitting{pid=Pid}, Fun) ->
     crash_fitting(Pid, Fun);
 crash_fitting(Pid, Fun) when is_pid(Pid) ->
-    (catch gen_fsm_compat:sync_send_all_state_event(Pid, {test_crash, Fun})).
+    (catch gen_fsm:sync_send_all_state_event(Pid, {test_crash, Fun})).
 
 %% @doc usually used with the riak_pipe_w_xform fitting: at each
 %% fitting, the xform worker will decrement the count by one.  If the

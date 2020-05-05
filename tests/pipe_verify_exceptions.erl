@@ -27,6 +27,11 @@
 
 -module(pipe_verify_exceptions).
 
+-compile({nowarn_deprecated_function, 
+            [{gen_fsm, send_event, 2},
+                {gen_fsm, sync_send_event, 2},
+                {gen_fsm, sync_send_all_state_event, 2}]}).
+
 -export([
          %% riak_test's entry
          confirm/0
@@ -201,17 +206,17 @@ middle_fitting_normal(Pipe) ->
 
     %% send fitting bogus messages - fitting should ignore because
     %% they're not known
-    gen_fsm_compat:send_event(hd(FittingPids), bogus_message),
+    gen_fsm:send_event(hd(FittingPids), bogus_message),
     {error, unknown} =
-        gen_fsm_compat:sync_send_event(hd(FittingPids), bogus_message),
-    gen_fsm_compat:sync_send_all_state_event(hd(FittingPids), bogus_message),
+        gen_fsm:sync_send_event(hd(FittingPids), bogus_message),
+    gen_fsm:sync_send_all_state_event(hd(FittingPids), bogus_message),
     hd(FittingPids) ! bogus_message,
 
     %% send bogus done message - fitting should ignore it because
     %% 'asdf' is not a working vnode pid
     [{_, Head}|_] = Pipe#pipe.fittings,
     MyRef = Head#fitting.ref,
-    ok = gen_fsm_compat:sync_send_event(hd(FittingPids), {done, MyRef, asdf}),
+    ok = gen_fsm:sync_send_event(hd(FittingPids), {done, MyRef, asdf}),
 
     %% kill fittings in the middle
     Third = lists:nth(3, FittingPids),
