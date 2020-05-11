@@ -227,7 +227,7 @@ client_write(Client, Bucket, Key, Value) ->
 
 client_write(Client, Bucket, Key, Value, Opts) ->
     Obj = riak_object:new(Bucket, Key, Value),
-    Client:put(Obj, Opts).
+    riak_client:put(Obj, Opts, Client).
 
 get_all_nodes_stats(Nodes) ->
     [{Nd, rpc:call(Nd, riak_kv_stat, get_stats, [])} || Nd <- Nodes].
