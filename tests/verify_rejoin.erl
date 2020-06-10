@@ -79,11 +79,18 @@ confirm() ->
     rt:systest_write(Node1, 4 * ?TEST_ITEM_COUNT + 1, 5 * ?TEST_ITEM_COUNT),
     check_joined([Node1, Node2, Node3]),
 
-    lager:info("Sleeping for manual check of logs"),
-    timer:sleep(30000),
+    lager:info("Checking for AAE repairs - should be none"),
+    lager:info("Will check the tictac_deltacount on state"),
+    lager:info("This may be brittle to changes in riak_kv_vnode state"),
+    lager:info("TODO - Add riak stat"),
     Ring = rt:get_ring(Node1),
     Owners = riak_core_ring:all_owners(Ring),
-    lists:foreach(check_vnode_stats/1, Owners),
+    timer:sleep(10000),
+    lists:foreach(fun check_vnode_stats/1, Owners),
+    timer:sleep(10000),
+    lists:foreach(fun check_vnode_stats/1, Owners),
+    timer:sleep(10000),
+    lists:foreach(fun check_vnode_stats/1, Owners),
 
     lager:info("Check all values read"),
     rt:systest_read(Node1, 5 * ?TEST_ITEM_COUNT),
@@ -106,5 +113,4 @@ check_vnode_stats({Partition, Node}) ->
                     riak_core_vnode,
                     get_modstate,
                     [Pid]),
-    lager:info("Module: ~w", [Mod]),
-    lager:info("ModState: ~p", ModState).
+    ?assertEqual(0, element(27, ModState)).
