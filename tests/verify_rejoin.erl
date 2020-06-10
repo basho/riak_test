@@ -38,36 +38,45 @@
                 {tictacaae_exchangetick, 10 * 1000}, % 10 seconds
                 {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
                 {tictacaae_primaryonly, true}]
-            }])
+            }]).
 
 confirm() ->
     %% Bring up a 3-node cluster for the test
     Nodes = rt:build_cluster(3, ?CFG),
     [Node1, Node2, Node3] = Nodes,
 
+    lager:info("Writing ~p items", [?TEST_ITEM_COUNT]),
     rt:systest_write(Node1, 1, ?TEST_ITEM_COUNT),
 
     lager:info("Have node2 leave and continue to write"),
     rt:leave(Node2),
     rt:systest_write(Node1, ?TEST_ITEM_COUNT + 1, 2 * ?TEST_ITEM_COUNT),
-    ?assertEqual(ok, wait_until_unpingable(Node2)),
+    ?assertEqual(ok, rt:wait_until_unpingable(Node2)),
 
     lager:info("Have node3 leave and continue to write"),
     rt:leave(Node3),
     rt:systest_write(Node1, 2 * ?TEST_ITEM_COUNT + 1, 3 * ?TEST_ITEM_COUNT),
-    ?assertEqual(ok, wait_until_unpingable(Node3)),
-
+    ?assertEqual(ok, rt:wait_until_unpingable(Node3)),
+    
+    lager:info("Restart node2"),
+    rt:start_and_wait(Node2),
+    timer:sleep(5000),
+    
     lager:info("Rejoin node2 and continue to write"),
-    rt:join(Node2),
+    rt:join(Node2, Node1),
     rt:systest_write(Node1, 3 * ?TEST_ITEM_COUNT + 1, 4 * ?TEST_ITEM_COUNT),
     check_joined([Node1, Node2]),
 
+    lager:info("Restart node3"),
+    rt:start_and_wait(Node3),
+    timer:sleep(5000),
+
     lager:info("Rejoin node3 and continue to write"),
-    rt:join(Node3),
+    rt:join(Node3, Node1),
     rt:systest_write(Node1, 4 * ?TEST_ITEM_COUNT + 1, 5 * ?TEST_ITEM_COUNT),
     check_joined([Node1, Node2, Node3]),
 
-    lager:info("Sleeping for manual check of logs")
+    lager:info("Sleeping for manual check of logs"),
     timer:sleep(30000),
 
     lager:info("Check all values read"),
@@ -79,4 +88,4 @@ confirm() ->
 check_joined(Nodes) ->
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
-    ?assertEqual(ok, rt:wait_until_nodes_agree_about_ownership(Nodes)),
+    ?assertEqual(ok, rt:wait_until_nodes_agree_about_ownership(Nodes)).
