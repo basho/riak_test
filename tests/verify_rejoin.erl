@@ -26,16 +26,15 @@
 
 -define(CFG, 
             [{riak_core,
-                [{ring_creation_size, 16}]},
+                [{ring_creation_size, 16},
+                {vnode_inactivity_timeout, 5 * 1000}]},
             {riak_kv, 
                 [{anti_entropy, {off, []}},
                 {tictacaae_active, active},
                 {tictacaae_parallelstore, leveled_ko},
                         % if backend not leveled will use parallel key-ordered
                         % store
-                {tictacaae_rebuildwait, 4},
-                {tictacaae_rebuilddelay, 3600},
-                {tictacaae_exchangetick, 10 * 1000}, % 10 seconds
+                {tictacaae_exchangetick, 10 * 1000}, % 10 seconds, > inactivity timeout
                 {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
                 {tictacaae_primaryonly, true}]
             }]).
@@ -80,8 +79,7 @@ confirm() ->
     timer:sleep(30000),
 
     lager:info("Check all values read"),
-    rt:systest_read(1, 5 * ?TEST_ITEM_COUNT),
-    
+    rt:systest_read(Node1, 5 * ?TEST_ITEM_COUNT),
     pass.
 
 
