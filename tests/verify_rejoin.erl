@@ -41,6 +41,10 @@
 
 confirm() ->
     %% Bring up a 3-node cluster for the test
+
+    lager:info("Leave and join nodes during write activity"),
+    lager:info("Do this with aggressive AAE - but we shouldn't see AAE repairs"),
+    lager:info("In the future - need a riak stat for repairs to validate this"),
     Nodes = rt:build_cluster(3, ?CFG),
     [Node1, Node2, Node3] = Nodes,
 
@@ -77,6 +81,9 @@ confirm() ->
 
     lager:info("Sleeping for manual check of logs"),
     timer:sleep(30000),
+    Ring = rt:get_ring(Node1),
+    Owners = riak_core_ring:all_owners(Ring),
+    lists:foreach(check_vnode_stats/1, Owners),
 
     lager:info("Check all values read"),
     rt:systest_read(Node1, 5 * ?TEST_ITEM_COUNT),
@@ -87,3 +94,17 @@ check_joined(Nodes) ->
     ?assertEqual(ok, rt:wait_until_nodes_ready(Nodes)),
     ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)),
     ?assertEqual(ok, rt:wait_until_nodes_agree_about_ownership(Nodes)).
+
+check_vnode_stats({Partition, Node}) ->
+    {ok, Pid} =
+        rpc:call(Node,
+                    riak_core_vnode_manager,
+                    get_vnode_pid,
+                    [Partition, riak_kv_vnode]),
+    {Mod, ModState} =
+        rpc:call(Node,
+                    riak_core_vnode,
+                    get_modstate,
+                    [Pid]),
+    lager:info("Module: ~w", [Mod]),
+    lager:info("ModState: ~p", ModState).
