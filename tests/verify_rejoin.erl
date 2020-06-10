@@ -108,7 +108,7 @@ check_vnode_stats({Partition, Node}) ->
                     riak_core_vnode_manager,
                     get_vnode_pid,
                     [Partition, riak_kv_vnode]),
-    {Mod, ModState} =
+    {riak_kv_vnode, ModState} =
         rpc:call(Node,
                     riak_core_vnode,
                     get_modstate,
