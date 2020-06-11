@@ -79,6 +79,13 @@ confirm() ->
     rt:systest_write(Node1, 4 * ?TEST_ITEM_COUNT + 1, 5 * ?TEST_ITEM_COUNT),
     check_joined([Node1, Node2, Node3]),
 
+    lager:info("restart node3 and continue to write"),
+    rt:stop_and_wait(Node3),
+    timer:sleep(1000),
+    rt:start(Node3),
+    rt:systest_write(Node1, 5 * ?TEST_ITEM_COUNT + 1, 6 * ?TEST_ITEM_COUNT),
+    rt:wait_until_no_pending_changes(Nodes),
+
     lager:info("Checking for AAE repairs - should be none"),
     lager:info("Will check the tictac_deltacount on state"),
     lager:info("This may be brittle to changes in riak_kv_vnode state"),
