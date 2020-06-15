@@ -51,3 +51,4 @@ verify_tictac_aae
 verify_vclock
 verify_vclock_raw
 verify_vclock_zlib
+verify_vnode_polling
