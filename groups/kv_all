@@ -39,6 +39,7 @@ verify_multibackend_head
 verify_object_limits
 verify_put_opt_node_confirms
 verify_readonly
+verify_rejoin
 verify_riak_stats
 verify_siblingmerge_basic
 verify_stats_removal

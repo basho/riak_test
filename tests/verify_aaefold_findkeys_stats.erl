@@ -63,6 +63,13 @@ confirm() ->
     ok = verify_aae_fold(ModH, ClientH, NodesH),
     ok = verify_stats(ModH, ClientH, hd(NodesH)),
 
+    lager:info("Creating bucket types"),
+    rt:create_and_activate_bucket_type(hd(NodesH),
+                                        <<"_maps">>, 
+                                        [{datatype, map}, {allow_mult, true}]),
+    
+    ok = verify_stats_crdt(ModH, ClientH, hd(NodesH), <<"_maps">>),
+
     lager:info("Cleaning cluster for next test"),
     ok = rt:clean_cluster(NodesH),
 
@@ -193,6 +200,67 @@ verify_stats(Mod, Client, Node) ->
     ?assertEqual(100, proplists:get_value(<<"total_count">>, MoreStats)),    
 
     ok.
+
+verify_stats_crdt(Mod, ClientH, Node, Type) ->
+    lager:info("Taking initial timestamp for modified range"),
+    timer:sleep(1000),
+    InitialTS = os:timestamp(),
+    ClientP = rt:pbc(Node),
+    riakc_pb_socket:modify_type(
+                        ClientP,
+                        fun(M) ->
+                            M1 = riakc_map:update(
+                                    {<<"friends">>, set},
+                                    fun(S) ->
+                                        riakc_set:add_element(<<"Russell">>,
+                                                                S)
+                                    end,
+                                    M),
+                            M2 = riakc_map:update(
+                                    {<<"followers">>, counter},
+                                    fun(C) ->
+                                        riakc_counter:increment(10,
+                                                                C)
+                                    end,
+                                    M1),
+                            riakc_map:update(
+                                    {<<"name">>, register},
+                                    fun(R) ->
+                                        riakc_register:set(<<"Original">>,
+                                                            R)
+                                    end,
+                                    M2)
+                        end,
+                        {Type, <<"test_map">>}, 
+                        <<"TestKey">>,
+                        [create]),
+    
+    ExpVal1 = 
+        [{{<<"followers">>, counter}, 10},
+            {{<<"friends">>, set}, [<<"Russell">>]},
+            {{<<"name">>, register}, <<"Original">>}],
+    lager:info("Read own write"),
+    nextgenrepl_rtq_autocrdt:check_value(ClientP,
+                                            riakc_pb_socket,
+                                            {<<"_maps">>, <<"test_map">>},
+                                            <<"TestKey">>,
+                                            riakc_map,
+                                            ExpVal1),
+    lager:info("Taking another timestamp for modified range"),
+    timer:sleep(1000),
+    NextTS = os:timestamp(),
+    {ok, {stats, OneMap}} =
+        Mod:aae_object_stats(ClientH, {Type, <<"test_map">>}, all,
+                                convert_to_modified_range(InitialTS, NextTS)),
+    ?assertEqual(1, proplists:get_value(<<"total_count">>, OneMap)),
+
+    {ok, {stats, NoStats}} =
+        Mod:aae_object_stats(ClientH, {Type, <<"test_map">>}, all,
+                                convert_to_modified_range(NextTS, os:timestamp())),
+    ?assertEqual(0, proplists:get_value(<<"total_count">>, NoStats)),
+
+    ok.
+
 
 
 convert_to_modified_range({StartMega, StartS, _}, {EndMega, EndS, _}) ->

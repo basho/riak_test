@@ -6,7 +6,7 @@
 
 -module(nextgenrepl_rtq_autocrdt).
 -behavior(riak_test).
--export([confirm/0]).
+-export([confirm/0, check_value/6]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(A_RING, 16).
