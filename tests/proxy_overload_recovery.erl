@@ -33,6 +33,9 @@
 -module(proxy_overload_recovery).
 -behaviour(riak_test).
 
+-compile({nowarn_deprecated_function, 
+            [{gen_fsm, sync_send_event, 3}]}).
+
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_statem.hrl").
@@ -306,7 +309,7 @@ direct_msg_args(#tstate{rt = RT}) ->
     [RT, pos_int()].
 
 direct_msg(#rt{vpid = VPid}, NumMsgs) ->
-    [catch gen_fsm_compat:sync_send_event(VPid, {ohai, X}, 0) ||
+    [catch gen_fsm:sync_send_event(VPid, {ohai, X}, 0) ||
         X <- lists:seq(1, NumMsgs)],
     ok.
 

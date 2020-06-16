@@ -8,11 +8,9 @@ gh_riak_core_155
 gh_riak_core_176
 http_bucket_types
 verify_build_cluster
-verify_build_cluster_caps_race
 verify_claimant
 verify_dynamic_ring
 verify_leave
-verify_listkeys_eqcfsm
 verify_reset_bucket_props
 verify_riak_lager
 verify_staged_clustering

@@ -19,7 +19,7 @@
 %% operational fold features
 
 -module(verify_aaefold_findkeys_stats).
--export([confirm/0, verify_aae_fold/1]).
+-export([confirm/0, verify_aae_fold/3]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
@@ -53,20 +53,45 @@
 -define(DELTA_COUNT, 10).
 
 confirm() ->
-    Nodes = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
-    ok = verify_aae_fold(Nodes),
-    ok = verify_stats(Nodes),
+    
+    lager:info("Testing AAE with HTTP Client"),
+
+    ModH = rhc,
+    NodesH = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    ClientH = rt:httpc(hd(NodesH)),
+
+    ok = verify_aae_fold(ModH, ClientH, NodesH),
+    ok = verify_stats(ModH, ClientH, hd(NodesH)),
+
+    lager:info("Creating bucket types"),
+    rt:create_and_activate_bucket_type(hd(NodesH),
+                                        <<"_maps">>, 
+                                        [{datatype, map}, {allow_mult, true}]),
+    
+    ok = verify_stats_crdt(ModH, ClientH, hd(NodesH), <<"_maps">>),
+
+    lager:info("Cleaning cluster for next test"),
+    ok = rt:clean_cluster(NodesH),
+
+    lager:info("Testing AAE with PB Client"),
+    ModP = riakc_pb_socket,
+    NodesP = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    ClientP = rt:pbc(hd(NodesP)),
+    
+    ok = verify_aae_fold(ModP, ClientP, NodesP),
+    ok = verify_stats(ModP, ClientP, hd(NodesP)),
 
     pass.
 
 
-verify_aae_fold(Nodes) ->
+verify_aae_fold(Mod, Client, Nodes) ->
 
-    HttpCH = rt:httpc(hd(Nodes)),
     lager:info("Find Keys for no data "),
 
-    {ok, {keys, SiblingCnts}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {sibling_count, 1}),
-    {ok, {keys, ObjSize}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {object_size, 1}),
+    {ok, {keys, SiblingCnts}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {sibling_count, 1}),
+    {ok, {keys, ObjSize}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {object_size, 1}),
 
     ?assertEqual([], SiblingCnts),
     ?assertEqual([], ObjSize),
@@ -76,7 +101,7 @@ verify_aae_fold(Nodes) ->
         fun(Node, KeyCount) ->
                 KVs = test_data(KeyCount + 1,
                                 KeyCount + ?NUM_KEYS_PERNODE,
-                                list_to_binary("U1")),
+                                list_to_binary("U1Q2V3P4")),
                 ok = write_data(Node, KVs),
                 KeyCount + ?NUM_KEYS_PERNODE
         end,
@@ -84,59 +109,166 @@ verify_aae_fold(Nodes) ->
     lists:foldl(KeyLoadFun, 0, Nodes),
     lager:info("Loaded ~w objects", [?NUM_KEYS_PERNODE * length(Nodes)]),
 
-    lager:info("Add siblings"),
-    ExpectedSibs = write_siblings(hd(Nodes)),
+    SibSize = 50,
+    lager:info("Add siblings with values of size ~w", [SibSize]),
+    ExpectedSibs = write_siblings(hd(Nodes), SibSize),
 
     lager:info("Find keys with siblings"),
-    {ok, {keys, SiblingCnts2}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {sibling_count, 1}),
-    %% can't account for the fixed overhead, so I ran the test and
-    %% peeked, everything without a sibling is 142-143 bytes, so I set
-    %% the bar at 200 bytes
-    {ok, {keys, ObjSize2}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {object_size, 200}),
+    {ok, {keys, SiblingCnts2}} = 
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {sibling_count, 1}),
+    
+    lager:info("Expect only keys with siblings to be at least 160 bytes"),
+    {ok, {keys, ObjSize2}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all, {object_size, 160}),
 
     ?assertEqual(ExpectedSibs, SiblingCnts2),
     %% verify that all the keys are there, and that all the objects
-    %% are greater than 200 in size
+    %% are greater than 160 in size
     ExpectedKeys = [K || {K, _} <- ExpectedSibs],
     ?assertEqual(ExpectedKeys, [K || {K, _S} <- ObjSize2]),
-    [?assertMatch(S when S > 200, S) || {_K, S} <- ObjSize2],
+    [?assertMatch(S when S > 160, S) || {_K, S} <- ObjSize2],
 
     lager:info("Find range of keys with siblings"),
     Range = {Lo, Hi} = {to_key(50), to_key(69)},
     ExpectedSibsRange = [{K, C} || {K, C} <- ExpectedSibs, K >= Lo, K =< Hi],
 
-    {ok, {keys, SiblingCntsRange}} = rhc:aae_find_keys(HttpCH, ?BUCKET, Range , all, {sibling_count, 1}),
+    {ok, {keys, SiblingCntsRange}} = 
+        Mod:aae_find_keys(Client, ?BUCKET, Range , all, {sibling_count, 1}),
     ?assertEqual(ExpectedSibsRange, SiblingCntsRange),
 
-    %% only keys from 95-100 should be returned as over 200 bytes
-    {ok, {keys, ObjSizeRange}} = rhc:aae_find_keys(HttpCH, ?BUCKET, {to_key(95), to_key(105)}, all, {object_size, 200}),
+    lager:info("Only keys from 95-100 should be returned as over 160 bytes"),
+    {ok, {keys, ObjSizeRange}} =
+        Mod:aae_find_keys(Client, ?BUCKET,
+                            {to_key(95), to_key(105)}, all,
+                            {object_size, 160}),
     ExpectedKeysRange = [to_key(N) || N <- lists:seq(95, 100)],
     ?assertEqual(ExpectedKeysRange, [K || {K, _S} <- ObjSizeRange]),
 
-    {ok, {keys, ObjSizeBig}} = rhc:aae_find_keys(HttpCH, ?BUCKET, all, all, {object_size, 500}),
-    ExpectedKeysBig = [to_key(N) || N <- lists:seq(1, 20)],
-    ?assertEqual(ExpectedKeysBig, [K || {K, _S} <- ObjSizeBig]),
-    [?assertMatch(S when S > 500, S) || {_K, S} <- ObjSizeBig],
+    lager:info("Discover size of 60th object"),
+    {ok, {keys, ObjSize60L}} = 
+        Mod:aae_find_keys(Client, ?BUCKET,
+                            {to_key(60), to_key(60)}, all,
+                            {object_size, 160}),
+    [{_, Key60Size}] = ObjSize60L,
+    lager:info("60th object has size ~w", [Key60Size]),
 
+    lager:info("find all keys bigger then the 60th with ~w byte margin",
+                [SibSize]),
+    {ok, {keys, ObjSizeBig}} =
+        Mod:aae_find_keys(Client, ?BUCKET, all, all,
+                            {object_size, Key60Size - SibSize}),
+    ExpectedKeysBig = [to_key(N) || N <- lists:seq(1, 60)],
+    ?assertEqual(ExpectedKeysBig, [K || {K, _S} <- ObjSizeBig]),
+    
     ok.
 
-verify_stats(Nodes) ->
-    HttpCH = rt:httpc(hd(Nodes)),
+verify_stats(Mod, Client, Node) ->
+    lager:info("Taking initial timestamp for modified range"),
+    timer:sleep(1000),
+    InitialTS = os:timestamp(),
     lager:info("get stats"),
-    {ok, {stats, Stats}} = rhc:aae_object_stats(HttpCH, ?BUCKET, all, all),
+    {ok, {stats, Stats}} =
+        Mod:aae_object_stats(Client, ?BUCKET, all, all),
+    lager:info("Stats returned ~p", [Stats]),
     %% Erm, what do we know? They should have keys
-    ?assertEqual(10000, proplists:get_value(<<"total_count">>, Stats)),
+    ExpectedKeyNumber = ?NUM_KEYS_PERNODE * ?NUM_NODES,
+    ?assertEqual(ExpectedKeyNumber, proplists:get_value(<<"total_count">>, Stats)),
     %% at least 100 bytes per key
-    ?assertMatch(N when is_integer(N) andalso N > (10000 * 100), proplists:get_value(<<"total_size">>, Stats)),
+    ?assertMatch(N when is_integer(N) andalso N > (ExpectedKeyNumber * 100),
+                    proplists:get_value(<<"total_size">>, Stats)),
     ?assertMatch(L when is_list(L), proplists:get_value(<<"sizes">>, Stats)),
     ?assertMatch(L when is_list(L), proplists:get_value(<<"siblings">>, Stats)),
+
+    lager:info("Taking another timestamp for modified range"),
+    timer:sleep(1000),
+    NextTS = os:timestamp(),
+    {ok, {stats, NoStats}} =
+        Mod:aae_object_stats(Client, ?BUCKET, all,
+                                convert_to_modified_range(InitialTS, NextTS)),
+    ?assertEqual(0, proplists:get_value(<<"total_count">>, NoStats)),
+
+    lager:info("Add more siblings"),
+    write_siblings(Node, 40),
+
+    lager:info("Taking closing timestamp for modified range"),
+    timer:sleep(1000),
+    LastTS = os:timestamp(),
+
+    {ok, {stats, MoreStats}} =
+        Mod:aae_object_stats(Client, ?BUCKET, all,
+                                convert_to_modified_range(NextTS, LastTS)),
+    ?assertEqual(100, proplists:get_value(<<"total_count">>, MoreStats)),    
+
+    ok.
+
+verify_stats_crdt(Mod, ClientH, Node, Type) ->
+    lager:info("Taking initial timestamp for modified range"),
+    timer:sleep(1000),
+    InitialTS = os:timestamp(),
+    ClientP = rt:pbc(Node),
+    riakc_pb_socket:modify_type(
+                        ClientP,
+                        fun(M) ->
+                            M1 = riakc_map:update(
+                                    {<<"friends">>, set},
+                                    fun(S) ->
+                                        riakc_set:add_element(<<"Russell">>,
+                                                                S)
+                                    end,
+                                    M),
+                            M2 = riakc_map:update(
+                                    {<<"followers">>, counter},
+                                    fun(C) ->
+                                        riakc_counter:increment(10,
+                                                                C)
+                                    end,
+                                    M1),
+                            riakc_map:update(
+                                    {<<"name">>, register},
+                                    fun(R) ->
+                                        riakc_register:set(<<"Original">>,
+                                                            R)
+                                    end,
+                                    M2)
+                        end,
+                        {Type, <<"test_map">>}, 
+                        <<"TestKey">>,
+                        [create]),
+    
+    ExpVal1 = 
+        [{{<<"followers">>, counter}, 10},
+            {{<<"friends">>, set}, [<<"Russell">>]},
+            {{<<"name">>, register}, <<"Original">>}],
+    lager:info("Read own write"),
+    nextgenrepl_rtq_autocrdt:check_value(ClientP,
+                                            riakc_pb_socket,
+                                            {<<"_maps">>, <<"test_map">>},
+                                            <<"TestKey">>,
+                                            riakc_map,
+                                            ExpVal1),
+    lager:info("Taking another timestamp for modified range"),
+    timer:sleep(1000),
+    NextTS = os:timestamp(),
+    {ok, {stats, OneMap}} =
+        Mod:aae_object_stats(ClientH, {Type, <<"test_map">>}, all,
+                                convert_to_modified_range(InitialTS, NextTS)),
+    ?assertEqual(1, proplists:get_value(<<"total_count">>, OneMap)),
+
+    {ok, {stats, NoStats}} =
+        Mod:aae_object_stats(ClientH, {Type, <<"test_map">>}, all,
+                                convert_to_modified_range(NextTS, os:timestamp())),
+    ?assertEqual(0, proplists:get_value(<<"total_count">>, NoStats)),
+
     ok.
 
 
+
+convert_to_modified_range({StartMega, StartS, _}, {EndMega, EndS, _}) ->
+    {StartMega * 1000000 + StartS, EndMega * 1000000 + EndS}.
 
 
 to_key(N) ->
-    list_to_binary(io_lib:format("K~4..0B", [N])).
+    list_to_binary(io_lib:format("K~6..0B", [N])).
 
 test_data(Start, End, V) ->
     Keys = [to_key(N) || N <- lists:seq(Start, End)],
@@ -160,7 +292,7 @@ write_data(Node, KVs, Opts) ->
     riakc_pb_socket:stop(PB),
     ok.
 
-write_siblings(Node) ->
+write_siblings(Node, SibSize) ->
     %% 1st 100 objects generate a sibling
     %% 1st 90 object generate 2 siblings
     %% 1st 80 objects generate 3 siblings
@@ -171,18 +303,18 @@ write_siblings(Node) ->
                              end,
                              orddict:new(),
                              [to_key(N) || N <- lists:seq(1, 100)]),
-    Bytes = crypto:strong_rand_bytes(10),
-    ExpectedSibs = write_siblings(100, PB, Bytes, InitialAcc),
+    ExpectedSibs = write_siblings(100, PB, SibSize, InitialAcc),
     riakc_pb_socket:stop(PB),
     ExpectedSibs.
 
-write_siblings(N, _Client, _Bytes, Acc) when N < 1 ->
+write_siblings(N, _Client, _SibSize, Acc) when N < 1 ->
     Acc;
-write_siblings(N, Client, Bytes, Acc) ->
+write_siblings(N, Client, SibSize, Acc) ->
     %% I think riak's merge logic will collapse siblings of the same
     %% value into a single value, so make each sibling have a
     %% different value. I also _think_ that the object size is all the
     %% is siblings, so object will by sibs * size(bytes)
+    Bytes = crypto:strong_rand_bytes(SibSize),
     KVs = test_data(1, N, <<"sibling", N:32/integer, Bytes/binary>>),
     Acc2 = lists:foldl(fun({K, V}, InnerAcc) ->
                                O = riakc_obj:new(?BUCKET, K, V),
@@ -193,5 +325,5 @@ write_siblings(N, Client, Bytes, Acc) ->
                        Acc,
                        KVs),
     %% Write MOAR siblings for a shrinking subset of keys
-    write_siblings(N-10, Client, Bytes, Acc2).
+    write_siblings(N-10, Client, SibSize, Acc2).
 

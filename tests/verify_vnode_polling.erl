@@ -35,17 +35,21 @@
 
 -define(RING_SIZE, 8).
 
-confirm() ->
-    Conf = [
-            {riak_kv, [{anti_entropy, {off, []}}]},
-            {riak_core, [{default_bucket_props, [{allow_mult, true},
-                                                 {dvv_enabled, true},
-                                                 {ring_creation_size, ?RING_SIZE},
-                                                 {vnode_management_timer, 1000},
-                                                 {handoff_concurrency, 100},
-                                                 {vnode_inactivity_timeout, 1000}]}]}],
+-define(CONF(MBoxCheck),
+        [{riak_kv, 
+                [{anti_entropy, {off, []}},
+                    {mbox_check_enabled, MBoxCheck}]},
+            {riak_core,
+                [{default_bucket_props,
+                    [{allow_mult, true},
+                        {dvv_enabled, true},
+                        {ring_creation_size, ?RING_SIZE},
+                        {vnode_management_timer, 1000},
+                        {handoff_concurrency, 100},
+                        {vnode_inactivity_timeout, 1000}]}]}]).
 
-    Nodes = rt:build_cluster(5, Conf),
+confirm() ->
+    Nodes = rt:build_cluster(5, ?CONF(true)),
     Node1 = hd(Nodes),
 
     Preflist = rt:get_preflist(Node1, ?BUCKET, ?KEY),
@@ -55,12 +59,17 @@ confirm() ->
     %% NOTE: The order of these tests IS IMPORTANT, as there is no
     %% facility currently to unload/disable intercepts once loaded.
     test_disabled_mbox_check(Nodes, Preflist),
-    test_no_local_pl_forward(Nodes, Preflist),
+    test_no_local_pl_forward(Nodes, Preflist, true),
     test_local_coord(Preflist),
     test_forward_on_local_softlimit(Preflist),
     test_local_coord_all_loaded(Preflist),
     test_forward_least_loaded(Nodes, Preflist),
     test_mbox_poll_timeout(Nodes, Preflist),
+
+    lists:foreach(fun(N) -> rt:set_advanced_conf(N, ?CONF(false)) end, Nodes),
+    rt:wait_until_ring_converged(Nodes),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Nodes),
+    test_no_local_pl_forward(Nodes, Preflist, false),
     pass.
 
 %% @doc the case the client themselves disabled the mbox check
@@ -80,7 +89,7 @@ test_disabled_mbox_check(Nodes, Preflist) ->
 %% @doc the base case where a non-pl node receives the put, and
 %% chooses the first unloaded vnode to respond as the coordinator to
 %% forward to
-test_no_local_pl_forward(Nodes, Preflist) ->
+test_no_local_pl_forward(Nodes, Preflist, IsEnabled) ->
     lager:info("test_no_local_pl_forward"),
     {FSMNode, Client} = non_pl_client(Nodes, Preflist),
 
@@ -91,7 +100,13 @@ test_no_local_pl_forward(Nodes, Preflist) ->
     FSMNodeStats = proplists:get_value(FSMNode, Stats),
 
     CoordRedirCnt = proplists:get_value(coord_redir_unloaded_total, FSMNodeStats),
-    ?assertEqual(1, CoordRedirCnt).
+    case IsEnabled of
+        true ->
+            ?assertEqual(1, CoordRedirCnt);
+        false ->
+            ?assertEqual(0, CoordRedirCnt)
+    end.
+
 
 %% @doc check that when a node is on the preflist, and is unloaded, it
 %% coords
@@ -227,7 +242,7 @@ client_write(Client, Bucket, Key, Value) ->
 
 client_write(Client, Bucket, Key, Value, Opts) ->
     Obj = riak_object:new(Bucket, Key, Value),
-    Client:put(Obj, Opts).
+    riak_client:put(Obj, Opts, Client).
 
 get_all_nodes_stats(Nodes) ->
     [{Nd, rpc:call(Nd, riak_kv_stat, get_stats, [])} || Nd <- Nodes].

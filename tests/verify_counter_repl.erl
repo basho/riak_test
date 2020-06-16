@@ -89,7 +89,7 @@ verify_counter(ExpectedValue, Node) ->
     ExpectedValue == get_counter(Node).
 
 rand_amt() ->
-    crypto:rand_uniform(-100, 100).
+    rand:uniform(200) - 101.
 
 %% Set up bi-directional full sync replication.
 repl_power_activate(ClusterA, ClusterB) ->

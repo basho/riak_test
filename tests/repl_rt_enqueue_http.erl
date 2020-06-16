@@ -105,19 +105,23 @@ run_test_for_buckets(Buckets, ANodes, BNodes) ->
          lager:info("RTE tests for ~p", [Bucket]),
          %% write new key to A
          Obj3 = riak_object:new(Bucket, ?KEY((Last+1)), ?VAL((Last+1))),
-         WriteRes3 = CA:put(Obj3, [{w, 2}]),
+         WriteRes3 = riak_client:put(Obj3, [{w, 2}], CA),
          ?assertEqual(ok, WriteRes3),
 
          %% verify you can read from B now
          ReplRead =
              rt:wait_until(fun() ->
-                                   {BReadRes3, _} = CB:get(Bucket, ?KEY((Last+1)), [{r, 3}]),
+                                   {BReadRes3, _} =
+                                        riak_client:get(Bucket,
+                                                        ?KEY((Last+1)),
+                                                        [{r, 3}],
+                                                        CB),
                                    lager:info("waiting for 'realtime repl' to repl"),
                                    BReadRes3 == ok
                            end, 10, 200),
          ?assertEqual(ok, ReplRead),
 
-         BReReadRes1 = CB:get(Bucket, ?KEY(First), []),
+         BReReadRes1 = riak_client:get(Bucket, ?KEY(First), [], CB),
          ?assertEqual({error, notfound}, BReReadRes1),
 
          %% touch an original key
@@ -127,7 +131,11 @@ run_test_for_buckets(Buckets, ANodes, BNodes) ->
          %% verify read touched from B
          TouchRead =
              rt:wait_until(fun() ->
-                                   {BReReadResPresent, _} = CB:get(Bucket, ?KEY(First), []),
+                                   {BReReadResPresent, _} =
+                                        riak_client:get(Bucket,
+                                                        ?KEY(First),
+                                                        [],
+                                                        CB),
                                    lager:info("waiting for touch to repl"),
                                    BReReadResPresent == ok
                            end, 10, 200),
@@ -139,7 +147,11 @@ run_test_for_buckets(Buckets, ANodes, BNodes) ->
 
          TouchRead2 =
              rt:wait_until(fun() ->
-                                   {BReReadResPresent, _} = CB:get(Bucket, ?KEY((First+1)), []),
+                                   {BReReadResPresent, _} =
+                                        riak_client:get(Bucket,
+                                                        ?KEY((First+1)),
+                                                        [],
+                                                        CB),
                                    lager:info("waiting for touch to repl"),
                                    BReReadResPresent == ok
                            end, 10, 200),
@@ -151,14 +163,18 @@ run_test_for_buckets(Buckets, ANodes, BNodes) ->
 
          TouchRead3 =
              rt:wait_until(fun() ->
-                                   {BReReadResPresent, _} = CB:get(Bucket, ?KEY((First+9)), []),
+                                   {BReReadResPresent, _} =
+                                        riak_client:get(Bucket,
+                                                        ?KEY((First+9)),
+                                                        [],
+                                                        CB),
                                    lager:info("waiting for touch to repl"),
                                    BReReadResPresent == ok
                            end, 10, 200),
          ?assertEqual(ok, TouchRead3),
 
          %% But still not object 3, neither repl'd nor touched
-         BReReadRes4 = CB:get(Bucket, ?KEY((First+2)), []),
+         BReReadRes4 = riak_client:get(Bucket, ?KEY((First+2)), [], CB),
          ?assertEqual({error, notfound}, BReReadRes4)
      end || Bucket <- Buckets],
 

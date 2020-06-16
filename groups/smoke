@@ -19,7 +19,7 @@ rt_cascading_simple
 verify_2i_returnterms
 verify_aae
 verify_aaefold_nval
-verify_aaefold_range_http
+verify_aaefold_range_api
 verify_asis_put
 verify_build_cluster
 verify_commit_hooks

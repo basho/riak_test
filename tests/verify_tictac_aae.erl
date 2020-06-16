@@ -76,7 +76,8 @@
            {tictacaae_rebuildwait, 0},
            {tictacaae_rebuilddelay, 60},
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
-           {tictacaae_rebuildtick, 60 * 1000} % Check for rebuilds!
+           {tictacaae_rebuildtick, 60 * 1000}, % Check for rebuilds!
+           {max_aae_queue_time, 0}
           ]},
          {riak_core,
           [
@@ -220,13 +221,14 @@ verify_data(Node, KeyValues) ->
     MaxTime = rt_config:get(rt_max_wait_time),
     Delay = 2000, % every two seconds until max time.
     Retry = MaxTime div Delay,
-    case rt:wait_until(CheckFun, Retry, Delay) of
-        ok ->
-            lager:info("Data is now correct. Yay!");
-        fail ->
-            lager:error("AAE failed to fix data"),
-            ?assertEqual(aae_fixed_data, aae_failed_to_fix_data)
-    end,
+    ok = 
+        case rt:wait_until(CheckFun, Retry, Delay) of
+            ok ->
+                lager:info("Data is now correct. Yay!");
+            fail ->
+                lager:error("AAE failed to fix data"),
+                aae_failed_to_fix_data
+        end,
     riakc_pb_socket:stop(PB),
     ok.
 

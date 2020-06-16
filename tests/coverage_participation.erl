@@ -121,12 +121,19 @@ confirm() ->
         end,
     lists:foreach(fun(N0) -> rt:wait_until(N0, CheckBackInFun) end, Nodes),
 
-    %% Get coverage plan
-    lager:info("Check that Node5 is in coverage plan."),
-    {CoverageVNodesW5, _} = rpc:call(Node5, riak_core_coverage_plan, create_plan, [allup,1,1,1,riak_kv]),
-    VnodesW5 = [ Node || { _ , Node } <- CoverageVNodesW5],
-    %% check Node5 is in coverage plan
-    ?assertEqual(true, lists:member(Node5, VnodesW5)),
+    CheckInPlanFun =
+        fun() ->
+            %% Get coverage plan
+            lager:info("Check that Node5 is in coverage plan."),
+            {CoverageVNodesW5, _} =
+                rpc:call(Node5,
+                        riak_core_coverage_plan,
+                        create_plan,
+                        [allup,1,1,1,riak_kv]),
+            VnodesW5 = [ Node || { _ , Node } <- CoverageVNodesW5],
+            lists:member(Node5, VnodesW5)
+        end,
+    rt:wait_until(CheckInPlanFun),
 
     pass.
 

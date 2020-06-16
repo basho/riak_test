@@ -1,16 +1,14 @@
+mapred_search_switch
 yokozuna_essential
 yz_aae_test
 yz_core_properties_create_unload
 yz_crdt
-yz_default_bucket_type_upgrade
 yz_dt_test
 yz_ensemble
 yz_errors
-yz_extractors
 yz_entropy_data
 yz_faceted_search
 yz_fallback
-yz_fuse_upgrade
 yz_handoff
 yz_handoff_blocking
 yz_index_admin
@@ -25,7 +23,6 @@ yz_search_http
 yz_security
 yz_siblings
 yz_solr_start_timeout
-yz_solr_upgrade_downgrade
 yz_solrq_test
 yz_startup_shutdown
 yz_stat_test

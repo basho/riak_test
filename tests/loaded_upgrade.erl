@@ -57,7 +57,7 @@ confirm() ->
                                        {version, OldVsn},
                                        {report_pid, self()}]), Node} || Node <- Nodes],
 
-    upgrade_recv_loop(),
+    ok = upgrade_recv_loop(),
 
     [begin
          exit(Sup, normal),
@@ -70,7 +70,7 @@ confirm() ->
                                                   {version, current},
                                                   {report_pid, self()}]),
          _NodeMon = init_node_monitor(Node, NewSup, self()),
-         upgrade_recv_loop()
+         ok = upgrade_recv_loop()
      end || {{ok, Sup}, Node} <- Sups],
     pass.
 
@@ -94,13 +94,13 @@ upgrade_recv_loop(EndTime) ->
         _ ->
             receive
                 {mapred, Node, bad_result} ->
-                    ?assertEqual(true, {mapred, Node, bad_result});
+                    {mapred_bad_result, Node};
                 {kv, Node, not_equal} ->
-                    ?assertEqual(true, {kv, Node, bad_result});
+                    {kv_not_equal, Node};
                 {kv, Node, {notfound, Key}} ->
-                    ?assertEqual(true, {kv, Node, {notfound, Key}});
+                    {kv_notfound, Node, Key};
                 {listkeys, Node, not_equal} ->
-                    ?assertEqual(true, {listkeys, Node, not_equal});
+                    {listkeys_not_equal, Node};
                 Msg ->
                     lager:debug("Received Mesg ~p", [Msg]),
                     upgrade_recv_loop(EndTime)

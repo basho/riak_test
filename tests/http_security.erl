@@ -509,7 +509,6 @@ confirm() ->
                           {ssl_options, [
                                          {cacertfile, filename:join([CertDir,
                                                                      "rootCA/cert.pem"])},
-                                         {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
 
     lager:info("checking search 1.0 404s because search is removed"),
@@ -520,7 +519,6 @@ confirm() ->
                           {ssl_options, [
                                          {cacertfile, filename:join([CertDir,
                                                                      "rootCA/cert.pem"])},
-                                         {verify, verify_peer},
                                          {reuse_sessions, false}]}])),
 
     pass.
