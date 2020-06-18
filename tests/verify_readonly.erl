@@ -48,7 +48,8 @@ confirm() ->
     Config = [{riak_core, [{ring_creation_size, 8}]},
                 {riak_kv, [{anti_entropy, {off, []}}]},
                 {bitcask, [{max_file_size, 1000000},
-                {leveled, [{journal_objectcount, 5000}]}]}],
+                {leveled, [{journal_objectcount, 2000},
+                            {max_pencillercachesize, 4000}]}]}],
     
     [RootNode | TestNodes] = rt:build_cluster(NTestNodes, Config),
     [FailNode | _RestNodes] = TestNodes,

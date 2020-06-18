@@ -122,7 +122,7 @@ run_test(Items, NTestNodes) ->
     lager:info("Joining new node with cluster."),
     rt:join(LastJoin, RootNode),
     ?assertEqual(ok, rt:wait_until_nodes_ready([RootNode, LastJoin])),
-    rt:wait_until_no_pending_changes([RootNode, LastJoin]),
+    rt:wait_until_no_pending_changes([RootNode, SecondJoin, LastJoin]),
     lager:info("Handoff complete"),
 
     lager:info("Validating data - siblings"),
