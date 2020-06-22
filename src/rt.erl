@@ -939,9 +939,14 @@ wait_until_unpingable(Node) ->
 wait_until_registered(Node, Name) ->
     lager:info("Wait until ~p is up on ~p", [Name, Node]),
 
-    F = fun() ->
-                Registered = rpc:call(Node, erlang, registered, []),
-                lists:member(Name, Registered)
+    F = 
+        fun() ->
+            case rpc:call(Node, erlang, registered, []) of
+                NodeList when is_list(NodeList) ->
+                    lists:member(Name, NodeList);
+                _ ->
+                    false
+            end
         end,
     case wait_until(F) of
         ok ->
