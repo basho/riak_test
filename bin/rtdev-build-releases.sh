@@ -180,5 +180,5 @@ build()
 }
 
 #build "riak-2.2.8" $R16B02 riak-2.2.8
-build "riak-3.0" $R203 develop-3.0-ns
+build "riak-3.1-multi_bitcask_instances" $OTP20 3.1-multi_bitcask_instances
 echo
