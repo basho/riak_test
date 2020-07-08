@@ -29,7 +29,7 @@
            % Speedy AAE configuration
            {anti_entropy, {on, []}},
            {tictacaae_active, TictacAAE},
-           {tictacaae_parallelstore, leveled_ko},
+           {tictacaae_parallelstore, leveled_ko}
                 % if backend not leveled will use parallel key-ordered
                 % store
           ]},
@@ -40,25 +40,23 @@
        ).
 
 -define(NUM_NODES, 4).
--define(NUM_KEYS, 100000).
+-define(NUM_KEYS, 400000).
 -define(BUCKET, <<"test_bucket">>).
 -define(N_VAL, 3).
 
 confirm() ->
-    Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG(off)),
+    Nodes = rt:build_cluster(?NUM_NODES, ?CFG(passive)),
 
-    % Verify that AAE eventually upgrades to version 0(or already has)
-    ok = verify_aae:wait_until_hashtree_upgrade(Nodes),
+    lager:info("Writing ~w items of data", [?NUM_KEYS]),
+    ok = write_data(hd(Nodes), test_data(1, ?NUM_KEYS), false),
 
-    ok = write_data(hd(Nodes0), test_data(1, ?NUM_KEYS), false),
-
-    lists:foreach(fun(N) -> rt:set_advanced_conf(N, ?CFG(on)) end, Nodes0),
-
-    rt:join_cluster(Nodes0),
+    lager:info("Changing config to enable tictac_aae"),
+    lists:foreach(fun(N) -> rt:set_advanced_conf(N, ?CFG(active)) end, Nodes),
 
     rt:wait_until_ring_converged(Nodes),
 
-    timer:sleep(60000)
+    lager:info("Waiting to see what happens"),
+    timer:sleep(2400000),
 
     pass.
 
@@ -76,11 +74,11 @@ write_data(Node, KVs, MaybePresent) ->
 write_data(Node, KVs, MaybePresent, Opts) ->
     PB = rt:pbc(Node),
     lists:foreach(fun({K, V}) ->
-                        write_data(K, V, Node, Opts, PB, MaybePresent)
+                        write_data(K, V, Opts, PB, MaybePresent)
                     end,
                     KVs).
 
-write_data(K, V, Node, Opts, PB, true) ->
+write_data(K, V, Opts, PB, true) ->
     Obj = 
         case riakc_pb_socket:get(PB, ?BUCKET, K) of
             {ok, Prev} ->
@@ -89,6 +87,6 @@ write_data(K, V, Node, Opts, PB, true) ->
                 riakc_obj:new(?BUCKET, K, V)
         end,
     ?assertMatch(ok, riakc_pb_socket:put(PB, Obj, Opts));
-write_data(K, V, Node, Opts, PB, false) ->
+write_data(K, V, Opts, PB, false) ->
     Obj = riakc_obj:new(?BUCKET, K, V),
     ?assertMatch(ok, riakc_pb_socket:put(PB, Obj, Opts)).
