@@ -93,12 +93,12 @@
 
 confirm() ->
 
-    lager:info("Test with no rebuilds - and the startup skip"),
+    lager:info("Test with no rebuilds - and no startup skip"),
     Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(true, false)),
     ok = verify_aae_norebuild(Nodes1),
     rt:clean_cluster(Nodes1),
 
-    lager:info("Test with no rebuilds - and no startup skip"),
+    lager:info("Test with no rebuilds - but with startup skip"),
     Nodes2 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(true, true)),
     ok = verify_aae_norebuild(Nodes2),
     rt:clean_cluster(Nodes2),
@@ -109,7 +109,7 @@ confirm() ->
     rt:clean_cluster(Nodes3),
 
     lager:info("Test with no rebuilds - and AAE on fallbacks"),
-    Nodes4 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(false)),
+    Nodes4 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(false, false)),
     ok = verify_aae_norebuild(Nodes4),
     pass.
 
