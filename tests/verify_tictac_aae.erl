@@ -77,7 +77,7 @@
            {tictacaae_rebuildwait, 0},
            {tictacaae_rebuilddelay, 60},
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
-           {tictacaae_rebuildtick, 60 * 1000}, % Check for rebuilds!
+           {tictacaae_rebuildtick, 15 * 1000}, % Check for rebuilds!
            {max_aae_queue_time, 0},
            {tictacaae_stepinitialtick, false}
           ]},
