@@ -58,8 +58,7 @@
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
            {tictacaae_primaryonly, PrimaryOnly},
-           {tictacaae_stepinitialtick, InitialSkip},
-           {log_readrepair, true}
+           {tictacaae_stepinitialtick, InitialSkip}
           ]},
          {riak_core,
           [
@@ -80,7 +79,8 @@
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
            {tictacaae_rebuildtick, 15 * 1000}, % Check for rebuilds!
            {max_aae_queue_time, 0},
-           {tictacaae_stepinitialtick, false}
+           {tictacaae_stepinitialtick, false},
+           {log_readrepair, true}
           ]},
          {riak_core,
           [
