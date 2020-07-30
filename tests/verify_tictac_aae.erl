@@ -58,7 +58,8 @@
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
            {tictacaae_primaryonly, PrimaryOnly},
-           {tictacaae_stepinitialtick, InitialSkip}
+           {tictacaae_stepinitialtick, InitialSkip},
+           {log_readrepair, true}
           ]},
          {riak_core,
           [
