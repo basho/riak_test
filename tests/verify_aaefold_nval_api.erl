@@ -83,9 +83,9 @@ confirm() ->
     rt:clean_cluster(Nodes0),
 
     Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
-    lager:info("Sleeping for rebuild tick - testing with rebuilds ongoing"),
+    lager:info("Sleeping for twice rebuild tick - testing with rebuilds ongoing"),
     lager:info("Testing this time with PB API"),
-    timer:sleep(?REBUILD_TICK),
+    timer:sleep(2 * ?REBUILD_TICK),
     ClientHeadPB = rt:pbc(hd(Nodes1)),
     ClientTailPB = rt:pbc(lists:last(Nodes1)),
     ok = verify_aae_fold(Nodes1, riakc_pb_socket, ClientHeadPB, ClientTailPB),
@@ -206,4 +206,5 @@ write_data(Node, KVs, Opts) ->
          ?assertMatch(ok, riakc_pb_socket:put(PB, O, Opts))
      end || {K, V} <- KVs],
     riakc_pb_socket:stop(PB),
+    timer:sleep(5000),
     ok.

@@ -65,7 +65,7 @@ confirm() ->
     test_local_coord_all_loaded(Preflist),
     test_forward_least_loaded(Nodes, Preflist),
     test_mbox_poll_timeout(Nodes, Preflist),
-
+    
     lists:foreach(fun(N) -> rt:set_advanced_conf(N, ?CONF(false)) end, Nodes),
     rt:wait_until_ring_converged(Nodes),
     lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, Nodes),
@@ -106,7 +106,6 @@ test_no_local_pl_forward(Nodes, Preflist, IsEnabled) ->
         false ->
             ?assertEqual(0, CoordRedirCnt)
     end.
-
 
 %% @doc check that when a node is on the preflist, and is unloaded, it
 %% coords

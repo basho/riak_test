@@ -44,7 +44,7 @@
 % to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 8).
 -define(AAE_THROTTLE_LIMITS, [{-1, 0}, {100, 10}]).
--define(CFG_NOREBUILD(PrimaryOnly),
+-define(CFG_NOREBUILD(PrimaryOnly, InitialSkip),
         [{riak_kv,
           [
            % Speedy AAE configuration
@@ -57,7 +57,8 @@
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {tictacaae_primaryonly, PrimaryOnly}
+           {tictacaae_primaryonly, PrimaryOnly},
+           {tictacaae_stepinitialtick, InitialSkip}
           ]},
          {riak_core,
           [
@@ -76,8 +77,10 @@
            {tictacaae_rebuildwait, 0},
            {tictacaae_rebuilddelay, 60},
            {tictacaae_exchangetick, 5 * 1000}, % 5 seconds
-           {tictacaae_rebuildtick, 60 * 1000}, % Check for rebuilds!
-           {max_aae_queue_time, 0}
+           {tictacaae_rebuildtick, 15 * 1000}, % Check for rebuilds!
+           {max_aae_queue_time, 0},
+           {tictacaae_stepinitialtick, false},
+           {log_readrepair, true}
           ]},
          {riak_core,
           [
@@ -90,16 +93,25 @@
 -define(N_VAL, 3).
 
 confirm() ->
-    Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(true)),
-    ok = verify_aae_norebuild(Nodes0),
-    rt:clean_cluster(Nodes0),
 
-    Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
-    ok = verify_aae_rebuild(Nodes1),
+    lager:info("Test with no rebuilds - and no startup skip"),
+    Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(true, false)),
+    ok = verify_aae_norebuild(Nodes1),
     rt:clean_cluster(Nodes1),
 
-    Nodes2 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(false)),
+    lager:info("Test with no rebuilds - but with startup skip"),
+    Nodes2 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(true, true)),
     ok = verify_aae_norebuild(Nodes2),
+    rt:clean_cluster(Nodes2),
+
+    lager:info("Test with rebuilds"),
+    Nodes3 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
+    ok = verify_aae_rebuild(Nodes3),
+    rt:clean_cluster(Nodes3),
+
+    lager:info("Test with no rebuilds - and AAE on fallbacks"),
+    Nodes4 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD(false, false)),
+    ok = verify_aae_norebuild(Nodes4),
     pass.
 
 

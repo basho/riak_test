@@ -79,8 +79,8 @@ confirm() ->
     rt:clean_cluster(Nodes0),
 
     Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_REBUILD),
-    lager:info("Sleeping for rebuild tick - testing with rebuilds ongoing"),
-    timer:sleep(?REBUILD_TICK),
+    lager:info("Sleeping for twice rebuild tick - testing with rebuilds ongoing"),
+    timer:sleep(2 * ?REBUILD_TICK),
     ok = verify_aae_fold(Nodes1),
     pass.
 
@@ -198,5 +198,6 @@ write_data(Node, KVs, Opts) ->
          ?assertMatch(ok, riakc_pb_socket:put(PB, O, Opts))
      end || {K, V} <- KVs],
     riakc_pb_socket:stop(PB),
+    timer:sleep(5000),
     ok.
 
