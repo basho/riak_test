@@ -19,7 +19,7 @@
 
 confirm() ->
 	[C1, _C2] = C = make_clusters_helper(),
-	[?assertEqual(pass, test(N, C1)) || N <- lists:seq(1,7)],
+	[?assertEqual(pass, test(N, C1)) || N <- lists:seq(1, 7)],
 %%	?assertEqual(pass, test(6, C2)),
 	destroy_clusters(C),
 	pass.
@@ -36,7 +36,7 @@ test(1, C1) ->
 	put_all_objects(C1, 1),
 	?assertEqual(true, check_objects("cluster1", C1, Expected1, erlang:now(), 240)),
 
-	Responses = check_backends(["default"], C1),	%% Confirm only default location has been created
+	Responses = check_backends([], C1),	%% Confirm only default location has been created
 	lager:info("Check for backends: ~p~n", [Responses]),
 
 	cleanup([C1], ["cluster1"]),
@@ -49,7 +49,7 @@ test(2, C1) ->
 	Keys2 		= ["4", "5", "6"],
 	%% Start second backend
 	[rpc:call(Node, riak_kv_console, add_split_backend_local, [second_split]) || Node <- lists:reverse(C1)],
-	check_backends(["default", "second_split"], C1),	%% Confirm requested splits are created
+	check_backends(["second_split"], C1),	%% Confirm requested splits are created
 
 	{_BackendStates, _MDBackends} = fetch_backend_data(C1),
 
@@ -101,7 +101,7 @@ test(3, C1) ->
 	%% Start second backend
 	This = [rpc:call(Node, riak_kv_console, add_split_backend_local, [second_split]) || Node <- C1],
 	lager:info("Add splti response: ~p~n", [This]),
-	check_backends(["default", "second_split"], C1),	%% Confirm requested splits are created
+	check_backends(["second_split"], C1),	%% Confirm requested splits are created
 
 	Something05 = [rpc:call(Node, riak_core_metadata, get, [{split_backend, splits}, {second_split, Node}]) || Node <- C1],
 	lager:info("Are backends in metadat: ~p~n", [Something05]),
@@ -159,7 +159,7 @@ test(4, C1) ->
 	lager:info("Starting test 4"),
 	%% Start second backend
 	[rpc:call(Node, riak_kv_console, add_split_backend_local, [second_split]) || Node <- C1],
-	check_backends(["default", "second_split"], C1),	%% Confirm requested splits are created
+	check_backends(["second_split"], C1),	%% Confirm requested splits are created
 
 	{_BackendStates, _MDBackends} = fetch_backend_data(C1),
 
@@ -222,7 +222,7 @@ test(5, C1) ->
 	lager:info("Starting test 5"),
 	%% Start second backend
 	[rpc:call(Node, riak_kv_console, add_split_backend_local, [second_split]) || Node <- C1],
-	check_backends(["default", "second_split"], C1),	%% Confirm requested splits are created
+	check_backends(["second_split"], C1),	%% Confirm requested splits are created
 
 	{_BackendStates, _MDBackends} = fetch_backend_data(C1),
 
@@ -304,7 +304,7 @@ test(6, C1) ->
 	lager:info("Starting test 6"),
 	%% Start second backend
 	[rpc:call(Node, riak_kv_console, add_split_backend_local, [second_split]) || Node <- C1],
-	check_backends(["default", "second_split"], C1),	%% Confirm requested splits are created
+	check_backends(["second_split"], C1),	%% Confirm requested splits are created
 
 	{_BackendStates, _MDBackends} = fetch_backend_data(C1),
 
@@ -411,7 +411,7 @@ test(7, C1) ->
 	?assertEqual(true, fold_keys(C1, "new_split", [make_key(integer_to_list(X)) || X <- lists:seq(1, 6)])),
 
 	[rpc:call(Node, riak_kv_console, add_split_backend_local, [new_split]) || Node <- C1],
-	check_backends(["default", "new_split"], C1),
+	check_backends(["new_split"], C1),
 
 	put_all_objects(C1, 2, {bucket, "new_split"}, ["7"], ["7"]),
 	put_all_objects(C1, 2, {key, "new_split"}, ["7"], ["7"]),
@@ -530,7 +530,7 @@ check_backends(Backends, Nodes) ->
 	BitcaskBackends = [Backend ||
 		{_Node, IdxFiles} <- NodeFiles,
 		BackendData <- IdxFiles,
-		{Backend, _BackendFiles} <- BackendData],
+		{Backend, _BackendFiles} <- BackendData, Backend =/= []],
 	?assertEqual(lists:sort(Backends), lists:usort(BitcaskBackends)).
 
 list_bitcask_files(Nodes) ->
@@ -542,22 +542,25 @@ list_node_bitcask_files(Node) ->
 	{ok, DataRoot} = rt:rpc_get_env(Node, [{bitcask, data_root}]),
 	{ok, RootDir} = rpc:call(Node, file, get_cwd, []),
 	FullDir = filename:join(RootDir, DataRoot),
-%%	lager:info("FullDir: ~p~n", [FullDir]),
-	Something = [begin
-					 IdxStr = integer_to_list(Idx),
-					 IdxDir = filename:join(FullDir, IdxStr),
-%%		 lager:info("File name attempting : ~p ~p~n", [FullDir, IdxStr]),
-					 {ok, DataDirs} = rpc:call(Node, file, list_dir, [IdxDir]),
-					 Dirs = [X || X <- DataDirs, X =/= "version.txt"],
-					 BackendFiles = [begin
-										 {ok, Files1} = rpc:call(Node, file, list_dir, [filename:join(IdxDir, Dir)]),
-										 {Dir, Files1}
-									 end || Dir <- Dirs],
-%%		 {IdxDir, Dirs}
-					 BackendFiles
-				 end || Idx <- Partitions],
-%%	lager:info("backend files: ~p~n", [Something]),
-	Something.
+	[begin
+		 IdxStr = integer_to_list(Idx),
+		 IdxDir = filename:join(FullDir, IdxStr),
+		 {ok, DataDirs} = rpc:call(Node, file, list_dir, [IdxDir]),
+		 Dirs = [X || X <- DataDirs, X =/= "version.txt"],
+		 [begin
+				case rpc:call(Node, file, list_dir, [filename:join(IdxDir, Dir)]) of
+					{ok, Files1} ->
+						{Dir, Files1};
+					_ ->
+						case filelib:is_dir(filename:join(IdxDir, Dir)) of
+							false ->
+								{[], []};
+							true ->
+								{Dir, []}
+						end
+				end
+			end || Dir <- Dirs]
+	 end || Idx <- Partitions].
 %%	[{IdxDir, Paths} || {IdxDir, Paths} <- Files, Paths =/= []].
 
 

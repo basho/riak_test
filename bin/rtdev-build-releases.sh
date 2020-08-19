@@ -15,8 +15,8 @@
 # directories. If using kerl or whatever, modify to use kerl's activate logic.
 # Or, alternatively, just substitute the paths to the kerl install paths as
 # that should work too.
-: ${R16B02:=$HOME/.erlang_releases/R16B02-basho10-O2}
-: ${R203:=$HOME/.erlang_releases/20.3}
+: ${R16B02:=$HOME/erl_rel/R16B02-basho10-O2}
+: ${R203:=$HOME/erl_rel/20.3}
 
 # These are the default tags to use when building basho OTP releases.
 # Export different tags to get a different build. N.B. You will need to
@@ -28,7 +28,7 @@
 # By default the Open Source version of Riak will be used, but for internal
 # testing you can override this variable to use `riak_ee` instead
 : ${RT_USE_EE:=""}
-GITURL_RIAK="git://github.com/basho/riak"
+GITURL_RIAK="git://github.com/bet365/riak"
 GITURL_RIAK_EE="git@github.com:basho/riak_ee"
 GITDIR="riak-src"
 
@@ -180,5 +180,5 @@ build()
 }
 
 #build "riak-2.2.8" $R16B02 riak-2.2.8
-build "riak-3.1-multi_bitcask_instances" $OTP20 3.1-multi_bitcask_instances
+build "riak-3.1-multi_bitcask_instances" $R203 riak-3.1-multi_bitcask_instances
 echo
