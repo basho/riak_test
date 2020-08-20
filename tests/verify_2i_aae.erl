@@ -94,7 +94,7 @@ check_lost_objects(Node1, PBC, NumItems, NumDel) ->
     [assert_range_query(PBC, Bucket, ExpectedInitial, Index, 1, NumItems+1)
      || Bucket <- ?BUCKETS],
     set_skip_index_specs(Node1, false),
-    run_2i_repair(Node1),
+    normal = run_2i_repair(Node1),
     lager:info("Now verify that previous changes are visible after repair"),
     ExpectedFinal = [{to_key(N), to_key(N)} || N <- lists:seq(1, NumItems-NumDel)],
     [assert_range_query(PBC, Bucket, ExpectedFinal, Index, 1, NumItems+1)
@@ -140,7 +140,7 @@ check_lost_indexes(Node1, PBC, NumItems) ->
     [assert_range_query(PBC, Bucket, [], Index, 1, NumItems+1)
      || Bucket <- ?BUCKETS],
     do_tree_rebuild(Node1),
-    ok = run_2i_repair(Node1),
+    normal = run_2i_repair(Node1),
     lager:info("Check that objects can now be found via index"),
     Expected = [{to_key(N+1), to_key(N)} || N <- lists:seq(1, NumItems)],
     [assert_range_query(PBC, Bucket, Expected, Index, 1, NumItems+1)
@@ -175,7 +175,7 @@ run_2i_repair(Node1) ->
     receive
         {'DOWN', Mon, _, _, Status} ->
             lager:info("Status: ~p", [Status]),
-            ok
+            Status 
     after
         MaxWaitTime ->
             lager:error("Timed out (~pms) waiting for 2i AAE repair process", [MaxWaitTime]),
