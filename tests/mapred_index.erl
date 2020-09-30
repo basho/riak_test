@@ -43,7 +43,7 @@ confirm() ->
                 [200, timer:now_diff(os:timestamp(), SW)/1000]),
 
 
-    lager:info("Null op 2i query result - with and without return_terms"),
+    lager:info("Null op 2i query result - with return_terms"),
     Q = [{reduce, {modfun, riak_kv_mapreduce, reduce_index_identity}, none, true}],
     Input0 = {index, ?BUCKET, <<"field2_int">>, 110, 189, true},
     {ok, R0} = rpcmr(hd(Nodes), Input0, Q),
@@ -52,6 +52,7 @@ confirm() ->
     ExpectedR0S = lists:seq(110, 189),
     ?assertMatch(ExpectedR0S, R0S),
 
+    lager:info("Null op 2i query result - without return_terms"),
     Input1 = {index, ?BUCKET, <<"field2_int">>, 110, 189, false},
     {ok, R1} = rpcmr(hd(Nodes), Input1, Q),
     ?assertMatch(80, length(R1)),
@@ -75,6 +76,16 @@ confirm() ->
     {ok, [R2A]} = rpcmr(hd(Nodes), Input2, Q2A),
     ?assertMatch(80, R2A),
 
+    lager:info("Extract term the range filter as prereduce - count in reduce"),
+    Input2B =
+        {index, ?BUCKET, <<"field2_bin">>, <<0:1/integer>>, <<1:1/integer>>,
+            true, undefined,
+            [{riak_kv_mapreduce, prereduce_index_extractinteger_fun, {term, int, this, 1, 32}},
+                {riak_kv_mapreduce, prereduce_index_byrange_fun, {int, this, 110, 190}}]},
+    Q2B = [{reduce, {modfun, riak_kv_mapreduce, reduce_count_inputs}, none, true}],
+    {ok, [R2B]} = rpcmr(hd(Nodes), Input2B, Q2B),
+    ?assertMatch(80, R2B),
+
     lager:info("Filter by applying regex within reduce"),
     Input3 = {index, ?BUCKET, <<"field1_bin">>, <<"val0">>, <<"val1">>, true},
     {ok, RE} = re:compile(".*99.*"),
@@ -85,6 +96,23 @@ confirm() ->
     Input4 = {index, ?BUCKET, <<"field1_bin">>, <<"val0">>, <<"val1">>, true, RE},
     {ok, R4} = rpcmr(hd(Nodes), Input4, Q),
     ?assertMatch(2, length(R4)),
+    lager:info("Flter by applying regex as prereduce"),
+    Input5 =
+        {index, ?BUCKET, <<"field1_bin">>, <<"val0">>, <<"val1">>,
+            true, undefined,
+            [{riak_kv_mapreduce, prereduce_index_regex_fun, {term, this, RE}}]},
+    {ok, R5} = rpcmr(hd(Nodes), Input5, Q),
+    ?assertMatch(2, length(R5)),
+
+
+    lager:info("Null op 2i query result - with log of Key"),
+    Input6 =
+        {index, ?BUCKET, <<"field2_int">>, 110, 189,
+            true, undefined,
+            [{riak_kv_mapreduce, prereduce_index_logidentity_fun, none}]},
+    {ok, R6} = rpcmr(hd(Nodes), Input6, Q),
+    ?assertMatch(80, length(R6)),
+
 
     pass.
 
