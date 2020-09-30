@@ -113,6 +113,10 @@ confirm() ->
     {ok, R6} = rpcmr(hd(Nodes), Input6, Q),
     ?assertMatch(80, length(R6)),
 
+    lager:info("Extract term the range filter as prereduce - find max in reduce"),
+    Q7 = [{reduce, {modfun, riak_kv_mapreduce, reduce_index_max}, {int, this}, true}],
+    {ok, [R7]} = rpcmr(hd(Nodes), Input2B, Q7),
+    ?assertMatch({{<<"2ibucket">>,<<"obj00000189">>},[{int,189}]}, R7),
 
     pass.
 
