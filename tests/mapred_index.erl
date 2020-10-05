@@ -160,6 +160,24 @@ confirm() ->
     lager:info("~w results with hamming distance of 40", [length(R8B)]),
     ?assert(length(R8B) > ExpLR8A),
 
+    lager:info("Return set of terms"),
+    Input9 = 
+        {index, ?BUCKET, <<"field3_int">>, 0, 200,
+            true, undefined, []},
+    Q9 = [{reduce, {modfun, riak_kv_mapreduce, reduce_index_set_union}, {term, integer}, true}],
+    {ok, R9} = rpcmr(hd(Nodes), Input9, Q9),
+    ExpR9 = lists:map(fun(I) -> I * 5 end, lists:seq(0, 40)),
+    ?assertMatch(ExpR9, R9),
+
+    lager:info("Return count by term"),
+    Input9 = 
+        {index, ?BUCKET, <<"field3_int">>, 0, 200,
+            true, undefined, []},
+    Q10 = [{reduce, {modfun, riak_kv_mapreduce, reduce_index_countby}, {term, integer}, true}],
+    {ok, R10} = rpcmr(hd(Nodes), Input9, Q10),
+    ExpR10 = lists:map(fun(I) -> {I * 5, 5} end, lists:seq(0, 40)),
+    ?assertMatch(ExpR10, R10),
+
     pass.
 
 load_test_data(Nodes, Count) ->
