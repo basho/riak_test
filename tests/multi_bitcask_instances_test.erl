@@ -19,7 +19,7 @@
 
 confirm() ->
 	[C1, _C2] = C = make_clusters_helper(),
-	[?assertEqual(pass, test(N, C1)) || N <- lists:seq(1, 7)],
+	[?assertEqual(pass, test(N, C1)) || N <- lists:seq(1,7)],
 %%	?assertEqual(pass, test(6, C2)),
 	destroy_clusters(C),
 	pass.
@@ -97,7 +97,6 @@ test(2, C1) ->
 %% TODO Stop riak on a node and open up bitcask on it directly to inspect the data is correct
 test(3, C1) ->
 	ct:pal("########### TEST 3 ###########"),
-	rt:wait_until_transfers_complete(C1),
 	%% Start second backend
 	This = [rpc:call(Node, riak_kv_console, add_split_backend_local, [second_split]) || Node <- C1],
 	lager:info("Add splti response: ~p~n", [This]),
