@@ -157,7 +157,7 @@ confirm() ->
     Input6 =
         {index, ?BUCKET, <<"field2_int">>, 1100, 1890,
             true, undefined,
-            [{riak_kv_mapreduce, prereduce_index_logidentity_fun, none}]},
+            [{riak_kv_mapreduce, prereduce_index_logidentity_fun, key}]},
     {ok, R6} = rpcmr(hd(Nodes), Input6, Q),
     ?assertMatch(791, length(R6)),
 
@@ -247,6 +247,116 @@ confirm() ->
     {ok, R15} = rpcmr(hd(Nodes), Input9, [{reduce, {modfun, riak_kv_mapreduce, reduce_index_sort}, term, true}]),
     ?assertMatch(ExpR12, lists:sort(R15)),
 
+    lager:info("Building a bloom from one query, then passing to another"),
+    Input10 = {index, ?BUCKET, <<"field4_int">>, 4, 5,
+                true, undefined,
+                    [{riak_kv_mapreduce,
+                        prereduce_index_extracthash_fun,
+                        {key, fnva, this, fnva}}]},
+    {ok, R16A} = rpcmr(hd(Nodes), Input10, []),
+    HintsBloom =
+        riak_kv_hints:create_gcs_metavalue(
+            lists:map(fun({{_B, _K}, [{fnva, H}]}) -> {fnva, H} end, R16A),
+            12,
+            fnva),
+    Input11 =
+        {index, ?BUCKET, <<"field2_int">>, 500, 1000,
+            true, undefined,
+            [{riak_kv_mapreduce,
+                prereduce_index_applybloom_fun,
+                {key, this, {riak_kv_hints, HintsBloom}}}]},
+    {ok, R16B} = rpcmr(hd(Nodes), Input11, []),
+    ?assertMatch(true, length(R16B) >= 100),
+    ?assertMatch(true, length(R16B) < 105),
+
+    lager:info("Generate person to find"),
+    SpecialKey = int_to_key(999999),
+    PeopleIdx =
+        complete_peoplesearch_index("SMINOKOWSKI",
+                                    "19391219",
+                                    ["S250", "S000", "J500"],
+                                    "1 Acacia Avenue, Manchester"),
+    lager:info("People index ~s", [PeopleIdx]),
+    put_an_object(rt:pbc(hd(Nodes)),
+                    SpecialKey,
+                    "Special person to find",
+                    [{"psearch_bin", PeopleIdx}]),
+    {ok, [SminObj]} =
+        rpcmr(
+            hd(Nodes),
+            {index, 
+                ?BUCKET,
+                    <<"psearch_bin">>,
+                    <<"SM">>, <<"SM~">>,
+                    true,
+                    "^SM[^\|]*KOWSKI\\|",
+                    % query the range of all family names beginning with SM
+                    % but apply an additional regular expression to filter for
+                    % only those names ending in *KOWSKI 
+                    [{riak_kv_mapreduce,
+                            prereduce_index_extractregex_fun,
+                            {term,
+                                [dob, givennames, address],
+                                this,
+                                "[^\|]*\\|(?<dob>[0-9]{8})\\|(?<givennames>[A-Z0-9]+)\\|(?<address>.*)"}},
+                        % Use a regular expresssion to split the term into three different terms
+                        % dob, givennames and address.  As Keep=this, only those three KV pairs will
+                        % be kept in the indexdata to the next stage
+                        {riak_kv_mapreduce,
+                            prereduce_index_applyrange_fun,
+                            {dob,
+                                all,
+                                <<"0">>,
+                                <<"19401231">>}},
+                        % Filter out all dates of births up to an including the last day of 1940.
+                        % Need to keep all terms as givenname and address filters still to be
+                        % applied
+                        {riak_kv_mapreduce,
+                            prereduce_index_applyregex_fun,
+                            {givennames,
+                                all,
+                                "S000"}},
+                        % Use a regular expression to only include those results with a given name
+                        % which sounds like Sue
+                        {riak_kv_mapreduce,
+                            prereduce_index_extractencoded_fun,
+                            {address,
+                                address_sim,
+                                this}},
+                        % This converts the base64 encoded hash back into a binary, and only `this`
+                        % is required now - so only the [{address_sim, Hash}] will be in the
+                        % IndexData downstream
+                        {riak_kv_mapreduce,
+                            prereduce_index_extracthamming_fun,
+                            {address_sim,
+                                address_distance,
+                                this,
+                                riak_kv_mapreduce:simhash(<<"Acecia Avenue, Manchester">>)}},
+                        % This generates a new projected attribute `address_distance` which
+                        % id the hamming distance between the query and the indexed address
+                        {riak_kv_mapreduce,
+                            prereduce_index_logidentity_fun,
+                            address_distance},
+                        % This adds a log for troubleshooting - the term passed to logidentity
+                        % is the projected attribute to log (`key` can be used just to log
+                        % the key
+                        {riak_kv_mapreduce,
+                            prereduce_index_applyrange_fun,
+                            {address_distance,
+                                this,
+                                0,
+                                50}}
+                        % Filter out any result where the hamming distance to the query
+                        % address is more than 50
+                            ]},
+            [{reduce, {modfun, riak_kv_mapreduce, reduce_index_min}, {address_distance, 10}, false},
+                % Restricts the number of results to be fetched to the ten matches with the
+                % smallest hamming distance to the queried address
+                {map, {modfun, riak_kv_mapreduce, map_identity}, none, true}
+                % Fetch all the matching objects
+            ]),
+    ?assertMatch(SpecialKey, riak_object:key(SminObj)),
+
     pass.
 
 load_test_data(Nodes, Count) ->
@@ -277,7 +387,9 @@ put_an_object(Pid, N) ->
                {"field2_bin", <<0:8/integer, N:32/integer, 0:8/integer>>},
                % every 5 items indexed together
                {"field3_int", N - (N rem 5)},
-               {"field4_bin", <<N:8/integer, SimHash/binary>>}
+               {"field4_int", N rem 5},
+               {"field4_bin", <<N:8/integer, SimHash/binary>>},
+               {"psearch_bin", generate_peoplesearch_index()}
               ],
     put_an_object(Pid, Key, Data, Indexes).
 
@@ -287,6 +399,39 @@ put_an_object(Pid, Key, Data, Indexes) when is_list(Indexes) ->
     Robj1 = riakc_obj:update_value(Robj0, Data),
     Robj2 = riakc_obj:update_metadata(Robj1, MetaData),
     riakc_pb_socket:put(Pid, Robj2).
+
+generate_peoplesearch_index() ->
+    SurnameInt = rand:uniform(531),
+    GivenNameCount = rand:uniform(3),
+    RandomStreet = rand:uniform(10),
+    RandomHouseNumber = rand:uniform(50),
+    RandomTown = rand:uniform(6),
+    RandomDoB =
+        io_lib:format("~4..0B~2..0B~2..0B",
+                        [1920 + rand:uniform(80),
+                            rand:uniform(12),
+                            rand:uniform(28)]),
+    Surname = 
+        element(1, hd(lists:dropwhile(fun({_T, I}) -> SurnameInt > I end, surname_list()))),
+    GivenNames =
+        lists:map(fun(_I) -> 
+                        lists:nth(
+                            rand:uniform(
+                                length(givenname_list()) - 1) + 1, givenname_list()) end,
+                lists:seq(1, GivenNameCount)),
+    Address =
+        io_lib:format("~w ~s, ~s",
+                                [RandomHouseNumber,
+                                    lists:nth(RandomStreet, streetname_list()),
+                                    lists:nth(RandomTown, town_list())]),
+    complete_peoplesearch_index(Surname, RandomDoB, GivenNames, Address).
+
+complete_peoplesearch_index(Surname, DoB, GivenNames, Address) ->
+    GNCodes =
+        lists:foldl(fun(N, Acc) -> Acc ++ N end, "", GivenNames),
+    AddressHash = base64:encode(riak_kv_mapreduce:simhash(list_to_binary(Address))),
+    iolist_to_binary(Surname ++ "|" ++ DoB ++ "|" ++ GNCodes ++ "|" ++ AddressHash).
+
 
 int_to_key(N) ->
     list_to_binary(io_lib:format("obj~8..0B", [N])).
@@ -320,3 +465,19 @@ word_list() ->
         "Wade", "Watch", "Water", "Waterfowl", "Weather", "Wetlands", "Wild", "Wildlife", "Wildlife", "Window", "Wing", "Wound",
         "Yonder", "Young"
         "Zone", "Zoo"].
+
+surname_list() ->
+    [{"Smith", 126}, {"Jones", 201}, {"Taylor", 260}, {"Brown",	316},
+        {"Williams", 355}, {"Wilson", 394}, {"Johnson", 431}, {"Davies", 467},
+        {"Robinson", 499}, {"Wright", 531}].
+
+givenname_list() ->
+    ["O410", "A540", "E540", "I240", "A100", "J220", "I214", "L400", "E400", "M000"].
+
+streetname_list() ->
+    ["High Street", "Station Road", "Main Street", "Park Road", "Church Road",
+        "Church Street", "London Road", "Victoria Road", "Green Lane",
+        "Manor Road", "Church Lane"].
+
+town_list() ->
+    ["Leeds", "Liverpool", "Fulham", "Sheffield", "Manchester", "Wolverhampton"].
