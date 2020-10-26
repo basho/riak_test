@@ -128,8 +128,8 @@ confirm() ->
     Input2B =
         {index, ?BUCKET, <<"field2_bin">>, <<0:1/integer>>, <<1:1/integer>>,
             true, undefined,
-            [{riak_kv_mapreduce, prereduce_index_extractinteger_fun, {term, int, this, 1, 32}},
-                {riak_kv_mapreduce, prereduce_index_applyrange_fun, {int, this, 1100, 1900}}]},
+            [{riak_kv_index_prereduce, extract_integer, {term, int, this, 1, 32}},
+                {riak_kv_index_prereduce, apply_range, {int, this, 1100, 1900}}]},
     Q2B = [{reduce, {modfun, riak_kv_mapreduce, reduce_count_inputs}, none, true}],
     {ok, [R2B]} = rpcmr(hd(Nodes), Input2B, Q2B),
     ?assertMatch(801, R2B),
@@ -148,7 +148,7 @@ confirm() ->
     Input5 =
         {index, ?BUCKET, <<"field1_bin">>, <<"val0">>, <<"val1">>,
             true, undefined,
-            [{riak_kv_mapreduce, prereduce_index_applyregex_fun, {term, this, RE}}]},
+            [{riak_kv_index_prereduce, apply_regex, {term, this, RE}}]},
     {ok, R5} = rpcmr(hd(Nodes), Input5, Q),
     ?assertMatch(38, length(R5)),
 
@@ -157,7 +157,7 @@ confirm() ->
     Input6 =
         {index, ?BUCKET, <<"field2_int">>, 1100, 1890,
             true, undefined,
-            [{riak_kv_mapreduce, prereduce_index_logidentity_fun, key}]},
+            [{riak_kv_index_prereduce, log_identity, key}]},
     {ok, R6} = rpcmr(hd(Nodes), Input6, Q),
     ?assertMatch(791, length(R6)),
 
@@ -182,13 +182,13 @@ confirm() ->
     
     lager:info("Find values similar to ..."),
     Similar =
-        riak_kv_mapreduce:simhash(list_to_binary("Arial Effect Agile")),
+        riak_kv_index_prereduce:simhash(list_to_binary("Arial Effect Agile")),
     Input8 =
         {index, ?BUCKET, <<"field4_bin">>, <<0:8/integer>>, <<255:8/integer>>,
             true, undefined,
-            [{riak_kv_mapreduce, prereduce_index_extractinteger_fun, {term, sim, this, 1, 128}},
-                {riak_kv_mapreduce, prereduce_index_extracthamming_fun, {sim, distance, this, Similar}},
-                {riak_kv_mapreduce, prereduce_index_applyrange_fun, {distance, this, 0, 30}}]},
+            [{riak_kv_index_prereduce, extract_integer, {term, sim, this, 1, 128}},
+                {riak_kv_index_prereduce, extract_hamming, {sim, distance, this, Similar}},
+                {riak_kv_index_prereduce, apply_range, {distance, this, 0, 30}}]},
     Q8 = [{map, {modfun, riak_kv_mapreduce, map_identity}, none, true}],
     {ok, R8} = rpcmr(hd(Nodes), Input8, Q8),
     R8A = lists:map(fun(Obj) -> binary_to_term(riak_object:get_value(Obj)) end, R8),
@@ -199,9 +199,9 @@ confirm() ->
     Input8B =
         {index, ?BUCKET, <<"field4_bin">>, <<0:8/integer>>, <<255:8/integer>>,
             true, undefined,
-            [{riak_kv_mapreduce, prereduce_index_extractinteger_fun, {term, sim, this, 1, 128}},
-                {riak_kv_mapreduce, prereduce_index_extracthamming_fun, {sim, distance, this, Similar}},
-                {riak_kv_mapreduce, prereduce_index_applyrange_fun, {distance, this, 0, 40}}]},
+            [{riak_kv_index_prereduce, extract_integer, {term, sim, this, 1, 128}},
+                {riak_kv_index_prereduce, extract_hamming, {sim, distance, this, Similar}},
+                {riak_kv_index_prereduce, apply_range, {distance, this, 0, 40}}]},
     {ok, R8B} = rpcmr(hd(Nodes), Input8B, Q8),
     lager:info("~w results with hamming distance of 40", [length(R8B)]),
     ?assert(length(R8B) > ExpLR8A),
@@ -250,8 +250,8 @@ confirm() ->
     lager:info("Building a bloom from one query, then passing to another"),
     Input10 = {index, ?BUCKET, <<"field4_int">>, 4, 5,
                 true, undefined,
-                    [{riak_kv_mapreduce,
-                        prereduce_index_extracthash_fun,
+                    [{riak_kv_index_prereduce,
+                        extract_hash,
                         {key, fnva, this, fnva}}]},
     {ok, R16A} = rpcmr(hd(Nodes), Input10, []),
     HintsBloom =
@@ -262,8 +262,8 @@ confirm() ->
     Input11 =
         {index, ?BUCKET, <<"field2_int">>, 500, 1000,
             true, undefined,
-            [{riak_kv_mapreduce,
-                prereduce_index_applybloom_fun,
+            [{riak_kv_index_prereduce,
+                apply_bloom,
                 {key, this, {riak_kv_hints, HintsBloom}}}]},
     {ok, R16B} = rpcmr(hd(Nodes), Input11, []),
     ?assertMatch(true, length(R16B) >= 100),
@@ -293,8 +293,8 @@ confirm() ->
                     % query the range of all family names beginning with SM
                     % but apply an additional regular expression to filter for
                     % only those names ending in *KOWSKI 
-                    [{riak_kv_mapreduce,
-                            prereduce_index_extractregex_fun,
+                    [{riak_kv_index_prereduce,
+                            extract_regex,
                             {term,
                                 [dob, givennames, address],
                                 this,
@@ -302,8 +302,8 @@ confirm() ->
                         % Use a regular expresssion to split the term into three different terms
                         % dob, givennames and address.  As Keep=this, only those three KV pairs will
                         % be kept in the indexdata to the next stage
-                        {riak_kv_mapreduce,
-                            prereduce_index_applyrange_fun,
+                        {riak_kv_index_prereduce,
+                            apply_range,
                             {dob,
                                 all,
                                 <<"0">>,
@@ -311,37 +311,37 @@ confirm() ->
                         % Filter out all dates of births up to an including the last day of 1940.
                         % Need to keep all terms as givenname and address filters still to be
                         % applied
-                        {riak_kv_mapreduce,
-                            prereduce_index_applyregex_fun,
+                        {riak_kv_index_prereduce,
+                            apply_regex,
                             {givennames,
                                 all,
                                 "S000"}},
                         % Use a regular expression to only include those results with a given name
                         % which sounds like Sue
-                        {riak_kv_mapreduce,
-                            prereduce_index_extractencoded_fun,
+                        {riak_kv_index_prereduce,
+                            extract_encoded,
                             {address,
                                 address_sim,
                                 this}},
                         % This converts the base64 encoded hash back into a binary, and only `this`
                         % is required now - so only the [{address_sim, Hash}] will be in the
                         % IndexData downstream
-                        {riak_kv_mapreduce,
-                            prereduce_index_extracthamming_fun,
+                        {riak_kv_index_prereduce,
+                            extract_hamming,
                             {address_sim,
                                 address_distance,
                                 this,
-                                riak_kv_mapreduce:simhash(<<"Acecia Avenue, Manchester">>)}},
+                                riak_kv_index_prereduce:simhash(<<"Acecia Avenue, Manchester">>)}},
                         % This generates a new projected attribute `address_distance` which
-                        % id the hamming distance between the query and the indexed address
-                        {riak_kv_mapreduce,
-                            prereduce_index_logidentity_fun,
+                        % is the hamming distance between the query and the indexed address
+                        {riak_kv_index_prereduce,
+                            log_identity,
                             address_distance},
                         % This adds a log for troubleshooting - the term passed to logidentity
                         % is the projected attribute to log (`key` can be used just to log
                         % the key
-                        {riak_kv_mapreduce,
-                            prereduce_index_applyrange_fun,
+                        {riak_kv_index_prereduce,
+                            apply_range,
                             {address_distance,
                                 this,
                                 0,
@@ -380,7 +380,7 @@ put_an_object(Pid, N) ->
                 lists:nth((N + 2) rem WordCount + 1, WordList)],
     WordStr = lists:flatten(io_lib:format("~s ~s ~s", Words)),
     Data = lists:flatten(io_lib:format("data ~p words ~s", [N, WordStr])),
-    SimHash = riak_kv_mapreduce:simhash(list_to_binary(WordStr)),
+    SimHash = riak_kv_index_prereduce:simhash(list_to_binary(WordStr)),
     BinIndex = int_to_field1_bin(N),
     Indexes = [{"field1_bin", BinIndex},
                {"field2_int", N},
@@ -429,7 +429,7 @@ generate_peoplesearch_index() ->
 complete_peoplesearch_index(Surname, DoB, GivenNames, Address) ->
     GNCodes =
         lists:foldl(fun(N, Acc) -> Acc ++ N end, "", GivenNames),
-    AddressHash = base64:encode(riak_kv_mapreduce:simhash(list_to_binary(Address))),
+    AddressHash = base64:encode(riak_kv_index_prereduce:simhash(list_to_binary(Address))),
     iolist_to_binary(Surname ++ "|" ++ DoB ++ "|" ++ GNCodes ++ "|" ++ AddressHash).
 
 
