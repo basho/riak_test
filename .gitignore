@@ -23,3 +23,4 @@ riak_test.iml
 _build/
 rebar.lock
 *.beam
+results/

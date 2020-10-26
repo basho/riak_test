@@ -17,13 +17,9 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc Verify some MapReduce internals.
-%%
-%% This test used to be in riak_kv's test/mapred_test.erl. It was
-%% called `compat_buffer_and_prereduce_test_'. It has been moved here
-%% to avoid the fragile setup and teardown stages that frequently
-%% broke eunit testing.
--module(mapred_index).
+%% @doc Verify some MapReduce 2i internals.
+
+-module(mapred_index_general).
 -behavior(riak_test).
 -export([
          %% riak_test api
@@ -269,93 +265,7 @@ confirm() ->
     ?assertMatch(true, length(R16B) >= 100),
     ?assertMatch(true, length(R16B) < 105),
 
-    lager:info("Generate person to find"),
-    SpecialKey = int_to_key(999999),
-    PeopleIdx =
-        complete_peoplesearch_index("SMINOKOWSKI",
-                                    "19391219",
-                                    ["S250", "S000", "J500"],
-                                    "1 Acacia Avenue, Manchester"),
-    lager:info("People index ~s", [PeopleIdx]),
-    put_an_object(rt:pbc(hd(Nodes)),
-                    SpecialKey,
-                    "Special person to find",
-                    [{"psearch_bin", PeopleIdx}]),
-    {ok, [SminObj]} =
-        rpcmr(
-            hd(Nodes),
-            {index, 
-                ?BUCKET,
-                    <<"psearch_bin">>,
-                    <<"SM">>, <<"SM~">>,
-                    true,
-                    "^SM[^\|]*KOWSKI\\|",
-                    % query the range of all family names beginning with SM
-                    % but apply an additional regular expression to filter for
-                    % only those names ending in *KOWSKI 
-                    [{riak_kv_index_prereduce,
-                            extract_regex,
-                            {term,
-                                [dob, givennames, address],
-                                this,
-                                "[^\|]*\\|(?<dob>[0-9]{8})\\|(?<givennames>[A-Z0-9]+)\\|(?<address>.*)"}},
-                        % Use a regular expresssion to split the term into three different terms
-                        % dob, givennames and address.  As Keep=this, only those three KV pairs will
-                        % be kept in the indexdata to the next stage
-                        {riak_kv_index_prereduce,
-                            apply_range,
-                            {dob,
-                                all,
-                                <<"0">>,
-                                <<"19401231">>}},
-                        % Filter out all dates of births up to an including the last day of 1940.
-                        % Need to keep all terms as givenname and address filters still to be
-                        % applied
-                        {riak_kv_index_prereduce,
-                            apply_regex,
-                            {givennames,
-                                all,
-                                "S000"}},
-                        % Use a regular expression to only include those results with a given name
-                        % which sounds like Sue
-                        {riak_kv_index_prereduce,
-                            extract_encoded,
-                            {address,
-                                address_sim,
-                                this}},
-                        % This converts the base64 encoded hash back into a binary, and only `this`
-                        % is required now - so only the [{address_sim, Hash}] will be in the
-                        % IndexData downstream
-                        {riak_kv_index_prereduce,
-                            extract_hamming,
-                            {address_sim,
-                                address_distance,
-                                this,
-                                riak_kv_index_prereduce:simhash(<<"Acecia Avenue, Manchester">>)}},
-                        % This generates a new projected attribute `address_distance` which
-                        % is the hamming distance between the query and the indexed address
-                        {riak_kv_index_prereduce,
-                            log_identity,
-                            address_distance},
-                        % This adds a log for troubleshooting - the term passed to logidentity
-                        % is the projected attribute to log (`key` can be used just to log
-                        % the key
-                        {riak_kv_index_prereduce,
-                            apply_range,
-                            {address_distance,
-                                this,
-                                0,
-                                50}}
-                        % Filter out any result where the hamming distance to the query
-                        % address is more than 50
-                            ]},
-            [{reduce, {modfun, riak_kv_mapreduce, reduce_index_min}, {address_distance, 10}, false},
-                % Restricts the number of results to be fetched to the ten matches with the
-                % smallest hamming distance to the queried address
-                {map, {modfun, riak_kv_mapreduce, map_identity}, none, true}
-                % Fetch all the matching objects
-            ]),
-    ?assertMatch(SpecialKey, riak_object:key(SminObj)),
+
 
     pass.
 
@@ -388,8 +298,7 @@ put_an_object(Pid, N) ->
                % every 5 items indexed together
                {"field3_int", N - (N rem 5)},
                {"field4_int", N rem 5},
-               {"field4_bin", <<N:8/integer, SimHash/binary>>},
-               {"psearch_bin", generate_peoplesearch_index()}
+               {"field4_bin", <<N:8/integer, SimHash/binary>>}
               ],
     put_an_object(Pid, Key, Data, Indexes).
 
@@ -399,38 +308,6 @@ put_an_object(Pid, Key, Data, Indexes) when is_list(Indexes) ->
     Robj1 = riakc_obj:update_value(Robj0, Data),
     Robj2 = riakc_obj:update_metadata(Robj1, MetaData),
     riakc_pb_socket:put(Pid, Robj2).
-
-generate_peoplesearch_index() ->
-    SurnameInt = rand:uniform(531),
-    GivenNameCount = rand:uniform(3),
-    RandomStreet = rand:uniform(10),
-    RandomHouseNumber = rand:uniform(50),
-    RandomTown = rand:uniform(6),
-    RandomDoB =
-        io_lib:format("~4..0B~2..0B~2..0B",
-                        [1920 + rand:uniform(80),
-                            rand:uniform(12),
-                            rand:uniform(28)]),
-    Surname = 
-        element(1, hd(lists:dropwhile(fun({_T, I}) -> SurnameInt > I end, surname_list()))),
-    GivenNames =
-        lists:map(fun(_I) -> 
-                        lists:nth(
-                            rand:uniform(
-                                length(givenname_list()) - 1) + 1, givenname_list()) end,
-                lists:seq(1, GivenNameCount)),
-    Address =
-        io_lib:format("~w ~s, ~s",
-                                [RandomHouseNumber,
-                                    lists:nth(RandomStreet, streetname_list()),
-                                    lists:nth(RandomTown, town_list())]),
-    complete_peoplesearch_index(Surname, RandomDoB, GivenNames, Address).
-
-complete_peoplesearch_index(Surname, DoB, GivenNames, Address) ->
-    GNCodes =
-        lists:foldl(fun(N, Acc) -> Acc ++ N end, "", GivenNames),
-    AddressHash = base64:encode(riak_kv_index_prereduce:simhash(list_to_binary(Address))),
-    iolist_to_binary(Surname ++ "|" ++ DoB ++ "|" ++ GNCodes ++ "|" ++ AddressHash).
 
 
 int_to_key(N) ->
@@ -465,19 +342,3 @@ word_list() ->
         "Wade", "Watch", "Water", "Waterfowl", "Weather", "Wetlands", "Wild", "Wildlife", "Wildlife", "Window", "Wing", "Wound",
         "Yonder", "Young"
         "Zone", "Zoo"].
-
-surname_list() ->
-    [{"Smith", 126}, {"Jones", 201}, {"Taylor", 260}, {"Brown",	316},
-        {"Williams", 355}, {"Wilson", 394}, {"Johnson", 431}, {"Davies", 467},
-        {"Robinson", 499}, {"Wright", 531}].
-
-givenname_list() ->
-    ["O410", "A540", "E540", "I240", "A100", "J220", "I214", "L400", "E400", "M000"].
-
-streetname_list() ->
-    ["High Street", "Station Road", "Main Street", "Park Road", "Church Road",
-        "Church Street", "London Road", "Victoria Road", "Green Lane",
-        "Manor Road", "Church Lane"].
-
-town_list() ->
-    ["Leeds", "Liverpool", "Fulham", "Sheffield", "Manchester", "Wolverhampton"].
