@@ -52,8 +52,77 @@ confirm() ->
                     SpecialKey,
                     "Special person to find",
                     [{"psearch_bin", PeopleIdx}]),
-    {ok, [SminObj]} =
-        rpcmr(
+
+    PreReduceFuns =
+        [{riak_kv_index_prereduce,
+                extract_regex,
+                {term,
+                    [dob, givennames, address],
+                    this,
+                    "[^\|]*\\|(?<dob>[0-9]{8})\\|(?<givennames>[A-Z0-9]+)\\|(?<address>.*)"}},
+            % Use a regular expresssion to split the term into three different terms
+            % dob, givennames and address.  As Keep=this, only those three KV pairs will
+            % be kept in the indexdata to the next stage, and the original `term` attribute
+            % will be dropped
+            {riak_kv_index_prereduce,
+                apply_range,
+                {dob,
+                    all,
+                    <<"0">>,
+                    <<"19401231">>}},
+            % Filter out all dates of births up to an including the last day of 1940.
+            % Need to keep all terms as givenname and address filters still to be
+            % applied
+            {riak_kv_index_prereduce,
+                apply_regex,
+                {givennames,
+                    all,
+                    "S000"}},
+            % Use a regular expression to only include those results with a given name
+            % which sounds like Sue
+            {riak_kv_index_prereduce,
+                extract_encoded,
+                {address,
+                    address_sim,
+                    this}},
+            % This converts the base64 encoded hash back into a binary, and only `this`
+            % is required now - so only the [{address_sim, Hash}] will be in the
+            % IndexData downstream
+            {riak_kv_index_prereduce,
+                extract_hamming,
+                {address_sim,
+                    address_distance,
+                    this,
+                    riak_kv_index_prereduce:simhash(<<"Acecia Avenue, Manchester">>)}},
+            % This generates a new projected attribute `address_distance` which
+            % is the hamming distance between the query and the indexed address
+            {riak_kv_index_prereduce,
+                log_identity,
+                address_distance},
+            % This adds a log for troubleshooting - the term passed to logidentity
+            % is the projected attribute to log (`key` can be used just to log
+            % the key
+            {riak_kv_index_prereduce,
+                apply_range,
+                {address_distance,
+                    this,
+                    0,
+                    50}}
+            % Filter out any result where the hamming distance to the query
+            % address is more than 50
+                ],
+    
+    MapReduceFuns =
+        [{reduce, {modfun, riak_kv_mapreduce, reduce_index_min}, {address_distance, 10}, false},
+            % Restricts the number of results to be fetched to the ten matches with the
+            % smallest hamming distance to the queried address
+            {map, {modfun, riak_kv_mapreduce, map_identity}, none, true}
+            % Fetch all the matching objects
+        ],
+
+    QueryFun =
+        fun(PRFs, MRFs) ->
+            rpcmr(
             hd(Nodes),
             {index, 
                 ?BUCKET,
@@ -64,70 +133,28 @@ confirm() ->
                     % query the range of all family names beginning with SM
                     % but apply an additional regular expression to filter for
                     % only those names ending in *KOWSKI 
-                    [{riak_kv_index_prereduce,
-                            extract_regex,
-                            {term,
-                                [dob, givennames, address],
-                                this,
-                                "[^\|]*\\|(?<dob>[0-9]{8})\\|(?<givennames>[A-Z0-9]+)\\|(?<address>.*)"}},
-                        % Use a regular expresssion to split the term into three different terms
-                        % dob, givennames and address.  As Keep=this, only those three KV pairs will
-                        % be kept in the indexdata to the next stage, and the original `term` attribute
-                        % will be dropped
-                        {riak_kv_index_prereduce,
-                            apply_range,
-                            {dob,
-                                all,
-                                <<"0">>,
-                                <<"19401231">>}},
-                        % Filter out all dates of births up to an including the last day of 1940.
-                        % Need to keep all terms as givenname and address filters still to be
-                        % applied
-                        {riak_kv_index_prereduce,
-                            apply_regex,
-                            {givennames,
-                                all,
-                                "S000"}},
-                        % Use a regular expression to only include those results with a given name
-                        % which sounds like Sue
-                        {riak_kv_index_prereduce,
-                            extract_encoded,
-                            {address,
-                                address_sim,
-                                this}},
-                        % This converts the base64 encoded hash back into a binary, and only `this`
-                        % is required now - so only the [{address_sim, Hash}] will be in the
-                        % IndexData downstream
-                        {riak_kv_index_prereduce,
-                            extract_hamming,
-                            {address_sim,
-                                address_distance,
-                                this,
-                                riak_kv_index_prereduce:simhash(<<"Acecia Avenue, Manchester">>)}},
-                        % This generates a new projected attribute `address_distance` which
-                        % is the hamming distance between the query and the indexed address
-                        {riak_kv_index_prereduce,
-                            log_identity,
-                            address_distance},
-                        % This adds a log for troubleshooting - the term passed to logidentity
-                        % is the projected attribute to log (`key` can be used just to log
-                        % the key
-                        {riak_kv_index_prereduce,
-                            apply_range,
-                            {address_distance,
-                                this,
-                                0,
-                                50}}
-                        % Filter out any result where the hamming distance to the query
-                        % address is more than 50
-                            ]},
-            [{reduce, {modfun, riak_kv_mapreduce, reduce_index_min}, {address_distance, 10}, false},
-                % Restricts the number of results to be fetched to the ten matches with the
-                % smallest hamming distance to the queried address
-                {map, {modfun, riak_kv_mapreduce, map_identity}, none, true}
-                % Fetch all the matching objects
-            ]),
+                    PRFs},
+            MRFs)
+        end,
+
+    {ok, [SminObj]} = QueryFun(PreReduceFuns, MapReduceFuns),
+        
     ?assertMatch(SpecialKey, riak_object:key(SminObj)),
+
+    lager:info("Return result summary"),
+    MapReduceFuns0 =
+        [{reduce,
+            {modfun, riak_kv_mapreduce, reduce_index_collateresults},
+            {address_distance, address_distance, this, min, 1},
+            true}],
+    
+    {ok, R} = QueryFun(PreReduceFuns, MapReduceFuns0),
+    lager:info("Result summary ~w", [R]),
+    [{{results,
+            [{{?BUCKET, SpecialKey}, [{address_distance, D}]}]},
+        {facet_count,
+            [{D, 1}]}}] = R,
+    ?assertMatch(true, is_integer(D)),
 
     pass.
 

@@ -1,5 +1,6 @@
 mapred_index_general
 mapred_index_peoplesearch
+mapred_index_reporting
 secondary_index_tests
 verify_2i_handoff
 verify_2i_hugeindex
