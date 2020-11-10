@@ -259,7 +259,7 @@ confirm() ->
         {index, ?BUCKET, <<"field2_int">>, 500, 1000,
             true, undefined,
             [{riak_kv_index_prereduce,
-                apply_bloom,
+                apply_remotebloom,
                 {key, this, {riak_kv_hints, HintsBloom}}}]},
     {ok, R16B} = rpcmr(hd(Nodes), Input11, []),
     ?assertMatch(true, length(R16B) >= 100),
