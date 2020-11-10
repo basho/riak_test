@@ -45,6 +45,7 @@
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+           {ttaaefs_maxresults, 128},
            {delete_mode, keep}
           ]}
         ]).
