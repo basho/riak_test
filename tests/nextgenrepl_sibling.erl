@@ -23,7 +23,7 @@
 -define(COMMMON_VAL_SIB, <<"CommonValueToWriteForAllSiblingObjects">>).
 -define(COMMMON_VAL_FIN, <<"CommonValueToWriteForAllFinalObjects">>).
 
--define(REPL_SLEEP, 2048). 
+-define(REPL_SLEEP, 4096). 
     % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
