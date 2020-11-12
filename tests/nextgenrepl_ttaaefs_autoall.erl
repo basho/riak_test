@@ -29,7 +29,7 @@
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
 
--define(CONFIG(RingSize, NVal), [
+-define(CONFIG(RingSize, NVal, FetchClocksRepair), [
         {riak_core,
             [
              {ring_creation_size, RingSize},
@@ -52,7 +52,8 @@
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep}
+           {delete_mode, keep},
+           {aae_fetchclocks_repair, FetchClocksRepair}
           ]}
         ]).
 
@@ -99,9 +100,9 @@ ttaae_config(Protocol, AAEPeer, RemoteClusterName, LocalClusterName,
 confirm() ->
     [ClusterAH, ClusterBH, ClusterCH] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, true)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, false)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, false)}]),
 
     lager:info("Test run using HTTP protocol"),
     test_repl(http, [ClusterAH, ClusterBH, ClusterCH]),
@@ -112,9 +113,9 @@ confirm() ->
 
     [ClusterAP, ClusterBP, ClusterCP] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, false)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, true)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, false)}]),
     
     lager:info("Test run using PB protocol"),
     test_repl(pb, [ClusterAP, ClusterBP, ClusterCP]),
