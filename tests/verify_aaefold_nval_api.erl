@@ -111,11 +111,15 @@ verify_aae_fold(Nodes, Mod, CH, CT) ->
 
     lists:foldl(KeyLoadFun, 1, Nodes),
     lager:info("Loaded ~w objects", [?NUM_KEYS_PERNODE * length(Nodes)]),
+    wait_until_root_stable(Mod, CH),
 
     lager:info("Fold for busy root"),
     {ok, {root, RH1}} = Mod:aae_merge_root(CH, ?N_VAL),
     {ok, {root, RT1}} = Mod:aae_merge_root(CT, ?N_VAL),
 
+    lager:info("Dirty segments ~w",
+        [leveled_tictac:find_dirtysegments(RH1, RT1)]),
+    
     ?assertMatch(true, RH1 == RT1),
     ?assertMatch(true, RH0 == RT0),
     ?assertMatch(false, RH0 == RH1),
@@ -127,7 +131,8 @@ verify_aae_fold(Nodes, Mod, CH, CT) ->
 
     DirtyBranches2 = aae_exchange:compare_roots(RH1, RH2),
 
-    lager:info("Found ~w branch deltas", [length(DirtyBranches2)]),
+    lager:info("Found branch deltas ~w", [DirtyBranches2]),
+    
     ?assertMatch(true, length(DirtyBranches2) > 0),
     ?assertMatch(true, length(DirtyBranches2) =< ?DELTA_COUNT),
 
@@ -208,3 +213,19 @@ write_data(Node, KVs, Opts) ->
     riakc_pb_socket:stop(PB),
     timer:sleep(5000),
     ok.
+
+wait_until_root_stable(Mod, Client) ->
+    {ok, {root, RH0}} = Mod:aae_merge_root(Client, ?N_VAL),
+    timer:sleep(2000),
+    {ok, {root, RH1}} = Mod:aae_merge_root(Client, ?N_VAL),
+    case aae_exchange:compare_roots(RH0, RH1) of
+        [] ->
+            lager:info("Root appears stable matched");
+        [L] ->
+            Pre = L * 4,
+            <<_B0:Pre/binary, V0:32/integer, _Post0/binary>> = RH0,
+            <<_B1:Pre/binary, V1:32/integer, _Post1/binary>> = RH1,
+            lager:info("Root not stable: branch ~w compares ~w with ~w",
+                        [L, V0, V1]),
+            wait_until_root_stable(Mod, Client)
+    end.

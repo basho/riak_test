@@ -116,6 +116,7 @@ verify_aae_fold(Nodes) ->
 
     lists:foldl(KeyLoadFun, 1, Nodes),
     lager:info("Loaded ~w objects", [?NUM_KEYS_NVAL3_PERNODE * length(Nodes)]),
+    wait_until_root_stable(CH),
 
     lager:info("Fold for busy root"),
     {ok, RH1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
@@ -288,3 +289,18 @@ write_data(Bucket, Node, KVs, Opts) ->
     timer:sleep(5000),
     ok.
 
+wait_until_root_stable(Client) ->
+    {ok, RH0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, Client),
+    timer:sleep(2000),
+    {ok, RH1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, Client),
+    case aae_exchange:compare_roots(RH0, RH1) of
+        [] ->
+            lager:info("Root appears stable matched");
+        [L] ->
+            Pre = L * 4,
+            <<_B0:Pre/binary, V0:32/integer, _Post0/binary>> = RH0,
+            <<_B1:Pre/binary, V1:32/integer, _Post1/binary>> = RH1,
+            lager:info("Root not stable: branch ~w compares ~w with ~w",
+                        [L, V0, V1]),
+            wait_until_root_stable(Client)
+    end.
