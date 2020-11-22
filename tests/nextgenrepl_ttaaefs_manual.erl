@@ -46,16 +46,26 @@
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
            {ttaaefs_maxresults, 128},
+           {ttaaefs_rangeboost, 1}, % So maxresults is consistent
            {delete_mode, keep}
           ]}
         ]).
 
 confirm() ->
-    [ClusterA, ClusterB, ClusterC] = setup_clusters(),
-    test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
-                                fun fullsync_check/2,
-                                fun partialsync_check/4,
-                                fun setup_replqueues/1).
+    [ClusterA1, ClusterB1, ClusterC1] = setup_clusters(),
+    pass = test_repl_between_clusters(ClusterA1, ClusterB1, ClusterC1,
+                                        rangesync_checkfun(),
+                                        none,
+                                        fun setup_replqueues/1),
+    rt:clean_cluster(ClusterA1),
+    rt:clean_cluster(ClusterB1),
+    rt:clean_cluster(ClusterC1),
+    
+    [ClusterA2, ClusterB2, ClusterC2] = setup_clusters(),
+    test_repl_between_clusters(ClusterA2, ClusterB2, ClusterC2,
+                                        fun fullsync_check/2,
+                                        fun partialsync_check/4,
+                                        fun setup_replqueues/1).
 
 setup_clusters() ->
     [ClusterA, ClusterB, ClusterC] =
@@ -212,6 +222,8 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
     {root_compare, 0} =
         FullSyncFun({NodeC, IPC, PortC, ?C_NVAL},
                         {NodeA, IPA, PortA, ?A_NVAL}),
+    
+
 
     case PartialSyncFun of
         none ->
@@ -353,6 +365,25 @@ fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
     N = drain_queue(SrcHTTPC, SnkC),
     lager:info("Drained queue and pushed ~w objects", [N]),
     AAEResult.
+
+rangesync_checkfun() ->
+    Start = calendar:now_to_datetime(os:timestamp()),
+    timer:sleep(1000),
+    fun({SrcNode, SrcIP, SrcPort, SrcNVal},
+            {SinkNode, SinkIP, SinkPort, SinkNVal}) ->
+        ModRef = riak_kv_ttaaefs_manager,
+        _ = rpc:call(SrcNode, ModRef, pause, []),
+        ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
+        ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
+        Now = calendar:now_to_datetime(os:timestamp()),
+        ok = rpc:call(SrcNode, ModRef, set_range, [?TEST_BUCKET, all, Start, Now]),
+        AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [range_sync, 60]),
+        SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
+        {ok, SnkC} = riak:client_connect(SinkNode),
+        N = drain_queue(SrcHTTPC, SnkC),
+        lager:info("Drained queue and pushed ~w objects", [N]),
+        AAEResult
+    end.
 
 partialsync_check({SrcNode, SrcIP, SrcPort, _SrcNVal},
                     {SinkNode, SinkIP, SinkPort, _SinkNVal},

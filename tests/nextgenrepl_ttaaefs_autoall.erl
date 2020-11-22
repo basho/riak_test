@@ -162,11 +162,11 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC], SyncCheck) ->
     [AllSync, DaySync, HourSync] =
         case SyncCheck of
             all ->
-                [1500, 0, 0];
+                [3000, 0, 0];
             day ->
-                [0, 1500, 0];
+                [0, 3000, 0];
             hour ->
-                [0, 0, 1500]
+                [0, 0, 3000]
         end,
 
     A1Cfg = ttaae_config(Protocol, NodeB1, cluster_b, cluster_a, ClusterASnkPL,
