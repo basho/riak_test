@@ -112,6 +112,7 @@ verify_aae_fold(Nodes, Mod, CH, CT) ->
     lists:foldl(KeyLoadFun, 1, Nodes),
     lager:info("Loaded ~w objects", [?NUM_KEYS_PERNODE * length(Nodes)]),
     wait_until_root_stable(Mod, CH),
+    wait_until_root_stable(Mod, CT),
 
     lager:info("Fold for busy root"),
     {ok, {root, RH1}} = Mod:aae_merge_root(CH, ?N_VAL),
@@ -127,8 +128,10 @@ verify_aae_fold(Nodes, Mod, CH, CT) ->
     lager:info("Make ~w changes", [?DELTA_COUNT]),
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary("U2")),
     ok = write_data(hd(Nodes), Changes2),
-    {ok, {root, RH2}} = Mod:aae_merge_root(CH, ?N_VAL),
 
+    wait_until_root_stable(Mod, CH),
+
+    {ok, {root, RH2}} = Mod:aae_merge_root(CH, ?N_VAL),
     DirtyBranches2 = aae_exchange:compare_roots(RH1, RH2),
 
     lager:info("Found branch deltas ~w", [DirtyBranches2]),
@@ -142,8 +145,10 @@ verify_aae_fold(Nodes, Mod, CH, CT) ->
     lager:info("Make ~w changes to same keys", [?DELTA_COUNT]),
     Changes3 = test_data(1, ?DELTA_COUNT, list_to_binary("U3")),
     ok = write_data(hd(Nodes), Changes3),
-    {ok, {root, RH3}} = Mod:aae_merge_root(CH, ?N_VAL),
+    
+    wait_until_root_stable(Mod, CH),
 
+    {ok, {root, RH3}} = Mod:aae_merge_root(CH, ?N_VAL),
     DirtyBranches3 = aae_exchange:compare_roots(RH2, RH3),
 
     lager:info("Found ~w branch deltas", [length(DirtyBranches3)]),

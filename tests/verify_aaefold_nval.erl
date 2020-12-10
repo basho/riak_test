@@ -117,6 +117,7 @@ verify_aae_fold(Nodes) ->
     lists:foldl(KeyLoadFun, 1, Nodes),
     lager:info("Loaded ~w objects", [?NUM_KEYS_NVAL3_PERNODE * length(Nodes)]),
     wait_until_root_stable(CH),
+    wait_until_root_stable(CT),
 
     lager:info("Fold for busy root"),
     {ok, RH1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
@@ -129,6 +130,8 @@ verify_aae_fold(Nodes) ->
     lager:info("Make ~w changes", [?DELTA_COUNT]),
     Changes2 = test_data(1, ?DELTA_COUNT, list_to_binary("U2")),
     ok = write_data(hd(Nodes), Changes2),
+    wait_until_root_stable(CH),
+
     {ok, RH2} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
     DirtyBranches2 = aae_exchange:compare_roots(RH1, RH2),
 
@@ -142,6 +145,8 @@ verify_aae_fold(Nodes) ->
     lager:info("Make ~w changes to same keys", [?DELTA_COUNT]),
     Changes3 = test_data(1, ?DELTA_COUNT, list_to_binary("U3")),
     ok = write_data(hd(Nodes), Changes3),
+    wait_until_root_stable(CH),
+
     {ok, RH3} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, CH),
     DirtyBranches3 = aae_exchange:compare_roots(RH2, RH3),
 
