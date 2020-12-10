@@ -235,17 +235,17 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
             {tree_compare, 0} =
                 PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
                                 {NodeB, IPB, PortB, ?B_NVAL},
-                                hour_sync,
+                                hour_check,
                                 Now),
             {tree_compare, 0} =
                 PartialSyncFun({NodeB, IPB, PortB, ?B_NVAL},
                                 {NodeC, IPC, PortC, ?C_NVAL},
-                                hour_sync,
+                                hour_check,
                                 Now),
             {tree_compare, 0} =
                 PartialSyncFun({NodeC, IPC, PortC, ?C_NVAL},
                                 {NodeA, IPA, PortA, ?A_NVAL},
-                                hour_sync,
+                                hour_check,
                                 Now),
             
             lager:info("Test further 1000 key differences"),
@@ -253,7 +253,7 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
             {clock_compare, N2}
                 = PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
                                     {NodeB, IPB, PortB, ?B_NVAL},
-                                    hour_sync,
+                                    hour_check,
                                     os:timestamp()),
             lager:info("First comparison found ~w differences", [N2]),
             ?assertEqual(true, N2 > 100),
@@ -261,7 +261,7 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
             LoopPartialRepairFun =
                 fun(SrcInfo, SnkInfo, TS) ->
                     fun(_I) ->
-                        PartialSyncFun(SrcInfo, SnkInfo, hour_sync, TS)
+                        PartialSyncFun(SrcInfo, SnkInfo, hour_check, TS)
                     end
                 end,
             lists:foreach(LoopPartialRepairFun({NodeA, IPA, PortA, ?A_NVAL},
@@ -271,7 +271,7 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
             {tree_compare, 0} =
                 PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
                                 {NodeB, IPB, PortB, ?B_NVAL},
-                                hour_sync,
+                                hour_check,
                                 os:timestamp()),
             lager:info("Differences A -> B resolved"),
 
@@ -280,23 +280,23 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
             {tree_compare, 0} =
                 PartialSyncFun({NodeA, IPA, PortA, ?B_NVAL},
                                 {NodeC, IPC, PortC, ?C_NVAL},
-                                hour_sync,
+                                hour_check,
                                 Now),
             lager:info("Look from now - and see the differences"),
             {clock_compare, N3}
                 = PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
                                     {NodeC, IPC, PortC, ?C_NVAL},
-                                    hour_sync,
+                                    hour_check,
                                     os:timestamp()),
             {clock_compare, N4}
                 = PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
                                     {NodeC, IPC, PortC, ?C_NVAL},
-                                    day_sync,
+                                    day_check,
                                     os:timestamp()),
             {clock_compare, N5}
                 = PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
                                     {NodeC, IPC, PortC, ?C_NVAL},
-                                    all_sync,
+                                    all_check,
                                     os:timestamp()),
             ?assertEqual(true, N3 > 100),
             ?assertEqual(true, N3 < 1000),
@@ -327,17 +327,17 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
             {tree_compare, 0} =
                 PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
                                 {NodeB, IPB, PortB, ?B_NVAL},
-                                day_sync,
+                                day_check,
                                 os:timestamp()),
             {tree_compare, 0} =
                 PartialSyncFun({NodeB, IPB, PortB, ?B_NVAL},
                                 {NodeC, IPC, PortC, ?C_NVAL},
-                                day_sync,
+                                day_check,
                                 os:timestamp()),
             {tree_compare, 0} =
                 PartialSyncFun({NodeC, IPC, PortC, ?C_NVAL},
                                 {NodeA, IPA, PortA, ?A_NVAL},
-                                day_sync,
+                                day_check,
                                 os:timestamp()),
             pass
     end.
@@ -359,7 +359,7 @@ fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
     _ = rpc:call(SrcNode, ModRef, pause, []),
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]),
     SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
     {ok, SnkC} = riak:client_connect(SinkNode),
     N = drain_queue(SrcHTTPC, SnkC),
@@ -377,7 +377,7 @@ rangesync_checkfun() ->
         ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
         Now = calendar:now_to_datetime(os:timestamp()),
         ok = rpc:call(SrcNode, ModRef, set_range, [?TEST_BUCKET, all, Start, Now]),
-        AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [range_sync, 60]),
+        AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [range_check, 60]),
         SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
         {ok, SnkC} = riak:client_connect(SinkNode),
         N = drain_queue(SrcHTTPC, SnkC),

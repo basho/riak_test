@@ -44,18 +44,19 @@
         },
         {riak_kv,
           [
-           {anti_entropy, {off, []}},
-           {tictacaae_active, active},
-           {tictacaae_parallelstore, leveled_ko},
+            {anti_entropy, {off, []}},
+            {tictacaae_active, active},
+            {tictacaae_parallelstore, leveled_ko},
                 % if backend not leveled will use parallel key-ordered
                 % store
-           {tictacaae_rebuildwait, 4},
-           {tictacaae_rebuilddelay, 3600},
-           {tictacaae_exchangetick, 120 * 1000},
-           {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep},
-           {replrtq_enablesrc, true},
-           {replrtq_srcqueue, SrcQueueDefns}
+            {tictacaae_rebuildwait, 4},
+            {tictacaae_rebuilddelay, 3600},
+            {tictacaae_exchangetick, 120 * 1000},
+            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+            {ttaaefs_maxresults, 128},
+            {delete_mode, keep},
+            {replrtq_enablesrc, true},
+            {replrtq_srcqueue, SrcQueueDefns}
           ]}
         ]).
 
@@ -343,7 +344,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                     set_bucketsync, [[{<<"_maps">>, <<"test_map">>}]]),
     ok = rpc:call(NodeA, ModRef,
                     set_queuename, [ttaaefs_b]),
-    AAEResult1 = rpc:call(NodeA, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult1 = rpc:call(NodeA, riak_client, ttaaefs_fullsync, [all_check, 60]),
 
     ?assertEqual({tree_compare, 0}, AAEResult1),
 
@@ -386,7 +387,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                     ExpVal4),
     
     lager:info("Testing of full-sync - resolve delta"),
-    AAEResult2 = rpc:call(NodeA, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult2 = rpc:call(NodeA, riak_client, ttaaefs_fullsync, [all_check, 60]),
     ?assertEqual({clock_compare, 1}, AAEResult2),
     lager:info("Check that remote value has converged with all changes"),
     check_value(ClientB,

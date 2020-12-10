@@ -52,6 +52,7 @@
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+           {ttaaefs_maxresults, 128},
            {delete_mode, keep},
            {aae_fetchclocks_repair, FetchClocksRepair}
           ]}
@@ -83,7 +84,8 @@
             {replrtq_enablesink, true},
             {replrtq_sinkqueue, LocalClusterName},
             {replrtq_sinkpeers, PeerList},
-            {replrtq_sinkworkers, ?SNK_WORKERS}
+            {replrtq_sinkworkers, ?SNK_WORKERS},
+            {tictacaae_maxresults, 128}
         ]}
 ]).
 

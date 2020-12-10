@@ -101,6 +101,17 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC) ->
     lager:info("Root compare has not set range check"),
     lists:foreach(fun(N) -> ?assertMatch(none, get_range(N)) end,
                     [NodeA, NodeB, NodeC]),
+    
+    lager:info("Range check should also root compare"),
+    {root_compare, 0}
+        = RangeCheckFun({NodeA, IPA, PortA, ?A_NVAL},
+                            {NodeB, IPB, PortB, ?B_NVAL}),
+    {root_compare, 0}
+        = RangeCheckFun({NodeB, IPB, PortB, ?B_NVAL},
+                        {NodeC, IPC, PortC, ?C_NVAL}),
+    {root_compare, 0}
+        = RangeCheckFun({NodeC, IPC, PortC, ?C_NVAL},
+                        {NodeA, IPA, PortA, ?A_NVAL}),
 
 
     lager:info("Test 100 key difference and resolve"),
@@ -125,22 +136,34 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC) ->
                             {NodeB, IPB, PortB, ?B_NVAL}),
     ?assertMatch(none, get_range(NodeA)),
 
-    lager:info("No check yet - so range check is null op"),
-    {range_sync, 0}
+    lager:info("On startup - range_check should check since startup"),
+    lager:info("Everything should be fixed due to range boost"),
+    {clock_compare, 100}
         = RangeCheckFun({NodeB, IPB, PortB, ?B_NVAL},
                         {NodeC, IPC, PortC, ?C_NVAL}),
-    {clock_compare, 32}
-        = fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
-                        {NodeC, IPC, PortC, ?C_NVAL}),
-    lager:info("Range check now resolves B -> C"),            
-    {clock_compare, 68}
-        = RangeCheckFun({NodeB, IPB, PortB, ?B_NVAL},
-                        {NodeC, IPC, PortC, ?C_NVAL}),
-    
     {tree_compare, 0}
         = partialsync_check({NodeA, IPA, PortA, ?A_NVAL},
                             {NodeC, IPC, PortC, ?C_NVAL},
-                            all_sync,
+                            all_check,
+                            os:timestamp()),
+    
+    lager:info("Cluster B should be N=3 and nodes=2, so can cope with node out of coverage"),
+    ok = rpc:call(NodeB, riak_client, remove_node_from_coverage, []),
+    timer:sleep(1000),
+    {tree_compare, 0}
+        = partialsync_check({NodeB, IPB, PortB, ?B_NVAL},
+                            {NodeC, IPC, PortC, ?C_NVAL},
+                            all_check,
+                            os:timestamp()),
+    ok = rpc:call(NodeB, riak_client, reset_node_for_coverage, []),
+    ok = rpc:call(NodeA, riak_client, remove_node_from_coverage, []),
+    timer:sleep(1000),
+
+    lager:info("something bad now happens with NodeA out of coverage"),
+    {error, 0}
+        = partialsync_check({NodeA, IPA, PortA, ?A_NVAL},
+                            {NodeC, IPC, PortC, ?C_NVAL},
+                            all_check,
                             os:timestamp()),
 
     pass.
@@ -165,7 +188,7 @@ fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
     _ = rpc:call(SrcNode, ModRef, pause, []),
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]),
     SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
     {ok, SnkC} = riak:client_connect(SinkNode),
     N = drain_queue(SrcHTTPC, SnkC),
@@ -179,7 +202,7 @@ rangesync_checkfun() ->
         _ = rpc:call(SrcNode, ModRef, pause, []),
         ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
         ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-        AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [range_sync, 60]),
+        AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [range_check, 60]),
         SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
         {ok, SnkC} = riak:client_connect(SinkNode),
         N = drain_queue(SrcHTTPC, SnkC),
