@@ -135,6 +135,32 @@ confirm() ->
         end,
     rt:wait_until(CheckInPlanFun),
 
+    lager:info("Take Node5 out of coverage at run-time"),
+    rpc:call(Node5, riak_client, remove_node_from_coverage, []),
+    %% Now wait until the ring has gossiped and stabilised
+    rt:wait_until_ring_converged(Nodes),
+
+    %% Get coverage plan
+    lager:info("Check that Node5 is not in coverage plan."),
+    {CoverageVNodes1, _} = rpc:call(Node1, riak_core_coverage_plan, create_plan, [allup,1,1,1,riak_kv]),
+    Vnodes1 = [ Node || { _ , Node } <- CoverageVNodes1],
+    %% check Node5 is not in coverage plan
+    ?assertEqual(false, lists:keysearch(Node5, 1, Vnodes1)),
+
+    lager:info("Check that Node5 is not in another coverage plan."),
+    {CoverageVNodes5, _} = rpc:call(Node5, riak_core_coverage_plan, create_plan, [allup,1,2,1,riak_kv]),
+    Vnodes5 = [ Node || { _ , Node } <- CoverageVNodes5],
+    %% check Node5 is not in coverage plan
+    ?assertEqual(false, lists:member(Node5, Vnodes5)),
+
+    lager:info("Re-add Node5 at runtime"),
+    rpc:call(Node5, riak_client, reset_node_for_coverage, []),
+    %% Now wait until the ring has gossiped and stabilised
+    rt:wait_until_ring_converged(Nodes),
+
+    lists:foreach(fun(N0) -> rt:wait_until(N0, CheckBackInFun) end, Nodes),
+    rt:wait_until(CheckInPlanFun),
+
     pass.
 
 n(Atom) ->
