@@ -10,6 +10,7 @@ nextgenrepl_sibling
 nextgenrepl_srcfail
 nextgenrepl_ttaaefs_autoall
 nextgenrepl_ttaaefs_manual
+nextgenrepl_ttaaefs_rangesync
 nextgenrepl_ttaaefs_semiauto
 verify_aaefold_api_compare
 verify_aaefold_findkeys_stats

@@ -45,11 +45,29 @@
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+           {ttaaefs_maxresults, 128},
+           {ttaaefs_rangeboost, 1}, % So maxresults is consistent
            {delete_mode, keep}
           ]}
         ]).
 
 confirm() ->
+    [ClusterA1, ClusterB1, ClusterC1] = setup_clusters(),
+    pass = test_repl_between_clusters(ClusterA1, ClusterB1, ClusterC1,
+                                        rangesync_checkfun(),
+                                        none,
+                                        fun setup_replqueues/1),
+    rt:clean_cluster(ClusterA1),
+    rt:clean_cluster(ClusterB1),
+    rt:clean_cluster(ClusterC1),
+    
+    [ClusterA2, ClusterB2, ClusterC2] = setup_clusters(),
+    test_repl_between_clusters(ClusterA2, ClusterB2, ClusterC2,
+                                        fun fullsync_check/2,
+                                        fun partialsync_check/4,
+                                        fun setup_replqueues/1).
+
+setup_clusters() ->
     [ClusterA, ClusterB, ClusterC] =
         rt:deploy_clusters([
             {2, ?CONFIG(?A_RING, ?A_NVAL)},
@@ -67,12 +85,15 @@ confirm() ->
                     ClusterA ++ ClusterB ++ ClusterC),
     
     lager:info("Ready for test."),
-    test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
-                                fun fullsync_check/2,
-                                fun setup_replqueues/1).
+    [ClusterA, ClusterB, ClusterC].
 
 test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
                             FullSyncFun, SetupReplFun) ->
+    test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
+                            FullSyncFun, none, SetupReplFun).
+
+test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
+                            FullSyncFun, PartialSyncFun, SetupReplFun) ->
     
     NodeA = hd(ClusterA),
     NodeB = hd(ClusterB),
@@ -201,10 +222,125 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
     {root_compare, 0} =
         FullSyncFun({NodeC, IPC, PortC, ?C_NVAL},
                         {NodeA, IPA, PortA, ?A_NVAL}),
+    
 
-    lager:info("Compare the bucket - dynamic AAE not based on cached trees"),
 
-    pass.
+    case PartialSyncFun of
+        none ->
+            pass;
+        _ ->
+            lager:info("Compare the bucket - dynamic AAE not based on cached trees"),
+            Now = os:timestamp(),
+            timer:sleep(1000),
+            {tree_compare, 0} =
+                PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL},
+                                hour_check,
+                                Now),
+            {tree_compare, 0} =
+                PartialSyncFun({NodeB, IPB, PortB, ?B_NVAL},
+                                {NodeC, IPC, PortC, ?C_NVAL},
+                                hour_check,
+                                Now),
+            {tree_compare, 0} =
+                PartialSyncFun({NodeC, IPC, PortC, ?C_NVAL},
+                                {NodeA, IPA, PortA, ?A_NVAL},
+                                hour_check,
+                                Now),
+            
+            lager:info("Test further 1000 key differences"),
+            write_to_cluster(NodeA, 1101, 2100),
+            {clock_compare, N2}
+                = PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                    {NodeB, IPB, PortB, ?B_NVAL},
+                                    hour_check,
+                                    os:timestamp()),
+            lager:info("First comparison found ~w differences", [N2]),
+            ?assertEqual(true, N2 > 100),
+            ?assertEqual(true, N2 < 1000),
+            LoopPartialRepairFun =
+                fun(SrcInfo, SnkInfo, TS) ->
+                    fun(_I) ->
+                        PartialSyncFun(SrcInfo, SnkInfo, hour_check, TS)
+                    end
+                end,
+            lists:foreach(LoopPartialRepairFun({NodeA, IPA, PortA, ?A_NVAL},
+                                                {NodeB, IPB, PortB, ?B_NVAL},
+                                                os:timestamp()),
+                    lists:seq(1, 8)),
+            {tree_compare, 0} =
+                PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL},
+                                hour_check,
+                                os:timestamp()),
+            lager:info("Differences A -> B resolved"),
+
+            lager:info("Wind now back to before changes - and don't see differences"),
+            
+            {tree_compare, 0} =
+                PartialSyncFun({NodeA, IPA, PortA, ?B_NVAL},
+                                {NodeC, IPC, PortC, ?C_NVAL},
+                                hour_check,
+                                Now),
+            lager:info("Look from now - and see the differences"),
+            {clock_compare, N3}
+                = PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                    {NodeC, IPC, PortC, ?C_NVAL},
+                                    hour_check,
+                                    os:timestamp()),
+            {clock_compare, N4}
+                = PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                    {NodeC, IPC, PortC, ?C_NVAL},
+                                    day_check,
+                                    os:timestamp()),
+            {clock_compare, N5}
+                = PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                    {NodeC, IPC, PortC, ?C_NVAL},
+                                    all_check,
+                                    os:timestamp()),
+            ?assertEqual(true, N3 > 100),
+            ?assertEqual(true, N3 < 1000),
+            ?assertEqual(true, N4 > 100),
+            ?assertEqual(true, N4 < 1000),
+            ?assertEqual(true, N5 > 100),
+            ?assertEqual(true, N5 < 1000),
+            lager:info("Five more syncs should fix it"),
+            lists:foreach(LoopPartialRepairFun({NodeA, IPA, PortA, ?A_NVAL},
+                                                {NodeC, IPC, PortC, ?C_NVAL},
+                                                os:timestamp()),
+                    lists:seq(1, 5)),
+
+            lager:info("Loop around syncing to confirm all OK"),
+            {root_compare, 0} =
+                FullSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL}),
+            {root_compare, 0} =
+                FullSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeC, IPC, PortC, ?C_NVAL}),
+            {root_compare, 0} =
+                FullSyncFun({NodeC, IPC, PortC, ?C_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL}),
+            {root_compare, 0} =
+                FullSyncFun({NodeB, IPB, PortB, ?B_NVAL},
+                                {NodeA, IPA, PortA, ?A_NVAL}),
+            
+            {tree_compare, 0} =
+                PartialSyncFun({NodeA, IPA, PortA, ?A_NVAL},
+                                {NodeB, IPB, PortB, ?B_NVAL},
+                                day_check,
+                                os:timestamp()),
+            {tree_compare, 0} =
+                PartialSyncFun({NodeB, IPB, PortB, ?B_NVAL},
+                                {NodeC, IPC, PortC, ?C_NVAL},
+                                day_check,
+                                os:timestamp()),
+            {tree_compare, 0} =
+                PartialSyncFun({NodeC, IPC, PortC, ?C_NVAL},
+                                {NodeA, IPA, PortA, ?A_NVAL},
+                                day_check,
+                                os:timestamp()),
+            pass
+    end.
 
 
 setup_replqueues([]) ->
@@ -223,7 +359,41 @@ fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
     _ = rpc:call(SrcNode, ModRef, pause, []),
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]),
+    SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
+    {ok, SnkC} = riak:client_connect(SinkNode),
+    N = drain_queue(SrcHTTPC, SnkC),
+    lager:info("Drained queue and pushed ~w objects", [N]),
+    AAEResult.
+
+rangesync_checkfun() ->
+    Start = calendar:now_to_datetime(os:timestamp()),
+    timer:sleep(1000),
+    fun({SrcNode, SrcIP, SrcPort, SrcNVal},
+            {SinkNode, SinkIP, SinkPort, SinkNVal}) ->
+        ModRef = riak_kv_ttaaefs_manager,
+        _ = rpc:call(SrcNode, ModRef, pause, []),
+        ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
+        ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
+        Now = calendar:now_to_datetime(os:timestamp()),
+        ok = rpc:call(SrcNode, ModRef, set_range, [?TEST_BUCKET, all, Start, Now]),
+        AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [range_check, 60]),
+        SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
+        {ok, SnkC} = riak:client_connect(SinkNode),
+        N = drain_queue(SrcHTTPC, SnkC),
+        lager:info("Drained queue and pushed ~w objects", [N]),
+        AAEResult
+    end.
+
+partialsync_check({SrcNode, SrcIP, SrcPort, _SrcNVal},
+                    {SinkNode, SinkIP, SinkPort, _SinkNVal},
+                    SyncRange,
+                    Now) ->
+    ModRef = riak_kv_ttaaefs_manager,
+    _ = rpc:call(SrcNode, ModRef, pause, []),
+    ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
+    ok = rpc:call(SrcNode, ModRef, set_bucketsync, [[?TEST_BUCKET]]),
+    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [SyncRange, 60, Now]),
     SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
     {ok, SnkC} = riak:client_connect(SinkNode),
     N = drain_queue(SrcHTTPC, SnkC),

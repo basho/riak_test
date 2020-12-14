@@ -44,18 +44,19 @@
         },
         {riak_kv,
           [
-           {anti_entropy, {off, []}},
-           {tictacaae_active, active},
-           {tictacaae_parallelstore, leveled_ko},
+            {anti_entropy, {off, []}},
+            {tictacaae_active, active},
+            {tictacaae_parallelstore, leveled_ko},
                 % if backend not leveled will use parallel key-ordered
                 % store
-           {tictacaae_rebuildwait, 4},
-           {tictacaae_rebuilddelay, 3600},
-           {tictacaae_exchangetick, 120 * 1000},
-           {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep},
-           {replrtq_enablesrc, true},
-           {replrtq_srcqueue, SrcQueueDefns}
+            {tictacaae_rebuildwait, 4},
+            {tictacaae_rebuilddelay, 3600},
+            {tictacaae_exchangetick, 120 * 1000},
+            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+            {ttaaefs_maxresults, 128},
+            {delete_mode, keep},
+            {replrtq_enablesrc, true},
+            {replrtq_srcqueue, SrcQueueDefns}
           ]}
         ]).
 
@@ -131,6 +132,9 @@ setup_clusters(Protocol, ClusterA, ClusterB) ->
     rt:create_and_activate_bucket_type(hd(ClusterB),
                                         <<"_maps">>, 
                                         [{datatype, map}, {allow_mult, true}]),
+    lager:info("Pause to ensure creation of type is complete..."),
+    lager:info("... and has propogated through each cluster"),
+    timer:sleep(2000),
 
     lager:info("Ready for test.").
 
@@ -177,7 +181,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
             {{<<"friends">>, set}, [<<"Russell">>]},
             {{<<"name">>, register}, <<"Original">>}],
     lager:info("Read own write in Cluster A"),
-    check_value(ClientA,
+    ok = check_value(ClientA,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -185,7 +189,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                     ExpVal1),
     
     lager:info("Read repl'd write eventually in Cluster B"),
-    check_value(ClientB,
+    ok = check_value(ClientB,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -218,7 +222,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
         [{{<<"followers">>, counter}, 20},
             {{<<"friends">>, set}, [<<"Martin">>, <<"Russell">>]},
             {{<<"name">>, register}, <<"Original">>}],
-    check_value(ClientA,
+    ok = check_value(ClientA,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -226,7 +230,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                     ExpVal2),
     
     lager:info("Read repl'd write eventually in Cluster B"),
-    check_value(ClientB,
+    ok = check_value(ClientB,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -263,7 +267,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
             {{<<"friends">>, set},
                 [<<"Martin">>, <<"Pontus">>, <<"Russell">>]},
             {{<<"name">>, register}, <<"Original">>}],
-    check_value(ClientA,
+    ok = check_value(ClientA,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -271,7 +275,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                     ExpVal3),
     timer:sleep(?REPL_SLEEP),
     lager:info("After a pause replicated value remains unchanged"),
-    check_value(ClientB,
+    ok = check_value(ClientB,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -290,7 +294,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
     timer:sleep(?REPL_SLEEP),
     lager:info("After a pause replicated value remains unchanged"),
     lager:info("Resume does not replay any replication"),
-    check_value(ClientB,
+    ok = check_value(ClientB,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -319,14 +323,14 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                 [<<"Martin">>, <<"Pontus">>, <<"Russell">>]},
             {{<<"name">>, register}, <<"Jaded">>}],
     lager:info("Check local value"),
-    check_value(ClientA,
+    ok = check_value(ClientA,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
                     riakc_map,
                     ExpVal4),
     lager:info("Check that remote value has converged with all changes"),
-    check_value(ClientB,
+    ok = check_value(ClientB,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -343,7 +347,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                     set_bucketsync, [[{<<"_maps">>, <<"test_map">>}]]),
     ok = rpc:call(NodeA, ModRef,
                     set_queuename, [ttaaefs_b]),
-    AAEResult1 = rpc:call(NodeA, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult1 = rpc:call(NodeA, riak_client, ttaaefs_fullsync, [all_check, 60]),
 
     ?assertEqual({tree_compare, 0}, AAEResult1),
 
@@ -370,7 +374,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                 [<<"Martin">>, <<"Pontus">>, <<"Russell">>]},
             {{<<"name">>, register}, <<"Jaded">>}],
     lager:info("Check local value"),
-    check_value(ClientA,
+    ok = check_value(ClientA,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -378,7 +382,7 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                     ExpVal5),
     timer:sleep(?REPL_SLEEP),
     lager:info("After a pause replicated value remains unchanged"),
-    check_value(ClientB,
+    ok = check_value(ClientB,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,
@@ -386,10 +390,10 @@ test_rtqrepl_between_clusters(Protocol, ClusterA, ClusterB) ->
                     ExpVal4),
     
     lager:info("Testing of full-sync - resolve delta"),
-    AAEResult2 = rpc:call(NodeA, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult2 = rpc:call(NodeA, riak_client, ttaaefs_fullsync, [all_check, 60]),
     ?assertEqual({clock_compare, 1}, AAEResult2),
     lager:info("Check that remote value has converged with all changes"),
-    check_value(ClientB,
+    ok = check_value(ClientB,
                     riakc_pb_socket,
                     {<<"_maps">>, <<"test_map">>},
                     <<"TestKey">>,

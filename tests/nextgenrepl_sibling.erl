@@ -23,7 +23,7 @@
 -define(COMMMON_VAL_SIB, <<"CommonValueToWriteForAllSiblingObjects">>).
 -define(COMMMON_VAL_FIN, <<"CommonValueToWriteForAllFinalObjects">>).
 
--define(REPL_SLEEP, 2048). 
+-define(REPL_SLEEP, 4096). 
     % May need to wait for 2 x the 1024ms max sleep time of a snk worker
 -define(WAIT_LOOPS, 12).
 
@@ -50,6 +50,7 @@
             {tictacaae_rebuilddelay, 3600},
             {tictacaae_exchangetick, 120 * 1000},
             {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+            {ttaaefs_maxresults, 128},
             {delete_mode, keep},
             {replrtq_enablesrc, true},
             {replrtq_srcqueue, SrcQueueDefns}
@@ -272,7 +273,7 @@ fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_queuename, [SnkClusterName]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]),
 
     % lager:info("Sleeping to await queue drain."),
     % timer:sleep(2000),

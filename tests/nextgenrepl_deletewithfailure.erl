@@ -18,7 +18,7 @@
 
 -define(KEY_COUNT, 10000).
 -define(UPDATE_COUNT, 2000).
--define(LOOP_COUNT, 10).
+-define(LOOP_COUNT, 20).
 -define(ACTION_DELAY, 2000).
 
 -define(SNK_WORKERS, 4).
@@ -47,9 +47,10 @@
                 % store
             {tictacaae_storeheads, true},
             {tictacaae_rebuildwait, 4},
-            {tictacaae_rebuilddelay, 3600},
-            {tictacaae_exchangetick, 2000},
+            {tictacaae_rebuilddelay, 3600000},
+            {tictacaae_exchangetick, 300000},
             {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+            {ttaaefs_maxresults, 128},
             {delete_mode, DeleteMode}
           ]}
         ]).
@@ -394,7 +395,7 @@ test_repl(Protocol, [ClusterA, ClusterB]) ->
                             undefined,
                             ?LOOP_COUNT),
 
-    lager:info("After reap/erase duing fail - tombs ~w keys ~w",
+    lager:info("After reap/erase during fail - tombs ~w keys ~w",
                 [Phase2TombCountS2, Phase2KeyCountS2]),
     ?assertMatch(true, Phase2TombCountS2 > 0),
     ?assertMatch(true, Phase2KeyCountS2 == 0),
@@ -448,7 +449,7 @@ fullsync_check(Protocol, {SrcNode, SrcNVal, SnkCluster},
     ok = rpc:call(SrcNode, ModRef, set_queuename, [SnkCluster]),
     ok = rpc:call(SrcNode, ModRef, set_sink, [Protocol, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]),
+    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]),
     AAEResult.
 
 length_aae_fold(Node, Protocol, Query) ->
@@ -586,11 +587,11 @@ wait_for_outcome(Module, Func, Args, ExpOutcome, LoopCount, MaxLoops) ->
 wait_until_stable(_Module, _Func, _Args, LastResult, 0) ->
     LastResult;
 wait_until_stable(Module, Func, Args, LastResult, LoopCount) ->
+    timer:sleep(2000),
     case apply(Module, Func, Args) of
         LastResult ->
             LastResult;
         ThisResult ->
-            timer:sleep(2000),
             wait_until_stable(Module, Func, Args, ThisResult, LoopCount - 1)
     end.
 

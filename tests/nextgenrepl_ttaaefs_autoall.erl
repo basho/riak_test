@@ -29,7 +29,7 @@
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
 
--define(CONFIG(RingSize, NVal), [
+-define(CONFIG(RingSize, NVal, FetchClocksRepair), [
         {riak_core,
             [
              {ring_creation_size, RingSize},
@@ -52,7 +52,9 @@
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
-           {delete_mode, keep}
+           {ttaaefs_maxresults, 128},
+           {delete_mode, keep},
+           {aae_fetchclocks_repair, FetchClocksRepair}
           ]}
         ]).
 
@@ -61,7 +63,8 @@
                         RemoteClusterName,
                         LocalClusterName,
                         PeerList,
-                        SrcQueueDefns), [
+                        SrcQueueDefns,
+                        AllSync, DaySync, HourSync), [
     {riak_kv,
         [
             {ttaaefs_scope, all},
@@ -70,7 +73,9 @@
             {ttaaefs_peerip, PeerIP},
             {ttaaefs_peerport, PeerPort},
             {ttaaefs_peerprotocol, Protocol},
-            {ttaaefs_allcheck, 1500}, % check about once every 60s
+            {ttaaefs_allcheck, AllSync},
+            {ttaaefs_daycheck, DaySync},
+            {ttaaefs_hourcheck, HourSync},
             {ttaaefs_nocheck, 0},
             {ttaaefs_queuename, RemoteClusterName},
             {ttaaefs_logrepairs, true},
@@ -79,13 +84,15 @@
             {replrtq_enablesink, true},
             {replrtq_sinkqueue, LocalClusterName},
             {replrtq_sinkpeers, PeerList},
-            {replrtq_sinkworkers, ?SNK_WORKERS}
+            {replrtq_sinkworkers, ?SNK_WORKERS},
+            {tictacaae_maxresults, 128}
         ]}
 ]).
 
 
 ttaae_config(Protocol, AAEPeer, RemoteClusterName, LocalClusterName,
-                PeerList, LNval, RNval) ->
+                PeerList, LNval, RNval,
+                AllSync, DaySync, HourSync) ->
     {Protocol, {IP, Port}} =
         lists:keyfind(Protocol, 1, rt:connection_info(AAEPeer)),
     ?TTAAE_CONFIG(Protocol, IP, Port,
@@ -93,18 +100,19 @@ ttaae_config(Protocol, AAEPeer, RemoteClusterName, LocalClusterName,
                     RemoteClusterName,
                     LocalClusterName,
                     PeerList,
-                    atom_to_list(RemoteClusterName) ++ ":block_rtq").
+                    atom_to_list(RemoteClusterName) ++ ":block_rtq",
+                    AllSync, DaySync, HourSync).
 
 
 confirm() ->
     [ClusterAH, ClusterBH, ClusterCH] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, true)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, false)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, false)}]),
 
     lager:info("Test run using HTTP protocol"),
-    test_repl(http, [ClusterAH, ClusterBH, ClusterCH]),
+    test_repl(http, [ClusterAH, ClusterBH, ClusterCH], all),
     
     rt:clean_cluster(ClusterAH),
     rt:clean_cluster(ClusterBH),
@@ -112,17 +120,31 @@ confirm() ->
 
     [ClusterAP, ClusterBP, ClusterCP] =
         rt:deploy_clusters([
-            {2, ?CONFIG(?A_RING, ?A_NVAL)},
-            {2, ?CONFIG(?B_RING, ?B_NVAL)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL)}]),
+            {2, ?CONFIG(?A_RING, ?A_NVAL, false)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, true)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, false)}]),
     
     lager:info("Test run using PB protocol"),
-    test_repl(pb, [ClusterAP, ClusterBP, ClusterCP]),
+    test_repl(pb, [ClusterAP, ClusterBP, ClusterCP], hour),
     
+    rt:clean_cluster(ClusterAP),
+    rt:clean_cluster(ClusterBP),
+    rt:clean_cluster(ClusterCP),
+
+    [ClusterAP1, ClusterBP1, ClusterCP1] =
+        rt:deploy_clusters([
+            {2, ?CONFIG(?A_RING, ?A_NVAL, false)},
+            {2, ?CONFIG(?B_RING, ?B_NVAL, true)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, false)}]),
+    
+    lager:info("Test run using PB protocol"),
+    test_repl(pb, [ClusterAP1, ClusterBP1, ClusterCP1], day),
+
+
     pass.
 
 
-test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
+test_repl(Protocol, [ClusterA, ClusterB, ClusterC], SyncCheck) ->
 
     [NodeA1, NodeA2] = ClusterA,
     [NodeB1, NodeB2] = ClusterB,
@@ -139,18 +161,28 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     ClusterBSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA ++ ClusterC),
     ClusterCSnkPL = lists:foldl(FoldToPeerConfig, "", ClusterA ++ ClusterB),
 
+    [AllSync, DaySync, HourSync] =
+        case SyncCheck of
+            all ->
+                [3000, 0, 0];
+            day ->
+                [0, 3000, 0];
+            hour ->
+                [0, 0, 3000]
+        end,
+
     A1Cfg = ttaae_config(Protocol, NodeB1, cluster_b, cluster_a, ClusterASnkPL,
-                            ?A_NVAL, ?B_NVAL),
+                            ?A_NVAL, ?B_NVAL, AllSync, DaySync, HourSync),
     A2Cfg = ttaae_config(Protocol, NodeC1, cluster_c, cluster_a, ClusterASnkPL,
-                            ?A_NVAL, ?C_NVAL),
+                            ?A_NVAL, ?C_NVAL, AllSync, DaySync, HourSync),
     B1Cfg = ttaae_config(Protocol, NodeA1, cluster_a, cluster_b, ClusterBSnkPL,
-                            ?B_NVAL, ?A_NVAL),
+                            ?B_NVAL, ?A_NVAL, AllSync, DaySync, HourSync),
     B2Cfg = ttaae_config(Protocol, NodeC1, cluster_c, cluster_b, ClusterBSnkPL,
-                            ?B_NVAL, ?C_NVAL),
+                            ?B_NVAL, ?C_NVAL, AllSync, DaySync, HourSync),
     C1Cfg = ttaae_config(Protocol, NodeB2, cluster_b, cluster_c, ClusterCSnkPL,
-                            ?C_NVAL, ?B_NVAL),
+                            ?C_NVAL, ?B_NVAL, AllSync, DaySync, HourSync),
     C2Cfg = ttaae_config(Protocol, NodeA2, cluster_a, cluster_c, ClusterCSnkPL,
-                            ?C_NVAL, ?A_NVAL),
+                            ?C_NVAL, ?A_NVAL, AllSync, DaySync, HourSync),
     rt:set_advanced_conf(NodeA1, A1Cfg),
     rt:set_advanced_conf(NodeA2, A2Cfg),
     rt:set_advanced_conf(NodeB1, B1Cfg),

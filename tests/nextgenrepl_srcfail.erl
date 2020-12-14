@@ -45,6 +45,7 @@
            {tictacaae_rebuilddelay, 3600},
            {tictacaae_exchangetick, 120 * 1000},
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
+           {ttaaefs_maxresults, 128},
            {delete_mode, keep}
           ]}
         ]).
@@ -260,7 +261,7 @@ fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
     ok = rpc:call(SrcNode, ModRef, set_queuename, [QueueName]),
     ok = rpc:call(SrcNode, ModRef, set_sink, [Protocol, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]).
+    rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]).
 
 range_repl(http, IP, Port, B, KR, MR, QN) ->
     RHC = rhc:create(IP, Port, "riak", []),

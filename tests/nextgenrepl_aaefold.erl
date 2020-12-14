@@ -275,7 +275,7 @@ fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
     ok = rpc:call(SrcNode, ModRef, set_queuename, [QueueName]),
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_sync, 60]).
+    rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]).
 
 range_repl_compare(RHC, PBC, B, KR, MR, QN) ->
     RH = rhc:aae_range_replkeys(RHC, B, KR, MR, QN),
