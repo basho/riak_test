@@ -738,6 +738,7 @@ common_stats() ->
         <<"object_set_merge_time_mean">>,
         <<"object_set_merge_time_median">>,
         <<"object_set_merge_total">>,
+        <<"observer_version">>,
         <<"os_mon_version">>,
         <<"parse_trans_version">>,
         <<"pbc_active">>,
