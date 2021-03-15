@@ -7,6 +7,8 @@ gh_riak_core_154
 gh_riak_core_155
 gh_riak_core_176
 http_bucket_types
+location
+location_upgrade
 verify_build_cluster
 verify_claimant
 verify_dynamic_ring
