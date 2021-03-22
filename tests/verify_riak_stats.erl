@@ -537,6 +537,7 @@ common_stats() ->
         <<"list_fsm_create_error">>,
         <<"list_fsm_create_error_total">>,
         <<"list_fsm_create_total">>,
+        <<"lz4_version">>,
         <<"map_actor_counts_100">>,
         <<"map_actor_counts_95">>,
         <<"map_actor_counts_99">>,
