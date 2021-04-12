@@ -15,7 +15,27 @@
 -define(RACK_F, "rack_f").
 
 confirm() ->
-    AllNodes = rt:deploy_nodes(6),
+    pass = run_test(32),
+    pass = run_test(64), 
+    pass = run_test(128),
+    pass.
+
+run_test(RingSize) ->
+    Conf =
+        [
+        {riak_kv, [{anti_entropy, {off, []}}]},
+        {riak_core,
+            [{default_bucket_props,
+                [{allow_mult, true},
+                    {dvv_enabled, true},
+                    {ring_creation_size, RingSize},
+                    {vnode_management_timer, 1000},
+                    {handoff_concurrency, 100},
+                    {vnode_inactivity_timeout, 1000}]}]}],
+
+    lager:info("Testing with ring-size ~w", [RingSize]),    
+
+    AllNodes = rt:deploy_nodes(6, Conf),
     [Node1, Node2, Node3, Node4, Node5, Node6] = AllNodes,
     Nodes = [Node1, Node2, Node3, Node4],
 
@@ -122,7 +142,13 @@ confirm() ->
     % Because of tail violations need to increase n_val to satisfy diversity of locations
     assert_no_location_violation(Ring10, 4, 3),
 
-    lager:info("Test verify location settings: Passed"),
+    lager:info("Test verify location settings with ring size ~w: Passed",
+                [RingSize]),
+    
+    rt:clean_cluster(AllNodes),
+
+    lager:info("Cluster cleaned"),
+
     pass.
 
 -spec set_location(node(), string()) -> ok | {fail, term()}.
