@@ -70,7 +70,7 @@ Initialise git in the test runtime environment i.e.:
 
 ```
 cd ~/riak_test
-./rtdev-setup-releases.sh
+./bin/rtdev-setup-releases.sh
 ```
 
 This script will make `~/rt/riak` the path to setup releases.  If this is to be overridden, then it ca be do so by override [$RT_DEST_DIR](../bin/rtdev-setup-releases.sh#L11)
@@ -99,7 +99,7 @@ Create a `~/.riak_test.config` file with the following sample configuration:
                   {previous, "~/rt/riak/previous"},
                   {legacy, "~/rt/riak/riak-2.0.5"},
                   {"2.0.5", "~/rt/riak/riak-2.0.5"}
-                 ]}.
+                 ]}
 ]}.
 ```
 
