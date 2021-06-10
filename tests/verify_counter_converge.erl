@@ -52,6 +52,8 @@ confirm() ->
 
     PartInfo = rt:partition([N1, N2], [N3, N4]),
 
+    timer:sleep(1000),
+
     %% increment one side
     increment_counter(C1, Key, 5),
 
