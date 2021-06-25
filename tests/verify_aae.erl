@@ -38,7 +38,9 @@
 
 -module(verify_aae).
 -export([confirm/0, verify_aae/1]).
--export([test_single_partition_loss/3, test_less_than_n_writes/2]).
+-export([test_single_partition_loss/3,
+            test_less_than_n_writes/2,
+            wait_until_hashtree_upgrade/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day

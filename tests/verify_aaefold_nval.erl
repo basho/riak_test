@@ -296,9 +296,15 @@ write_data(Bucket, Node, KVs, Opts) ->
 
 wait_until_root_stable(Client) ->
     {ok, RH0} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, Client),
-    timer:sleep(2000),
+    timer:sleep(500),
     {ok, RH1} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, Client),
-    case aae_exchange:compare_roots(RH0, RH1) of
+    timer:sleep(500),
+    {ok, RH2} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, Client),
+    timer:sleep(500),
+    {ok, RH3} = riak_client:aae_fold({merge_root_nval, ?N_VAL}, Client),
+    case lists:usort(aae_exchange:compare_roots(RH0, RH1) ++ 
+                        aae_exchange:compare_roots(RH1, RH2) ++
+                        aae_exchange:compare_roots(RH2, RH3)) of
         [] ->
             lager:info("Root appears stable matched");
         [L] ->
@@ -307,5 +313,8 @@ wait_until_root_stable(Client) ->
             <<_B1:Pre/binary, V1:32/integer, _Post1/binary>> = RH1,
             lager:info("Root not stable: branch ~w compares ~w with ~w",
                         [L, V0, V1]),
+            wait_until_root_stable(Client);
+        Multi ->
+            lager:info("Root not stable ~w branch deltas", [length(Multi)]),
             wait_until_root_stable(Client)
     end.

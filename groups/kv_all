@@ -20,6 +20,7 @@ riak_rex
 rt_basic_test
 sibling_explosion
 verify_aae
+verify_aae_capability
 verify_aae_resettoken
 verify_aaefold_nval
 verify_aaefold_range
