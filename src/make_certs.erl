@@ -83,18 +83,18 @@ do_append_files([F|Fs], RF) ->
     do_append_files(Fs, RF).
 
 rootCA(Root, Name) ->
-    create_ca_dir(Root, Name, ca_cnf(Name)),
+    create_ca_dir(Root, Name, ca_cnf(Root,Name)),
     DN = #dn{commonName = Name},
-    create_self_signed_cert(Root, Name, req_cnf(DN)),
+    create_self_signed_cert(Root, Name, req_cnf(Root,DN)),
     file:copy(filename:join([Root, Name, "cert.pem"]), filename:join([Root, Name, "cacerts.pem"])),
     gencrl(Root, Name).
 
 intermediateCA(Root, CA, ParentCA) ->
-    create_ca_dir(Root, CA, ca_cnf(CA)),
+    create_ca_dir(Root, CA, ca_cnf(Root,CA)),
     CARoot = filename:join([Root, CA]),
     DN = #dn{commonName = CA},
     CnfFile = filename:join([CARoot, "req.cnf"]),
-    file:write_file(CnfFile, req_cnf(DN)),
+    file:write_file(CnfFile, req_cnf(Root,DN)),
     KeyFile = filename:join([CARoot, "private", "key.pem"]), 
     ReqFile =  filename:join([CARoot, "req.pem"]), 
     create_req(Root, CnfFile, KeyFile, ReqFile),
@@ -123,7 +123,7 @@ enduser(Root, CA, User, DirName) ->
     file:make_dir(UsrRoot),
     CnfFile = filename:join([UsrRoot, "req.cnf"]),
     DN = #dn{commonName = User},
-    file:write_file(CnfFile, req_cnf(DN)),
+    file:write_file(CnfFile, req_cnf(Root,DN)),
     KeyFile = filename:join([UsrRoot, "key.pem"]), 
     ReqFile =  filename:join([UsrRoot, "req.pem"]), 
     create_req(Root, CnfFile, KeyFile, ReqFile),
@@ -143,8 +143,7 @@ revoke(Root, CA, User) ->
 	   " -revoke ", UsrCert,
 	   " -crl_reason keyCompromise",
 	   " -config ", CACnfFile],
-    Env = [{"ROOTDIR", filename:absname(Root)}], 
-    cmd(Cmd, Env),
+    cmd(Cmd),
     gencrl(Root, CA).
 
 gencrl(Root, CA) ->
@@ -155,8 +154,7 @@ gencrl(Root, CA) ->
 	   " -crlhours 24",
 	   " -out ", CACRLFile,
 	   " -config ", CACnfFile],
-    Env = [{"ROOTDIR", filename:absname(Root)}], 
-    cmd(Cmd, Env).
+    cmd(Cmd).
 
 verify(Root, CA, User) ->
     CAFile = filename:join([Root, User, "cacerts.pem"]),
@@ -167,8 +165,7 @@ verify(Root, CA, User) ->
 	   " -CRLfile ", CACRLFile, %% this is undocumented, but seems to work
 	   " -crl_check ",
 	   CertFile],
-    Env = [{"ROOTDIR", filename:absname(Root)}],
-    try cmd(Cmd, Env) catch
+    try cmd(Cmd) catch
 	   exit:{eval_cmd, _, _} ->
 		invalid
     end.
@@ -185,9 +182,8 @@ create_self_signed_cert(Root, CAName, Cnf) ->
 	   " -config ", CnfFile,
 	   " -keyout ", KeyFile,
 	   " -outform PEM",
-	   " -out ", CertFile], 
-    Env = [{"ROOTDIR", filename:absname(Root)}],  
-    cmd(Cmd, Env).
+	   " -out ", CertFile],
+    cmd(Cmd).
 
 create_self_signed_ecc_cert(Root, CAName, Cnf) ->
     CARoot = filename:join([Root, CAName]),
@@ -288,6 +284,8 @@ remove_rnd(Dir) ->
     File = filename:join([Dir, "RAND"]),
     file:delete(File).
 
+cmd(Cmd) -> cmd(Cmd, []).
+
 cmd(Cmd, Env) ->
     FCmd = lists:flatten(Cmd),
     Port = open_port({spawn, FCmd}, [stream, eof, exit_status, stderr_to_stdout, 
@@ -313,10 +311,10 @@ eval_cmd(Port, Cmd) ->
 %% Contents of configuration files 
 %%
 
-req_cnf(DN) ->
+req_cnf(Root,DN) ->
     ["# Purpose: Configuration for requests (end users and CAs)."
      "\n"
-     "ROOTDIR	        = $ENV::ROOTDIR\n"
+     "ROOTDIR	        = ", filename:absname(Root), "\n"
      "\n"
 
      "[req]\n"
@@ -349,10 +347,10 @@ req_cnf(DN) ->
      "subjectKeyIdentifier = hash\n"
      "subjectAltName	= email:copy\n"].
 
-ca_cnf(CA) ->
+ca_cnf(Root,CA) ->
     ["# Purpose: Configuration for CAs.\n"
      "\n"
-     "ROOTDIR	        = $ENV::ROOTDIR\n"
+     "ROOTDIR	        = ", filename:absname(Root), "\n"
      "default_ca	= ca\n"
      "\n"
 
