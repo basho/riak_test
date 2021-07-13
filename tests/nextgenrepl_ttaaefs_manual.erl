@@ -52,6 +52,13 @@
         ]).
 
 confirm() ->
+    [ClusterA3, ClusterB3, ClusterC3] = setup_clusters(),
+    test_externalrepl_between_clusters(ClusterA3, ClusterB3),
+
+    rt:clean_cluster(ClusterA3),
+    rt:clean_cluster(ClusterB3),
+    rt:clean_cluster(ClusterC3),
+
     [ClusterA1, ClusterB1, ClusterC1] = setup_clusters(),
     pass = test_repl_between_clusters(ClusterA1, ClusterB1, ClusterC1,
                                         rangesync_checkfun(),
@@ -343,6 +350,66 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC,
     end.
 
 
+test_externalrepl_between_clusters(ClusterA, ClusterB) ->
+    lager:info("spoof reconciliation with an external cluster"),
+
+    NodeA = hd(ClusterA),
+    NodeB = hd(ClusterB),
+
+    lager:info("Test empty clusters don't show any differences"),
+    {http, {IPA, PortA}} = lists:keyfind(http, 1, rt:connection_info(NodeA)),
+    {http, {IPB, PortB}} = lists:keyfind(http, 1, rt:connection_info(NodeB)),
+    lager:info("Cluster A ~s ~w Cluster B ~s ~w", [IPA, PortA, IPB, PortB]),
+    
+    {root_compare, 0}
+        = fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
+                            {NodeB, IPB, PortB, ?B_NVAL}),
+    
+    write_to_cluster(NodeA, 1, 100),
+
+    lager:info("Discover deltas, and request qeueuing"),
+
+    "Queue q1_ttaaefs: 0 100 0" = 
+        fullsync_push({NodeA, IPA, PortA, ?A_NVAL},
+                        {NodeB, IPB, PortB, ?B_NVAL},
+                        ?TEST_BUCKET),
+    
+    {root_compare, 0}
+        = fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
+                            {NodeB, IPB, PortB, ?B_NVAL}),
+    
+    rt:create_and_activate_bucket_type(NodeA,
+                                       <<"nval4">>,
+                                       [{n_val, 4},
+                                            {allow_mult, false}]),
+    rt:create_and_activate_bucket_type(NodeB,
+                                       <<"nval4">>,
+                                       [{n_val, 4},
+                                            {allow_mult, false}]),
+
+    Nv4B = {<<"nval4">>, <<"test_typed_buckets">>},
+    CommonValBin = <<"CommonValueToWriteForNV4Objects">>,
+    write_to_cluster(NodeA, 1, 100, Nv4B, true, CommonValBin),
+
+    lager:info("Discover deltas, and request qeueuing - typed bucket"),
+
+    "Queue q1_ttaaefs: 0 100 0" = 
+        fullsync_push({NodeA, IPA, PortA, 4},
+                        {NodeB, IPB, PortB, 4},
+                        Nv4B),
+    
+    {root_compare, 0}
+        = fullsync_check({NodeA, IPA, PortA, 4},
+                            {NodeB, IPB, PortB, 4}),
+    {root_compare, 0}
+        = fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
+                            {NodeB, IPB, PortB, ?B_NVAL}),
+   
+
+    
+    pass.
+
+
 setup_replqueues([]) ->
     ok;
 setup_replqueues([HeadNode|Others]) ->
@@ -365,6 +432,41 @@ fullsync_check({SrcNode, SrcIP, SrcPort, SrcNVal},
     N = drain_queue(SrcHTTPC, SnkC),
     lager:info("Drained queue and pushed ~w objects", [N]),
     AAEResult.
+
+fullsync_push({SrcNode, SrcIP, SrcPort, SrcNVal},
+                {SinkNode, SinkIP, SinkPort, SinkNVal},
+                Bucket) ->
+    ModRef = riak_kv_ttaaefs_manager,
+    _ = rpc:call(SrcNode, ModRef, pause, []),
+    ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
+    ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
+    {ok, KCLSrc} = 
+        rpc:call(SrcNode,
+                    riak_client,
+                    aae_fold,
+                    [{fetch_clocks_range, Bucket, all, all, all}]),
+    {ok, KCLSnk} =
+        rpc:call(SinkNode,
+                    riak_client,
+                    aae_fold,
+                    [{fetch_clocks_range, Bucket, all, all, all}]),
+    KCLPsh = lists:subtract(KCLSrc, KCLSnk),
+
+    EncodedPsh =
+        riak_kv_clusteraae_fsm:json_encode_results(fetch_clocks_range, KCLPsh),
+    
+    {ok, "200", _Headers, Body} =
+        ibrowse:send_req(rt:http_url(SrcNode)++"/queuename/q1_ttaaefs",
+                            [{"content-type", "application/json"}],
+                            post,
+                            EncodedPsh,
+                            []),
+    
+    SrcHTTPC = rhc:create(SrcIP, SrcPort, "riak", []),
+    {ok, SnkC} = riak:client_connect(SinkNode),
+    N = drain_queue(SrcHTTPC, SnkC),
+    lager:info("Drained queue and pushed ~w objects", [N]),
+    Body.
 
 rangesync_checkfun() ->
     Start = calendar:now_to_datetime(os:timestamp()),
