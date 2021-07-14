@@ -8,6 +8,7 @@
 -behavior(riak_test).
 -export([confirm/0]).
 -export([test_repl_between_clusters/5,
+            write_to_cluster/3,
             write_to_cluster/6,
             read_from_cluster/6,
             delete_from_cluster/4,
