@@ -132,6 +132,22 @@ test_reconcile_between_clusters(ClusterA, ClusterB, QueueFun) ->
         = fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
                             {NodeB, IPB, PortB, ?B_NVAL}),
     
+    lager:info("Discover deletes, and request qeueuing"),
+
+    nextgenrepl_ttaaefs_manual:delete_from_cluster(NodeA, 1, 50, ?TEST_BUCKET),
+
+    _SegListD = 
+        fullsync_push({NodeA, IPA, PortA, ?A_NVAL},
+                        {NodeB, IPB, PortB, ?B_NVAL},
+                        ?TEST_BUCKET,
+                        DrainQueueFun,
+                        Protocol),
+    
+    {root_compare, 0}
+        = fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
+                            {NodeB, IPB, PortB, ?B_NVAL}),
+
+
     rt:create_and_activate_bucket_type(NodeA,
                                        <<"nval4">>,
                                        [{n_val, 4},
@@ -174,7 +190,7 @@ fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
     AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]),
     {ok, SnkC} = riak:client_connect(SinkNode),
     {N, []} = drain_queue_http(SrcNode, SnkC),
-    lager:info("Drained queue and pushed ~w objects", [N]),
+    lager:info("Drained queue and pushed ~w objects (check)", [N]),
     AAEResult.
 
 
@@ -192,7 +208,7 @@ fullsync_push({SrcNode, _SrcIP, _SrcPort, SrcNVal},
 
     {ok, SnkC} = riak:client_connect(SnkNode),
     {N, SegList} = DrainQueueFun(SrcNode, SnkC),
-    lager:info("Drained queue and pushed ~w objects", [N]),
+    lager:info("Drained queue and pushed ~w objects (push)", [N]),
     ExpectedBody = lists:flatten(io_lib:format("Queue q1_ttaaefs: 0 ~w 0", [N])),
     ?assertEqual(ExpectedBody, binary_to_list(Body)),
     SegList.
