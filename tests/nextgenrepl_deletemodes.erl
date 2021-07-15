@@ -24,6 +24,7 @@
 -define(SNK_WORKERS, 4).
 
 -define(DELETE_DELAY, 10000).
+-define(DELETE_WAIT, 2000).
 
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
@@ -158,7 +159,7 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     ?assertMatch(?KEY_COUNT, length(BKdhL)),
     
     reap_from_cluster(NodeA1, 1, ?KEY_COUNT),
-    timer:sleep(?DELETE_DELAY +  1000),
+    timer:sleep(?DELETE_DELAY + ?DELETE_WAIT),
     {root_compare, 0} =
         fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
                         {NodeC1ip, NodeC1port, ?C_NVAL}),
@@ -186,7 +187,7 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     {ok, BKdhL1} = find_tombs(NodeA1, all, all),
     ?assertMatch(?KEY_COUNT, length(BKdhL1)),
     reap_from_cluster(NodeA1, BKdhL1),
-    timer:sleep(?DELETE_DELAY +  1000),
+    timer:sleep(?DELETE_DELAY + ?DELETE_WAIT),
     {root_compare, 0} =
         fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
                         {NodeC1ip, NodeC1port, ?C_NVAL}),
