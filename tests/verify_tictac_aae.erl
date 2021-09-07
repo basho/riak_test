@@ -38,6 +38,7 @@
 
 -module(verify_tictac_aae).
 -export([confirm/0, verify_aae_norebuild/1, verify_aae_rebuild/1, test_single_partition_loss/3]).
+-export([verify_data/2]).
 -include_lib("eunit/include/eunit.hrl").
 
 % I would hope this would come from the testing framework some day
