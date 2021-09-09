@@ -20,3 +20,4 @@ verify_aaefold_nval_api
 verify_aaefold_nval
 verify_aaefold_range_api
 verify_aaefold_range
+verify_aaefold_rangerepair
