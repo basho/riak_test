@@ -411,7 +411,94 @@ confirm() ->
                  rhc:mapred_bucket(RHC, {modfun, ?MODULE,
                                                     mapred_modfun_type, []},
                                        ?SUMVALUE_MAPRED)),
+
+
+    rt:clean_cluster(Nodes),
+    rt_redbug:set_tracing_applied(true),
+    lager:info("Deploy a single node cluster"),
+    lager:info("Can only monitor one node with redbug"),
+    [SingleNode] 
+        = rt:build_cluster(1, 
+                            [], 
+                            [{riak_core, 
+                                [{default_bucket_props,
+                                    [{n_val, 3},
+                                        {allow_mult, true},
+                                        {dvv_enabled, true}
+                                    ]}]}]),
+
+    lager:info("Create a bucket type with selective sync enabled"),
+    ok =
+        rt:create_activate_and_wait_for_bucket_type(
+            [SingleNode], <<"sync_backend">>, [{sync_on_write,backend}, {n_val,3}]),
+    ok =
+        rt:create_activate_and_wait_for_bucket_type(
+            [SingleNode], <<"sync_one">>, [{sync_on_write,one}, {n_val,3}]),
+    ok =
+        rt:create_activate_and_wait_for_bucket_type(
+            [SingleNode], <<"sync_all">>, [{sync_on_write,all}, {n_val,3}]),
+
+    lager:info("Setup redbug tracing for selective sync test"),
+    {ok, CWD} = file:get_cwd(),
+    FnameBase = "rt_vhc",
+    FileBase = filename:join([CWD, FnameBase]),
+    OneTrcFile = FileBase ++ "One",
+    AllTrcFile = FileBase ++ "All",
+    BackendTrcFile = FileBase ++ "Backend",
+    file:delete(OneTrcFile),
+    file:delete(AllTrcFile),
+    file:delete(BackendTrcFile),
+
+    lager:info("STARTING TRACE"),
+    Backend = proplists:get_value(backend, riak_test_runner:metadata()),
+    TraceFun = flushputfun(Backend),
+
+    redbug_start(TraceFun, OneTrcFile, SingleNode),
+    lager:info("doing put"),
+    ok = rhc:put(RHC,
+        riakc_obj:new({<<"sync_one">>, <<"b_sync_one">>}, <<"key">>, <<"newestvalue">>)),
+    lager:info("doing get"),
+    {ok, _} = rhc:get(RHC, {<<"sync_one">>, <<"b_sync_one">>}, <<"key">>),
+    
+    stopped = redbug:stop(),
+    ?assertMatch(1, flushput_cnt(TraceFun, OneTrcFile)),
+
+
+    redbug_start(TraceFun, BackendTrcFile, SingleNode),
+    lager:info("doing put"),
+    ok = rhc:put(RHC,
+        riakc_obj:new({<<"sync_backend">>, <<"b_sync_backend">>}, <<"key">>, <<"newestvalue">>)),
+    lager:info("doing get"),
+    {ok, _} = rhc:get(RHC, {<<"sync_backend">>, <<"b_sync_backend">>}, <<"key">>),
+
+    stopped = redbug:stop(),
+    ?assertMatch(0, flushput_cnt(TraceFun, BackendTrcFile)),
+
+    redbug_start(TraceFun, AllTrcFile, SingleNode),
+    lager:info("doing put"),
+    ok = rhc:put(RHC,
+        riakc_obj:new({<<"sync_all">>, <<"b_sync_all">>}, <<"key">>, <<"newestvalue">>)),
+    lager:info("doing get"),
+    {ok, _} = rhc:get(RHC, {<<"sync_all">>, <<"b_sync_all">>}, <<"key">>),
+
+    stopped = redbug:stop(),
+    ?assertMatch(3, flushput_cnt(TraceFun, AllTrcFile)),
+
+    file:delete(OneTrcFile),
+    file:delete(AllTrcFile),
+    file:delete(BackendTrcFile),
+    
     pass.
+
+redbug_start(TraceFun, TrcFile, Node) ->
+    timer:sleep(1000), % redbug doesn't always appear to immediately stop
+    lager:info("TracingFun ~s on ~w", [TraceFun, Node]),
+    Start = redbug:start(TraceFun,
+                        rt_redbug:default_trace_options() ++
+                            [{target, Node},
+                            {arity, true},
+                            {print_file, TrcFile}]),
+    lager:info("Redbug start message ~w", [Start]).
 
 mapred_modfun(Pipe, Args, _Timeout) ->
     lager:info("Args for mapred modfun are ~p", [Args]),
@@ -422,3 +509,20 @@ mapred_modfun_type(Pipe, Args, _Timeout) ->
     lager:info("Args for mapred modfun are ~p", [Args]),
     riak_pipe:queue_work(Pipe, {{{<<"mytype">>, <<"MRbucket">>}, <<"bam">>}, {struct, []}}),
     riak_pipe:eoi(Pipe).
+
+flushputfun(leveled) ->
+    "riak_kv_leveled_backend:flush_put/5";
+flushputfun(eleveldb) ->
+    "riak_kv_eleveldb_backend:flush_put/5";
+flushputfun(bitcask) ->
+    "riak_kv_bitcask_backend:flush_put/5".
+
+flushput_cnt(TraceFun, File) ->
+    lager:info("checking ~p", [File]),
+    {ok, FileData} = file:read_file(File),
+    count_matches(re:run(FileData, TraceFun, [global])).
+
+count_matches(nomatch) ->
+    0;
+count_matches({match, Matches}) ->
+    length(Matches).
