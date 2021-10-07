@@ -115,11 +115,11 @@ verify_aae_repair(Nodes, ClientMod, ClientHead, Nodes) ->
 
     rt:wait_until_transfers_complete(Nodes),
     
-    object_count(ClientMod, ClientHead, "after restart - particpating"),
-    object_count(ClientMod, ClientHead, "after restart - particpating"),
-    object_count(ClientMod, ClientHead, "after restart - particpating"),
-    object_count(ClientMod, ClientHead, "after restart - particpating"),
-    object_count(ClientMod, ClientHead, "after restart - particpating"),
+    object_count(ClientMod, ClientHead, "after restart - participating"),
+    object_count(ClientMod, ClientHead, "after restart - participating"),
+    object_count(ClientMod, ClientHead, "after restart - participating"),
+    object_count(ClientMod, ClientHead, "after restart - participating"),
+    object_count(ClientMod, ClientHead, "after restart - participating"),
 
     rpc:call(TailNode, riak_client, remove_node_from_coverage, []),
 
@@ -131,6 +131,9 @@ verify_aae_repair(Nodes, ClientMod, ClientHead, Nodes) ->
     verify_tictac_aae:verify_data(HeadNode, TestKVs2),
 
     lager:info("Forcing read repair - first set"),
+    %% Initially two sets were to be used, to similate reverting to backup, but
+    %% as only leveled has a testable hot_backup, we have to repair the first
+    %% set to get back to the "recovered from backup point" 
     {ok, NumKeys0} = 
         ClientMod:aae_range_repairkeys(ClientHead,
                                         ?BUCKET,
@@ -155,7 +158,7 @@ verify_aae_repair(Nodes, ClientMod, ClientHead, Nodes) ->
     rpc:call(TailNode, riak_client, reset_node_for_coverage, []),
     rt:wait_until_ring_converged(Nodes),
     
-    TC2 = object_count(ClientMod, ClientHead, "after repair - particpating"),
+    TC2 = object_count(ClientMod, ClientHead, "after repair - participating"),
     ?assertMatch(TC2, 3 * ?NUM_KEYS),
 
     RR1 = get_read_repair_total(Nodes),
