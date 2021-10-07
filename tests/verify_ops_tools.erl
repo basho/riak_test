@@ -23,7 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 
-%% Very basic test to confirm that redbug and recon are laoded and available
+%% Very basic test to confirm that redbug and recon are loaded and available
 %% to support troubleshooting
 
 confirm() ->
