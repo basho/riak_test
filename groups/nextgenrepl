@@ -17,7 +17,5 @@ verify_aaefold_api_compare
 verify_aaefold_findkeys_stats
 verify_aaefold_listbuckets
 verify_aaefold_nval_api
-verify_aaefold_nval
 verify_aaefold_range_api
-verify_aaefold_range
 verify_aaefold_rangerepair
