@@ -30,7 +30,8 @@
 confirm() ->
     inets:start(),
 
-    Nodes = rt:build_cluster(3),
+    Config = [{riak_kv, [{log_index_fsm, true}]}],
+    Nodes = rt:build_cluster(3, Config),
     ?assertEqual(ok, (rt:wait_until_nodes_ready(Nodes))),
 
     RiakHttp = rt:http_url(hd(Nodes)),
