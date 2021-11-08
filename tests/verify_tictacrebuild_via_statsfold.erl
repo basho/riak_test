@@ -66,11 +66,11 @@
 confirm() ->
 
     Cluster =
-        rt:deploy_nodes(5, ?CFG_TICTACAAE(60 * 60 * 1000,
+        rt:deploy_nodes(4, ?CFG_TICTACAAE(60 * 60 * 1000,
                                             60 * 60 * 1000,
                                             dscp)),
         % Build a cluster with AAE - but don't have the AAE do exchanages
-    [Node1, Node2, Node3, _Node4, _Node5] = Cluster,
+    [Node1, Node2, Node3, _Node4] = Cluster,
     rt:set_advanced_conf(Node1, ?CFG_NOAAE(dscp)),
     rt:set_advanced_conf(Node2, ?CFG_NOAAE(single)),
     rt:set_advanced_conf(Node3, ?CFG_NOAAE(none)),
@@ -158,6 +158,12 @@ confirm() ->
     ?assertEqual(0, lists:max(N2_AF4)),
     ?assertEqual(0, lists:max(N3_AF4)),
 
+    {ok, {stats, ModifiedStats}} =
+        rhc:aae_object_stats(HttpCH, ?BUCKET, all, {SWbefore, SWafter}),
+    ModifiedKeyCount = proplists:get_value(<<"total_count">>, ModifiedStats),
+    lager:info("ModifiedKeyCount=~w TotalModifiedKeys=~w",
+                [ModifiedKeyCount, TotalModifiedKeys]),
+
     N1_NWP = fetch_stats(nwpool_stats(), Node1),
     N2_NWP = fetch_stats(nwpool_stats(), Node2),
     N3_NWP = fetch_stats(nwpool_stats(), Node3),
@@ -172,7 +178,7 @@ confirm() ->
 
 
 fetch_stats(StatList, Node) ->
-    Stats = verify_riak_stats:get_stats(Node),
+    Stats = verify_riak_stats:get_stats(Node, 1000),
     SL = lists:map(fun(S) -> proplists:get_value(S, Stats) end, StatList),
     lager:info("Stats pulled for ~p ~w - ~p", [StatList, Node, SL]),
     SL.

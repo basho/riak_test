@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(verify_riak_stats).
 -behavior(riak_test).
--export([confirm/0, get_stats/1]).
+-export([confirm/0, get_stats/1, get_stats/2]).
 -include_lib("eunit/include/eunit.hrl").
 -include("../src/stacktrace.hrl").
 
@@ -189,7 +189,10 @@ has_head_support(_Backend) ->
     false.
 
 get_stats(Node) ->
-    timer:sleep(10000),
+    get_stats(Node, 10000).
+
+get_stats(Node, Wait) ->
+    timer:sleep(Wait),
     lager:info("Retrieving stats from node ~s", [Node]),
     StatsCommand = io_lib:format("curl -s -S ~s/stats", [rt:http_url(Node)]),
     lager:debug("Retrieving stats using command ~s", [StatsCommand]),
