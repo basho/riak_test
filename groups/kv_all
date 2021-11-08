@@ -25,6 +25,7 @@ verify_aaefold_nval
 verify_aaefold_range
 verify_api_timeouts
 verify_asis_put
+verify_basic_upgrade
 verify_busy_dist_port
 verify_commit_hooks
 verify_conditional_postcommit
