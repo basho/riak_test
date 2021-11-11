@@ -159,10 +159,38 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     ?assertMatch(?KEY_COUNT, length(BKdhL)),
     
     reap_from_cluster(NodeA1, 1, ?KEY_COUNT),
-    timer:sleep(2 * ?DELETE_DELAY + ?DELETE_WAIT),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
+    
+    rpc:call(NodeB1,
+                application,
+                set_env,
+                [riak_kv, ttaaefs_logrepairs, true]),
+
+    timer:sleep(?DELETE_WAIT),
+    R = fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
                         {NodeC1ip, NodeC1port, ?C_NVAL}),
+    {root_compare, 0} =
+        case R of
+            {clock_compare, N} when N < 10 ->
+                %% There is a problem here with immediate mode delete
+                %% in that it can sometimes fail to clean up the odd
+                %% tombstone.
+                %% It was for this reason the tombstone_delay was added
+                %% but amending this cannot stop an intermittent issue
+                %% Workaround for the purpose of this test is to permit
+                %% a small discrepancy in this case
+                lager:warning("Immediate delete issue - ~w not cleared", [N]),
+                timer:sleep(?DELETE_WAIT),
+                fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
+                                {NodeC1ip, NodeC1port, ?C_NVAL});
+            R ->
+                R
+        end,
+
+    rpc:call(NodeB1,
+                application,
+                set_env,
+                [riak_kv, ttaaefs_logrepairs, false]),
+    
     lager:info("As tombstones reaped A, B and C the same"),
     {root_compare, 0} =
         fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_b},

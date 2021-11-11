@@ -22,15 +22,41 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(NUM_KEYS, 20000).
+
+-define(CONFIG(RingSize, NVal), 
+    [
+        {riak_core,
+            [
+            {ring_creation_size, RingSize},
+            {default_bucket_props,
+                [
+                    {n_val, NVal},
+                    {allow_mult, true},
+                    {dvv_enabled, true}
+                ]}
+            ]
+        },
+        {leveled,
+            [
+                {journal_objectcount, 2000} 
+                % setting  low object count ensures we test rolled journal
+                % files, not just active ones
+            ]}
+        ]).
+
 confirm() ->
+    
     TestMetaData = riak_test_runner:metadata(),
     OldVsn = proplists:get_value(upgrade_version, TestMetaData, previous),
 
-    Nodes = [Node1|_] = rt:build_cluster([OldVsn, OldVsn, OldVsn, OldVsn]),
+    [Nodes] = 
+        rt:build_clusters([{4, OldVsn, ?CONFIG(8, 3)}]),
+    [Node1|_] = Nodes,
 
-    lager:info("Writing 100 keys to ~p", [Node1]),
-    rt:systest_write(Node1, 100, 3),
-    ?assertEqual([], rt:systest_read(Node1, 100, 1)),
+    lager:info("Writing ~w keys to ~p", [?NUM_KEYS, Node1]),
+    rt:systest_write(Node1, ?NUM_KEYS, 3),
+    ?assertEqual([], rt:systest_read(Node1, ?NUM_KEYS, 1)),
 
     [upgrade(Node, current) || Node <- Nodes],
 
@@ -43,6 +69,5 @@ upgrade(Node, NewVsn) ->
     rt:upgrade(Node, NewVsn),
     rt:wait_for_service(Node, riak_kv),
     lager:info("Ensuring keys still exist"),
-    rt:systest_read(Node, 100, 1),
-    ?assertEqual([], rt:systest_read(Node, 100, 1)),
+    ?assertEqual([], rt:systest_read(Node, ?NUM_KEYS, 1)),
     ok.

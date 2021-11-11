@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 -module(verify_riak_stats).
 -behavior(riak_test).
--export([confirm/0, get_stats/1]).
+-export([confirm/0, get_stats/1, get_stats/2]).
 -include_lib("eunit/include/eunit.hrl").
 -include("../src/stacktrace.hrl").
 
@@ -168,7 +168,7 @@ confirm() ->
     Stats7 = get_stats(Node1),
     lager:info("Verifying pool stats are incremented"),
 
-    verify_inc(Stats6, Stats7, inc_by_one(dscp_stats())),
+    verify_inc(Stats6, Stats7, inc_by_one(dscp_totals())),
 
     pass.
 
@@ -189,7 +189,10 @@ has_head_support(_Backend) ->
     false.
 
 get_stats(Node) ->
-    timer:sleep(10000),
+    get_stats(Node, 10000).
+
+get_stats(Node, Wait) ->
+    timer:sleep(Wait),
     lager:info("Retrieving stats from node ~s", [Node]),
     StatsCommand = io_lib:format("curl -s -S ~s/stats", [rt:http_url(Node)]),
     lager:debug("Retrieving stats using command ~s", [StatsCommand]),
@@ -523,6 +526,17 @@ common_stats() ->
         <<"index_fsm_active">>,
         <<"index_fsm_create">>,
         <<"index_fsm_create_error">>,
+        <<"index_fsm_complete">>,
+        <<"index_fsm_results_mean">>,
+        <<"index_fsm_results_median">>,
+        <<"index_fsm_results_95">>,
+        <<"index_fsm_results_99">>,
+        <<"index_fsm_results_100">>,
+        <<"index_fsm_time_mean">>,
+        <<"index_fsm_time_median">>,
+        <<"index_fsm_time_95">>,
+        <<"index_fsm_time_99">>,
+        <<"index_fsm_time_100">>,
         <<"inets_version">>,
         <<"kernel_version">>,
         % No yokozuna <<"kvc_version">>,
@@ -1006,16 +1020,57 @@ product_stats(riak) ->
 
 pool_stats() ->
     dscp_stats() ++
-        [<<"node_worker_pool_node_worker_pool_total">>,
-         <<"node_worker_pool_unregistered_total">>,
-         <<"vnode_worker_pool_total">>].
+        [<<"worker_node_worker_pool_total">>,
+            <<"worker_node_worker_pool_queuetime_mean">>,
+            <<"worker_node_worker_pool_queuetime_100">>,
+            <<"worker_node_worker_pool_worktime_mean">>,
+            <<"worker_node_worker_pool_worktime_100">>,
+        <<"worker_unregistered_total">>,
+            <<"worker_unregistered_queuetime_mean">>,
+            <<"worker_unregistered_queuetime_100">>,
+            <<"worker_unregistered_worktime_mean">>,
+            <<"worker_unregistered_worktime_100">>,
+        <<"worker_vnode_pool_total">>,
+            <<"worker_vnode_pool_queuetime_mean">>,
+            <<"worker_vnode_pool_queuetime_100">>,
+            <<"worker_vnode_pool_worktime_mean">>,
+            <<"worker_vnode_pool_worktime_100">>].
+
 
 dscp_stats() ->
-    [<<"node_worker_pool_af1_pool_total">>,
-     <<"node_worker_pool_af2_pool_total">>,
-     <<"node_worker_pool_af3_pool_total">>,
-     <<"node_worker_pool_af4_pool_total">>,
-     <<"node_worker_pool_be_pool_total">>].
+    [<<"worker_af1_pool_total">>,
+            <<"worker_af1_pool_queuetime_mean">>,
+            <<"worker_af1_pool_queuetime_100">>,
+            <<"worker_af1_pool_worktime_mean">>,
+            <<"worker_af1_pool_worktime_100">>,
+        <<"worker_af2_pool_total">>,
+            <<"worker_af2_pool_queuetime_mean">>,
+            <<"worker_af2_pool_queuetime_100">>,
+            <<"worker_af2_pool_worktime_mean">>,
+            <<"worker_af2_pool_worktime_100">>,
+        <<"worker_af3_pool_total">>,
+            <<"worker_af3_pool_queuetime_mean">>,
+            <<"worker_af3_pool_queuetime_100">>,
+            <<"worker_af3_pool_worktime_mean">>,
+            <<"worker_af3_pool_worktime_100">>,
+        <<"worker_af4_pool_total">>,
+            <<"worker_af4_pool_queuetime_mean">>,
+            <<"worker_af4_pool_queuetime_100">>,
+            <<"worker_af4_pool_worktime_mean">>,
+            <<"worker_af4_pool_worktime_100">>,
+        <<"worker_be_pool_total">>,
+            <<"worker_be_pool_queuetime_mean">>,
+            <<"worker_be_pool_queuetime_100">>,
+            <<"worker_be_pool_worktime_mean">>,
+            <<"worker_be_pool_worktime_100">>
+        ].
+
+dscp_totals() ->
+    [<<"worker_af1_pool_total">>,
+        <<"worker_af2_pool_total">>,
+        <<"worker_af3_pool_total">>,
+        <<"worker_af4_pool_total">>,
+        <<"worker_be_pool_total">>].
 
 do_pools(Node) ->
     do_pools(Node, rpc:call(Node, riak_core_node_worker_pool, dscp_pools, [])).

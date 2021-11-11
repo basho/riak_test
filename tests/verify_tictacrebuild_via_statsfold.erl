@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(DEFAULT_RING_SIZE, 32).
+-define(DEFAULT_RING_SIZE, 64).
 -define(CFG_TICTACAAE(ExchangeTick, RebuildTick, PoolStrategy),
         [{riak_kv,
           [
@@ -44,12 +44,13 @@
            {default_bucket_props, [{allow_mult, true}]}
           ]}]
        ).
--define(CFG_NOAAE, 
+-define(CFG_NOAAE(PoolStrategy), 
         [{riak_kv,
           [
            % Speedy AAE configuration
            {anti_entropy, {off, []}},
-           {tictacaae_active, passive}
+           {tictacaae_active, passive},
+           {worker_pool_strategy, PoolStrategy}
           ]},
           {riak_core,
           [
@@ -57,7 +58,7 @@
            {default_bucket_props, [{allow_mult, true}]}
           ]}]).
 
--define(NUM_KEYS_PERNODE, 10000).
+-define(NUM_KEYS_PERNODE, 5000).
 -define(BUCKET, <<"test_bucket">>).
 -define(N_VAL, 3).
 -define(DELTA_COUNT, 10).
@@ -65,14 +66,14 @@
 confirm() ->
 
     Cluster =
-        rt:deploy_nodes(6, ?CFG_TICTACAAE(60 * 60 * 1000,
+        rt:deploy_nodes(4, ?CFG_TICTACAAE(60 * 60 * 1000,
                                             60 * 60 * 1000,
                                             dscp)),
         % Build a cluster with AAE - but don't have the AAE do exchanages
-    [Node1, Node2, Node3, _Node4, _Node5, _Node6] = Cluster,
-    rt:set_advanced_conf(Node1, ?CFG_NOAAE),
-    rt:set_advanced_conf(Node2, ?CFG_NOAAE),
-    rt:set_advanced_conf(Node3, ?CFG_NOAAE),
+    [Node1, Node2, Node3, _Node4] = Cluster,
+    rt:set_advanced_conf(Node1, ?CFG_NOAAE(dscp)),
+    rt:set_advanced_conf(Node2, ?CFG_NOAAE(single)),
+    rt:set_advanced_conf(Node3, ?CFG_NOAAE(none)),
         % Change 1 node to not use Tictac AAE
     rt:join_cluster(Cluster),
     lager:info("Waiting for convergence."),
@@ -148,10 +149,51 @@ confirm() ->
     ModifiedKeyCount = proplists:get_value(<<"total_count">>, ModifiedStats),
     lager:info("ModifiedKeyCount=~w TotalModifiedKeys=~w",
                 [ModifiedKeyCount, TotalModifiedKeys]),
+
+    N1_AF4 = fetch_stats(af4pool_stats(), Node1),
+    N2_AF4 = fetch_stats(af4pool_stats(), Node2),
+    N3_AF4 = fetch_stats(af4pool_stats(), Node3),
+    
+    ?assertNotEqual(0, lists:min(N1_AF4)),
+    ?assertEqual(0, lists:max(N2_AF4)),
+    ?assertEqual(0, lists:max(N3_AF4)),
+
+    {ok, {stats, ModifiedStats}} =
+        rhc:aae_object_stats(HttpCH, ?BUCKET, all, {SWbefore, SWafter}),
+    ModifiedKeyCount = proplists:get_value(<<"total_count">>, ModifiedStats),
+    lager:info("ModifiedKeyCount=~w TotalModifiedKeys=~w",
+                [ModifiedKeyCount, TotalModifiedKeys]),
+
+    N1_NWP = fetch_stats(nwpool_stats(), Node1),
+    N2_NWP = fetch_stats(nwpool_stats(), Node2),
+    N3_NWP = fetch_stats(nwpool_stats(), Node3),
+
+    ?assertEqual(0, lists:max(N1_NWP)),
+    ?assertNotEqual(0, lists:min(N2_NWP)),
+    ?assertEqual(0, lists:max(N3_NWP)),
+
     ?assertMatch(TotalModifiedKeys, ModifiedKeyCount),
 
     pass.
 
+
+fetch_stats(StatList, Node) ->
+    Stats = verify_riak_stats:get_stats(Node, 1000),
+    SL = lists:map(fun(S) -> proplists:get_value(S, Stats) end, StatList),
+    lager:info("Stats pulled for ~p ~w - ~p", [StatList, Node, SL]),
+    SL.
+
+af4pool_stats() ->
+    [<<"worker_af4_pool_queuetime_mean">>,
+        <<"worker_af4_pool_queuetime_100">>,
+        <<"worker_af4_pool_worktime_mean">>,
+        <<"worker_af4_pool_worktime_100">>].
+
+nwpool_stats() ->
+    [<<"worker_node_worker_pool_queuetime_mean">>,
+        <<"worker_node_worker_pool_queuetime_100">>,
+        <<"worker_node_worker_pool_worktime_mean">>,
+        <<"worker_node_worker_pool_worktime_100">>].
 
 to_key(N) ->
     list_to_binary(io_lib:format("K~8..0B", [N])).
