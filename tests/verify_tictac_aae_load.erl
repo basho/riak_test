@@ -40,13 +40,16 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
-% I would hope this would come from the testing framework some day
-% to use the test in small and large scenarios.
 -define(DEFAULT_RING_SIZE, 8).
--define(EXCHANGE_TICK, 120).
+
+% Amend defaults for 
+-define(EXCHANGE_TICK, 60).
 -define(MAX_RESULTS, 128).
 -define(REPAIR_LOOPS, 4).
 -define(KEY_RANGE, false).
+-define(RANGE_BOOST, 2).
+
+-define(TEST_VERSION, current).
 
 -define(CFG,
         [{riak_kv,
@@ -57,7 +60,8 @@
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
            {tictacaae_maxresults, ?MAX_RESULTS},
            {tictacaae_repairloops, ?REPAIR_LOOPS},
-           {tictacaae_enablekeyrange, ?KEY_RANGE}
+           {tictacaae_enablekeyrange, ?KEY_RANGE},
+           {tictacaae_rangeboost, ?RANGE_BOOST}
           ]},
          {riak_core,
           [
@@ -66,16 +70,17 @@
        ).
 
 -define(NUM_NODES, 4).
--define(PRELOAD_KEYS_PERBUCKET, 100000).
--define(N1_KEYS_PERBUCKET, 250).
--define(N2_KEYS_SINGLEBUCKET, 1000).
+-define(PRELOAD_KEYS_PERBUCKET, 125000).
+-define(N1_KEYS_PERBUCKET, 200).
+-define(N2_KEYS_SINGLEBUCKET, 800).
+
 -define(ALT_BUCKET1, <<"alt_bucket1">>).
 -define(ALT_BUCKET2, <<"alt_bucket2">>).
 -define(ALT_BUCKET3, <<"alt_bucket3">>).
 -define(ALT_BUCKET4, <<"alt_bucket4">>).
+
 -define(N_VAL, 3).
 -define(STATS_DELAY, 1000).
--define(TEST_VERSION, current).
 -define(VERIFY_DELAY, 10000).
 -define(MICRO, 1000000).
 
