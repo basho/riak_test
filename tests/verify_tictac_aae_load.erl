@@ -70,9 +70,9 @@
        ).
 
 -define(NUM_NODES, 4).
--define(PRELOAD_KEYS_PERBUCKET, 125000).
--define(N1_KEYS_PERBUCKET, 200).
--define(N2_KEYS_SINGLEBUCKET, 800).
+-define(PRELOAD_KEYS_PERBUCKET, 150000).
+-define(N1_KEYS_PERBUCKET, 500).
+-define(N2_KEYS_SINGLEBUCKET, 2000).
 
 -define(ALT_BUCKET1, <<"alt_bucket1">>).
 -define(ALT_BUCKET2, <<"alt_bucket2">>).
