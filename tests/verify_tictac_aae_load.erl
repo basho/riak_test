@@ -17,24 +17,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-%% @doc Verification of Active Anti Entropy.
-%% The basic guarantee of AAE is this: Even without the read repairs that will
-%% happen when data is accessed, inconsistencies between the replicas of a
-%% KV object will be repaired eventually.  The test tries hard not to
-%% explicitly check for when the AAE trees are built or when exchanges are run
-%% in an effort to remain decoupled from the implementation.  Instead, it
-%% simply configures AAE to build/rebuild and run exchanges between the data
-%% partitions. It then performs direct vnode reads on all replicas and verify
-%% they eventually match.
-%%
-%% Data recovery after the following scenarios is tested:
-%%
-%% - Data for a partition completely disappears.
-%% - Less than N replicas are written
-%% - Less than N replicas are updated
-%%
-%% Also, a sanity check is done to make sure AAE repairs go away eventually
-%% if there is no activity.  That was an actual early AAE bug.
+%% @doc Verification of Active Anti Entropy performance.
 
 -module(verify_tictac_aae_load).
 -export([confirm/0]).
@@ -43,7 +26,7 @@
 -define(DEFAULT_RING_SIZE, 8).
 
 % Amend defaults for 
--define(EXCHANGE_TICK, 60).
+-define(EXCHANGE_TICK, 30).
 -define(MAX_RESULTS, 128).
 -define(REPAIR_LOOPS, 4).
 -define(KEY_RANGE, false).
@@ -71,8 +54,8 @@
 
 -define(NUM_NODES, 4).
 -define(PRELOAD_KEYS_PERBUCKET, 150000).
--define(N1_KEYS_PERBUCKET, 500).
--define(N2_KEYS_SINGLEBUCKET, 2000).
+-define(N1_KEYS_PERBUCKET, 2500).
+-define(N2_KEYS_SINGLEBUCKET, 15000).
 
 -define(ALT_BUCKET1, <<"alt_bucket1">>).
 -define(ALT_BUCKET2, <<"alt_bucket2">>).
