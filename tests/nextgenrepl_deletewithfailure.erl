@@ -7,7 +7,11 @@
 -module(nextgenrepl_deletewithfailure).
 -behavior(riak_test).
 -export([confirm/0]).
--export([read_from_cluster/5, aae_fold/3, length_aae_fold/3]).
+-export([read_from_cluster/5,
+            aae_fold/3,
+            length_aae_fold/3,
+            wait_for_outcome/5,
+            write_to_cluster/4]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_del">>).
