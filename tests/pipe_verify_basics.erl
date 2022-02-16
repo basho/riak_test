@@ -84,11 +84,11 @@ verify_order([RN|_]) ->
 
 verify_trace_filtering([RN|_]) ->
     lager:info("Verify that trace messages are filtered"),
-    {eoi, _Res, Trace1} = 
+    {eoi, Res, Trace1} = 
         rpc:call(RN, riak_pipe, generic_transform,
                  [fun mult_by_2/1, fun order_fun/1,
                   [{log,sink}, {trace, [eoi]}], 5]),
-    {eoi, _Res, Trace2} = 
+    {eoi, Res, Trace2} = 
         rpc:call(RN, riak_pipe, generic_transform,
                  [fun mult_by_2/1, fun order_fun/1,
                   [{log,sink}, {trace, all}], 5]),

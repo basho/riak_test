@@ -56,11 +56,11 @@ setup_repl_clusters(Conf, InterceptSetup) ->
     repl_util:wait_until_leader(AFirst),
     LeaderA = rpc:call(AFirst, riak_core_cluster_mgr, get_leader, []),
 
-    {ok, {_IP, BPort}} = rpc:call(BFirst, application, get_env,
+    {ok, {_IPB, BPort}} = rpc:call(BFirst, application, get_env,
                                   [riak_core, cluster_mgr]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", BPort),
 
-    {ok, {_IP, CPort}} = rpc:call(CFirst, application, get_env,
+    {ok, {_IPC, CPort}} = rpc:call(CFirst, application, get_env,
                                   [riak_core, cluster_mgr]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", CPort),
 

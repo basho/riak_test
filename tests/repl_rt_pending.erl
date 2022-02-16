@@ -140,13 +140,13 @@ write_n_keys(Source, Destination, M, N) ->
 
 %% @doc Connect two clusters for replication using their respective leader nodes.
 connect_clusters(LeaderA, LeaderB) ->
-    {ok, {_IP, PortB}} = rpc:call(LeaderB, application, get_env,
+    {ok, {_IPB, PortB}} = rpc:call(LeaderB, application, get_env,
                                  [riak_core, cluster_mgr]),
     lager:info("connect cluster A:~p to B on port ~p", [LeaderA, PortB]),
     repl_util:connect_cluster(LeaderA, "127.0.0.1", PortB),
     ?assertEqual(ok, repl_util:wait_for_connection(LeaderA, "B")),
 
-    {ok, {_IP, PortA}} = rpc:call(LeaderA, application, get_env,
+    {ok, {_IPA, PortA}} = rpc:call(LeaderA, application, get_env,
                                  [riak_core, cluster_mgr]),
     lager:info("connect cluster B:~p to A on port ~p", [LeaderB, PortA]),
     repl_util:connect_cluster(LeaderB, "127.0.0.1", PortA),

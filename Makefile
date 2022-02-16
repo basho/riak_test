@@ -12,7 +12,6 @@ REBAR=./rebar3
 all: deps compile
 	$(REBAR) as test compile
 	$(REBAR) escriptize
-	SMOKE_TEST=1 $(REBAR) escriptize
 	mkdir -p ./ebin
 	cp ./_build/test/lib/riak_test/tests/*.beam ./ebin
 

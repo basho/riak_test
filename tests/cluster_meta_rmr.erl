@@ -136,8 +136,8 @@ calc_stuff(AllNodes, History) ->
                  end, orddict:new(), CountDict).
 
 
-process_message({_From, _To,
-                 {broadcast, {{?CM_PREFIX, {round, TestRound}}, _Ctx}, _Payload, _Mod, BCastRound, _Root, _From}},
+process_message({From, _To,
+                 {broadcast, {{?CM_PREFIX, {round, TestRound}}, _Ctx}, _Payload, _Mod, BCastRound, _Root, From}},
                 ResultsDict) ->
     case orddict:find({round, TestRound}, ResultsDict) of
         error ->

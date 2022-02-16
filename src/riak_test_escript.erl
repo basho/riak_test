@@ -257,44 +257,7 @@ which_tests_to_run(undefined, CommandLineTests) ->
         lists:partition(fun is_runnable_test/1, CommandLineTests),
     lager:info("These modules are not runnable tests: ~p",
                [[NTMod || {NTMod, _} <- NonTests]]),
-    Tests;
-which_tests_to_run(Platform, []) -> giddyup:get_suite(Platform);
-which_tests_to_run(Platform, CommandLineTests) ->
-    Suite = filter_zip_suite(Platform, CommandLineTests),
-    {Tests, NonTests} =
-        lists:partition(fun is_runnable_test/1,
-                        lists:foldr(fun filter_merge_tests/2, [], Suite)),
-
-    lager:info("These modules are not runnable tests: ~p",
-               [[NTMod || {NTMod, _} <- NonTests]]),
     Tests.
-
-filter_zip_suite(Platform, CommandLineTests) ->
-    [ {SModule, SMeta, CMeta} || {SModule, SMeta} <- giddyup:get_suite(Platform),
-                                 {CModule, CMeta} <- CommandLineTests,
-                                 SModule =:= CModule].
-
-filter_merge_tests({Module, SMeta, CMeta}, Tests) ->
-    case filter_merge_meta(SMeta, CMeta, [backend, upgrade_version]) of
-        false ->
-            Tests;
-        Meta ->
-            [{Module, Meta}|Tests]
-    end.
-
-filter_merge_meta(SMeta, _CMeta, []) ->
-    SMeta;
-filter_merge_meta(SMeta, CMeta, [Field|Rest]) ->
-    case {kvc:value(Field, SMeta, undefined), kvc:value(Field, CMeta, undefined)} of
-        {X, X} ->
-            filter_merge_meta(SMeta, CMeta, Rest);
-        {_, undefined} ->
-            filter_merge_meta(SMeta, CMeta, Rest);
-        {undefined, X} ->
-            filter_merge_meta(lists:keystore(Field, 1, SMeta, {Field, X}), CMeta, Rest);
-        _ ->
-            false
-    end.
 
 %% Check for api compatibility
 is_runnable_test({TestModule, _}) ->
@@ -302,7 +265,7 @@ is_runnable_test({TestModule, _}) ->
     code:ensure_loaded(Mod),
     erlang:function_exported(Mod, Fun, 0).
 
-run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
+run_test(Test, Outdir, TestMetaData, undefined, HarnessArgs, NumTests) ->
     rt_cover:maybe_start(Test),
     SingleTestResult = riak_test_runner:confirm(Test, Outdir, TestMetaData,
                                                 HarnessArgs),
@@ -314,60 +277,8 @@ run_test(Test, Outdir, TestMetaData, Report, HarnessArgs, NumTests) ->
     CoverageFile = rt_cover:maybe_export_coverage(Test,
                                                   CoverDir,
                                                   erlang:phash2(TestMetaData)),
-    case Report of
-        undefined -> ok;
-        _ ->
-            {value, {log, L}, TestResult} =
-                lists:keytake(log, 1, SingleTestResult),
-            case giddyup:post_result(TestResult) of
-                error -> woops;
-                {ok, Base} ->
-                    %% Now push up the artifacts, starting with the test log
-                    giddyup:post_artifact(Base, {"riak_test.log", L}),
-                    [giddyup:post_artifact(Base, File)
-                     || File <- rt:get_node_logs()],
-                    maybe_post_debug_logs(Base),
-                    [giddyup:post_artifact(
-                       Base,
-                       {filename:basename(CoverageFile) ++ ".gz",
-                        zlib:gzip(element(2,file:read_file(CoverageFile)))})
-                     || CoverageFile /= cover_disabled],
-                    ResultPlusGiddyUp = TestResult ++
-                                        [{giddyup_url, list_to_binary(Base)}],
-                    [rt:post_result(ResultPlusGiddyUp, WebHook) ||
-                     WebHook <- get_webhooks()]
-            end
-    end,
     rt_cover:stop(),
     [{coverdata, CoverageFile} | SingleTestResult].
-
-maybe_post_debug_logs(Base) ->
-    case rt_config:get(giddyup_post_debug_logs, true) of
-        true ->
-            NodeDebugLogs = rt:get_node_debug_logs(),
-            [giddyup:post_artifact(Base, File)
-             || File <- NodeDebugLogs];
-        _ ->
-            false
-    end.
-
-get_webhooks() ->
-    Hooks = lists:foldl(fun(E, Acc) -> [parse_webhook(E) | Acc] end,
-                        [],
-                        rt_config:get(webhooks, [])),
-    lists:filter(fun(E) -> E =/= undefined end, Hooks).
-
-parse_webhook(Props) ->
-    Url = proplists:get_value(url, Props),
-    case is_list(Url) of
-        true ->
-            #rt_webhook{url= Url,
-                        name=proplists:get_value(name, Props, "Webhook"),
-                        headers=proplists:get_value(headers, Props, [])};
-        false ->
-            lager:error("Invalid configuration for webhook : ~p", Props),
-            undefined
-    end.
 
 print_summary(TestResults, CoverResult, Verbose) ->
     io:format("~nTest Results:~n"),
