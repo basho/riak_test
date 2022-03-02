@@ -87,10 +87,13 @@ confirm() ->
     rt:wait_until_ring_converged(ClusterB),
     rt:wait_until_ring_converged(ClusterC),
 
-    lager:info("Discover Peer IP/ports for pb and restart with peer config"),
-    lists:foreach(compare_peer_info(1), ClusterA),
-    lists:foreach(compare_peer_info(3), ClusterB),
-    lists:foreach(compare_peer_info(2), ClusterC),
+    lager:info("Discover Peer IP/ports and restart with peer config"),
+    lists:foreach(compare_peer_info(1, pb), ClusterA),
+    lists:foreach(compare_peer_info(3, pb), ClusterB),
+    lists:foreach(compare_peer_info(2, pb), ClusterC),
+    lists:foreach(compare_peer_info(1, http), ClusterA),
+    lists:foreach(compare_peer_info(3, http), ClusterB),
+    lists:foreach(compare_peer_info(2, http), ClusterC),
 
     [NodeA|_RestA] = ClusterA,
     [NodeB|_RestB] = ClusterB,
@@ -129,14 +132,36 @@ confirm() ->
 
     pass.
 
-compare_peer_info(ExpectedPeers) ->
+compare_peer_info(ExpectedPeers, Protocol) ->
     fun(Node) ->
-        {pb, {IP, Port}} =
-            lists:keyfind(pb, 1, rt:connection_info(Node)),
-        MemberList = rpc:call(Node, riak_client, membership_request, [pb]),
-        lager:info("Discovered Member list ~p", [MemberList]),
-        ?assert(lists:member({IP, Port}, MemberList)),
-        ?assertMatch(ExpectedPeers, length(MemberList))
+        {Protocol, {IP, Port}} =
+            lists:keyfind(Protocol, 1, rt:connection_info(Node)),
+        MemberList =
+            lists:map(
+                fun({IPm, Portm}) ->
+                    {list_to_binary(IPm), Portm}
+                end,
+                rpc:call(Node, riak_client, membership_request, [Protocol])),
+        {Mod, RiakErlC} = 
+            case Protocol of
+                pb ->
+                    {ok, Pid} = riakc_pb_socket:start(IP, Port),
+                    {riakc_pb_socket, Pid};
+                http ->
+                    {rhc, rhc:create(IP, Port, "riak", [])}
+            end,
+        {ok, MemberList} = Mod:peer_discovery(RiakErlC),
+        lager:info(
+            "Discovered Member list (two ways) ~p ~p",
+            [MemberList, Protocol]),
+        ?assert(lists:member({list_to_binary(IP), Port}, MemberList)),
+        ?assertMatch(ExpectedPeers, length(MemberList)),
+        case Protocol of
+            pb ->
+                Mod:stop(RiakErlC);
+            _ ->
+                ok
+        end
     end.
 
 reset_peer_config(SnkCluster, ClusterName, PeerX, PeerY) ->
