@@ -15,7 +15,8 @@
 -define(B_NVAL, 2).
 -define(C_NVAL, 3).
 
--define(SNK_WORKERS, 4).
+-define(SNK_WORKERS, 8).
+-define(PEER_LIMIT, 2).
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
 
@@ -63,7 +64,8 @@
                 {replrtq_prompt_max_seconds, ?INIT_MAX_DELAY},
                 {replrtq_sinkqueue, ClusterName},
                 {replrtq_sinkpeers, PeerList},
-                {replrtq_sinkworkers, ?SNK_WORKERS}]}]).
+                {replrtq_sinkworkers, ?SNK_WORKERS},
+                {replrtq_sinkpeerlimit, ?PEER_LIMIT}]}]).
 
 confirm() ->
     ClusterASrcQ = "cluster_b:any|cluster_c:any",
@@ -125,11 +127,6 @@ confirm() ->
     lager:info("ClusterA stats ~w", [StatsA1]),
     lager:info("ClusterB stats ~w", [StatsB1]),
 
-    lager:info("Check peers stable"),
-    ?assertNot(check_peers_stable(NodeA, cluster_a)),
-    ?assertNot(check_peers_stable(NodeB, cluster_b)),
-    ?assertNot(check_peers_stable(NodeC, cluster_c)),
-
     pass.
 
 compare_peer_info(ExpectedPeers) ->
@@ -147,6 +144,17 @@ reset_peer_config(SnkCluster, ClusterName, PeerX, PeerY) ->
     lists:foreach(fun(N) -> rt:set_advanced_conf(N, ClusterSNkCfg) end,
                     SnkCluster).
 
+current_peers(Node, QueueName) ->
+    rpc:call(Node, riak_kv_replrtq_snk, current_peers, [QueueName]).
+
+worker_counts(Node) ->
+    rpc:call(Node, riak_kv_replrtq_snk, get_worker_counts, []).
+
+reset_cluster_worker_counts(Node, WorkerCount, PerPeerLimit) ->
+    rpc:call(Node, riak_client, replrtq_reset_all_workercounts, [WorkerCount, PerPeerLimit]).
+
+reset_cluster_peers(Node, QueueName) ->
+    rpc:call(Node, riak_client, replrtq_reset_all_peers, [QueueName]).    
 
 test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
 
@@ -213,6 +221,44 @@ test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC) ->
                             {NodeB, IPB, PortB},
                             {NodeC, IPC, PortC}),
 
+    lager:info("Check peers stable"),
+    ?assertNot(check_peers_stable(NodeA, cluster_a)),
+    ?assertNot(check_peers_stable(NodeB, cluster_b)),
+    ?assertNot(check_peers_stable(NodeC, cluster_c)),
+
+    lager:info("Node A current peers ~p", [current_peers(NodeA, cluster_a)]),
+    lager:info("Node B current peers ~p", [current_peers(NodeB, cluster_b)]),
+    lager:info("Node C current peers ~p", [current_peers(NodeC, cluster_c)]),
+    ?assertMatch({8, 2}, worker_counts(NodeA)),
+    ?assertMatch({8, 2}, worker_counts(NodeB)),
+    ?assertMatch({8, 2}, worker_counts(NodeC)),
+
+    lager:info("Confirm no peers change on cluster-wide reset"),
+    ?assertMatch([], reset_cluster_peers(NodeA, cluster_a)),
+    ?assertMatch([], reset_cluster_peers(NodeB, cluster_b)),
+    ?assertMatch([], reset_cluster_peers(NodeC, cluster_c)),
+
+    lager:info("Confirm all peers change on cluster-wide count reset"),
+    ?assertMatch(1, length(reset_cluster_worker_counts(NodeA, 12, 3))),
+    ?assertMatch(3, length(reset_cluster_worker_counts(NodeB, 12, 3))),
+    ?assertMatch(2, length(reset_cluster_worker_counts(NodeC, 12, 3))),
+
+    lager:info("Test replicating from Cluster B"),
+    lager:info("Test 1000 key difference and resolve"),
+    % Write keys to cluster B, verify A and C do have them.
+    write_to_cluster(NodeB, 2001, 3000, new_obj),
+    timer:sleep(?REPL_SLEEP),
+    read_from_cluster(NodeA, 2001, 3000, ?COMMMON_VAL_INIT, 0),
+    read_from_cluster(NodeC, 2001, 3000, ?COMMMON_VAL_INIT, 0),
+    true = check_all_insync({NodeA, IPA, PortA},
+                            {NodeB, IPB, PortB},
+                            {NodeC, IPC, PortC}),
+
+    lager:info("Confirm modified worker counts"),
+    lists:foreach(
+        fun(N) -> ?assertMatch({12, 3}, worker_counts(N)) end,
+        ClusterA ++ ClusterB ++ ClusterC),
+
     pass.
 
 
@@ -241,12 +287,7 @@ fullsync_check({SrcNode, _SrcIP, _SrcPort, SrcNVal},
     ok = rpc:call(SrcNode, ModRef, set_sink, [http, SinkIP, SinkPort]),
     ok = rpc:call(SrcNode, ModRef, set_queuename, [SnkClusterName]),
     ok = rpc:call(SrcNode, ModRef, set_allsync, [SrcNVal, SinkNVal]),
-    AAEResult = rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]),
-
-    % lager:info("Sleeping to await queue drain."),
-    % timer:sleep(2000),
-    
-    AAEResult.
+    rpc:call(SrcNode, riak_client, ttaaefs_fullsync, [all_check, 60]).
 
 %% @doc Write a series of keys and ensure they are all written.
 write_to_cluster(Node, Start, End, CommonValBin) ->
