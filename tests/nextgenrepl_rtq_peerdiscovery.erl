@@ -72,12 +72,32 @@ confirm() ->
     ClusterBSrcQ = "cluster_a:any|cluster_c:any",
     ClusterCSrcQ = "cluster_b:any|cluster_a:any",
 
-    [ClusterA, ClusterB, ClusterC] =
+    lager:info("Running tests with pb based peer relationships"),
+
+    [ClusterA1, ClusterB1, ClusterC1] =
+        rt:deploy_clusters([
+            {1, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
+            {3, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)},
+            {2, ?CONFIG(?C_RING, ?C_NVAL, ClusterCSrcQ)}]),
+
+    pass = cluster_test(ClusterA1, ClusterB1, ClusterC1, pb),
+
+    rt:clean_cluster(ClusterA1),
+    rt:clean_cluster(ClusterB1),
+    rt:clean_cluster(ClusterC1),
+    
+    lager:info("Running tests with http based peer relationships"),
+
+    [ClusterA2, ClusterB2, ClusterC2] =
         rt:deploy_clusters([
             {1, ?CONFIG(?A_RING, ?A_NVAL, ClusterASrcQ)},
             {3, ?CONFIG(?B_RING, ?B_NVAL, ClusterBSrcQ)},
             {2, ?CONFIG(?C_RING, ?C_NVAL, ClusterCSrcQ)}]),
     
+    cluster_test(ClusterA2, ClusterB2, ClusterC2, http).
+
+cluster_test(ClusterA, ClusterB, ClusterC, Protocol) ->
+
     rt:join_cluster(ClusterA),
     rt:join_cluster(ClusterB),
     rt:join_cluster(ClusterC),
@@ -88,12 +108,9 @@ confirm() ->
     rt:wait_until_ring_converged(ClusterC),
 
     lager:info("Discover Peer IP/ports and restart with peer config"),
-    lists:foreach(compare_peer_info(1, pb), ClusterA),
-    lists:foreach(compare_peer_info(3, pb), ClusterB),
-    lists:foreach(compare_peer_info(2, pb), ClusterC),
-    lists:foreach(compare_peer_info(1, http), ClusterA),
-    lists:foreach(compare_peer_info(3, http), ClusterB),
-    lists:foreach(compare_peer_info(2, http), ClusterC),
+    lists:foreach(compare_peer_info(1, Protocol), ClusterA),
+    lists:foreach(compare_peer_info(3, Protocol), ClusterB),
+    lists:foreach(compare_peer_info(2, Protocol), ClusterC),
 
     [NodeA|_RestA] = ClusterA,
     [NodeB|_RestB] = ClusterB,
@@ -101,9 +118,9 @@ confirm() ->
 
     PeerConfigFun =
         fun(Node) ->
-            {pb, {IP, Port}} =
-                lists:keyfind(pb, 1, rt:connection_info(Node)),
-            IP ++ ":" ++ integer_to_list(Port) ++ ":" ++ "pb"
+            {Protocol, {IP, Port}} =
+                lists:keyfind(Protocol, 1, rt:connection_info(Node)),
+            IP ++ ":" ++ integer_to_list(Port) ++ ":" ++ atom_to_list(Protocol)
         end,
     
     PeerA = PeerConfigFun(NodeA),
@@ -113,7 +130,6 @@ confirm() ->
     reset_peer_config(ClusterA, cluster_a, PeerB, PeerC),
     reset_peer_config(ClusterB, cluster_b, PeerA, PeerC),
     reset_peer_config(ClusterC, cluster_c, PeerA, PeerB),
-
     lager:info("Waiting for convergence."),
     rt:wait_until_ring_converged(ClusterA),
     rt:wait_until_ring_converged(ClusterB),
