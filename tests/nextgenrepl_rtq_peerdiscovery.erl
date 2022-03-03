@@ -114,7 +114,7 @@ cluster_test(ClusterA, ClusterB, ClusterC, Protocol) ->
 
     [NodeA|_RestA] = ClusterA,
     [NodeB|_RestB] = ClusterB,
-    [NodeC|_RestC] = ClusterC,
+    [NodeC|RestC] = ClusterC,
 
     PeerConfigFun =
         fun(Node) ->
@@ -138,7 +138,7 @@ cluster_test(ClusterA, ClusterB, ClusterC, Protocol) ->
     lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
                     ClusterA ++ ClusterB ++ ClusterC),
 
-    lager:info("Ready for test - with protocol buffers client for rtq."),
+    lager:info("Ready for test - with ~w client for rtq.", [Protocol]),
     pass =
         test_rtqrepl_between_clusters(ClusterA, ClusterB, ClusterC),
     StatsA1 = get_stats(ClusterA),
@@ -146,6 +146,23 @@ cluster_test(ClusterA, ClusterB, ClusterC, Protocol) ->
     lager:info("ClusterA stats ~w", [StatsA1]),
     lager:info("ClusterB stats ~w", [StatsB1]),
 
+    lager:info("Stopping a node - to confirm peers will reset"),
+    [NodeC1|_RestC1] = RestC,
+    rt:stop_and_wait(NodeC1),
+    timer:sleep(?REPL_SLEEP),
+    lager:info("Every peer in cluster should reset"),
+    LA = length(ClusterA),
+    ?assertMatch(LA, length(reset_cluster_peers(NodeA, cluster_a))),
+    LB = length(ClusterB),
+    ?assertMatch(LB, length(reset_cluster_peers(NodeB, cluster_b))),
+    lager:info("No peers in affected cluster should reset"),
+    ?assertMatch(0, length(reset_cluster_peers(NodeC, cluster_c))),
+    rt:start_and_wait(NodeC1),
+    rt:wait_until_ring_converged(ClusterC),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end, ClusterC),
+    lager:info("Every peer should change on reset after start"),
+    ?assertMatch(LA, length(reset_cluster_peers(NodeA, cluster_a))),
+    ?assertMatch(LB, length(reset_cluster_peers(NodeB, cluster_b))),
     pass.
 
 compare_peer_info(ExpectedPeers, Protocol) ->
