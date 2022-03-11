@@ -43,7 +43,7 @@
            {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
            {ttaaefs_maxresults, 32},
            {ttaaefs_rangeboost, 4},
-           {ttaaefs_checkwindow, {LowHour, HighHour}},
+           {ttaaefs_allcheck_window, {LowHour, HighHour}},
            {delete_mode, keep}
           ]}
         ]).
@@ -68,12 +68,7 @@ setup_clusters(Now) ->
     rt:join_cluster(ClusterB),
     rt:join_cluster(ClusterC),
     
-    lager:info("Waiting for convergence."),
-    rt:wait_until_ring_converged(ClusterA),
-    rt:wait_until_ring_converged(ClusterB),
-    rt:wait_until_ring_converged(ClusterC),
-    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
-                    ClusterA ++ ClusterB ++ ClusterC),
+    wait_for_convergence(ClusterA, ClusterB, ClusterC),
     
     lager:info("Ready for test."),
     [ClusterA, ClusterB, ClusterC].
@@ -88,6 +83,8 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC, Now) ->
     AutoCheckFun = autosync_checkfun(Now),
     
     ok = setup_replqueues(ClusterA ++ ClusterB ++ ClusterC),
+
+    wait_for_convergence(ClusterA, ClusterB, ClusterC),
 
     lager:info("Test empty clusters don't show any differences"),
     {http, {IPA, PortA}} = lists:keyfind(http, 1, rt:connection_info(NodeA)),
@@ -160,6 +157,14 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC, Now) ->
     ?assertMatch({1, 1, 0, 0, 1, 1, 0, 32}, get_stats(NodeC)),
 
     pass.
+
+wait_for_convergence(ClusterA, ClusterB, ClusterC) ->
+    lager:info("Waiting for convergence."),
+    rt:wait_until_ring_converged(ClusterA),
+    rt:wait_until_ring_converged(ClusterB),
+    rt:wait_until_ring_converged(ClusterC),
+    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
+                    ClusterA ++ ClusterB ++ ClusterC).
 
 
 get_range(Node) ->
