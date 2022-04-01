@@ -113,48 +113,36 @@ test_repl_between_clusters(ClusterA, ClusterB, ClusterC, Now) ->
     write_to_cluster(NodeA, 1, 100),
     read_from_cluster(NodeB, 1, 100, 100),
     read_from_cluster(NodeC, 1, 100, 100),
-    {clock_compare, 0}
+    {clock_compare, 100}
         = AutoCheckFun({NodeA, IPA, PortA, ?A_NVAL},
                             {NodeB, IPB, PortB, ?B_NVAL}),
-
-    PostWriteCheckFun = autosync_checkfun(os:timestamp()),
-    {clock_compare,32}
-        = PostWriteCheckFun({NodeA, IPA, PortA, ?A_NVAL},
-                            {NodeB, IPB, PortB, ?B_NVAL}),
+    % First check should actuall be a range_check from last success (which
+    % will be the start time).  This will repair everything first sweep.
 
     ?assertMatch(?TEST_BUCKET, element(1, get_range(NodeA))),
     ?assertMatch(all, element(2, get_range(NodeA))),
     ?assertMatch(none, get_range(NodeB)),
-    lager:info("Range check now resolves A -> B"),
-    {clock_compare, 68}
-        = PostWriteCheckFun({NodeA, IPA, PortA, ?A_NVAL},
-                            {NodeB, IPB, PortB, ?B_NVAL}),
-    ?assertMatch(?TEST_BUCKET, element(1, get_range(NodeA))),
-    ?assertMatch(all, element(2, get_range(NodeA))),
+    lager:info("Range check attempt, but nothing left to fix"),
     {root_compare, 0}
-        = PostWriteCheckFun({NodeA, IPA, PortA, ?A_NVAL},
+        = AutoCheckFun({NodeA, IPA, PortA, ?A_NVAL},
                             {NodeB, IPB, PortB, ?B_NVAL}),
     ?assertMatch(none, get_range(NodeA)),
-
-    {Mega, Sec, MicroSec} = Now,
-    Later = Mega * ?MEGA + Sec + 3600 * 2,
-    AllCheckFun =
-        autosync_checkfun({Later div ?MEGA, Later rem ?MEGA, MicroSec}),
-    
     {root_compare, 0}
-        = AllCheckFun({NodeA, IPA, PortA, ?A_NVAL},
+        = AutoCheckFun({NodeA, IPA, PortA, ?A_NVAL},
                             {NodeB, IPB, PortB, ?B_NVAL}),
-    {clock_compare, 32}
-        = AllCheckFun({NodeB, IPB, PortB, ?B_NVAL},
+    ?assertMatch(none, get_range(NodeA)),
+    
+    {clock_compare, 100}
+        = AutoCheckFun({NodeB, IPB, PortB, ?B_NVAL},
                             {NodeC, IPC, PortC, ?C_NVAL}),
-    {clock_compare, 32}
-        = AllCheckFun({NodeC, IPC, PortC, ?C_NVAL},
+    {root_compare, 0}
+        = AutoCheckFun({NodeC, IPC, PortC, ?C_NVAL},
                             {NodeA, IPA, PortA, ?A_NVAL}),
 
 
-    ?assertMatch({1, 3, 0, 2, 3, 3, 100, 0}, get_stats(NodeA)),
-    ?assertMatch({1, 1, 0, 0, 1, 1, 32, 0}, get_stats(NodeB)),
-    ?assertMatch({1, 1, 0, 0, 1, 1, 0, 32}, get_stats(NodeC)),
+    ?assertMatch({0, 0, 0, 4, 3, 1, 100, 0}, get_stats(NodeA)),
+    ?assertMatch({0, 0, 0, 2, 1, 1, 100, 0}, get_stats(NodeB)),
+    ?assertMatch({0, 0, 0, 2, 2, 0, 0, 0}, get_stats(NodeC)),
 
     pass.
 
