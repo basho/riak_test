@@ -10,6 +10,8 @@ nextgenrepl_rtq_stdobj
 nextgenrepl_sibling
 nextgenrepl_srcfail
 nextgenrepl_ttaaefs_autoall
+nextgenrepl_ttaaefs_autocheck
+nextgenrepl_ttaaefs_bicheck
 nextgenrepl_ttaaefs_manual
 nextgenrepl_ttaaefs_rangesync
 nextgenrepl_ttaaefs_semiauto
