@@ -170,7 +170,7 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
                         {NodeC1ip, NodeC1port, ?C_NVAL}),
     {root_compare, 0} =
         case R of
-            {clock_compare, N} when N < 10 ->
+            {Outcome, N} when N < 10, Outcome =/= root_compare ->
                 %% There is a problem here with immediate mode delete
                 %% in that it can sometimes fail to clean up the odd
                 %% tombstone.
