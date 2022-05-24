@@ -581,6 +581,8 @@ common_stats() ->
         <<"ngrrepl_empty_total">>,
         <<"ngrrepl_error">>,
         <<"ngrrepl_error_total">>,
+        <<"ngrrepl_srcdiscard">>,
+        <<"ngrrepl_srcdiscard_total">>,
         <<"node_get_fsm_active">>,
         <<"node_get_fsm_active_60s">>,
         <<"node_get_fsm_counter_objsize_100">>,
