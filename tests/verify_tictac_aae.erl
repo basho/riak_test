@@ -190,7 +190,8 @@ verify_aae_norebuild(Nodes, CheckTypeStats) ->
                         verify_riak_stats:get_stats(N, ?STATS_DELAY))
                 end,
                 Nodes)),
-    ?assertMatch(?NUM_KEYS, Repairs),
+    ?assert(Repairs >= ?NUM_KEYS),
+    ?assert(Repairs =< ?NUM_KEYS + 1),
 
     KV2 = [{K, <<V/binary, "a">>} || {K, V} <- KV1],
     lager:info("Writing additional n=1 data to require more repairs"),
