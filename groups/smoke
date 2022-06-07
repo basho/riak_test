@@ -29,7 +29,6 @@ verify_down
 verify_handoff
 verify_leave
 verify_listkeys
-verify_riak_lager
 verify_riak_stats
 verify_staged_clustering
 verify_tictac_aae

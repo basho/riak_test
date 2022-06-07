@@ -500,13 +500,11 @@ redbug_start(TraceFun, TrcFile, Node) ->
                             {print_file, TrcFile}]),
     lager:info("Redbug start message ~w", [Start]).
 
-mapred_modfun(Pipe, Args, _Timeout) ->
-    lager:info("Args for mapred modfun are ~p", [Args]),
+mapred_modfun(Pipe, _Args, _Timeout) ->
     riak_pipe:queue_work(Pipe, {{<<"MRbucket">>, <<"foo">>}, {struct, []}}),
     riak_pipe:eoi(Pipe).
 
-mapred_modfun_type(Pipe, Args, _Timeout) ->
-    lager:info("Args for mapred modfun are ~p", [Args]),
+mapred_modfun_type(Pipe, _Args, _Timeout) ->
     riak_pipe:queue_work(Pipe, {{{<<"mytype">>, <<"MRbucket">>}, <<"bam">>}, {struct, []}}),
     riak_pipe:eoi(Pipe).
 

@@ -1916,12 +1916,11 @@ log_to_nodes(Nodes0, LFmt, LArgs) ->
     %% we're saying
     Nodes = lists:flatten(Nodes0),
     lager:debug("log_to_nodes: " ++ LFmt, LArgs),
-    Module = lager,
-    Function = log,
-    Meta = [],
+    Module = logger,
+    Function = info,
     Args = case LArgs of
-               [] -> [info, Meta, "---riak_test--- " ++ LFmt];
-               _  -> [info, Meta, "---riak_test--- " ++ LFmt, LArgs]
+               [] -> ["---riak_test--- " ++ LFmt];
+               _  -> ["---riak_test--- " ++ LFmt, LArgs]
            end,
     [rpc:call(Node, Module, Function, Args) || Node <- lists:flatten(Nodes)].
 

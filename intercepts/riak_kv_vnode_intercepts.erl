@@ -95,8 +95,7 @@ drop_do_get(Sender, BKey, ReqId, State) ->
             case lists:member(Partition, Partitions) of
                 true ->
                     %% ?I_INFO("Dropping get for ~p on ~p", [BKey, Partition]),
-                    lager:log(info, self(), "dropping get request for ~p",
-                        [Partition]),
+                    logger:info("dropping get request for ~p", [Partition]),
                     {noreply, State};
                 false ->
                     ?M:do_get_orig(Sender, BKey, ReqId, State)
@@ -114,8 +113,7 @@ drop_do_head(Sender, BKey, ReqId, State) ->
             case lists:member(Partition, Partitions) of
                 true ->
                     %% ?I_INFO("Dropping get for ~p on ~p", [BKey, Partition]),
-                    lager:log(info, self(), "dropping head request for ~p",
-                        [Partition]),
+                    logger:info("dropping head request for ~p", [Partition]),
                     {noreply, State};
                 false ->
                     ?M:do_head_orig(Sender, BKey, ReqId, State)
@@ -133,8 +131,7 @@ drop_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
         [{drop_do_put_partitions, Partitions}] ->
             case lists:member(Partition, Partitions) of
                 true ->
-                    lager:log(info, self(), "dropping put request for ~p",
-                        [Partition]),
+                    logger:info("dropping put request for ~p", [Partition]),
                     %% ?I_INFO("Dropping put for ~p on ~p", [BKey, Partition]),
                     %% NB: riak_kv#1046 - do_put returns a tuple now
                     {dropped_by_intercept, State};
@@ -152,8 +149,7 @@ error_do_put(Sender, BKey, RObj, ReqId, StartTime, Options, State) ->
         [{drop_do_put_partitions, Partitions}] ->
             case lists:member(Partition, Partitions) of
                 true ->
-                    lager:log(info, self(), "failing put request for ~p",
-                        [Partition]),
+                    logger:info("failing put request for ~p", [Partition]),
                     %% ?I_INFO("Failing put for ~p on ~p", [BKey, Partition]),
 
                     %% sleep for a while, so the vnode response order is
