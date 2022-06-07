@@ -577,6 +577,8 @@ common_stats() ->
         <<"ngrrepl_empty_total">>,
         <<"ngrrepl_error">>,
         <<"ngrrepl_error_total">>,
+        <<"ngrrepl_srcdiscard">>,
+        <<"ngrrepl_srcdiscard_total">>,
         <<"node_get_fsm_active">>,
         <<"node_get_fsm_active_60s">>,
         <<"node_get_fsm_counter_objsize_100">>,
@@ -999,7 +1001,10 @@ common_stats() ->
         <<"write_once_puts">>,
         <<"write_once_puts_total">>,
         <<"xmerl_version">>
-    ] ++ pool_stats().
+    ]
+    ++ pool_stats()
+    ++ tictacaae_stats()
+    ++ ttaaefs_stats().
 
 product_stats(riak_ee) ->
     [
@@ -1031,7 +1036,6 @@ pool_stats() ->
             <<"worker_vnode_pool_queuetime_100">>,
             <<"worker_vnode_pool_worktime_mean">>,
             <<"worker_vnode_pool_worktime_100">>].
-
 
 dscp_stats() ->
     [<<"worker_af1_pool_total">>,
@@ -1067,6 +1071,43 @@ dscp_totals() ->
         <<"worker_af3_pool_total">>,
         <<"worker_af4_pool_total">>,
         <<"worker_be_pool_total">>].
+
+tictacaae_stats() ->
+    [<<"tictacaae_queue_microsec__max">>,
+        <<"tictacaae_queue_microsec_mean">>,
+        <<"tictacaae_root_compare">>,
+        <<"tictacaae_root_compare_total">>,
+        <<"tictacaae_branch_compare">>,
+        <<"tictacaae_branch_compare_total">>,
+        <<"tictacaae_clock_compare">>,
+        <<"tictacaae_clock_compare_total">>,
+        <<"tictacaae_error">>,
+        <<"tictacaae_error_total">>,
+        <<"tictacaae_exchange">>,
+        <<"tictacaae_exchange_total">>,
+        <<"tictacaae_bucket">>,
+        <<"tictacaae_bucket_total">>,
+        <<"tictacaae_timeout">>,
+        <<"tictacaae_timeout_total">>,
+        <<"tictacaae_not_supported">>,
+        <<"tictacaae_not_supported_total">>,
+        <<"tictacaae_modtime">>,
+        <<"tictacaae_modtime_total">>].
+
+ttaaefs_stats() ->
+    [<<"ttaaefs_src_ahead_total">>,
+        <<"ttaaefs_snk_ahead_total">>,
+        <<"ttaaefs_nosync_total">>,
+        <<"ttaaefs_sync_total">>,
+        <<"ttaaefs_fail_total">>,
+        <<"ttaaefs_nosync_time_100">>,
+        <<"ttaaefs_sync_time_100">>,
+        <<"ttaaefs_fail_time_100">>,
+        <<"ttaaefs_rangecheck_total">>,
+        <<"ttaaefs_allcheck_total">>,
+        <<"ttaaefs_daycheck_total">>,
+        <<"ttaaefs_hourcheck_total">>].
+
 
 do_pools(Node) ->
     do_pools(Node, rpc:call(Node, riak_core_node_worker_pool, dscp_pools, [])).

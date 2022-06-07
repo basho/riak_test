@@ -1,4 +1,5 @@
 nextgenrepl_aaefold
+nextgenrepl_bouncingtomb
 nextgenrepl_deletemodes
 nextgenrepl_deletewithfailure
 nextgenrepl_external_reconcile
@@ -6,10 +7,13 @@ nextgenrepl_rtq_auto
 nextgenrepl_rtq_autocrdt
 nextgenrepl_rtq_autotypes
 nextgenrepl_rtq_pbsecurity
+nextgenrepl_rtq_peerdiscovery
 nextgenrepl_rtq_stdobj
 nextgenrepl_sibling
 nextgenrepl_srcfail
 nextgenrepl_ttaaefs_autoall
+nextgenrepl_ttaaefs_autocheck
+nextgenrepl_ttaaefs_bicheck
 nextgenrepl_ttaaefs_manual
 nextgenrepl_ttaaefs_rangesync
 nextgenrepl_ttaaefs_semiauto
@@ -19,3 +23,4 @@ verify_aaefold_listbuckets
 verify_aaefold_nval_api
 verify_aaefold_range_api
 verify_aaefold_rangerepair
+verify_overflowq

@@ -23,7 +23,6 @@
 
 -define(SNK_WORKERS, 4).
 
--define(DELETE_DELAY, 5000).
 -define(DELETE_WAIT, 5000).
 
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
@@ -83,7 +82,7 @@ confirm() ->
         rt:deploy_clusters([
             {2, ?CONFIG(?A_RING, ?A_NVAL, keep)},
             {2, ?CONFIG(?B_RING, ?B_NVAL, immediate)},
-            {2, ?CONFIG(?C_RING, ?C_NVAL, ?DELETE_DELAY)}]),
+            {2, ?CONFIG(?C_RING, ?C_NVAL, ?DELETE_WAIT)}]),
 
     lager:info("Test run using PB protocol an a mix of delete modes"),
     test_repl(pb, [ClusterA, ClusterB, ClusterC]),
@@ -127,8 +126,9 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     rt:wait_until_ring_converged(ClusterA),
     rt:wait_until_ring_converged(ClusterB),
     rt:wait_until_ring_converged(ClusterC),
-    lists:foreach(fun(N) -> rt:wait_for_service(N, riak_kv) end,
-                    ClusterA ++ ClusterB ++ ClusterC),
+    lists:foreach(
+        fun(N) -> rt:wait_for_service(N, riak_kv) end,
+        ClusterA ++ ClusterB ++ ClusterC),
     
     write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2),
     
@@ -137,22 +137,35 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     {Protocol, {NodeC1ip, NodeC1port}} =
         lists:keyfind(Protocol, 1, rt:connection_info(NodeC1)),
     lager:info("Following deletes, and waiting for delay - B and C equal"),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
-    lager:info("A should differ from B/C as tombstones not empty"),
+    root_compare(
+        Protocol,
+        {NodeB1, ?B_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    lager:info("A should differ from B as tombstones not empty"),
     {clock_compare, Delta1} = 
         fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_b},
                         {NodeB1ip, NodeB1port, ?B_NVAL}),
+    lager:info("A should differ from C as tombstones have gone after wait"),
     {clock_compare, Delta2} = 
         fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_c},
                         {NodeC1ip, NodeC1port, ?C_NVAL}),
+    lager:info(
+        "Wait less then delete timeout to ensure replication, but presence"),
+    timer:sleep(?DELETE_WAIT div 4),
     lager:info("Now that tombstones have been re-replicated - B and C differ"),
     {clock_compare, Delta3} =
         fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
                         {NodeC1ip, NodeC1port, ?C_NVAL}),
     lager:info("Delta A to B ~w A to C ~w and B to C ~w",
                 [Delta1, Delta2, Delta3]),
+    lager:info("Full sync will have re-replicated tombstones"),
+    lager:info("B initially should have tombstones, but A should not"),
+    lager:info("After delete wait, B and C should end up the same"),
+    timer:sleep(?DELETE_WAIT),
+    root_compare(
+        Protocol,
+        {NodeB1, ?B_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
     
     lager:info("Find all tombstones in cluster A"),
     {ok, BKdhL} = find_tombs(NodeA1, all, all),
@@ -165,26 +178,10 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
                 set_env,
                 [riak_kv, ttaaefs_logrepairs, true]),
 
-    timer:sleep(?DELETE_WAIT),
-    R = fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
-    {root_compare, 0} =
-        case R of
-            {clock_compare, N} when N < 10 ->
-                %% There is a problem here with immediate mode delete
-                %% in that it can sometimes fail to clean up the odd
-                %% tombstone.
-                %% It was for this reason the tombstone_delay was added
-                %% but amending this cannot stop an intermittent issue
-                %% Workaround for the purpose of this test is to permit
-                %% a small discrepancy in this case
-                lager:warning("Immediate delete issue - ~w not cleared", [N]),
-                timer:sleep(?DELETE_WAIT),
-                fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
-                                {NodeC1ip, NodeC1port, ?C_NVAL});
-            R ->
-                R
-        end,
+    root_compare(
+        Protocol,
+        {NodeB1, ?B_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
 
     rpc:call(NodeB1,
                 application,
@@ -192,15 +189,18 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
                 [riak_kv, ttaaefs_logrepairs, false]),
     
     lager:info("As tombstones reaped A, B and C the same"),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_b},
-                        {NodeB1ip, NodeB1port, ?B_NVAL}),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeA1, ?A_NVAL, cluster_b},
+        {NodeB1ip, NodeB1port, ?B_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeA1, ?A_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeB1, ?B_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
     
     lager:info("Confirm no tombstones in any cluster"),
     {ok, BKdhLA} = find_tombs(NodeA1, all, all),
@@ -215,20 +215,26 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     {ok, BKdhL1} = find_tombs(NodeA1, all, all),
     ?assertMatch(?KEY_COUNT, length(BKdhL1)),
     reap_from_cluster(NodeA1, BKdhL1),
-    timer:sleep(2 * ?DELETE_DELAY + ?DELETE_WAIT),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    timer:sleep(2 * ?DELETE_WAIT),
+
+    root_compare(
+        Protocol,
+        {NodeB1, ?B_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
     lager:info("As tombstones reaped A, B and C the same"),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_b},
-                        {NodeB1ip, NodeB1port, ?B_NVAL}),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeA1, ?A_NVAL, cluster_b},
+        {NodeB1ip, NodeB1port, ?B_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeA1, ?A_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeB1, ?B_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    
     lager:info("Confirm no tombstones in any cluster"),
     {ok, BKdhLA} = find_tombs(NodeA1, all, all),
     ?assertMatch(0, length(BKdhLA)),
@@ -253,19 +259,23 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     wait_for_outcome(?MODULE, length_find_tombs, [NodeB1, all, all], 0, 20),
     wait_for_outcome(?MODULE, length_find_tombs, [NodeC1, all, all], 0, 20),
 
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeB1, ?B_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
     lager:info("As tombstones reaped A, B and C the same"),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_b},
-                        {NodeB1ip, NodeB1port, ?B_NVAL}),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeA1, ?A_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
-    {root_compare, 0} =
-        fullsync_check(Protocol, {NodeB1, ?B_NVAL, cluster_c},
-                        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeA1, ?A_NVAL, cluster_b},
+        {NodeB1ip, NodeB1port, ?B_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeA1, ?A_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
+    root_compare(
+        Protocol,
+        {NodeB1, ?B_NVAL, cluster_c},
+        {NodeC1ip, NodeC1port, ?C_NVAL}),
 
     pass.
 
@@ -497,3 +507,36 @@ write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2) ->
                         ?KEY_COUNT,
                         ?LOOP_COUNT),
     lager:info("Write and delete cylcle confirmed").
+
+
+root_compare(
+    Protocol,
+    {NodeX, XNVAL, QueueName},
+    {NodeY, YPort, YNVAL}) ->
+    timer:sleep(?DELETE_WAIT),
+    R =
+        fullsync_check(
+            Protocol,
+            {NodeX, XNVAL, QueueName},
+            {NodeY, YPort, YNVAL}),
+    {root_compare, 0} =
+        case R of
+            {Outcome, N} when N < 10, Outcome =/= root_compare ->
+                %% There is a problem here with immediate mode delete
+                %% in that it can sometimes fail to clean up the odd
+                %% tombstone.
+                %% It was for this reason the tombstone_delay was added
+                %% but amending this cannot stop an intermittent issue
+                %% Workaround for the purpose of this test is to permit
+                %% a small discrepancy in this case
+                lager:warning(
+                    "Immediate delete issue - ~w not cleared ~w",
+                    [N, Outcome]),
+                timer:sleep(2 * ?DELETE_WAIT),
+                root_compare(
+                    Protocol,
+                    {NodeX, XNVAL, QueueName},
+                    {NodeY, YPort, YNVAL});
+            R ->
+                R
+        end.

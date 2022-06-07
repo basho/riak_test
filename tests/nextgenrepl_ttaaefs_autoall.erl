@@ -21,7 +21,7 @@
 -define(KEY_COUNT, 200).
 -define(REPL_SLEEP, (?KEY_COUNT div 128) * 60000).
     % Will replicate 200 keys - 128 keys to be repaired per cycle,
-    % and 2 cycles per minute.  No point chekcing within a minute
+    % and 2 cycles per minute.  No point checking within a minute
 -define(LOOP_COUNT, 10).
 
 -define(SNK_WORKERS, 4).

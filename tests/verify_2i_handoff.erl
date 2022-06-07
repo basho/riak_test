@@ -115,7 +115,7 @@ run_test(Items, NTestNodes) ->
 
     lager:info("Joining new node with cluster."),
     rt:join(LastJoin, RootNode),
-    repeatedly_test_query(RootClient, Items, B1, ?Q_LOOP, assert),
+    % repeatedly_test_query(RootClient, Items, B1, ?Q_LOOP, assert),
     ?assertEqual(ok, rt:wait_until_nodes_ready([RootNode, LastJoin])),
     rt:wait_until_no_pending_changes([RootNode, LastJoin]),
     lager:info("Handoff complete"),
