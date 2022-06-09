@@ -127,11 +127,44 @@ verify_aae_fold(Nodes) ->
         end,
     lists:foreach(MatchFun, lists:seq(1, ?DELTA_COUNT)),
     
+    lager:info("Activate bucket type and load objects"),
+    rt:create_and_activate_bucket_type(hd(Nodes),
+                                       <<"nval4">>,
+                                       [{n_val, 4},
+                                            {allow_mult, false}]),
+
+    Nv4B = {<<"nval4">>, <<"test_typed_buckets">>},
+    timer:sleep(1000),
+
+    KeyLoadTypeBFun = 
+        fun(Node, KeyCount) ->
+            KVs = test_data(KeyCount + 1,
+                                KeyCount + ?NUM_KEYS_PERNODE div 4,
+                                list_to_binary("U1")),
+            ok = write_data(Node, KVs, [], Nv4B),
+            KeyCount + ?NUM_KEYS_PERNODE div 4
+        end,
+    lists:foldl(KeyLoadTypeBFun, 1, Nodes),
+    TypedBucketObjectCount = (?NUM_KEYS_PERNODE div 4) * length(Nodes),
+    lager:info(
+        "Loaded ~w objects",
+        [TypedBucketObjectCount]),
+    timer:sleep(1000),
+    
+    ObjectStatsTypedBucketQuery = {object_stats, Nv4B, all, all},
+    {ok, ObjStatsTypedBucket0} =
+        riak_client:aae_fold(ObjectStatsTypedBucketQuery, CH),
+    lager:info("Object Stats ~p", [ObjStatsTypedBucket0]),
+    {total_count, TCBT0} = hd(ObjStatsTypedBucket0),
+    ?assertMatch(TCBT0, TypedBucketObjectCount),
+
     lager:info("Stopping a node - query results should be unchanged"),
     rt:stop_and_wait(hd(tl(Nodes))),
     
     {ok, KCL2} = riak_client:aae_fold(FetchClocksQuery, CH),
-    ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)).
+    ?assertMatch(true, lists:sort(KCL1) == lists:sort(KCL2)),
+    
+    ok.
 
 
 to_key(N) ->
@@ -145,14 +178,17 @@ write_data(Node, KVs) ->
     write_data(Node, KVs, []).
 
 write_data(Node, KVs, Opts) ->
+    write_data(Node, KVs, Opts, ?BUCKET).
+
+write_data(Node, KVs, Opts, Bucket) ->
     PB = rt:pbc(Node),
     [begin
          O =
-         case riakc_pb_socket:get(PB, ?BUCKET, K) of
+         case riakc_pb_socket:get(PB, Bucket, K) of
              {ok, Prev} ->
                  riakc_obj:update_value(Prev, V);
              _ ->
-                 riakc_obj:new(?BUCKET, K, V)
+                 riakc_obj:new(Bucket, K, V)
          end,
          ?assertMatch(ok, riakc_pb_socket:put(PB, O, Opts))
      end || {K, V} <- KVs],
