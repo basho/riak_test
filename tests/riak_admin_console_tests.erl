@@ -234,7 +234,7 @@ check_admin_cmd(Node, Cmd) ->
     S = string:tokens(Cmd, " "),
     lager:info("Testing riak admin ~s on ~s", [Cmd, Node]),
     {ok, Out} = rt:admin(Node, S),
-    ?assertEqual("pass", Out).
+    ?assertEqual("passok\n", Out).
 
 %% Recently we've started calling riak_core_console twice from the
 %% same riak admin invocation; this will result in "passpass" as a
@@ -243,4 +243,4 @@ check_admin_cmd_2x(Node, Cmd) ->
     S = string:tokens(Cmd, " "),
     lager:info("Testing riak admin ~s on ~s", [Cmd, Node]),
     {ok, Out} = rt:admin(Node, S),
-    ?assertEqual("passpass", Out).
+    ?assertEqual("passok\npassok\n", Out).

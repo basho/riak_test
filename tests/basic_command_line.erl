@@ -84,7 +84,10 @@ start_test(Node) ->
 
     {ok, StartPass} = rt:riak(Node, ["start"]),
     lager:info("StartPass: ~p", [StartPass]),
-    ?assert(StartPass =:= "" orelse string:str(StartPass, "WARNING") =/= 0),
+    ?assert(
+        StartPass =:= ""
+    orelse string:str(StartPass, "WARNING") =/= 0
+    orelse string:str(StartPass, "riak start is deprecated") =/= 0),
     rt:stop_and_wait(Node),
     ok.
 
@@ -113,13 +116,13 @@ ping_down_test(Node) ->
     lager:info("Node down, should pang"),
     {ok, PangOut} = rt:riak(Node, ["ping"]),
     lager:info("Node responds ~s", [PangOut]),
-    ?assert(rt:str(PangOut, "Node is not running!")),
+    ?assert(rt:str(PangOut, "not responding to pings")),
     ok.
 
 attach_down_test(Node) ->
     lager:info("Testing riak attach while down"),
     {ok, AttachOut} = rt:riak(Node, ["attach"]),
-    ?assert(rt:str(AttachOut, "Node is not running!")),
+    ?assert(rt:str(AttachOut, "not responding to pings")),
     ok.
 
 attach_direct_up_test(Node) ->
@@ -146,7 +149,7 @@ status_down_test(Node) ->
     lager:info("Test riak admin status while down"),
     {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     ?assertEqual(1, ExitCode),
-    ?assert(rt:str(StatusOut, "Node is not running!")),
+    ?assert(rt:str(StatusOut, "not responding to pings")),
     ok.
 
 getpid_up_test(Node) ->
@@ -159,5 +162,5 @@ getpid_up_test(Node) ->
 getpid_down_test(Node) ->
     lager:info("Test riak getpid fails on ~s", [Node]),
     {ok, PidOut} = rt:riak(Node, ["pid"]),
-    ?assert(rt:str(PidOut, "Node is not running!")),
+    ?assert(rt:str(PidOut, "not responding to pings")),
     ok.
