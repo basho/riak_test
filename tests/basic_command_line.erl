@@ -24,6 +24,7 @@
 -compile([export_all, nowarn_export_all]).
 -export([confirm/0]).
 
+
 confirm() ->
 
     %% Deploy a node to test against
@@ -111,7 +112,8 @@ ping_down_test(Node) ->
     %% ping / pang
     lager:info("Node down, should pang"),
     {ok, PangOut} = rt:riak(Node, ["ping"]),
-    ?assert(rt:str(PangOut, "not responding to pings")),
+    lager:info("Node responds ~s", [PangOut]),
+    ?assert(rt:str(PangOut, "Node is not running!")),
     ok.
 
 attach_down_test(Node) ->
@@ -144,7 +146,7 @@ status_down_test(Node) ->
     lager:info("Test riak admin status while down"),
     {ok, {ExitCode, StatusOut}} = rt:admin(Node, ["status"], [return_exit_code]),
     ?assertEqual(1, ExitCode),
-    ?assert(rt:str(StatusOut, "not responding to pings")),
+    ?assert(rt:str(StatusOut, "Node is not running!")),
     ok.
 
 getpid_up_test(Node) ->
@@ -157,5 +159,5 @@ getpid_up_test(Node) ->
 getpid_down_test(Node) ->
     lager:info("Test riak getpid fails on ~s", [Node]),
     {ok, PidOut} = rt:riak(Node, ["pid"]),
-    ?assert(rt:str(PidOut, "not responding to pings")),
+    ?assert(rt:str(PidOut, "Node is not running!")),
     ok.

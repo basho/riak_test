@@ -53,8 +53,7 @@ confirm() ->
     rt:load_modules_on_nodes([cause_bdp, verify_bdp_event_handler,
                              riak_test_lager_backend], [Node1]),
     Res = rpc:call(Node1, verify_bdp_event_handler, add_handler, [self()]),
-    ok = rpc:call(Node1, gen_event, add_handler, [lager_event, riak_test_lager_backend, [info, false]]),
-    ok = rpc:call(Node1, lager, set_loglevel, [riak_test_lager_backend, info]),
+    ok = rt_logger:plugin_logger(Node1),
     lager:info("RES: ~p", [Res]),
 
     OsPid = rpc:call(Node2, os, getpid, []),
@@ -76,8 +75,8 @@ confirm() ->
     end,
 
     lager:info("Verifying busy_dist_port message ended up in the log"),
-    CheckLogFun = fun(Node) ->
-            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+    CheckLogFun = fun() ->
+            Logs = rt_logger:get_logs(Node1),
             try case re:run(Logs, "monitor busy_dist_port .*#Port", []) of
                     {match, _} -> true;
                     nomatch    -> false
@@ -89,7 +88,7 @@ confirm() ->
             end
     end,
 
-    Success = case rt:wait_until(Node1, CheckLogFun) of
+    Success = case rt:wait_until(CheckLogFun, 12, 5000) of
         ok ->
             lager:info("found busy_dist_port message in log", []),
             true;
@@ -97,6 +96,8 @@ confirm() ->
             lager:error("busy_dist_port message not found in log", []),
             false
     end,
+
+    rt_logger:unplug_logger(Node1),
 
     lager:info("continuing node 2 (~p) pid ~s", [Node2, OsPid]),
     %% NOTE: this call must be executed on the OS running Node2 in order to unpause it

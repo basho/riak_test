@@ -2065,22 +2065,7 @@ wait_until_bucket_props(Nodes, Bucket, Props) ->
 
 %% @doc Set up in memory log capture to check contents in a test.
 setup_log_capture(Nodes) when is_list(Nodes) ->
-    rt:load_modules_on_nodes([riak_test_lager_backend], Nodes),
-    [?assertEqual({Node, ok},
-                  {Node,
-                   rpc:call(Node,
-                            gen_event,
-                            add_handler,
-                            [lager_event,
-                             riak_test_lager_backend,
-                             [info, false]])}) || Node <- Nodes],
-    [?assertEqual({Node, ok},
-                  {Node,
-                   rpc:call(Node,
-                            lager,
-                            set_loglevel,
-                            [riak_test_lager_backend,
-                             info])}) || Node <- Nodes];
+    lists:foreach(fun(N) -> rt_logger:plugin_logger(N) end, Nodes);
 setup_log_capture(Node) when not is_list(Node) ->
     setup_log_capture([Node]).
 
@@ -2089,8 +2074,9 @@ expect_in_log(Node, Pattern) ->
     expect_in_log(Node, Pattern, Retry, Delay).
 
 expect_in_log(Node, Pattern, Retry, Delay) ->
-    CheckLogFun = fun() ->
-            Logs = rpc:call(Node, riak_test_lager_backend, get_logs, []),
+    CheckLogFun =
+        fun() ->
+            Logs = rt_logger:get_logs(Node),
             lager:info("looking for pattern ~s in logs for ~p",
                        [Pattern, Node]),
             case re:run(Logs, Pattern, []) of

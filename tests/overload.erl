@@ -433,11 +433,11 @@ kill_pids(Pids) ->
     [exit(Pid, kill) || Pid <- Pids].
 
 suspend_and_overload_all_kv_vnodes(Node) ->
-    lager:info("Suspending vnodes on ~p", [Node]),
+    io:format("Suspending vnodes on ~p", [Node]),
     Pid = rpc:call(Node, ?MODULE, remote_suspend_and_overload, []),
     Pid ! {overload, self()},
     receive {overloaded, Pid} ->
-        lager:info("Received overloaded message from ~p", [Pid]),
+        io:format("Received overloaded message from ~p", [Pid]),
         Pid
     end,
     rt:wait_until(node_overload_check(Pid)),
@@ -447,7 +447,7 @@ remote_suspend_and_overload() ->
     spawn(fun() ->
                   Vnodes = riak_core_vnode_manager:all_vnodes(),
                   [begin
-                       lager:info("Suspending vnode pid: ~p~n", [Pid]),
+                       io:format("Suspending vnode pid: ~p~n", [Pid]),
                        erlang:suspend_process(Pid)
                    end || {riak_kv_vnode, _, Pid} <- Vnodes],
                   wait_for_input(Vnodes)
@@ -456,9 +456,9 @@ remote_suspend_and_overload() ->
 wait_for_input(Vnodes) ->
     receive
         {overload, From} ->
-            lager:info("Overloading vnodes.", []),
+            io:format("Overloading vnodes.", []),
             [overload(Vnodes, Pid) || {riak_kv_vnode, _, Pid} <- Vnodes],
-            lager:info("Sending overloaded message back to test.", []),
+            io:format("Sending overloaded message back to test.", []),
             From ! {overloaded, self()},
             wait_for_input(Vnodes);
         {verify_overload, From} ->
@@ -466,7 +466,7 @@ wait_for_input(Vnodes) ->
             From ! OverloadCheck,
             wait_for_input(Vnodes);
         resume ->
-            lager:info("Resuming vnodes~n"),
+            io:format("Resuming vnodes~n"),
             [erlang:resume_process(Pid) || {riak_kv_vnode, _, Pid}
                                                <- Vnodes]
     end.
@@ -510,7 +510,6 @@ suspend_vnode(Node, Idx) ->
 remote_suspend_vnode(Idx) ->
     spawn(fun() ->
                   {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Idx, riak_kv_vnode),
-                  lager:info("Suspending vnode pid: ~p", [Pid]),
                   erlang:suspend_process(Pid),
                   receive resume ->
                           erlang:resume_process(Pid)
@@ -573,7 +572,7 @@ remote_vnode_gets_in_queue(Idx) ->
     {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Idx, riak_kv_vnode),
     {messages, AllMessages} = process_info(Pid, messages),
     GetMessages = lists:filter(fun is_get_req/1, AllMessages),
-    lager:info("Get requests (~p): ~p", [Idx, length(GetMessages)]),
+    io:format("Get requests (~p): ~p", [Idx, length(GetMessages)]),
     length(GetMessages).
 
 %% This is not the greatest thing ever, since we're coupling this test pretty

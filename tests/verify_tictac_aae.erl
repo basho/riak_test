@@ -94,6 +94,7 @@
        ).
 -define(NUM_NODES, 4).
 -define(NUM_KEYS, 2000).
+-define(FUZZ_REPAIRS, 2).
 -define(BUCKET, <<"test_bucket">>).
 -define(ALT_BUCKET1, <<"alt_bucket1">>).
 -define(ALT_BUCKET2, <<"alt_bucket2">>).
@@ -136,16 +137,16 @@ confirm() ->
             1,
             rpc:call(NodeToUpgrade, application, loaded_applications, [])),
     
-    case RiakVer of
-        RiakVer when RiakVer >= "riak_kv-3.0.9" ->
-            lager:info("Skipping upgrade test - previous ~s > 3.0.8", [RiakVer]),
+    case check_capability(NodeToUpgrade) of
+        true ->
+            lager:info(
+                "Skipping upgrade test - previous version has prompted_repairs capability"),
+            lager:info("Previous should be ~s > 3.0.8", [RiakVer]),
             pass;
-        RiakVer ->
+        false ->
             lager:info("Running upgrade test with previous version ~s", [RiakVer]),
             rt:upgrade(NodeToUpgrade, current),
             rt:wait_for_service(NodeToUpgrade, riak_kv),
-
-            ?assertNot(check_capability(NodeToUpgrade)),
 
             ok = verify_aae_norebuild(Nodes5, false),
 
@@ -190,8 +191,11 @@ verify_aae_norebuild(Nodes, CheckTypeStats) ->
                         verify_riak_stats:get_stats(N, ?STATS_DELAY))
                 end,
                 Nodes)),
+    lager:info("Repairs ~w approx expected ~w", [Repairs, ?NUM_KEYS]),
     ?assert(Repairs >= ?NUM_KEYS),
-    ?assert(Repairs =< ?NUM_KEYS + 1),
+    ?assert(Repairs =< ?NUM_KEYS + ?FUZZ_REPAIRS),
+        % Allow a fuzz of 0.1%
+        % Some keys may have repair triggered twice.
 
     KV2 = [{K, <<V/binary, "a">>} || {K, V} <- KV1],
     lager:info("Writing additional n=1 data to require more repairs"),
