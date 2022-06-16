@@ -220,7 +220,7 @@ assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName)
 %% general 2i utility
 put_an_object(HTTPc, B, N) ->
     Key = int_to_key(N),
-    Data = io_lib:format("data~p", [N]),
+    Data = list_to_binary(io_lib:format("data~p", [N])),
     BinIndex = list_to_binary(?FOO ++ integer_to_list(N)),
     Indexes = [{"field1_bin", BinIndex},
                {"field2_int", N}
