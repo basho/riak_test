@@ -137,7 +137,11 @@ confirm() ->
                                 {ssl_opts, [{versions, ['tlsv1']}]}
                             ]),
     lager:info("check that connections trying to use ssl 3.0 fail"),
-    {error,{tcp,{tls_alert,ProtocolVersionError}}} =
+    OTP24SSL3Error =
+        {error,{tcp,{options,{sslv3,{versions,[sslv3]}}}}},
+    OTP22SSL3Error =
+        {error,{tcp,{tls_alert,ProtocolVersionError}}},
+    SSL3Error =
         pb_connection_info(Port,
                             [{credentials, "user", "password"},
                                 {cacertfile,
@@ -145,6 +149,7 @@ confirm() ->
                                                     "rootCA/cert.pem"])},
                                     {ssl_opts, [{versions, ['sslv3']}]}
                                     ]),
+    ?assert(lists:member(SSL3Error, [OTP22SSL3Error, OTP24SSL3Error])),
 
     lager:info("Enable ssl 3.0, tls 1.0 and tls 1.1 and disable tls 1.2"),
     rpc:call(Node, application, set_env, [riak_api, tls_protocols,
@@ -216,7 +221,8 @@ pb_connection_info(Port, Config) ->
             ?assertEqual(pong, riakc_pb_socket:ping(PB)),
             {ok, ConnInfo} = ssl:connection_information(pb_get_socket(PB)),
             {protocol, P} = lists:keyfind(protocol, 1, ConnInfo),
-            {cipher_suite, CS} = lists:keyfind(cipher_suite, 1, ConnInfo),
+            {selected_cipher_suite, CS} =
+                lists:keyfind(selected_cipher_suite, 1, ConnInfo),
             riakc_pb_socket:stop(PB),
             {ok, {P, convert_suite_to_tuple(CS)}};
         Error ->
@@ -232,8 +238,6 @@ convert_suite_to_tuple(CS) when is_map(CS) ->
         maps:get(mac, CS)}.
 
 
--ifdef(deprecated_22).
-
 cipher_format(Cipher) ->
     Cipher.
 
@@ -244,13 +248,24 @@ insufficient_check(Port, SingleCipherProps) ->
                 {insufficient_security, _ErrorMsg}}}} =
         pb_connection_info(Port, SingleCipherProps).
 
-check_reasons({protocol_version,
-                "TLS client: In state hello received SERVER ALERT:"
-                " Fatal - Protocol Version\n "}) ->
+check_reasons(
+    {protocol_version,
+        "TLS client: In state hello received SERVER ALERT: Fatal - Protocol Version\n "}) ->
+    ok;
+check_reasons(
+    {protocol_version,
+        "TLS client: In state hello received SERVER ALERT: Fatal - Protocol Version\n"}) ->
     ok;
 check_reasons(ProtocolVersionError) ->
     lager:info("Unexpected error ~s", [ProtocolVersionError]),
     error.
+
+
+-ifdef(post_22).
+
+check_with_reenabled_protools(_Port, _CertDir) -> ok.
+
+-else.
 
 check_with_reenabled_protools(Port, CertDir) ->
     lager:info("Check tls 1.1 succeeds - OK as long as cipher good?"),
@@ -274,84 +289,4 @@ check_with_reenabled_protools(Port, CertDir) ->
                                 {ssl_opts, [{versions, ['tlsv1']}]}
                             ])).
 
--else.
-
-
-    -ifdef(deprecated_21).
-
-        check_with_reenabled_protools(Port, CertDir) ->
-            lager:info("Cannot re-enable old protocols before OTP 22"),
-            ?assertMatch({error, {tcp, {tls_alert, {insufficient_security, _}}}},
-                pb_connection_info(Port,
-                                    [{credentials, "user", "password"},
-                                        {cacertfile,
-                                            filename:join([CertDir,
-                                                            "rootCA/cert.pem"])},
-                                    {ssl_opts, [{versions, ['tlsv1.1']}]}
-                                ])),
-
-            ?assertMatch({error, {tcp, {tls_alert, {insufficient_security, _}}}},
-                pb_connection_info(Port,
-                                    [{credentials, "user", "password"},
-                                            {cacertfile,
-                                                filename:join([CertDir,
-                                                                "rootCA/cert.pem"])},
-                                        {ssl_opts, [{versions, ['tlsv1']}]}
-                                    ])).
-
-        check_reasons({protocol_version,
-                        "received CLIENT ALERT: Fatal - Protocol Version"}) ->
-            ok;
-        check_reasons(ProtocolVersionError) ->
-            lager:info("Unexpected error ~s", [ProtocolVersionError]),
-            error.
-
-        insufficient_check(Port, SingleCipherProps) ->
-            {error,
-                {tcp,
-                    {tls_alert,
-                        {insufficient_security, _ErrorMsg}}}} =
-                pb_connection_info(Port, SingleCipherProps).
-        
-        cipher_format(Cipher) ->
-            ssl_cipher_format:suite_definition(Cipher).
-
-
-    -else.
-
-        check_reasons("protocol version") ->
-            ok;
-        check_reasons(ProtocolVersionError) ->
-            lager:info("Unexpected error ~s", [ProtocolVersionError]),
-            error.
-
-        check_with_reenabled_protools(Port, CertDir) ->
-            lager:info("Cannot re-enable old protocols before OTP 22"),
-            ?assertMatch({error, {tcp, {tls_alert,"insufficient security"}}},
-                pb_connection_info(Port,
-                                    [{credentials, "user", "password"},
-                                        {cacertfile,
-                                            filename:join([CertDir,
-                                                        "rootCA/cert.pem"])},
-                                    {ssl_opts, [{versions, ['tlsv1.1']}]}
-                                ])),
-
-            ?assertMatch({error, {tcp, {tls_alert,"insufficient security"}}},
-                pb_connection_info(Port,
-                                    [{credentials, "user", "password"},
-                                        {cacertfile,
-                                            filename:join([CertDir,
-                                                        "rootCA/cert.pem"])},
-                                        {ssl_opts, [{versions, ['tlsv1']}]}
-                                    ])).
-
-
-        insufficient_check(Port, SingleCipherProps) ->
-            {error, {tcp, {tls_alert,"insufficient security"}}} =
-                pb_connection_info(Port, SingleCipherProps).
-        
-        cipher_format(Cipher) ->
-            ssl_cipher:suite_definition(Cipher).
-
-    -endif.
 -endif.
