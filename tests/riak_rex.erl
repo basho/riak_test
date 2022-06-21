@@ -23,9 +23,10 @@ rex_test(Node) ->
     RexPid1 = riak_core_util:safe_rpc(Node, erlang, whereis, [rex]),
     ?assertEqual(Node, node(RexPid1)),
     % kill rex on the node and check that safe_rpc works
+    % - as in it doesn't crash
     kill_rex(Node),
-    ErrorTuple = riak_core_util:safe_rpc(Node, erlang, whereis, [rex]),
-    ?assertEqual(badrpc, element(1, ErrorTuple)),
+    NotPid = riak_core_util:safe_rpc(Node, erlang, whereis, [rex]),
+    rex_failure(NotPid),
     % restart rex
     supervisor:restart_child({kernel_sup, Node}, rex),
     RexPid2 = riak_core_util:safe_rpc(Node, erlang, whereis, [rex]),
@@ -57,3 +58,16 @@ conf() ->
       ]
      }
     ].
+
+
+-ifdef(post_22).
+
+rex_failure(undefined) ->
+    ok.
+
+-else.
+
+rex_failure({badrpc, _Error}) ->
+    ok.
+
+-endif.
