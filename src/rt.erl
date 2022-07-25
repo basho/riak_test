@@ -117,6 +117,7 @@
          random_uniform/0,
          random_uniform/1,
          remove/2,
+         reset_cookie/3,
          riak/2,
          riak_repl/2,
          rpc_get_env/2,
@@ -541,19 +542,49 @@ down(Node, OtherNode) ->
 %%      note: the nodes remained connected to riak_test@local,
 %%      which is how `heal/1' can still work.
 partition(P1, P2) ->
+    lager:info("Split partition between nodes ~w and ~w", [P1, P2]),
     OldCookie = rpc:call(hd(P1), erlang, get_cookie, []),
     NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
-    [true = rpc:call(N, erlang, set_cookie, [N, NewCookie]) || N <- P1],
-    [[true = rpc:call(N, erlang, disconnect_node, [P2N]) || N <- P1] || P2N <- P2],
+    lager:info("Changing cookie ~w to ~w on nodes ~w", [OldCookie, NewCookie, P1]),
+    [reset_cookie(N, NewCookie, OldCookie) || N <- P1],
+    [reset_cookie(N, OldCookie, OldCookie) || N <- P2],
+    [[ok = node_disconnect(N, P2N) || N <- P1] || P2N <- P2],
     wait_until_partitioned(P1, P2),
     {NewCookie, OldCookie, P1, P2}.
 
+node_disconnect(N, P2N) ->
+    node_disconnect(N, P2N, 10).
+
+node_disconnect(_N, _P2N, 0) ->
+    {badrpc, nodedown};
+node_disconnect(N, P2N, I) ->
+    lager:info("RPC to node ~w to disconnect from node ~w", [N, P2N]),
+    case rpc:call(N, erlang, disconnect_node, [P2N]) of
+        true ->
+            ok;
+        NotTrue ->
+            lager:info("Disconnect got response ~w", [NotTrue]),
+            case rpc:call(N, erlang, nodes, []) of
+                {badrpc, nodedown} ->
+                    timer:sleep(1000),
+                    lager:info(
+                        "Node ~w down for disconnect request.  Try again",
+                        [N]),
+                    node_disconnect(N, P2N, I - 1);
+                VisibleNodes ->
+                    lager:info("Remote view of nodes ~w", [VisibleNodes]),
+                    lager:info("... ok to proceed if ~w not connected", [P2N]),
+                    false = lists:member(P2N, VisibleNodes),
+                    ok
+            end
+    end.
+
 %% @doc heal the partition created by call to `partition/2'
 %%      `OldCookie' is the original shared cookie
-heal({_NewCookie, OldCookie, P1, P2}) ->
+heal({NewCookie, OldCookie, P1, P2}) ->
     Cluster = P1 ++ P2,
     % set OldCookie on P1 Nodes
-    [true = rpc:call(N, erlang, set_cookie, [N, OldCookie]) || N <- P1],
+    lists:foreach(fun(N) -> reset_cookie(N, OldCookie, NewCookie) end, P1),
     wait_until_connected(Cluster),
     {_GN, []} = rpc:sbcast(Cluster, riak_core_node_watcher, broadcast),
     ok.
@@ -562,9 +593,9 @@ heal({_NewCookie, OldCookie, P1, P2}) ->
 %% node in P1 is down, just skip it, rather than failing. Returns {ok,
 %% list(node())} where the list is those nodes down and therefore not
 %% healed/reconnected.
-heal_upnodes({_NewCookie, OldCookie, P1, P2}) ->
+heal_upnodes({NewCookie, OldCookie, P1, P2}) ->
     %% set OldCookie on UP P1 Nodes
-    Res = [{N, rpc:call(N, erlang, set_cookie, [N, OldCookie])} || N <- P1],
+    Res = lists:map(fun(N) -> {N, reset_cookie(N, OldCookie, NewCookie)} end, P1),
     UpForReconnect = [N || {N, true} <- Res],
     DownForReconnect = [N || {N, RPC} <- Res, RPC /= true],
     Cluster = UpForReconnect ++ P2,
@@ -902,9 +933,10 @@ wait_until_legacy_ringready(Node) ->
 wait_until_connected(Nodes) ->
     lager:info("Wait until connected ~p", [Nodes]),
     NodeSet = sets:from_list(Nodes),
-    F = fun(Node) ->
-                Connected = rpc:call(Node, erlang, nodes, []),
-                sets:is_subset(NodeSet, sets:from_list(([Node] ++ Connected) -- [node()]))
+    F = 
+        fun(Node) ->
+            Connected = rpc:call(Node, erlang, nodes, []),
+            sets:is_subset(NodeSet, sets:from_list(([Node] ++ Connected) -- [node()]))
         end,
     [?assertEqual(ok, wait_until(Node, F)) || Node <- Nodes],
     ok.
@@ -968,11 +1000,48 @@ wait_until_partitioned(P1, P2) ->
     [ begin
           lager:info("Waiting for ~p to be partitioned from ~p", [Node, P1]),
           wait_until(fun() -> is_partitioned(Node, P1) end)
-      end || Node <- P2 ].
+      end || Node <- P2 ],
+    
+    timer:sleep(1000),
+
+    [ begin
+        lager:info("Checking that ~p still connected to ~p", [Node, P1]),
+        wait_until(fun() -> is_still_connected(Node, P1) end)
+    end || Node <- P1 ],
+    [ begin
+        lager:info("Checking that ~p still connected to ~p", [Node, P2]),
+        wait_until(fun() -> is_still_connected(Node, P2) end)
+    end || Node <- P2 ].
 
 is_partitioned(Node, Peers) ->
-    AvailableNodes = rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]),
-    lists:all(fun(Peer) -> not lists:member(Peer, AvailableNodes) end, Peers).
+    case rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]) of
+        {badrpc, nodedown} ->
+            lager:info(
+                "Node ~w not responding to rpc call.  Try again ...",
+                [Node]),
+            timer:sleep(1000),
+            false;
+        AvailableNodes ->
+            lager:info(
+                "AvailableNodes ~p for Node ~p and Peers ~p",
+                [AvailableNodes, Node, Peers]),
+            lists:all(fun(Peer) -> not lists:member(Peer, AvailableNodes) end, Peers)
+    end.
+
+is_still_connected(Node, Peers) ->
+    case rpc:call(Node, riak_core_node_watcher, nodes, [riak_kv]) of
+        {badrpc, nodedown} ->
+            lager:info(
+                "Node ~w not responding to rpc call.  Try again ...",
+                [Node]),
+            timer:sleep(1000),
+            false;
+        UpNodes ->
+            lager:info(
+                "UpNodes ~p for Node ~p and Peers ~p",
+                [UpNodes, Node, Peers]),
+            lists:all(fun(Peer) -> lists:member(Peer, UpNodes) end, Peers)
+    end.
 
 % when you just can't wait
 brutal_kill(Node) ->
@@ -2291,6 +2360,31 @@ assert_supported(Capabilities, Capability, Value) ->
                           Capability,
                           proplists:get_value('$supported', Capabilities))),
     ok.
+
+
+-spec reset_cookie(node(), atom(), atom()) -> true|tuple().
+
+-ifdef(post_24).
+
+reset_cookie(Node, OldCookie, NewCookie) ->
+    lager:info(
+        "Resetting cookie back to ~w from ~w for Node ~w",
+        [OldCookie, NewCookie, Node]),
+    erlang:set_cookie(Node, NewCookie),
+    R = rpc:call(Node, erlang, set_cookie, [OldCookie]),
+    erlang:set_cookie(Node, OldCookie),
+    lager:info("RPC response ~w for Node ~w", [R, Node]),
+    R.
+
+-else.
+
+reset_cookie(Node, OldCookie, _NewCookie) ->
+    lager:info("Resetting cookie back to ~w", [OldCookie]),
+    R = rpc:call(Node, erlang, set_cookie, [Node, OldCookie]),
+    lager:info("RPC response ~w", [R]),
+    R.
+
+-endif.
 
 
 -spec no_op(term()) -> ok.

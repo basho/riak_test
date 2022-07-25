@@ -49,34 +49,40 @@
 -define(MODIFY_OPTS, [create]).
 
 confirm() ->
-    Config = [ {riak_kv, [{handoff_concurrency, 100}]},
-               {riak_core, [ {ring_creation_size, 16},
-                             {vnode_management_timer, 1000} ]}],
+    Config = 
+        [{riak_kv,
+            [{handoff_concurrency, 16},
+            {anti_entropy, {off, []}}]},
+        {riak_core,
+            [{ring_creation_size, 16}]}],
 
-    [N1, N2, N3, N4]=Nodes = rt:build_cluster(4, Config),
+    [N1, N2, N3, N4] = Nodes = rt:build_cluster(4, Config),
 
     create_bucket_types(Nodes, ?TYPES),
 
-    [P1, P2, P3, P4] = PBClients = create_pb_clients(Nodes),
-    [H1, H2, H3, H4] = HTTPClients = create_http_clients(Nodes),
+    [P01, P02, P03, P04] = create_pb_clients(Nodes),
+    [H01, H02, H03, H04] = create_http_clients(Nodes),
 
     %% Do some updates to each type
     [update_1(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
-        {Type, Client} <- lists:zip(?TYPES, [P1, P2, P3, P4, P4])],
+        {Type, Client} <- lists:zip(?TYPES, [P01, P02, P03, P04, P04])],
 
     [update_1(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H1, H2, H3, H4, H3])],
+        {Type, Client} <- lists:zip(?TYPES, [H01, H02, H03, H04, H03])],
 
     %% Check that the updates are stored
     [check_1(Type, ?PB_BUCKET, Client, riakc_pb_socket) ||
-        {Type, Client} <- lists:zip(?TYPES, [P4, P3, P2, P1, P2])],
+        {Type, Client} <- lists:zip(?TYPES, [P04, P03, P02, P01, P02])],
 
     [check_1(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H4, H3, H2, H1, H4])],
+        {Type, Client} <- lists:zip(?TYPES, [H04, H03, H02, H01, H04])],
 
     lager:info("Partition cluster in two."),
 
     PartInfo = rt:partition([N1, N2], [N3, N4]),
+
+    [P1, P2, P3, P4] = PBClients = create_pb_clients(Nodes),
+    [H1, H2, H3, H4] = HTTPClients = create_http_clients(Nodes),
 
     lager:info("Modify data on side 1"),
     %% Modify one side
@@ -92,7 +98,7 @@ confirm() ->
         {Type, Client} <- lists:zip(?TYPES, [P4, P3, P4, P3, P4])],
 
     [check_2b(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H4, H3, H4, H3, H4])],
+        {Type, Client} <- lists:zip(?TYPES, [H3, H4, H3, H4, H3])],
 
     lager:info("Modify data on side 2"),
     %% Modify other side
@@ -100,7 +106,7 @@ confirm() ->
         {Type, Client} <- lists:zip(?TYPES, [P3, P4, P3, P4, P3])],
 
     [update_3b(Type, ?HTTP_BUCKET, Client, rhc) ||
-        {Type, Client} <- lists:zip(?TYPES, [H3, H4, H3, H4, H3])],
+        {Type, Client} <- lists:zip(?TYPES, [H4, H3, H4, H3, H4])],
 
     lager:info("Check data is unmodified on side 1"),
     %% verify values differ
@@ -308,18 +314,18 @@ update_3b({BType, set}, Bucket, Client, CMod) ->
 update_3b({BType, map},Bucket,Client,CMod) ->
     CMod:modify_type(Client,
                      fun(M) ->
-                             M1 = riakc_map:erase({<<"friends">>, set}, M),
-                             riakc_map:update(
-                               {<<"emails">>, map},
-                               fun(MI) ->
-                                       riakc_map:update(
-                                         {<<"home">>, register},
-                                         fun(R) ->
-                                                 riakc_register:set(
-                                                   <<"foo@bar.com">>, R)
-                                         end, MI)
-                               end,
-                               M1)
+                        M1 = riakc_map:erase({<<"friends">>, set}, M),
+                        riakc_map:update(
+                        {<<"emails">>, map},
+                        fun(MI) ->
+                            riakc_map:update(
+                                {<<"home">>, register},
+                                fun(R) ->
+                                        riakc_register:set(
+                                        <<"foo@bar.com">>, R)
+                                end, MI)
+                        end,
+                        M1)
                      end,
                      {BType, Bucket}, ?KEY, ?MODIFY_OPTS);
 update_3b({BType, hll}, Bucket, Client, CMod) ->
@@ -400,7 +406,7 @@ check_4({BType, gset}, Bucket, Client, CMod) ->
 
 check_value(Client, CMod, Bucket, Key, DTMod, Expected) ->
     check_value(Client,CMod,Bucket,Key,DTMod,Expected,
-                [{r,2}, {notfound_ok, true}, {timeout, 5000}]).
+                [{pr, 1}, {r,2}, {notfound_ok, true}, {timeout, 5000}]).
 
 check_value(Client, CMod, Bucket, Key, DTMod, Expected, Options) ->
     rt:wait_until(fun() ->

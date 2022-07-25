@@ -65,36 +65,37 @@ verify_size_limits(C, Node1) ->
             {?WARN_SIZE, warning},
             {?MAX_SIZE, error},
             {?MAX_SIZE*2, error}],
-    [begin
-            lager:info("Checking put of size ~p, expected ~p", [N, X]),
-            K = <<N:32/big-integer>>,
-            V = <<0:(N)/integer-unit:8>>, % N zeroes bin
-            O = riakc_obj:new(?BUCKET, K, V),
-            % Verify behavior on write
-            Res = riakc_pb_socket:put(C, O),
-            lager:info("Result : ~p", [Res]),
-            case X of
-                ok ->
-                    ?assertMatch({N, ok}, {N, Res});
-                error ->
-                    ?assertMatch({N, {error, _}}, {N, Res}),
-                    verify_size_write_error(Node1, K, N);
-                warning ->
-                    verify_size_write_warning(Node1, K, N)
-            end,
-            % Now verify on read
-            lager:info("Now checking read of size ~p, expected ~p", [N, X]),
-            ReadRes = riakc_pb_socket:get(C, ?BUCKET, K),
-            case X of
-                ok ->
-                    ?assertMatch({{ok, _}, N}, {ReadRes, N});
-                warning ->
-                    ?assertMatch({{ok, _}, N}, {ReadRes, N}),
-                    verify_size_read_warning(Node1, K, N);
-                error ->
-                    ?assertMatch({{error, _}, N}, {ReadRes, N})
-            end
-        end || {N, X} <- Puts],
+    lists:foreach(fun(SL) -> verify_size_limits(C, Node1, SL) end, Puts).
+
+verify_size_limits(C, Node1, {N, X}) ->
+    lager:info("Checking put of size ~p, expected ~p", [N, X]),
+    K = <<N:32/big-integer>>,
+    V = <<0:(N)/integer-unit:8>>, % N zeroes bin
+    O = riakc_obj:new(?BUCKET, K, V),
+    % Verify behavior on write
+    Res = riakc_pb_socket:put(C, O),
+    lager:info("Result : ~p", [Res]),
+    case X of
+        ok ->
+            ?assertMatch({N, ok}, {N, Res});
+        error ->
+            ?assertMatch({N, {error, _}}, {N, Res}),
+            verify_size_write_error(Node1, K, N);
+        warning ->
+            verify_size_write_warning(Node1, K, N)
+    end,
+    % Now verify on read
+    lager:info("Now checking read of size ~p, expected ~p", [N, X]),
+    ReadRes = riakc_pb_socket:get(C, ?BUCKET, K),
+    case X of
+        ok ->
+            ?assertMatch({{ok, _}, N}, {ReadRes, N});
+        warning ->
+            ?assertMatch({{ok, _}, N}, {ReadRes, N}),
+            verify_size_read_warning(Node1, K, N);
+        error ->
+            ?assertMatch({{error, _}, N}, {ReadRes, N})
+    end,
     ok.
 
 verify_size_write_warning(Node, K, N) ->

@@ -223,26 +223,18 @@ replication([AFirst|_] = ANodes, [BFirst|_] = BNodes, Connected) ->
 
             lager:info("Simulation partition to force leader re-election"),
 
-            OldCookie = rpc:call(LeaderA2, erlang, get_cookie, []),
-            NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
-            rpc:call(LeaderA2, erlang, set_cookie, [LeaderA2, NewCookie]),
+            PInfo = rt:partition([LeaderA2], ANodes -- [LeaderA2]),
 
-            [ rpc:call(LeaderA2, erlang, disconnect_node, [Node]) ||
-                Node <- ANodes -- [LeaderA2]],
-            [ rpc:call(Node, erlang, disconnect_node, [LeaderA2]) ||
-                Node <- ANodes -- [LeaderA2]],
-
+            lager:info("Waiting for new leader"),
             wait_until_new_leader(hd(ANodes -- [LeaderA2]), LeaderA2),
             InterimLeader = rpc:call(LeaderA, riak_repl_leader, leader_node, []),
             lager:info("Interim leader: ~p", [InterimLeader]),
 
-            rpc:call(LeaderA2, erlang, set_cookie, [LeaderA2, OldCookie]),
+            lager:info("Heal partition"),
 
-            [ rpc:call(LeaderA2, net_adm, ping, [Node]) ||
-                Node <- ANodes -- [LeaderA2]],
-            [ rpc:call(Node, net_adm, ping, [LeaderA2]) ||
-                Node <- ANodes -- [LeaderA2]],
+            rt:heal(PInfo),
 
+            lager:info("Wait for leader convergence"),
             %% there's no point in writing anything until the leaders
             %% converge, as we can drop writes in the middle of an election
             wait_until_leader_converge(ANodes),

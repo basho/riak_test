@@ -55,6 +55,7 @@ confirm() ->
     Node = lists:nth(rand:uniform(length((Cluster1))), Cluster1),
     rt:create_and_activate_bucket_type(Node, ?BUCKET_TYPE, [{write_once, true}]),
     rt:wait_until_bucket_type_status(?BUCKET_TYPE, active, Cluster1),
+    rt:wait_until_bucket_type_visible(Cluster1, ?BUCKET_TYPE),
     lager:info("Created ~p bucket type on ~p", [?BUCKET_TYPE, Node]),
     %%
     %%
@@ -91,11 +92,12 @@ confirm_put(Node) ->
 
 confirm_w(Nodes) ->
     %%
-    %% split the cluster into 2 paritions [dev1, dev2, dev3], [dev4]
+    %% split the cluster into 2 partitions [dev1, dev2, dev3], [dev4]
     %%
     P1 = lists:sublist(Nodes, 3),
     P2 = lists:sublist(Nodes, 4, 1),
     PartitonInfo = rt:partition(P1, P2),
+    {_NewCookie, _OldCookie, _, _} = PartitonInfo,
     [Node1 | _Rest1] = P1,
     verify_put(Node1, ?BUCKET, <<"confirm_w_key">>, <<"confirm_w_value">>),
     [Node2 | _Rest2] = P2,
@@ -117,7 +119,7 @@ confirm_w(Nodes) ->
 
 confirm_pw(Nodes) ->
     %%
-    %% split the cluster into 2 paritions [dev1, dev2, dev3], [dev4]
+    %% split the cluster into 2 partitions [dev1, dev2, dev3], [dev4]
     %%
     P1 = lists:sublist(Nodes, 3),
     P2 = lists:sublist(Nodes, 4, 1),
@@ -142,7 +144,7 @@ confirm_pw(Nodes) ->
 
 confirm_rww(Nodes) ->
     %%
-    %% split the cluster into 2 paritions
+    %% split the cluster into 2 partitions
     %%
     P1 = lists:sublist(Nodes, 2),
     P2 = lists:sublist(Nodes, 3, 2),
@@ -155,16 +157,51 @@ confirm_rww(Nodes) ->
     verify_put(Node1, ?BUCKET, <<"confirm_rww_key">>, <<"confirm_rww_value1">>),
     [Node2 | _Rest2] = P2,
     verify_put(Node2, ?BUCKET, <<"confirm_rww_key">>, <<"confirm_rww_value2">>),
-    %%
-    %% After healing, both should agree on an arbitrary value
-    %%
+    %% Wait and confirm no secret healing
+    lager:info("Wait and confirm no secret healing"),
+    timer:sleep(1000),
+    <<"confirm_rww_value1">> =
+        get(Node1, ?BUCKET, <<"confirm_rww_key">>),
+    <<"confirm_rww_value2">> =
+        get(Node2, ?BUCKET, <<"confirm_rww_key">>),
+
+    lager:info("Heal and confirm answers merge to single value"),
     rt:heal(PartitonInfo),
     rt:wait_until(fun() ->
         V1 = get(Node1, ?BUCKET, <<"confirm_rww_key">>),
         V2 = get(Node2, ?BUCKET, <<"confirm_rww_key">>),
-        V1 =:= V2
+        lager:info("Value on ~w ~p", [Node1, V1]),
+        lager:info("Value on ~w ~p", [Node2, V2]),
+        (V1 =:= V2) and (V1 =/= notfound)
     end),
+
+    lager:info(
+        "Arbitrary value in P1 ~w is ~p",
+        [Node1, get(Node1, ?BUCKET, <<"confirm_rww_key">>)]),
+    lager:info(
+        "Arbitrary value in P2 ~w is ~p",
+        [Node2, get(Node2, ?BUCKET, <<"confirm_rww_key">>)]),
+
+    lager:info("Merge will not happen until handoffs complete"),
+    rt:wait_until_transfers_complete(Nodes),
+    
     ?assert(NumFastMerges < num_fast_merges(Nodes)),
+
+    lager:info(
+        "Arbitrary value in P1 ~w is ~p",
+        [Node1, get(Node1, ?BUCKET, <<"confirm_rww_key">>)]),
+    lager:info(
+        "Arbitrary value in P2 ~w is ~p",
+        [Node2, get(Node2, ?BUCKET, <<"confirm_rww_key">>)]),
+
+    ?assertMatch(1,
+        length(
+            lists:usort(
+                lists:map(
+                    fun(N) -> get(N, ?BUCKET, <<"confirm_rww_key">>) end,
+                    Nodes)))
+        ),
+
     lager:info("confirm_rww...ok"),
     pass.
 
@@ -282,43 +319,62 @@ verify_put_timeout(Node, Bucket, Key, Value, Options, Timeout, ExpectedPutReturn
     ok.
 
 num_fast_merges(Nodes) ->
-    lists:foldl(
-        fun(Node, Acc) ->
-            {write_once_merge, N} = proplists:lookup(
-                write_once_merge,
-                rpc:call(Node, riak_kv_stat, get_stats, [])
-            ),
-            Acc + N
-        end,
-        0, Nodes
-    ).
+    NumMerges =
+        lists:foldl(
+            fun(Node, Acc) ->
+                {write_once_merge, N} = proplists:lookup(
+                    write_once_merge,
+                    rpc:call(Node, riak_kv_stat, get_stats, [])
+                ),
+                case N > 0 of
+                    true ->
+                        lager:info(
+                            "write_once_merge non-zero ~w on ~w",
+                            [N, Node]);
+                    false ->
+                        ok
+                end,
+                Acc + N
+            end,
+            0, Nodes
+        ),
+    lager:info(
+        "write_once_merge total across Nodes ~w in stats is ~w",
+        [Nodes, NumMerges]),
+    NumMerges.
 
 get(Node, Bucket, Key) ->
     Client = rt:pbc(Node),
-    {ok, Val} = riakc_pb_socket:get(Client, Bucket, Key),
-    riakc_obj:get_value(Val).
+    case riakc_pb_socket:get(Client, Bucket, Key) of
+        {ok, Val} ->
+            riakc_obj:get_value(Val);
+        {error, notfound} ->
+            lager:info(
+                "Unexpected notfound on Node ~w",
+                [Node]),
+            notfound
+    end.
 
 config(RingSize, NVal) ->
-    config(RingSize, NVal, riak_kv_multi_backend).
+    [
+        {riak_core, [
+            {default_bucket_props, [{n_val, NVal}]},
+            {ring_creation_size, RingSize}]
+        },
+        {riak_kv, [
+            {anti_entropy, {off, []}}
+        ]}
+    ].
 
 config(RingSize, NVal, Backend) ->
     [
         {riak_core, [
             {default_bucket_props, [{n_val, NVal}]},
-            {vnode_management_timer, 1000},
             {ring_creation_size, RingSize}]
         },
         {riak_kv, [
-            {anti_entropy_build_limit, {100, 1000}},
-            {anti_entropy_concurrency, 100},
-            {anti_entropy_tick, 100},
-            {anti_entropy, {on, []}},
-            {anti_entropy_timeout, 5000},
-            {storage_backend, Backend},
-            {multi_backend, [
-                {mymemory, riak_kv_memory_backend, []},
-                {myeleveldb, riak_kv_eleveldb_backend, []}
-            ]}
+            {anti_entropy, {off, []}},
+            {storage_backend, Backend}
         ]}
     ].
 

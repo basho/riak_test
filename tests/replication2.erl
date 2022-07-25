@@ -329,22 +329,13 @@ network_partition_test([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
 
     ?assertEqual(ok, repl_util:wait_until_connection(LeaderA)),
 
-    %% Swap cookie on LeaderA to simulate a network partition.
-    OldCookie = rpc:call(LeaderA, erlang, get_cookie, []),
-    NewCookie = list_to_atom(lists:reverse(atom_to_list(OldCookie))),
-    rpc:call(LeaderA, erlang, set_cookie, [LeaderA, NewCookie]),
-
-    [rpc:call(LeaderA, erlang, disconnect_node, [Node]) || Node <- ANodes -- [LeaderA]],
-    [rpc:call(Node, erlang, disconnect_node, [LeaderA]) || Node <- ANodes -- [LeaderA]],
+    PInfo = rt:partition([LeaderA], ANodes -- [LeaderA]),
 
     repl_util:wait_until_new_leader(hd(ANodes -- [LeaderA]), LeaderA),
     InterimLeader = rpc:call(LeaderA, riak_core_cluster_mgr, get_leader, []),
     lager:info("Interim leader: ~p", [InterimLeader]),
 
-    rpc:call(LeaderA, erlang, set_cookie, [LeaderA, OldCookie]),
-
-    [rpc:call(LeaderA, net_adm, ping, [Node]) || Node <- ANodes -- [LeaderA]],
-    [rpc:call(Node, net_adm, ping, [LeaderA]) || Node <- ANodes -- [LeaderA]],
+    rt:heal(PInfo),
 
     %% There's no point in writing anything until the leaders converge, as we
     %% can drop writes in the middle of an election
