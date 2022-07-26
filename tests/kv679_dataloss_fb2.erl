@@ -69,21 +69,24 @@
 
 confirm() ->
     Conf = [
-            {riak_kv, [{anti_entropy, {off, []}}]},
-            {riak_core, [{default_bucket_props, [
-                                                 %% note reduced n_val
-                                                 %% is to reduce
-                                                 %% number of nodes
-                                                 %% required for test
-                                                 %% case and to
-                                                 %% simplify case.
-                                                 {n_val, ?NVAL},
-                                                 {allow_mult, true},
-                                                 {dvv_enabled, true},
-                                                 {ring_creation_size, 8},
-                                                 {vnode_management_timer, 1000},
-                                                 {handoff_concurrency, 100},
-                                                 {vnode_inactivity_timeout, 1000}]}]},
+            {riak_kv,
+                [{anti_entropy, {off, []}}]},
+            {riak_core,
+            [
+                {ring_creation_size, 16},
+                {vnode_management_timer, 1000},
+                {handoff_concurrency, 100},
+                {vnode_inactivity_timeout, 1000},
+                {default_bucket_props, [
+                    %% note reduced n_val
+                    %% is to reduce
+                    %% number of nodes
+                    %% required for test
+                    %% case and to
+                    %% simplify case.
+                    {n_val, ?NVAL},
+                    {allow_mult, true},
+                    {dvv_enabled, true}]}]},
             {bitcask, [{sync_strategy, o_sync}, {io_mode, nif}]},
             {leveled, [{sync_strategy, riak_sync}]},
             {leveldb, [{sync_on_write, on}]}],
@@ -110,19 +113,19 @@ confirm() ->
 
     ?assert(length(Fallbacks) == 3),
 
-    lager:info("fallbacks ~p, primaries ~p~n", [Fallbacks, [CoordNode] ++ OtherPrimaries]),
+    lager:info(
+        "fallbacks ~p, primaries ~p~n",
+        [Fallbacks, [CoordNode] ++ OtherPrimaries]),
 
     %% Partition the other primary and one non-preflist node
-    {_, _, _P1, P2} = PartInfo = rt:partition([CoordNode] ++ tl(Fallbacks), OtherPrimaries ++ [hd(Fallbacks)]),
+    {_, _, _P1, P2} = PartInfo =
+        rt:partition([CoordNode] ++ tl(Fallbacks), OtherPrimaries ++ [hd(Fallbacks)]),
     lager:info("Partitioned ~p~n", [PartInfo]),
+    lager:info("During partition - alternate state may have been created"),
+    lager:info("Waiting for settled partioned state"),
+    timer:sleep(1000),
 
-    rt:wait_until(fun() ->
-                          NewPL = kv679_tombstone:get_preflist(CoordNode, ?NVAL),
-                          lager:info("new PL ~p~n", [NewPL]),
-                          primary_and_fallback_counts(NewPL) == {1, 1}
-                  end),
-
-    FBPL = kv679_tombstone:get_preflist(CoordNode, ?NVAL),
+    FBPL = get_preflist(CoordNode),
     lager:info("Got a preflist with coord and 1 fb ~p~n", [FBPL]),
 
     %% Write key once at coordinating primary
@@ -137,11 +140,7 @@ confirm() ->
     rt:wait_until_unpingable(FB1),
 
     %% get a new preflist with a different fallback
-    rt:wait_until(fun() ->
-                          NewPL = kv679_tombstone:get_preflist(CoordNode, ?NVAL),
-                          primary_and_fallback_counts(NewPL) == {1, 1} andalso NewPL /= FBPL
-                  end),
-    FBPL2 = kv679_tombstone:get_preflist(CoordNode, ?NVAL),
+    FBPL2 = get_preflist(CoordNode),
     lager:info("Got a preflist with coord and 1 fb ~p~n", [FBPL2]),
     ?assert(FBPL2 /= FBPL),
 
@@ -153,18 +152,15 @@ confirm() ->
     lager:info("Clock at fallback2"),
 
     %% Kill the fallback before it can handoff
-    [FB2] = [Node || {{_Idx, Node}, Type} <- FBPL2,
-                     Type == fallback],
+    [FB2] = [Node || {{_Idx, Node}, Type} <- FBPL2, Type == fallback],
     rt:brutal_kill(FB2),
     rt:wait_until_unpingable(FB2),
 
     %% meanwhile, in the other partition, let's write some data
-    P2PL = kv679_tombstone:get_preflist(hd(P2), ?NVAL),
+    P2PL = get_preflist(hd(P2)),
     lager:info("partition 2 PL ~p", [P2PL]),
-    [P2FB] = [Node || {{_Idx, Node}, Type} <- P2PL,
-                      Type == fallback],
-    [P2P] = [Node || {{_Idx, Node}, Type} <- P2PL,
-                     Type == primary],
+    [P2FB] = [Node || {{_Idx, Node}, Type} <- P2PL, Type == fallback],
+    [P2P] = [Node || {{_Idx, Node}, Type} <- P2PL, Type == primary],
     P2Client = kv679_tombstone:coordinating_client(Clients, P2PL),
     kv679_tombstone:write_key(P2Client, [<<"dave">>]),
     kv679_tombstone2:dump_clock(P2Client),
@@ -239,11 +235,22 @@ confirm() ->
     rpc:call(FB2, riak_core_vnode_manager, force_handoffs, []),
     rt:wait_until_transfers_complete(Nodes),
 
-    lager:info("final get"),
+    lager:info("Final get - wait for sibling"),
+    rt:wait_until(
+        fun() ->
+            Res = kv679_tombstone:read_key(CoordClient),
+            ?assertMatch({ok, _}, Res),
+            {ok, O} = Res,
+            V = lists:sort(riakc_obj:get_values(O)),
+            io:format("Returned values ~p", [V]),
+            [<<"charlie">>, <<"emma">>] == V
+        end
+    ),
+
+    lager:info("Final get - confirm sibling"),
     Res = kv679_tombstone:read_key(CoordClient),
     ?assertMatch({ok, _}, Res),
     {ok, O} = Res,
-
     %% A nice riak would have somehow managed to make a sibling of the
     %% last acked write, even with all the craziness
     ?assertEqual([<<"charlie">>, <<"emma">>], lists:sort(riakc_obj:get_values(O))),
@@ -276,3 +283,23 @@ clean_intercept(Node, leveled) ->
     rt_intercept:clean(Node, riak_kv_leveled_backend);
 clean_intercept(Node, eleveldb) ->
     rt_intercept:clean(Node, riak_kv_eleveldb_backend).
+
+
+coordinater_count(PL, CoordNode) ->
+    length(
+        lists:filter(
+            fun({{_Idx, Node}, _Type}) ->
+                Node == CoordNode
+            end,
+            PL)).
+
+get_preflist(CoordNode) ->
+    rt:wait_until(
+        fun() ->
+            NewPL = kv679_tombstone:get_preflist(CoordNode, ?NVAL),
+            lager:info("new PL ~p~n", [NewPL]),
+            CoCount = coordinater_count(NewPL, CoordNode),
+            primary_and_fallback_counts(NewPL) == {1, ?NVAL - 1} andalso
+            CoCount < length(NewPL)
+        end),
+    kv679_tombstone:get_preflist(CoordNode, ?NVAL).

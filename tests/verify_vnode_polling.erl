@@ -250,9 +250,14 @@ get_all_nodes_stats(Nodes) ->
 %% intercept code, so kill it, ugly, sorry, but at the same time,
 %% WOW, what other language enables this?
 kill_proxy(Idx, Node) ->
-    {ProxyName, Node} = rpc:call(Node, riak_core_vnode_proxy, reg_name, [riak_kv_vnode, Idx, Node]),
-    ProxyPid = rpc:call(Node, erlang, whereis, [ProxyName]),
-    true = rpc:call(Node, erlang, exit, [ProxyPid, kill]).
+    {ProxyName, Node} =
+        rpc:call(Node, riak_core_vnode_proxy, reg_name, [riak_kv_vnode, Idx, Node]),
+    case rpc:call(Node, erlang, whereis, [ProxyName]) of
+        undefined ->
+            lager:info("ProxyName ~w on node ~w already down", [ProxyName, Node]);
+        ProxyPid ->
+            true = rpc:call(Node, erlang, exit, [ProxyPid, kill])
+    end.
 
 non_pl_client(Nodes, Preflist) ->
     %% make a client with a node _NOT_ on the preflist
