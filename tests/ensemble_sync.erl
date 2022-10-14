@@ -115,7 +115,7 @@ run_scenario(Nodes, NVal, {NumKill, NumSuspend, NumValid, _, Name, Expect}) ->
     WriteFun =
         fun(Key) ->
             ok =
-                case rt:pbc_write(PBC, Bucket, Key, Key) of
+                case rt:pbc_write(PBC, Bucket, Key, Key, "text/plain", Options) of
                     ok ->
                         ok;
                     E ->
