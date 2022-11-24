@@ -5,18 +5,44 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(TYPE_ALL, <<"ptype_all">>).
+-define(TYPE_QUORUM, <<"ptype_quorum">>).
+
 confirm() ->
     application:start(inets),
     lager:info("Deploy some nodes"),
     Nodes = rt:build_cluster(4),
 
     %% calculate the preflist for foo/bar
-    {ok, Ring} = rpc:call(hd(Nodes), riak_core_ring_manager, get_my_ring, []),
-    UpNodes = rpc:call(hd(Nodes), riak_core_node_watcher, nodes, [riak_kv]),
-    DocIdx = rpc:call(hd(Nodes), riak_core_util, chash_key, [{<<"foo">>,
-                <<"bar">>}]),
+    {ok, Ring} =
+        rpc:call(hd(Nodes), riak_core_ring_manager, get_my_ring, []),
+    UpNodes =
+        rpc:call(hd(Nodes), riak_core_node_watcher, nodes, [riak_kv]),
     N = 3,
-    Preflist2 = riak_core_apl:get_apl_ann(DocIdx, N, Ring, UpNodes),
+
+    lager:info("Setting Custom bucket types for pr/pw test"),
+    TypePropsAll = [{pr, 3}, {pw, 3}, {allow_mult, false}],
+    lager:info("Create bucket type ~p, wait for propagation", [?TYPE_ALL]),
+    rt:create_and_activate_bucket_type(hd(Nodes), ?TYPE_ALL, TypePropsAll),
+    rt:wait_until_bucket_type_status(?TYPE_ALL, active, Nodes),
+    rt:wait_until_bucket_props(Nodes, {?TYPE_ALL, <<"bucket">>}, TypePropsAll),
+    TypePropsQ = [{pr, quorum}, {pw, quorum}, {allow_mult, false}],
+    lager:info("Create bucket type ~p, wait for propagation", [?TYPE_QUORUM]),
+    rt:create_and_activate_bucket_type(hd(Nodes), ?TYPE_QUORUM, TypePropsQ),
+    rt:wait_until_bucket_type_status(?TYPE_QUORUM, active, Nodes),
+    rt:wait_until_bucket_props(Nodes, {?TYPE_QUORUM, <<"bucket">>}, TypePropsQ),
+
+    PreflistFun = 
+        fun(B, K) ->
+            H = rpc:call(hd(Nodes), riak_core_util, chash_key, [{B, K}]),
+            riak_core_apl:get_apl_ann(H, N, Ring, UpNodes)
+        end,
+    Preflist2 = PreflistFun(<<"foo">>, <<"bar">>),
+
+    lager:info("Beginning key search"),
+    AllKey = find_key(PreflistFun, {?TYPE_ALL, <<"foo">>}, Preflist2),
+    QKey = find_key(PreflistFun, {?TYPE_QUORUM, <<"foo">>}, Preflist2),
+
     lager:info("Preflist is ~p", [Preflist2]),
     PLNodes = [Node || {{_Index, Node}, _Status} <- Preflist2],
     lager:info("Nodes in preflist ~p", [PLNodes]),
@@ -36,6 +62,16 @@ confirm() ->
                     riak_client:put(Obj, [{pw, all}], C)),
     ?assertMatch({ok, _},
                     riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
+    ObjTBAll =
+        riak_object:new(
+            {?TYPE_ALL, <<"foo">>}, AllKey, <<42:32/integer>>),
+    ObjTBQ =
+        riak_object:new(
+            {?TYPE_QUORUM, <<"foo">>}, QKey, <<42:32/integer>>),
+
+    check_typed_bucket_ok(C, ObjTBAll, AllKey, ?TYPE_ALL),
+    check_typed_bucket_ok(C, ObjTBQ, QKey, ?TYPE_QUORUM),
+    
 
     %% check pr/pw can't be violated
     ?assertEqual({error, {pw_val_violation, evil}},
@@ -67,12 +103,16 @@ confirm() ->
         riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
     ?assertEqual({error, timeout},
         riak_client:put(Obj, [{pw, all}], C)),
+    
+    check_typed_bucket_error(C, ObjTBAll, ?TYPE_ALL, AllKey, {error, timeout}),
 
     %% we can still meet quorum, though
     ?assertEqual(ok,
                     riak_client:put(Obj, [{pw, quorum}], C)),
     ?assertMatch({ok, _},
                     riak_client:get(<<"foo">>, <<"bar">>, [{pr, quorum}], C)),
+    
+    check_typed_bucket_ok(C, ObjTBQ, QKey, ?TYPE_QUORUM),
 
     rt:stop_and_wait(Node),
 
@@ -83,12 +123,17 @@ confirm() ->
     ?assertEqual({error, {pw_val_unsatisfied, 3, 2}},
                     riak_client:put(Obj, [{pw, all}], C)),
 
+    check_typed_bucket_error(
+        C, ObjTBAll, ?TYPE_ALL, AllKey, unsatisfied),
+    
     ?assertMatch({ok, {{_, 503, _}, _, "PR-value unsatisfied: 2/3\n"}},
         httpc:request(get, {UrlFun(<<"foo">>, <<"bar">>, <<"?pr=all">>), []}, [], [])),
 
     ?assertMatch({ok, {{_, 503, _}, _, "PW-value unsatisfied: 2/3\n"}},
         httpc:request(put, {UrlFun(<<"foo">>, <<"bar">>,
                     <<"?pw=all">>), [], "text/plain", <<42:32/integer>>}, [], [])),
+
+    check_typed_bucket_ok(C, ObjTBQ, QKey, ?TYPE_QUORUM),
 
     %% emulate another node failure
     {{Index2, Node2}, _} = lists:nth(2, Preflist2),
@@ -106,6 +151,8 @@ confirm() ->
     ?assertEqual({error, timeout}, 
                     riak_client:put(Obj, [{pw, quorum}], C)),
 
+    check_typed_bucket_error(C, ObjTBQ, ?TYPE_QUORUM, QKey, {error, timeout}),
+
     %% restart the node
     rt:start_and_wait(Node),
     rt:wait_for_service(Node, riak_kv),
@@ -115,11 +162,16 @@ confirm() ->
                     riak_client:put(Obj, [{pw, quorum}], C)),
     ?assertMatch({ok, _},
                     riak_client:get(<<"foo">>, <<"bar">>, [{pr, quorum}], C)),
+    
+    check_typed_bucket_ok(C, ObjTBQ, QKey, ?TYPE_QUORUM),
+
     %% intercepts still in force on second node, so we'll get timeouts
     ?assertEqual({error, timeout},
                     riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
     ?assertEqual({error, timeout},
                     riak_client:put(Obj, [{pw, all}], C)),
+    
+    check_typed_bucket_error(C, ObjTBAll, ?TYPE_ALL, AllKey, {error, timeout}),
 
     %% reboot the node
     rt:stop_and_wait(Node2),
@@ -131,6 +183,9 @@ confirm() ->
                     riak_client:put(Obj, [{pw, all}], C)),
     ?assertMatch({ok, _}, 
                     riak_client:get(<<"foo">>, <<"bar">>, [{pr, all}], C)),
+    
+    check_typed_bucket_ok(C, ObjTBAll, AllKey, ?TYPE_ALL),
+    check_typed_bucket_ok(C, ObjTBQ, QKey, ?TYPE_QUORUM),
 
     %% make a vnode start to fail puts
     make_intercepts_tab(Node2, Index2),
@@ -164,3 +219,39 @@ make_intercepts_tab(Node, Partition) ->
                 [Partition]}]),
     true = rpc:call(Node, ets, insert, [intercepts_tab, {drop_do_put_partitions,
                 [Partition]}]).
+
+check_typed_bucket_ok(C, Obj, K, Type) ->
+    ?assertEqual(
+        ok, riak_client:put(Obj, [], C)),
+    ?assertMatch(
+        {ok, _}, riak_client:get({Type, <<"foo">>}, K, C)).
+
+check_typed_bucket_error(C, Obj, Type, K, ExpectedError) ->
+    {GetError, PutError} =
+        case ExpectedError of
+            unsatisfied ->
+                {{error,{pr_val_unsatisfied,3,2}},
+                    {error,{pw_val_unsatisfied,3,2}}};
+            _ ->
+                {ExpectedError, ExpectedError}
+        end,
+
+    ?assertEqual(
+        PutError, riak_client:put(Obj, [], C)),
+    ?assertMatch(
+        GetError, riak_client:get({Type, <<"foo">>}, K, C)).
+
+find_key(PreflistFun, Bucket, TargetPreflist) ->
+    TestK =
+        list_to_binary(
+            lists:flatten(
+                io_lib:format("K~8..0B", [leveled_rand:uniform(1000000)]))),
+    case PreflistFun(Bucket, TestK) of
+        TargetPreflist ->
+            lager:info(
+                "Found key ~p with preflist ~p for Bucket ~p",
+                [TestK, TargetPreflist, Bucket]),
+            TestK;
+        _ ->
+            find_key(PreflistFun, Bucket, TargetPreflist)
+    end.
