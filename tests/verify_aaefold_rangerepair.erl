@@ -53,21 +53,69 @@
 -define(DELTA_COUNT, 10).
 
 confirm() ->
+    lager:info("---------------------------------------------"),
     lager:info("Testing without rebuilds - using http api"),
+    lager:info("---------------------------------------------"),
     Nodes0 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    H_MOD = rhc,
     CH_HTTP = rt:httpc(hd(Nodes0)),
-    ok = verify_aae_repair(Nodes0, rhc, CH_HTTP, Nodes0),
+    HFun =
+        fun(TS1, TS2) ->
+            H_MOD:aae_range_repairkeys(
+                CH_HTTP, ?BUCKET, all, convert_to_modified_range(TS1, TS2))
+        end,
+
+    ok = verify_aae_repair(Nodes0, rhc, CH_HTTP, HFun),
 
     rt:clean_cluster(Nodes0),
 
+    lager:info("---------------------------------------------"),
+    lager:info("Testing without rebuilds - using pb api"),
+    lager:info("---------------------------------------------"),
     Nodes1 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    P_MOD = riakc_pb_socket,
     CH_PB = rt:pbc(hd(Nodes1)),
-    ok = verify_aae_repair(Nodes1, riakc_pb_socket, CH_PB, Nodes1),
+    PFun =
+        fun(TS1, TS2) ->
+            P_MOD:aae_range_repairkeys(
+                CH_PB, ?BUCKET, all, convert_to_modified_range(TS1, TS2))
+        end,
+
+    ok = verify_aae_repair(Nodes1, riakc_pb_socket, CH_PB, PFun),
+
+    rt:clean_cluster(Nodes1),
+
+    lager:info("---------------------------------------------"),
+    lager:info("Testing without rebuilds - using riak_client"),
+    lager:info("---------------------------------------------"),
+    Nodes2 = rt:build_cluster(?NUM_NODES, ?CFG_NOREBUILD),
+    P_MOD = riakc_pb_socket,
+    CH_PB2 = rt:pbc(hd(Nodes2)),
+    RCFun =
+        fun(TSL, TSH) ->
+            DT =
+                {date, 
+                    calendar:now_to_datetime(TSL),
+                    calendar:now_to_datetime(TSH)},
+            {ok, R} = 
+                rpc:call(
+                    hd(Nodes2),
+                    riak_client,
+                    aae_fold,
+                    [{repair_keys_range,
+                        ?BUCKET,
+                        all,
+                        DT,
+                        all}]),
+            {ok, element(2, R)}
+        end,
+
+    ok = verify_aae_repair(Nodes2, P_MOD, CH_PB2, RCFun),
 
     pass.
 
 
-verify_aae_repair(Nodes, ClientMod, ClientHead, Nodes) ->
+verify_aae_repair(Nodes, ClientMod, ClientHead, ClientFun) ->
 
     TailNode = lists:last(Nodes),
     HeadNode = hd(Nodes),
@@ -131,14 +179,13 @@ verify_aae_repair(Nodes, ClientMod, ClientHead, Nodes) ->
     verify_tictac_aae:verify_data(HeadNode, TestKVs2),
 
     lager:info("Forcing read repair - first set"),
+    lager:info(
+        "Modified range of ~w",
+        [convert_to_modified_range(TS0, TS1)]),
     %% Initially two sets were to be used, to similate reverting to backup, but
     %% as only leveled has a testable hot_backup, we have to repair the first
     %% set to get back to the "recovered from backup point" 
-    {ok, NumKeys0} = 
-        ClientMod:aae_range_repairkeys(ClientHead,
-                                        ?BUCKET,
-                                        all,
-                                        convert_to_modified_range(TS0, TS1)),
+    {ok, NumKeys0} = ClientFun(TS0, TS1),
     ?assertEqual(?NUM_KEYS, NumKeys0),
 
     verify_tictac_aae:verify_data(HeadNode, TestKVs0),
@@ -146,11 +193,10 @@ verify_aae_repair(Nodes, ClientMod, ClientHead, Nodes) ->
     get_read_repair_total(Nodes),
 
     lager:info("Forcing read repair - second set"),
-    {ok, NumKeys1} = 
-        ClientMod:aae_range_repairkeys(ClientHead,
-                                        ?BUCKET,
-                                        all,
-                                        convert_to_modified_range(TS1, TS2)),
+    lager:info(
+        "Modified range of ~w",
+        [convert_to_modified_range(TS1, TS2)]),
+    {ok, NumKeys1} = ClientFun(TS1, TS2),
     ?assertEqual(?NUM_KEYS, NumKeys1),
 
     verify_tictac_aae:verify_data(HeadNode, TestKVs1),
