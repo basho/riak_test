@@ -137,13 +137,12 @@ confirm() ->
             1,
             rpc:call(NodeToUpgrade, application, loaded_applications, [])),
     
-    case check_capability(NodeToUpgrade) of
-        true ->
-            lager:info(
-                "Skipping upgrade test - previous version has prompted_repairs capability"),
-            lager:info("Previous should be ~s > 3.0.8", [RiakVer]),
+    UpgradeRE = "riak_kv\-3\.0\.[0-8]$",
+    case re:run(RiakVer, UpgradeRE) of
+        nomatch ->
+            lager:info("Skipping upgrade test - previous ~s > 3.0.8", [RiakVer]),
             pass;
-        false ->
+        _ ->
             lager:info("Running upgrade test with previous version ~s", [RiakVer]),
             rt:upgrade(NodeToUpgrade, current),
             rt:wait_for_service(NodeToUpgrade, riak_kv),
@@ -161,13 +160,6 @@ confirm() ->
 
             pass
     end.
-
-
-check_capability(Node) ->
-    rpc:call(Node,
-        riak_core_capability,
-        get,
-        [{riak_kv, tictacaae_prompted_repairs}, false]).
 
 verify_aae_norebuild(Nodes) ->
     verify_aae_norebuild(Nodes, false).
