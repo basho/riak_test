@@ -23,7 +23,7 @@
 
 -define(SNK_WORKERS, 4).
 
--define(DELETE_WAIT, 5000).
+-define(DELETE_WAIT, 8000).
 
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
@@ -161,7 +161,7 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     lager:info("Full sync will have re-replicated tombstones"),
     lager:info("B initially should have tombstones, but A should not"),
     lager:info("After delete wait, B and C should end up the same"),
-    timer:sleep(?DELETE_WAIT),
+    timer:sleep(2 * ?DELETE_WAIT),
     root_compare(
         Protocol,
         {NodeB1, ?B_NVAL, cluster_c},
@@ -188,6 +188,29 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
                 set_env,
                 [riak_kv, ttaaefs_logrepairs, false]),
     
+    lager:info("Confirm no tombstones in any cluster"),
+    {ok, BKdhLA} = find_tombs(NodeA1, all, all),
+    {ok, BKdhLB} = find_tombs(NodeB1, all, all),
+    {ok, BKdhLC} = find_tombs(NodeC1, all, all),
+    lager:info(
+        "Tomb counts A=~w B=~w C=~w", 
+        [length(BKdhLA), length(BKdhLB), length(BKdhLC)]),
+    ?assertMatch(0, length(BKdhLA)),
+    ?assertMatch(0, length(BKdhLC)),
+    ?assert(length(BKdhLB)< 5),
+    {ok, BKdhLBr1} = find_tombs(NodeB1, all, all),
+    {ok, BKdhLBr2} = find_tombs(NodeB1, all, all),
+    {ok, BKdhLBr3} = find_tombs(NodeB1, all, all),
+    {ok, BKdhLBr4} = find_tombs(NodeB1, all, all),
+    Found = lists:usort(BKdhLBr1 ++ BKdhLBr2 ++ BKdhLBr3 ++ BKdhLBr4),
+    lager:info("Found ~w tombstones in Cluster B", [length(Found)]),
+    lager:info("Re-reaping ~p", [Found]),
+    lager:info("Immediate delete not always successful"),
+    reap_from_cluster(NodeB1, Found),
+    timer:sleep(1000),
+    {ok, BKdhLBretry} = find_tombs(NodeB1, all, all),
+    ?assertMatch(0, length(BKdhLBretry)),
+
     lager:info("As tombstones reaped A, B and C the same"),
     root_compare(
         Protocol,
@@ -201,14 +224,6 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
         Protocol,
         {NodeB1, ?B_NVAL, cluster_c},
         {NodeC1ip, NodeC1port, ?C_NVAL}),
-    
-    lager:info("Confirm no tombstones in any cluster"),
-    {ok, BKdhLA} = find_tombs(NodeA1, all, all),
-    ?assertMatch(0, length(BKdhLA)),
-    {ok, BKdhLB} = find_tombs(NodeB1, all, all),
-    ?assertMatch(0, length(BKdhLB)),
-    {ok, BKdhLC} = find_tombs(NodeC1, all, all),
-    ?assertMatch(0, length(BKdhLC)),
 
     write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2),
     lager:info("Find all tombstones in cluster A"),
@@ -238,8 +253,7 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     lager:info("Confirm no tombstones in any cluster"),
     {ok, BKdhLA} = find_tombs(NodeA1, all, all),
     ?assertMatch(0, length(BKdhLA)),
-    {ok, BKdhLB} = find_tombs(NodeB1, all, all),
-    ?assertMatch(0, length(BKdhLB)),
+    {ok, 0} = find_tombs(NodeB1, all, all, return_count),
     {ok, BKdhLC} = find_tombs(NodeC1, all, all),
     ?assertMatch(0, length(BKdhLC)),
 
