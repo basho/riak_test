@@ -517,8 +517,12 @@ flushputfun(bitcask) ->
 
 flushput_cnt(TraceFun, File) ->
     lager:info("checking ~p", [File]),
-    {ok, FileData} = file:read_file(File),
-    count_matches(re:run(FileData, TraceFun, [global])).
+    case file:read_file(File) of
+        {ok, FileData} ->
+            count_matches(re:run(FileData, TraceFun, [global]));
+        {error, enoent} ->
+            0
+    end.
 
 count_matches(nomatch) ->
     0;

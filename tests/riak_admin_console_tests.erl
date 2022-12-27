@@ -59,6 +59,8 @@ cluster_tests(Node) ->
 bucket_tests(Node) ->
     check_admin_cmd(Node, "bucket-type status foo"),
     check_admin_cmd(Node, "bucket-type activate foo"),
+    % The following tests may fail on OSX post Riak 3.2, please test on a
+    % supported OS (e.g. debian)
     check_admin_cmd(Node, "bucket-type create foo {\"props\":{[]}}"),
     check_admin_cmd(Node, "bucket-type update foo {\"props\":{[]}}"),
     check_admin_cmd(Node, "bucket-type list").

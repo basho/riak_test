@@ -52,6 +52,7 @@
 -define(HLL_TYPE, <<"hlls">>).
 -define(BUCKET, {?HLL_TYPE, <<"testbucket">>}).
 -define(KEY, <<"xyzzy">>).
+-define(NOT_TESTING_PARTITION_SPEED, 1000).
 
 confirm() ->
     {N1, N2} = setup(),
@@ -61,11 +62,13 @@ confirm() ->
 
     lager:info("Partition cluster in two so we can do conflicting writes"),
     PartInfo = rt:partition([N1], [N2]),
+    timer:sleep(?NOT_TESTING_PARTITION_SPEED),
 
     write_siblings(PBC1, PBC2),
 
     lager:info("Heal partition"),
     ?assertEqual(ok, rt:heal(PartInfo)),
+    timer:sleep(?NOT_TESTING_PARTITION_SPEED),
 
     verify_no_siblings(PBC1),
 
