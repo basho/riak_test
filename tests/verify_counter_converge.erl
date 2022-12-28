@@ -52,14 +52,38 @@ confirm() ->
 
     PartInfo = rt:partition([N1, N2], [N3, N4]),
 
-    timer:sleep(1000),
+    lager:info("Increment counter on partitioned cluster"),
 
     %% increment one side
     increment_counter(C1, Key, 5),
 
+    C1Incr = get_counter(C1, Key),
+    C2Incr = get_counter(C2, Key),
+    lager:info("Validate counter after increment applied"),
+    lager:info(
+        "Initial value on increment side ~w ~w",
+        [C1Incr, C2Incr]),
+    
+    case {C1Incr, C2Incr} of
+        {13, 13} ->
+            ok;
+        _ ->
+            SW = os:timestamp(),
+            rt:wait_until(fun() -> 13 == get_counter(C1, Key) end),
+            rt:wait_until(fun() -> 13 == get_counter(C2, Key) end),
+            lager:warning(
+                "Maybe waited for increment ~w ms",
+                [timer:now_diff(os:timestamp(), SW) div 1000]),
+            lager:warning(
+                "Maybe cluster unstable after partition?")
+    end,
+
     %% check value on one side is different from other
-    [?assertEqual(13, get_counter(C, Key)) || C <- [C1, C2]],
-    [?assertEqual(8, get_counter(C, Key)) || C <- [C3, C4]],
+    ?assertEqual(13, get_counter(C1, Key)),
+    ?assertEqual(13, get_counter(C2, Key)),
+
+    ?assertEqual(8, get_counter(C3, Key)),
+    ?assertEqual(8, get_counter(C4, Key)),
 
     %% decrement other side
     decrement_counter(C3, Key, 2),
@@ -106,11 +130,11 @@ not_404(Client, Key) ->
             case Res of
                 %% NOTE: only 404, any other error is unexpected to
                 %% resolve itself
-                {error,{ok,"404",
-                        _Headers,
-                        <<"not found\n">>}} ->
+                {error, {ok,"404", _Headers, <<"not found\n">>}} ->
+                    lager:info("Key ~p not found on ~p", [Key, Client]),
                     false;
-                _ -> true
+                _ ->
+                    true
             end
     end.
 
@@ -127,4 +151,11 @@ decrement_counter(Client, Key, Amt) ->
     update_counter(Client, Key, -Amt).
 
 update_counter(Client, Key, Amt) ->
-    rhc:counter_incr(Client, ?BUCKET, Key, Amt).
+    case rhc:counter_incr(Client, ?BUCKET, Key, Amt) of
+        ok ->
+            ok;
+        {error,req_timedout} ->
+            lager:warning("Increment timed out"),
+            lager:warning("Assuming increment has not been made"),
+            ok = rhc:counter_incr(Client, ?BUCKET, Key, Amt)
+    end.
