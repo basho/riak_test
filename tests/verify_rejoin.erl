@@ -22,21 +22,26 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(TEST_ITEM_COUNT, 10000).
+-define(TEST_ITEM_COUNT, 20000).
 -define(B, <<"systest">>).
 -define(EXCHANGE_TICK, 10 * 1000). % Must be > inactivity timeout
 
--define(CFG, 
+-define(CFG(SuspendAAE), 
     [{riak_core,
         [{ring_creation_size, 16},
-        {vnode_inactivity_timeout, 5 * 1000}]},
+        {vnode_inactivity_timeout, 5 * 1000},
+        {handoff_timeout, 30 * 1000},
+        {handoff_receive_timeout, 30 * 1000},
+        {handoff_acklog_threshold, 4},
+        {handoff_batch_threshold_count, 500}]},
     {riak_kv, 
         [{anti_entropy, {off, []}},
         {tictacaae_active, active},
         {tictacaae_parallelstore, leveled_ko},
                 % if backend not leveled will use parallel key-ordered
                 % store
-        {tictacaae_exchangetick, ?EXCHANGE_TICK}, 
+        {tictacaae_exchangetick, ?EXCHANGE_TICK},
+        {tictacaae_pause, SuspendAAE},
         {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
         {tictacaae_primaryonly, true}]
     }]).
@@ -47,7 +52,7 @@ confirm() ->
     lager:info("Leave and join nodes during write activity"),
     lager:info("Do this with aggressive AAE - but we shouldn't see AAE repairs"),
     lager:info("In the future - need a riak stat for repairs to validate this"),
-    Nodes = rt:build_cluster(4, ?CFG),
+    Nodes = rt:build_cluster(4, ?CFG(false)),
     [Node1, Node2, Node3, Node4] = Nodes,
 
     lager:info("Writing ~p items", [?TEST_ITEM_COUNT]),
@@ -86,8 +91,6 @@ confirm() ->
     check_joined([Node1, Node2, Node3, Node4]),
 
     lager:info("Checking for AAE repairs - should be none"),
-    Ring = rt:get_ring(Node1),
-    Owners = riak_core_ring:all_owners(Ring),
     timer:sleep(?EXCHANGE_TICK),
     {RCT0, _CCT0} = tictacaae_accumulate_stats(Nodes),
     timer:sleep(?EXCHANGE_TICK),
@@ -105,6 +108,16 @@ confirm() ->
     {0, <<"undefined">>, <<"undefined">>} = repair_stats(Node1),
     {0, <<"undefined">>, <<"undefined">>} = repair_stats(Node2),
 
+    lager:info(
+        "Testing without AAE - and varying read repair settings "
+        "as well as handoff settings"),
+    lager:info("Update config on all nodes"),
+    lists:foreach(
+        fun(N) -> rt:update_app_config(N, ?CFG(true)) end,
+        [Node1, Node2, Node3, Node4]
+    ),
+    ok = rt:wait_until_no_pending_changes([Node1, Node2, Node3, Node4]),    
+
     lager:info("Set Node 1 not to do fallback repair"),
     lager:info("Stop Node 3 so read repairs happen on GET"),
     ok =
@@ -113,6 +126,7 @@ confirm() ->
             application,
             set_env,
             [riak_kv, read_repair_primaryonly, true]),
+    
     rt:stop_and_wait(Node3),
     ok = rt:wait_until_no_pending_changes([Node1, Node2]),
     ok = rt:wait_until(fun() -> upnode_count(Node1, 3) end),
@@ -157,7 +171,35 @@ confirm() ->
 
     lager:info("Restart Node3"),
     ok = rm_backend_dir(Node3),
+    lager:info("Removing vnodeids!"),
+    lager:info(
+        "Testing with removed vnode ids resolves the issue of rogue "
+        "repairs caused by key_amnesia"
+    ),
+    lager:info(
+        "If the data backend is removed, but not the vnode ids, when the "
+        "node restarts handoffs will lead to logging of key amnesia, as Node3 "
+        "has forgotten changes it previously coordinated"
+    ),
+    lager:info(
+        "With no vnode_id, a new one is generated on startup - so amnesia is "
+        "not recorded.  This means that the read_repair prompted by amnesia "
+        "does not happen"
+    ),
+    lager:info(
+        "When the read repair does happen, then some will be attempted before "
+        "the transfer is complete, and will not trigger read repair"
+    ),
+    lager:info(
+        "In this case we cna see read repairs prompted on other nodes in the "
+        "next systest_read"
+    ),
+
+    ok = rt:clean_data_dir([Node3], "kv_vnode"),
     rt:start_and_wait(Node3),
+    ok =
+        rpc:call(
+            Node3, application, set_env, [riak_kv, read_repair_log, true]),
     timer:sleep(1000),
     ok = rt:wait_until_transfers_complete(Nodes),
 
@@ -167,6 +209,10 @@ confirm() ->
     lager:info(
         "Primary repairs now expected from Node1 though"
     ),
+    ok =
+        rpc:call(
+            Node2, application, set_env, [riak_kv, read_repair_log, true]),
+   
     [] =
         rt:systest_read(Node1, 1, ?TEST_ITEM_COUNT * 2, ?B, 2),
     [] =
@@ -175,32 +221,18 @@ confirm() ->
     
     {RRT1C, RRFNF1C, RRPNF1C} = repair_stats(Node1),
     {RRT2C, RRFNF2C, RRPNF2C} = repair_stats(Node2),
+    lager:info("Read repair count on Node 2 ~w after reads", [RRT2C]),
     true = RRT1C > RRT1B,
     true = RRFNF1C == <<"undefined">>,
-    lager:info(
-        "AAE may explain why read repairs N2 ~w non-zero, but should be << ~w",
-        [(RRT2C - RRT2B), ?TEST_ITEM_COUNT]),
-    true = (RRT2C - RRT2B) < ?TEST_ITEM_COUNT,
-    true = (RRT2C - RRT2B) < (RRT1C - RRT1B),
+    true = RRT2C == RRT2B,
+
     true = RRPNF1C > 0,
     true = RRFNF2C == RRFNF2B,
-    lager:info(
-        "AAE may explain why  read repairs N2 ~w non-zero, but should be << ~w",
-        [RRPNF2C, ?TEST_ITEM_COUNT]),
-    true = (RRPNF2C == <<"undefined">>) or (RRPNF2C < ?TEST_ITEM_COUNT),
+    true = RRPNF2C == <<"undefined">>,
 
     {RCT3, CCT3} = tictacaae_accumulate_stats(Nodes),
-    lager:info(
-        "root compares delta ~w clock compares delta ~w",
-        [(RCT3 - RCT2), (CCT3 - CCT2)]),
-    
-    case RRT2C > RRT2B of
-        true ->
-            lager:info("AAE does appear to be the cause of read repairs"),
-            true = (CCT3 - CCT2) > 0;
-        false ->
-            ok
-    end,
+    true = RCT3 == 0,
+    true = CCT3 == 0,
 
     [] =
         rt:systest_read(
