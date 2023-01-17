@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(TEST_ITEM_COUNT, 20000).
+-define(TEST_ITEM_COUNT, 12000).
 -define(B, <<"systest">>).
 -define(EXCHANGE_TICK, 10 * 1000). % Must be > inactivity timeout
 
@@ -41,7 +41,7 @@
                 % if backend not leveled will use parallel key-ordered
                 % store
         {tictacaae_exchangetick, ?EXCHANGE_TICK},
-        {tictacaae_pause, SuspendAAE},
+        {tictacaae_suspend, SuspendAAE},
         {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
         {tictacaae_primaryonly, true}]
     }]).
@@ -242,6 +242,38 @@ confirm() ->
     true = RRFNF1D == <<"undefined">>,
     true = RRPNF1D == RRPNF1C,
 
+    lager:info("Clear Node3 again - this time use partition repair"),
+    rt:stop_and_wait(Node3),
+    ok = rt:wait_until_no_pending_changes([Node1, Node2]),
+    ok = rt:wait_until(fun() -> upnode_count(Node1, 3) end),
+    ok = rt:wait_until(fun() -> upnode_count(Node2, 3) end),
+    timer:sleep(10000),
+    ok = rm_backend_dir(Node3),
+    ok = rt:clean_data_dir([Node3], "kv_vnode"),
+    ok = rt:clean_data_dir([Node3], "tictac_aae"),
+    rt:start_and_wait(Node3),
+    ok =
+        rpc:call(
+            Node3, application, set_env, [riak_kv, read_repair_log, true]),
+    timer:sleep(1000),
+    ok = rt:wait_until_transfers_complete(Nodes),
+    lager:info("Set Node 3 to repair"),
+    ok = 
+        rpc:call(
+            Node3, riak_client, repair_node, []
+        ),
+    timer:sleep(1000),
+    ok = rt:wait_until_no_pending_changes(Nodes),
+    ok = wait_until_repair_complete(Node1),
+    lager:info("Re-read everything and check no read repairs"),
+    [] =
+        rt:systest_read(
+            Node1, 1, 6 * ?TEST_ITEM_COUNT, ?B, 2),
+    {RRT1E, RRFNF1E, RRPNF1E} = repair_stats(Node1),
+    true = RRT1E == RRT1D,
+    true = RRFNF1E == <<"undefined">>,
+    true = RRPNF1E == RRPNF1D,
+
     pass.
 
 
@@ -308,4 +340,55 @@ tictacaae_stats(Node) ->
         [Node, RCT, CCT]
     ),
     {RCT, CCT}.
+
+-define(VERIFY_COUNT, 15).
+-define(REPAIR_SLEEP, 2000).
+-define(TOTAL_REPAIR_TIME, 120000).
+
+wait_until_repair_complete(Node) ->
+    wait_until_repair_complete(Node, ?TOTAL_REPAIR_TIME, false).
+
+wait_until_repair_complete(_Node, 0, false) ->
+    lager:info("Repair never started"),
+    not_started;
+wait_until_repair_complete(_Node, Wait, _Count) when Wait =< 0 ->
+    lager:info("Repair never completed"),
+    not_completed;
+wait_until_repair_complete(_Node, Wait, 0) ->
+    lager:info("Repair appears to have completed ~w ms remaining", [Wait]),
+    ok;
+wait_until_repair_complete(Node, TimeToWait, false) ->
+    {TransfersPerNode, _NodesDown} =
+        rpc:call(Node, riak_core_status, all_active_transfers, []),
+    Transfers = lists:flatten(TransfersPerNode),
+    case Transfers of
+        [] ->
+            timer:sleep(?REPAIR_SLEEP),
+            wait_until_repair_complete(
+                Node, TimeToWait - ?REPAIR_SLEEP, false);
+        Transfers ->
+            lager:info(
+                "Transfers started ~w", [lists:flatten(Transfers)]),
+            wait_until_repair_complete(Node, TimeToWait, ?VERIFY_COUNT)
+    end;
+wait_until_repair_complete(Node, TimeToWait, CountDown) ->
+    {TransfersPerNode, _NodesDown} =
+        rpc:call(Node, riak_core_status, all_active_transfers, []),
+    Transfers = lists:flatten(TransfersPerNode),
+    case Transfers of
+        [] ->
+            lager:info(
+                "Repair maybe complete - validating count ~w", [CountDown]),
+            timer:sleep(?REPAIR_SLEEP),
+            wait_until_repair_complete(
+                Node, TimeToWait - ?REPAIR_SLEEP, CountDown - 1);
+        Transfers ->
+            lager:info(
+                "Repair ongoing ~w", [Transfers]),
+            timer:sleep(?REPAIR_SLEEP),
+            wait_until_repair_complete(
+                Node, TimeToWait - ?REPAIR_SLEEP, ?VERIFY_COUNT)
+    end.
+
+
     
