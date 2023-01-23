@@ -83,28 +83,28 @@ confirm() ->
     ExpectedNodeStats = 
         case HeadSupport of
             true ->
-                [{<<"node_gets">>, 10},
+                [{<<"node_gets">>, 5},
                     {<<"node_puts">>, 5},
-                    {<<"node_gets_total">>, 10},
+                    {<<"node_gets_total">>, 5},
                     {<<"node_puts_total">>, 5},
                     {<<"vnode_gets">>, 5}, 
                         % The five PUTS will require only HEADs
-                    {<<"vnode_heads">>, 30},
+                    {<<"vnode_heads">>, 15},
                         % There is no reduction in the count of HEADs
                         % as HEADS before GETs
                     {<<"vnode_puts">>, 15},
                     {<<"vnode_gets_total">>, 5},
-                    {<<"vnode_heads_total">>, 30},
+                    {<<"vnode_heads_total">>, 15},
                     {<<"vnode_puts_total">>, 15}];
             false ->
-                [{<<"node_gets">>, 10},
+                [{<<"node_gets">>, 5},
                     {<<"node_puts">>, 5},
-                    {<<"node_gets_total">>, 10},
+                    {<<"node_gets_total">>, 5},
                     {<<"node_puts_total">>, 5},
-                    {<<"vnode_gets">>, 30},
+                    {<<"vnode_gets">>, 15},
                     {<<"vnode_heads">>, 0},
                     {<<"vnode_puts">>, 15},
-                    {<<"vnode_gets_total">>, 30},
+                    {<<"vnode_gets_total">>, 15},
                     {<<"vnode_heads_total">>, 0},
                     {<<"vnode_puts_total">>, 15}]
         end,
@@ -123,52 +123,60 @@ confirm() ->
                        <<"node_put_fsm_time_95">>,
                        <<"node_put_fsm_time_99">>,
                        <<"node_put_fsm_time_100">>]),
+    
+    Stats3 = get_stats(Node1),
 
     lager:info("Make PBC Connection"),
     Pid = rt:pbc(Node1),
 
-    Stats3 = get_stats(Node1),
-
-    rt:systest_write(Node1, 1),
+    [rt:pbc_write(Pid, <<"systest">>, <<X>>, <<"12345">>) || X <- lists:seq(1, 5)],
+    [rt:pbc_read(Pid, <<"systest">>, <<X>>) || X <- lists:seq(1, 5)],
+    
+    Stats4 = get_stats(Node1),
     %% make sure the stats that were supposed to increment did
-    verify_inc(Stats2, Stats3, [{<<"pbc_connects_total">>, 1},
-                                {<<"pbc_connects">>, 1},
-                                {<<"pbc_active">>, 1}]),
-
-
+    verify_inc(
+        Stats3,
+        Stats4,
+        [{<<"pbc_connects_total">>, 1},
+        {<<"pbc_connects">>, 1},
+        {<<"pbc_active">>, 1}]),
+    
+    %% make sure the stats that were supposed to increment did
+    %% PB and HTTP API change stats the same
+    verify_inc(Stats3, Stats4, ExpectedNodeStats),
 
     lager:info("Force Read Repair"),
     rt:pbc_write(Pid, <<"testbucket">>, <<"1">>, <<"blah!">>),
     rt:pbc_set_bucket_prop(Pid, <<"testbucket">>, [{n_val, 4}]),
 
-    Stats4 = get_stats(Node1),
-    verify_inc(Stats3, Stats4, [{<<"read_repairs_total">>, 0},
+    Stats5 = get_stats(Node1),
+    verify_inc(Stats3, Stats5, [{<<"read_repairs_total">>, 0},
                                 {<<"read_repairs">>, 0}]),
 
     _Value = rt:pbc_read(Pid, <<"testbucket">>, <<"1">>),
 
-    Stats5 = get_stats(Node1),
+    Stats6 = get_stats(Node1),
 
-    verify_inc(Stats3, Stats5, [{<<"read_repairs_total">>, 1},
+    verify_inc(Stats3, Stats6, [{<<"read_repairs_total">>, 1},
                                 {<<"read_repairs">>, 1}]),
 
     _ = do_datatypes(Pid),
 
     lager:info("Verifying datatype stats are non-zero."),
 
-    Stats6 = get_stats(Node1),
+    Stats7 = get_stats(Node1),
     [
      begin
          lager:info("~s: ~p (expected non-zero)", [S, proplists:get_value(S, Stats6)]),
-         verify_nz(Stats6, [S])
+         verify_nz(Stats7, [S])
      end || S <- datatype_stats() ],
 
     _ = do_pools(Node1),
 
-    Stats7 = get_stats(Node1),
+    Stats8 = get_stats(Node1),
     lager:info("Verifying pool stats are incremented"),
 
-    verify_inc(Stats6, Stats7, inc_by_one(dscp_totals())),
+    verify_inc(Stats7, Stats8, inc_by_one(dscp_totals())),
 
     pass.
 
