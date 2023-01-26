@@ -206,79 +206,80 @@ test_api_consistency(Client, ClientMod, Bucket, Version) ->
     true = riakc_obj:get_value(ObjC) == <<"valueB">>,
 
     ok = 
-        case {ClientMod, Version} of
-            {rhc, current} ->
-                extra_http_notmodified_test(Client, Bucket, ObjC);
+        case Version of
+            current ->
+                extra_http_notmodified_test(ClientMod, Client, Bucket, ObjC);
             _ ->
                 ok
         end,
 
     ok.
 
-extra_http_notmodified_test(Client, Bucket, Obj) ->
+extra_http_notmodified_test(ClientMod, Client, Bucket, Obj) ->
     lager:info("Http only test - using if_not_modified"),
     Obj1 = riakc_obj:update_value(Obj, <<"modified1">>),
-    ok = rhc:put(Client, Obj1, [if_not_modified]),
-    {ok, _Obj2} = rhc:get(Client, Bucket, ?UPDATE_KEY),
+    ok = ClientMod:put(Client, Obj1, [if_not_modified]),
+    {ok, _Obj2} = ClientMod:get(Client, Bucket, ?UPDATE_KEY),
 
     lager:info("Http only test - generate sibling again"),
-    ok = rhc:put(Client, riakc_obj:update_value(Obj1, <<"modified2">>)),
-    {ok, Obj3} = rhc:get(Client, Bucket, ?UPDATE_KEY),
+    ok = ClientMod:put(Client, riakc_obj:update_value(Obj1, <<"modified2">>)),
+    {ok, Obj3} = ClientMod:get(Client, Bucket, ?UPDATE_KEY),
     [<<"modified1">>, <<"modified2">>] =
         lists:sort(riakc_obj:get_values(Obj3)),
 
     lager:info("Resolve siblings checking if_not_modified"),
     Obj4 = riakc_obj:new(Bucket, ?UPDATE_KEY, <<"modified3">>),
     ok =
-        rhc:put(
+        ClientMod:put(
             Client,
             riakc_obj:set_vclock(Obj4, riakc_obj:vclock(Obj3)),
             [if_not_modified]),
-    {ok, Obj5} = rhc:get(Client, Bucket, ?UPDATE_KEY),
+    {ok, Obj5} = ClientMod:get(Client, Bucket, ?UPDATE_KEY),
     true = riakc_obj:get_value(Obj5) == <<"modified3">>,
 
     lager:info("Fail to update due to if_not_modified"),
-    {error, {ok, "409", _Headers5, _Body5}} =
-        rhc:put(Client, Obj1, [if_not_modified]),
+    Error5 = ClientMod:put(Client, Obj1, [if_not_modified]),
+    check_current_match_conflict(ClientMod, Error5),
     
     lager:info("Succeed to update by correcting vector clock if_not_modified"),
     ok =
-        rhc:put(
+        ClientMod:put(
             Client,
             riakc_obj:set_vclock(Obj4, riakc_obj:vclock(Obj5)),
             [if_not_modified]),
-    {ok, Obj6} = rhc:get(Client, Bucket, ?UPDATE_KEY),
+    {ok, Obj6} = ClientMod:get(Client, Bucket, ?UPDATE_KEY),
     true = riakc_obj:get_value(Obj6) == <<"modified3">>,
 
     lager:info("Succeed again in creating siblings"),
-    ok = rhc:put(Client, Obj1),
-    {ok, Obj7} = rhc:get(Client, Bucket, ?UPDATE_KEY),
+    ok = ClientMod:put(Client, Obj1),
+    {ok, Obj7} = ClientMod:get(Client, Bucket, ?UPDATE_KEY),
     [<<"modified1">>, <<"modified3">>] =
         lists:sort(riakc_obj:get_values(Obj7)),
 
     lager:info("Succeed in resolving siblings with if_not_modified"),
     ok =
-        rhc:put(
+        ClientMod:put(
             Client,
             riakc_obj:set_vclock(Obj1, riakc_obj:vclock(Obj7)),
             [if_not_modified]),
-    {ok, Obj8} = rhc:get(Client, Bucket, ?UPDATE_KEY),
+    {ok, Obj8} = ClientMod:get(Client, Bucket, ?UPDATE_KEY),
     true = riakc_obj:get_value(Obj8) == <<"modified1">>,
     
     lager:info("Fail to update again blocked by if_not_modified"),
-    {error, {ok, "409", _Headers9, _Body9}} =
-        rhc:put(
+    Error9 =
+        ClientMod:put(
             Client,
             riakc_obj:set_vclock(Obj1, riakc_obj:vclock(Obj7)),
             [if_not_modified]),
+    check_current_match_conflict(ClientMod, Error9),
     
     lager:info("Fail to create new object with clock if_not_modified"),
     ObjA =
         riakc_obj:set_vclock(
             riakc_obj:new(Bucket, ?FRESHER_KEY, <<"modifiedA">>),
             riakc_obj:vclock(Obj7)),
-    {error, {ok, "409", _HeadersA, _BodyA}} =
-        rhc:put(Client, ObjA, [if_not_modified]),
+    ErrorA = ClientMod:put(Client, ObjA, [if_not_modified]),
+    check_current_match_conflict(ClientMod, ErrorA),
 
     ok.
 
@@ -311,6 +312,16 @@ check_match_conflict(rhc, MatchError) ->
     {error, {ok, StatusCode, _Headers, _Message}} = MatchError,
     ?assertMatch("412", StatusCode).
 
+% After the release of Riak 3.0.13 the X-Riak-If-Not-Modified header can be
+% used instaead of If-Match.  This changes the error produced on failure.
+check_current_match_conflict(riakc_pb_socket, MatchError) ->
+    {error, Response} = MatchError,
+    % On the PBC client notfound is returned when replacing a non-existent
+    % object with the if_not_modified header
+    ?assert(lists:member(Response, [<<"modified">>, <<"notfound">>]));
+check_current_match_conflict(rhc, MatchError) ->
+    {error, {ok, StatusCode, _Headers, _Message}} = MatchError,
+    ?assertMatch("409", StatusCode).
 
 log_tombs(ClientMod, Client, Bucket) ->
     {ok, {keys, L}} = ClientMod:aae_find_tombs(Client, Bucket, all, all, all),
