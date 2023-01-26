@@ -46,6 +46,33 @@
 
 %% You should have curl installed locally to do this.
 confirm() ->
+    lager:info(
+        "Prior to Riak 3.0.13 there was behaviour on the PB API "
+        "that could be triggered by passing if_none_match and if_not_modified."
+    ),
+    lager:info(
+        "This behaviour was also available via the HTTP API, with use of the "
+        "standard HTTP request headers of If-None-Match and If-Match headers."
+    ),
+    lager:info(
+        "The HTTP Riak Erlang client did not by default support this behaviour"
+        " and the behaviour was only provided by adding an extra GET to every "
+        "PUT."
+    ),
+    lager:info(
+        "This test proves that with the 3.0.13 Riak Erlang HTTP client, the "
+        "same effecive behaviour was possible both in 3.0.12, and also with "
+        "3.0.13 - which no longer requires a GET on every PUT"
+    ),
+    lager:info(
+        "For 3.0.13 there is also a test of the if_not_modified option, which "
+        "more directly replicates the behaviour the same option in PB."
+    ),
+    lager:info(
+        "This was added to 3.0.13 through the use of a bespoke "
+        "X-Riak-If-Not-Modified header - which unlike If-Match always does a "
+        "vector clock comparison, rather than a vtag comparison."
+    ),
 
     [[CurrentNode], [PreviousNode]] =
         rt:build_clusters([{1, current, ?CONF}, {1, previous, ?CONF}]),
