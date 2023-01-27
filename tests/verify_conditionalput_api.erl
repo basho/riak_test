@@ -216,12 +216,12 @@ test_api_consistency(Client, ClientMod, Bucket, Version) ->
     ok.
 
 extra_http_notmodified_test(ClientMod, Client, Bucket, Obj) ->
-    lager:info("Http only test - using if_not_modified"),
+    lager:info("Update - using if_not_modified"),
     Obj1 = riakc_obj:update_value(Obj, <<"modified1">>),
     ok = ClientMod:put(Client, Obj1, [if_not_modified]),
     {ok, _Obj2} = ClientMod:get(Client, Bucket, ?UPDATE_KEY),
 
-    lager:info("Http only test - generate sibling again"),
+    lager:info("Generate siblings again"),
     ok = ClientMod:put(Client, riakc_obj:update_value(Obj1, <<"modified2">>)),
     {ok, Obj3} = ClientMod:get(Client, Bucket, ?UPDATE_KEY),
     [<<"modified1">>, <<"modified2">>] =
