@@ -75,28 +75,28 @@ confirm() ->
     ExpectedNodeStats = 
         case HeadSupport of
             true ->
-                [{<<"node_gets">>, 10},
+                [{<<"node_gets">>, 5},
                     {<<"node_puts">>, 5},
-                    {<<"node_gets_total">>, 10},
+                    {<<"node_gets_total">>, 5},
                     {<<"node_puts_total">>, 5},
                     {<<"vnode_gets">>, 5}, 
                         % The five PUTS will require only HEADs
-                    {<<"vnode_heads">>, 30},
+                    {<<"vnode_heads">>, 15},
                         % There is no reduction in the count of HEADs
                         % as HEADS before GETs
                     {<<"vnode_puts">>, 15},
                     {<<"vnode_gets_total">>, 5},
-                    {<<"vnode_heads_total">>, 30},
+                    {<<"vnode_heads_total">>, 15},
                     {<<"vnode_puts_total">>, 15}];
             false ->
-                [{<<"node_gets">>, 10},
+                [{<<"node_gets">>, 5},
                     {<<"node_puts">>, 5},
-                    {<<"node_gets_total">>, 10},
+                    {<<"node_gets_total">>, 5},
                     {<<"node_puts_total">>, 5},
-                    {<<"vnode_gets">>, 30},
+                    {<<"vnode_gets">>, 15},
                     {<<"vnode_heads">>, 0},
                     {<<"vnode_puts">>, 15},
-                    {<<"vnode_gets_total">>, 30},
+                    {<<"vnode_gets_total">>, 15},
                     {<<"vnode_heads_total">>, 0},
                     {<<"vnode_puts_total">>, 15}]
         end,
