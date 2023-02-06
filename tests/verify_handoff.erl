@@ -122,10 +122,12 @@ assert_using(Node, {CapabilityCategory, CapabilityName}, ExpectedCapabilityName)
     lager:info("assert_using ~p =:= ~p", [ExpectedCapabilityName, CapabilityName]),
     ExpectedCapabilityName =:= rt:capability(Node, {CapabilityCategory, CapabilityName}).
 
-%% For some testing purposes, making these limits smaller is helpful:
+%% For some testing purposes, making these limits smaller is helpful,
+%% or at least exercise some more code:
 deploy_test_nodes(false, N) ->
     Config = [{riak_core, [{ring_creation_size, 8},
-                           {handoff_acksync_threshold, 20},
+                           {handoff_acksync_threshold, 5},
+                           {handoff_batch_threshold_count, 20},
                            {handoff_receive_timeout, 2000}]}],
     rt:deploy_nodes(N, Config);
 deploy_test_nodes(true,  N) ->
@@ -134,7 +136,6 @@ deploy_test_nodes(true,  N) ->
                            {ring_creation_size, 8},
                            {handoff_concurrency, 8},
                            {vnode_inactivity_timeout, 1000},
-                           {handoff_acksync_threshold, 20},
                            {handoff_receive_timeout, 2000},
                            {gossip_limit, {10000000, 60000}}]}],
     rt:deploy_nodes(N, Config).
