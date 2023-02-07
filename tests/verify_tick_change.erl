@@ -50,9 +50,13 @@ confirm() ->
            end),
     lager:info("If we got this far, then we found no inconsistencies\n"),
     [begin
-         RemoteTime = rpc:call(Node, net_kernel, get_net_ticktime, []),
-         io:format("Node ~p tick is ~p\n", [Node, RemoteTime]),
-         ?assertEqual(NewTime, RemoteTime)
+        rt:wait_until(
+            fun() ->
+                RemoteTime = rpc:call(Node, net_kernel, get_net_ticktime, []),
+                io:format("Node ~p tick is ~p\n", [Node, RemoteTime]),
+                RemoteTime == NewTime
+            end
+        )
      end || Node <- lists:usort([node()|nodes(connected)])],
     io:format("If we got this far, all nodes are using the same tick time\n"),
 
