@@ -31,6 +31,7 @@ verify_commit_hooks
 verify_conditional_postcommit
 verify_conditionalput_api
 verify_corruption_filtering
+verify_delete_onreplace
 verify_down
 verify_handoff
 verify_handoff_raw
