@@ -15,6 +15,9 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
+%% 
+%% Confirm that with handoff_deletes enabled there will not be tombstones
+%% left after a replace
 -module(verify_delete_onreplace).
 -behavior(riak_test).
 -export([confirm/0]).
@@ -23,6 +26,7 @@
 -define(TEST_ITEM_COUNT, 20000).
 -define(B, <<"systest">>).
 -define(EXCHANGE_TICK, 10 * 1000). % Must be > inactivity timeout
+-define(TOLERANCE, 10).
 
 -define(CFG(SuspendAAE, DeleteMode), 
     [{riak_core,
@@ -42,12 +46,13 @@
         {tictacaae_suspend, SuspendAAE},
         {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
         {tictacaae_primaryonly, true},
-        {delete_mode, DeleteMode}
+        {delete_mode, DeleteMode},
+        {handoff_deletes, true}
     ]
     }]).
 
 confirm() ->
-    Nodes = rt:deploy_nodes(5, ?CFG(true, 3000)),
+    Nodes = rt:deploy_nodes(5, ?CFG(true, immediate)),
     [Node1, Node2, Node3, Node4, Node5] = Nodes,
     InitialCluster = [Node1, Node2, Node3, Node4],
     ReplaceCluster = [Node1, Node3, Node4, Node5],
@@ -96,7 +101,11 @@ confirm() ->
     ?assertEqual(ok, rt:wait_until_no_pending_changes(ReplaceCluster)),
     rt:assert_nodes_agree_about_ownership(ReplaceCluster),
 
-    _ = repeatedly_count_tombs(Node1, 60),
+    TC0 = repeatedly_count_tombs(Node1, 10),
+    ?assert(TC0 < ?TOLERANCE),
+        % There can be timing issues, especially with the delete being made
+        % of multiple messages.  There may still be some tombstones
+    _ = find_tombs(Node1),
 
     lager:info("Resuming AAE on cluster"),
     lists:foreach(
@@ -105,19 +114,22 @@ confirm() ->
         end,
         ReplaceCluster
     ),
-    timer:sleep(?EXCHANGE_TICK),
+    lager:info("Waiting for exchanges to complete"),
+    timer:sleep(?EXCHANGE_TICK * 10),
 
-    _ = repeatedly_count_tombs(Node1, 60),
+    TC1 = repeatedly_count_tombs(Node1, 10),
+    ?assert(TC1 == 0),
+    _ = find_tombs(Node1),
 
     pass.
 
 
-repeatedly_count_tombs(Node, 0) ->
-    count_tombs(Node);
 repeatedly_count_tombs(Node, N) ->
-    count_tombs(Node),
-    timer:sleep(2000),
-    repeatedly_count_tombs(Node, N - 1).
+    lists:sum(
+        lists:map(
+            fun(_I) -> timer:sleep(1000), count_tombs(Node) end,
+            lists:seq(1, N)
+        )) div N.
 
 
 count_tombs(Node) ->
@@ -129,6 +141,19 @@ count_tombs(Node) ->
             [{reap_tombs, ?B, all, all, all, count}]),
     lager:info("Tombstone count ~w", [TC0]),
     TC0.
+
+find_tombs(Node) ->
+    {ok, Tombs} =
+        rpc:call(
+            Node,
+            riak_client,
+            aae_fold,
+            [{find_tombs, ?B, all, all, all}]),
+    lists:foreach(
+        fun(T) -> lager:info("Tombstone found ~p", [T]) end, Tombs
+    ),
+    length(Tombs).
+
 
 delete_batch(BatchSize, Node, Total) ->
     delete_batch(Node, 1, BatchSize, Total).
