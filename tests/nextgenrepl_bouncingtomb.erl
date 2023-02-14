@@ -23,7 +23,7 @@
 -define(STND_MAX_DELAY, 3600).
 -define(BIG_REPL_SLEEP, 4000).
 
--define(LOOP_COUNT, 4).
+-define(LOOP_COUNT, 5).
 -define(STATS_WAIT, 1000).
 
 

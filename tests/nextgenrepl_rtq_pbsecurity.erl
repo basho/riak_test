@@ -408,21 +408,36 @@ check_all_insync({NodeA, IPA, PortA},
                     {NodeB, IPB, PortB},
                     {NodeC, IPC, PortC},
                     SSLCredentials) ->
-    {root_compare, 0}
-        = fullsync_check({NodeA, IPA, PortA, ?A_NVAL},
-                            {NodeB, IPB, PortB, ?B_NVAL},
-                            cluster_a,
-                            SSLCredentials),
-    {root_compare, 0}
-        = fullsync_check({NodeB, IPB, PortB, ?B_NVAL},
-                            {NodeC, IPC, PortC, ?C_NVAL},
-                            cluster_c,
-                            SSLCredentials),
-    {root_compare, 0}
-        = fullsync_check({NodeC, IPC, PortC, ?C_NVAL},
-                            {NodeA, IPA, PortA, ?A_NVAL},
-                            cluster_a,
-                            SSLCredentials),
+    {root_compare, 0} =
+        wait_for_outcome(
+            ?MODULE,
+            fullsync_check,
+            [{NodeA, IPA, PortA, ?A_NVAL},
+                {NodeB, IPB, PortB, ?B_NVAL},
+                cluster_b,
+                SSLCredentials],
+            {root_compare, 0},
+            ?WAIT_LOOPS),
+    {root_compare, 0} =
+        wait_for_outcome(
+            ?MODULE,
+            fullsync_check,
+            [{NodeB, IPB, PortB, ?B_NVAL},
+                {NodeC, IPC, PortC, ?C_NVAL},
+                cluster_c,
+                SSLCredentials],
+            {root_compare, 0},
+            ?WAIT_LOOPS),
+    {root_compare, 0} =
+        wait_for_outcome(
+            ?MODULE,
+            fullsync_check,
+            [{NodeC, IPC, PortC, ?C_NVAL},
+                {NodeA, IPA, PortA, ?A_NVAL},
+                cluster_a,
+                SSLCredentials],
+            {root_compare, 0},
+            ?WAIT_LOOPS),
     true.
 
 setup_srcreplqueues([], _SinkClusters, _Filter) ->
