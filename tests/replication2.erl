@@ -593,16 +593,34 @@ pb_write_during_shutdown([AFirst|_] = ANodes, [BFirst|_] = BNodes) ->
         false ->
             lager:error("Received more read errors on ~p: ~p than write errors on ~p: ~p",
             [BFirst, length(ReadErrors), Target, length(WriteErrors)]),
-            FailedKeys = lists:foldl(fun({Key, _}, Acc) ->
-            case lists:keyfind(Key, 1, WriteErrors) of
+            FailedKeys =
+                lists:foldl(
+                    fun({Key, _}, Acc) ->
+                        case lists:keyfind(Key, 1, WriteErrors) of
+                            false ->
+                                [Key|Acc];
+                            _ ->
+                                Acc
+                        end
+                    end,
+                    [],
+                    ReadErrors),
+            lager:info("Failed keys ~p", [FailedKeys]),
+            lager:info("Validate number of read failures on secondary cluster"),
+            ReadErrors3 = rt:systest_read(BFirst, 1000, 11000, TestBucket, 2),
+            lager:info("Received ~p read failures", [length(ReadErrors3)]),
+            case length(WriteErrors) >= length(ReadErrors3) of
+                true ->
+                    lager:info(
+                        "Discrepancy appears to be timing, checking again"),
+                    ?assertMatch(
+                        ReadErrors3,
+                        rt:systest_read(BFirst, 1000, 11000, TestBucket, 2)),
+                    lager:info("Check complete"),
+                    ok;
                 false ->
-                    [Key|Acc];
-                _ ->
-                    Acc
+                    ?assert(false)
             end
-        end, [], ReadErrors),
-    lager:info("Failed keys ~p", [FailedKeys]),
-    ?assert(false)
     end.
 
 
