@@ -342,10 +342,12 @@ tictacaae_stats(Node) ->
     {RCT, CCT}.
 
 -define(VERIFY_COUNT, 15).
+-define(PRESTART_SLEEP, 200).
 -define(REPAIR_SLEEP, 2000).
 -define(TOTAL_REPAIR_TIME, 120000).
 
 wait_until_repair_complete(Node) ->
+    lager:info("Waiting until repair complete"),
     wait_until_repair_complete(Node, ?TOTAL_REPAIR_TIME, false).
 
 wait_until_repair_complete(_Node, 0, false) ->
@@ -363,9 +365,9 @@ wait_until_repair_complete(Node, TimeToWait, false) ->
     Transfers = lists:flatten(TransfersPerNode),
     case Transfers of
         [] ->
-            timer:sleep(?REPAIR_SLEEP),
+            timer:sleep(?PRESTART_SLEEP),
             wait_until_repair_complete(
-                Node, TimeToWait - ?REPAIR_SLEEP, false);
+                Node, TimeToWait - ?PRESTART_SLEEP, false);
         Transfers ->
             lager:info(
                 "Transfers started ~w", [lists:flatten(Transfers)]),
