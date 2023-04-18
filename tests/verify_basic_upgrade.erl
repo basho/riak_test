@@ -22,7 +22,7 @@
 -export([confirm/0]).
 -include_lib("eunit/include/eunit.hrl").
 
--define(NUM_KEYS, 20000).
+-define(NUM_KEYS, 200000).
 
 -define(CONFIG(RingSize, NVal), 
     [
@@ -42,6 +42,10 @@
                 {journal_objectcount, 2000} 
                 % setting  low object count ensures we test rolled journal
                 % files, not just active ones
+            ]},
+        {eleveldb,
+            [
+                {compression, snappy}
             ]}
         ]).
 
