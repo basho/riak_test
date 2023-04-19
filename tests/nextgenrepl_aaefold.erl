@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_BUCKET, <<"repl-aae-fullsync-systest_a">>).
+-define(CONFIRMS_BUCKET, <<"repl-aae-fullsync-systest_node_confirms">>).
 -define(A_RING, 8).
 -define(B_RING, 32).
 -define(C_RING, 16).
@@ -222,8 +223,53 @@ confirm() ->
     {root_compare, 0} = fullsync_check(RefB, RefC, no_repair),
     {root_compare, 0} = fullsync_check(RefC, RefA, no_repair),
 
+    lager:info("Test with node_confirms of 2"),
+    set_node_confirms(NodeB, ClusterB, ?CONFIRMS_BUCKET, 2),
+    FunMod:write_to_cluster(NodeB, 1, 1000, ?CONFIRMS_BUCKET, true, ?VAL_INIT),
+    0 = 
+        wait_for_outcome(FunMod,
+                            read_from_cluster,
+                            [NodeB, 1, 1000, undefined,
+                                ?CONFIRMS_BUCKET, ?VAL_INIT],
+                            0,
+                            5),
+    1000 = 
+        wait_for_outcome(FunMod,
+                            read_from_cluster,
+                            [NodeC, 1, 1000, undefined,
+                                ?CONFIRMS_BUCKET, ?VAL_INIT],
+                            1000,
+                            5),
+    
+    lager:info("Complete all necessary replications using all"),
+    
+    {ok, KC_NC0} =
+        range_repl_compare(
+            SrcHTTPCB, SrcPBCB, ?CONFIRMS_BUCKET, all, all, cluster_c),
+    ?assertEqual(1000, KC_NC0),
+    0 = 
+        wait_for_outcome(FunMod,
+                            read_from_cluster,
+                            [NodeC, 1, 1000, undefined,
+                                ?CONFIRMS_BUCKET, ?VAL_INIT],
+                            0,
+                            5),
+
     pass.
 
+
+set_node_confirms(Node, Nodes, Bucket, NC) ->
+    rpc:call(
+        Node,
+        riak_core_bucket,
+        set_bucket, [Bucket, [{node_confirms, NC}]]),
+    timer:sleep(1000),
+    lager:info(
+        "Bucket properties for ~s ~p",
+        [Bucket,
+            rpc:call(Node, riak_core_bucket, get_bucket, [Bucket])]
+    ),
+    rt:wait_until_ring_converged(Nodes).
 
 setup_replqueues([], _ClusterList) ->
     ok;
