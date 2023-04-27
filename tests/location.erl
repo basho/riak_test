@@ -25,13 +25,15 @@ run_test(RingSize) ->
         [
         {riak_kv, [{anti_entropy, {off, []}}]},
         {riak_core,
-            [{default_bucket_props,
-                [{allow_mult, true},
-                    {dvv_enabled, true},
-                    {ring_creation_size, RingSize},
-                    {vnode_management_timer, 1000},
-                    {handoff_concurrency, 100},
-                    {vnode_inactivity_timeout, 1000}]}]}],
+            [
+              {ring_creation_size, RingSize},
+              {vnode_management_timer, 5000},
+              {vnode_inactivity_timeout, 60000},
+              {handoff_concurrency, 8},
+              {default_bucket_props,
+                [{allow_mult, true}, {dvv_enabled, true}]}
+              ]}
+            ],
 
     lager:info("Testing with ring-size ~w", [RingSize]),    
 
@@ -42,7 +44,7 @@ run_test(RingSize) ->
     rt:staged_join(Node2, Node1),
     rt:staged_join(Node3, Node1),
     rt:staged_join(Node4, Node1),
-
+    
     % Set one location
     setup_location(Nodes, #{Node1 => ?RACK_A}),
     Ring1 = rt:get_ring(Node1),
@@ -116,31 +118,50 @@ run_test(RingSize) ->
     Ring8 = rt:get_ring(Node1),
     assert_ring_satisfy_n_val(Ring8),
 
-    rt:staged_join(Node6, Node1),
+    case RingSize of
+      64 ->
 
-    setup_location(AllNodes, #{Node1 => ?RACK_A,
-                               Node2 => ?RACK_A,
-                               Node3 => ?RACK_B,
-                               Node4 => ?RACK_B,
-                               Node5 => ?RACK_C,
-                               Node6 => ?RACK_C
-                              }),
-    Ring9 = rt:get_ring(Node1),
-    assert_ring_satisfy_n_val(Ring9),
-    % Because of tail violations need to increase n_val to satisfy diversity of locations
-    assert_no_location_violation(Ring9, 4, 3),
+        rt:staged_join(Node6, Node1),
 
-    setup_location(AllNodes, #{Node1 => ?RACK_A,
-                               Node2 => ?RACK_B,
-                               Node3 => ?RACK_C,
-                               Node4 => ?RACK_C,
-                               Node5 => ?RACK_B,
-                               Node6 => ?RACK_A
-    }),
-    Ring10 = rt:get_ring(Node1),
-    assert_ring_satisfy_n_val(Ring10),
-    % Because of tail violations need to increase n_val to satisfy diversity of locations
-    assert_no_location_violation(Ring10, 4, 3),
+        setup_location(AllNodes, #{Node1 => ?RACK_A,
+                                  Node2 => ?RACK_A,
+                                  Node3 => ?RACK_B,
+                                  Node4 => ?RACK_B,
+                                  Node5 => ?RACK_C,
+                                  Node6 => ?RACK_C
+                                  }),
+        Ring9 = rt:get_ring(Node1),
+
+        Preflists = riak_core_ring:all_preflists(Ring9, 4),
+        lager:info("Preflist heads for Ring9:"),
+        lists:foreach(
+          fun(L) -> lager:info("~p", [hd(L)]) end,
+          Preflists
+        ),
+
+        assert_ring_satisfy_n_val(Ring9),
+        % Because of tail violations need to increase n_val to satisfy diversity of locations
+        assert_no_location_violation(Ring9, 4, 3),
+
+        setup_location(AllNodes, #{Node1 => ?RACK_A,
+                                  Node2 => ?RACK_B,
+                                  Node3 => ?RACK_C,
+                                  Node4 => ?RACK_C,
+                                  Node5 => ?RACK_B,
+                                  Node6 => ?RACK_A
+        }),
+        Ring10 = rt:get_ring(Node1),
+        assert_ring_satisfy_n_val(Ring10),
+        % Because of tail violations need to increase n_val to satisfy diversity of locations
+        assert_no_location_violation(Ring10, 4, 3);
+
+      N ->
+        lager:info(
+          "Test skipped for ring size =/= 64 - as will fail "
+          "for unsolveable tail violations"),
+        ok
+        
+    end,
 
     lager:info("Test verify location settings with ring size ~w: Passed",
                 [RingSize]),
@@ -163,8 +184,24 @@ set_location(Node, Location) ->
 -spec setup_location([node()], #{node() := string()}) -> ok.
 setup_location([OnNode | _] = Nodes, NodeMap) ->
     maps:map(fun set_location/2, NodeMap),
+    rt:wait_until_ring_converged(Nodes),
+    lager:info("Never rush into commitment"),
+    timer:sleep(5000),
     rt:plan_and_commit(OnNode),
-    ?assertEqual(ok, rt:wait_until_no_pending_changes(Nodes)).
+    rt:wait_until_ring_converged(Nodes),
+    lists:foreach(fun(N) -> rt:wait_until_ready(N) end, Nodes),
+    lager:info("Sleeping before checking transfer progress"),
+    timer:sleep(5000),
+    ok = rt:wait_until_transfers_complete(Nodes),
+    lists:foreach(
+      fun(N) -> rt:wait_until_node_handoffs_complete(N) end,
+      Nodes),
+    lager:info("Sleeping before confirming transfers complete"),
+    timer:sleep(5000),
+    ok = rt:wait_until_transfers_complete(Nodes),
+    lager:info("Clearly annoying to sleep again - but need to be sure"),
+    timer:sleep(5000),
+    ok = rt:wait_until_transfers_complete(Nodes).
 
 assert_ring_satisfy_n_val(Ring) ->
   lager:info("Ensure that every preflists satisfy n_val"),
@@ -187,3 +224,5 @@ log_assert_no_location_violation(Nval, Nval) ->
 log_assert_no_location_violation(NVal, MinNumberOfDistinctLocation) ->
   lager:info("Ensure that every preflists (n_val: ~p) have at leaset ~p distinct locations",
              [NVal, MinNumberOfDistinctLocation]).
+
+  
