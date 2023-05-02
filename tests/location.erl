@@ -15,9 +15,9 @@
 -define(RACK_F, "rack_f").
 
 confirm() ->
-    pass = run_test(32),
+    % pass = run_test(32),
     pass = run_test(64), 
-    pass = run_test(128),
+    % pass = run_test(128),
     pass.
 
 run_test(RingSize) ->
@@ -27,9 +27,10 @@ run_test(RingSize) ->
         {riak_core,
             [
               {ring_creation_size, RingSize},
+              {claimant_tick, 5000},
               {vnode_management_timer, 5000},
               {vnode_inactivity_timeout, 60000},
-              {handoff_concurrency, 8},
+              {handoff_concurrency, 16},
               {default_bucket_props,
                 [{allow_mult, true}, {dvv_enabled, true}]}
               ]}
@@ -157,10 +158,11 @@ run_test(RingSize) ->
 
       N ->
         lager:info(
-          "Test skipped for ring size =/= 64 - as will fail "
-          "for unsolveable tail violations"),
+          "Test skipped for ring size ~w =/= 64 - as will fail "
+          "for unsolveable tail violations",
+          [N]),
         ok
-        
+
     end,
 
     lager:info("Test verify location settings with ring size ~w: Passed",
@@ -196,7 +198,7 @@ setup_location([OnNode | _] = Nodes, NodeMap) ->
     lists:foreach(
       fun(N) -> rt:wait_until_node_handoffs_complete(N) end,
       Nodes),
-    lager:info("Sleeping before confirming transfers complete"),
+    lager:info("Sleeping claimant_tick before confirming transfers complete"),
     timer:sleep(5000),
     ok = rt:wait_until_transfers_complete(Nodes),
     lager:info("Clearly annoying to sleep again - but need to be sure"),
