@@ -132,6 +132,8 @@
          spawn_cmd/1,
          spawn_cmd/2,
          search_cmd/2,
+         staged_join/2,
+         staged_leave/1,
          start/1,
          start_and_wait/1,
          status_of_according_to/2,
@@ -471,6 +473,13 @@ staged_join(Node, PNode) ->
     Fun = fun() -> rpc:call(Node, riak_core, staged_join, [PNode]) end,
     lager:info("[join] ~p to (~p)", [Node, PNode]),
     ?assertEqual(ok, join_with_retry(Fun)),
+    ok.
+
+%% @doc Have `Node' send a leave request
+staged_leave(Node) ->
+    Fun = fun() -> rpc:call(Node, riak_core_console, stage_leave, [Node]) end,
+    lager:info("[leave] ~p from cluster", [Node]),
+    ok = Fun(),
     ok.
 
 plan_and_commit(Node) ->

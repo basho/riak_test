@@ -6,6 +6,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(N_VAL, 3).
+-define(CLAIMANT_TICK, 5000).
 
 -define(RACK_A, "rack_a").
 -define(RACK_B, "rack_b").
@@ -15,28 +16,37 @@
 -define(RACK_F, "rack_f").
 
 confirm() ->
-    % pass = run_test(32),
-    pass = run_test(64), 
-    % pass = run_test(128),
-    pass.
+  % Test takes a long time, so testing other ring sizes is expensive
+  % The Ring size of 64 is a distinct scenario to ring size of 32 or
+  % 128 (because it does not create a tail violation).
+  pass = run_test(64, choose_claim_v2), 
+  pass = run_test(128, choose_claim_v2),
+  pass = run_test(64, choose_claim_v4),
+  pass = run_test(256, choose_claim_v4),
+  pass = run_test(512, choose_claim_v4),
+  pass.
 
-run_test(RingSize) ->
+run_test(RingSize, ClaimAlgorithm) ->
     Conf =
         [
         {riak_kv, [{anti_entropy, {off, []}}]},
         {riak_core,
             [
               {ring_creation_size, RingSize},
-              {claimant_tick, 5000},
-              {vnode_management_timer, 5000},
-              {vnode_inactivity_timeout, 60000},
+              {claimant_tick, ?CLAIMANT_TICK},
+              {vnode_management_timer, 2000},
+              {vnode_inactivity_timeout, 4000},
               {handoff_concurrency, 16},
+              {choose_claim_fun, ClaimAlgorithm},
               {default_bucket_props,
                 [{allow_mult, true}, {dvv_enabled, true}]}
               ]}
             ],
 
-    lager:info("Testing with ring-size ~w", [RingSize]),    
+    lager:info("*************************"),
+    lager:info("Testing with ring-size ~w", [RingSize]),
+    lager:info("Testing with claim algorithm ~w", [ClaimAlgorithm]),
+    lager:info("*************************"),
 
     AllNodes = rt:deploy_nodes(6, Conf),
     [Node1, Node2, Node3, Node4, Node5, Node6] = AllNodes,
@@ -55,7 +65,7 @@ run_test(RingSize) ->
     setup_location(Nodes, #{Node1 => ?RACK_B}),
     Ring2 = rt:get_ring(Node1),
     assert_ring_satisfy_n_val(Ring2),
-    assert_no_ownership_change(Ring1, Ring2),
+    assert_no_ownership_change(Ring1, Ring2, ClaimAlgorithm, false),
 
     % Two Nodes same location
     setup_location(Nodes, #{Node1 => ?RACK_B,
@@ -73,7 +83,7 @@ run_test(RingSize) ->
                             Node2 => ?RACK_B}),
     Ring4 = rt:get_ring(Node1),
     assert_ring_satisfy_n_val(Ring4),
-    assert_no_ownership_change(Ring4, Ring3),
+    assert_no_ownership_change(Ring4, Ring3, ClaimAlgorithm, true),
 
     % Change both nodes locations and expect no transfers
     setup_location(Nodes, #{Node1 => ?RACK_B,
@@ -106,7 +116,7 @@ run_test(RingSize) ->
     Ring7 = rt:get_ring(Node1),
     assert_ring_satisfy_n_val(Ring7),
     assert_no_location_violation(Ring7),
-    assert_no_ownership_change(Ring6, Ring7),
+    assert_no_ownership_change(Ring6, Ring7, ClaimAlgorithm, false),
 
     rt:staged_join(Node5, Node1),
 
@@ -120,7 +130,7 @@ run_test(RingSize) ->
     assert_ring_satisfy_n_val(Ring8),
 
     case RingSize of
-      64 ->
+      N when N == 64; N == 256 ->
 
         rt:staged_join(Node6, Node1),
 
@@ -132,13 +142,6 @@ run_test(RingSize) ->
                                   Node6 => ?RACK_C
                                   }),
         Ring9 = rt:get_ring(Node1),
-
-        Preflists = riak_core_ring:all_preflists(Ring9, 4),
-        lager:info("Preflist heads for Ring9:"),
-        lists:foreach(
-          fun(L) -> lager:info("~p", [hd(L)]) end,
-          Preflists
-        ),
 
         assert_ring_satisfy_n_val(Ring9),
         % Because of tail violations need to increase n_val to satisfy diversity of locations
@@ -186,32 +189,50 @@ set_location(Node, Location) ->
 -spec setup_location([node()], #{node() := string()}) -> ok.
 setup_location([OnNode | _] = Nodes, NodeMap) ->
     maps:map(fun set_location/2, NodeMap),
+    plan_and_wait(OnNode, Nodes).
+
+-spec plan_and_wait(node(), [node()]) -> ok.
+plan_and_wait(Claimant, Nodes) ->
     rt:wait_until_ring_converged(Nodes),
-    lager:info("Never rush into commitment"),
-    timer:sleep(5000),
-    rt:plan_and_commit(OnNode),
+    rt:plan_and_commit(Claimant),
     rt:wait_until_ring_converged(Nodes),
     lists:foreach(fun(N) -> rt:wait_until_ready(N) end, Nodes),
-    lager:info("Sleeping before checking transfer progress"),
-    timer:sleep(5000),
+    lager:info("Sleeping claimant_tick before checking transfer progress"),
+    timer:sleep(?CLAIMANT_TICK),
     ok = rt:wait_until_transfers_complete(Nodes),
     lists:foreach(
       fun(N) -> rt:wait_until_node_handoffs_complete(N) end,
       Nodes),
-    lager:info("Sleeping claimant_tick before confirming transfers complete"),
-    timer:sleep(5000),
+    lager:info(
+      "Sleeping claimant_tick  + 1s before confirming transfers complete"),
+    timer:sleep(?CLAIMANT_TICK + 1000),
     ok = rt:wait_until_transfers_complete(Nodes),
-    lager:info("Clearly annoying to sleep again - but need to be sure"),
-    timer:sleep(5000),
+    lager:info(
+      "Sleeping claimant_tick  + 1s before confirming transfers complete"),
+    timer:sleep(?CLAIMANT_TICK + 1000),
     ok = rt:wait_until_transfers_complete(Nodes).
 
 assert_ring_satisfy_n_val(Ring) ->
   lager:info("Ensure that every preflists satisfy n_val"),
   ?assertEqual([], riak_core_ring_util:check_ring(Ring, ?N_VAL)).
 
-assert_no_ownership_change(RingA, RingB) ->
+assert_no_ownership_change(RingA, RingB, choose_claim_v2, _TolerateChange) ->
   lager:info("Ensure no ownership changed"),
-  ?assertEqual(riak_core_ring:all_owners(RingA), riak_core_ring:all_owners(RingB)).
+  ?assertEqual(
+    riak_core_ring:all_owners(RingA), riak_core_ring:all_owners(RingB));
+assert_no_ownership_change(RingA, RingB, _, false) ->
+  lager:info("Ensure no ownership changed"),
+  ?assertEqual(
+    riak_core_ring:all_owners(RingA), riak_core_ring:all_owners(RingB));
+assert_no_ownership_change(RingA, RingB, choose_claim_v4, true) ->
+  OwnersA = riak_core_ring:all_owners(RingA),
+  OwnersB = riak_core_ring:all_owners(RingB),
+  DiffOwners = lists:subtract(OwnersA, OwnersB),
+  lager:info(
+    "choose_claim_v4 does not guarrantee no ownership change on "
+    "change of location name - ~w changes out of ~w",
+    [length(DiffOwners), length(OwnersA)]),
+  ok.
 
 assert_no_location_violation(Ring) ->
   assert_no_location_violation(Ring, ?N_VAL, ?N_VAL).
