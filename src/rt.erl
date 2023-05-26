@@ -485,15 +485,41 @@ staged_leave(Node) ->
 plan_and_commit(Node) ->
     timer:sleep(1000),
     lager:info("planning cluster change"),
+    SW = os:timestamp(),
     case rpc:call(Node, riak_core_claimant, plan, []) of
         {error, ring_not_ready} ->
             lager:info("plan: ring not ready"),
             timer:sleep(100),
             plan_and_commit(Node);
-        {ok, _, _} ->
-            lager:info("plan: done"),
+        {ok, _Changes, NextRings} ->
+            lager:info(
+                "plan: done in ~w ms",
+                [timer:now_diff(os:timestamp(), SW) div 1000]),
+            NextRings2 =
+                lists:sublist(NextRings, erlang:max(0, length(NextRings) - 1)),
+            lager:info("Transitions in plan: ~w", [length(NextRings2)]),
+            lists:foldl(
+                fun({Ring1, Ring2}, I) ->
+                    compare_rings(Ring1, Ring2, I, Node),
+                    I+1
+                end,
+                1,
+                NextRings2),
             do_commit(Node)
     end.
+
+compare_rings(Ring, NextRing, I, Node) ->
+    Owners1 = rpc:call(Node, riak_core_ring, all_owners, [Ring]),
+    FutureRing = rpc:call(Node, riak_core_ring, future_ring, [NextRing]),
+    Owners2 = rpc:call(Node, riak_core_ring, all_owners, [FutureRing]),
+    Owners3 = lists:zip(Owners1, Owners2),
+    Reassigned = 
+        [{Idx, PrevOwner, NewOwner}
+            || {{Idx, PrevOwner}, {Idx, NewOwner}} <- Owners3,
+                PrevOwner /= NewOwner],
+    lager:info(
+        "Transition ~w will result in ~w re-assignments",
+        [I, length(Reassigned)]).
 
 do_commit(Node) ->
     lager:info("planning cluster commit"),

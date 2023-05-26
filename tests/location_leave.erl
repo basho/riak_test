@@ -39,6 +39,7 @@ run_test(RingSize, ClaimAlgorithm, LNV, ActualL) ->
               {handoff_concurrency, 16},
               {choose_claim_fun, ClaimAlgorithm},
               {target_location_n_val, 3},
+              {full_rebalance_onleave, true},
               {default_bucket_props,
                 [{allow_mult, true}, {dvv_enabled, true}]}
               ]}
