@@ -22,7 +22,7 @@
 
 -define(KEY_COUNT, 10000).
 -define(UPDATE_COUNT, 2000).
--define(LOOP_COUNT, 20).
+-define(LOOP_COUNT, 16).
 -define(ACTION_DELAY, 2000).
 
 -define(SNK_WORKERS, 4).
@@ -159,6 +159,7 @@ test_repl(Protocol, [ClusterA, ClusterB]) ->
     write_then_delete(NodeA1, NodeB1, ?KEY_COUNT + 1, ?KEY_COUNT * 2),
     timer:sleep(?ACTION_DELAY),
     SW1B = os:timestamp(),
+    timer:sleep(?ACTION_DELAY),
 
     {ok, K0} = aae_fold(NodeA1,
                         Protocol,
@@ -266,7 +267,9 @@ test_repl(Protocol, [ClusterA, ClusterB]) ->
     {EK0, 2} = lists:last(SKLA0),
     [{SK1, 2}|_RestA1] = SKLA1,
     {EK1, 2} = lists:last(SKLA1),
-    lager:info("Erasing partial delete siblings from Node"),
+    lager:info(
+        "Erasing partial delete siblings from Node ~p ~p - local",
+        [SK0, EK0]),
     {ok, EraseCount0} =
         aae_fold(NodeA1,
                     Protocol,
@@ -275,6 +278,9 @@ test_repl(Protocol, [ClusterA, ClusterB]) ->
                         all,
                         {ts_epoch(SW0A), ts_epoch(SW0B)},
                         local}),
+    lager:info(
+        "Erasing partial delete siblings from Node ~p ~p - job",
+        [SK1, EK1]),
     {ok, EraseCount1} =
         aae_fold(NodeA1,
                     Protocol,
@@ -319,8 +325,13 @@ test_repl(Protocol, [ClusterA, ClusterB]) ->
                         ?TEST_BUCKET, all, all,
                         {ts_epoch(SW1A), ts_epoch(SW1B)},
                         local}),
+    lager:info("Reaped ~w tombs from first time range", [TombCount0]),
+    lager:info("Reaped ~w tombs from second time range", [TombCount1]),
 
     ExpectedEC = EraseCount0 + EraseCount1,
+    lager:info(
+        "EraseCount0 ~w EraseCount1 ~w expected tombs ~w",
+        [EraseCount0, EraseCount1, ExpectedEC]),
     {ok, ExpectedEC} =
         wait_for_outcome(?MODULE,
                             aae_fold,
@@ -489,7 +500,7 @@ write_to_cluster(Node, Start, End, CommonValBin) ->
     B = ?TEST_BUCKET,
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
+            Key = list_to_binary(io_lib:format("~8..0B", [N])),
             Obj = 
                 case CommonValBin of
                     new_obj ->
@@ -528,7 +539,7 @@ delete_from_cluster(Node, Start, End) ->
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
+            Key = list_to_binary(io_lib:format("~8..0B", [N])),
             try riak_client:delete(?TEST_BUCKET, Key, C) of
                 ok ->
                     Acc;
@@ -548,7 +559,7 @@ read_from_cluster(Node, Start, End, CommonValBin, Errors) ->
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
+            Key = list_to_binary(io_lib:format("~8..0B", [N])),
             case riak_client:get(?TEST_BUCKET, Key, C) of
                 {ok, Obj} ->
                     ExpectedVal = <<N:32/integer, CommonValBin/binary>>,
@@ -619,7 +630,7 @@ write_then_delete(NodeA1, NodeB1, Start, End) ->
                             0,
                             ?LOOP_COUNT),
     
-    lager:info("Deleting ~w objects from B and read not_found from A and C",
+    lager:info("Deleting ~w objects from B and read not_found from A",
                 [?KEY_COUNT]),
     delete_from_cluster(NodeB1, Start, End),
     lager:info("Waiting for missing sample"),
