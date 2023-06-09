@@ -19,11 +19,15 @@
 -define(C_NVAL, 2).
 
 -define(KEY_COUNT, 10000).
--define(LOOP_COUNT, 10).
+-define(LOOP_COUNT, 4).
 
 -define(SNK_WORKERS, 4).
 
 -define(DELETE_WAIT, 8000).
+%% This must be increased, otherwise tombstones may be reaped before their
+%% presence can be checked in the test
+
+-define(TOMB_PAUSE, 2).
 
 -define(COMMMON_VAL_INIT, <<"CommonValueToWriteForAllObjects">>).
 -define(COMMMON_VAL_MOD, <<"CommonValueToWriteForAllModifiedObjects">>).
@@ -50,9 +54,10 @@
             {tictacaae_storeheads, true},
             {tictacaae_rebuildwait, 4},
             {tictacaae_rebuilddelay, 3600},
-            {tictacaae_exchangetick, 120 * 1000},
+            {tictacaae_exchangetick, 3600 * 1000}, % don't exchange during test
             {tictacaae_rebuildtick, 3600000}, % don't tick for an hour!
             {ttaaefs_maxresults, 128},
+            {tombstone_pause, ?TOMB_PAUSE},
             {delete_mode, DeleteMode}
           ]}
         ]).
@@ -225,6 +230,8 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
         {NodeB1, ?B_NVAL, cluster_c},
         {NodeC1ip, NodeC1port, ?C_NVAL}),
 
+    lager:info(
+        "*** Re-write and re-delete after initial tombstones reaped ***"),
     write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2),
     lager:info("Find all tombstones in cluster A"),
     {ok, BKdhL1} = find_tombs(NodeA1, all, all),
@@ -257,6 +264,8 @@ test_repl(Protocol, [ClusterA, ClusterB, ClusterC]) ->
     {ok, BKdhLC} = find_tombs(NodeC1, all, all),
     ?assertMatch(0, length(BKdhLC)),
 
+    lager:info(
+        "*** Re-re-write and re-re-delete after initial tombstones reaped ***"),
     write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2),
     reap_from_cluster(NodeA1, {job, 1}),
     lager:info("Immediate reap count ~w after fsm managed reap",
@@ -311,7 +320,7 @@ write_to_cluster(Node, Start, End, CommonValBin) ->
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
+            Key = list_to_binary(io_lib:format("~8..0B", [N])),
             Obj = 
                 case CommonValBin of
                     new_obj ->
@@ -344,7 +353,7 @@ delete_from_cluster(Node, Start, End) ->
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
+            Key = list_to_binary(io_lib:format("~8..0B", [N])),
             try riak_client:delete(?TEST_BUCKET, Key, C) of
                 ok ->
                     Acc;
@@ -364,7 +373,7 @@ reap_from_cluster(Node, Start, End) ->
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
+            Key = list_to_binary(io_lib:format("~8..0B", [N])),
             try riak_client:reap(?TEST_BUCKET, Key, C) of
                 true ->
                     Acc;
@@ -414,14 +423,18 @@ read_from_cluster(Node, Start, End, CommonValBin, Errors) ->
     {ok, C} = riak:client_connect(Node),
     F = 
         fun(N, Acc) ->
-            Key = list_to_binary(io_lib:format("~8..0B~n", [N])),
+            Key = list_to_binary(io_lib:format("~8..0B", [N])),
             case riak_client:get(?TEST_BUCKET, Key, C) of
                 {ok, Obj} ->
                     ExpectedVal = <<N:32/integer, CommonValBin/binary>>,
-                    case riak_object:get_value(Obj) of
-                        ExpectedVal ->
+                    case riak_object:get_values(Obj) of
+                        [ExpectedVal] ->
                             Acc;
-                        UnexpectedVal ->
+                        Siblings when length(Siblings) > 1 ->
+                            lager:info(
+                                "Siblings for Key ~s:~n ~w", [Key, Obj]),
+                            [{wrong_value, Key, siblings}|Acc];
+                        [UnexpectedVal] ->
                             [{wrong_value, Key, UnexpectedVal}|Acc]
                     end;
                 {error, Error} ->
@@ -514,13 +527,18 @@ write_then_delete(NodeA1, NodeA2, NodeB1, NodeB2, NodeC1, NodeC2) ->
                         [NodeA2, 1, ?KEY_COUNT, ?COMMMON_VAL_INIT, undefined],
                         ?KEY_COUNT,
                         ?LOOP_COUNT),
+    lager:info(
+        "Waiting for delete wait before reading from delete_mode ~w cluster "
+        "as otherwise read may overlap with reap and prompt a repair",
+        [?DELETE_WAIT]),
+    timer:sleep(?DELETE_WAIT),
     ?KEY_COUNT =
         wait_for_outcome(?MODULE,
                         read_from_cluster,
                         [NodeC2, 1, ?KEY_COUNT, ?COMMMON_VAL_INIT, undefined],
                         ?KEY_COUNT,
                         ?LOOP_COUNT),
-    lager:info("Write and delete cylcle confirmed").
+    lager:info("Write and delete cycle confirmed").
 
 
 root_compare(
