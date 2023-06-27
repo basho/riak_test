@@ -35,10 +35,10 @@ confirm() ->
     PBPid = rt:pbc(hd(Nodes)),
     Http = rt:http_url(hd(Nodes)),
 
-    [put_an_object(PBPid, N) || N <- lists:seq(0, 100)],
-    [put_an_object(PBPid, int_to_key(N), N, ?FOO) || N <- lists:seq(101, 200)],
+    [put_an_object(PBPid, N) || N <- lists:seq(0, 500)],
+    [put_an_object(PBPid, int_to_key(N), N, ?FOO) || N <- lists:seq(501, 5000)],
 
-    ExpectedKeys = lists:sort([int_to_key(N) || N <- lists:seq(0, 200)]),
+    ExpectedKeys = lists:sort([int_to_key(N) || N <- lists:seq(0, 5000)]),
     Query = {<<"$bucket">>, ?BUCKET},
     %% Verifies that the app.config param was used
     ?assertEqual({error, timeout}, stream_pb(PBPid, Query, [])),
@@ -47,8 +47,11 @@ confirm() ->
     {ok, Res} =  stream_pb(PBPid, Query, [{timeout, 5000}]),
     ?assertEqual(ExpectedKeys, lists:sort(proplists:get_value(keys, Res, []))),
 
-    {ok, {{_, ErrCode, _}, _, Body}} = httpc:request(url("~s/buckets/~s/index/~s/~s~s",
-                                                     [Http, ?BUCKET, <<"$bucket">>, ?BUCKET, []])),
+    {ok, {{_, ErrCode, _}, _, Body}} =
+        httpc:request(
+            url("~s/buckets/~s/index/~s/~s~s", [Http, ?BUCKET, <<"$bucket">>, ?BUCKET, []])),
+    
+    lager:info("Query error with ErrCode ~p", [ErrCode]),
 
     ?assertEqual(true, ErrCode >= 500),
     ?assertMatch({match, _}, re:run(Body, "request timed out|{error,timeout}")), %% shows the app.config timeout
