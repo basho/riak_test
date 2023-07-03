@@ -59,11 +59,11 @@ confirm() ->
     assertRangeQuery(Clients, ?KEYS(10, 18), <<"field1_bin">>, <<"val10">>, <<"val18">>),
     assertRangeQuery(Clients, ?KEYS(12), <<"field1_bin">>, <<"val10">>, <<"val18">>, <<"v...2">>),
     assertRangeQuery(Clients, ?KEYS(10, 19), <<"field2_int">>, 10, 19),
-    assertRangeQuery(Clients, ?KEYS(10, 17), <<"$key">>, <<"obj10">>, <<"obj17">>),
-    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"ob..2">>),
+    assertRangeQuery(Clients, ?KEYS(10, 17), <<"$key">>, int_to_key(10), int_to_key(17)),
+    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, int_to_key(10), int_to_key(17), <<"ob.*2">>),
 
     lager:info("Delete an object, verify deletion..."),
-    ToDel = [<<"obj05">>, <<"obj11">>],
+    ToDel = [int_to_key(5), int_to_key(11)],
     [?assertMatch(ok, riakc_pb_socket:delete(PBC, ?BUCKET, KD)) || KD <- ToDel],
     lager:info("Make sure the tombstone is reaped..."),
     ?assertMatch(ok, rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, ?BUCKET, ToDel) end)),
@@ -74,12 +74,12 @@ confirm() ->
     assertRangeQuery(Clients, ?KEYS(10, 18, N /= 11), <<"field1_bin">>, <<"val10">>, <<"val18">>),
     assertRangeQuery(Clients, ?KEYS(10), <<"field1_bin">>, <<"val10">>, <<"val18">>, <<"10$">>),
     assertRangeQuery(Clients, ?KEYS(10, 19, N /= 11), <<"field2_int">>, 10, 19),
-    assertRangeQuery(Clients, ?KEYS(10, 17, N /= 11), <<"$key">>, <<"obj10">>, <<"obj17">>),
-    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"2">>),
+    assertRangeQuery(Clients, ?KEYS(10, 17, N /= 11), <<"$key">>, int_to_key(10), int_to_key(17)),
+    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, int_to_key(10), int_to_key(17), <<"2">>),
 
     %% Verify the $key index, and riak_kv#367 regression
-    assertRangeQuery(Clients, ?KEYS(6), <<"$key">>, <<"obj06">>, <<"obj06">>),
-    assertRangeQuery(Clients, ?KEYS(6,7), <<"$key">>, <<"obj06">>, <<"obj07">>),
+    assertRangeQuery(Clients, ?KEYS(6), <<"$key">>, int_to_key(6), int_to_key(6)),
+    assertRangeQuery(Clients, ?KEYS(6,7), <<"$key">>, int_to_key(6), int_to_key(7)),
 
     %% Exercise sort set to true by default
     SetResult2 = rpc:multicall(Nodes, application, set_env,
@@ -97,14 +97,14 @@ confirm() ->
     assertRangeQuery(Clients, ?KEYS(0, 20, N /= 11, N /= 5),
                      <<"field2_int">>, 0, 20, undefined, {undefined, true}),
     assertRangeQuery(Clients, ?KEYS(0, 20, N /= 11, N /= 5),
-                     <<"$key">>, <<"obj00">>, <<"obj20">>, undefined, {undefined, true}),
+                     <<"$key">>, int_to_key(0), int_to_key(20), undefined, {undefined, true}),
 
     %% Verify bignum sort order in sext -- eleveldb only (riak_kv#499)
     TestIdxVal = 1362400142028,
     [TestObj] = ?KEYS(TestIdxVal),
     put_an_object(PBC, TestIdxVal),
     assertRangeQuery(Clients,
-                     [<<"obj1362400142028">>],
+                     [int_to_key(TestIdxVal)],
                      <<"field2_int">>,
                      1000000000000,
                      TestIdxVal),
@@ -130,11 +130,11 @@ confirm() ->
     assertRangeQuery(Clients,
         ?KEYS(9) ++ lists:sort(?KEYS(10, 18) ++ ?KEYS(10, 18)) ++ ?KEYS(19),
         <<"field2_int">>, 10, 19),
-    assertRangeQuery(Clients, ?KEYS(10, 17), <<"$key">>, <<"obj10">>, <<"obj17">>),
-    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, <<"obj10">>, <<"obj17">>, <<"ob..2">>),
+    assertRangeQuery(Clients, ?KEYS(10, 17), <<"$key">>, int_to_key(10), int_to_key(17)),
+    assertRangeQuery(Clients, ?KEYS(12), <<"$key">>, int_to_key(10), int_to_key(17), <<"ob.*2">>),
 
     lager:info("Delete an object, verify deletion..."),
-    ToDel = [<<"obj05">>, <<"obj11">>],
+    ToDel = [int_to_key(5), int_to_key(11)],
     [?assertMatch(ok, riakc_pb_socket:delete(PBC, ?BUCKET, KD)) || KD <- ToDel],
     lager:info("Make sure the tombstone is reaped..."),
     ?assertMatch(ok, rt:wait_until(fun() -> rt:pbc_really_deleted(PBC, ?BUCKET, ToDel) end)),
@@ -229,7 +229,7 @@ put_a_sibling_object(Pid, N) ->
     put_an_object(Pid, Key, Data, Indexes).
 
 put_an_object(Pid, Key, Data, Indexes) when is_list(Indexes) ->
-    lager:info("Putting object ~p", [Key]),
+    lager:debug("Putting object ~p", [Key]),
     MetaData = dict:from_list([{<<"index">>, Indexes}]),
     Robj0 = riakc_obj:new(?BUCKET, Key),
     Robj1 = riakc_obj:update_value(Robj0, Data),
@@ -241,12 +241,7 @@ put_an_object(Pid, Key, IntIndex, BinIndex) when is_integer(IntIndex), is_binary
 
 
 int_to_key(N) ->
-    case N < 100 of
-        true ->
-            list_to_binary(io_lib:format("obj~2..0B", [N]));
-        _ ->
-            list_to_binary(io_lib:format("obj~p", [N]))
-    end.
+    list_to_binary(io_lib:format("obj~16..0B", [N])).
 
 int_to_field1_bin(N) ->
     list_to_binary(io_lib:format("val~p", [N])).
