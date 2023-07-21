@@ -9,6 +9,7 @@ nextgenrepl_rtq_autotypes
 nextgenrepl_rtq_pbsecurity
 nextgenrepl_rtq_peerdiscovery
 nextgenrepl_rtq_stdobj
+nextgenrepl_rtq_workercount
 nextgenrepl_sibling
 nextgenrepl_srcfail
 nextgenrepl_ttaaefs_autoall
