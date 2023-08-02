@@ -20,6 +20,7 @@
 
 -module(verify_vclock_prune).
 -export([confirm/0]).
+-export([wait_for_queues_to_drain/2]).
 -import(location, [plan_and_wait/2]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -378,10 +379,16 @@ verify_clock_pruning(Nodes, ClusterB) ->
 
     return_clock_lengths(CH, CR, 10),
 
-    lager:info("Full-sync should show no deltas"),
-    ACR1 = rpc:call(hd(Nodes), riak_client, ttaaefs_fullsync, [all_check, 60]),
-    lager:info("Full sync A -> B ~p", [ACR1]),
-    ?assertMatch({root_compare, 0}, ACR1),
+    lager:info("No deltas between clusters"),
+    NoDeltaFun =
+        fun() ->
+            ACR3 =
+                rpc:call(
+                    hd(Nodes), riak_client, ttaaefs_fullsync, [all_check, 60]),
+            lager:info("Full sync A -> B ~p", [ACR3]),
+            {root_compare, 0} == ACR3
+        end,
+    rt:wait_until(NoDeltaFun),
 
     KeyLoadN1Fun =
         fun(V) ->
@@ -420,9 +427,7 @@ verify_clock_pruning(Nodes, ClusterB) ->
     _ = return_clock_lengths(CR),
 
     lager:info("Full-sync should show no deltas"),
-    ACR3 = rpc:call(hd(Nodes), riak_client, ttaaefs_fullsync, [all_check, 60]),
-    lager:info("Full sync A -> B ~p", [ACR3]),
-    ?assertMatch({root_compare, 0}, ACR3)
+    rt:wait_until(NoDeltaFun)
 
     .
 
