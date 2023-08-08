@@ -460,7 +460,7 @@ confirm() ->
     lager:info("doing get"),
     {ok, _} = rhc:get(RHC, {<<"sync_one">>, <<"b_sync_one">>}, <<"key">>),
     
-    stopped = redbug:stop(),
+    stopped = redbug:stop(SingleNode),
     ?assertMatch(1, flushput_cnt(TraceFun, OneTrcFile)),
 
 
@@ -471,7 +471,7 @@ confirm() ->
     lager:info("doing get"),
     {ok, _} = rhc:get(RHC, {<<"sync_backend">>, <<"b_sync_backend">>}, <<"key">>),
 
-    stopped = redbug:stop(),
+    stopped = redbug:stop(SingleNode),
     ?assertMatch(0, flushput_cnt(TraceFun, BackendTrcFile)),
 
     redbug_start(TraceFun, AllTrcFile, SingleNode),
@@ -481,7 +481,7 @@ confirm() ->
     lager:info("doing get"),
     {ok, _} = rhc:get(RHC, {<<"sync_all">>, <<"b_sync_all">>}, <<"key">>),
 
-    stopped = redbug:stop(),
+    stopped = redbug:stop(SingleNode),
     ?assertMatch(3, flushput_cnt(TraceFun, AllTrcFile)),
 
     file:delete(OneTrcFile),

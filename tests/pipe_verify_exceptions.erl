@@ -312,7 +312,6 @@ tail_fitting_crash(Pipe) ->
     Last = lists:last(FittingPids),
     rt_pipe:crash_fitting(Last),
     %% try to avoid racing w/pipeline shutdown
-    lager:info("Pause before attempting to pipe into crash"),
     timer:sleep(2000),
     {error,[worker_startup_failed]} = riak_pipe:queue_work(Pipe, 30),
     riak_pipe:eoi(Pipe),

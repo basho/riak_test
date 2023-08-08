@@ -104,22 +104,38 @@ confirm() ->
     ?assert(kv679_tombstone2:perfect_preflist(PL, ?NVAL)),
 
     lager:info("Got preflist ~p", [PL]),
+    lager:info(
+        "Got preflist ~p for NVAL node_count ~w", 
+        [kv679_tombstone:get_preflist(hd(Nodes), length(Nodes)),
+            length(Nodes)]),
 
     {CoordNode, _}=CoordClient = kv679_tombstone:coordinating_client(Clients, PL),
-    OtherPrimaries = [Node || {{_Idx, Node}, Type} <- PL,
-                              Type == primary,
-                              Node /= CoordNode],
-    Fallbacks = [FB || FB <- Nodes, FB /= CoordNode andalso not lists:member(FB, OtherPrimaries)],
+    lager:info(
+        "Target n_val of 4 - so target preflist should have 2 fallbacks "
+        "other than the 2 primaries"),
+    TargetPL = kv679_tombstone:get_preflist(hd(Nodes), 4),
+    TargetNodes =
+        lists:usort(
+            lists:map(fun({{_Idx, Node}, primary}) -> Node end, TargetPL)    
+        ),
+    PrimaryNodes =
+        lists:usort(
+            lists:map(fun({{_Idx, Node}, primary}) -> Node end, PL)    
+        ),
+    Fallbacks = TargetNodes -- PrimaryNodes,
+    OtherPrimaries = PrimaryNodes -- [CoordNode],
 
-    ?assert(length(Fallbacks) == 3),
+    ?assert(length(Fallbacks) == 2),
 
     lager:info(
         "fallbacks ~p, primaries ~p~n",
         [Fallbacks, [CoordNode] ++ OtherPrimaries]),
+    lager:info("Create partition with One Primary and 2 fallbacks"),
+    P1 = [CoordNode] ++ Fallbacks,
+    P2 = Nodes -- P1,
 
-    %% Partition the other primary and one non-preflist node
-    {_, _, _P1, P2} = PartInfo =
-        rt:partition([CoordNode] ++ tl(Fallbacks), OtherPrimaries ++ [hd(Fallbacks)]),
+    %% Partition the other primary + 2 fallbacks and one non-preflist node
+    {_, _, P1, P2} = PartInfo = rt:partition(P1, P2),
     lager:info("Partitioned ~p~n", [PartInfo]),
     lager:info("During partition - alternate state may have been created"),
     lager:info("Waiting for settled partioned state"),
@@ -134,8 +150,7 @@ confirm() ->
     lager:info("Clock at fallback"),
 
     %% Kill the fallback before it can handoff
-    [FB1] = [Node || {{_Idx, Node}, Type} <- FBPL,
-                     Type == fallback],
+    [FB1] = [Node || {{_Idx, Node}, Type} <- FBPL, Type == fallback],
     rt:brutal_kill(FB1),
     rt:wait_until_unpingable(FB1),
 
