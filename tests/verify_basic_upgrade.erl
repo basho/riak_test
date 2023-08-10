@@ -97,7 +97,7 @@ confirm() ->
 
     [NodesPlainText] =
         rt:build_clusters([{4, OldVsn, ?CONFIG_PLAINTEXT(?CONFIG_CORE(8,3))}]),
-    pass = verify_basic_upgrade(NodesPlainText, OldVsn),
+    PlainTextSz = verify_basic_upgrade(NodesPlainText, OldVsn),
 
     case KVBackend of
         bitcask ->
@@ -111,7 +111,8 @@ confirm() ->
             [NodesNative] =
                 rt:build_clusters(
                     [{4, OldVsn, ?CONFIG_NATIVE(?CONFIG_CORE(8,3))}]),
-            pass = verify_basic_upgrade(NodesNative, OldVsn),
+            NativeSz = verify_basic_upgrade(NodesNative, OldVsn),
+            ?assert(NativeSz < floor((PlainTextSz * 0.8))),
             
             rt:clean_cluster(NodesNative),
 
@@ -121,7 +122,9 @@ confirm() ->
             [NodesLZ4] =
                 rt:build_clusters(
                     [{4, OldVsn, ?CONFIG_LZ4(?CONFIG_CORE(8, 3))}]),
-            verify_basic_upgrade(NodesLZ4, OldVsn)
+            LZ4Sz = verify_basic_upgrade(NodesLZ4, OldVsn),
+            ?assert(LZ4Sz < floor((PlainTextSz * 0.8))),
+            pass
     end.
     
 verify_basic_upgrade(Nodes, OldVsn) ->
@@ -145,8 +148,7 @@ verify_basic_upgrade(Nodes, OldVsn) ->
     validate_value(Node1, <<"B1">>, 1, ?NUM_KEYS, V, 0.1),
     validate_value(Node1, <<"B2">>, 1, ?NUM_KEYS div 4, V, 1.0),
 
-    lager:info("Backend size ~s", [backend_size(Node1)]),
-    pass.
+    backend_size(Node1).
 
 upgrade(Node, NewVsn) ->
     lager:info("Upgrading ~p to ~p", [Node, NewVsn]),
@@ -160,7 +162,11 @@ backend_size(Node) ->
     {ok, DataDir} =
         rpc:call(Node, application, get_env, [riak_core, platform_data_dir]),
     BackendDir = filename:join(DataDir, base_dir_for_backend(KVBackend)),
-    rpc:call(Node, os, cmd, ["du -sh " ++ BackendDir]).
+    SzTxt = rpc:call(Node, os, cmd, ["du -sh " ++ BackendDir]),
+    lager:info("Backend size ~s", [SzTxt]),
+    {match, [SzOnly]} =
+        re:run(SzTxt, "(?<SzOnly>[0-9]+)M.*", [{capture, all_names, list}]),
+    list_to_integer(SzOnly).
 
 base_dir_for_backend(leveled) ->
     "leveled";
