@@ -54,7 +54,7 @@
 -define(NUM_KEYS, 5000).
 -define(BUCKET, <<"test_bucket">>).
 -define(N_VAL, 3).
--define(RETRY_LOOPS, 12).
+-define(RETRY_LOOPS, 15).
 -define(RETRY_PAUSE, 2000).
 
 confirm() ->

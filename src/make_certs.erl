@@ -20,7 +20,7 @@
 -module(make_certs).
 -compile([export_all, nowarn_export_all]).
 
--export([all/1, all/2, rootCA/2, intermediateCA/3, endusers/3, enduser/3, revoke/3, gencrl/2, verify/3]).
+-export([all/1, all/2, rootCA/2, intermediateCA/3, endusers/3, enduser/3, revoke/3, gencrl/2, verify/3, version/0]).
 
 -record(dn, {commonName,
 	     organizationalUnitName = "Basho Engineering",
@@ -31,6 +31,9 @@
 	     default_bits = "2048"}).
 
 -define(OpenSSLCmd, "openssl").
+
+version() ->
+    os:cmd(?OpenSSLCmd ++ " version").
 
 all([DataDir, PrivDir]) ->
 	all(DataDir, PrivDir).

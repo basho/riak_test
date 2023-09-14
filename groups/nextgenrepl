@@ -3,6 +3,7 @@ nextgenrepl_bouncingtomb
 nextgenrepl_deletemodes
 nextgenrepl_deletewithfailure
 nextgenrepl_external_reconcile
+nextgenrepl_reaptombs
 nextgenrepl_rtq_auto
 nextgenrepl_rtq_autocrdt
 nextgenrepl_rtq_autotypes
