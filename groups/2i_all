@@ -7,3 +7,4 @@ verify_2i_returnterms
 verify_2i_stream
 verify_2i_timeout
 verify_cs_bucket
+verify_dollarkeyreap
