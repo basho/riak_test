@@ -217,7 +217,7 @@ test_repl(Protocol, [ClusterA, ClusterB]) ->
                             all,
                             count}),
     lager:info("Counted ~w active keys on B1 all time", [KB]),
-    {ok, {keys, TBL}} = aae_fold(NodeB1,
+    {ok, {keysclocks, TBL}} = aae_fold(NodeB1,
                         Protocol,
                         {find_tombs,
                             ?TEST_BUCKET, all,
@@ -468,7 +468,7 @@ fullsync_check(Protocol, {SrcNode, SrcNVal, SnkCluster},
     AAEResult.
 
 length_aae_fold(Node, Protocol, Query) ->
-    {ok, {keys, List}} = aae_fold(Node, Protocol, Query),
+    {ok, {_, List}} = aae_fold(Node, Protocol, Query),
     length(List).
 
 aae_fold(Node, Protocol, Query) ->

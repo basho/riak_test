@@ -84,15 +84,33 @@ confirm() ->
     RHCc = rt:httpc(CurrentNode),
     ok = test_api_consistency(RHCc, rhc, <<"bucketHTTP">>, current),
 
-    rt:wait_for_service(PreviousNode, riak_kv),
+    TestMetaData = riak_test_runner:metadata(),
+    {match, [Vsn]} =
+        re:run(
+            proplists:get_value(version, TestMetaData),
+            "riak-(?<VER>[0-9\.]+)",
+            [{capture, ['VER'], binary}]),
+    case Vsn > <<"3.0.16">> of
+        true ->
+            lager:info("Not testing previous"),
+            lager:info("Current tested version is ~s", [Vsn]),
+            lager:info(
+                "Issues with change of client to support"
+                " reap_tomb API change in 3.0.17"),
+            pass;
+        false ->
+            rt:wait_for_service(PreviousNode, riak_kv),
 
-    RPCp = rt:pbc(PreviousNode),
-    ok = test_api_consistency(RPCp, riakc_pb_socket, <<"bucketPB">>, previous),
+            RPCp = rt:pbc(PreviousNode),
+            ok = test_api_consistency(
+                RPCp, riakc_pb_socket, <<"bucketPB">>, previous),
 
-    RHCp = rt:httpc(PreviousNode),
-    ok = test_api_consistency(RHCp, rhc, <<"bucketHTTP">>, previous),
+            RHCp = rt:httpc(PreviousNode),
+            ok = test_api_consistency(
+                RHCp, rhc, <<"bucketHTTP">>, previous),
 
-    pass. 
+            pass
+    end.
 
 
 test_api_consistency(Client, ClientMod, Bucket, Version) ->
@@ -324,6 +342,6 @@ check_current_match_conflict(rhc, MatchError) ->
     ?assertMatch("409", StatusCode).
 
 log_tombs(ClientMod, Client, Bucket) ->
-    {ok, {keys, L}} = ClientMod:aae_find_tombs(Client, Bucket, all, all, all),
+    {ok, {keysclocks, L}} = ClientMod:aae_find_tombs(Client, Bucket, all, all, all),
     lager:info("Found ~w tombs", [length(L)]),
     L.
